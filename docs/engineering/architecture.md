@@ -38,6 +38,17 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, short-lived agent cont
 | `ModelAuth` | Credentials for the model per factory | subscription token (laptop only), API key, Bedrock |
 | `Clock` | Time, for deterministic tests | system, fake |
 
+#### Phase 1 signatures
+
+`internal/ports/ports.go` is the source of truth; this is the shape adapters implement.
+
+- `Store`: `CreateItem`, `Item`, `Waiting` (pull order), `Leases`, `ClaimNext(Claim{Station, Slot, Now, ExpiresAt})`, `HeartbeatLease`, `RequeueExpiredLeases`, `StartRun`, `FinishRun`, `Transition` (compare-and-set on station and state, fenced by the lease's `AcquiredAt`), `AppendEvents`. WIP is not counted: the unique `(factory_id, station, slot)` lease makes a claim beyond capacity fail with `ErrSlotTaken`.
+- `Runner`: `Start(ctx, TaskSpec) (Task, error)`; `Task` has `Events() <-chan RunEvent` and `Wait() (RunResult, error)`. Cancelling `ctx` stops the task.
+- `Secrets`: `Resolve(ctx, ref)` for literals and `env:NAME`. `Contracts`: `Validate(ctx, factory, contract, output)`, wrapping `ErrContractViolation` for bad output.
+- `Clock`: `Now()` and `NewTicker(d)`.
+- Per-task MCP gateway tokens are HMAC-signed (`domain.SignTaskToken`), so any instance can verify them without stored state.
+- `Knowledge` and `ModelAuth` arrive when the engine first needs them; until then model credentials reach tasks through `engine.Config.TaskEnv` secret references.
+
 ### Wiring
 
 Manual constructor injection. `cmd/goald/main.go` reads the environment, builds each adapter, passes them to `engine.New(...)` and starts the HTTP server. No container, no globals, no `init()` side effects. A constructor takes its dependencies as interfaces and returns a concrete type.

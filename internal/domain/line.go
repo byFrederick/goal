@@ -1,0 +1,198 @@
+package domain
+
+import (
+	"errors"
+	"fmt"
+	"slices"
+)
+
+// ErrNoRoute means a routed station has no agent for the item's lane.
+var ErrNoRoute = errors.New("no route for lane")
+
+// StationKind says who works at a station.
+type StationKind string
+
+// Station kinds, as written in factory.yaml.
+const (
+	KindQueue StationKind = "queue"
+	KindAgent StationKind = "agent"
+	KindHuman StationKind = "human"
+	KindDone  StationKind = "done"
+)
+
+// Line is the part of a factory definition the engine needs: its stations in order, its
+// agents and its flow policy. internal/config builds it from factory.yaml.
+type Line struct {
+	FactoryID FactoryID
+	Runtime   Runtime
+	Stations  []Station
+	Agents    []AgentSpec
+	// ExpediteTypes are the work types that enter with class of service expedite.
+	ExpediteTypes []string
+}
+
+// Runtime is what every agent task of the factory shares.
+type Runtime struct {
+	Image string
+	Model string // default model; an agent's own Model wins
+	// MaxTurnsPerTask and PerItemUSD are passed to the runner as limits; zero means unset.
+	MaxTurnsPerTask int
+	PerItemUSD      float64
+}
+
+// Station is one step of the line.
+type Station struct {
+	ID    string
+	Kind  StationKind
+	Agent string
+	// Route maps an item lane to an agent; used when Agent is empty.
+	Route map[string]string
+	// Agents is how many agent slots the station runs; WIP caps items in progress there.
+	Agents int
+	WIP    int
+	// Output names the contract the station's output must satisfy; empty means none.
+	Output string
+	Gate   *Gate
+}
+
+// Gate sends rejected work back to OnReject, at most MaxRework times per item.
+type Gate struct {
+	OnReject  string
+	MaxRework int
+}
+
+// AgentSpec is everything a runner needs to start one agent.
+type AgentSpec struct {
+	Name string
+	// PromptPath is the agent's prompt file, resolved against the factory folder.
+	PromptPath  string
+	Model       string
+	Skills      []SkillRef
+	Connections []string
+	ToolsAllow  []string
+	ToolsDeny   []string
+}
+
+// SkillRef is a skill an agent loads: a local folder (resolved path) or a skills.sh source.
+type SkillRef struct {
+	Name   string
+	Source string
+}
+
+// Station returns the station with the given id.
+func (l Line) Station(id string) (Station, bool) {
+	i := slices.IndexFunc(l.Stations, func(s Station) bool { return s.ID == id })
+	if i < 0 {
+		return Station{}, false
+	}
+
+	return l.Stations[i], true
+}
+
+// First returns the station new items enter at.
+func (l Line) First() (Station, error) {
+	if len(l.Stations) == 0 {
+		return Station{}, fmt.Errorf("factory %s: line has no stations", l.FactoryID)
+	}
+
+	return l.Stations[0], nil
+}
+
+// Next returns the station after id.
+func (l Line) Next(id string) (Station, error) {
+	i := slices.IndexFunc(l.Stations, func(s Station) bool { return s.ID == id })
+	if i < 0 {
+		return Station{}, fmt.Errorf("station %q is not on the line", id)
+	}
+
+	if i == len(l.Stations)-1 {
+		return Station{}, fmt.Errorf("station %q is the last station", id)
+	}
+
+	return l.Stations[i+1], nil
+}
+
+// ReworkTarget is where rejected work at station id goes back to: the gate's onReject, or
+// else the nearest agent station before it.
+func (l Line) ReworkTarget(id string) (Station, error) {
+	i := slices.IndexFunc(l.Stations, func(s Station) bool { return s.ID == id })
+	if i < 0 {
+		return Station{}, fmt.Errorf("station %q is not on the line", id)
+	}
+
+	if g := l.Stations[i].Gate; g != nil {
+		if s, ok := l.Station(g.OnReject); ok {
+			return s, nil
+		}
+
+		return Station{}, fmt.Errorf("station %q: gate.onReject %q is not on the line", id, g.OnReject)
+	}
+
+	for j := i - 1; j >= 0; j-- {
+		if l.Stations[j].Kind == KindAgent {
+			return l.Stations[j], nil
+		}
+	}
+
+	return Station{}, fmt.Errorf("station %q: no agent station upstream to send work back to", id)
+}
+
+// Agent returns the agent with the given name.
+func (l Line) Agent(name string) (AgentSpec, bool) {
+	i := slices.IndexFunc(l.Agents, func(a AgentSpec) bool { return a.Name == name })
+	if i < 0 {
+		return AgentSpec{}, false
+	}
+
+	return l.Agents[i], true
+}
+
+// ClassFor returns the class of service a new item of workType enters with.
+func (l Line) ClassFor(workType string) ClassOfService {
+	if slices.Contains(l.ExpediteTypes, workType) {
+		return ClassExpedite
+	}
+
+	return ClassStandard
+}
+
+// Capacity is how many items the station may have in progress: min(agents, wip), where an
+// unset value does not limit and a station always has at least one slot.
+func (s Station) Capacity() int {
+	n := max(s.Agents, 1)
+	if s.WIP > 0 {
+		n = min(n, s.WIP)
+	}
+
+	return n
+}
+
+// AgentFor returns the agent that works an item of the given lane at this station.
+func (s Station) AgentFor(lane string) (string, error) {
+	if s.Agent != "" {
+		return s.Agent, nil
+	}
+
+	if a, ok := s.Route[lane]; ok {
+		return a, nil
+	}
+
+	return "", fmt.Errorf("station %s, lane %q: %w", s.ID, lane, ErrNoRoute)
+}
+
+// Arrival is the state an item takes when it arrives at this station.
+func (s Station) Arrival() ItemState {
+	switch s.Kind {
+	case KindHuman:
+		return StateWaitingHuman
+	case KindDone:
+		return StateDone
+	case KindQueue, KindAgent:
+		return StateQueued
+	}
+
+	return StateQueued
+}
+
+// CanRework reports whether an item already reworked reworkCount times may go back again.
+func (g Gate) CanRework(reworkCount int) bool { return reworkCount < g.MaxRework }

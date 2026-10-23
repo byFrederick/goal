@@ -1,0 +1,3 @@
+# architect
+
+Test fixture prompt.

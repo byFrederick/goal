@@ -1,0 +1,423 @@
+package engine
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"sync"
+
+	"github.com/byFrederick/factory/internal/domain"
+	"github.com/byFrederick/factory/internal/ports"
+)
+
+// maxAttempts is one run plus one retry when the output breaks the station's contract.
+const maxAttempts = 2
+
+// claimed is an item this instance holds a lease on at an agent station.
+type claimed struct {
+	line    domain.Line
+	station domain.Station
+	item    domain.Item
+	lease   domain.Lease
+	agent   domain.AgentSpec
+}
+
+// work runs the agent on a claimed item until the item moves on, is blocked, is released at
+// shutdown or the lease is lost to another instance.
+func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it domain.Item, lease domain.Lease) {
+	c := claimed{line: l, station: st, item: it, lease: lease}
+	log := e.log.With(slog.String("factory", string(it.FactoryID)), slog.String("item", string(it.ID)), slog.String("station", st.ID))
+
+	name, err := st.AgentFor(it.Lane)
+	if err != nil {
+		e.block(ctx, log, c, err.Error())
+		return
+	}
+
+	if c.agent, err = agentSpec(l, name); err != nil {
+		e.block(ctx, log, c, err.Error())
+		return
+	}
+
+	brief := briefOf(it)
+
+	for attempt := 1; ; attempt++ {
+		res, err := e.runOnce(ctx, c, brief)
+
+		switch {
+		case errors.Is(err, ports.ErrLeaseLost):
+			log.WarnContext(ctx, "lease lost; another instance owns the item now")
+			return
+		case ctx.Err() != nil:
+			e.release(ctx, log, c)
+			return
+		case err != nil:
+			e.block(ctx, log, c, err.Error())
+			return
+		case res.Status != domain.RunSucceeded:
+			e.block(ctx, log, c, fmt.Sprintf("run %s: %s", res.Status, res.Error))
+			return
+		}
+
+		verdict, err := e.check(ctx, c, res.Output)
+		if err == nil {
+			e.finish(ctx, log, c, res.Output, verdict)
+			return
+		}
+
+		if !e.contractFailed(ctx, log, c, attempt, err) {
+			return
+		}
+
+		brief = briefOf(it) + "\n\nYour previous output was rejected: " + err.Error() + "\nReturn output that satisfies the station contract."
+	}
+}
+
+// contractFailed records a failed output check and reports whether to try again; when not,
+// it has blocked the item.
+func (e *Engine) contractFailed(ctx context.Context, log *slog.Logger, c claimed, attempt int, err error) bool {
+	retryable := errors.Is(err, ports.ErrContractViolation) || errors.Is(err, domain.ErrBadVerdict)
+	if !retryable {
+		e.block(ctx, log, c, "check output: "+err.Error())
+		return false
+	}
+
+	ev := event(c.item, domain.EventContractFailed, e.clock.Now(), domain.ActorEngine,
+		map[string]any{"contract": c.station.Output, "error": err.Error(), "attempt": attempt})
+	if aerr := e.store.AppendEvents(ctx, ev); aerr != nil {
+		log.ErrorContext(ctx, "append contract_failed event", slog.Any("error", aerr))
+	}
+
+	if attempt < maxAttempts {
+		return true
+	}
+
+	e.block(ctx, log, c, fmt.Sprintf("output failed its contract %d times: %v", attempt, err))
+
+	return false
+}
+
+// check validates an output against the station's contract and, at a gate, reads its verdict.
+func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (*domain.Verdict, error) {
+	if c.station.Output != "" {
+		if err := e.contracts.Validate(ctx, c.line.FactoryID, c.station.Output, output); err != nil {
+			return nil, fmt.Errorf("contract %s: %w", c.station.Output, err)
+		}
+	}
+
+	if c.station.Gate == nil {
+		return nil, nil // no verdict outside a gate
+	}
+
+	v, err := domain.ParseVerdict(output)
+	if err != nil {
+		return nil, err
+	}
+
+	return &v, nil
+}
+
+// runOnce records a run, starts the agent task, heartbeats the lease while it runs and
+// returns its result. It returns ErrLeaseLost when another instance took the item.
+func (e *Engine) runOnce(ctx context.Context, c claimed, brief string) (domain.RunResult, error) {
+	runID, err := e.store.StartRun(ctx, ports.NewRun{
+		FactoryID: c.line.FactoryID, ItemID: c.item.ID, Station: c.station.ID, Agent: c.agent.Name,
+		Model: modelOf(c), StartedAt: e.clock.Now(),
+	})
+	if err != nil {
+		return domain.RunResult{}, fmt.Errorf("record run: %w", err)
+	}
+
+	taskCtx, stop := context.WithTimeout(ctx, e.cfg.TaskTimeout)
+	defer stop()
+
+	// Heartbeat from before the start: starting a task (pulling an image) can outlast the TTL.
+	var (
+		beats sync.WaitGroup
+		lost  bool
+	)
+
+	beatCtx, stopBeat := context.WithCancel(taskCtx)
+
+	beats.Go(func() { lost = e.heartbeat(beatCtx, c.lease, stop) })
+
+	task, err := e.start(taskCtx, c, runID, brief)
+	if err != nil {
+		stopBeat()
+		beats.Wait()
+		e.finishRun(ctx, runID, domain.RunResult{Status: domain.RunFailed, Error: err.Error()})
+
+		if lost {
+			return domain.RunResult{}, ports.ErrLeaseLost
+		}
+
+		return domain.RunResult{}, err
+	}
+
+	var relayed sync.WaitGroup
+
+	relayed.Go(func() { e.relay(ctx, c, runID, task.Events()) })
+
+	res, err := task.Wait()
+
+	relayed.Wait()
+	stopBeat()
+	beats.Wait()
+
+	if err != nil {
+		res = domain.RunResult{Status: domain.RunFailed, Error: "wait for task: " + err.Error()}
+	}
+
+	e.finishRun(ctx, runID, res)
+
+	if lost {
+		return res, ports.ErrLeaseLost
+	}
+
+	return res, nil
+}
+
+// start builds the task spec, resolving secrets and signing the gateway token, and starts it.
+func (e *Engine) start(ctx context.Context, c claimed, runID domain.RunID, brief string) (ports.Task, error) {
+	env := make(map[string]string, len(e.cfg.TaskEnv))
+
+	for name, ref := range e.cfg.TaskEnv {
+		v, err := e.secrets.Resolve(ctx, ref)
+		if err != nil {
+			return nil, fmt.Errorf("task env %s: %w", name, err)
+		}
+
+		env[name] = v
+	}
+
+	token, err := e.gatewayToken(ctx, c, runID)
+	if err != nil {
+		return nil, err
+	}
+
+	a, rt := c.agent, c.line.Runtime
+
+	task, err := e.runner.Start(ctx, ports.TaskSpec{
+		FactoryID: c.line.FactoryID, ItemID: c.item.ID, RunID: runID, Station: c.station.ID, Agent: a.Name,
+		Image: rt.Image, Model: modelOf(c), PromptPath: a.PromptPath, Skills: a.Skills,
+		ToolsAllow: a.ToolsAllow, ToolsDeny: a.ToolsDeny, GatewayURL: e.cfg.GatewayURL, GatewayToken: token,
+		Brief: brief, Inputs: c.item.Outputs, Output: c.station.Output, Env: env, Timeout: e.cfg.TaskTimeout,
+		Budget: ports.Budget{MaxTurns: rt.MaxTurnsPerTask, MaxUSD: rt.PerItemUSD},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("start task: %w", err)
+	}
+
+	return task, nil
+}
+
+func (e *Engine) gatewayToken(ctx context.Context, c claimed, runID domain.RunID) (string, error) {
+	if e.cfg.GatewayURL == "" {
+		return "", nil
+	}
+
+	key, err := e.secrets.Resolve(ctx, e.cfg.GatewayKeyRef)
+	if err != nil {
+		return "", fmt.Errorf("gateway key: %w", err)
+	}
+
+	token, err := domain.SignTaskToken([]byte(key), domain.TaskClaims{
+		FactoryID: c.line.FactoryID, ItemID: c.item.ID, Station: c.station.ID, Agent: c.agent.Name, RunID: runID,
+		Connections: c.agent.Connections, ExpiresAt: e.clock.Now().Add(e.cfg.TaskTimeout + e.cfg.LeaseTTL).Unix(),
+	})
+	if err != nil {
+		return "", fmt.Errorf("gateway token: %w", err)
+	}
+
+	return token, nil
+}
+
+// heartbeat extends the lease every HeartbeatEvery until ctx ends. When the lease is lost it
+// stops the task and reports true.
+func (e *Engine) heartbeat(ctx context.Context, lease domain.Lease, stopTask context.CancelFunc) bool {
+	t := e.clock.NewTicker(e.cfg.HeartbeatEvery)
+	defer t.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-t.C():
+		}
+
+		now := e.clock.Now()
+
+		_, err := e.store.HeartbeatLease(ctx, lease, now, now.Add(e.cfg.LeaseTTL))
+
+		switch {
+		case errors.Is(err, ports.ErrLeaseLost):
+			stopTask()
+			return true
+		case err != nil && ctx.Err() == nil:
+			e.log.WarnContext(ctx, "heartbeat lease", slog.String("item", string(lease.ItemID)), slog.Any("error", err))
+		}
+	}
+}
+
+// relay records the task's progress events until the task closes the stream.
+func (e *Engine) relay(ctx context.Context, c claimed, runID domain.RunID, events <-chan ports.RunEvent) {
+	for ev := range events {
+		at := ev.At
+		if at.IsZero() {
+			at = e.clock.Now()
+		}
+
+		rec := event(c.item, ev.Kind, at, c.agent.Name, ev.Data)
+		rec.RunID = runID
+
+		if err := e.store.AppendEvents(ctx, rec); err != nil && ctx.Err() == nil {
+			e.log.WarnContext(ctx, "record task event", slog.String("item", string(c.item.ID)), slog.Any("error", err))
+		}
+	}
+}
+
+func (e *Engine) finishRun(ctx context.Context, id domain.RunID, res domain.RunResult) {
+	ctx, cancel := cleanup(ctx)
+	defer cancel()
+
+	if err := e.store.FinishRun(ctx, id, res, e.clock.Now()); err != nil {
+		e.log.ErrorContext(ctx, "record run result", slog.String("run", string(id)), slog.Any("error", err))
+	}
+}
+
+// finish moves an item whose output passed its checks: through the gate's verdict when the
+// station has one, otherwise to the next station.
+func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output json.RawMessage, v *domain.Verdict) {
+	t := ports.Transition{
+		ItemID: c.item.ID, From: domain.Position{Station: c.station.ID, State: domain.StateInProgress},
+		Lease: &c.lease, Lane: domain.LaneFrom(output), OutputStation: c.station.ID, Output: output, At: e.clock.Now(),
+	}
+
+	var err error
+
+	switch {
+	case v != nil && v.Decision == domain.Reject:
+		err = e.gateReject(c, v.Reason, &t)
+	case v != nil:
+		t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
+		err = e.advance(c.line, c.item, c.agent.Name, &t)
+	default:
+		err = e.advance(c.line, c.item, c.agent.Name, &t)
+	}
+
+	if err != nil {
+		e.block(ctx, log, c, err.Error())
+		return
+	}
+
+	e.transition(ctx, log, t)
+}
+
+// advance points t at the station after the item's current one.
+func (e *Engine) advance(l domain.Line, it domain.Item, actor string, t *ports.Transition) error {
+	next, err := l.Next(it.Station)
+	if err != nil {
+		return err
+	}
+
+	pos, events, doneAt := e.arrive(it, next, actor)
+	t.To, t.DoneAt = pos, doneAt
+	t.Events = append(t.Events, events...)
+
+	return nil
+}
+
+// gateReject points t back at the gate's onReject station, or at a human once the item has
+// used up its rework allowance.
+func (e *Engine) gateReject(c claimed, reason string, t *ports.Transition) error {
+	it, gate := c.item, *c.station.Gate
+	t.Events = append(t.Events, event(it, domain.EventGateRejected, t.At, c.agent.Name,
+		map[string]any{keyReason: reason, "rework_count": it.ReworkCount}))
+
+	if !gate.CanRework(it.ReworkCount) {
+		t.To = domain.Position{Station: it.Station, State: domain.StateWaitingHuman}
+		t.Events = append(t.Events, event(it, domain.EventWaitingHuman, t.At, domain.ActorEngine,
+			map[string]any{keyReason: fmt.Sprintf("rejected after %d reworks (max %d)", it.ReworkCount, gate.MaxRework)}))
+
+		return nil
+	}
+
+	target, err := c.line.ReworkTarget(it.Station)
+	if err != nil {
+		return err
+	}
+
+	pos, events, doneAt := e.arrive(it, target, domain.ActorEngine)
+	t.To, t.DoneAt, t.Rework = pos, doneAt, true
+	t.Events = append(t.Events, events...)
+
+	return nil
+}
+
+// block parks a claimed item as blocked, with the reason in its event, and releases the lease.
+func (e *Engine) block(ctx context.Context, log *slog.Logger, c claimed, reason string) {
+	now := e.clock.Now()
+
+	e.transition(ctx, log, ports.Transition{
+		ItemID: c.item.ID, From: domain.Position{Station: c.station.ID, State: domain.StateInProgress},
+		To: domain.Position{Station: c.station.ID, State: domain.StateBlocked}, Lease: &c.lease, At: now,
+		Events: []domain.Event{event(c.item, domain.EventBlocked, now, domain.ActorEngine, map[string]any{keyReason: reason})},
+	})
+}
+
+// release returns a claimed item to the queue at its station, for shutdown.
+func (e *Engine) release(ctx context.Context, log *slog.Logger, c claimed) {
+	now := e.clock.Now()
+
+	e.transition(ctx, log, ports.Transition{
+		ItemID: c.item.ID, From: domain.Position{Station: c.station.ID, State: domain.StateInProgress},
+		To: domain.Position{Station: c.station.ID, State: domain.StateQueued}, Lease: &c.lease, At: now,
+		Events: []domain.Event{event(c.item, domain.EventReleased, now, domain.ActorEngine, map[string]any{keyReason: "shutdown"})},
+	})
+}
+
+// transition applies t even while ctx is being cancelled; losing the lease or the item to
+// another instance is expected and only logged.
+func (e *Engine) transition(ctx context.Context, log *slog.Logger, t ports.Transition) {
+	ctx, cancel := cleanup(ctx)
+	defer cancel()
+
+	_, err := e.store.Transition(ctx, t)
+
+	switch {
+	case errors.Is(err, ports.ErrLeaseLost), errors.Is(err, ports.ErrConflict):
+		log.WarnContext(ctx, "item changed hands before its transition", slog.String("to", string(t.To.State)), slog.Any("error", err))
+	case err != nil:
+		log.ErrorContext(ctx, "transition item; the lease will expire and requeue it",
+			slog.String("to", string(t.To.State)), slog.Any("error", err))
+	default:
+		log.InfoContext(ctx, "item moved", slog.String("to_station", t.To.Station), slog.String("to_state", string(t.To.State)))
+	}
+}
+
+func agentSpec(l domain.Line, name string) (domain.AgentSpec, error) {
+	a, ok := l.Agent(name)
+	if !ok {
+		return domain.AgentSpec{}, fmt.Errorf("agent %q is not defined", name)
+	}
+
+	return a, nil
+}
+
+func modelOf(c claimed) string {
+	if c.agent.Model != "" {
+		return c.agent.Model
+	}
+
+	return c.line.Runtime.Model
+}
+
+func briefOf(it domain.Item) string {
+	if it.Body == "" {
+		return it.Title
+	}
+
+	return it.Title + "\n\n" + it.Body
+}

@@ -1,0 +1,449 @@
+package engine_test
+
+import (
+	"context"
+	"encoding/json"
+	"testing"
+	"time"
+
+	"github.com/byFrederick/factory/internal/domain"
+	"github.com/byFrederick/factory/internal/engine"
+	"github.com/byFrederick/factory/internal/ports"
+	"github.com/byFrederick/factory/internal/ports/porttest"
+)
+
+const factoryID domain.FactoryID = "31efd04e-b231-4939-9f13-8986bf7e462a"
+
+var t0 = time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
+
+// Names the test lines use.
+const (
+	stDone       = "done"
+	stApprove    = "approve"
+	agReviewer   = "reviewer"
+	agBackend    = "backend-engineer"
+	agFrontend   = "frontend-engineer"
+	agWorker     = "worker"
+	stWork       = "work"
+	typeIncident = "incident"
+)
+
+const (
+	ttl       = time.Minute
+	heartbeat = 20 * time.Second
+	tickEvery = 5 * time.Second
+)
+
+type harness struct {
+	e         *engine.Engine
+	store     *porttest.Store
+	runner    *porttest.Runner
+	clock     *porttest.Clock
+	contracts *porttest.Contracts
+	line      domain.Line
+}
+
+func newHarness(t *testing.T, line domain.Line, run porttest.RunFunc) *harness {
+	t.Helper()
+
+	h := &harness{
+		store:     porttest.NewStore(),
+		runner:    porttest.NewRunner(run),
+		clock:     porttest.NewClock(t0),
+		contracts: porttest.NewContracts(),
+		line:      line,
+	}
+	h.e = h.engine(t, h.store)
+
+	return h
+}
+
+// engine builds another goald instance on the same store, as a second process would.
+func (h *harness) engine(t *testing.T, store ports.Store) *engine.Engine {
+	t.Helper()
+
+	e, err := engine.New(engine.Deps{
+		Store: store, Runner: h.runner, Contracts: h.contracts, Clock: h.clock,
+		Secrets: porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y", "MODEL_ACCESS": "tok"},
+	}, engine.Config{
+		Lines:          []domain.Line{h.line},
+		TickEvery:      tickEvery,
+		LeaseTTL:       ttl,
+		HeartbeatEvery: heartbeat,
+		GatewayURL:     "http://gateway.example.com/mcp",
+		GatewayKeyRef:  "env:GOAL_GATEWAY_KEY",
+		TaskEnv:        map[string]string{"MODEL_ACCESS": "env:MODEL_ACCESS"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return e
+}
+
+func (h *harness) submit(t *testing.T, n domain.NewItem) domain.Item {
+	t.Helper()
+
+	n.FactoryID = factoryID
+	if n.Title == "" {
+		n.Title = "an item"
+	}
+
+	if n.Type == "" {
+		n.Type = "feature"
+	}
+
+	it, err := h.e.Submit(t.Context(), n)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return it
+}
+
+// step runs one tick and waits for every run it started.
+func (h *harness) step(t *testing.T) {
+	t.Helper()
+
+	if err := h.e.Tick(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	h.wait(t, h.e)
+}
+
+// deadline bounds how long a test waits for the engine's goroutines, so a regression fails
+// the test instead of hanging the package.
+const deadline = 10 * time.Second
+
+// wait waits for e's in-flight runs, failing the test if they never finish.
+func (h *harness) wait(t *testing.T, e *engine.Engine) {
+	t.Helper()
+
+	done := make(chan struct{})
+
+	go func() {
+		e.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(deadline):
+		t.Fatal("engine runs did not finish")
+	}
+}
+
+// bounded is the test's context with a deadline, for waits on fakes.
+func bounded(t *testing.T) context.Context {
+	t.Helper()
+
+	c, cancel := context.WithTimeout(t.Context(), deadline)
+	t.Cleanup(cancel)
+
+	return c
+}
+
+// claimAsDeadInstance moves an item to station and claims it there the way another goald
+// instance would, then never heartbeats: the instance died.
+func (h *harness) claimAsDeadInstance(t *testing.T, it domain.Item, station string) {
+	t.Helper()
+
+	if _, err := h.store.Transition(t.Context(), ports.Transition{
+		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: station, State: domain.StateQueued}, At: t0,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	st, _ := h.line.Station(station)
+	if _, _, err := h.store.ClaimNext(t.Context(), ports.Claim{
+		FactoryID: factoryID, Station: st, Slot: 0, Now: h.clock.Now(), ExpiresAt: h.clock.Now().Add(ttl),
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (h *harness) item(t *testing.T, id domain.ItemID) domain.Item {
+	t.Helper()
+
+	it, err := h.store.Item(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return it
+}
+
+func (h *harness) kinds(id domain.ItemID) []domain.EventKind {
+	var out []domain.EventKind
+	for _, e := range h.store.Events(id) {
+		out = append(out, e.Kind)
+	}
+
+	return out
+}
+
+func (h *harness) eventsOf(id domain.ItemID, kind domain.EventKind) []domain.Event {
+	var out []domain.Event
+
+	for _, e := range h.store.Events(id) {
+		if e.Kind == kind {
+			out = append(out, e)
+		}
+	}
+
+	return out
+}
+
+// lineOf builds a line inbox → stations... → done with the agents the tests use.
+func lineOf(stations ...domain.Station) domain.Line {
+	all := append([]domain.Station{{ID: "inbox", Kind: domain.KindQueue}}, stations...)
+	all = append(all, domain.Station{ID: stDone, Kind: domain.KindDone})
+
+	agents := []domain.AgentSpec{}
+	for _, name := range []string{"architect", agWorker, agReviewer, agBackend, agFrontend} {
+		agents = append(agents, domain.AgentSpec{Name: name, PromptPath: "./agents/" + name + ".md"})
+	}
+
+	return domain.Line{
+		FactoryID:     factoryID,
+		Runtime:       domain.Runtime{Image: "ghcr.io/acme/agent:1", Model: "claude-sonnet-5-5", MaxTurnsPerTask: 40, PerItemUSD: 3},
+		Stations:      all,
+		Agents:        agents,
+		ExpediteTypes: []string{typeIncident},
+	}
+}
+
+func agentStation(id, agent string, agents, wip int) domain.Station {
+	return domain.Station{ID: id, Kind: domain.KindAgent, Agent: agent, Agents: agents, WIP: wip}
+}
+
+func ok(output string) domain.RunResult {
+	return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(output)}
+}
+
+func TestSubmit_EntersFirstStationWithClassOfService(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		workType string
+		want     domain.ClassOfService
+	}{
+		{name: "expedite type", workType: typeIncident, want: domain.ClassExpedite},
+		{name: "other type", workType: "feature", want: domain.ClassStandard},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarness(t, lineOf(agentStation(stWork, agWorker, 1, 1)), porttest.Succeed(`{}`))
+			it := h.submit(t, domain.NewItem{Type: tt.workType})
+
+			if it.Station != "inbox" || it.State != domain.StateQueued || it.Class != tt.want || it.Number != 1 {
+				t.Errorf("item = %s/%s class %s number %d; want inbox/queued class %s number 1",
+					it.Station, it.State, it.Class, it.Number, tt.want)
+			}
+		})
+	}
+}
+
+func TestTick_ClaimsExpediteBeforePriority(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		items []domain.NewItem // submitted in this order, one second apart
+		want  []string         // titles in the order the single slot works them
+	}{
+		{
+			name: "expedite beats priority and age",
+			items: []domain.NewItem{
+				{Title: "old", Priority: 0},
+				{Title: "urgent", Priority: 5},
+				{Title: typeIncident, Type: typeIncident, Priority: 0},
+			},
+			want: []string{typeIncident, "urgent", "old"},
+		},
+		{
+			name:  "priority beats age",
+			items: []domain.NewItem{{Title: "low"}, {Title: "high", Priority: 2}},
+			want:  []string{"high", "low"},
+		},
+		{
+			name:  "age breaks ties",
+			items: []domain.NewItem{{Title: "first"}, {Title: "second"}},
+			want:  []string{"first", "second"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarness(t, lineOf(agentStation(stWork, agWorker, 1, 1)), porttest.Succeed(`{}`))
+			for _, n := range tt.items {
+				h.submit(t, n)
+				h.clock.Advance(time.Second)
+			}
+
+			for range tt.items {
+				h.step(t)
+			}
+
+			var got []string
+			for _, spec := range h.runner.Started() {
+				got = append(got, spec.Brief)
+			}
+
+			if len(got) != len(tt.want) {
+				t.Fatalf("worked %q, want %q", got, tt.want)
+			}
+
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("worked %q, want %q", got, tt.want)
+				}
+			}
+		})
+	}
+}
+
+func TestTick_NeverExceedsWIP(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		agents    int
+		wip       int
+		instances int
+		want      int
+	}{
+		{name: "wip below agents", agents: 3, wip: 2, instances: 1, want: 2},
+		{name: "agents below wip", agents: 1, wip: 4, instances: 1, want: 1},
+		{name: "unset wip", agents: 3, instances: 1, want: 3},
+		{name: "three instances share one store", agents: 3, wip: 3, instances: 3, want: 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			release := make(chan struct{})
+			h := newHarness(t, lineOf(agentStation(stWork, agWorker, tt.agents, tt.wip)), porttest.Block(release, `{}`))
+
+			for range 6 {
+				h.submit(t, domain.NewItem{})
+			}
+
+			engines := []*engine.Engine{h.e}
+			for range tt.instances - 1 {
+				engines = append(engines, h.engine(t, h.store))
+			}
+
+			for range 2 {
+				for _, e := range engines {
+					if err := e.Tick(t.Context()); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+
+			leases, err := h.store.Leases(t.Context(), factoryID, stWork)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if len(leases) != tt.want {
+				t.Errorf("%d leases at work, want %d", len(leases), tt.want)
+			}
+
+			if err := h.runner.WaitStarted(bounded(t), tt.want); err != nil {
+				t.Fatal(err)
+			}
+
+			close(release)
+
+			for _, e := range engines {
+				h.wait(t, e)
+			}
+
+			if got := len(h.runner.Started()); got != tt.want {
+				t.Errorf("%d tasks started, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSweep_ExpiredLeaseRequeues(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, lineOf(agentStation(stWork, agWorker, 1, 1)), porttest.Succeed(`{}`))
+	crashed := h.submit(t, domain.NewItem{})
+
+	h.claimAsDeadInstance(t, crashed, stWork)
+
+	h.step(t)
+
+	if len(h.runner.Started()) != 0 {
+		t.Fatal("a tick started work while the dead instance's lease filled the only slot")
+	}
+
+	if n, err := h.e.SweepLeases(t.Context()); err != nil || n != 0 {
+		t.Fatalf("sweep before expiry requeued %d (%v), want 0", n, err)
+	}
+
+	h.clock.Advance(ttl)
+
+	n, err := h.e.SweepLeases(t.Context())
+	if err != nil || n != 1 {
+		t.Fatalf("sweep after expiry requeued %d (%v), want 1", n, err)
+	}
+
+	if got := h.item(t, crashed.ID); got.Station != stWork || got.State != domain.StateQueued {
+		t.Fatalf("item is %s/%s, want work/queued", got.Station, got.State)
+	}
+
+	if len(h.eventsOf(crashed.ID, domain.EventLeaseExpired)) != 1 {
+		t.Errorf("events %v, want one lease_expired", h.kinds(crashed.ID))
+	}
+
+	if n, err := h.e.SweepLeases(t.Context()); err != nil || n != 0 {
+		t.Errorf("second sweep requeued %d (%v), want 0", n, err)
+	}
+
+	h.step(t)
+
+	if got := h.item(t, crashed.ID); got.State != domain.StateDone {
+		t.Errorf("item is %s/%s after the next tick, want done", got.Station, got.State)
+	}
+}
+
+func TestRun_LoopTicksOnTheClock(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, lineOf(agentStation(stWork, agWorker, 1, 1)), porttest.Succeed(`{}`))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error)
+
+	go func() { done <- h.e.Run(ctx) }()
+
+	if err := h.clock.WaitTickers(bounded(t), 1); err != nil {
+		t.Fatal(err)
+	}
+
+	it := h.submit(t, domain.NewItem{})
+	h.clock.Advance(tickEvery)
+
+	if err := h.store.Await(bounded(t), func() bool { return h.item(t, it.ID).State == domain.StateDone }); err != nil {
+		t.Fatal(err)
+	}
+
+	cancel()
+
+	if err := <-done; err != nil {
+		t.Errorf("Run returned %v after cancel, want nil", err)
+	}
+}

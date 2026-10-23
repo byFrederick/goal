@@ -1,5 +1,5 @@
 [tools]
-go = "1.23"
+go = "1.26"
 node = "22"
 terraform = "1.15"
 golangci-lint = "2"
