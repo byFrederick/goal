@@ -286,7 +286,9 @@ func (s *Store) FinishRun(_ context.Context, id domain.RunID, res domain.RunResu
 	s.items[r.ItemID].CostUSD += res.CostUSD
 	s.append(domain.Event{
 		FactoryID: r.FactoryID, ItemID: r.ItemID, RunID: id, At: endedAt, Kind: domain.EventRunFinished,
-		Station: r.Station, Actor: r.Agent, Data: map[string]any{"status": string(res.Status), "error": res.Error},
+		Station: r.Station, Actor: r.Agent, Data: map[string]any{
+			"status": string(res.Status), "error": res.Error, "cost_usd": res.CostUSD, "turns": res.Turns,
+		},
 	})
 
 	return nil

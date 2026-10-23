@@ -72,7 +72,7 @@ type Store interface {
 	StartRun(ctx context.Context, r NewRun) (domain.RunID, error)
 
 	// FinishRun records a run's result, adds its cost to the item and appends a run_finished
-	// event. Finishing a run twice is a no-op.
+	// event with its status, error, cost and turns. Finishing a run twice is a no-op.
 	FinishRun(ctx context.Context, id domain.RunID, res domain.RunResult, endedAt time.Time) error
 
 	// Transition moves an item as described by t, compare-and-set on t.From (and on t.Lease

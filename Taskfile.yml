@@ -39,9 +39,21 @@ tasks:
   build:
     desc: Build every binary in cmd/ into bin/
     sources: ["**/*.go", go.mod, go.sum, schema/*.json]
-    generates: [bin/goal]
+    generates: [bin/goal, bin/goald]
     cmds:
       - go build -trimpath -o bin/ ./cmd/...
+
+  up:
+    desc: Start PostgreSQL and RustFS, ensure the bucket and run goald in the foreground (goal up)
+    deps: [build]
+    cmds:
+      - bin/goal up
+
+  goald:
+    desc: Run goald in the foreground against already running compose services
+    deps: [build]
+    cmds:
+      - bin/goald
 
   test:
     desc: Unit tests with the race detector

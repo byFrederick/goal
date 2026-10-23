@@ -346,7 +346,7 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 		return appendEvents(ctx, q, []domain.Event{{
 			FactoryID: domain.FactoryID(row.FactoryID.String()), ItemID: domain.ItemID(item.String()), RunID: id,
 			At: endedAt, Kind: domain.EventRunFinished, Station: row.Station, Actor: row.Agent,
-			Data: map[string]any{"status": string(res.Status), "error": res.Error},
+			Data: runFinished(res),
 		}})
 	})
 	if err != nil {

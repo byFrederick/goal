@@ -62,21 +62,30 @@ export function agentQuery(
 /**
  * Maps the agent's tool rules onto the SDK. Allow rules use Claude Code's permission syntax
  * ("Read", "Bash(npm test*)"): their tool names are the only built-in tools available, and the
- * rules themselves are pre-approved. Deny rules always win.
+ * rules themselves are pre-approved. Deny rules always win. Rules for gateway tools
+ * ("github__get_*": a connection, two underscores, a tool pattern) are enforced by goald's
+ * gateway, which serves only the allowed ones, so they are left out here.
  */
 export function toolPolicy(
   spec: Pick<TaskSpec, 'tools_allow' | 'tools_deny' | 'skills'>,
   gateway: boolean,
 ): Pick<Options, 'tools' | 'allowedTools' | 'disallowedTools'> {
-  const allow = spec.tools_allow.length > 0 ? spec.tools_allow : readOnlyTools;
+  const builtin = spec.tools_allow.filter((rule) => !isGatewayRule(rule));
+  const allow = builtin.length > 0 ? builtin : readOnlyTools;
   const tools = new Set(allow.map((rule) => rule.replace(/\(.*$/, '')).filter((name) => !name.startsWith('mcp__')));
   if (spec.skills.length > 0) tools.add('Skill');
 
   return {
     tools: [...tools],
     allowedTools: gateway ? [...allow, `mcp__${gatewayServer}`] : [...allow],
-    disallowedTools: [...spec.tools_deny],
+    disallowedTools: spec.tools_deny.filter((rule) => !isGatewayRule(rule)),
   };
+}
+
+/** Gateway tool rules name "<connection>__<tool pattern>"; built-in tool names have no "__". */
+function isGatewayRule(rule: string): boolean {
+  const name = rule.replace(/\(.*$/, '');
+  return name.includes('__') && !name.startsWith('mcp__');
 }
 
 export function agentEnv(env: NodeJS.ProcessEnv): Record<string, string | undefined> {

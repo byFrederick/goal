@@ -160,6 +160,11 @@ func eventFrom(r db.ItemEvent) (domain.Event, error) {
 	return e, nil
 }
 
+// runFinished is the data of a run_finished event: how the run ended and what it cost.
+func runFinished(res domain.RunResult) map[string]any {
+	return map[string]any{"status": string(res.Status), "error": res.Error, "cost_usd": res.CostUSD, "turns": res.Turns}
+}
+
 func deref(s *string) string {
 	if s == nil {
 		return ""

@@ -671,7 +671,7 @@ func testRuns(f *fixture) {
 		{FactoryID: f.factory, ItemID: it.ID, RunID: id, At: t1, Kind: domain.EventRunStarted, Station: stWork, Actor: agWorker},
 		{
 			FactoryID: f.factory, ItemID: it.ID, RunID: id, At: t2, Kind: domain.EventRunFinished, Station: stWork,
-			Actor: agWorker, Data: map[string]any{"status": "succeeded", "error": ""},
+			Actor: agWorker, Data: map[string]any{"status": "succeeded", "error": "", "cost_usd": 0.25, "turns": 3},
 		},
 	})
 

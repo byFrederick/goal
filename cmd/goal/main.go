@@ -1,9 +1,11 @@
 // Command goal is the Goal CLI: it validates factory definitions and moves them between a
-// local working copy and the bucket where they live. `goal up` (daemon + UI) lands later.
+// local working copy and the bucket where they live, starts the local platform (goal up), and
+// submits, follows and decides on work items through goald's HTTP API.
 //
 // Object storage comes from the environment: GOAL_S3_BUCKET, and for a local S3-compatible
 // server (RustFS) GOAL_S3_ENDPOINT, GOAL_S3_ACCESS_KEY and GOAL_S3_SECRET_KEY. On AWS the
-// standard credential chain applies.
+// standard credential chain applies. goald's API is GOAL_API_URL (default
+// http://127.0.0.1:8080).
 package main
 
 import (
@@ -21,6 +23,13 @@ import (
 )
 
 const usage = `usage:
+  goal up                                         start PostgreSQL and RustFS, ensure the bucket, run goald
+  goal run <factory> "<brief>" [--type T] [--body B] [--priority N] [--detach]
+                                                  submit a work item and follow it until a human or done
+  goal follow <item>                              follow an item's events again
+  goal item <item>                                show an item with its outputs
+  goal approve <item> [--by NAME]                 approve an item waiting at a human station
+  goal reject <item> --reason "..." [--by NAME]   send it back for rework
   goal factory validate <dir> ...                 validate local factory folders (alias: goal validate)
   goal factory push <dir>                         validate, then upload to factories/<metadata.id>/
   goal factory pull <id|name> <dir>               download a factory into a new folder
@@ -58,6 +67,16 @@ func run(ctx context.Context, args []string, out *printer, getenv func(string) s
 		return validate(out, rest)
 	case "factory":
 		return factory(ctx, out, getenv, rest)
+	case "up":
+		return up(ctx, out, getenv, rest)
+	case "run":
+		return runItem(ctx, out, getenv, rest)
+	case "follow":
+		return followItem(ctx, out, getenv, rest)
+	case "item":
+		return showItem(ctx, out, getenv, rest)
+	case "approve", "reject":
+		return decide(ctx, out, getenv, cmd, rest)
 	case "storage":
 		if len(rest) != 1 || rest[0] != "init" {
 			return errUsage

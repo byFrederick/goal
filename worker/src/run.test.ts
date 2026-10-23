@@ -106,6 +106,22 @@ describe('runTask', () => {
     expect(calls[0]?.prompt).toContain('output contract "change"');
   });
 
+  it('leaves gateway tool rules to the gateway', async () => {
+    const { calls } = await run([success], {
+      spec: {
+        ...spec,
+        tools_allow: ['Read', 'github__get_*', 'github__push_files'],
+        tools_deny: ['Bash(git push*)', 'github__merge_*'],
+      } as TaskSpec,
+    });
+
+    expect(calls[0]?.options).toMatchObject({
+      tools: ['Read', 'Skill'],
+      allowedTools: ['Read', 'mcp__goal'],
+      disallowedTools: ['Bash(git push*)'],
+    });
+  });
+
   it('allows only read-only tools when the agent allows none', async () => {
     const { calls } = await run([success], {
       spec: { ...spec, tools_allow: [], skills: [], gateway_url: undefined } as TaskSpec,
