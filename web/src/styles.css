@@ -1,0 +1,140 @@
+/* Design tokens from design-system/goal/MASTER.md (the user overrides). Components use these
+   names only: no hex values, no default Tailwind palette (it is cleared below), no gradients. */
+@import "tailwindcss";
+@import "@fontsource-variable/inter/opsz.css";
+@import "@fontsource/fira-code/400.css";
+@import "@fontsource/fira-code/500.css";
+
+@theme {
+  --color-*: initial;
+  --color-white: #ffffff;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  /* Surfaces */
+  --color-ground: #e6e9e7;
+  --color-shell: #eef1ef;
+  --color-card: #f6f7f5;
+  --color-surface: #ffffff;
+  --color-control: #e3e7e5;
+  --color-control-hover: #d8dedb;
+  --color-nav-hover: #e1e6e3;
+
+  /* Text and lines */
+  --color-ink: #1d2733;
+  --color-muted: #556270;
+  --color-rule: #cbd2ce;
+  --color-line: #dde2df;
+  --color-hairline: #e3e7e5;
+  --color-faint: #9aa5a0;
+
+  /* Meaning: teal runs, amber is the constraint only, violet waits on you, rust is rework */
+  --color-run: #1f6f8b;
+  --color-run-tint: #dceef3;
+  --color-run-hatch: #bfe0ea;
+  --color-amber: #f0a202;
+  --color-amber-tint: #fff6e0;
+  --color-amber-line: #f2d58a;
+  --color-amber-ink: #8a5d00;
+  --color-you: #5b4bb7;
+  --color-you-tint: #ece9f8;
+  --color-you-line: #c9c1ee;
+  --color-rework: #b4441c;
+  --color-rework-tint: #fbefe9;
+  --color-rework-line: #ebc3b2;
+  --color-rework-ink: #8a3313;
+  --color-rework-hatch: #f1cdbe;
+  --color-ok: #2e6b4e;
+  --color-ok-dot: #2e8b5e;
+  --color-target: #8a958f;
+
+  --font-sans: "Inter Variable", "Inter", system-ui, sans-serif;
+  --font-mono: "Fira Code", ui-monospace, monospace;
+
+  --tracking-display: -0.035em;
+  --tracking-numeral: -0.04em;
+
+  --radius-shell: 16px;
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --radius-chip: 6px;
+
+  --shadow-shell: 0 20px 40px -24px rgb(29 39 51 / 0.25);
+  --shadow-raise: 0 1px 2px rgb(29 39 51 / 0.08);
+  --shadow-lift: 0 4px 12px -6px rgb(29 39 51 / 0.25);
+  --shadow-dialog: 0 20px 25px -5px rgb(29 39 51 / 0.2);
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+}
+
+@layer base {
+  html {
+    background: var(--color-ground);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-optical-sizing: auto;
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-size-adjust: 100%;
+    scrollbar-color: var(--color-faint) transparent;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+  }
+
+  ::selection {
+    background: var(--color-run-hatch);
+    color: var(--color-ink);
+  }
+
+  a {
+    color: inherit;
+    text-underline-offset: 3px;
+  }
+
+  button,
+  [role="button"],
+  a[href],
+  summary {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-run);
+    outline-offset: 2px;
+  }
+
+  input,
+  textarea,
+  select {
+    caret-color: var(--color-run);
+  }
+
+  code,
+  kbd,
+  pre,
+  samp,
+  .font-mono {
+    font-family: var(--font-mono);
+    font-variant-ligatures: none;
+  }
+}
+
+/* Unlayered, so it wins over every utility without !important. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
+    scroll-behavior: auto;
+  }
+}

@@ -11,8 +11,7 @@ goal/
   go.mod                       Go module (goald, goal CLI, engine, adapters)
   cmd/  internal/  migrations/  queries/
   api/
-    openapi.yaml               THE contract between goald and every TypeScript client
-    events.schema.json         SSE event payloads
+    openapi.yaml               THE contract between goald and every TypeScript client (incl. the SSE StreamEvent)
   schema/                      factory.schema.json, evals.schema.json
   package.json                 private root: pnpm + turbo only, no app code
   pnpm-workspace.yaml          apps/* and packages/*
@@ -39,7 +38,7 @@ Rules:
 
 - Go: `oapi-codegen` generates a strict server interface that `internal/adapters/http` implements. Handlers call the engine through ports, as everywhere else.
 - TypeScript: `openapi-typescript` generates types into `packages/contracts`; `openapi-fetch` gives a typed client with no hand-written fetch code.
-- Realtime: `GET /v1/events` streams Server-Sent Events whose payloads are defined in `api/events.schema.json`. The client turns each event into a TanStack Query cache invalidation, so screens update without polling.
+- Realtime: `GET /v1/stream?factory=` streams Server-Sent Events: `event: item` (data: the `StreamEvent` schema in `api/openapi.yaml`, `id:` the event id) and `event: resync` (data `{}`: events may have been missed). There is no replay, so a client re-reads what it shows after a reconnect or a resync. The client turns each event into a TanStack Query cache invalidation, so screens update without polling.
 - Factory and eval files keep their JSON Schemas in `schema/`; the same schemas drive Go validation, TS types and the YAML editor's autocompletion.
 
 ## Web app architecture
@@ -57,19 +56,55 @@ Rules:
 | Charts | Small SVG components in `packages/ui` (hatched bars, bridge, sparkline) | Exactly the design system's marks; no heavy chart library |
 | Long lists | TanStack Virtual for traces and big boards | Keeps the main thread free |
 
-Folder structure inside `web/src`:
+Folder structure inside `web/src` (phase 2):
 
 ```
-app/          router, providers, error boundary, layout (sidebar on desktop, bottom tabs under 768 px)
+main.tsx      QueryClient, router, providers
+routes/       file-based route files (TanStack Router plugin; routeTree.gen.ts is generated and committed)
+                /                         → the floor of the factory used last (or the first)
+                /f/$factory               → Floor        (layout route: shell + live stream)
+                /f/$factory/board         → Board        (?station= picks the station on phones)
+                /f/$factory/items         → Items list   (?state= filters)
+                /f/$factory/items/$ref    → Item         ($ref: the number, goal#12 or the id)
+api/          the only HTTP code: types.ts (contract shapes), client.ts (fetch + SSE), queries.ts (keys, queryOptions)
+app/          shell (sidebar from 768 px, icon rail 768–1023 px, bottom tabs below 768 px), loading/error/not-found screens
 features/
-  floor/  board/  items/  agents/  knowledge/  jonah/  definition/
-    routes/      route files for this feature
-    components/  feature-only components
-    queries.ts   TanStack Query hooks over packages/api-client
-shared/       formatting (Intl), SSE wiring, auth session
+  floor/  board/  items/        one folder per screen: page, cards, feature-only logic (items/timeline.ts)
+shared/       code more than one feature uses: decisions (approve, send back, merge, retry), new item,
+              live stream provider, factory helpers, formatting (Intl), state labels
+ui/           design-system primitives on Radix: button, dialog, card, chip, hatch (SVG pattern marks), logo
 ```
 
-Features never import each other; shared code goes to `shared/` or `packages/ui`. `dependency-cruiser` enforces this in CI the same way depguard guards the Go engine.
+Route files stay thin (loader + component); screens live in `features/`. Features never import each other; shared code goes to `shared/` or `ui/`. Boundaries are kept in review for now; `dependency-cruiser` arrives with `packages/`, the same way depguard guards the Go engine. `ui/` moves to `packages/ui` when a second app needs it.
+
+### The API module and `@goal/api-client`
+
+`web/src/api/types.ts` mirrors `api/openapi.yaml` by hand and `client.ts` holds every request (`listFactories`, `getBoard`, `getMetrics`, `listItems`, `getItem`, `listItemEvents`, `submitItem`, `approveItem`, `rejectItem`, `mergeItem`, `retryItem`, `subscribeToFactory`). Nothing else in `src/` calls `fetch` or `EventSource`. Switching to the generated `@goal/api-client` (`createGoalClient`, `subscribe`, schema types) is one change: `types.ts` re-exports the generated schema types under the same names, and `client.ts` reimplements the same functions over `createGoalClient`; `queries.ts` and the screens stay as they are.
+
+### Live updates
+
+`shared/stream.tsx` opens one `EventSource` per open factory. Each `item` event invalidates the factory's board, metrics and lists and that item's queries, batched over 300 ms so a burst of tool calls costs one refetch; the item's history refetch asks only for events after the last one cached. `resync`, and every reconnect after the first open, invalidate everything.
+
+### Decisions
+
+Approve and retry act at once (they only move work forward); send back asks for a reason in a dialog, and merge asks for confirmation. Merge replaces approve at a human station whose `action` is `merge`; nothing is keyed by station names. `by` is read from `localStorage["goal.by"]`, else `web`, until goald gains sign-in.
+
+### Running it
+
+```bash
+task web:dev                     # Vite on :5173, /v1 proxied to goald on 127.0.0.1:8080 (GOAL_API_URL to change)
+GOAL_API=mock task web:dev       # the same against the in-memory mock API (web/mock), no goald needed
+GOAL_API=mock GOAL_MOCK_LIVE=1 task web:dev   # the mock's agents keep calling tools, to watch the stream
+task web:check                   # tsc, Biome, Vitest
+task web:e2e                     # Playwright (Chromium) at 375, 768, 1440 px with axe, on vite preview + the mock
+task build                       # web:build, then go build -tags webui: goald serves the UI at /
+```
+
+`web/mock` is a stand-in for goald's API with the contract's shapes and realistic fixtures (a goal factory building itself, a small SRE factory). It keeps state per server, broadcasts stream events like goald, and `POST /__mock/reset` restores the seed (the e2e tests reset before each test).
+
+### Embedding in goald
+
+`web/webui.go` (Go package `web`) serves the build: files as they are (hashed `assets/` with a one-year immutable cache, the rest `no-cache`), `index.html` for every other path so client routes work on reload, and 404 for unknown `/v1`, `/mcp` and asset paths. `go build -tags webui` embeds `web/dist`; without the tag goald embeds `web/placeholder`, a page that says how to build the UI, so `go build ./...` works on a fresh clone without Node. `cmd/goald` mounts it with `mux.Handle("/", web.Handler())`.
 
 ## Responsive and mobile
 
@@ -87,8 +122,8 @@ The UI holds no secrets. In the cloud it signs in through goald (OIDC); on a lap
 
 ## Quality gates
 
-- Biome for lint and format; `tsc --noEmit` for types; dependency-cruiser for boundaries.
-- Vitest + Testing Library for components with real behavior (board moves, approval flow, editor validation), with MSW handlers generated from the OpenAPI contract. No snapshot tests of markup.
+- Biome for lint and format; `tsc --noEmit` for types; dependency-cruiser for boundaries (with `packages/`).
+- Vitest for logic with real behavior (the trace built from events, which decisions an item allows); Testing Library for components when they carry such logic. No snapshot tests of markup.
 - Playwright for the critical flows at 375, 768 and 1440 px, with axe accessibility checks.
 - Budgets: initial JS under 250 KB gzipped; routes are code-split.
 - Every UI change follows ui-ux-pro-max's pre-delivery checklist and attaches screenshots at the three widths.
