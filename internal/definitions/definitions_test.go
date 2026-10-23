@@ -175,7 +175,8 @@ func TestWriteAgentFiles_StagesPromptLocalSkillsAndSchema(t *testing.T) {
 		"prompt.md":                           "# writer\n",
 		"skills/acme-notes/SKILL.md":          "---\nname: acme-notes\n---\n# Notes\n",
 		"skills/acme-notes/templates/note.md": "a template\n",
-		"output.schema.json":                  noteContract,
+		// Without "$schema": Claude Code's structured output refuses a 2020-12 meta-schema.
+		"output.schema.json": `{"properties":{"title":{"type":"string","minLength":1}},"required":["title"],"type":"object"}`,
 	}
 
 	var got []string

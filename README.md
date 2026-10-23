@@ -5,19 +5,22 @@ Goal runs AI agent factories on your machine. A factory is a definition: `factor
 Factory definitions are content, not code. They live in one versioned S3-compatible bucket, not in this repository (ADR 0005). The first factory, `goal`, builds this repository; others (`sre`, `university`) run the same engine on other work.
 
 ```
-cmd/goal/              CLI: goal factory validate|push|pull|list, goal storage init (goal up later)
+cmd/goal/              CLI: goal up, run, follow, item, approve, reject; goal factory validate|push|pull|list; goal storage init
+cmd/goald/             daemon: flow engine, HTTP API (/v1/), MCP gateway (/mcp), Docker agent runs
+api/                   openapi.yaml: the HTTP API contract (Go types generated into internal/api/gen)
+internal/engine/       flow engine: pull, WIP, gates, workspaces and command checks per run
 internal/config/       loader and cross-reference validation (reads a folder or a bucket prefix)
 internal/factorystore/ bucket layout factories/<id>/: push, pull, list
-internal/adapters/     s3store (S3 and RustFS), more adapters as phases land
+internal/adapters/     postgres, s3store (S3 and RustFS), docker (runner, checker), gitworkspace, envsecrets, sysclock
 schema/                factory.schema.json, evals.schema.json (editor autocompletion + validation)
 migrations/            PostgreSQL schema (goose, forward-only)
 queries/               SQL for sqlc (pgx/v5)
 compose.yaml           local PostgreSQL 18 and RustFS (S3-compatible object storage)
-worker/                agent container image (TypeScript, Claude Agent SDK) — phase 1
+worker/                agent container images (TypeScript, Claude Agent SDK): runtime and dev (Go, task, Terraform, PostgreSQL)
 web/                   UI (React) — phase 2
 terraform/             AWS infrastructure: bucket, KMS, S3 Vectors, one Bedrock KB per factory (phase 3)
 design-system/         UI rules generated with ui-ux-pro-max, plus the user's overrides (MASTER.md)
-docs/adr/              decisions (0001 stack, 0002 Jonah evals, 0003 hexagonal architecture, 0004 frontend, 0005 definitions in object storage)
+docs/adr/              decisions (0001 stack, 0002 Jonah evals, 0003 hexagonal architecture, 0004 frontend, 0005 definitions in object storage, 0006 workspaces and command checks)
 docs/engineering/      architecture and testing rules
 docs/jonah/            evaluation and self-remediation plan
 AGENTS.md              rules for every agent and human (CLAUDE.md imports it)
@@ -40,6 +43,22 @@ task storage:up            # RustFS on 127.0.0.1:9000 (console on :9001)
 task storage:init          # bucket goal-local with versioning
 task test-integration      # adapters against PostgreSQL 18 and RustFS
 ```
+
+### Run a factory
+
+```bash
+# .env: CLAUDE_CODE_OAUTH_TOKEN (claude setup-token), GOAL_GITHUB_TOKEN (fine-grained PAT, this repo),
+#       GOAL_GATEWAY_KEY (openssl rand -hex 32)
+task worker:image-dev                              # the agent image the goal factory names (runtime.image)
+task up                                            # PostgreSQL + RustFS, bucket, then goald in the foreground
+task factory:push DIR=../goal-factories/goal       # in another terminal: the definition goald runs
+bin/goal run goal "Add a goal version subcommand"  # submit; prints the timeline until a human must act
+bin/goal item <item>                               # read the spec the architect wrote
+bin/goal approve <item> --by "$USER"               # approve-spec → build → review → merge (you)
+bin/goal follow <item>                             # follow it again
+```
+
+`goal up` does not push factories: goald runs what the bucket holds and picks up pushes within `GOAL_REFRESH_EVERY` (or at once when `goal run` names a new factory). Ctrl-C stops goald and returns in-flight items to their queue; `docker compose down` stops PostgreSQL and RustFS (volumes stay). Each agent run works in a fresh clone of the factory's `runtime.repository` on the item's branch (`goal/<number>-<slug>`); the GitHub token is used on the host only, for the clone and inside the MCP gateway, and never reaches a container. Station command checks (`task check`, `task migrate-check`) run in a separate hardened container of the same image ([ADR 0006](docs/adr/0006-workspaces-and-command-checks.md)).
 
 GitHub Actions minutes are not available for this private repository, so CI on GitHub is disabled for now and the pre-push hook is the gate. `git push` is blocked unless `task check` passes (and `task migrate-check` when the pushed commits touch `migrations/`).
 

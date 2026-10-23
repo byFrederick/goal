@@ -22,9 +22,11 @@ cmd/goal/            CLI            (main: parse flags, wire, run)
 cmd/goald/           daemon         (main: wire adapters into the engine)
 internal/domain/     plain types and rules: factory, item, station, lease. Imports nothing internal.
 internal/engine/     flow engine: pull, WIP, drum-buffer-rope, andon. Imports domain + ports only.
-internal/ports/      interfaces: Store, Runner, Secrets, Contracts, ObjectStore, Clock (Knowledge, ModelAuth later)
-internal/adapters/   s3store/ postgres/ docker/ ecs/ envsecrets/ awssecrets/ bedrockkb/ http/  (onepassword/ in the last phase)
+internal/ports/      interfaces: Store, Runner, Workspaces, Checker, Secrets, Contracts, ObjectStore, Clock (Knowledge, ModelAuth later)
+internal/adapters/   s3store/ postgres/ docker/ gitworkspace/ envsecrets/ sysclock/ (ecs/ awssecrets/ bedrockkb/ later; onepassword/ in the last phase)
+internal/api/        HTTP API handlers for api/openapi.yaml (generated types in internal/api/gen); no adapter imports
 internal/gateway/    MCP gateway inside goald: task-token auth, per-agent tools, credentials added on the host
+internal/definitions/ goald's cache of the bucket's factory definitions: contracts, agent files, gateway lookups
 internal/config/     loads and validates one factory definition from an fs.FS (bucket prefix or local folder)
 internal/factorystore/ bucket layout factories/<id>/: push, pull, list, fs.FS view. Imports config + ports only.
 migrations/          forward-only SQL (goose); never edit an applied file

@@ -26,6 +26,8 @@ RUN apt-get update \
 ENV NODE_ENV=production \
     HOME=/home/node
 COPY --from=build /out /opt/goal-worker
+# The workspace is a bind mount whose owner may differ from the container's user.
+RUN git config --system --add safe.directory /workspace
 USER 1000:1000
 WORKDIR /workspace
 ENTRYPOINT ["node", "/opt/goal-worker/dist/main.js"]

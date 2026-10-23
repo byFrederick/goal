@@ -2,6 +2,7 @@ package definitions
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -63,11 +64,35 @@ func (c *Cache) WriteAgentFiles(ctx context.Context, t ports.TaskSpec, dir strin
 		return err
 	}
 
-	if err := copyFile(files, file, filepath.Join(dir, "output.schema.json")); err != nil {
+	if err := writeOutputSchema(files, file, filepath.Join(dir, "output.schema.json")); err != nil {
 		return fmt.Errorf("contract %s: %w", t.Output, err)
 	}
 
 	return nil
+}
+
+// writeOutputSchema stages a contract for the agent without its "$schema" keyword: Claude
+// Code's structured output knows only its default draft and refuses a schema that names
+// another (2020-12 contracts would fail every run). goald still validates the output against
+// the full contract.
+func writeOutputSchema(files fs.FS, src, dst string) error {
+	body, err := fs.ReadFile(files, src)
+	if err != nil {
+		return err
+	}
+
+	var schema map[string]json.RawMessage
+	if err := json.Unmarshal(body, &schema); err != nil {
+		return fmt.Errorf("%s is not a JSON object: %w", src, err)
+	}
+
+	delete(schema, "$schema")
+
+	if body, err = json.Marshal(schema); err != nil {
+		return err
+	}
+
+	return os.WriteFile(dst, body, fileMode)
 }
 
 func copyTree(files fs.FS, root, dst string) error {
