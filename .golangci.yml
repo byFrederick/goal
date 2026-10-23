@@ -129,6 +129,8 @@ linters:
               desc: the engine receives domain types, not file loaders
             - pkg: github.com/jackc/pgx
               desc: database access belongs in internal/adapters/postgres
+            - pkg: github.com/pressly/goose
+              desc: migrations are applied by internal/adapters/postgres
             - pkg: github.com/docker
               desc: container access belongs in internal/adapters/docker
             - pkg: github.com/aws
@@ -153,6 +155,8 @@ linters:
               desc: the engine receives domain types; definitions never call it
             - pkg: github.com/aws
               desc: AWS access belongs in internal/adapters
+            - pkg: github.com/jackc/pgx
+              desc: database access belongs in internal/adapters/postgres
         gateway:
           files: ["**/internal/gateway/**"]
           deny:
@@ -164,6 +168,13 @@ linters:
               desc: definitions arrive through gateway.Definitions; cmd/goald wires the bucket
             - pkg: github.com/aws
               desc: AWS access belongs in internal/adapters
+            - pkg: github.com/jackc/pgx
+              desc: database access belongs in internal/adapters/postgres
+        sqlc:
+          files: ["**/internal/**", "**/cmd/**", "!**/internal/adapters/postgres/**"]
+          deny:
+            - pkg: github.com/byFrederick/goal/internal/adapters/postgres/db
+              desc: the generated queries are private to the postgres adapter; use its Store
     dupl:
       threshold: 100 # lower => stricter (tokens)
     errcheck:

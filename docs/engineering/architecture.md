@@ -51,6 +51,8 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object s
 - `Clock`: `Now()` and `NewTicker(d)`.
 - `ObjectStore`: `Get(ctx, key, version)` (empty version = current; `ErrNotFound` for a missing or deleted key or version), `Put(ctx, key, body) (ObjectInfo, error)`, `List(ctx, prefix) ([]ObjectInfo, error)` (current objects only, each with its version id), `Delete(ctx, key)` (a delete marker; earlier versions stay readable). `ObjectInfo` is `{Key, Version, Size}`; `Object` adds `Body`.
 - Per-task MCP gateway tokens are HMAC-signed (`domain.SignTaskToken`), so any instance can verify them without stored state.
+- `internal/adapters/postgres` implements `Store` with pgx and sqlc (`queries/` compiled against `migrations/` into the private package `postgres/db`; `task sqlc` regenerates it). Wiring: `postgres.Open(ctx, url)` returns a `*pgxpool.Pool`, `postgres.Migrate(ctx, pool)` applies the embedded goose migrations under a per-schema advisory lock (safe when several instances start at once), `postgres.New(pool)` returns the store, and `SaveFactory` registers each factory `goald` runs before work enters it (items reference their factory row). Every method is one transaction; locks are taken item first, then its lease or runs. `porttest/storetest` is the conformance suite both the fake and the adapter pass.
+- `Knowledge` and `ModelAuth` arrive when the engine first needs them; until then model credentials reach tasks through `engine.Config.TaskEnv` secret references.
 
 ### MCP gateway
 
@@ -62,7 +64,6 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object s
 - **Tools.** Named `<connection>__<tool>`. `tools.allow` and `tools.deny` entries of the form `<connection>__<pattern>` (`path.Match`) apply to gateway tools; deny wins, and a connection with allow entries serves only what they match.
 - **Audit.** Every `tools/call`, denied ones included, appends a `gateway_tool_call` event (connection, tool, outcome, duration, request and response sizes) through `gateway.Events`, which `ports.Store` satisfies. Arguments, results and credentials are never recorded; resolved credentials are scrubbed from results, errors and logs.
 - **Bounds.** Per-call and list timeouts, a cap on upstream response and agent request sizes, no redirects for credentialed requests.
-- `Knowledge` and `ModelAuth` arrive when the engine first needs them; until then model credentials reach tasks through `engine.Config.TaskEnv` secret references.
 
 ### Factory definitions in object storage
 

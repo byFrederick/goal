@@ -59,6 +59,11 @@ tasks:
     cmds:
       - "{{.GOLANGCI}} fmt ./..."
 
+  sqlc:
+    desc: Regenerate internal/adapters/postgres/db from queries/ and migrations/ (sqlc from .mise.toml)
+    cmds:
+      - sqlc generate
+
   validate:
     desc: Validate factory definitions (the test fixtures by default; FACTORIES=<glob> for others)
     cmds:
