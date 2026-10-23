@@ -24,6 +24,8 @@ const (
 	EventLeaseExpired   EventKind = "lease_expired"
 	EventReleased       EventKind = "released"
 	EventDone           EventKind = "done"
+	EventRetried        EventKind = "retried"
+	EventMerged         EventKind = "merged"
 )
 
 // ActorEngine is the actor of events the engine writes on its own.

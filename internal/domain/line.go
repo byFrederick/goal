@@ -20,6 +20,12 @@ const (
 	KindDone  StationKind = "done"
 )
 
+// StationAction is what goald does on a human's behalf when they act at a human station.
+type StationAction string
+
+// ActionMerge marks the human station where approving an item means merging its pull request.
+const ActionMerge StationAction = "merge"
+
 // Line is the part of a factory definition the engine needs: its stations in order, its
 // agents and its flow policy. internal/config builds it from factory.yaml.
 type Line struct {
@@ -68,6 +74,9 @@ type Station struct {
 	// output satisfies its contract; each must exit 0 before the item moves on.
 	Checks []string
 	Gate   *Gate
+	// Action is set on human stations where goald acts for the human (ActionMerge); empty
+	// means the human acts outside Goal and only records the decision.
+	Action StationAction
 }
 
 // Gate sends rejected work back to OnReject, at most MaxRework times per item.

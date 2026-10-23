@@ -39,6 +39,9 @@ type settings struct {
 	// often factory definitions are re-read from the bucket (GOAL_REFRESH_EVERY, default 30s).
 	TickEvery    time.Duration
 	RefreshEvery time.Duration
+	// GitHubAPIURL is the GitHub REST API goald merges pull requests through
+	// (GOAL_GITHUB_API_URL, default https://api.github.com; http only on a loopback address).
+	GitHubAPIURL string
 	// LogLevel (GOAL_LOG_LEVEL: debug, info, warn, error) and LogFormat (GOAL_LOG_FORMAT: json or
 	// text) shape the structured log on stdout.
 	LogLevel  slog.Level
@@ -75,6 +78,7 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 		WorkspaceRoot: or("GOAL_WORKSPACE_ROOT", filepath.Join(os.TempDir(), "goal-workspaces")),
 		RunDir:        or("GOAL_RUN_DIR", filepath.Join(os.TempDir(), "goal-runs")),
 		LogFormat:     or("GOAL_LOG_FORMAT", "json"),
+		GitHubAPIURL:  or("GOAL_GITHUB_API_URL", "https://api.github.com"),
 	}
 
 	var errs []error
@@ -102,6 +106,10 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 		errs = append(errs, fmt.Errorf("GOAL_LOG_LEVEL: %w", err))
 	}
 
+	if err := apiURL(s.GitHubAPIURL); err != nil {
+		errs = append(errs, err)
+	}
+
 	if s.LogFormat != "json" && s.LogFormat != "text" {
 		errs = append(errs, fmt.Errorf("GOAL_LOG_FORMAT %q is not json or text", s.LogFormat))
 	}
@@ -119,6 +127,25 @@ func loopback(listen string) error {
 
 	if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
 		return fmt.Errorf("GOAL_LISTEN %q: the API has no authentication yet, so goald listens on a loopback address only", listen)
+	}
+
+	return nil
+}
+
+// apiURL refuses a GitHub API that a repository token would reach in clear text, except on
+// this machine (a stand-in API for tests).
+func apiURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return fmt.Errorf("GOAL_GITHUB_API_URL %q is not a URL", raw)
+	}
+
+	if u.Scheme == "https" {
+		return nil
+	}
+
+	if ip := net.ParseIP(u.Hostname()); u.Scheme != "http" || (u.Hostname() != "localhost" && (ip == nil || !ip.IsLoopback())) {
+		return fmt.Errorf("GOAL_GITHUB_API_URL %q must be https (http only on a loopback address)", raw)
 	}
 
 	return nil

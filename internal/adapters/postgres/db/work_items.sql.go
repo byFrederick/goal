@@ -26,12 +26,123 @@ func (q *Queries) AddItemCost(ctx context.Context, arg AddItemCostParams) error 
 	return err
 }
 
+const donePerDay = `-- name: DonePerDay :many
+SELECT date_trunc('day', done_at, 'UTC')::timestamptz AS day, count(*) AS done
+FROM work_items
+WHERE factory_id = $1 AND done_at >= $2::timestamptz AND done_at < $3::timestamptz
+GROUP BY 1
+ORDER BY 1
+`
+
+type DonePerDayParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+	Until     time.Time
+}
+
+type DonePerDayRow struct {
+	Day  time.Time
+	Done int64
+}
+
+// Items done in [since, until) by UTC day.
+func (q *Queries) DonePerDay(ctx context.Context, arg DonePerDayParams) ([]DonePerDayRow, error) {
+	rows, err := q.db.Query(ctx, donePerDay, arg.FactoryID, arg.Since, arg.Until)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DonePerDayRow
+	for rows.Next() {
+		var i DonePerDayRow
+		if err := rows.Scan(&i.Day, &i.Done); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const doneStats = `-- name: DoneStats :one
+SELECT count(*) AS items_done,
+       count(*) FILTER (WHERE rework_count > 0) AS reworked,
+       coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM done_at - created_at)::float8), 0)::float8 AS p50_seconds,
+       coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM done_at - created_at)::float8), 0)::float8 AS p85_seconds
+FROM work_items
+WHERE factory_id = $1 AND done_at >= $2::timestamptz AND done_at < $3::timestamptz
+`
+
+type DoneStatsParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+	Until     time.Time
+}
+
+type DoneStatsRow struct {
+	ItemsDone  int64
+	Reworked   int64
+	P50Seconds float64
+	P85Seconds float64
+}
+
+// Lead time (created to done) percentiles in seconds, interpolated between ranks.
+func (q *Queries) DoneStats(ctx context.Context, arg DoneStatsParams) (DoneStatsRow, error) {
+	row := q.db.QueryRow(ctx, doneStats, arg.FactoryID, arg.Since, arg.Until)
+	var i DoneStatsRow
+	err := row.Scan(
+		&i.ItemsDone,
+		&i.Reworked,
+		&i.P50Seconds,
+		&i.P85Seconds,
+	)
+	return i, err
+}
+
 const getItem = `-- name: GetItem :one
 SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at FROM work_items WHERE id = $1
 `
 
 func (q *Queries) GetItem(ctx context.Context, id uuid.UUID) (WorkItem, error) {
 	row := q.db.QueryRow(ctx, getItem, id)
+	var i WorkItem
+	err := row.Scan(
+		&i.ID,
+		&i.FactoryID,
+		&i.Number,
+		&i.ParentID,
+		&i.Type,
+		&i.Lane,
+		&i.Title,
+		&i.Body,
+		&i.Station,
+		&i.State,
+		&i.ClassOfService,
+		&i.Priority,
+		&i.Size,
+		&i.ReworkCount,
+		&i.CostUsd,
+		&i.Outputs,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DoneAt,
+	)
+	return i, err
+}
+
+const getItemByNumber = `-- name: GetItemByNumber :one
+SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at FROM work_items WHERE factory_id = $1 AND number = $2
+`
+
+type GetItemByNumberParams struct {
+	FactoryID uuid.UUID
+	Number    int64
+}
+
+func (q *Queries) GetItemByNumber(ctx context.Context, arg GetItemByNumberParams) (WorkItem, error) {
+	row := q.db.QueryRow(ctx, getItemByNumber, arg.FactoryID, arg.Number)
 	var i WorkItem
 	err := row.Scan(
 		&i.ID,
@@ -124,6 +235,72 @@ func (q *Queries) InsertItem(ctx context.Context, arg InsertItemParams) (WorkIte
 		&i.DoneAt,
 	)
 	return i, err
+}
+
+const listItems = `-- name: ListItems :many
+SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at FROM work_items
+WHERE factory_id = $1
+  AND (cardinality($2::text[]) = 0 OR state = ANY ($2::text[]))
+  AND ($3::text = '' OR station = $3::text)
+  AND ($4::bigint <= 0 OR number < $4::bigint)
+ORDER BY number DESC
+LIMIT $5::bigint
+`
+
+type ListItemsParams struct {
+	FactoryID uuid.UUID
+	States    []string
+	Station   string
+	Before    int64
+	MaxItems  int64
+}
+
+// Newest first, paged by number: the unique (factory_id, number) index serves the order.
+// Empty states and station and a non-positive before mean no filter.
+func (q *Queries) ListItems(ctx context.Context, arg ListItemsParams) ([]WorkItem, error) {
+	rows, err := q.db.Query(ctx, listItems,
+		arg.FactoryID,
+		arg.States,
+		arg.Station,
+		arg.Before,
+		arg.MaxItems,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorkItem
+	for rows.Next() {
+		var i WorkItem
+		if err := rows.Scan(
+			&i.ID,
+			&i.FactoryID,
+			&i.Number,
+			&i.ParentID,
+			&i.Type,
+			&i.Lane,
+			&i.Title,
+			&i.Body,
+			&i.Station,
+			&i.State,
+			&i.ClassOfService,
+			&i.Priority,
+			&i.Size,
+			&i.ReworkCount,
+			&i.CostUsd,
+			&i.Outputs,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DoneAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockItem = `-- name: LockItem :one
@@ -284,6 +461,17 @@ func (q *Queries) NextItemNumber(ctx context.Context, id uuid.UUID) (int64, erro
 	return last_item_number, err
 }
 
+const openItemCount = `-- name: OpenItemCount :one
+SELECT count(*) FROM work_items WHERE factory_id = $1 AND state NOT IN ('done', 'cancelled')
+`
+
+func (q *Queries) OpenItemCount(ctx context.Context, factoryID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, openItemCount, factoryID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const startItem = `-- name: StartItem :one
 UPDATE work_items SET state = 'in_progress', updated_at = $2 WHERE id = $1 RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at
 `
@@ -318,6 +506,36 @@ func (q *Queries) StartItem(ctx context.Context, arg StartItemParams) (WorkItem,
 		&i.DoneAt,
 	)
 	return i, err
+}
+
+const stationLoads = `-- name: StationLoads :many
+SELECT station, waiting, in_progress FROM station_wip WHERE factory_id = $1
+`
+
+type StationLoadsRow struct {
+	Station    string
+	Waiting    int64
+	InProgress int64
+}
+
+func (q *Queries) StationLoads(ctx context.Context, factoryID uuid.UUID) ([]StationLoadsRow, error) {
+	rows, err := q.db.Query(ctx, stationLoads, factoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StationLoadsRow
+	for rows.Next() {
+		var i StationLoadsRow
+		if err := rows.Scan(&i.Station, &i.Waiting, &i.InProgress); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const waitingItems = `-- name: WaitingItems :many

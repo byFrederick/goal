@@ -45,37 +45,77 @@ spec:
       - { id: done, kind: done }
 `
 
+// line is inbox → build (agents, routed by lane) → merge (human, action merge) → done, on a
+// repository: enough for boards, metrics, retries and merges. Tests seed its items straight
+// into the store.
+const line = `apiVersion: goal/v1
+kind: Factory
+metadata: { id: ` + lineID + `, name: line }
+spec:
+  runtime:
+    runner: docker
+    image: ghcr.io/acme/agent:1.0.0
+    auth: anthropic-api-key
+    repository: { url: "https://github.com/acme/app.git", token: env:REPO_TOKEN }
+  knowledgeBase: { collections: [notes] }
+  agents:
+    - { name: backend, prompt: ./agents/backend.md }
+    - { name: frontend, prompt: ./agents/frontend.md }
+  board:
+    stations:
+      - { id: inbox, kind: queue }
+      - { id: build, kind: agent, route: { api: backend, web: frontend }, agents: 2, wip: 2 }
+      - { id: merge, kind: human, action: merge }
+      - { id: done, kind: done }
+`
+
+const lineID = "0b6f1c9e-5d0a-4c39-9a51-6f1f3f0e2a10"
+
+var t0 = time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
+
 type harness struct {
-	srv    *httptest.Server
-	engine *engine.Engine
-	store  *porttest.Store
+	srv      *httptest.Server
+	engine   *engine.Engine
+	store    *porttest.Store
+	clock    *porttest.Clock
+	codehost *porttest.CodeHost
+	notices  *porttest.ItemNotices
 }
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 
-	dir := t.TempDir()
-	for name, body := range map[string]string{"factory.yaml": acme, "agents/writer.md": "# writer\n"} {
-		if err := os.MkdirAll(filepath.Join(dir, filepath.Dir(name)), 0o750); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-
 	catalog := factorystore.New(porttest.NewObjectStore())
-	if _, _, err := catalog.Push(t.Context(), dir); err != nil {
-		t.Fatal(err)
+
+	for _, files := range []map[string]string{
+		{"factory.yaml": acme, "agents/writer.md": "# writer\n"},
+		{"factory.yaml": line, "agents/backend.md": "# backend\n", "agents/frontend.md": "# frontend\n"},
+	} {
+		dir := t.TempDir()
+		for name, body := range files {
+			if err := os.MkdirAll(filepath.Join(dir, filepath.Dir(name)), 0o750); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if _, _, err := catalog.Push(t.Context(), dir); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	h := &harness{store: porttest.NewStore()}
+	h := &harness{
+		store: porttest.NewStore(), clock: porttest.NewClock(t0), codehost: porttest.NewCodeHost(),
+		notices: porttest.NewItemNotices(),
+	}
 
 	e, err := engine.New(engine.Deps{
 		Store: h.store, Runner: porttest.NewRunner(porttest.Succeed(`{}`)), Workspaces: porttest.NewWorkspaces(),
 		Checker: porttest.NewChecker(), Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{},
-		Clock: porttest.NewClock(time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)),
+		CodeHost: h.codehost, Clock: h.clock,
 	}, engine.Config{})
 	if err != nil {
 		t.Fatal(err)
@@ -93,13 +133,28 @@ func newHarness(t *testing.T) *harness {
 		return e.SetLines(lines)
 	}, nil)
 
-	handler, err := api.New(api.Deps{Engine: e, Items: h.store, Factories: defs})
+	feed := api.NewFeed(h.notices, nil)
+	ctx, stop := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+
+	go func() { done <- feed.Run(ctx) }()
+
+	handler, err := api.New(api.Deps{Engine: e, Items: h.store, Factories: defs, Feed: feed, Clock: h.clock})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	h.srv = httptest.NewServer(handler)
-	t.Cleanup(h.srv.Close)
+
+	t.Cleanup(func() {
+		stop() // ends every stream before the server closes
+
+		if err := <-done; err != nil {
+			t.Error(err)
+		}
+
+		h.srv.Close()
+	})
 
 	return h
 }
@@ -170,7 +225,7 @@ func TestAPI_HealthAndFactories(t *testing.T) {
 	// it is listed.
 	h.submit(t)
 
-	if code := h.call(t, http.MethodGet, "/v1/factories", "", &list); code != http.StatusOK || len(list.Factories) != 1 {
+	if code := h.call(t, http.MethodGet, "/v1/factories", "", &list); code != http.StatusOK || len(list.Factories) != 2 {
 		t.Fatalf("list factories = %d %+v", code, list)
 	}
 

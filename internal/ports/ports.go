@@ -34,6 +34,10 @@ var (
 	ErrContractViolation = errors.New("contract violation")
 	// ErrSecretNotFound means a secret reference names nothing.
 	ErrSecretNotFound = errors.New("secret not found")
+	// ErrNotMergeable means a pull request cannot be merged as it stands: it is closed, has
+	// conflicts or failing required checks, its head moved, or it is not on the expected
+	// repository. Nothing was changed.
+	ErrNotMergeable = errors.New("pull request not mergeable")
 )
 
 // Store is the engine's only state. Every method is atomic; methods that change state append
@@ -87,6 +91,33 @@ type Store interface {
 	// append order (ascending id). An unknown item has no events; an id no item could have is
 	// ErrNotFound.
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
+
+	// ItemByNumber returns a factory's item by its per-factory number, or ErrNotFound.
+	ItemByNumber(ctx context.Context, factory domain.FactoryID, number int64) (domain.Item, error)
+
+	// ListItems returns up to q.Limit of a factory's items that match q, newest (highest
+	// number) first.
+	ListItems(ctx context.Context, q ItemQuery) ([]domain.Item, error)
+
+	// StationLoads returns the load of every station of a factory that has open items: how
+	// many wait (queued or ready) and how many are in progress. Order is unspecified.
+	StationLoads(ctx context.Context, factory domain.FactoryID) ([]domain.StationLoad, error)
+
+	// FlowMetrics measures a factory's flow: items done and spend in [since, until), and the
+	// work in the line now.
+	FlowMetrics(ctx context.Context, factory domain.FactoryID, since, until time.Time) (domain.FlowMetrics, error)
+}
+
+// ItemQuery selects a factory's items for a listing.
+type ItemQuery struct {
+	FactoryID domain.FactoryID
+	// States, when not empty, keeps items in one of these states.
+	States []domain.ItemState
+	// Station, when not empty, keeps items at this station.
+	Station string
+	// Before, when positive, keeps items numbered below it: the cursor of the next page.
+	Before int64
+	Limit  int
 }
 
 // Claim asks for the next item at a station for one slot.
@@ -129,6 +160,73 @@ type Transition struct {
 	// DoneAt is stored when To.State is done.
 	DoneAt time.Time
 	Events []domain.Event
+}
+
+// ItemNotices streams a notice of every item event as it is committed, from any goald
+// instance: PostgreSQL LISTEN/NOTIFY. Each instance listens once and fans out to its own
+// clients, so no instance holds state another needs.
+type ItemNotices interface {
+	// Listen calls deliver for every item event committed while it listens, in commit order,
+	// until ctx ends; it returns nil then. Each time it starts listening (the first time, and
+	// again after reconnecting when the connection was lost, which misses the events committed
+	// meanwhile) it first delivers a notice with Resync set. deliver must not block for long.
+	Listen(ctx context.Context, deliver func(ItemNotice)) error
+}
+
+// ItemNotice is one committed item event as listeners see it, with the item's state right
+// after it. A Resync notice carries nothing else: listeners must re-read what they show.
+type ItemNotice struct {
+	Resync    bool
+	EventID   int64
+	FactoryID domain.FactoryID
+	ItemID    domain.ItemID
+	// Number is the item's per-factory number.
+	Number  int64
+	Kind    domain.EventKind
+	Station string
+	State   domain.ItemState
+	At      time.Time
+}
+
+// CodeHost reaches the API of the host where a factory's repository lives (GitHub), with the
+// repository's token, on the goald host only. Adapters never put the token in errors or logs.
+type CodeHost interface {
+	// PullRequest returns the state of the pull request at url, which must belong to repo
+	// (otherwise an error wrapping ErrNotMergeable).
+	PullRequest(ctx context.Context, repo domain.Repository, url string) (PullRequest, error)
+
+	// Merge merges the pull request at url only while its head is still m.HeadSHA, and never
+	// forces: a pull request the host refuses to merge is an error wrapping ErrNotMergeable.
+	// It returns the merge commit's SHA.
+	Merge(ctx context.Context, repo domain.Repository, url string, m Merge) (string, error)
+
+	// DeleteBranch deletes a branch of repo; a branch that is already gone is not an error.
+	DeleteBranch(ctx context.Context, repo domain.Repository, branch string) error
+}
+
+// PullRequest is what goald needs to know before and after merging a pull request.
+type PullRequest struct {
+	URL    string
+	Open   bool
+	Merged bool
+	// Mergeable is false while the host is still computing it, as well as when the pull
+	// request has conflicts or fails required checks.
+	Mergeable bool
+	HeadSHA   string
+	// HeadBranch is the branch the pull request merges from; SameRepository reports whether
+	// that branch lives in repo itself (not a fork). BaseBranch is the branch it merges into.
+	HeadBranch     string
+	SameRepository bool
+	BaseBranch     string
+	// MergeSHA is the merge commit once merged.
+	MergeSHA string
+}
+
+// Merge says how to merge a pull request.
+type Merge struct {
+	// Method is squash, merge or rebase.
+	Method  string
+	HeadSHA string
 }
 
 // Runner starts agent tasks: a container on a laptop (Docker) or a task on AWS (ECS).

@@ -76,7 +76,7 @@ func fakeGoald(t *testing.T) *httptest.Server {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(gen.Item{Id: "item-1", Number: 1, State: state, Station: "approve-spec", CostUsd: 0.42})
+		_ = json.NewEncoder(w).Encode(gen.Item{Id: "item-1", Ref: "goal#1", Number: 1, State: state, Station: "approve-spec", CostUsd: 0.42})
 	})
 	mux.HandleFunc("GET /v1/items/{id}/events", func(w http.ResponseWriter, r *http.Request) {
 		after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
@@ -117,7 +117,7 @@ func TestFollow_PrintsEachEventOnceUntilAHumanMustAct(t *testing.T) {
 	}
 
 	got := buf.String()
-	for _, want := range []string{"created", "run succeeded ($0.42, 7 turns)", "moved spec → approve-spec", "is waiting_human at approve-spec", "goal approve item-1"} {
+	for _, want := range []string{"created", "run succeeded ($0.42, 7 turns)", "moved spec → approve-spec", "goal#1 is waiting_human at approve-spec", "goal approve goal#1"} {
 		if strings.Count(got, want) != 1 {
 			t.Errorf("output has %q %d times, want once:\n%s", want, strings.Count(got, want), got)
 		}

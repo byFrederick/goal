@@ -43,6 +43,7 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 		{name: "GitHub token for tasks", env: map[string]string{"GOAL_TASK_ENV": "goal_github_token=env:X"}, want: "never reach"},
 		{name: "literal secret for tasks", env: map[string]string{"GOAL_TASK_ENV": "CLAUDE_CODE_OAUTH_TOKEN=sk-literal"}, want: "NAME=env:REF"},
 		{name: "bad duration", env: map[string]string{"GOAL_TICK_EVERY": "-1s"}, want: "GOAL_TICK_EVERY"},
+		{name: "GitHub API in clear text", env: map[string]string{"GOAL_GITHUB_API_URL": "http://api.example.com"}, want: "must be https"},
 	}
 
 	for _, tt := range tests {

@@ -45,6 +45,7 @@ type harness struct {
 	checker    *porttest.Checker
 	clock      *porttest.Clock
 	contracts  *porttest.Contracts
+	codehost   *porttest.CodeHost
 	line       domain.Line
 
 	mu    sync.Mutex
@@ -75,6 +76,7 @@ func newHarness(t *testing.T, line domain.Line, run porttest.RunFunc) *harness {
 		checker:    porttest.NewChecker(),
 		clock:      porttest.NewClock(t0),
 		contracts:  porttest.NewContracts(),
+		codehost:   porttest.NewCodeHost(),
 		line:       line,
 	}
 	h.e = h.engine(t, h.store)
@@ -88,7 +90,7 @@ func (h *harness) engine(t *testing.T, store ports.Store) *engine.Engine {
 
 	e, err := engine.New(engine.Deps{
 		Store: store, Runner: h.runner, Workspaces: h.workspaces, Checker: h.checker, Contracts: h.contracts, Clock: h.clock,
-		Secrets: porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y", "MODEL_ACCESS": "tok"}, RunEnded: h.runEnded,
+		Secrets: porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y", "MODEL_ACCESS": "tok"}, CodeHost: h.codehost, RunEnded: h.runEnded,
 	}, engine.Config{
 		Lines:          []domain.Line{h.line},
 		TickEvery:      tickEvery,

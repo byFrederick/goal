@@ -148,6 +148,8 @@ linters:
               desc: adapters move bytes; loading and validating factories is internal/config's job
             - pkg: github.com/byFrederick/goal/internal/factorystore
               desc: adapters implement ports; the factory layout in the bucket is factorystore's job
+            - pkg: github.com/byFrederick/goal/internal/api
+              desc: adapters implement ports; the HTTP API calls them, never the reverse
         definitions:
           files: ["**/internal/config/**", "**/internal/factorystore/**", "**/internal/definitions/**"]
           deny:
@@ -179,6 +181,8 @@ linters:
               desc: the API reaches the store and the engine through its own interfaces; cmd/goald wires adapters
             - pkg: github.com/byFrederick/goal/internal/factorystore
               desc: factory definitions arrive through api.Factories
+            - pkg: github.com/byFrederick/goal/internal/definitions
+              desc: factory definitions arrive through api.Factories; cmd/goald wires the cache
             - pkg: github.com/byFrederick/goal/internal/gateway
               desc: the gateway is a sibling HTTP component, mounted by cmd/goald
             - pkg: github.com/aws

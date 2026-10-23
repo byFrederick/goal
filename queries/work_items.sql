@@ -61,3 +61,40 @@ RETURNING *;
 
 -- name: AddItemCost :exec
 UPDATE work_items SET cost_usd = cost_usd + $2 WHERE id = $1;
+
+-- name: GetItemByNumber :one
+SELECT * FROM work_items WHERE factory_id = $1 AND number = $2;
+
+-- name: ListItems :many
+-- Newest first, paged by number: the unique (factory_id, number) index serves the order.
+-- Empty states and station and a non-positive before mean no filter.
+SELECT * FROM work_items
+WHERE factory_id = sqlc.arg(factory_id)
+  AND (cardinality(sqlc.arg(states)::text[]) = 0 OR state = ANY (sqlc.arg(states)::text[]))
+  AND (sqlc.arg(station)::text = '' OR station = sqlc.arg(station)::text)
+  AND (sqlc.arg(before)::bigint <= 0 OR number < sqlc.arg(before)::bigint)
+ORDER BY number DESC
+LIMIT sqlc.arg(max_items)::bigint;
+
+-- name: StationLoads :many
+SELECT station, waiting, in_progress FROM station_wip WHERE factory_id = $1;
+
+-- name: OpenItemCount :one
+SELECT count(*) FROM work_items WHERE factory_id = $1 AND state NOT IN ('done', 'cancelled');
+
+-- name: DonePerDay :many
+-- Items done in [since, until) by UTC day.
+SELECT date_trunc('day', done_at, 'UTC')::timestamptz AS day, count(*) AS done
+FROM work_items
+WHERE factory_id = sqlc.arg(factory_id) AND done_at >= sqlc.arg(since)::timestamptz AND done_at < sqlc.arg(until)::timestamptz
+GROUP BY 1
+ORDER BY 1;
+
+-- name: DoneStats :one
+-- Lead time (created to done) percentiles in seconds, interpolated between ranks.
+SELECT count(*) AS items_done,
+       count(*) FILTER (WHERE rework_count > 0) AS reworked,
+       coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM done_at - created_at)::float8), 0)::float8 AS p50_seconds,
+       coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM done_at - created_at)::float8), 0)::float8 AS p85_seconds
+FROM work_items
+WHERE factory_id = sqlc.arg(factory_id) AND done_at >= sqlc.arg(since)::timestamptz AND done_at < sqlc.arg(until)::timestamptz;

@@ -1,13 +1,21 @@
 // Package api serves goald's HTTP API, the contract in api/openapi.yaml: health, the factories
-// goald runs, submitting work items, reading items and their history, and human decisions.
+// goald runs, their boards and flow metrics, submitting and listing work items, reading items
+// and their history, human decisions (approve, reject, retry, merge) and a Server-Sent Events
+// stream of item events.
 //
 // The handlers implement the strict server interface generated into internal/api/gen
 // (`task api:gen`). They reach the engine, the store and the factory definitions only through
-// the small interfaces below; cmd/goald wires the real ones. Errors are RFC 9457 problem
-// details: unknown items and factories are 404, invalid requests 400, a decision on an item
-// that is not waiting for a human 409; anything else is a 500 whose detail stays in the log.
+// the small interfaces below; cmd/goald wires the real ones. Wherever a path takes an item,
+// it takes its id or <factory>#<number>. Errors are RFC 9457 problem details: unknown items
+// and factories are 404, invalid requests 400, an action the item's state does not allow (a
+// decision on an item not waiting for a human, a retry of an item not blocked, a merge that is
+// not the item's step or that the pull request refuses) 409; anything else is a 500 whose
+// detail stays in the log.
 //
-// Phase 1 has no authentication: goald binds the API to 127.0.0.1.
+// The stream is served from a Feed: one LISTEN per goald instance, fanned out to that
+// instance's clients, so any instance serves any client.
+//
+// No authentication yet: goald binds the API to 127.0.0.1.
 package api
 
 import (
@@ -19,6 +27,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/config"
@@ -32,12 +41,20 @@ type Engine interface {
 	Submit(ctx context.Context, n domain.NewItem) (domain.Item, error)
 	Approve(ctx context.Context, id domain.ItemID, by string) (domain.Item, error)
 	Reject(ctx context.Context, id domain.ItemID, by, reason string) (domain.Item, error)
+	Retry(ctx context.Context, id domain.ItemID, by string) (domain.Item, error)
+	Merge(ctx context.Context, id domain.ItemID, by, method string) (domain.Item, error)
 }
 
-// Items reads items and their history; ports.Store satisfies it.
+// Items reads items, their history, the leases on them and a factory's flow; ports.Store
+// satisfies it.
 type Items interface {
 	Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
+	ItemByNumber(ctx context.Context, factory domain.FactoryID, number int64) (domain.Item, error)
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
+	ListItems(ctx context.Context, q ports.ItemQuery) ([]domain.Item, error)
+	Leases(ctx context.Context, factory domain.FactoryID, station string) ([]domain.Lease, error)
+	StationLoads(ctx context.Context, factory domain.FactoryID) ([]domain.StationLoad, error)
+	FlowMetrics(ctx context.Context, factory domain.FactoryID, since, until time.Time) (domain.FlowMetrics, error)
 }
 
 // Factories are the definitions goald runs; *definitions.Cache satisfies it.
@@ -52,7 +69,11 @@ type Deps struct {
 	Engine    Engine
 	Items     Items
 	Factories Factories
-	Logger    *slog.Logger
+	// Feed serves /v1/stream; the caller runs it (Feed.Run).
+	Feed *Feed
+	// Clock dates ages and metric windows and paces stream heartbeats.
+	Clock  ports.Clock
+	Logger *slog.Logger
 }
 
 // Limits on requests.
@@ -67,8 +88,8 @@ var errInvalid = errors.New("invalid request")
 
 // New returns the API's handler for the /v1/ routes.
 func New(d Deps) (http.Handler, error) {
-	if d.Engine == nil || d.Items == nil || d.Factories == nil {
-		return nil, errors.New("api: Engine, Items and Factories are required")
+	if d.Engine == nil || d.Items == nil || d.Factories == nil || d.Feed == nil || d.Clock == nil {
+		return nil, errors.New("api: Engine, Items, Factories, Feed and Clock are required")
 	}
 
 	log := d.Logger
@@ -76,7 +97,7 @@ func New(d Deps) (http.Handler, error) {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	s := &server{engine: d.Engine, items: d.Items, factories: d.Factories, log: log}
+	s := &server{engine: d.Engine, items: d.Items, factories: d.Factories, feed: d.Feed, clock: d.Clock, log: log}
 
 	strict := gen.NewStrictHandlerWithOptions(s, nil, gen.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
@@ -98,6 +119,8 @@ type server struct {
 	engine    Engine
 	items     Items
 	factories Factories
+	feed      *Feed
+	clock     ports.Clock
 	log       *slog.Logger
 }
 
@@ -140,16 +163,31 @@ func (s *server) SubmitItem(ctx context.Context, req gen.SubmitItemRequestObject
 		return nil, err
 	}
 
-	return gen.SubmitItem201JSONResponse(itemOf(it)), nil
+	return gen.SubmitItem201JSONResponse(s.itemOf(it)), nil
 }
 
 func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen.GetItemResponseObject, error) {
-	it, err := s.items.Item(ctx, domain.ItemID(req.Item))
+	it, err := s.item(ctx, req.Item)
 	if err != nil {
 		return nil, err
 	}
 
-	return gen.GetItem200JSONResponse(itemOf(it)), nil
+	return gen.GetItem200JSONResponse(s.itemOf(it)), nil
+}
+
+// item finds an item by its id or by <factory>#<number>.
+func (s *server) item(ctx context.Context, ref string) (domain.Item, error) {
+	r, ok := domain.ParseItemRef(ref)
+	if !ok {
+		return s.items.Item(ctx, domain.ItemID(ref))
+	}
+
+	f, err := s.factories.Lookup(ctx, r.Factory)
+	if err != nil {
+		return domain.Item{}, fmt.Errorf("item %s: %w", ref, err)
+	}
+
+	return s.items.ItemByNumber(ctx, domain.FactoryID(f.Metadata.ID), r.Number)
 }
 
 func (s *server) ListItemEvents(ctx context.Context, req gen.ListItemEventsRequestObject) (gen.ListItemEventsResponseObject, error) {
@@ -163,11 +201,12 @@ func (s *server) ListItemEvents(ctx context.Context, req gen.ListItemEventsReque
 	}
 
 	// Unknown items are 404, not an empty history.
-	if _, err := s.items.Item(ctx, domain.ItemID(req.Item)); err != nil {
+	it, err := s.item(ctx, req.Item)
+	if err != nil {
 		return nil, err
 	}
 
-	events, err := s.items.ItemEvents(ctx, domain.ItemID(req.Item), after, limit)
+	events, err := s.items.ItemEvents(ctx, it.ID, after, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -186,12 +225,16 @@ func (s *server) ApproveItem(ctx context.Context, req gen.ApproveItemRequestObje
 		return nil, fmt.Errorf("%w: say who approves (by)", errInvalid)
 	}
 
-	it, err := s.engine.Approve(ctx, domain.ItemID(req.Item), strings.TrimSpace(req.Body.By))
+	it, err := s.item(ctx, req.Item)
 	if err != nil {
 		return nil, err
 	}
 
-	return gen.ApproveItem200JSONResponse(itemOf(it)), nil
+	if it, err = s.engine.Approve(ctx, it.ID, strings.TrimSpace(req.Body.By)); err != nil {
+		return nil, err
+	}
+
+	return gen.ApproveItem200JSONResponse(s.itemOf(it)), nil
 }
 
 func (s *server) RejectItem(ctx context.Context, req gen.RejectItemRequestObject) (gen.RejectItemResponseObject, error) {
@@ -200,12 +243,58 @@ func (s *server) RejectItem(ctx context.Context, req gen.RejectItemRequestObject
 		return nil, fmt.Errorf("%w: a rejection needs who rejects (by) and a reason", errInvalid)
 	}
 
-	it, err := s.engine.Reject(ctx, domain.ItemID(req.Item), by, reason)
+	it, err := s.item(ctx, req.Item)
 	if err != nil {
 		return nil, err
 	}
 
-	return gen.RejectItem200JSONResponse(itemOf(it)), nil
+	if it, err = s.engine.Reject(ctx, it.ID, by, reason); err != nil {
+		return nil, err
+	}
+
+	return gen.RejectItem200JSONResponse(s.itemOf(it)), nil
+}
+
+func (s *server) RetryItem(ctx context.Context, req gen.RetryItemRequestObject) (gen.RetryItemResponseObject, error) {
+	by := strings.TrimSpace(req.Body.By)
+	if by == "" {
+		return nil, fmt.Errorf("%w: say who retries (by)", errInvalid)
+	}
+
+	it, err := s.item(ctx, req.Item)
+	if err != nil {
+		return nil, err
+	}
+
+	if it, err = s.engine.Retry(ctx, it.ID, by); err != nil {
+		return nil, err
+	}
+
+	return gen.RetryItem200JSONResponse(s.itemOf(it)), nil
+}
+
+func (s *server) MergeItem(ctx context.Context, req gen.MergeItemRequestObject) (gen.MergeItemResponseObject, error) {
+	by := strings.TrimSpace(req.Body.By)
+	if by == "" {
+		return nil, fmt.Errorf("%w: say who merges (by)", errInvalid)
+	}
+
+	method := engine.MergeSquash
+
+	if m := req.Body.Method; m != nil && *m != gen.Squash {
+		return nil, fmt.Errorf("%w: merge method %q is not squash", errInvalid, *m)
+	}
+
+	it, err := s.item(ctx, req.Item)
+	if err != nil {
+		return nil, err
+	}
+
+	if it, err = s.engine.Merge(ctx, it.ID, by, method); err != nil {
+		return nil, err
+	}
+
+	return gen.MergeItem200JSONResponse(s.itemOf(it)), nil
 }
 
 // problem writes err as problem details with the status its kind maps to.
@@ -217,7 +306,8 @@ func (s *server) problem(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, ports.ErrNotFound):
 		status, detail = http.StatusNotFound, err.Error()
-	case errors.Is(err, engine.ErrNotWaitingHuman):
+	case errors.Is(err, engine.ErrNotWaitingHuman), errors.Is(err, engine.ErrNotBlocked),
+		errors.Is(err, engine.ErrNotMergeStep), errors.Is(err, ports.ErrNotMergeable):
 		status, detail = http.StatusConflict, err.Error()
 	case errors.As(err, &tooLarge):
 		status, detail = http.StatusRequestEntityTooLarge, err.Error()
@@ -247,17 +337,42 @@ func factoryOf(f *config.Factory) gen.Factory {
 	}
 
 	for _, st := range f.Spec.Board.Stations {
-		out.Stations = append(out.Stations, gen.Station{Id: st.ID, Kind: gen.StationKind(st.Kind)})
+		out.Stations = append(out.Stations, gen.Station{Id: st.ID, Kind: gen.StationKind(st.Kind), Action: actionOf(st.Action)})
 	}
 
 	return out
 }
 
-func itemOf(it domain.Item) gen.Item {
+func actionOf(a string) *gen.StationAction {
+	if a == "" {
+		return nil
+	}
+
+	action := gen.StationAction(a)
+
+	return &action
+}
+
+// ref writes an item's reference with its factory's current name, or its id when the factory
+// is not loaded.
+func (s *server) ref(factory domain.FactoryID, number int64) string {
+	name := string(factory)
+
+	for _, f := range s.factories.Factories() {
+		if f.Metadata.ID == string(factory) {
+			name = f.Metadata.Name
+			break
+		}
+	}
+
+	return domain.ItemRef{Factory: name, Number: number}.String()
+}
+
+func (s *server) itemOf(it domain.Item) gen.Item {
 	out := gen.Item{
-		Id: string(it.ID), FactoryId: string(it.FactoryID), Number: it.Number, ParentId: optional(string(it.ParentID)),
-		Type: it.Type, Lane: optional(it.Lane), Title: it.Title, Body: it.Body, Station: it.Station,
-		State: gen.ItemState(it.State), ClassOfService: gen.ItemClassOfService(it.Class), Priority: it.Priority,
+		Id: string(it.ID), Ref: s.ref(it.FactoryID, it.Number), FactoryId: string(it.FactoryID), Number: it.Number,
+		ParentId: optional(string(it.ParentID)), Type: it.Type, Lane: optional(it.Lane), Title: it.Title, Body: it.Body,
+		Station: it.Station, State: gen.ItemState(it.State), ClassOfService: gen.ClassOfService(it.Class), Priority: it.Priority,
 		ReworkCount: it.ReworkCount, CostUsd: it.CostUSD, Outputs: map[string]any{},
 		CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt,
 	}

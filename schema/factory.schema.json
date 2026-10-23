@@ -228,6 +228,10 @@
             }
           }
         },
+        "action": {
+          "enum": ["merge"],
+          "description": "On a human station: what goald does when the human approves. merge merges the item's pull request (the pull_request field of its latest output) on runtime.repository first."
+        },
         "gate": {
           "type": "object",
           "required": ["onReject"],
@@ -239,7 +243,8 @@
         }
       },
       "allOf": [
-        { "if": { "properties": { "kind": { "const": "agent" } } }, "then": { "oneOf": [ { "required": ["agent"] }, { "required": ["route"] } ] } }
+        { "if": { "properties": { "kind": { "const": "agent" } } }, "then": { "oneOf": [ { "required": ["agent"] }, { "required": ["route"] } ] } },
+        { "if": { "required": ["action"] }, "then": { "properties": { "kind": { "const": "human" } } } }
       ]
     },
     "board": {

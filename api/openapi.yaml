@@ -1,14 +1,16 @@
-# The contract between goald and its clients (the goal CLI now, the web UI and its generated
-# TypeScript client later). Change it first, then regenerate (`task api:gen`); the Go server
-# types in internal/api/gen are generated from this file and committed.
+# The contract between goald and its clients: the goal CLI (Go client in internal/api/gen) and
+# the web UI (TypeScript client in packages/api-client). Change it first, then regenerate both
+# (`task api:gen`); the generated code is committed.
 #
-# Phase 1: no authentication. goald binds its API to 127.0.0.1 and serves one person on their
-# own machine. Authentication arrives with the first shared deployment.
+# No authentication yet: goald binds its API to 127.0.0.1 and serves one person on their own
+# machine. Authentication arrives with the first shared deployment.
 openapi: 3.0.3
 info:
   title: Goal API
-  version: 0.1.0
-  description: Factories, work items, their history and human decisions.
+  version: 0.2.0
+  description: >-
+    Factories, their boards and flow metrics, work items, their history, human decisions and a
+    realtime stream of item events.
 servers:
   - url: http://127.0.0.1:8080
 paths:
@@ -35,11 +37,33 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
   /v1/factories/{factory}/items:
     parameters:
-      - name: factory
-        in: path
-        required: true
-        description: The factory's metadata.id or metadata.name
-        schema: { type: string }
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: listItems
+      summary: One page of a factory's items, newest first
+      parameters:
+        - name: state
+          in: query
+          description: Only items in this state
+          schema: { $ref: "#/components/schemas/ItemState" }
+        - name: station
+          in: query
+          description: Only items at this station
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: after
+          in: query
+          description: The next_after of the previous page; items listed after it (numbered below it)
+          schema: { type: integer, format: int64, minimum: 1 }
+      responses:
+        "200":
+          description: Items, highest number first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ItemPage" }
+        default: { $ref: "#/components/responses/Problem" }
     post:
       operationId: submitItem
       summary: Submit a work item to a factory's first station
@@ -55,9 +79,71 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/factories/{factory}/board:
+    parameters:
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: getBoard
+      summary: The factory's board, station by station in line order
+      description: >-
+        Every open item (up to 500, newest first) at its station, and the 20 newest done items at
+        the done station. waiting and in_progress count every item, beyond the cards shown. The
+        constraint is the agent station with the most work per slot right now,
+        (waiting + in_progress) / min(agents, wip), or null when no agent station has any work;
+        later phases replace this heuristic with constraint detection over time.
+      responses:
+        "200":
+          description: The board
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Board" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/factories/{factory}/metrics:
+    parameters:
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: getMetrics
+      summary: The factory's flow over the last days
+      parameters:
+        - name: window
+          in: query
+          description: >-
+            The last N UTC calendar days, today included, written Nd (1d to 90d). Items count
+            when they reached done in the window; spend counts agent runs started in it.
+          schema: { type: string, pattern: "^[1-9][0-9]?d$", default: 7d }
+      responses:
+        "200":
+          description: Flow metrics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Metrics" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/stream:
+    get:
+      operationId: streamEvents
+      summary: Item events as they happen (Server-Sent Events)
+      description: >-
+        A text/event-stream. Each committed item event arrives as `event: item` with `id:` the
+        event id and `data:` a StreamEvent. `event: resync` (data `{}`) means goald may have
+        missed events (it reconnected to the database): re-read what you show. A comment line
+        (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored,
+        so a client that reconnects re-reads what it shows. goald ends the stream of a client
+        that falls too far behind.
+      parameters:
+        - name: factory
+          in: query
+          description: Only this factory's events (its metadata.id or metadata.name)
+          schema: { type: string }
+      responses:
+        "200":
+          description: The event stream
+          content:
+            text/event-stream:
+              schema: { $ref: "#/components/schemas/StreamEvent" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/items/{item}:
     parameters:
-      - $ref: "#/components/parameters/ItemID"
+      - $ref: "#/components/parameters/ItemRef"
     get:
       operationId: getItem
       summary: One work item
@@ -70,7 +156,7 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
   /v1/items/{item}/events:
     parameters:
-      - $ref: "#/components/parameters/ItemID"
+      - $ref: "#/components/parameters/ItemRef"
     get:
       operationId: listItemEvents
       summary: One page of an item's history, oldest first
@@ -91,7 +177,7 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
   /v1/items/{item}/approve:
     parameters:
-      - $ref: "#/components/parameters/ItemID"
+      - $ref: "#/components/parameters/ItemRef"
     post:
       operationId: approveItem
       summary: Approve an item waiting for a human; it moves to the next station
@@ -109,7 +195,7 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
   /v1/items/{item}/reject:
     parameters:
-      - $ref: "#/components/parameters/ItemID"
+      - $ref: "#/components/parameters/ItemRef"
     post:
       operationId: rejectItem
       summary: Reject an item waiting for a human; it goes back for rework with the reason
@@ -125,13 +211,64 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/items/{item}/retry:
+    parameters:
+      - $ref: "#/components/parameters/ItemRef"
+    post:
+      operationId: retryItem
+      summary: Send a blocked item back to its station's queue (409 if it is not blocked)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Retry" }
+      responses:
+        "200":
+          description: The item, queued at its station again
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/items/{item}/merge:
+    parameters:
+      - $ref: "#/components/parameters/ItemRef"
+    post:
+      operationId: mergeItem
+      summary: Merge the item's pull request, then approve it
+      description: >-
+        Only for an item waiting at a human station with action merge. goald merges the pull
+        request named by the pull_request field of the item's latest station output, on the
+        factory's runtime.repository, with the repository's token. It never forces: a pull
+        request that is closed, has conflicts or failing required checks, or whose head moves
+        meanwhile is refused with 409 and nothing changes. After the merge it deletes the pull
+        request's head branch (only when it lives on the same repository) and approves the item.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MergeRequest" }
+      responses:
+        "200":
+          description: The item after the merge and the approval
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        default: { $ref: "#/components/responses/Problem" }
 components:
   parameters:
-    ItemID:
+    FactoryRef:
+      name: factory
+      in: path
+      required: true
+      description: The factory's metadata.id or metadata.name
+      schema: { type: string }
+    ItemRef:
       name: item
       in: path
       required: true
-      description: The item's id (a UUID)
+      description: >-
+        The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by
+        metadata.name or metadata.id; percent-encode the # as %23)
       schema: { type: string }
   responses:
     Problem:
@@ -178,7 +315,21 @@ components:
       required: [id, kind]
       properties:
         id: { type: string }
-        kind: { type: string, enum: [queue, agent, human, done] }
+        kind: { $ref: "#/components/schemas/StationKind" }
+        action: { $ref: "#/components/schemas/StationAction" }
+    StationKind:
+      type: string
+      enum: [queue, agent, human, done]
+    StationAction:
+      type: string
+      description: What goald does when a human acts at this human station (merge → POST /v1/items/{item}/merge)
+      enum: [merge]
+    ItemState:
+      type: string
+      enum: [queued, ready, in_progress, waiting_human, blocked, done, cancelled]
+    ClassOfService:
+      type: string
+      enum: [standard, expedite]
     NewItem:
       type: object
       required: [title, type]
@@ -199,11 +350,23 @@ components:
       properties:
         by: { type: string, minLength: 1 }
         reason: { type: string, minLength: 1, description: What the agent must change }
+    Retry:
+      type: object
+      required: [by]
+      properties:
+        by: { type: string, minLength: 1, description: Who retries }
+    MergeRequest:
+      type: object
+      required: [by]
+      properties:
+        by: { type: string, minLength: 1, description: Who merges }
+        method: { type: string, enum: [squash], default: squash }
     Item:
       type: object
-      required: [id, factory_id, number, type, title, body, station, state, class_of_service, priority, rework_count, cost_usd, outputs, created_at, updated_at]
+      required: [id, ref, factory_id, number, type, title, body, station, state, class_of_service, priority, rework_count, cost_usd, outputs, created_at, updated_at]
       properties:
         id: { type: string }
+        ref: { type: string, description: "<factory name>#<number>, as in goal#2" }
         factory_id: { type: string }
         number: { type: integer, format: int64 }
         parent_id: { type: string }
@@ -212,8 +375,8 @@ components:
         title: { type: string }
         body: { type: string }
         station: { type: string }
-        state: { type: string, enum: [queued, ready, in_progress, waiting_human, blocked, done, cancelled] }
-        class_of_service: { type: string, enum: [standard, expedite] }
+        state: { $ref: "#/components/schemas/ItemState" }
+        class_of_service: { $ref: "#/components/schemas/ClassOfService" }
         priority: { type: integer }
         rework_count: { type: integer }
         cost_usd: { type: number, format: double }
@@ -224,6 +387,127 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         done_at: { type: string, format: date-time }
+    ItemCard:
+      type: object
+      description: An item as boards and lists show it
+      required: [id, ref, number, title, type, station, state, class_of_service, rework_count, cost_usd, created_at, updated_at, age_seconds, agent, pr_url]
+      properties:
+        id: { type: string }
+        ref: { type: string, description: "<factory name>#<number>, as in goal#2" }
+        number: { type: integer, format: int64 }
+        title: { type: string }
+        type: { type: string }
+        lane: { type: string }
+        station: { type: string }
+        state: { $ref: "#/components/schemas/ItemState" }
+        class_of_service: { $ref: "#/components/schemas/ClassOfService" }
+        rework_count: { type: integer }
+        cost_usd: { type: number, format: double }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        age_seconds:
+          type: integer
+          format: int64
+          description: Seconds since the item was created; for a done item, from created to done
+        agent:
+          type: string
+          nullable: true
+          description: The agent working the item now (in progress), else null
+        pr_url:
+          type: string
+          nullable: true
+          description: The pull request the item's latest station output names, else null
+    ItemPage:
+      type: object
+      required: [items, next_after]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ItemCard" }
+        next_after:
+          type: integer
+          format: int64
+          nullable: true
+          description: Pass as `after` for the next page; null on the last page
+    Board:
+      type: object
+      required: [factory, stations, constraint]
+      properties:
+        factory:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string }
+            name: { type: string }
+            title: { type: string }
+        stations:
+          type: array
+          items: { $ref: "#/components/schemas/BoardStation" }
+        constraint:
+          type: string
+          nullable: true
+          description: The id of the agent station with the most work per slot now, or null
+    BoardStation:
+      type: object
+      required: [id, kind, agents, wip_limit, waiting, in_progress, items]
+      properties:
+        id: { type: string }
+        kind: { $ref: "#/components/schemas/StationKind" }
+        action: { $ref: "#/components/schemas/StationAction" }
+        agents:
+          type: array
+          description: The agents that work here (one, or one per routed lane)
+          items: { type: string }
+        wip_limit:
+          type: integer
+          nullable: true
+          description: The station's wip setting, or null when it has none
+        waiting: { type: integer, description: Items queued or ready here }
+        in_progress: { type: integer, description: Items being worked here }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ItemCard" }
+    Metrics:
+      type: object
+      required: [window, throughput, lead_time_hours, wip, rework_rate, spend_usd, items_done]
+      properties:
+        window: { type: string, description: "The window asked for, as in 7d" }
+        throughput:
+          type: array
+          description: Items done per UTC day, one entry for every day of the window, oldest first
+          items:
+            type: object
+            required: [day, done]
+            properties:
+              day: { type: string, format: date }
+              done: { type: integer }
+        lead_time_hours:
+          type: object
+          nullable: true
+          description: Percentiles of created → done of the items done in the window; null when none were
+          required: [p50, p85]
+          properties:
+            p50: { type: number, format: double }
+            p85: { type: number, format: double }
+        wip: { type: integer, description: "Items in the line now, neither done nor cancelled" }
+        rework_rate:
+          type: number
+          format: double
+          description: Share of the items done in the window that were sent back at least once (0 when none were done)
+        spend_usd: { type: number, format: double, description: Cost of the agent runs started in the window }
+        items_done: { type: integer }
+    StreamEvent:
+      type: object
+      description: "The data of one `event: item` on /v1/stream"
+      required: [item_id, ref, factory_id, kind, state, at]
+      properties:
+        item_id: { type: string }
+        ref: { type: string, description: "<factory name>#<number>, as in goal#2" }
+        factory_id: { type: string }
+        kind: { type: string, description: "The event kind (created, moved, approved, tool_call, ...)" }
+        station: { type: string }
+        state: { $ref: "#/components/schemas/ItemState" }
+        at: { type: string, format: date-time }
     EventPage:
       type: object
       required: [events, next_after]

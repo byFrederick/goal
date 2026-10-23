@@ -1,13 +1,13 @@
 // Command goald is Goal's daemon: it runs every factory in the bucket on one flow engine, serves
 // the HTTP API (/v1/) and the MCP gateway agents use (/mcp), and starts agent tasks in Docker.
 //
-// All wiring happens here, by hand: PostgreSQL (store), the bucket (factory definitions),
-// environment secrets, git workspaces, the Docker runner, checker and MCP sidecars, the system
-// clock, the engine, the gateway and the API. Configuration comes from the environment;
-// settings.go lists every variable. goald keeps nothing another instance would need: work state
-// is in PostgreSQL, definitions are in the bucket, and its workspaces and run folders are
-// scratch. The exception is the gateway's running MCP sidecars, which serve only the runs this
-// instance started (see internal/gateway).
+// All wiring happens here, by hand: PostgreSQL (store and item notices), the bucket (factory
+// definitions), environment secrets, git workspaces, GitHub (merges), the Docker runner, checker
+// and MCP sidecars, the system clock, the engine, the gateway, the API and its stream feed.
+// Configuration comes from the environment; settings.go lists every variable. goald keeps nothing
+// another instance would need: work state is in PostgreSQL, definitions are in the bucket, and its
+// workspaces and run folders are scratch. The exception is the gateway's running MCP sidecars,
+// which serve only the runs this instance started (see internal/gateway).
 package main
 
 import (
@@ -27,6 +27,7 @@ import (
 
 	"github.com/byFrederick/goal/internal/adapters/docker"
 	"github.com/byFrederick/goal/internal/adapters/envsecrets"
+	"github.com/byFrederick/goal/internal/adapters/github"
 	"github.com/byFrederick/goal/internal/adapters/gitworkspace"
 	"github.com/byFrederick/goal/internal/adapters/postgres"
 	"github.com/byFrederick/goal/internal/adapters/s3store"
@@ -146,9 +147,11 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// Runs after serve returns: HTTP is drained and the engine's runs have ended.
 	defer gw.Close()
 
+	codehost := github.New(secrets, github.Config{APIURL: s.GitHubAPIURL})
+
 	eng, err = engine.New(engine.Deps{
 		Store: store, Runner: runner, Workspaces: workspaces, Checker: docker.NewChecker(dockerClient, runnerCfg, log),
-		Contracts: defs, Secrets: secrets, Clock: clock, Logger: log, RunEnded: gw.EndRun,
+		Contracts: defs, Secrets: secrets, CodeHost: codehost, Clock: clock, Logger: log, RunEnded: gw.EndRun,
 	}, engine.Config{
 		TickEvery: s.TickEvery, GatewayURL: s.GatewayURL, GatewayKeyRef: s.GatewayKeyRef, TaskEnv: s.TaskEnv,
 	})
@@ -165,7 +168,9 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	reap(ctx, log, runner, workspaces)
 
-	apiHandler, err := api.New(api.Deps{Engine: eng, Items: store, Factories: defs, Logger: log})
+	feed := api.NewFeed(postgres.NewNotices(pool.Config().ConnConfig, log), log)
+
+	apiHandler, err := api.New(api.Deps{Engine: eng, Items: store, Factories: defs, Feed: feed, Clock: clock, Logger: log})
 	if err != nil {
 		return err
 	}
@@ -176,12 +181,15 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	srv := &http.Server{Addr: s.Listen, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 
-	return serve(ctx, log, s, srv, eng, defs)
+	return serve(ctx, log, s, srv, eng, defs, feed)
 }
 
-// serve runs the HTTP server, the engine and the definitions refresh until ctx ends, then shuts
-// them down: HTTP first, then the engine, which releases the items its runs held.
-func serve(ctx context.Context, log *slog.Logger, s settings, srv *http.Server, eng *engine.Engine, defs *definitions.Cache) error {
+// serve runs the HTTP server, the engine, the stream feed and the definitions refresh until ctx
+// ends, then shuts them down: the feed ends every stream, HTTP drains, then the engine releases
+// the items its runs held.
+func serve(ctx context.Context, log *slog.Logger, s settings, srv *http.Server, eng *engine.Engine, defs *definitions.Cache,
+	feed *api.Feed,
+) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -211,6 +219,12 @@ func serve(ctx context.Context, log *slog.Logger, s settings, srv *http.Server, 
 	})
 
 	wg.Go(func() { refresh(ctx, log, defs, s.RefreshEvery) })
+
+	wg.Go(func() {
+		if err := feed.Run(ctx); err != nil {
+			fail(fmt.Errorf("stream feed: %w", err))
+		}
+	})
 
 	<-ctx.Done()
 	log.Info("goald shutting down")

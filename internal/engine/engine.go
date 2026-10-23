@@ -11,7 +11,10 @@
 // items waiting at queue stations straight to the next station, prepares a fresh workspace
 // (a clone of the factory's repository on the item's branch) for every run, validates outputs
 // against station contracts, runs the station's command checks against the workspace, applies
-// gates and human approvals, routes by lane and sweeps expired leases. These arrive in later phases and are deliberately absent here: drum-buffer-rope
+// gates and human approvals, routes by lane and sweeps expired leases. Humans also send
+// blocked items back to their queue (Retry) and, at a human station whose action is merge,
+// merge the item's pull request through the CodeHost port before approving it (Merge).
+// These arrive in later phases and are deliberately absent here: drum-buffer-rope
 // release (the rope that limits release from queue stations), constraint detection,
 // station buffers, andon pulls, the expedite WIP limit, budget enforcement in the engine
 // (the worker enforces per-task limits), and Knowledge and
@@ -43,11 +46,17 @@ type Deps struct {
 	Checker    ports.Checker
 	Contracts  ports.Contracts
 	Secrets    ports.Secrets
+	CodeHost   ports.CodeHost
 	Clock      ports.Clock
 	Logger     *slog.Logger // nil discards logs
 	// RunEnded, when set, is told each run whose agent task has ended (goald stops the run's
 	// MCP sidecars). It is called once per run, with the run's result already recorded.
 	RunEnded func(ctx context.Context, run domain.RunID)
+}
+
+func (d Deps) complete() bool {
+	return d.Store != nil && d.Runner != nil && d.Workspaces != nil && d.Checker != nil && d.Contracts != nil &&
+		d.Secrets != nil && d.CodeHost != nil && d.Clock != nil
 }
 
 // Config is the engine's behaviour; zero durations take the defaults below.
@@ -95,6 +104,7 @@ type Engine struct {
 	checker    ports.Checker
 	contracts  ports.Contracts
 	secrets    ports.Secrets
+	codehost   ports.CodeHost
 	clock      ports.Clock
 	log        *slog.Logger
 	runEnded   func(context.Context, domain.RunID)
@@ -109,8 +119,7 @@ type Engine struct {
 
 // New returns an engine for the given lines.
 func New(d Deps, cfg Config) (*Engine, error) {
-	if d.Store == nil || d.Runner == nil || d.Workspaces == nil || d.Checker == nil || d.Contracts == nil ||
-		d.Secrets == nil || d.Clock == nil {
+	if !d.complete() {
 		return nil, errors.New("engine: every port in Deps is required")
 	}
 
@@ -135,7 +144,7 @@ func New(d Deps, cfg Config) (*Engine, error) {
 
 	return &Engine{
 		store: d.Store, runner: d.Runner, workspaces: d.Workspaces, checker: d.Checker, contracts: d.Contracts,
-		secrets: d.Secrets, clock: d.Clock, log: log, runEnded: d.RunEnded, cfg: cfg, lines: lines,
+		secrets: d.Secrets, codehost: d.CodeHost, clock: d.Clock, log: log, runEnded: d.RunEnded, cfg: cfg, lines: lines,
 	}, nil
 }
 

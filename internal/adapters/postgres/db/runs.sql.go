@@ -117,3 +117,23 @@ func (q *Queries) RunItem(ctx context.Context, id uuid.UUID) (uuid.UUID, error) 
 	err := row.Scan(&item_id)
 	return item_id, err
 }
+
+const spend = `-- name: Spend :one
+SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd
+FROM agent_runs
+WHERE factory_id = $1 AND started_at >= $2 AND started_at < $3
+`
+
+type SpendParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+	Until     time.Time
+}
+
+// The cost of the runs a factory started in [since, until).
+func (q *Queries) Spend(ctx context.Context, arg SpendParams) (float64, error) {
+	row := q.db.QueryRow(ctx, spend, arg.FactoryID, arg.Since, arg.Until)
+	var spend_usd float64
+	err := row.Scan(&spend_usd)
+	return spend_usd, err
+}

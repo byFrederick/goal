@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
+	"github.com/byFrederick/goal/internal/domain"
 )
 
 // Work commands talk to goald's HTTP API (GOAL_API_URL, default http://127.0.0.1:8080).
@@ -96,7 +98,7 @@ func runItem(ctx context.Context, out *printer, getenv func(string) string, args
 	}
 
 	it := res.JSON201
-	out.printf("submitted #%d %q (%s) at %s\n", it.Number, it.Title, it.Id, it.Station)
+	out.printf("submitted %s %q (%s) at %s\n", it.Ref, it.Title, it.Id, it.Station)
 
 	if *detach {
 		return nil
@@ -105,9 +107,13 @@ func runItem(ctx context.Context, out *printer, getenv func(string) string, args
 	return follow(ctx, out, c, it.Id, 0, pollEvery)
 }
 
-// followItem follows an existing item: goal follow <item>.
+// followItem follows an existing item: goal follow <item> [--factory F].
 func followItem(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
-	if len(args) != 1 {
+	fs := newFlags("follow")
+	factory := fs.String("factory", "", "the factory of a bare item number")
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 1 {
 		return errUsage
 	}
 
@@ -116,7 +122,59 @@ func followItem(ctx context.Context, out *printer, getenv func(string) string, a
 		return err
 	}
 
-	return follow(ctx, out, c, args[0], 0, pollEvery)
+	ref, err := itemRef(ctx, c, pos[0], *factory)
+	if err != nil {
+		return err
+	}
+
+	return follow(ctx, out, c, ref, 0, pollEvery)
+}
+
+// itemRef turns the item a user names into what the API takes. An id or <factory>#<number>
+// passes as is; a bare number is that item of --factory, or of the one factory that has an
+// item with that number.
+func itemRef(ctx context.Context, c *gen.ClientWithResponses, arg, factory string) (string, error) {
+	n, bare := bareNumber(arg)
+	if !bare {
+		return arg, nil
+	}
+
+	if factory != "" {
+		return domain.ItemRef{Factory: factory, Number: n}.String(), nil
+	}
+
+	res, err := c.ListFactoriesWithResponse(ctx)
+	if err != nil {
+		return "", apiDown(err)
+	}
+
+	if res.JSON200 == nil {
+		return "", problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+
+	var found []string
+
+	for _, f := range res.JSON200.Factories {
+		ref := domain.ItemRef{Factory: f.Name, Number: n}.String()
+
+		it, err := c.GetItemWithResponse(ctx, ref)
+		if err != nil {
+			return "", apiDown(err)
+		}
+
+		if it.JSON200 != nil {
+			found = append(found, ref)
+		}
+	}
+
+	switch len(found) {
+	case 0:
+		return "", fmt.Errorf("no factory has an item #%d", n)
+	case 1:
+		return found[0], nil
+	default:
+		return "", fmt.Errorf("items %s all have number %d; name one, or pass --factory", strings.Join(found, ", "), n)
+	}
 }
 
 // follow prints the item's events as they happen until it reaches a state where someone else
@@ -178,15 +236,17 @@ func following(ctx context.Context, err error) error {
 }
 
 func stopped(out *printer, it *gen.Item) error {
-	out.printf("\n#%d is %s at %s (cost $%.2f)\n", it.Number, it.State, it.Station, it.CostUsd)
+	out.printf("\n%s is %s at %s (cost $%.2f)\n", it.Ref, it.State, it.Station, it.CostUsd)
 
 	if it.State == "waiting_human" {
-		out.printf("  goal item %s           # read it, with the outputs so far\n", it.Id)
-		out.printf("  goal approve %s\n  goal reject %s --reason \"...\"\n", it.Id, it.Id)
+		out.printf("  goal item %s           # read it, with the outputs so far\n", it.Ref)
+		out.printf("  goal approve %s        # or goal merge %s at a merge station\n", it.Ref, it.Ref)
+		out.printf("  goal reject %s --reason \"...\"\n", it.Ref)
 	}
 
 	if it.State == "blocked" {
-		return fmt.Errorf("item #%d is blocked at %s; the blocked event says why", it.Number, it.Station)
+		return fmt.Errorf("%s is blocked at %s; the blocked event says why (goal retry %s sends it back to the queue)",
+			it.Ref, it.Station, it.Ref)
 	}
 
 	return nil
@@ -266,8 +326,13 @@ func str(e gen.Event, key string) string {
 	return s
 }
 
+// showItem prints an item: goal item <item> [--factory F].
 func showItem(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
-	if len(args) != 1 {
+	fs := newFlags("item")
+	factory := fs.String("factory", "", "the factory of a bare item number")
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 1 {
 		return errUsage
 	}
 
@@ -276,7 +341,12 @@ func showItem(ctx context.Context, out *printer, getenv func(string) string, arg
 		return err
 	}
 
-	res, err := c.GetItemWithResponse(ctx, args[0])
+	ref, err := itemRef(ctx, c, pos[0], *factory)
+	if err != nil {
+		return err
+	}
+
+	res, err := c.GetItemWithResponse(ctx, ref)
 	if err != nil {
 		return apiDown(err)
 	}
@@ -295,15 +365,32 @@ func showItem(ctx context.Context, out *printer, getenv func(string) string, arg
 	return nil
 }
 
-// decide approves or rejects an item waiting for a human:
-// goal approve <item> [--by name]; goal reject <item> --reason "..." [--by name].
+// bareNumber reports whether arg is an item number on its own, such as 2.
+func bareNumber(arg string) (int64, bool) {
+	n, err := strconv.ParseInt(arg, 10, 64)
+
+	return n, err == nil && n > 0
+}
+
+// The decisions a human makes on an item.
+const (
+	verbApprove = "approve"
+	verbReject  = "reject"
+	verbRetry   = "retry"
+	verbMerge   = "merge"
+)
+
+// decide acts on an item: goal approve <item> [--by name]; goal reject <item> --reason "..."
+// [--by name]; goal retry <item> [--by name]; goal merge <item> [--by name]. Each takes
+// --factory for a bare item number.
 func decide(ctx context.Context, out *printer, getenv func(string) string, verb string, args []string) error {
 	fs := newFlags(verb)
 	by := fs.String("by", getenv("USER"), "who decides")
 	reason := fs.String("reason", "", "what must change (reject)")
+	factory := fs.String("factory", "", "the factory of a bare item number")
 
 	pos, err := parseInterspersed(fs, args)
-	if err != nil || len(pos) != 1 || strings.TrimSpace(*by) == "" || (verb == "reject") != (*reason != "") {
+	if err != nil || len(pos) != 1 || strings.TrimSpace(*by) == "" || (verb == verbReject) != (*reason != "") {
 		return errUsage
 	}
 
@@ -312,35 +399,65 @@ func decide(ctx context.Context, out *printer, getenv func(string) string, verb 
 		return err
 	}
 
-	var (
-		it   *gen.Item
-		resp *http.Response
-		prob *gen.Problem
-	)
-
-	if verb == "approve" {
-		res, err := c.ApproveItemWithResponse(ctx, pos[0], gen.Approval{By: *by})
-		if err != nil {
-			return apiDown(err)
-		}
-
-		it, resp, prob = res.JSON200, res.HTTPResponse, res.ApplicationproblemJSONDefault
-	} else {
-		res, err := c.RejectItemWithResponse(ctx, pos[0], gen.Rejection{By: *by, Reason: *reason})
-		if err != nil {
-			return apiDown(err)
-		}
-
-		it, resp, prob = res.JSON200, res.HTTPResponse, res.ApplicationproblemJSONDefault
+	ref, err := itemRef(ctx, c, pos[0], *factory)
+	if err != nil {
+		return err
 	}
 
-	if it == nil {
-		return problem(resp, prob)
+	it, err := act(ctx, c, verb, ref, *by, *reason)
+	if err != nil {
+		return err
 	}
 
-	out.printf("✓ %sd #%d; now %s at %s\n", verb, it.Number, it.State, it.Station)
+	out.printf("✓ %s %s; now %s at %s\n", done[verb], it.Ref, it.State, it.Station)
 
 	return nil
+}
+
+// done is what each decision did, for the line that confirms it.
+var done = map[string]string{verbApprove: "approved", verbReject: "rejected", verbRetry: "retried", verbMerge: "merged"}
+
+// act sends one decision and returns the item after it, or why it was refused.
+func act(ctx context.Context, c *gen.ClientWithResponses, verb, ref, by, reason string) (*gen.Item, error) {
+	switch verb {
+	case verbApprove:
+		res, err := c.ApproveItemWithResponse(ctx, ref, gen.Approval{By: by})
+		if err != nil {
+			return nil, apiDown(err)
+		}
+
+		return answer(res.JSON200, res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	case verbReject:
+		res, err := c.RejectItemWithResponse(ctx, ref, gen.Rejection{By: by, Reason: reason})
+		if err != nil {
+			return nil, apiDown(err)
+		}
+
+		return answer(res.JSON200, res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	case verbRetry:
+		res, err := c.RetryItemWithResponse(ctx, ref, gen.Retry{By: by})
+		if err != nil {
+			return nil, apiDown(err)
+		}
+
+		return answer(res.JSON200, res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	default:
+		res, err := c.MergeItemWithResponse(ctx, ref, gen.MergeRequest{By: by})
+		if err != nil {
+			return nil, apiDown(err)
+		}
+
+		return answer(res.JSON200, res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+}
+
+// answer is the item goald answered with, or the problem it answered instead.
+func answer(it *gen.Item, res *http.Response, p *gen.Problem) (*gen.Item, error) {
+	if it == nil {
+		return nil, problem(res, p)
+	}
+
+	return it, nil
 }
 
 func problem(res *http.Response, p *gen.Problem) error {

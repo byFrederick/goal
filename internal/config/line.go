@@ -50,7 +50,7 @@ func (f *Factory) Line() domain.Line {
 func station(st Station) domain.Station {
 	out := domain.Station{
 		ID: st.ID, Kind: domain.StationKind(st.Kind), Agent: st.Agent, Route: maps.Clone(st.Route),
-		Agents: st.Agents, WIP: st.WIP, Output: st.Output,
+		Agents: st.Agents, WIP: st.WIP, Output: st.Output, Action: domain.StationAction(st.Action),
 	}
 
 	for _, c := range st.Checks {

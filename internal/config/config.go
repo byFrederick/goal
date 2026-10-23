@@ -182,7 +182,13 @@ type Station struct {
 	Output string            `json:"output,omitempty"`
 	Checks []Check           `json:"checks,omitempty"`
 	Gate   *Gate             `json:"gate,omitempty"`
+	// Action makes goald act when a human approves at this (human) station: "merge" merges
+	// the item's pull request first.
+	Action string `json:"action,omitempty"`
 }
+
+// ActionMerge is the station action that merges the item's pull request on approval.
+const ActionMerge = "merge"
 
 // Check kinds.
 const (
@@ -404,8 +410,16 @@ func (f *Factory) validateStation(p *problems, s Station, agents, stations []str
 		p.add("station %s: gate.onReject %q is not a station", s.ID, s.Gate.OnReject)
 	}
 
+	f.validateAction(p, s)
+
 	if s.Kind == "agent" && s.WIP > 0 && s.Agents > s.WIP {
 		p.add("station %s: %d agents exceed wip %d; extra agents would idle", s.ID, s.Agents, s.WIP)
+	}
+}
+
+func (f *Factory) validateAction(p *problems, s Station) {
+	if s.Action == ActionMerge && f.Spec.Runtime.Repository == nil {
+		p.add("station %s: action merge needs runtime.repository, whose pull requests it merges", s.ID)
 	}
 }
 

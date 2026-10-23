@@ -9,6 +9,9 @@ import (
 	"github.com/byFrederick/goal/internal/ports"
 )
 
+// ErrNotBlocked means a retry was asked for an item that is not blocked.
+var ErrNotBlocked = errors.New("item is not blocked")
+
 // Approve records a human's approval of an item waiting for one (at a human station, or a
 // gate escalation after too many reworks) and moves it to the next station.
 func (e *Engine) Approve(ctx context.Context, id domain.ItemID, by string) (domain.Item, error) {
@@ -86,4 +89,43 @@ func (e *Engine) decide(ctx context.Context, verb string, t ports.Transition) (d
 	}
 
 	return it, nil
+}
+
+// Retry sends a blocked item back to its station's queue, so a slot pulls it again. Its
+// rework count is unchanged: nobody rejected the work.
+func (e *Engine) Retry(ctx context.Context, id domain.ItemID, by string) (domain.Item, error) {
+	it, err := e.store.Item(ctx, id)
+	if err != nil {
+		return domain.Item{}, fmt.Errorf("retry %s: %w", id, err)
+	}
+
+	if it.State != domain.StateBlocked {
+		return domain.Item{}, fmt.Errorf("retry %s: item is %s: %w", id, it.State, ErrNotBlocked)
+	}
+
+	l, err := e.line(it.FactoryID)
+	if err != nil {
+		return domain.Item{}, fmt.Errorf("retry %s: %w", id, err)
+	}
+
+	st, ok := l.Station(it.Station)
+	if !ok {
+		return domain.Item{}, fmt.Errorf("retry %s: station %q is not on the line", id, it.Station)
+	}
+
+	now := e.clock.Now()
+
+	got, err := e.store.Transition(ctx, ports.Transition{
+		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: st.ID, State: st.Arrival()}, At: now,
+		Events: []domain.Event{event(it, domain.EventRetried, now, by, nil)},
+	})
+	if errors.Is(err, ports.ErrConflict) {
+		return domain.Item{}, fmt.Errorf("retry %s: %w", id, errors.Join(ErrNotBlocked, err))
+	}
+
+	if err != nil {
+		return domain.Item{}, fmt.Errorf("retry %s: %w", id, err)
+	}
+
+	return got, nil
 }

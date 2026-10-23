@@ -35,6 +35,7 @@ func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 		{ID: "approve-spec", Kind: domain.KindHuman, WIP: 3},
 		{ID: "build", Kind: domain.KindAgent, Route: map[string]string{"backend": "engineer", "frontend": "engineer"}, Agents: 2, WIP: 2, Checks: []string{"make test"}},
 		{ID: "review", Kind: domain.KindAgent, Agent: "reviewer", Gate: &domain.Gate{OnReject: "build", MaxRework: 2}},
+		{ID: "merge", Kind: domain.KindHuman, Action: domain.ActionMerge},
 		{ID: "done", Kind: domain.KindDone},
 	}
 	if !reflect.DeepEqual(l.Stations, wantStations) {

@@ -57,6 +57,52 @@ spec:
 	}
 }
 
+// A merge action merges pull requests on the factory's repository at a human's word, so it
+// belongs only on a human station of a factory that has a repository.
+func TestLoad_MergeActionOnlyOnAHumanStationWithARepository(t *testing.T) {
+	t.Parallel()
+
+	factory := func(repository, station string) fstest.MapFS {
+		return fstest.MapFS{"factory.yaml": {Data: []byte(`
+apiVersion: goal/v1
+kind: Factory
+metadata: { id: 00000000-0000-4000-8000-000000000002, name: merger }
+spec:
+  runtime: { runner: docker, image: x, auth: claude-subscription` + repository + ` }
+  knowledgeBase: { collections: [notes] }
+  agents:
+    - { name: worker, prompt: ./worker.md }
+  board:
+    stations:
+      - { id: work, kind: agent, agent: worker }
+      - ` + station + `
+      - { id: done, kind: done }
+`)}, "worker.md": {Data: []byte("# worker\n")}}
+	}
+
+	repo := `, repository: { url: "https://code.example.com/acme/app.git" }`
+
+	tests := []struct {
+		name, repository, station, wantErr string
+	}{
+		{"human station with a repository", repo, "{ id: merge, kind: human, action: merge }", ""},
+		{"no repository", "", "{ id: merge, kind: human, action: merge }", "action merge needs runtime.repository"},
+		{"agent station", repo, "{ id: merge, kind: agent, agent: worker, action: merge }", "schema"},
+		{"unknown action", repo, "{ id: merge, kind: human, action: deploy }", "schema"},
+	}
+
+	for _, tt := range tests {
+		_, err := Load(factory(tt.repository, tt.station))
+
+		switch {
+		case tt.wantErr == "" && err != nil:
+			t.Errorf("%s: %v", tt.name, err)
+		case tt.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErr)):
+			t.Errorf("%s: err = %v, want one mentioning %q", tt.name, err, tt.wantErr)
+		}
+	}
+}
+
 // A factory is a self-contained tree: it may live in a bucket prefix, so a prompt path that
 // climbs out of it must not resolve against whatever happens to sit next to it on disk.
 func TestLoad_PathsCannotLeaveTheFactory(t *testing.T) {

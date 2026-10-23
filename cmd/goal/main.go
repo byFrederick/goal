@@ -31,12 +31,18 @@ const usage = `usage:
   goal item <item>                                show an item with its outputs
   goal approve <item> [--by NAME]                 approve an item waiting at a human station
   goal reject <item> --reason "..." [--by NAME]   send it back for rework
+  goal retry <item> [--by NAME]                   send a blocked item back to its station's queue
+  goal merge <item> [--by NAME]                   merge the item's pull request, then approve it
+                                                  (at a station with action: merge)
   goal factory validate <dir> ...                 validate local factory folders (alias: goal validate)
   goal factory push <dir>                         validate, then upload to factories/<metadata.id>/
   goal factory pull <id|name> <dir>               download a factory into a new folder
   goal factory list                               show and validate every factory in the bucket
   goal storage init                               create the bucket if missing and enable versioning
-  goal version                                    print the module version and build info`
+  goal version                                    print the module version and build info
+
+<item> is goal#2 (factory and number), the item's id, or a bare number such as 2 when one
+factory has that item (--factory F picks the factory of a bare number)`
 
 // errUsage marks a command line that names no valid command; main exits 2 for it.
 var errUsage = errors.New(usage)
@@ -79,7 +85,7 @@ func run(ctx context.Context, args []string, out *printer, getenv func(string) s
 		return followItem(ctx, out, getenv, rest)
 	case "item":
 		return showItem(ctx, out, getenv, rest)
-	case "approve", "reject":
+	case verbApprove, verbReject, verbRetry, verbMerge:
 		return decide(ctx, out, getenv, cmd, rest)
 	case "storage":
 		if len(rest) != 1 || rest[0] != "init" {

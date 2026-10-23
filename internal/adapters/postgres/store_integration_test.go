@@ -61,8 +61,8 @@ func TestMigrate_RepeatableAndSafeToRunConcurrently(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if version != 2 {
-		t.Errorf("schema version = %d; want 2", version)
+	if version != 3 {
+		t.Errorf("schema version = %d; want 3", version)
 	}
 }
 

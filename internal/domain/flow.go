@@ -1,0 +1,87 @@
+package domain
+
+import (
+	"encoding/json"
+	"slices"
+	"strings"
+	"time"
+)
+
+// pullRequestKey is the output field in which an agent station reports the pull request it
+// opened. It is a convention of station contracts, not a station or factory name.
+const pullRequestKey = "pull_request"
+
+// PullRequest returns the pull request URL the item's outputs name: the pull_request field of
+// the output of the latest station on the line that has one, or "" when none does.
+func (it Item) PullRequest(l Line) string {
+	for _, st := range slices.Backward(l.Stations) {
+		raw, ok := it.Outputs[st.ID]
+		if !ok {
+			continue
+		}
+
+		var out map[string]any
+		if json.Unmarshal(raw, &out) != nil {
+			continue
+		}
+
+		if url, _ := out[pullRequestKey].(string); strings.HasPrefix(url, "https://") {
+			return url
+		}
+	}
+
+	return ""
+}
+
+// StationLoad is the work at one station now: items waiting to be pulled and items being worked.
+type StationLoad struct {
+	Station    string
+	Waiting    int
+	InProgress int
+}
+
+// Constraint returns the agent station whose load is highest relative to its capacity,
+// (waiting + in progress) / capacity, from a snapshot of the line's loads. Ties go to the
+// earlier station; a line with no load at any agent station has no constraint. This is the
+// simple phase 2 heuristic; constraint detection over time replaces it.
+func (l Line) Constraint(loads map[string]StationLoad) (string, bool) {
+	best, ratio := "", 0.0
+
+	for _, st := range l.Stations {
+		if st.Kind != KindAgent {
+			continue
+		}
+
+		ld := loads[st.ID]
+		if r := float64(ld.Waiting+ld.InProgress) / float64(st.Capacity()); r > ratio {
+			best, ratio = st.ID, r
+		}
+	}
+
+	return best, best != ""
+}
+
+// FlowMetrics describe a factory's flow over a window of time.
+type FlowMetrics struct {
+	// DonePerDay counts items that reached done in the window, by UTC day, ascending; days
+	// without any are left out.
+	DonePerDay []DayCount
+	// ItemsDone is how many items reached done in the window, Reworked how many of those were
+	// sent back at least once.
+	ItemsDone int
+	Reworked  int
+	// LeadTimeP50 and LeadTimeP85 are percentiles (linear interpolation) of created → done of
+	// the items done in the window; zero when none were.
+	LeadTimeP50 time.Duration
+	LeadTimeP85 time.Duration
+	// WIP is how many items are in the line now, neither done nor cancelled.
+	WIP int
+	// SpendUSD is the cost of the agent runs started in the window.
+	SpendUSD float64
+}
+
+// DayCount is a count for one UTC day (midnight).
+type DayCount struct {
+	Day   time.Time
+	Count int
+}

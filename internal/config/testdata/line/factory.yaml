@@ -47,6 +47,7 @@ spec:
         wip: 2
         checks: [{ kind: schema }, { kind: command, run: make test }]
       - { id: review, kind: agent, agent: reviewer, gate: { onReject: build, maxRework: 2 } }
+      - { id: merge, kind: human, action: merge }
       - { id: done, kind: done }
     flow:
       expedite: { types: [incident], wip: 1 }

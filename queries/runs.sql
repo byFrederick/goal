@@ -17,3 +17,9 @@ RETURNING factory_id, item_id, station, agent;
 -- name: FailRunningRuns :exec
 UPDATE agent_runs SET status = 'failed', error = sqlc.arg(error), ended_at = sqlc.arg(ended_at)
 WHERE item_id = ANY (sqlc.arg(item_ids)::uuid[]) AND status = 'running';
+
+-- name: Spend :one
+-- The cost of the runs a factory started in [since, until).
+SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd
+FROM agent_runs
+WHERE factory_id = sqlc.arg(factory_id) AND started_at >= sqlc.arg(since) AND started_at < sqlc.arg(until);
