@@ -172,6 +172,9 @@ type TaskSpec struct {
 	Inputs map[string]json.RawMessage
 	// Output names the contract the result must satisfy; empty when none.
 	Output string
+	// WorkspaceDir is the host path of the git checkout prepared for this run; the task works in
+	// it and never receives git or GitHub credentials.
+	WorkspaceDir string
 	// Env holds resolved secrets and settings for the task. Runners never log it.
 	Env     map[string]string
 	Timeout time.Duration

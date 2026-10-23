@@ -133,6 +133,8 @@ linters:
               desc: migrations are applied by internal/adapters/postgres
             - pkg: github.com/docker
               desc: container access belongs in internal/adapters/docker
+            - pkg: github.com/moby
+              desc: container access belongs in internal/adapters/docker
             - pkg: github.com/aws
               desc: AWS access belongs in internal/adapters
             - pkg: github.com/modelcontextprotocol

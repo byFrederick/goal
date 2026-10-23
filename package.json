@@ -1,0 +1,9 @@
+{
+  "name": "goal",
+  "private": true,
+  "description": "pnpm workspace root: tooling only, no app code (docs/engineering/frontend.md)",
+  "packageManager": "pnpm@12.15.0",
+  "engines": {
+    "node": ">=22.12"
+  }
+}

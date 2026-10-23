@@ -12,6 +12,8 @@ vars:
   FACTORIES_DIR: '{{.GOAL_FACTORIES_DIR | default "../goal-factories"}}'
   # Fixtures that `task validate` checks; override to validate a working copy.
   FACTORIES: '{{.FACTORIES | default "internal/config/testdata/*/"}}'
+  # The agent image factories name in runtime.image; built locally, never pushed from here.
+  WORKER_IMAGE: '{{.WORKER_IMAGE | default "ghcr.io/byfrederick/goal-agent:0.1.0"}}'
 
 # The storage tasks talk to the local RustFS from compose.yaml unless .env or the shell says
 # otherwise. For an AWS bucket run bin/goal directly with GOAL_S3_BUCKET and AWS credentials.
@@ -95,8 +97,29 @@ tasks:
     cmds:
       - task: lint
       - task: test
+      - task: worker:check
       - task: validate
       - task: tf-check
+
+  worker:install:
+    desc: Install the pnpm workspace's dependencies from the lockfile
+    sources: [package.json, pnpm-lock.yaml, pnpm-workspace.yaml, worker/package.json]
+    cmds:
+      - pnpm install --frozen-lockfile
+
+  worker:check:
+    desc: Worker typecheck, Biome lint and Vitest unit tests (no image build)
+    deps: [worker:install]
+    dir: worker
+    cmds:
+      - pnpm run --silent typecheck
+      - pnpm run --silent lint
+      - pnpm run --silent test
+
+  worker:image:
+    desc: Build the agent worker image locally (WORKER_IMAGE); never pushes
+    cmds:
+      - docker build -f worker/Dockerfile -t {{.WORKER_IMAGE}} .
 
   hooks:install:
     desc: Use the versioned git hooks in .githooks (pre-push runs task check)
