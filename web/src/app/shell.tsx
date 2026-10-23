@@ -1,4 +1,5 @@
-// The app frame: the concrete shell with a sidebar from 768 px, a bottom tab bar below it.
+// The app frame: full viewport, a sidebar pinned to the left edge from 768 px, a bottom tab bar
+// below it. No framed or floating shell: the app is the page.
 import { Link } from '@tanstack/react-router';
 import { Columns3, Ellipsis, LayoutGrid, List, SearchCheck } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
@@ -10,23 +11,21 @@ import { LogoMark } from '../ui/logo';
 
 export function Shell({ factory, children }: { factory: Factory; children: ReactNode }) {
   return (
-    <div className="min-h-dvh bg-shell md:bg-ground md:p-3 lg:p-6">
+    <div className="min-h-dvh bg-shell md:flex">
       <a
         href="#main"
         className="sr-only z-50 rounded-control bg-ink px-4 py-2 text-white focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
       >
         Skip to content
       </a>
-      <div className="mx-auto flex max-w-[1392px] gap-6 md:min-h-[calc(100dvh-24px)] md:rounded-shell md:border md:border-line md:bg-shell md:py-5 md:pr-5 md:pl-3 md:shadow-shell lg:min-h-[calc(100dvh-48px)] lg:pr-6 lg:pl-4">
-        <Sidebar factory={factory} />
-        <main
-          id="main"
-          tabIndex={-1}
-          className="flex min-w-0 flex-1 flex-col gap-5 px-4 pt-4 pb-28 outline-none md:p-0 md:pt-1"
-        >
-          {children}
-        </main>
-      </div>
+      <Sidebar factory={factory} />
+      <main
+        id="main"
+        tabIndex={-1}
+        className="flex min-w-0 flex-1 flex-col gap-5 px-4 pt-4 pb-28 outline-none md:px-6 md:pt-6 md:pb-8 lg:px-8 lg:pt-7"
+      >
+        {children}
+      </main>
       <TabBar factory={factory} />
     </div>
   );
@@ -38,7 +37,10 @@ function Sidebar({ factory }: { factory: Factory }) {
   const params = { factory: factory.name };
   const item = cn(navItem, 'hover:bg-nav-hover');
   return (
-    <nav aria-label="Main" className="hidden shrink-0 flex-col gap-1 md:flex md:w-11 lg:w-[208px] xl:w-[228px]">
+    <nav
+      aria-label="Main"
+      className="hidden shrink-0 flex-col gap-1 overflow-y-auto border-r border-line md:sticky md:top-0 md:flex md:h-dvh md:w-[68px] md:px-3 md:py-5 lg:w-[240px] lg:px-4 xl:w-[260px]"
+    >
       <Link
         to="/f/$factory"
         params={params}

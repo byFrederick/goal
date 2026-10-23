@@ -4,7 +4,7 @@ import { extendTailwindMerge } from 'tailwind-merge';
 // tailwind-merge must know the custom radius names, or it drops them against rounded-*.
 const merge = extendTailwindMerge({
   extend: {
-    theme: { radius: ['shell', 'card', 'control', 'chip'], tracking: ['display', 'numeral'] },
+    theme: { radius: ['card', 'control', 'chip'], tracking: ['display', 'numeral'] },
   },
 });
 

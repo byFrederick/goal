@@ -12,7 +12,6 @@
   --color-current: currentColor;
 
   /* Surfaces */
-  --color-ground: #e6e9e7;
   --color-shell: #eef1ef;
   --color-card: #f6f7f5;
   --color-surface: #ffffff;
@@ -54,12 +53,10 @@
   --tracking-display: -0.035em;
   --tracking-numeral: -0.04em;
 
-  --radius-shell: 16px;
   --radius-card: 12px;
   --radius-control: 8px;
   --radius-chip: 6px;
 
-  --shadow-shell: 0 20px 40px -24px rgb(29 39 51 / 0.25);
   --shadow-raise: 0 1px 2px rgb(29 39 51 / 0.08);
   --shadow-lift: 0 4px 12px -6px rgb(29 39 51 / 0.25);
   --shadow-dialog: 0 20px 25px -5px rgb(29 39 51 / 0.2);
@@ -73,7 +70,7 @@
 
 @layer base {
   html {
-    background: var(--color-ground);
+    background: var(--color-shell);
     color: var(--color-ink);
     font-family: var(--font-sans);
     font-optical-sizing: auto;

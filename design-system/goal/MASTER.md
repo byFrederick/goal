@@ -6,8 +6,8 @@
 >
 > | Token | Hex | Use |
 > |---|---|---|
-> | `--ground` | `#E6E9E7` | Page background (concrete) |
-> | `--shell` | `#EEF1EF` | App shell |
+> | `--ground` | `#E6E9E7` | Concrete; reserved (no longer the page background) |
+> | `--shell` | `#EEF1EF` | Page background: the app fills the viewport |
 > | `--card` | `#F6F7F5` | Cards |
 > | `--surface` | `#FFFFFF` | Items inside cards, inputs |
 > | `--ink` | `#1D2733` | Text, primary buttons, active nav |
@@ -19,12 +19,13 @@
 > | `--rework` | `#B4441C` | Rework, delays, losses, andon (replaces red/pink) |
 > | `--ok` | `#2E6B4E` | Healthy, done |
 >
-> - **Radii (softer, not pill-shaped):** shell 16px, cards 12px, inner rows 8px, buttons and inputs 8px, chips 6px. No 999px pills except status dots.
+> - **Layout:** the app takes the whole viewport like a normal web app: sidebar pinned to the left edge (full height, a right border), content beside it. No framed, floating or rounded outer shell and no outer margin around the app; the framed box in the reference video was only its presentation. (User override, 2026-10-23.)
+> - **Radii (softer, not pill-shaped):** cards 12px, inner rows 8px, buttons and inputs 8px, chips 6px. No 999px pills except status dots.
 > - **Data marks:** hatched teal = actual, hatched rust = delay/loss, hatched gray = target; every value is signed and labelled, never color alone (charts.csv: waterfall).
 > - **Drag and drop:** every card also has a Move menu (ux-guidelines: Dragging Movements, WCAG 2.2).
 > - **Typography:** Inter with optical sizing (`opsz` 14..32, so large text renders as Inter Display), weights 400 for display and numerals, 500 for headings, 400 body; tracking −0.035em on display sizes; `font-feature-settings: "cv11","ss01"`; tabular numerals. Fira Code only for code, YAML and file paths. (User override: match the reference font.)
 > - **No gradients** on any background or card. Solid fills only.
-> - **Reference look:** the "Margin" dashboard by @nizamdesign: soft shell, large numerals, insight card, "Needs you" list.
+> - **Reference look:** the "Margin" dashboard by @nizamdesign: large numerals, insight card, "Needs you" list.
 
 
 > **LOGIC:** When building a specific page, first check `design-system/pages/[page-name].md`.
