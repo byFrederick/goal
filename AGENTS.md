@@ -23,7 +23,8 @@ cmd/goald/           daemon         (main: wire adapters into the engine)
 internal/domain/     plain types and rules: factory, item, station, lease. Imports nothing internal.
 internal/engine/     flow engine: pull, WIP, drum-buffer-rope, andon. Imports domain + ports only.
 internal/ports/      interfaces: Store, Runner, Secrets, Contracts, ObjectStore, Clock (Knowledge, ModelAuth later)
-internal/adapters/   s3store/ postgres/ docker/ ecs/ envsecrets/ awssecrets/ bedrockkb/ gateway/ http/  (onepassword/ in the last phase)
+internal/adapters/   s3store/ postgres/ docker/ ecs/ envsecrets/ awssecrets/ bedrockkb/ http/  (onepassword/ in the last phase)
+internal/gateway/    MCP gateway inside goald: task-token auth, per-agent tools, credentials added on the host
 internal/config/     loads and validates one factory definition from an fs.FS (bucket prefix or local folder)
 internal/factorystore/ bucket layout factories/<id>/: push, pull, list, fs.FS view. Imports config + ports only.
 migrations/          forward-only SQL (goose); never edit an applied file

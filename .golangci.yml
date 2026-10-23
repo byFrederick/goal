@@ -133,6 +133,8 @@ linters:
               desc: container access belongs in internal/adapters/docker
             - pkg: github.com/aws
               desc: AWS access belongs in internal/adapters
+            - pkg: github.com/modelcontextprotocol
+              desc: MCP belongs in internal/gateway
         adapters:
           files: ["**/internal/adapters/**"]
           deny:
@@ -149,6 +151,17 @@ linters:
               desc: factory definitions reach storage only through ports.ObjectStore
             - pkg: github.com/byFrederick/goal/internal/engine
               desc: the engine receives domain types; definitions never call it
+            - pkg: github.com/aws
+              desc: AWS access belongs in internal/adapters
+        gateway:
+          files: ["**/internal/gateway/**"]
+          deny:
+            - pkg: github.com/byFrederick/goal/internal/adapters
+              desc: the gateway reaches secrets and events through ports and its own interfaces
+            - pkg: github.com/byFrederick/goal/internal/engine
+              desc: the gateway serves tools; it never drives the engine
+            - pkg: github.com/byFrederick/goal/internal/factorystore
+              desc: definitions arrive through gateway.Definitions; cmd/goald wires the bucket
             - pkg: github.com/aws
               desc: AWS access belongs in internal/adapters
     dupl:

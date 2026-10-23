@@ -24,9 +24,10 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object s
 | `internal/adapters/*` | `domain`, `ports`, their own SDK | `engine`, other adapters |
 | `internal/config` | `domain` | adapters, engine |
 | `internal/factorystore` | `config`, `ports` | adapters, engine, cloud SDKs |
+| `internal/gateway` | `domain`, `ports`, `config`, the MCP Go SDK | adapters, engine, `factorystore`, cloud SDKs |
 | `cmd/*` | everything | — (wiring only) |
 
-`depguard` in `.golangci.yml` enforces the engine, domain, adapter, config and factorystore rows. A new external system is a new adapter behind an existing or new port; it never adds an import to the engine.
+`depguard` in `.golangci.yml` enforces the engine, domain, adapter, config, factorystore and gateway rows. A new external system is a new adapter behind an existing or new port; it never adds an import to the engine.
 
 ### Ports
 
@@ -50,6 +51,17 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object s
 - `Clock`: `Now()` and `NewTicker(d)`.
 - `ObjectStore`: `Get(ctx, key, version)` (empty version = current; `ErrNotFound` for a missing or deleted key or version), `Put(ctx, key, body) (ObjectInfo, error)`, `List(ctx, prefix) ([]ObjectInfo, error)` (current objects only, each with its version id), `Delete(ctx, key)` (a delete marker; earlier versions stay readable). `ObjectInfo` is `{Key, Version, Size}`; `Object` adds `Body`.
 - Per-task MCP gateway tokens are HMAC-signed (`domain.SignTaskToken`), so any instance can verify them without stored state.
+
+### MCP gateway
+
+`internal/gateway` is an inbound HTTP component of `goald`, not an adapter: it reads factory definitions (`config.Factory`), which adapters may not. `gateway.New(Deps, Config)` returns an `http.Handler` that `goald` mounts at its MCP path. Its package comment is the reference; in short:
+
+- **Auth.** Every request carries `Authorization: Bearer <task token>`; a missing, forged or expired token is 401, an agent the current definition no longer declares is 403, both without detail.
+- **Stateless.** The SDK's stateless streamable-HTTP mode: each request is verified and served on its own and opens short upstream sessions, so any instance serves any request.
+- **Connections.** A task gets the connections in both its token and its agent's `connections`. Remote MCP servers (`type: mcp`, `transport: http`, https or loopback http) are served, with header values like `Bearer env:NAME` resolved through `Secrets` on the host. Builtin (`knowledge`), stdio images and `aws` connections are reported unavailable (initialize instructions, the `goal/connections` `_meta` of `tools/list`, a logged warning) until their phase.
+- **Tools.** Named `<connection>__<tool>`. `tools.allow` and `tools.deny` entries of the form `<connection>__<pattern>` (`path.Match`) apply to gateway tools; deny wins, and a connection with allow entries serves only what they match.
+- **Audit.** Every `tools/call`, denied ones included, appends a `gateway_tool_call` event (connection, tool, outcome, duration, request and response sizes) through `gateway.Events`, which `ports.Store` satisfies. Arguments, results and credentials are never recorded; resolved credentials are scrubbed from results, errors and logs.
+- **Bounds.** Per-call and list timeouts, a cap on upstream response and agent request sizes, no redirects for credentialed requests.
 - `Knowledge` and `ModelAuth` arrive when the engine first needs them; until then model credentials reach tasks through `engine.Config.TaskEnv` secret references.
 
 ### Factory definitions in object storage
