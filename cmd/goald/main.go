@@ -39,6 +39,7 @@ import (
 	"github.com/byFrederick/goal/internal/engine"
 	"github.com/byFrederick/goal/internal/factorystore"
 	"github.com/byFrederick/goal/internal/gateway"
+	"github.com/byFrederick/goal/web"
 )
 
 // minKeyBytes is the shortest gateway key goald accepts (openssl rand -hex 32 gives 64).
@@ -178,6 +179,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", apiHandler)
 	mux.Handle("/mcp", gw)
+	mux.Handle("/", web.Handler())
 
 	srv := &http.Server{Addr: s.Listen, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 

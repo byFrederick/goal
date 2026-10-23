@@ -37,11 +37,13 @@ tasks:
     silent: true
 
   build:
-    desc: Build every binary in cmd/ into bin/
-    sources: ["**/*.go", go.mod, go.sum, schema/*.json]
+    desc: Build the web UI, then every binary in cmd/ into bin/ with the UI embedded in goald
+    deps: [web:build]
+    sources: ["**/*.go", go.mod, go.sum, schema/*.json, web/dist/**/*]
     generates: [bin/goal, bin/goald]
     cmds:
-      - go build -trimpath -o bin/ ./cmd/...
+      # -tags webui embeds web/dist; without it goald serves a page saying the UI is not built.
+      - go build -trimpath -tags webui -o bin/ ./cmd/...
 
   up:
     desc: Start PostgreSQL and RustFS, ensure the bucket and run goald in the foreground (goal up)
@@ -146,6 +148,7 @@ tasks:
       - task: test
       - task: worker:check
       - task: api-client:check
+      - task: web:check
       - task: validate
       - task: tf-check
 
@@ -154,6 +157,45 @@ tasks:
     sources: [package.json, pnpm-lock.yaml, pnpm-workspace.yaml, worker/package.json, packages/*/package.json]
     cmds:
       - pnpm install --frozen-lockfile
+
+  web:install:
+    desc: Install the pnpm workspace's dependencies from the lockfile (web and worker share one)
+    sources: [package.json, pnpm-lock.yaml, pnpm-workspace.yaml, web/package.json]
+    cmds:
+      - pnpm install --frozen-lockfile
+
+  web:dev:
+    desc: Vite dev server on :5173 proxying /v1 to goald (GOAL_API_URL, default http://127.0.0.1:8080); GOAL_API=mock uses the mock API
+    deps: [web:install]
+    dir: web
+    cmds:
+      - pnpm run dev
+
+  web:build:
+    desc: Build the web UI into web/dist (embedded into goald by task build)
+    deps: [web:install]
+    dir: web
+    sources: [src/**/*, public/**/*, index.html, vite.config.ts, package.json, ../pnpm-lock.yaml]
+    generates: [dist/index.html]
+    cmds:
+      - pnpm run --silent build
+
+  web:check:
+    desc: Web typecheck, Biome lint and Vitest unit tests (no browser)
+    deps: [web:install]
+    dir: web
+    cmds:
+      - pnpm run --silent typecheck
+      - pnpm run --silent lint
+      - pnpm run --silent test
+
+  web:e2e:
+    desc: Playwright on the critical flows at 375, 768 and 1440 px with axe, against vite preview and the mock API (Chromium)
+    deps: [web:install]
+    dir: web
+    cmds:
+      - pnpm exec playwright install chromium
+      - pnpm run --silent e2e
 
   worker:check:
     desc: Worker typecheck, Biome lint and Vitest unit tests (no image build)

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Goal: UI not built</title>
+    <style>
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #e6e9e7; color: #1d2733; font: 16px/1.5 system-ui, sans-serif; }
+      main { max-width: 34rem; margin: 24px; padding: 24px; background: #f6f7f5; border: 1px solid #dde2df; border-radius: 12px; }
+      h1 { margin: 0 0 8px; font-size: 28px; font-weight: 400; letter-spacing: -0.03em; }
+      p { margin: 8px 0 0; color: #556270; }
+      code { font-family: ui-monospace, monospace; color: #1d2733; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>This goald has no web UI built in</h1>
+      <p>The API at <code>/v1</code> works. To serve the UI, build it and goald together: <code>task build</code>
+        (or <code>task web:build</code>, then <code>go build -tags webui ./cmd/goald</code>).</p>
+      <p>While developing the UI, run <code>task web:dev</code> instead.</p>
+    </main>
+  </body>
+</html>
