@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 
 	"github.com/byFrederick/goal/internal/adapters/s3store"
@@ -34,7 +35,8 @@ const usage = `usage:
   goal factory push <dir>                         validate, then upload to factories/<metadata.id>/
   goal factory pull <id|name> <dir>               download a factory into a new folder
   goal factory list                               show and validate every factory in the bucket
-  goal storage init                               create the bucket if missing and enable versioning`
+  goal storage init                               create the bucket if missing and enable versioning
+  goal version                                    print the module version and build info`
 
 // errUsage marks a command line that names no valid command; main exits 2 for it.
 var errUsage = errors.New(usage)
@@ -43,7 +45,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
 	out := &printer{w: os.Stdout}
-	err := errors.Join(run(ctx, os.Args[1:], out, os.Getenv), out.err)
+	err := errors.Join(run(ctx, os.Args[1:], out, os.Getenv, debug.ReadBuildInfo), out.err)
 
 	stop()
 
@@ -57,12 +59,14 @@ func main() {
 	}
 }
 
-func run(ctx context.Context, args []string, out *printer, getenv func(string) string) error {
+func run(ctx context.Context, args []string, out *printer, getenv func(string) string, readBuildInfo buildInfoFunc) error {
 	if len(args) == 0 {
 		return errUsage
 	}
 
 	switch cmd, rest := args[0], args[1:]; cmd {
+	case "version":
+		return version(out, readBuildInfo, rest)
 	case "validate":
 		return validate(out, rest)
 	case "factory":
@@ -193,7 +197,9 @@ func pull(ctx context.Context, out *printer, catalog *factorystore.Catalog, args
 		return errUsage
 	}
 
-	s, err := catalog.Pull(ctx, args[0], args[1])
+	id, dir := args[0], args[1]
+
+	s, err := catalog.Pull(ctx, id, dir)
 	if err != nil {
 		return err
 	}
@@ -202,7 +208,7 @@ func pull(ctx context.Context, out *printer, catalog *factorystore.Catalog, args
 		out.printf("  %-60s %s\n", f.Key, f.Version)
 	}
 
-	out.printf("✓ pulled %s (%d files) into %s\n", s.ID, len(s.Files), args[1])
+	out.printf("✓ pulled %s (%d files) into %s\n", s.ID, len(s.Files), dir)
 
 	return nil
 }
