@@ -12,3 +12,6 @@ coverage.out
 coverage.html
 .vercel/
 .task/
+
+# Agent worktrees (Claude Code)
+.claude/worktrees/
