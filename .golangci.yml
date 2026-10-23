@@ -138,6 +138,19 @@ linters:
           deny:
             - pkg: github.com/byFrederick/goal/internal/engine
               desc: adapters implement ports; they never call the engine
+            - pkg: github.com/byFrederick/goal/internal/config
+              desc: adapters move bytes; loading and validating factories is internal/config's job
+            - pkg: github.com/byFrederick/goal/internal/factorystore
+              desc: adapters implement ports; the factory layout in the bucket is factorystore's job
+        definitions:
+          files: ["**/internal/config/**", "**/internal/factorystore/**"]
+          deny:
+            - pkg: github.com/byFrederick/goal/internal/adapters
+              desc: factory definitions reach storage only through ports.ObjectStore
+            - pkg: github.com/byFrederick/goal/internal/engine
+              desc: the engine receives domain types; definitions never call it
+            - pkg: github.com/aws
+              desc: AWS access belongs in internal/adapters
     dupl:
       threshold: 100 # lower => stricter (tokens)
     errcheck:

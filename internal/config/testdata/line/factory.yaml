@@ -1,5 +1,5 @@
 # Test fixture for config.Line: a small line exercising every station kind, a route, a gate
-# and an expedite lane. Self-contained so tests never read the factories/ folder.
+# and an expedite lane. Self-contained: tests never read factory definitions from outside testdata.
 apiVersion: goal/v1
 kind: Factory
 metadata:

@@ -4,10 +4,10 @@ The UI is a static React single-page app. `goald` embeds it for the laptop; the 
 
 ## Monorepo layout
 
-One repository, two toolchains: a Go module at the root and a pnpm workspace for TypeScript, orchestrated by Turborepo. `make check` runs both.
+One repository, two toolchains: a Go module at the root and a pnpm workspace for TypeScript, orchestrated by Turborepo. `task check` runs both.
 
 ```
-factory/
+goal/
   go.mod                       Go module (goald, goal CLI, engine, adapters)
   cmd/  internal/  migrations/  queries/
   api/

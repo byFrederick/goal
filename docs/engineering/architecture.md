@@ -1,6 +1,6 @@
 # Architecture
 
-Goal is one Go daemon (`goald`), one PostgreSQL database, short-lived agent containers and a static React UI. The same binaries run on a laptop, on AWS and, for the UI, on Vercel. Decisions: [ADR 0001](../adr/0001-technology-stack.md) (stack), [ADR 0003](../adr/0003-hexagonal-architecture-and-deployment.md) (architecture and deployment).
+Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object storage bucket for factory definitions, short-lived agent containers and a static React UI. The same binaries run on a laptop, on AWS and, for the UI, on Vercel. Decisions: [ADR 0001](../adr/0001-technology-stack.md) (stack), [ADR 0003](../adr/0003-hexagonal-architecture-and-deployment.md) (architecture and deployment), [ADR 0005](../adr/0005-factory-definitions-in-object-storage.md) (factory definitions in object storage).
 
 ## Hexagonal core
 
@@ -9,10 +9,10 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, short-lived agent cont
   HTTP/SSE ──▶│ adapters/http ──▶  engine  ◀── domain                  │
   (UI, CLI)   │                      │                                 │
               │                    ports: Store  Runner  Secrets       │
-              │                           Knowledge  ModelAuth  Clock   │
+              │                           ObjectStore  Clock  Knowledge │
               │                      │                                 │
               │ adapters: postgres  docker | ecs  envsecrets | awssecrets
-              │           bedrockkb  gateway (MCP)                      │
+              │           s3store (S3 | RustFS)  bedrockkb  gateway     │
               └────────────────────────────────────────────────────────┘
 ```
 
@@ -23,9 +23,10 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, short-lived agent cont
 | `internal/engine` | `domain`, `ports` | `adapters`, `config`, database or cloud SDKs |
 | `internal/adapters/*` | `domain`, `ports`, their own SDK | `engine`, other adapters |
 | `internal/config` | `domain` | adapters, engine |
+| `internal/factorystore` | `config`, `ports` | adapters, engine, cloud SDKs |
 | `cmd/*` | everything | — (wiring only) |
 
-`depguard` in `.golangci.yml` enforces the engine and domain rows. A new external system is a new adapter behind an existing or new port; it never adds an import to the engine.
+`depguard` in `.golangci.yml` enforces the engine, domain, adapter, config and factorystore rows. A new external system is a new adapter behind an existing or new port; it never adds an import to the engine.
 
 ### Ports
 
@@ -34,6 +35,7 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, short-lived agent cont
 | `Store` | Items, events, leases, factories, runs; transactions | `postgres` |
 | `Runner` | Start, watch and stop one agent task | `docker` (laptop), `ecs` (AWS); a Vercel Sandbox adapter is possible later |
 | `Secrets` | Resolve `env:`, ARN and (later) `op://` references at the edge | `envsecrets` (now), `awssecrets` (AWS), `onepassword` (last phase) |
+| `ObjectStore` | Versioned objects in one bucket: factory definitions now, knowledge documents from phase 3 | `s3store` (Amazon S3 on AWS, RustFS on a laptop) |
 | `Knowledge` | `kb_search`, `kb_write`, sync | `bedrockkb` |
 | `ModelAuth` | Credentials for the model per factory | subscription token (laptop only), API key, Bedrock |
 | `Clock` | Time, for deterministic tests | system, fake |
@@ -46,8 +48,24 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, short-lived agent cont
 - `Runner`: `Start(ctx, TaskSpec) (Task, error)`; `Task` has `Events() <-chan RunEvent` and `Wait() (RunResult, error)`. Cancelling `ctx` stops the task.
 - `Secrets`: `Resolve(ctx, ref)` for literals and `env:NAME`. `Contracts`: `Validate(ctx, factory, contract, output)`, wrapping `ErrContractViolation` for bad output.
 - `Clock`: `Now()` and `NewTicker(d)`.
+- `ObjectStore`: `Get(ctx, key, version)` (empty version = current; `ErrNotFound` for a missing or deleted key or version), `Put(ctx, key, body) (ObjectInfo, error)`, `List(ctx, prefix) ([]ObjectInfo, error)` (current objects only, each with its version id), `Delete(ctx, key)` (a delete marker; earlier versions stay readable). `ObjectInfo` is `{Key, Version, Size}`; `Object` adds `Body`.
 - Per-task MCP gateway tokens are HMAC-signed (`domain.SignTaskToken`), so any instance can verify them without stored state.
 - `Knowledge` and `ModelAuth` arrive when the engine first needs them; until then model credentials reach tasks through `engine.Config.TaskEnv` secret references.
+
+### Factory definitions in object storage
+
+Definitions are content, not code ([ADR 0005](../adr/0005-factory-definitions-in-object-storage.md)). One versioned bucket holds every factory under its id:
+
+```
+s3://<bucket>/factories/<factory-id>/
+  factory.yaml  agents/  skills/  contracts/  evals/     the definition
+  knowledge/<collection>/                                reserved for the knowledge base (phase 3)
+```
+
+- `internal/config` loads a definition from any `fs.FS`; `LoadDir` wraps a local working copy. Paths in `factory.yaml` resolve inside that tree only.
+- `internal/factorystore` owns the layout. `Push` validates a folder, uploads new and changed files (`factory.yaml` last), deletes files that were removed and never touches `knowledge/`. `Open` reads a factory's prefix at the listed object versions into an in-memory `fs.FS` (`Snapshot`), so a reader never mixes two pushes and can record exactly which versions it ran. `Pull` writes a snapshot into an empty folder; `List` validates every factory in the bucket.
+- `internal/adapters/s3store` implements `ObjectStore` with the AWS SDK for Go v2: a custom endpoint with path-style addressing for RustFS, the standard credential chain on AWS. `EnsureBucket` (used by `goal storage init`) creates the bucket and turns versioning on.
+- Rollback restores earlier object versions; the bucket keeps them for the lifecycle window.
 
 ### Wiring
 
@@ -70,11 +88,11 @@ Manual constructor injection. `cmd/goald/main.go` reads the environment, builds 
 
 ## Deployment targets
 
-| Target | goald | PostgreSQL | Agent runners | UI | Secrets | Model auth |
-| --- | --- | --- | --- | --- | --- | --- |
-| Laptop | one process | `compose.yaml` | Docker | served by goald | `.env` now, 1Password in the last phase | Claude subscription token |
-| AWS | ECS Fargate service, 2+ tasks behind an ALB | RDS or Aurora PostgreSQL, Multi-AZ | ECS `RunTask`, one task per agent run | served by goald or S3 + CloudFront | Secrets Manager | API key or Bedrock |
-| Vercel UI | on AWS as above | as above, or a Vercel Marketplace Postgres (Neon, Supabase) | ECS | Vercel static deploy, calling goald's API | Vercel env for UI only | API key or Bedrock |
+| Target | goald | PostgreSQL | Object storage (definitions) | Agent runners | UI | Secrets | Model auth |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Laptop | one process | `compose.yaml` | RustFS in `compose.yaml` (`rustfs/rustfs`, S3 API on 127.0.0.1:9000) | Docker | served by goald | `.env` now, 1Password in the last phase | Claude subscription token |
+| AWS | ECS Fargate service, 2+ tasks behind an ALB | RDS or Aurora PostgreSQL, Multi-AZ | Amazon S3, versioned, KMS-encrypted; task role through the standard credential chain | ECS `RunTask`, one task per agent run | served by goald or S3 + CloudFront | Secrets Manager | API key or Bedrock |
+| Vercel UI | on AWS as above | as above, or a Vercel Marketplace Postgres (Neon, Supabase) | Amazon S3 as above | ECS | Vercel static deploy, calling goald's API | Vercel env for UI only | API key or Bedrock |
 
 Agent runs cannot run as Vercel Functions: they last minutes to hours and need a container. The UI is static, so it deploys to Vercel without changes. All AWS infrastructure for these targets is added to `terraform/` as modules (`goald-service`, `postgres`, `runner`), each planned before it is applied.
 

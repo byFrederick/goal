@@ -10,7 +10,7 @@ import (
 func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 	t.Parallel()
 
-	f, err := Load("testdata/line")
+	f, err := LoadDir("testdata/line")
 	if err != nil {
 		t.Fatal(err)
 	}

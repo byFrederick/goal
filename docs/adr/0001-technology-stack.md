@@ -15,10 +15,11 @@ Status: accepted · 2026-10-23
 | Containers | Docker Engine API (Docker Desktop, OrbStack or Colima) | Local-first; an ECS runner can implement the same interface later. |
 | Tools for agents | **Goal MCP gateway** (Go, inside `goald`) | Credentials stay on the host; each agent gets one MCP URL that exposes only its allowed connections. |
 | Secrets | **Environment variables** (`env:NAME`, git-ignored `.env`) now; AWS Secrets Manager in the cloud; **1Password** service accounts in the last phase | References resolved on the host, passed to the gateway, never into agent context. The `Secrets` port makes the switch an adapter change. |
-| Knowledge | **S3 + Bedrock Knowledge Bases + S3 Vectors** | Managed RAG with per-factory isolation and near-zero idle cost. |
+| Factory definitions | **One versioned S3-compatible bucket**, `factories/<id>/` per factory; RustFS (`compose.yaml`) locally, Amazon S3 on AWS; AWS SDK for Go v2 behind the `ObjectStore` port | Definitions are content, not code: they change without a release, roll back by object version, and the same API works on a laptop and on AWS ([ADR 0005](0005-factory-definitions-in-object-storage.md)). |
+| Knowledge | **S3 + Bedrock Knowledge Bases + S3 Vectors** | Managed RAG with per-factory isolation and near-zero idle cost. Documents go under `factories/<id>/knowledge/` in the same bucket (phase 3). |
 | Telemetry | Claude Code OpenTelemetry → `goald` OTLP receiver; optional export to Langfuse/Grafana | Cost, tokens and tool events per item without extra agents. |
-| Infrastructure | **Terraform ≥ 1.10, AWS provider 6.x**, S3 backend with native lockfile | `terraform/` reads `factories/*/factory.yaml` directly. |
-| Tooling | mise (versions), Taskfile, golangci-lint, Biome | |
+| Infrastructure | **Terraform ≥ 1.10, AWS provider 6.x**, S3 backend with native lockfile | `terraform/` provisions the knowledge layer; from phase 3 it reads factory definitions from the bucket, not from the repository. |
+| Tooling | mise (versions), Taskfile (go-task v3), golangci-lint, Biome | `task check` is the one entry point for humans, the pre-push hook and CI. |
 
 ## Languages
 

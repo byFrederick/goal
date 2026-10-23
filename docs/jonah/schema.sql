@@ -67,8 +67,9 @@ CREATE TABLE eval_suites (
 CREATE INDEX eval_suites_config_idx ON eval_suites (factory_id, config_sha256);
 
 -- ---------------------------------------------------------------------------------------------
--- Cases and fixtures. Visible cases live in git (factories/<name>/evals/cases/); goald syncs
--- them here by content hash. The sealed holdout lives only here, never in the repository.
+-- Cases and fixtures. Visible cases live in the definitions bucket (factories/<id>/evals/cases/,
+-- ADR 0005); goald syncs them here by content hash. The sealed holdout lives only here, never in
+-- the bucket. J1 revises the proposal columns below (base_commit, merged) for object versions.
 -- ---------------------------------------------------------------------------------------------
 
 CREATE TABLE eval_cases (

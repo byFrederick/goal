@@ -3,7 +3,7 @@ package schema
 
 import _ "embed"
 
-// Factory is factory.schema.json, the contract for every factories/*/factory.yaml.
+// Factory is factory.schema.json, the contract for every factory.yaml.
 //
 //go:embed factory.schema.json
 var Factory []byte

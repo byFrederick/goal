@@ -1,4 +1,6 @@
-// Package config loads and validates a factory definition (factories/<name>/factory.yaml).
+// Package config loads and validates a factory definition: factory.yaml at the root of a
+// file tree that holds its prompts, skills, contracts and evals. The tree is an fs.FS, so the
+// same loader reads a local working copy or a factory's prefix in the bucket.
 //
 // Validation runs in two passes: the JSON Schema checks shape, then Validate checks
 // what a schema cannot: that every reference (agent, skill, connection, station,
@@ -9,8 +11,9 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"slices"
 	"strings"
 	"sync"
@@ -21,15 +24,15 @@ import (
 	"github.com/byFrederick/goal/schema"
 )
 
-// Factory is one parsed factories/<name>/factory.yaml.
+// Factory is one parsed factory.yaml.
 type Factory struct {
 	APIVersion string   `json:"apiVersion"`
 	Kind       string   `json:"kind"`
 	Metadata   Metadata `json:"metadata"`
 	Spec       Spec     `json:"spec"`
 
-	// Dir is the factory folder; relative paths in the spec resolve against it.
-	Dir string `json:"-"`
+	// files is the factory's file tree; relative paths in the spec resolve against its root.
+	files fs.FS
 }
 
 // Metadata identifies a factory.
@@ -71,7 +74,7 @@ type Budget struct {
 	MaxTurnsPerTask int     `json:"maxTurnsPerTask,omitempty"`
 }
 
-// KnowledgeBase lists the collections under the factory's S3 prefix.
+// KnowledgeBase lists the collections under the factory's knowledge prefix in the bucket.
 type KnowledgeBase struct {
 	Collections []string `json:"collections"`
 	Retrieval   *struct {
@@ -196,15 +199,20 @@ type Learning struct {
 	} `json:"kaizen,omitempty"`
 }
 
-// Prefix is the factory's folder in the knowledge bucket. It uses the ID, so renames never move data.
-func (f *Factory) Prefix() string { return f.Metadata.ID + "/" }
+// FileName is the factory definition at the root of a factory's file tree.
+const FileName = "factory.yaml"
 
-// Load reads dir/factory.yaml, validates it against the schema and its own references.
-func Load(dir string) (*Factory, error) {
-	//nolint:gosec // G304: the operator chooses factory folders; no remote input reaches this path.
-	raw, err := os.ReadFile(filepath.Join(dir, "factory.yaml"))
+// LoadDir loads the factory in a local folder, such as a working copy pulled from the bucket.
+func LoadDir(dir string) (*Factory, error) {
+	return Load(os.DirFS(dir))
+}
+
+// Load reads factory.yaml at the root of files and validates it against the schema and its own
+// references. Referenced paths resolve inside files only; a path that leaves it is not found.
+func Load(files fs.FS) (*Factory, error) {
+	raw, err := fs.ReadFile(files, FileName)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read %s: %w", FileName, err)
 	}
 
 	doc, err := yaml.YAMLToJSON(raw)
@@ -218,10 +226,10 @@ func Load(dir string) (*Factory, error) {
 
 	var f Factory
 	if err := yaml.Unmarshal(raw, &f); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode %s: %w", FileName, err)
 	}
 
-	f.Dir = dir
+	f.files = files
 	if err := f.Validate(); err != nil {
 		return nil, err
 	}
@@ -282,7 +290,7 @@ func (f *Factory) Validate() error {
 func (f *Factory) validateFiles(p *problems) {
 	for _, s := range f.Spec.Skills {
 		if s.Local() {
-			f.mustExist(p, filepath.Join(s.Source, "SKILL.md"), "skill "+s.Name)
+			f.mustExist(p, path.Join(s.Source, "SKILL.md"), "skill "+s.Name)
 		}
 	}
 
@@ -376,8 +384,10 @@ func (f *Factory) validateFlowAndLearning(p *problems) {
 	}
 }
 
+// mustExist reports rel unless it names a file in the factory's tree. Spec paths are written
+// "./agents/x.md"; fs.FS paths have no "./" and no "..", so a path escaping the tree never matches.
 func (f *Factory) mustExist(p *problems, rel, what string) {
-	if _, err := os.Stat(filepath.Join(f.Dir, rel)); err != nil {
+	if _, err := fs.Stat(f.files, path.Clean(rel)); err != nil {
 		p.add("%s: %s not found", what, rel)
 	}
 }

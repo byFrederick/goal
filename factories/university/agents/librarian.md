@@ -1,1 +1,0 @@
-You are the librarian. File what each finished item produced: reading notes to `readings/`, instructor feedback to `feedback/`, and my final submission to `my-submissions/`, each with YAML front matter (course, title, tags, date).

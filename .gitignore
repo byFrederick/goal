@@ -11,3 +11,4 @@ dist/
 coverage.out
 coverage.html
 .vercel/
+.task/

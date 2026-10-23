@@ -1,0 +1,139 @@
+# Every check here is what the pre-push hook (.githooks/pre-push) and CI run. `task check` before
+# calling a change done. `task --list` shows every task.
+version: "3"
+
+# .env is git-ignored and optional; copy .env.example. Its values reach every task's commands.
+dotenv: [".env"]
+
+vars:
+  GOLANGCI: '{{.GOLANGCI | default "golangci-lint"}}'
+  PG_IMAGE: postgres:18
+  # Working copy of the factory definitions: outside this repository, never committed.
+  FACTORIES_DIR: '{{.GOAL_FACTORIES_DIR | default "../goal-factories"}}'
+  # Fixtures that `task validate` checks; override to validate a working copy.
+  FACTORIES: '{{.FACTORIES | default "internal/config/testdata/*/"}}'
+
+# The storage tasks talk to the local RustFS from compose.yaml unless .env or the shell says
+# otherwise. For an AWS bucket run bin/goal directly with GOAL_S3_BUCKET and AWS credentials.
+env:
+  GOAL_S3_BUCKET: '{{.GOAL_S3_BUCKET | default "goal-local"}}'
+  GOAL_S3_ENDPOINT: '{{.GOAL_S3_ENDPOINT | default "http://127.0.0.1:9000"}}'
+  GOAL_S3_ACCESS_KEY: '{{.GOAL_S3_ACCESS_KEY | default "goal-dev-only"}}'
+  GOAL_S3_SECRET_KEY: '{{.GOAL_S3_SECRET_KEY | default "goal-dev-only-secret"}}'
+  AWS_REGION: '{{.AWS_REGION | default "us-east-1"}}'
+
+tasks:
+  default:
+    cmds:
+      - task --list
+    silent: true
+
+  build:
+    desc: Build every binary in cmd/ into bin/
+    sources: ["**/*.go", go.mod, go.sum, schema/*.json]
+    generates: [bin/goal]
+    cmds:
+      - go build -trimpath -o bin/ ./cmd/...
+
+  test:
+    desc: Unit tests with the race detector
+    cmds:
+      - go test -race ./...
+
+  test-integration:
+    desc: Integration tests against PostgreSQL 18 and RustFS from compose.yaml
+    cmds:
+      - docker compose up -d --wait postgres rustfs
+      - go test -race -tags integration ./...
+    env:
+      GOAL_TEST_DATABASE_URL: postgres://goal:{{.GOAL_PG_PASSWORD | default "goal-dev-only"}}@localhost:5432/goal?sslmode=disable
+      GOAL_TEST_S3_ENDPOINT: http://127.0.0.1:9000
+
+  lint:
+    desc: golangci-lint v2 with the repo's rules (.golangci.yml)
+    cmds:
+      - "{{.GOLANGCI}} run --build-tags integration ./..."
+
+  fmt:
+    desc: Format Go code
+    cmds:
+      - "{{.GOLANGCI}} fmt ./..."
+
+  validate:
+    desc: Validate factory definitions (the test fixtures by default; FACTORIES=<glob> for others)
+    cmds:
+      - go run ./cmd/goal factory validate {{.FACTORIES}}
+
+  tf-check:
+    desc: terraform fmt and validate (no AWS calls, no backend)
+    dir: terraform
+    cmds:
+      - terraform fmt -check -recursive
+      - terraform init -backend=false -input=false >/dev/null
+      - terraform validate
+
+  migrate-check:
+    desc: Apply all migrations to a throwaway PostgreSQL 18
+    cmds:
+      - docker rm -f goal-migrate-check >/dev/null 2>&1 || true
+      - docker run -d --rm --name goal-migrate-check -e POSTGRES_PASSWORD=check -e POSTGRES_DB=goal {{.PG_IMAGE}} >/dev/null
+      - defer: docker stop goal-migrate-check >/dev/null
+      - until docker exec goal-migrate-check pg_isready -h 127.0.0.1 -U postgres -d goal >/dev/null 2>&1; do sleep 1; done
+      - |
+        for f in migrations/*.sql; do
+          docker exec -i goal-migrate-check psql -U postgres -d goal -v ON_ERROR_STOP=1 -q < "$f" || exit 1
+          echo "applied $f"
+        done
+
+  check:
+    desc: Everything the pre-push hook and CI check except migrations and integration tests
+    cmds:
+      - task: lint
+      - task: test
+      - task: validate
+      - task: tf-check
+
+  hooks:install:
+    desc: Use the versioned git hooks in .githooks (pre-push runs task check)
+    cmds:
+      - git config core.hooksPath .githooks
+
+  storage:up:
+    desc: Start the local RustFS (S3-compatible) from compose.yaml
+    cmds:
+      - docker compose up -d --wait rustfs
+
+  storage:init:
+    desc: Create the bucket if missing and enable versioning
+    deps: [build]
+    cmds:
+      - bin/goal storage init
+
+  factory:validate:
+    desc: Validate every factory in the working copy (GOAL_FACTORIES_DIR)
+    cmds:
+      - go run ./cmd/goal factory validate {{.FACTORIES_DIR}}/*/
+
+  factory:list:
+    desc: List and validate the factories in the bucket
+    deps: [build]
+    cmds:
+      - bin/goal factory list
+
+  factory:push:
+    desc: Validate and push factories (DIR=<folder>, default every folder in GOAL_FACTORIES_DIR)
+    deps: [build]
+    cmds:
+      - |
+        {{if .DIR}}bin/goal factory push "{{.DIR}}"{{else}}for d in {{.FACTORIES_DIR}}/*/; do bin/goal factory push "$d" || exit 1; done{{end}}
+
+  factory:pull:
+    desc: Pull a factory into a new folder (task factory:pull -- <id|name> <dir>)
+    deps: [build]
+    cmds:
+      - bin/goal factory pull {{.CLI_ARGS}}
+
+  clean:
+    desc: Remove build output
+    cmds:
+      - rm -rf bin/

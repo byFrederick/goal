@@ -1,58 +1,99 @@
 # Goal — config-driven AI agent factories
 
-Goal runs AI agent factories on your machine. A factory is one folder: `factory.yaml` defines its stations, agents, skills, connections, WIP limits and knowledge base; Markdown files hold the agent prompts and skills. The engine moves work through the factory as a pull-based Kanban flow, built on the Theory of Constraints (*The Goal*) and the Three Ways (*The Phoenix Project*).
+Goal runs AI agent factories on your machine. A factory is a definition: `factory.yaml` declares its stations, agents, skills, connections, WIP limits and knowledge base; Markdown files hold the agent prompts and skills. The engine moves work through the factory as a pull-based Kanban flow, built on the Theory of Constraints (*The Goal*) and the Three Ways (*The Phoenix Project*).
 
-The first factory, `factories/goal`, builds Goal itself.
+Factory definitions are content, not code. They live in one versioned S3-compatible bucket, not in this repository (ADR 0005). The first factory, `goal`, builds this repository; others (`sre`, `university`) run the same engine on other work.
 
 ```
-factories/
-  goal/           builds this repository: architect → you approve → engineers → checks → reviewer → you merge
-  sre/            triage → investigate → review → you approve
-  university/     plan → research → you write → critique
-schema/           factory.schema.json   (editor autocompletion + validation)
-cmd/goal/         CLI (goal validate today; goal up in phase 1)
-internal/config/  loader and cross-reference validation
-migrations/       PostgreSQL schema (goose, forward-only)
-queries/          SQL for sqlc (pgx/v5)
-compose.yaml      local PostgreSQL 18
-worker/           agent container image (TypeScript, Claude Agent SDK) — phase 1
-web/              UI (React) — phase 2
-terraform/        all AWS infrastructure: knowledge bucket, KMS, S3 Vectors, one Bedrock KB per factory
-design-system/    UI rules generated with ui-ux-pro-max, plus the user's overrides (MASTER.md)
-docs/adr/         decisions (0001 stack, 0002 Jonah evals, 0003 hexagonal architecture and deployment)
-docs/engineering/ architecture and testing rules
-docs/jonah/       evaluation and self-remediation plan
-AGENTS.md         rules for every agent and human (CLAUDE.md imports it)
-Makefile          make check = everything CI runs
-.github/          CI: lint, race tests, migrations on PostgreSQL 18, factory validation, Terraform
-.claude/skills/   skills.sh skills used to build Goal itself, pinned in skills-lock.json
+cmd/goal/              CLI: goal factory validate|push|pull|list, goal storage init (goal up later)
+internal/config/       loader and cross-reference validation (reads a folder or a bucket prefix)
+internal/factorystore/ bucket layout factories/<id>/: push, pull, list
+internal/adapters/     s3store (S3 and RustFS), more adapters as phases land
+schema/                factory.schema.json, evals.schema.json (editor autocompletion + validation)
+migrations/            PostgreSQL schema (goose, forward-only)
+queries/               SQL for sqlc (pgx/v5)
+compose.yaml           local PostgreSQL 18 and RustFS (S3-compatible object storage)
+worker/                agent container image (TypeScript, Claude Agent SDK) — phase 1
+web/                   UI (React) — phase 2
+terraform/             AWS infrastructure: bucket, KMS, S3 Vectors, one Bedrock KB per factory (phase 3)
+design-system/         UI rules generated with ui-ux-pro-max, plus the user's overrides (MASTER.md)
+docs/adr/              decisions (0001 stack, 0002 Jonah evals, 0003 hexagonal architecture, 0004 frontend, 0005 definitions in object storage)
+docs/engineering/      architecture and testing rules
+docs/jonah/            evaluation and self-remediation plan
+AGENTS.md              rules for every agent and human (CLAUDE.md imports it)
+Taskfile.yml           task check = everything the pre-push hook and CI run
+.githooks/             pre-push hook: task check (+ task migrate-check when migrations/ changed)
+.github/               CI workflow, currently disabled (no Actions minutes); runs the same tasks
+.claude/skills/        skills.sh skills used to build Goal itself, pinned in skills-lock.json
 ```
 
 ## Quick start
 
+Tools: Go, [Task](https://taskfile.dev), Docker, Terraform and golangci-lint v2 (`mise install` reads `.mise.toml`).
+
 ```bash
-make check                 # lint, tests, factory validation, terraform
-make migrate-check         # migrations apply from zero on PostgreSQL 18
-docker compose up -d postgres
+task hooks:install         # once per clone: pushes run task check first
+cp .env.example .env       # optional; defaults already point at the local RustFS
+task check                 # lint, race tests, factory validation, terraform
+task migrate-check         # migrations apply from zero on PostgreSQL 18
+task storage:up            # RustFS on 127.0.0.1:9000 (console on :9001)
+task storage:init          # bucket goal-local with versioning
+task test-integration      # adapters against PostgreSQL 18 and RustFS
 ```
+
+GitHub Actions minutes are not available for this private repository, so CI on GitHub is disabled for now and the pre-push hook is the gate. `git push` is blocked unless `task check` passes (and `task migrate-check` when the pushed commits touch `migrations/`).
 
 Read `AGENTS.md` before changing anything.
 
+## Where factories live
+
+One bucket, versioned. Locally it is `goal-local` on RustFS (`compose.yaml`); on AWS it is `goal-<account>-<region>`.
+
+```
+s3://<bucket>/factories/<factory-id>/
+  factory.yaml
+  agents/*.md
+  skills/<name>/SKILL.md
+  contracts/*.schema.json
+  evals/          evals.yaml, cases/, judges/, fixtures/
+  knowledge/      reserved for the knowledge base (<collection>/<doc>.md); phase 3
+```
+
+Every push writes new object versions, so a previous definition is restorable by version id. `goal factory push` mirrors a folder to its prefix: changed files are uploaded (`factory.yaml` last), files you removed are deleted, unchanged files keep their version, and `knowledge/` is never touched. The CLI prints the object version of every file it wrote.
+
+Configuration comes from the environment (`.env.example`): `GOAL_S3_BUCKET`, plus `GOAL_S3_ENDPOINT`, `GOAL_S3_ACCESS_KEY` and `GOAL_S3_SECRET_KEY` for a local S3-compatible server. On AWS leave those three empty; the standard AWS credential chain applies.
+
+## Edit a factory
+
+Work in a working copy outside this repository (by default `../goal-factories`, never committed):
+
+```bash
+task factory:list                                   # what the bucket holds
+task factory:pull -- sre ../goal-factories/sre      # pull by name or id into a new folder
+$EDITOR ../goal-factories/sre/agents/triager.md
+task factory:validate                               # every folder in GOAL_FACTORIES_DIR
+task factory:push DIR=../goal-factories/sre         # validate, then upload; prints versions
+```
+
+`goal factory validate` checks the schema and every cross-reference (agents, skills, connections, stations, contracts, files). A push of an invalid factory writes nothing. Pull refuses a folder that is not empty, so it never overwrites local edits.
+
 ## Factories are keyed by UUID
 
-Every factory has an immutable `metadata.id`. Database rows, the knowledge base prefix (`s3://…/<id>/`) and every AWS resource use it, so you can rename a factory or its folder at any time. When you copy a factory, give the copy a new id (`uuidgen | tr A-Z a-z`); `goal validate` rejects duplicates.
+Every factory has an immutable `metadata.id`. Its bucket prefix (`factories/<id>/`), database rows and every AWS resource use it, so you can rename a factory or its folder at any time. When you copy a factory, give the copy a new id (`uuidgen | tr A-Z a-z`); `goal factory validate` rejects duplicates among the folders it checks.
 
 ## Add a factory
 
-1. Copy a folder under `factories/`, set a new `metadata.id` and `metadata.name`, then edit `factory.yaml`.
-2. `go run ./cmd/goal validate`
-3. `cd terraform && terraform apply` creates the factory's knowledge base. No HCL changes.
+1. Copy a folder in your working copy, set a new `metadata.id` and `metadata.name`, then edit `factory.yaml`.
+2. `task factory:validate`
+3. `task factory:push DIR=../goal-factories/<name>`
 
 ## Database
 
-PostgreSQL 18 is the only datastore: work items, the event log, leases (`FOR UPDATE SKIP LOCKED`), agent runs and realtime (`LISTEN/NOTIFY`). Schema changes are new files in `migrations/`; applied migrations are never edited.
+PostgreSQL 18 is the only database: work items, the event log, leases (`FOR UPDATE SKIP LOCKED`), agent runs and realtime (`LISTEN/NOTIFY`). Schema changes are new files in `migrations/`; applied migrations are never edited.
 
 ## Infrastructure
+
+`terraform/` holds the AWS knowledge layer; knowledge-base provisioning is phase 3.
 
 ```bash
 cd terraform

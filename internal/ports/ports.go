@@ -199,6 +199,39 @@ type Contracts interface {
 	Validate(ctx context.Context, factory domain.FactoryID, contract string, output json.RawMessage) error
 }
 
+// ObjectStore keeps objects in one versioned bucket: S3 on AWS, an S3-compatible server
+// (RustFS) on a laptop. Factory definitions and knowledge documents live there; every write
+// creates a new object version, so earlier content stays readable by its version id.
+type ObjectStore interface {
+	// Get returns the object at key. An empty version means the current one. It returns an
+	// error wrapping ErrNotFound when the key or version does not exist or was deleted.
+	Get(ctx context.Context, key, version string) (Object, error)
+
+	// Put stores body at key as a new current version and returns it.
+	Put(ctx context.Context, key string, body []byte) (ObjectInfo, error)
+
+	// List returns every current object whose key starts with prefix, ordered by key.
+	List(ctx context.Context, prefix string) ([]ObjectInfo, error)
+
+	// Delete makes key absent. Earlier versions stay readable by version id; deleting a missing
+	// key is not an error.
+	Delete(ctx context.Context, key string) error
+}
+
+// ObjectInfo identifies one version of an object.
+type ObjectInfo struct {
+	Key     string
+	Version string
+	Size    int64
+}
+
+// Object is one version of an object with its content.
+type Object struct {
+	ObjectInfo
+
+	Body []byte
+}
+
 // Clock tells time, so tests can drive it by hand.
 type Clock interface {
 	Now() time.Time

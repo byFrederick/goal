@@ -7,7 +7,9 @@ Tests exist to stop real regressions. A test that would still pass if the behavi
 | Layer | How | Examples |
 | --- | --- | --- |
 | `internal/engine` | Unit tests with in-memory fakes from `internal/ports/porttest`, table-driven, `t.Parallel()` | expedite pulls first; WIP is never exceeded; buffer below target releases intake; rework past `maxRework` goes to a human; andon pauses intake |
-| `internal/config` | Unit tests on real example factories plus small broken fixtures | every cross-reference error is reported (already in place) |
+| `internal/config` | Unit tests on small, self-contained fixtures in `internal/config/testdata` (sample org `acme`) and in-memory `fstest.MapFS` trees; never on real factory definitions, which live in the bucket | every cross-reference error is reported; a path cannot leave the factory's tree |
+| `internal/factorystore` | Unit tests with the in-memory `porttest.ObjectStore` | push then pull round-trips a factory; unchanged files keep their version; removed files are deleted but restorable; `knowledge/` is never touched; an invalid factory writes nothing |
+| `internal/adapters/s3store` | Integration tests (`//go:build integration`) against RustFS from `compose.yaml`, one fresh bucket per test, removed afterwards | every version stays readable; deleted keys are not found but restorable by version; list returns current objects only |
 | `internal/adapters/postgres` | Integration tests (`//go:build integration`) against PostgreSQL 18 from `compose.yaml` | concurrent claims never return the same item; lease expiry requeues; migrations apply from zero |
 | `internal/adapters/docker`, `ecs` | Integration tests behind build tags; ECS only in a sandbox account | a task starts, streams, is killed on timeout |
 | HTTP API | Handler tests with `httptest` against the engine and fakes | auth, validation errors, SSE framing |
@@ -34,7 +36,7 @@ Tests exist to stop real regressions. A test that would still pass if the behavi
 ## Commands
 
 ```bash
-make test               # unit tests with -race
-make test-integration   # starts PostgreSQL 18 via compose, runs integration-tagged tests
-make check              # everything CI runs
+task test               # unit tests with -race
+task test-integration   # starts PostgreSQL 18 and RustFS via compose, runs integration-tagged tests
+task check              # everything the pre-push hook (and CI, when enabled) runs
 ```

@@ -1,6 +1,6 @@
 # Jonah — evaluation and self-remediation for Goal
 
-Status: design, ready for implementation (phase J0 done) · 2026-10-23 · Decision record: [ADR 0002](../adr/0002-jonah-evals.md)
+Status: design, ready for implementation (phase J0 done) · 2026-10-23 · Decision records: [ADR 0002](../adr/0002-jonah-evals.md), [ADR 0005](../adr/0005-factory-definitions-in-object-storage.md) (definitions and visible cases in the bucket)
 
 In *The Goal*, Jonah never fixes the plant. He asks Alex Rogo questions until Alex can see the constraint himself, then lets him change it. This subsystem works the same way. It measures every agent, station and factory, finds where quality is lost (first at the constraint), and proposes one change at a time with evidence. A human decides. Jonah never edits the measuring stick.
 
@@ -11,7 +11,7 @@ Files that make up this design:
 | `docs/jonah/README.md` | This plan |
 | `docs/adr/0002-jonah-evals.md` | Key decisions and rejected alternatives |
 | `schema/evals.schema.json` | JSON Schema (2020-12) for `evals.yaml` and case files |
-| `factories/goal/evals/`, `factories/sre/evals/` | Starter suites, cases, judges and fixtures |
+| `factories/<id>/evals/` in the definitions bucket (goal, sre) | Starter suites, cases, judges and fixtures ([ADR 0005](../adr/0005-factory-definitions-in-object-storage.md)) |
 | `docs/jonah/schema.sql` | Draft tables, tested on PostgreSQL 18; becomes migrations in J1 |
 
 ---
@@ -21,9 +21,9 @@ Files that make up this design:
 Goal runs factories of agents. Prompts, skills, tool policies, models, contracts and WIP limits all change, and every change can make a station worse in ways nobody sees until rework piles up at the constraint. Jonah exists to:
 
 1. **Measure** quality at three levels: each agent, each station (gates and checks), each factory (flow and outcomes).
-2. **Catch regressions before they ship** (offline suites on pull requests and new models) and **drift after they ship** (online sampling of production runs).
+2. **Catch regressions before they ship** (offline suites on proposed definition changes and new models) and **drift after they ship** (online sampling of production runs).
 3. **Turn failures into tests**: every escaped defect, andon pull and human override can become an eval case.
-4. **Propose fixes with evidence**: diagnose a failure mode, draft a diff to factory files, prove offline that it wins without regressions, and hand it to the `goal` factory as a pull request with a human gate. Then watch it, and roll it back if production disagrees.
+4. **Propose fixes with evidence**: diagnose a failure mode, draft a diff to definition files, prove offline that it wins without regressions, and ship it with your approval as a versioned definition change in the bucket, pinning the previous object versions. Then watch it, and roll it back to those versions if production disagrees.
 
 Non-goals: Jonah does not replace the human gates, does not train models, does not edit Go or TypeScript code, and never changes graders, cases, holdout sets or its own policy.
 
@@ -41,7 +41,7 @@ Source: Anthropic, *Demystifying evals for AI agents* (2026-01-09), <https://www
 | Evaluation harness | Runs tasks concurrently, records steps, grades, aggregates | **Jonah harness** inside `goald`, using the same Runner as production |
 | Agent harness (scaffold) | The system that lets the model act; evaluating an agent evaluates harness + model | **Worker** (Claude Agent SDK) + agent prompt + skills + tool policy + MCP gateway. Evals run this exact stack. |
 | Evaluation suite | Tasks sharing a goal | **Suite** in `evals.yaml`, per agent or station, purpose capability or regression |
-| Capability vs regression evals | Capability starts low (a hill to climb); regression stays near 100% and a drop means breakage; mature capability cases graduate | `purpose: capability` tracks progress, `purpose: regression` gates merges and proposals; graduation moves a case between them |
+| Capability vs regression evals | Capability starts low (a hill to climb); regression stays near 100% and a drop means breakage; mature capability cases graduate | `purpose: capability` tracks progress, `purpose: regression` gates definition pushes and proposals; graduation moves a case between them |
 | pass@k / pass^k | At least one success in k trials vs all k succeed | pass@k for specs and plans (one good attempt is enough, rework exists); **pass^k for anything customer- or production-facing** (triage, gates) |
 | Grader types | Code (fast, objective, brittle), model (flexible, needs calibration), human (gold standard, slow) | Code graders in Go first; Claude judges for one criterion each, calibrated on human labels; humans label in the UI queue |
 | Grade outcomes, not paths | Do not require an exact tool sequence; allow partial credit | Graders check outputs and state; `tool-calls` only forbids unsafe tools. `score` records partial credit beside binary `passed` |
@@ -54,7 +54,7 @@ Source: Anthropic, *Demystifying evals for AI agents* (2026-01-09), <https://www
 | Calibrate model graders; offer an "unknown" | Structured rubrics, one dimension per judge, human calibration | Binary judges with critique first, `unknown` routed to humans, TPR/TNR on a sealed test split |
 | Swiss cheese | Evals, production monitoring, A/B, feedback, transcript review, human studies each catch what others miss | Offline suites + online sampling + flow metrics + human labeling queue; no A/B traffic split (one owner, low volume) |
 | Coding / research / conversational agents | Unit tests plus a rubric for coding; groundedness, coverage and source quality for research; state checks and turn limits for conversation | `goal` factory: tests, scope, verification, rubric judge. `sre` factory: groundedness of evidence against recorded tool results, ruled-out alternatives, read-only state check |
-| Eval-driven development; shared ownership | Write the eval before the capability; product people contribute tasks via PRs | Specs for new agent behavior come with capability cases; cases are reviewed like code in `factories/<name>/evals/` |
+| Eval-driven development; shared ownership | Write the eval before the capability; product people contribute tasks via PRs | Specs for new agent behavior come with capability cases; cases are versioned with the prompts they test under `factories/<id>/evals/` in the bucket and validated on every push |
 
 ## 3. Evaluation levels
 
@@ -140,11 +140,11 @@ Humans label in the Goal UI (section 13). Uses: open coding during error analysi
 
 | Split | Where | Who reads transcripts | Used for |
 | --- | --- | --- | --- |
-| `tune` | Git: `factories/<name>/evals/cases/*.yaml` | Humans and Jonah's diagnostician | Error analysis and diagnosis |
-| `check` | Git, same folder | Humans only; Jonah sees scores | Every comparison; picks winners |
+| `tune` | Bucket: `factories/<id>/evals/cases/*.yaml` (versioned) | Humans and Jonah's diagnostician | Error analysis and diagnosis |
+| `check` | Bucket, same folder | Humans only; Jonah sees scores | Every comparison; picks winners |
 | `holdout` | **Postgres only** (`eval_cases.storage = 'postgres'`, enforced by a CHECK) | Humans only; Jonah sees only the gate verdict | Final gate of every proposal and monthly audit, at most `holdout.maxRunsPerMonth` runs |
 
-Why git for visible cases: they are reviewed in pull requests, versioned with the prompts they test, diffable, and editable by humans with schema autocompletion. Why Postgres for the holdout: the repository is readable by every agent in the `goal` factory, including the engineers who implement Jonah's own proposals; a holdout in git is not sealed. Every case version that runs is copied into `eval_case_versions` by content hash, so runners in ECS never need a checkout and results always point at the exact text that was run.
+Why the bucket for visible cases: they live and version next to the prompts they test, every change is an object version that can be diffed and restored, and humans edit them in a working copy with schema autocompletion (`goal factory pull` → edit → `goal factory push`, which validates first). Why Postgres for the holdout: the definitions in the bucket are readable by the tooling and operators that edit them, and Jonah's diagnostician reads the `tune` split; a holdout there is not sealed. Every case version that runs is copied into `eval_case_versions` by content hash, so runners in ECS need no copy of the definitions and results always point at the exact text that was run.
 
 ### 5.2 Case file format
 
@@ -171,12 +171,12 @@ Fixtures:
 
 - **Repository snapshots** (`goal` factory): `fixture.repo.ref` names a tag; the harness exports that tree as a single squashed commit (no history, no remotes, no other branches), applies an optional `patch`, and serves it by hash through the gateway. Hidden tests (`fixture.files`) are copied in only after the agent exits.
 - **Cassettes** (`sre` factory): JSONL records of `{connection, tool, match, response}`. In replay mode the gateway answers matching calls from the cassette (regex or exact on arguments, whitespace-normalized). Unmatched `kb_search` returns no results; other unmatched calls return a "no recording" error, are counted, and above a threshold flag the case for coverage review rather than failing the agent. Write tools are never served.
-- **Recording**: `goal eval record <run>` turns a production run's tool calls into a cassette, with secrets and personal data scrubbed, for review in a pull request.
+- **Recording**: `goal eval record <run>` turns a production run's tool calls into a cassette, with secrets and personal data scrubbed, for human review before it is pushed with the factory's evals.
 
 ### 5.3 Lifecycle
 
 ```
-             ┌──────────── human promotes (PR) ───────────┐
+             ┌─────────── human promotes (push) ──────────┐
 candidate ──▶ draft ──(oracle passes, null fails)──▶ active ──(3 runs ≥ 90%)──▶ graduated to regression
    ▲                                                  │
    │                                       zero passes in 10 trials,
@@ -189,7 +189,7 @@ production failures                        or flake rate > 30%
 ```
 
 - **Sources**: hand-written seeds (start with 20–50 per factory from what is checked by hand today); production failures, which Jonah turns into `candidate` rows with the item and run attached (`goal eval export-case GOAL-42` does the same by hand, as the prior system did for its ~12 hand-labeled incidents); synthetic cases from `cases.sources[kind=synthetic]` dimensions.
-- **Synthetic generation** (generate-synthetic-data): 3–5 dimensions that target expected failures, 20 tuples drafted and reviewed by a human first, then more tuples by Claude, then a **separate** prompt turns each tuple into a realistic input. A human filters them; survivors become `draft` files in a PR.
+- **Synthetic generation** (generate-synthetic-data): 3–5 dimensions that target expected failures, 20 tuples drafted and reviewed by a human first, then more tuples by Claude, then a **separate** prompt turns each tuple into a realistic input. A human filters them; survivors become `draft` case files in the working copy and are pushed.
 - **Activation**: a draft becomes active only when its `reference` passes every grader (oracle) and an empty or constant output fails them (null). This catches broken graders and ambiguous tasks before they cost trials.
 - **Balance**: every gate suite holds both approve and reject cases; every severity suite holds both escalate and do-not-escalate cases.
 - **Saturation**: a capability suite above `saturation.passRate` for `saturation.runs` runs is flagged; its cases are proposed for graduation and the dashboard asks for harder cases.
@@ -200,7 +200,7 @@ production failures                        or flake rate > 30%
 
 ### 6.1 Offline (suites on frozen cases)
 
-Triggers (`suite.triggers`): `schedule` (cron inside `lane.windows`), `pull-request` (a PR that changes the factory's agents, skills, contracts or `factory.yaml`), `model-change` (a new model id reported for an agent's alias), `proposal` (Jonah verification), `andon`.
+Triggers (`suite.triggers`): `schedule` (cron inside `lane.windows`), `pull-request` (a proposed definition change, before it is pushed, to the factory's agents, skills, contracts or `factory.yaml`; the name predates ADR 0005), `model-change` (a new model id reported for an agent's alias), `proposal` (Jonah verification), `andon`.
 
 Run protocol:
 
@@ -226,11 +226,11 @@ The labeling queue (`review_queue_items`) is fed by every source above. **Error 
 ### 7.1 The loop
 
 ```
- detect ──▶ diagnose ──▶ propose ──▶ verify offline ──▶ ship (goal factory PR) ──▶ watch ──▶ keep
+ detect ──▶ diagnose ──▶ propose ──▶ verify offline ──▶ ship (new versions) ───▶ watch ──▶ keep
    ▲          error        one diff     baseline vs        human approves            │
-   │          analysis     per          candidate,         and merges               ▼
+   │          analysis     per          candidate,         and goald writes it      ▼
    │          over         hypothesis   regression +                          rollback (pin)
-   └─ signals transcripts               targeted + holdout                    + revert item
+   └─ signals transcripts               targeted + holdout                to previous versions
 ```
 
 1. **Detect** — `remediation_signals` from: online drop, regression suite failure, andon pull, kaizen report finding, gate accuracy drift, cost/turn drift, model change, flow target miss, or a human ("ask Jonah"). One open signal per fingerprint.
@@ -249,11 +249,11 @@ The labeling queue (`review_queue_items`) is fed by every source above. **Error 
    | `grader` / `case` / `harness` | The output was right and the grader said no; the task was ambiguous; the environment broke | **Never Jonah's to fix**: a human item is opened |
 
    The output is a `diagnosis` (failure mode, frequency, impact on the constraint, lever, hypothesis, quoted evidence). Following the error-analysis skill, Jonah first asks whether a plain fix exists (a missing instruction) before suggesting a new grader.
-3. **Propose** — one change per hypothesis (one behavior, possibly several hunks), as a unified diff against the current commit, limited to the allowed files (7.4). Up to `maxCandidatesPerSignal` alternatives. Each is checked before any trial runs: `goal validate` on the candidate tree, path allowlist, size limits, and a **leak check** that rejects a diff sharing long word sequences with any case input or reference (memorizing cases instead of fixing behavior).
+3. **Propose** — one change per hypothesis (one behavior, possibly several hunks), as a unified diff against the factory's current object versions, limited to the allowed files (7.4). Up to `maxCandidatesPerSignal` alternatives. Each is checked before any trial runs: `goal factory validate` on the candidate tree, path allowlist, size limits, and a **leak check** that rejects a diff sharing long word sequences with any case input or reference (memorizing cases instead of fixing behavior).
 4. **Verify offline** — baseline (current config) and candidate run interleaved on: the targeted cases (the failure mode's `tune` and `check` cases), every regression suite in `verify.guardSuites`, with `verify.trials` trials. Decision rule in section 11.4. If it passes, the candidate runs once against the **holdout**; Jonah learns only pass or fail. Every comparison is stored (`eval_comparisons`) and is immutable once decided.
-5. **Ship** — `goald` creates a work item in the `goal` factory with the spec pre-filled (what changes, why, the evidence summary and links) and enters it at `approve-spec`, the human gate. After approval the build station applies the diff **verbatim** (a check compares the branch diff with `diff_sha256`), runs the usual checks, the reviewer reviews, and a human merges. The DB refuses a proposal past verification without a passing comparison, and refuses `shipped` without a work item.
-6. **Watch** — after merge, `remediation_rollouts` watches the next `watchItems` items or `watchDays` days: targeted online pass rate, regression suites, rework rate, cost per item, andon.
-7. **Roll back** automatically when a `rollbackOn` condition holds: `goald` **pins** the factory to the previous definition (`factory_config_pins`, effective on every instance immediately), opens an **expedite** revert item in the `goal` factory so git catches up, and reopens the signal with the new evidence. A human releases the pin when the revert merges.
+5. **Ship** — the proposal waits for your approval in the Goal UI with the diff, the evidence summary and links. On approval `goald` applies the diff **verbatim** (it checks the candidate against `diff_sha256`), validates the candidate definition, writes the changed files to the bucket as new object versions and records the previous object versions in `factory_config_pins` as the rollback target. The DB refuses a proposal past verification without a passing comparison, and refuses `shipped` without the recorded versions. The `goal` factory is not involved: it opens pull requests only for Goal's own code.
+6. **Watch** — after the change ships, `remediation_rollouts` watches the next `watchItems` items or `watchDays` days: targeted online pass rate, regression suites, rework rate, cost per item, andon.
+7. **Roll back** automatically when a `rollbackOn` condition holds: `goald` **pins** the factory to the previous object versions (`factory_config_pins`, effective on every instance immediately), restores those versions as the current ones in the bucket, and reopens the signal with the new evidence. A human releases the pin.
 
 Concurrency and attribution: one proposal in flight per factory (unique index), a `cooldownDays` pause per agent or station after a rollout, and all changes go through `factory_definitions`, so every production run and trial records the exact config it used.
 
@@ -263,10 +263,10 @@ Concurrency and attribution: one proposal in flight per factory (unique index), 
 | --- | --- | --- |
 | **L0 Report** | Run suites, online evals and flow metrics; write the Jonah section of the kaizen report | Everything else |
 | **L1 Diagnose** (default for a new factory) | Open signals, run error analysis, draft diagnoses and diffs, suggest candidate cases | Reads the proposal; clicks "Verify" to spend eval budget; decides whether to ship |
-| **L2 Propose with evidence** (default once ready) | Everything in L1, plus run verification within budget and open the work item in the `goal` factory | Approves at `approve-spec`, reviews, merges |
-| **L3 Auto-merge low risk** | Everything in L2, plus merge **low-risk flow-config** changes (`autoMerge` steps: WIP ±1, buffer ±2, agents ±1) after all checks, evidence and holdout pass | Can revert any time; reviews a weekly digest |
+| **L2 Propose with evidence** (default once ready) | Everything in L1, plus run verification within budget and submit the proposal for approval | Reviews the diff and evidence, approves or rejects |
+| **L3 Auto-apply low risk** | Everything in L2, plus apply **low-risk flow-config** changes (`autoMerge` steps: WIP ±1, buffer ±2, agents ±1) after all checks, evidence and holdout pass | Can revert any time; reviews a weekly digest |
 
-Readiness: Jonah runs one level below the configured `autonomy` until `readiness` holds (enough regression and holdout cases, every judge used by a regression suite gating). Risk classes are fixed in code, never configurable upward: **low** = flow-config within `autoMerge` steps; **medium** = prompt, skill, tool-policy narrowing; **high** = model, tool-policy widening, connection, contract, budgets. L3 never auto-merges medium or high risk. A human override (`jonah_overrides`, `max_autonomy`) caps any factory instantly; `L0` is the kill switch. Jonah cannot raise its own level: the level lives in `evals.yaml`, which Jonah cannot edit, and overrides require a `human:` actor.
+Readiness: Jonah runs one level below the configured `autonomy` until `readiness` holds (enough regression and holdout cases, every judge used by a regression suite gating). Risk classes are fixed in code, never configurable upward: **low** = flow-config within `autoMerge` steps; **medium** = prompt, skill, tool-policy narrowing; **high** = model, tool-policy widening, connection, contract, budgets. L3 never auto-applies medium or high risk. A human override (`jonah_overrides`, `max_autonomy`) caps any factory instantly; `L0` is the kill switch. Jonah cannot raise its own level: the level lives in `evals.yaml`, which Jonah cannot edit, and overrides require a `human:` actor.
 
 ### 7.3 Goodhart protection
 
@@ -284,8 +284,8 @@ When a measure becomes a target it stops being a good measure. Controls:
 
 | Guardrail | Enforcement |
 | --- | --- |
-| Jonah edits only `factories/<name>/factory.yaml`, `agents/*.md`, local `skills/*/SKILL.md`, `contracts/*.schema.json` | `jonah_paths_allowed()` CHECK on `remediation_proposals.files`; same rule in Go; build-station check compares the PR diff to the approved one |
-| Never edits graders, cases, judges, holdout, schemas, migrations, Jonah code or policy | Not in the allowlist; `evals/` additionally protected by CODEOWNERS (human review required) |
+| Jonah edits only `factory.yaml`, `agents/*.md`, local `skills/*/SKILL.md`, `contracts/*.schema.json` under `factories/<id>/` | `jonah_paths_allowed()` CHECK on `remediation_proposals.files`; same rule in Go; `goald` compares the written diff to the approved one |
+| Never edits graders, cases, judges, holdout, schemas, migrations, Jonah code or policy | Not in the allowlist; `goald` never writes under `evals/` for a proposal, and Jonah's tasks have no bucket credentials |
 | Holdout never used for tuning | Holdout content only in Postgres; Jonah's transcript tool serves `tune` and production only; DB role for Jonah tasks has no `SELECT` on holdout rows (row-level security); verdict-only API |
 | No change without eval evidence | CHECK + FK cascade: past `verifying`, a proposal must reference a comparison whose decision is `pass`; comparisons are immutable once decided |
 | One change at a time | Unique index: one proposal in flight per factory; cooldown per subject |
@@ -295,7 +295,7 @@ When a measure becomes a target it stops being a good measure. Controls:
 
 ## 8. Configuration
 
-Each factory may have `factories/<name>/evals/`:
+Each factory may have `evals/` in its bucket prefix (`factories/<id>/evals/`):
 
 ```
 evals/
@@ -305,9 +305,9 @@ evals/
   fixtures/             cassettes (*.cassette.jsonl), reference patches, hidden test files
 ```
 
-Both kinds validate against `schema/evals.schema.json` (`kind: Evals` or `kind: EvalCase`), so the YAML editor in the UI and in editors gives autocompletion. `goal validate` will also check the cross-references a schema cannot express (J1-2): `metadata.factoryId` equals the factory's id; graders, judges, contracts, agents and stations exist; prompt, cassette, patch and file paths exist; cassette lines parse and name real connections; case ids are unique and file names equal `metadata.name`; every `expect` key is a grader used by a suite that selects the case; every suite selects at least one case.
+Both kinds validate against `schema/evals.schema.json` (`kind: Evals` or `kind: EvalCase`), so the YAML editor in the UI and in editors gives autocompletion. `goal factory validate` will also check the cross-references a schema cannot express (J1-2): `metadata.factoryId` equals the factory's id; graders, judges, contracts, agents and stations exist; prompt, cassette, patch and file paths exist; cassette lines parse and name real connections; case ids are unique and file names equal `metadata.name`; every `expect` key is a grader used by a suite that selects the case; every suite selects at least one case.
 
-Excerpt (`factories/sre/evals/evals.yaml`):
+Excerpt (the `sre` factory's `evals/evals.yaml`):
 
 ```yaml
 apiVersion: goal/v1
@@ -338,7 +338,7 @@ spec:
     rollout: { watchItems: 15, watchDays: 14, rollbackOn: { regressionFailure: true, andon: true, onlineDrop: 0.12 } }
 ```
 
-Why a separate file, not a section of `factory.yaml`: it has a different owner (Jonah may propose changes to `factory.yaml`, never to evals), a different review path (CODEOWNERS), and it keeps `factory.schema.json` unchanged.
+Why a separate file, not a section of `factory.yaml`: it has a different owner (Jonah may propose changes to `factory.yaml`, never to evals), a different write path (humans push it; proposals never touch it), and it keeps `factory.schema.json` unchanged.
 
 ## 9. Data model
 
@@ -350,7 +350,7 @@ Draft: [`schema.sql`](schema.sql). It applies after `migrations/00001_init.sql` 
 | `agent_runs.definition_sha256` (new column) | Which config produced each production run |
 | `eval_configs` | Every loaded `evals.yaml`, by sha256 |
 | `eval_suites` | Current suites per factory (level, purpose, agent, station) |
-| `eval_cases` | Case identity, split, state, origin (item, run), storage (git or postgres; holdout must be postgres) |
+| `eval_cases` | Case identity, split, state, origin (item, run), storage (bucket or postgres; holdout must be postgres) |
 | `eval_case_versions` | Immutable, content-addressed case content; trials point here |
 | `eval_fixtures`, `eval_case_version_fixtures` | Cassettes, snapshots and files by hash, inline or by URI |
 | `eval_runs` | One arm (baseline or candidate) of one suite run, with purpose, config shas, cost, cached summary |
@@ -366,7 +366,7 @@ Draft: [`schema.sql`](schema.sql). It applies after `migrations/00001_init.sql` 
 | `diagnoses` | Failure mode, lever, hypothesis, evidence, constraint at the time |
 | `remediation_proposals` | The diff, files (allowlisted), risk, autonomy, budget, state, link to the `goal` work item |
 | `eval_comparisons` | Baseline vs candidate (+ holdout) decision with stats; immutable once decided |
-| `remediation_rollouts` | Watch window and outcome after merge |
+| `remediation_rollouts` | Watch window and outcome after a change ships |
 | `factory_config_pins` | Immediate rollback to a previous definition, released only by a human |
 | `jonah_overrides` | Human cap on autonomy (kill switch) |
 | `metric_snapshots` | Rollups per level, subject, metric and window, with CI |
@@ -410,7 +410,7 @@ Packages (each with one responsibility and a caller):
 | `internal/adapters/postgres` | Eval tables, `SKIP LOCKED` trial queue, advisory-lock jobs |
 | `internal/adapters/gateway` | Replay and record modes, fixture and snapshot serving by hash, eval-mode tool policy |
 | `internal/adapters/judge` | `anthropic` (Messages API, structured outputs, prompt caching, Message Batches for offline grading), `bedrock`, `worker` (subscription) |
-| `cmd/goal` | `goal validate` (evals too), `goal eval run|compare|record|export-case|calibrate` |
+| `cmd/goal` | `goal factory validate` (evals too), `goal eval run|compare|record|export-case|calibrate` |
 | `worker/` | Envelope `mode: eval`: no push, gateway URL in replay mode, then a separate grading phase (hidden files, commands) the agent never sees; `mode: judge`: one turn, no tools, JSON schema output |
 | `web/src/features/jonah/` | Screens in section 13, through `packages/api-client` |
 
@@ -470,7 +470,7 @@ Inconclusive (interval spans the threshold) is not a pass; Jonah may ask for mor
 
 ### 11.5 Flow statistics
 
-Lead time is reported as p50/p85/p95 with bootstrap intervals; throughput per week with a Poisson interval; rates (rework, first-pass yield, override) with Wilson intervals. Rollout watch uses the same tests as drift, comparing the watch window with the 28 days before the merge.
+Lead time is reported as p50/p85/p95 with bootstrap intervals; throughput per week with a Poisson interval; rates (rework, first-pass yield, override) with Wilson intervals. Rollout watch uses the same tests as drift, comparing the watch window with the 28 days before the change shipped.
 
 ## 12. Quota and cost
 
@@ -520,17 +520,17 @@ Screens live in `web/src/features/jonah/` and follow `design-system/goal/MASTER.
 4. **Run and comparison**: paired per-case dots baseline → candidate, effect with interval against `minEffect`, guard suites with non-inferiority bars, cost ratio, holdout verdict (pass/fail only), and links to transcripts.
 5. **Transcript review and labeling queue** (build-review-interface): one trace at a time, full transcript with tool calls linked to their results, system prompt and long tool output collapsed, markdown rendered, code highlighted, JSON pretty-printed; case input, reference and rubric in a side panel; Pass / Fail / Defer with a notes field ("first thing that went wrong"), failure-mode tags once a taxonomy exists; keyboard 1 / 2 / D / U and arrows; progress "12 of 87"; auto-save. Judge verdicts are hidden until the human labels, to avoid anchoring, then shown with the disagreement highlighted. Output is sanitized; no remote images.
 6. **Judge calibration**: per judge version, TPR and TNR on dev and test with intervals, status, disagreement table (input, human, judge, critique), and the action to start a new version.
-7. **Remediation proposals**: Jonah's diagnosis written as questions and answers, quoted evidence with links, the diff (Monaco diff view), risk and autonomy level, budget spent, the comparison summary, and actions: verify (L1), approve to ship (opens the `goal` item), reject with reason, more trials. After merge: the rollout timeline with each rollback condition and its current value.
+7. **Remediation proposals**: Jonah's diagnosis written as questions and answers, quoted evidence with links, the diff (Monaco diff view), risk and autonomy level, budget spent, the comparison summary, and actions: verify (L1), approve to ship (writes new object versions and pins the previous ones), reject with reason, more trials. After it ships: the rollout timeline with each rollback condition and its current value.
 8. **Jonah settings** (read-only view of `evals.yaml` policy) with the human override control (cap autonomy, kill switch).
 
 Under 768 px the Jonah tab shows the Needs-you list and the labeling queue first; every action has a 44 px target.
 
 ## 14. Security
 
-- **Least privilege.** Jonah tasks run in containers with read-only tools: a builtin `jonah` MCP connection that serves production samples and `tune`-split transcripts and nothing else. No git, no GitHub token, no network beyond the gateway. Proposals are created by `goald`; the `goal` factory's engineers apply them under that factory's own PAT and tool policy.
+- **Least privilege.** Jonah tasks run in containers with read-only tools: a builtin `jonah` MCP connection that serves production samples and `tune`-split transcripts and nothing else. No git, no GitHub token, no network beyond the gateway. Proposals are created and, once approved, written to the bucket by `goald`; Jonah's tasks never hold bucket or git credentials.
 - **Eval containers** get no production credentials: the gateway replays cassettes and never forwards to real systems in eval mode; `aws`-type connections have no credentials in eval mode at all.
 - **Prompt injection.** Transcripts, tool results and case inputs are untrusted. Judges and the diagnostician receive them inside tagged blocks declared as data; their outputs are schema-validated; Jonah's authority is bounded by the allowlist, the DB constraints and the human gate, not by its prompt.
-- **Secrets and personal data.** The gateway keeps credentials out of agent context; transcripts are additionally scanned at ingest for secret patterns and personal data and redacted (`transcripts.redacted`). Cassettes recorded from production are scrubbed and reviewed in a PR. The `transcript` grader fails trials that print secret-shaped strings.
+- **Secrets and personal data.** The gateway keeps credentials out of agent context; transcripts are additionally scanned at ingest for secret patterns and personal data and redacted (`transcripts.redacted`). Cassettes recorded from production are scrubbed and reviewed by a human before they are pushed. The `transcript` grader fails trials that print secret-shaped strings.
 - **Holdout protection.** Row-level security on `eval_cases`/`eval_case_versions` for the role Jonah's queries use; verdict-only API; access to holdout content is logged in `jonah_audit`.
 - **Encryption and retention.** RDS encryption with KMS in AWS; production transcripts expire after 90 days unless attached to a case, label or comparison; eval evidence is kept.
 - **Audit.** `jonah_audit` and `eval_case_versions` are append-only by trigger; comparisons are immutable once decided; overrides and pin releases require a `human:` actor.
@@ -561,11 +561,11 @@ Goal's main phases: **0** foundation (done) · **1** first agent end to end · *
 | --- | --- | --- | --- |
 | **J0 Design** | 0 → 1 | This plan, ADR 0002, schema, starter configs and cases, SQL draft | Done: examples validate (Python jsonschema and Go jsonschema v6), SQL applies on PG 18 with 21 constraint checks rejected as intended; owner accepts ADR 0002 |
 | **J1 Capture and run** | 1 | Transcripts and config shas on every run; eval files in `goal validate`; offline harness MVP (`goal eval run`), Docker runner, code graders (contract, match, transcript, tool-calls), stats package | Architect suites run end to end with ≥ 10 cases × 3 trials; oracle passes 100% and null fails 100%; an induced API error is recorded as `error`; re-grading stored outputs reproduces 100% of code-grader verdicts; cost, turns and latency recorded per trial |
-| **J2 Evals as CI for Goal** | 2 | Eval lane (WIP, windows, share, yield, backoff) under advisory locks; repo snapshots and hidden tests; command, diff-scope, verification graders; judge adapters and calibration; labeling queue and overview screens; PR trigger posts comparisons on PRs that change `factories/goal/**` | `goal` factory has ≥ 30 regression and ≥ 15 capability cases; ≥ 1 judge gating (TPR and TNR ≥ 0.9 on a sealed test with ≥ 30 per class); 14 nights of scheduled runs with eval share ≤ 15% and p95 production claim wait within 10% of the pre-J2 baseline; 100% of PRs changing goal agents show a comparison |
+| **J2 Evals as CI for Goal** | 2 | Eval lane (WIP, windows, share, yield, backoff) under advisory locks; repo snapshots and hidden tests; command, diff-scope, verification graders; judge adapters and calibration; labeling queue and overview screens; the `pull-request` trigger runs comparisons on proposed changes to the `goal` factory's definition | `goal` factory has ≥ 30 regression and ≥ 15 capability cases; ≥ 1 judge gating (TPR and TNR ≥ 0.9 on a sealed test with ≥ 30 per class); 14 nights of scheduled runs with eval share ≤ 15% and p95 production claim wait within 10% of the pre-J2 baseline; 100% of proposed changes to goal agents show a comparison before they are pushed |
 | **J3 SRE, online, gates** | 3 | Gateway record and replay; SRE suites; online sampling, judging, Rogan–Gladen, drift; station gate metrics and sampled rejection spot checks; `export-case` from production items | `sre` has ≥ 20 active cases; replay is deterministic (same cassette and calls → identical responses in 100 repeated trials); ≥ 90% of sampled runs graded within 1 hour; an injected degradation (a shadow config with a removed instruction) is detected within one drift window; review-gate confusion matrix on ≥ 50 items |
 | **J4 Flow and diagnosis (L1)** | 4 | Flow metrics and constraint-first ordering; Jonah section in the kaizen report; defect links; error-analysis sessions; failure taxonomy; signals; diagnostician task | Flow metrics equal hand-computed values on a fixture event log; for 3 seeded faults (removed instruction, over-tight tool deny, starved constraint from a WIP limit) the diagnosis names the right lever in ≥ 2 of 3 and a human confirms the failure mode; zero proposals touch a forbidden path |
-| **J5 Verify and ship (L2)** | 4 | Proposal builder, leak check, comparisons with the decision rule and holdout gate, `goal` factory integration, rollout watch, pins and revert items, proposals screen | A seeded regression goes detect → PR with evidence → human merge → kept; a seeded bad change is pinned back automatically within its watch window and an expedite revert item appears; every step is in `jonah_audit`; a proposal exceeding its budget is refused before any trial |
-| **J6 Low-risk autonomy (L3)** | after 4 | Auto-merge of low-risk flow-config changes; human-station auto-approval for Jonah items (needs a `factory.schema.json` addition); weekly digest | Entry: ≥ 10 L2 proposals with ≥ 70% human acceptance and no rollback among accepted low-risk ones. Exit: 30 days of L3 on one factory with no unrecovered regression and every auto-merge reverted cleanly when tested |
+| **J5 Verify and ship (L2)** | 4 | Proposal builder, leak check, comparisons with the decision rule and holdout gate, shipping as object versions, rollout watch, pins and version restores, proposals screen | A seeded regression goes detect → proposal with evidence → human approval → new object versions → kept; a seeded bad change is pinned back automatically within its watch window and the previous versions are current again; every step is in `jonah_audit`; a proposal exceeding its budget is refused before any trial |
+| **J6 Low-risk autonomy (L3)** | after 4 | Auto-apply of low-risk flow-config changes; human-station auto-approval for Jonah items (needs a `factory.schema.json` addition); weekly digest | Entry: ≥ 10 L2 proposals with ≥ 70% human acceptance and no rollback among accepted low-risk ones. Exit: 30 days of L3 on one factory with no unrecovered regression and every auto-applied change rolled back cleanly when tested |
 
 ### 16.1 Work items for the `goal` factory
 
@@ -574,7 +574,7 @@ Spec-ready titles; lane in brackets; acceptance criteria are checkable.
 **J1**
 
 1. **Store transcripts and config versions for every agent run** [backend] — `factory_definitions`, `transcripts` and `agent_runs.definition_sha256` added by new migrations from `docs/jonah/schema.sql`; a finished run has a zstd transcript row with sha256 and size; the run's `definition_sha256` matches the loaded factory; integration test proves two goald instances storing transcripts concurrently do not conflict.
-2. **Validate evals.yaml and case files in `goal validate`** [backend] — embeds `schema/evals.schema.json`; reports every cross-reference error listed in section 8; the starter files for goal and sre pass; a broken fixture set reports each error at once (table test).
+2. **Validate evals.yaml and case files in `goal factory validate`** [backend] — embeds `schema/evals.schema.json`; reports every cross-reference error listed in section 8; the starter files for goal and sre pass; a broken fixture set reports each error at once (table test).
 3. **Repository snapshots for eval fixtures** [backend] — tag `evals/base-1` exists; `goal eval snapshot <ref>` produces a single-commit tree with no history or remotes, stored by sha256; the gateway serves it by hash; a test proves `git log` inside the snapshot shows one commit.
 4. **Offline harness MVP: `goal eval run <factory> <suite>`** [backend] — plans trials with interleaved order keys; runs each in a fresh Docker container through the Runner port; records `error` vs `graded`; prints pass@1, pass@k, pass^k with intervals; oracle and null checks run for draft cases.
 5. **Code graders and statistics** [backend] — `contract`, `match`, `transcript`, `tool-calls`; `internal/jonah/stats` with pass@k and pass^k estimators, Wilson and cluster bootstrap; table tests against hand-computed values.
@@ -588,7 +588,7 @@ Spec-ready titles; lane in brackets; acceptance criteria are checkable.
 4. **Jonah API and events in the contract** [backend] — `/v1/jonah/*` and `jonah_events` in `api/openapi.yaml` and `api/events.schema.json`; generated server and client; handler tests.
 5. **Labeling queue screen** [frontend] — section 13 screen 5; keyboard shortcuts; auto-save; judge verdict hidden until labeled; Playwright flow at 375, 768, 1440 px with axe checks.
 6. **Evals overview screen** [frontend] — section 13 screen 1 with suite health and Needs-you list; constraint shown in amber only.
-7. **Eval comparison on pull requests** [infra] — CI job runs the regression suites affected by a PR touching `factories/<name>/` and comments pass rates, deltas and intervals; CODEOWNERS protects `factories/*/evals/`.
+7. **Eval comparison on definition changes** [backend] — before a push, the regression suites affected by the changed files run against the current object versions and report pass rates, deltas and intervals; pushes that change `evals/` require a human actor.
 
 **J3**
 
@@ -608,10 +608,10 @@ Spec-ready titles; lane in brackets; acceptance criteria are checkable.
 
 **J5**
 
-1. **Proposal builder** [backend] — diff against HEAD, allowlist, `goal validate` on the candidate tree, leak check, risk classification; DB rejects forbidden paths.
+1. **Proposal builder** [backend] — diff against the current object versions, allowlist, `goal factory validate` on the candidate tree, leak check, risk classification; DB rejects forbidden paths.
 2. **Comparisons and the decision rule** [backend] — interleaved arms, section 11.4 rule, Holm, holdout gate with verdict-only output; immutable decisions.
-3. **Ship through the goal factory** [backend] — item created at `approve-spec` with a pre-filled spec; build check verifies the branch diff equals the approved diff; PR links evidence.
-4. **Rollout watch and automatic rollback** [backend] — watch window; pin on trigger; expedite revert item; human releases the pin; seeded bad change test.
+3. **Ship as a versioned definition change** [backend] — on approval `goald` writes exactly the approved diff as new object versions, records the previous versions as the pin, and links the evidence in `jonah_audit`.
+4. **Rollout watch and automatic rollback** [backend] — watch window; pin on trigger; previous object versions restored as current; human releases the pin; seeded bad change test.
 5. **Proposals screen** [frontend] — section 13 screen 7 with diff, evidence and actions.
 
 **J6**

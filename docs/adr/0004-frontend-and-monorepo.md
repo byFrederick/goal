@@ -4,7 +4,7 @@ Status: accepted · 2026-10-23
 
 ## Decision
 
-1. **One repository**: a Go module at the root plus a pnpm workspace (`web`, `worker`, `packages/*`) orchestrated by Turborepo. `make check` runs Go and TypeScript checks together.
+1. **One repository**: a Go module at the root plus a pnpm workspace (`web`, `worker`, `packages/*`) orchestrated by Turborepo. `task check` runs Go and TypeScript checks together.
 2. **Contract first**: `api/openapi.yaml` is the single API contract. Go server interfaces (oapi-codegen) and TypeScript types and client (openapi-typescript, openapi-fetch) are generated from it; CI fails on drift.
 3. **Static React SPA**: React 19, Vite, TypeScript strict, TanStack Router and Query, Tailwind v4 with tokens generated from `design-system/goal/MASTER.md`, shadcn/ui on Radix in `packages/ui`.
 4. **Realtime by SSE** from goald, mapped to query invalidation.
