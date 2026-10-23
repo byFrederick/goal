@@ -80,8 +80,8 @@ describe('runTask', () => {
       cwd: '/workspace',
       model: 'claude-sonnet-5-5',
       systemPrompt: { type: 'preset', preset: 'claude_code', append: 'You are the engineer.' },
-      tools: ['Read', 'Edit', 'Bash', 'Skill', 'ToolSearch'],
-      allowedTools: ['Read', 'Edit', 'Bash(npm test*)', 'ToolSearch', 'mcp__goal'],
+      tools: ['Read', 'Edit', 'Bash', 'Skill'],
+      allowedTools: ['Read', 'Edit', 'Bash(npm test*)', 'mcp__goal'],
       disallowedTools: ['Bash(git push*)'],
       permissionMode: 'dontAsk',
       skills: ['acme-conventions'],
@@ -90,6 +90,7 @@ describe('runTask', () => {
           type: 'http',
           url: 'http://host.docker.internal:8081/mcp',
           headers: { Authorization: 'Bearer gateway-token' },
+          alwaysLoad: true,
         },
       },
       strictMcpConfig: true,
@@ -116,8 +117,8 @@ describe('runTask', () => {
     });
 
     expect(calls[0]?.options).toMatchObject({
-      tools: ['Read', 'Skill', 'ToolSearch'],
-      allowedTools: ['Read', 'ToolSearch', 'mcp__goal'],
+      tools: ['Read', 'Skill'],
+      allowedTools: ['Read', 'mcp__goal'],
       disallowedTools: ['Bash(git push*)'],
     });
   });

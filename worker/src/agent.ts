@@ -4,9 +4,6 @@ import { type AgentFiles, paths, type TaskSpec } from './spec.js';
 /** The only MCP server an agent sees: goald's gateway. Its tools are mcp__goal__<tool>. */
 export const gatewayServer = 'goal';
 
-/** The built-in tool that loads deferred MCP tools. */
-const toolSearch = 'ToolSearch';
-
 /** Tools an agent gets when its definition allows none: it can read the workspace, nothing more. */
 const readOnlyTools = ['Read', 'Grep', 'Glob'];
 
@@ -45,6 +42,10 @@ export function agentQuery(
             type: 'http',
             url: spec.gateway_url,
             headers: gatewayToken ? { Authorization: `Bearer ${gatewayToken}` } : {},
+            // The gateway already serves only the agent's allowed tools; loading them up front
+            // (instead of deferring them behind tool search) is what lets agents call them
+            // reliably, and it waits for the connection before the first turn.
+            alwaysLoad: true,
           },
         }
       : {},
@@ -77,13 +78,10 @@ export function toolPolicy(
   const allow = builtin.length > 0 ? builtin : readOnlyTools;
   const tools = new Set(allow.map((rule) => rule.replace(/\(.*$/, '')).filter((name) => !name.startsWith('mcp__')));
   if (spec.skills.length > 0) tools.add('Skill');
-  // Claude Code defers MCP tools behind tool search when they are many; without ToolSearch the
-  // agent could not reach a single gateway tool.
-  if (gateway) tools.add(toolSearch);
 
   return {
     tools: [...tools],
-    allowedTools: gateway ? [...allow, toolSearch, `mcp__${gatewayServer}`] : [...allow],
+    allowedTools: gateway ? [...allow, `mcp__${gatewayServer}`] : [...allow],
     disallowedTools: spec.tools_deny.filter((rule) => !isGatewayRule(rule)),
   };
 }

@@ -12,8 +12,11 @@ Tests exist to stop real regressions. A test that would still pass if the behavi
 | `internal/adapters/s3store` | Integration tests (`//go:build integration`) against RustFS from `compose.yaml`, one fresh bucket per test, removed afterwards | every version stays readable; deleted keys are not found but restorable by version; list returns current objects only |
 | `internal/ports/porttest/storetest` | The `Store` conformance suite, run by the in-memory fake (unit) and by the PostgreSQL adapter (integration), so engine tests on the fake hold for the real store | pull order; slot and lease rules; compare-and-set transitions; requeue fencing; concurrent claims never share a slot or an item |
 | `internal/adapters/postgres` | Integration tests (`//go:build integration`) against PostgreSQL 18 from `compose.yaml`, one fresh schema per test (`search_path`), migrated from zero and dropped afterwards | the conformance suite; migrations are repeatable and safe to run concurrently |
-| `internal/adapters/docker`, `ecs` | Integration tests behind build tags; ECS only in a sandbox account | a task starts, streams, is killed on timeout |
-| HTTP API | Handler tests with `httptest` against the engine and fakes | auth, validation errors, SSE framing |
+| `internal/adapters/docker`, `ecs` | Integration tests behind build tags; ECS only in a sandbox account | a task starts, streams, is killed on timeout; a command check runs in the workspace without secrets and stops at its timeout |
+| `internal/adapters/gitworkspace` | Unit tests against a local smart-HTTP git server (`git http-backend` behind `httptest`) that requires the token | the item's branch is checked out (new or existing); no file under the workspace holds the token; a failed clone leaves nothing |
+| `internal/definitions` | Unit tests over the in-memory bucket | contracts validate outputs and cannot reference files or the network; agent files are staged; a broken push keeps the last valid definition |
+| HTTP API (`internal/api`) | Handler tests with `httptest` against the real engine, the definitions cache and port fakes | status codes and problem details, work-type validation, event paging, human decisions |
+| CLIs (`cmd/`) | Unit tests on argument parsing, settings and the follow loop against a stub API | flags after positionals; unsafe settings refused; each event printed once until a human must act |
 | Worker (TypeScript) | Vitest on the policy hook and envelope parsing; one smoke test with a recorded SDK stream | deny rules block; contract violations fail |
 | UI | Playwright on critical flows at 375, 768, 1440 px; accessibility checks | approve an item; move a card without dragging |
 | Agents and factories | Jonah eval suites, not unit tests | see `docs/jonah/` |

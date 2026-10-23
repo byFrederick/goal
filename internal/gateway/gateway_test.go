@@ -294,6 +294,11 @@ func testListTools(t *testing.T, protocol string) {
 		t.Fatalf("tools = %v, want %v", got, want)
 	}
 
+	// Claude Code refuses a tools/list result without a valid cache scope, and then has no tools.
+	if protocol == "" && res.CacheScope != "private" {
+		t.Errorf("cache scope = %q, want private: the list is per task", res.CacheScope)
+	}
+
 	status, _ := res.Meta[metaConnections].(map[string]any)
 	wantStatus := map[string]string{
 		tracker:     "available",

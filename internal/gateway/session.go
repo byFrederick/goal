@@ -190,7 +190,11 @@ func (s *session) listTools(ctx context.Context) *mcp.ListToolsResult {
 		tools = append(tools, lists[i]...)
 	}
 
-	return &mcp.ListToolsResult{Tools: tools, Meta: mcp.Meta{metaConnections: status}}
+	// The list depends on the task's token, so it is private. The result bypasses the SDK's own
+	// tools/list handler, which would fill in the cache scope; clients reject an empty one.
+	return &mcp.ListToolsResult{
+		Tools: tools, Meta: mcp.Meta{metaConnections: status}, Cacheable: mcp.Cacheable{CacheScope: "private"},
+	}
 }
 
 func (s *session) upstreamTools(ctx context.Context, c *connection) ([]*mcp.Tool, error) {
