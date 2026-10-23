@@ -168,6 +168,10 @@ func validate(out *printer, dirs []string) error {
 		out.printf("✓ %s (%s) — %d agents, %d stations, stored at %s\n",
 			f.Metadata.Name, f.Metadata.ID[:8], len(f.Spec.Agents), len(f.Spec.Board.Stations),
 			factorystore.Prefix(f.Metadata.ID))
+
+		for _, w := range f.Warnings() {
+			out.printf("  ⚠ %s\n", w)
+		}
 	}
 
 	if failed > 0 {
@@ -188,6 +192,10 @@ func push(ctx context.Context, out *printer, catalog *factorystore.Catalog, buck
 	}
 
 	out.printf("✓ pushed %s to s3://%s/%s\n", f.Metadata.Name, bucket, factorystore.Prefix(f.Metadata.ID))
+
+	for _, w := range f.Warnings() {
+		out.printf("  ⚠ %s\n", w)
+	}
 
 	return nil
 }

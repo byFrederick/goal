@@ -3,6 +3,8 @@ package engine_test
 import (
 	"context"
 	"encoding/json"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -44,6 +46,23 @@ type harness struct {
 	clock      *porttest.Clock
 	contracts  *porttest.Contracts
 	line       domain.Line
+
+	mu    sync.Mutex
+	ended []domain.RunID // runs reported to RunEnded
+}
+
+func (h *harness) runEnded(_ context.Context, run domain.RunID) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.ended = append(h.ended, run)
+}
+
+func (h *harness) endedRuns() []domain.RunID {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	return slices.Clone(h.ended)
 }
 
 func newHarness(t *testing.T, line domain.Line, run porttest.RunFunc) *harness {
@@ -69,7 +88,7 @@ func (h *harness) engine(t *testing.T, store ports.Store) *engine.Engine {
 
 	e, err := engine.New(engine.Deps{
 		Store: store, Runner: h.runner, Workspaces: h.workspaces, Checker: h.checker, Contracts: h.contracts, Clock: h.clock,
-		Secrets: porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y", "MODEL_ACCESS": "tok"},
+		Secrets: porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y", "MODEL_ACCESS": "tok"}, RunEnded: h.runEnded,
 	}, engine.Config{
 		Lines:          []domain.Line{h.line},
 		TickEvery:      tickEvery,

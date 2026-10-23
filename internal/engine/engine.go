@@ -45,6 +45,9 @@ type Deps struct {
 	Secrets    ports.Secrets
 	Clock      ports.Clock
 	Logger     *slog.Logger // nil discards logs
+	// RunEnded, when set, is told each run whose agent task has ended (goald stops the run's
+	// MCP sidecars). It is called once per run, with the run's result already recorded.
+	RunEnded func(ctx context.Context, run domain.RunID)
 }
 
 // Config is the engine's behaviour; zero durations take the defaults below.
@@ -94,6 +97,7 @@ type Engine struct {
 	secrets    ports.Secrets
 	clock      ports.Clock
 	log        *slog.Logger
+	runEnded   func(context.Context, domain.RunID)
 	cfg        Config
 
 	mu    sync.RWMutex
@@ -131,7 +135,7 @@ func New(d Deps, cfg Config) (*Engine, error) {
 
 	return &Engine{
 		store: d.Store, runner: d.Runner, workspaces: d.Workspaces, checker: d.Checker, contracts: d.Contracts,
-		secrets: d.Secrets, clock: d.Clock, log: log, cfg: cfg, lines: lines,
+		secrets: d.Secrets, clock: d.Clock, log: log, runEnded: d.RunEnded, cfg: cfg, lines: lines,
 	}, nil
 }
 

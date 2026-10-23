@@ -1,6 +1,7 @@
-// Package docker implements ports.Runner with local Docker containers (Docker Desktop,
-// OrbStack or Docker Engine on Linux): one hardened container of the factory's worker image per
-// agent task.
+// Package docker implements ports.Runner, ports.Checker and ports.Sidecars with local Docker
+// containers (Docker Desktop, OrbStack or Docker Engine on Linux): one hardened container of the
+// factory's worker image per agent task, one per command check, and one per stdio MCP server a
+// run uses (sidecars.go).
 //
 // Per run the runner creates <RunDir>/<run id>/ on the host, writes spec.json (the task without
 // secrets) into it, has AgentFiles write the agent's prompt, skills and output schema into its
@@ -217,7 +218,7 @@ func ensureImage(ctx context.Context, docker *client.Client, log *slog.Logger, r
 		return fmt.Errorf("inspect image %s: %w", ref, err)
 	}
 
-	log.InfoContext(ctx, "pulling agent image", slog.String("image", ref))
+	log.InfoContext(ctx, "pulling image", slog.String("image", ref))
 
 	pull, err := docker.ImagePull(ctx, ref, client.ImagePullOptions{})
 	if err != nil {
@@ -231,9 +232,9 @@ func ensureImage(ctx context.Context, docker *client.Client, log *slog.Logger, r
 	return nil
 }
 
-// Reap removes task containers and run folders whose run is no longer live, for example after
-// goald crashed mid-run. live reports whether a run is still running; goald answers it from the
-// store. It returns how many runs it cleaned up.
+// Reap removes task, check and sidecar containers and run folders whose run is no longer live,
+// for example after goald crashed mid-run. live reports whether a run is still running; goald
+// answers it from the store. It returns how many runs it cleaned up.
 func (r *Runner) Reap(ctx context.Context, live func(domain.RunID) bool) (int, error) {
 	list, err := r.docker.ContainerList(ctx, client.ContainerListOptions{All: true, Filters: make(client.Filters).Add("label", LabelRun)})
 	if err != nil {

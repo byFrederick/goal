@@ -134,6 +134,21 @@ func upstreamContext(ctx context.Context, timeout time.Duration) (context.Contex
 	}
 }
 
+// open returns an MCP session with c's server and the func that ends the request's use of it:
+// the run's sidecar session, or a short session with a remote server.
+func (s *session) open(ctx context.Context, c *connection) (*mcp.ClientSession, func(), error) {
+	if c.sidecar != nil {
+		return s.g.sidecars.session(ctx, *c.sidecar)
+	}
+
+	cs, err := s.connect(ctx, c)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return cs, func() { s.disconnect(ctx, cs) }, nil
+}
+
 // connect opens a short session with c's upstream server, credentials added per request.
 func (s *session) connect(ctx context.Context, c *connection) (*mcp.ClientSession, error) {
 	limit := s.g.cfg.MaxResponseBytes

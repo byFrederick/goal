@@ -125,10 +125,26 @@
             "properties": {
               "transport": { "enum": ["http", "stdio"] },
               "url": { "type": "string", "format": "uri" },
-              "image": { "type": "string" },
-              "command": { "type": "array", "items": { "type": "string" } },
+              "image": {
+                "type": "string",
+                "description": "stdio: the MCP server's container image, run by goald as a hardened sidecar for each run that uses the connection. Pin it: a version tag (not latest) or a digest (name:1.2.3@sha256:...). Validation warns about an unpinned image and the gateway does not start one."
+              },
+              "command": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "stdio: arguments that replace the image's command (its entrypoint is kept). Words that are secret references (env:NAME) are resolved on the host."
+              },
               "headers": { "type": "object", "additionalProperties": { "$ref": "#/$defs/secretRef" } },
-              "env": { "type": "object", "additionalProperties": { "$ref": "#/$defs/secretRef" } }
+              "env": {
+                "type": "object",
+                "additionalProperties": { "$ref": "#/$defs/secretRef" },
+                "description": "stdio: the sidecar's environment. References are resolved on the host and reach only the sidecar, never the agent's container."
+              },
+              "network": {
+                "type": "boolean",
+                "default": false,
+                "description": "stdio: give the sidecar outbound network access (Docker's default bridge; host.docker.internal is the host). Without it the sidecar has no network at all, which suits servers that only work on their stdio. Servers that browse, call APIs or reach a database need it."
+              }
             },
             "oneOf": [
               { "properties": { "transport": { "const": "http" } }, "required": ["url"] },

@@ -198,12 +198,22 @@ func containerOf(cfg Config, t ports.TaskSpec, runDir string) (*container.Config
 	return cc, hc
 }
 
-// hardened is the host configuration every goal container shares: non-root (set on the
-// container), read-only root filesystem, tmpfs /tmp, an anonymous volume as home (disk-backed,
-// so toolchain caches fit; removed with the container), every capability dropped, no privilege
-// escalation, an init process and CPU, memory and PID limits, plus the given mounts.
+// hardened is the host configuration of agent tasks and checks: isolated, plus an anonymous
+// volume as home (disk-backed, so toolchain caches fit; removed with the container) and the
+// given mounts.
 func hardened(cfg Config, mounts ...mount.Mount) *container.HostConfig {
-	useInit := true // reaps the agent's child processes
+	hc := isolated(cfg)
+	hc.Mounts = append(hc.Mounts, mounts...)
+	hc.Mounts = append(hc.Mounts, mount.Mount{Type: mount.TypeVolume, Target: containerHome})
+
+	return hc
+}
+
+// isolated is the host configuration every goal container shares: read-only root filesystem,
+// tmpfs /tmp, every capability dropped, no privilege escalation, an init process and CPU,
+// memory and PID limits. The user (non-root) is set on the container.
+func isolated(cfg Config) *container.HostConfig {
+	useInit := true // reaps the container's child processes
 	pids := cfg.PIDs
 	memory := cfg.MemoryBytes
 
@@ -214,7 +224,6 @@ func hardened(cfg Config, mounts ...mount.Mount) *container.HostConfig {
 		SecurityOpt:    []string{"no-new-privileges:true"},
 		Init:           &useInit,
 		Tmpfs:          map[string]string{"/tmp": "rw,nosuid,nodev,size=1g,mode=1777"},
-		Mounts:         append(mounts, mount.Mount{Type: mount.TypeVolume, Target: containerHome}),
 		Resources: container.Resources{
 			NanoCPUs:   int64(cfg.CPUs * 1e9),
 			Memory:     memory,

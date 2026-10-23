@@ -85,6 +85,65 @@ spec:
 	}
 }
 
+func TestPinned(t *testing.T) {
+	t.Parallel()
+
+	digest := "sha256:" + strings.Repeat("ab", 32)
+	tests := map[string]bool{
+		"ghcr.io/acme/db-mcp:1.2.3":            true,
+		"ghcr.io/acme/db-mcp:1.2.3@" + digest:  true,
+		"ghcr.io/acme/db-mcp@" + digest:        true,
+		"ghcr.io/acme/db-mcp:latest@" + digest: true,
+		"localhost:5000/acme/db-mcp:v0.0.83":   true,
+		"ghcr.io/acme/db-mcp":                  false,
+		"ghcr.io/acme/db-mcp:latest":           false,
+		"localhost:5000/acme/db-mcp":           false, // the port is not a tag
+		"ghcr.io/acme/db-mcp@sha256:abc":       false,
+	}
+
+	for image, want := range tests {
+		if got := Pinned(image); got != want {
+			t.Errorf("Pinned(%q) = %v, want %v", image, got, want)
+		}
+	}
+}
+
+func TestWarnings_NameUnpinnedConnectionImages(t *testing.T) {
+	t.Parallel()
+
+	f, err := Load(fstest.MapFS{
+		"agents/worker.md": {Data: []byte("# worker\n")},
+		"factory.yaml": {Data: []byte(`
+apiVersion: goal/v1
+kind: Factory
+metadata: { id: 00000000-0000-4000-8000-000000000002, name: unpinned }
+spec:
+  runtime: { runner: docker, image: x, auth: claude-subscription }
+  knowledgeBase: { collections: [notes] }
+  connections:
+    - { name: shop-db, type: mcp, transport: stdio, image: "ghcr.io/acme/db-mcp:latest", network: true }
+    - { name: wiki, type: mcp, transport: stdio, image: "ghcr.io/acme/docs-mcp:2.0.1" }
+  agents:
+    - { name: worker, prompt: ./agents/worker.md, connections: [shop-db, wiki] }
+  board:
+    stations:
+      - { id: work, kind: agent, agent: worker }
+      - { id: done, kind: done }
+`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if w := f.Warnings(); len(w) != 1 || !strings.Contains(w[0], "connection shop-db: image ghcr.io/acme/db-mcp:latest is not pinned") {
+		t.Fatalf("warnings = %q, want one for the shop-db connection", w)
+	}
+
+	if !f.Spec.Connections[0].Network || f.Spec.Connections[1].Network {
+		t.Fatalf("network = %v, %v; want true, false", f.Spec.Connections[0].Network, f.Spec.Connections[1].Network)
+	}
+}
+
 func write(t *testing.T, path, content string) {
 	t.Helper()
 

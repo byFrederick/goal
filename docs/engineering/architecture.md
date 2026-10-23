@@ -44,6 +44,7 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object s
 | `Clock` | Time, for deterministic tests | `sysclock`, fake |
 | `Workspaces` | A fresh clone of the factory's repository on the item's branch, per run | `gitworkspace` (host git) |
 | `Checker` | A station's command checks against a run's workspace, isolated from the host | `docker` (laptop); ECS later |
+| `Sidecars` | A run's stdio MCP servers, each in its own hardened container, used by the gateway | `docker` (laptop); ECS later |
 | `Contracts` | Station outputs against the factory's JSON Schema contracts | `definitions` (over the bucket) |
 
 #### Phase 1 signatures
@@ -54,6 +55,7 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object s
 - `Runner`: `Start(ctx, TaskSpec) (Task, error)`; `Task` has `Events() <-chan RunEvent` and `Wait() (RunResult, error)`. Cancelling `ctx` stops the task. `TaskSpec.WorkspaceDir` is the host path of the run's prepared git checkout. The `docker` adapter runs one hardened container of the worker image per task, stages the agent's prompt, skills and output schema through its `AgentFiles` dependency, and maps the worker's stdout protocol to events and a result; `worker/README.md` is the container contract.
 - `Secrets`: `Resolve(ctx, ref)` for literals and `env:NAME`. `Contracts`: `Validate(ctx, factory, contract, output)`, wrapping `ErrContractViolation` for bad output.
 - `Workspaces`: `Prepare(ctx, WorkspaceSpec{Run, Repository, Branch}) (Workspace, error)` and `Remove`. `Checker`: `Check(ctx, CheckSpec{Image, Command, WorkspaceDir, Timeout}) (CheckResult, error)`; a command that ran and failed is a result, not an error. [ADR 0006](../adr/0006-workspaces-and-command-checks.md) has the decisions behind both.
+- `Sidecars`: `Start(ctx, SidecarSpec{Run, Connection, Image, Command, Env, Network}) (Sidecar, error)`; a `Sidecar` is an `io.ReadWriteCloser` over the server's stdout and stdin, and `Close` removes its container. `Env` carries resolved values that adapters never log. The `docker` adapter's sidecars carry the run's labels plus `goal.connection`, so `Runner.Reap` removes orphans with their run.
 - `Clock`: `Now()` and `NewTicker(d)`.
 - `ObjectStore`: `Get(ctx, key, version)` (empty version = current; `ErrNotFound` for a missing or deleted key or version), `Put(ctx, key, body) (ObjectInfo, error)`, `List(ctx, prefix) ([]ObjectInfo, error)` (current objects only, each with its version id), `Delete(ctx, key)` (a delete marker; earlier versions stay readable). `ObjectInfo` is `{Key, Version, Size}`; `Object` adds `Body`.
 - Per-task MCP gateway tokens are HMAC-signed (`domain.SignTaskToken`), so any instance can verify them without stored state.
@@ -65,8 +67,9 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object s
 `internal/gateway` is an inbound HTTP component of `goald`, not an adapter: it reads factory definitions (`config.Factory`), which adapters may not. `gateway.New(Deps, Config)` returns an `http.Handler` that `goald` mounts at its MCP path. Its package comment is the reference; in short:
 
 - **Auth.** Every request carries `Authorization: Bearer <task token>`; a missing, forged or expired token is 401, an agent the current definition no longer declares is 403, both without detail.
-- **Stateless.** The SDK's stateless streamable-HTTP mode: each request is verified and served on its own and opens short upstream sessions, so any instance serves any request.
-- **Connections.** A task gets the connections in both its token and its agent's `connections`. Remote MCP servers (`type: mcp`, `transport: http`, https or loopback http) are served, with header values like `Bearer env:NAME` resolved through `Secrets` on the host. Builtin (`knowledge`), stdio images and `aws` connections are reported unavailable (initialize instructions, the `goal/connections` `_meta` of `tools/list`, a logged warning) until their phase.
+- **Stateless towards agents.** The SDK's stateless streamable-HTTP mode: each request is verified and served on its own and opens short sessions with remote servers. The one exception is the registry of running sidecars (below), keyed by run: it lives in the `goald` that started them, so a run's MCP traffic must reach that instance. Phase 2 runs one `goald`, so it always does; running several needs requests routed by run id (it is in the token) or sidecars that any instance can reach, such as ECS tasks with a network endpoint. A dead `goald`'s sidecars are orphans `Runner.Reap` removes.
+- **Connections.** A task gets the connections in both its token and its agent's `connections`. Remote MCP servers (`type: mcp`, `transport: http`, https or loopback http) are served, with header values like `Bearer env:NAME` resolved through `Secrets` on the host. Stdio servers with an `image` are served as sidecars. Builtin (`knowledge`), `aws` connections and stdio commands without an image (they would run on the host) are reported unavailable (initialize instructions, the `goal/connections` `_meta` of `tools/list`, a logged warning) until their phase.
+- **Sidecars.** A stdio connection's server runs in its own container per run (`ports.Sidecars`), started lazily by the run's first `tools/list` or `tools/call` that needs it, reused through one MCP session over its stdio for the rest of the run, and stopped when the engine reports the run ended (`engine.Deps.RunEnded` → `Gateway.EndRun`), after `SidecarIdle` (10 minutes) without requests, when its server exits, and at shutdown (`Gateway.Close`). `MaxSidecars` (16) caps one `goald`; past it, and when a sidecar fails to start, the connection is unavailable for that request only. The `env` values and `command` words that are secret references are resolved on the host and reach only the sidecar's environment and arguments, never the agent's container, and are scrubbed from results, errors, logs and events like header credentials. The image must be pinned (a version tag or a digest; `config.Pinned`): `goal factory validate` and `push` warn about an unpinned one, and the gateway reports it unavailable instead of starting it. The Docker adapter gives a sidecar the hardening of an agent task (read-only root with tmpfs `/tmp` as `HOME`, no capabilities, no new privileges, init, 1 CPU, 2 GiB, 512 PIDs), runs it as its image's user unless that is root (then as nobody), mounts nothing, and gives it no network unless the connection sets `network: true` (the default bridge, where `host.docker.internal` is the host). The first start pulls the image within `SidecarStartTimeout` (5 minutes) and outlives the request that began it; pull large images ahead of a run, since the worker lists tools once at start.
 - **Tools.** Named `<connection>__<tool>`. `tools.allow` and `tools.deny` entries of the form `<connection>__<pattern>` (`path.Match`) apply to gateway tools; deny wins, and a connection with allow entries serves only what they match.
 - **Audit.** Every `tools/call`, denied ones included, appends a `gateway_tool_call` event (connection, tool, outcome, duration, request and response sizes) through `gateway.Events`, which `ports.Store` satisfies. Arguments, results and credentials are never recorded; resolved credentials are scrubbed from results, errors and logs.
 - **Upstream protocol.** Upstream sessions negotiate the latest MCP protocol. On the 2026 protocol a server may require `Mcp-Param-*` headers mirroring annotated arguments (`x-mcp-header`; GitHub's server does), which the SDK adds only for tools the session has listed, so a call lists the upstream's tools first. The gateway's own `tools/list` result is `cacheScope: private` (it depends on the task's token).
@@ -114,13 +117,15 @@ settings (env) ─┬─ envsecrets.New ─────────────�
                 │      Contracts, gateway.Definitions, docker.AgentFiles ◀──────────┘
                 ├─ gitworkspace.New(secrets) ─────────────────────┤ Workspaces
                 ├─ docker client → docker.New(defs) / NewChecker ─┤ Runner, Checker
+                │      docker.NewSidecars → gateway.New(defs, secrets, store, sidecars)
                 └─ sysclock.Clock ────────────────────────────────┤ Clock
                                                                   ▼
-                                        engine.New(Deps, Config{GatewayURL, GatewayKeyRef, TaskEnv})
+                        engine.New(Deps{..., RunEnded: gateway.EndRun}, Config{GatewayURL, GatewayKeyRef, TaskEnv})
    load hook: every refresh → store.SaveFactory(each) → engine.SetLines(lines)
-   http.ServeMux: /v1/ → api.New(engine, store, defs)    /mcp → gateway.New(defs, secrets, store)
+   http.ServeMux: /v1/ → api.New(engine, store, defs)    /mcp → gateway
    goroutines: engine.Run (ticks + lease sweep), definitions refresh (GOAL_REFRESH_EVERY), HTTP
-   startup: Refresh, then reap orphaned containers, run folders and workspaces
+   startup: Refresh, then reap orphaned containers (task, check, sidecar), run folders and workspaces
+   shutdown: HTTP, then the engine, then gateway.Close (stops every sidecar)
    SIGTERM: HTTP shutdown, engine context cancelled → runs stopped, items released to their queue
 ```
 

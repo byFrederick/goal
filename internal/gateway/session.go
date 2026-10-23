@@ -15,12 +15,15 @@ import (
 
 	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/ports"
 )
 
 // Reasons a granted connection is not served. They reach the agent and the logs, so they
 // never carry a value.
 const (
-	reasonStdio       = "stdio (container) MCP servers are not served yet"
+	reasonStdio       = "stdio (container) MCP servers are not served by this goald"
+	reasonHost        = "a stdio server without an image would run on the host, which the gateway never does"
+	reasonUnpinned    = "its image is not pinned to a version tag or a digest"
 	reasonKind        = " connections are not served yet"
 	reasonURL         = "its url is not https (plain http is allowed to loopback only)"
 	reasonCredentials = "its credentials are not configured"
@@ -42,12 +45,13 @@ type session struct {
 	secrets []string
 }
 
-// connection is a granted connection. unavailable, when set, says why it is not served and
-// err holds the cause for the log.
+// connection is a granted connection: a remote server (url and headers) or a sidecar.
+// unavailable, when set, says why it is not served and err holds the cause for the log.
 type connection struct {
 	name        string
 	url         string
 	headers     map[string]string
+	sidecar     *ports.SidecarSpec
 	unavailable string
 	err         error
 }
@@ -70,7 +74,7 @@ func (s *session) prepare(ctx context.Context, c config.Connection) *connection 
 	switch {
 	case c.Type == "mcp" && c.Transport == "http":
 	case c.Type == "mcp":
-		conn.unavailable = reasonStdio
+		s.prepareSidecar(ctx, c, conn)
 
 		return conn
 	default:
@@ -99,6 +103,54 @@ func (s *session) prepare(ctx context.Context, c config.Connection) *connection 
 	}
 
 	return conn
+}
+
+// prepareSidecar describes the sidecar of a stdio connection, with its env values and command
+// words resolved on the host.
+func (s *session) prepareSidecar(ctx context.Context, c config.Connection, conn *connection) {
+	switch {
+	case s.g.sidecars == nil:
+		conn.unavailable = reasonStdio
+
+		return
+	case c.Image == "":
+		conn.unavailable = reasonHost
+
+		return
+	case !config.Pinned(c.Image):
+		conn.unavailable = reasonUnpinned
+
+		return
+	}
+
+	spec := &ports.SidecarSpec{
+		FactoryID: s.claims.FactoryID, ItemID: s.claims.ItemID, RunID: s.claims.RunID, Connection: c.Name,
+		Image: c.Image, Network: c.Network, Env: make(map[string]string, len(c.Env)),
+	}
+
+	for name, value := range c.Env {
+		v, err := s.resolve(ctx, value)
+		if err != nil {
+			conn.unavailable, conn.err = reasonCredentials, fmt.Errorf("env %s: %w", name, err)
+
+			return
+		}
+
+		spec.Env[name] = v
+	}
+
+	for i, arg := range c.Command {
+		v, err := s.resolve(ctx, arg)
+		if err != nil {
+			conn.unavailable, conn.err = reasonCredentials, fmt.Errorf("command argument %d: %w", i+1, err)
+
+			return
+		}
+
+		spec.Command = append(spec.Command, v)
+	}
+
+	conn.sidecar = spec
 }
 
 func (s *session) connection(name string) *connection {
@@ -198,11 +250,11 @@ func (s *session) listTools(ctx context.Context) *mcp.ListToolsResult {
 }
 
 func (s *session) upstreamTools(ctx context.Context, c *connection) ([]*mcp.Tool, error) {
-	cs, err := s.connect(ctx, c)
+	cs, done, err := s.open(ctx, c)
 	if err != nil {
 		return nil, err
 	}
-	defer s.disconnect(ctx, cs)
+	defer done()
 
 	var out []*mcp.Tool
 
@@ -282,18 +334,20 @@ func (s *session) forward(ctx context.Context, c *connection, tool string, args 
 	ctx, cancel := upstreamContext(ctx, s.g.cfg.CallTimeout)
 	defer cancel()
 
-	cs, err := s.connect(ctx, c)
+	cs, done, err := s.open(ctx, c)
 	if err != nil {
 		return nil, 0, err
 	}
-	defer s.disconnect(ctx, cs)
+	defer done()
 
 	params := &mcp.CallToolParams{Name: tool}
 	if len(args) > 0 {
 		params.Arguments = args
 	}
 
-	learnTool(ctx, cs, tool)
+	if c.sidecar == nil {
+		learnTool(ctx, cs, tool)
+	}
 
 	res, err := cs.CallTool(ctx, params)
 	if err != nil {

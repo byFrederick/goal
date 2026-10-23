@@ -65,9 +65,7 @@ func newTestRunner(t *testing.T) (*Runner, *client.Client) {
 }
 
 func buildStub(docker *client.Client) error {
-	var buf bytes.Buffer
-
-	tw := tar.NewWriter(&buf)
+	files := map[string][]byte{}
 
 	for _, name := range []string{"Dockerfile", "stub.sh"} {
 		body, err := os.ReadFile(filepath.Join("testdata", "stub", name)) //nolint:gosec // fixed test files
@@ -75,7 +73,20 @@ func buildStub(docker *client.Client) error {
 			return err
 		}
 
-		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(body))}); err != nil {
+		files[name] = body
+	}
+
+	return buildImage(docker, stubImage, files)
+}
+
+// buildImage builds tag from a build context of the given files.
+func buildImage(docker *client.Client, tag string, files map[string][]byte) error {
+	var buf bytes.Buffer
+
+	tw := tar.NewWriter(&buf)
+
+	for name, body := range files {
+		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o755, Size: int64(len(body))}); err != nil {
 			return err
 		}
 
@@ -88,7 +99,7 @@ func buildStub(docker *client.Client) error {
 		return err
 	}
 
-	res, err := docker.ImageBuild(context.Background(), &buf, client.ImageBuildOptions{Tags: []string{stubImage}, Remove: true})
+	res, err := docker.ImageBuild(context.Background(), &buf, client.ImageBuildOptions{Tags: []string{tag}, Remove: true})
 	if err != nil {
 		return err
 	}

@@ -397,12 +397,17 @@ func (e *Engine) relay(ctx context.Context, c claimed, runID domain.RunID, event
 	}
 }
 
+// finishRun records a run's result and tells RunEnded that the run is over.
 func (e *Engine) finishRun(ctx context.Context, id domain.RunID, res domain.RunResult) {
 	ctx, cancel := cleanup(ctx)
 	defer cancel()
 
 	if err := e.store.FinishRun(ctx, id, res, e.clock.Now()); err != nil {
 		e.log.ErrorContext(ctx, "record run result", slog.String("run", string(id)), slog.Any("error", err))
+	}
+
+	if e.runEnded != nil {
+		e.runEnded(ctx, id)
 	}
 }
 

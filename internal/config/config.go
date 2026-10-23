@@ -110,8 +110,23 @@ type Connection struct {
 	Command   []string          `json:"command,omitempty"`
 	Headers   map[string]string `json:"headers,omitempty"`
 	Env       map[string]string `json:"env,omitempty"`
-	RoleARN   string            `json:"roleArn,omitempty"`
-	Region    string            `json:"region,omitempty"`
+	// Network gives a stdio connection's sidecar outbound network access.
+	Network bool   `json:"network,omitempty"`
+	RoleARN string `json:"roleArn,omitempty"`
+	Region  string `json:"region,omitempty"`
+}
+
+// Pinned reports whether a container image reference names one version: it has a digest
+// (name@sha256:...) or a tag other than latest.
+func Pinned(image string) bool {
+	if _, digest, ok := strings.Cut(image, "@"); ok {
+		return strings.HasPrefix(digest, "sha256:") && len(digest) == len("sha256:")+64
+	}
+
+	name := image[strings.LastIndex(image, "/")+1:]
+	_, tag, ok := strings.Cut(name, ":")
+
+	return ok && tag != "" && tag != "latest"
 }
 
 // Skill is a SKILL.md folder, local or from skills.sh.
@@ -286,6 +301,21 @@ func validateSchema(doc []byte) error {
 	}
 
 	return nil
+}
+
+// Warnings lists what loads but should be fixed: today, connection images that are not pinned
+// (the gateway does not start them).
+func (f *Factory) Warnings() []string {
+	var w []string
+
+	for _, c := range f.Spec.Connections {
+		if c.Image != "" && !Pinned(c.Image) {
+			w = append(w, fmt.Sprintf("connection %s: image %s is not pinned; use a version tag or a digest (name:1.2.3@sha256:...)",
+				c.Name, c.Image))
+		}
+	}
+
+	return w
 }
 
 // problems collects every validation error so the author sees them all at once.

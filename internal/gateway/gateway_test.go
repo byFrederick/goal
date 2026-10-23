@@ -33,8 +33,9 @@ const (
 	trackerCred                  = "acme-tracker-s3cr3t-0123456789"
 )
 
-// factoryYAML declares one served connection (tracker), one the token does not grant (wiki),
-// one with missing credentials (crm) and two kinds the gateway does not serve yet.
+// factoryYAML declares one served remote connection (tracker), one the token does not grant
+// (wiki), one with missing credentials (crm), one served sidecar (shop-db), one sidecar whose
+// image is not pinned (postgres) and one kind the gateway does not serve yet.
 const factoryYAML = `apiVersion: goal/v1
 kind: Factory
 metadata: { id: ` + string(factoryID) + `, name: acme-gateway }
@@ -50,6 +51,13 @@ spec:
       headers: { Authorization: "Bearer env:ACME_TRACKER_TOKEN", X-Acme-Team: platform }
     - { name: wiki, type: mcp, transport: http, url: UPSTREAM }
     - { name: postgres, type: mcp, transport: stdio, image: "mcp/postgres:latest" }
+    - name: shop-db
+      type: mcp
+      transport: stdio
+      image: ghcr.io/acme/shop-db-mcp:1.4.2
+      command: [--read-only, "env:ACME_DB_URL"]
+      env: { DATABASE_URL: "env:ACME_DB_URL", LOG_LEVEL: info }
+      network: true
     - name: crm
       type: mcp
       transport: http
@@ -58,10 +66,10 @@ spec:
   agents:
     - name: engineer
       prompt: ./agents/engineer.md
-      connections: [knowledge, tracker, wiki, postgres, crm]
+      connections: [knowledge, tracker, wiki, postgres, crm, shop-db]
       tools:
         allow: [Read, Bash, "tracker__get_*", tracker__echo, tracker__whoami, tracker__leak, tracker__big]
-        deny: ["Bash(git push*)", tracker__get_secret]
+        deny: ["Bash(git push*)", tracker__get_secret, "shop-db__drop_*"]
   board:
     stations:
       - { id: build, kind: agent, agent: engineer }
@@ -162,12 +170,14 @@ func (b *syncBuffer) String() string {
 }
 
 type harness struct {
-	url   string
-	up    *upstream
-	store *porttest.Store
-	logs  *syncBuffer
-	clock *porttest.Clock
-	key   []byte
+	url      string
+	gw       *Gateway
+	up       *upstream
+	sidecars *fakeSidecars
+	store    *porttest.Store
+	logs     *syncBuffer
+	clock    *porttest.Clock
+	key      []byte
 }
 
 func newHarness(t *testing.T, cfg Config) *harness {
@@ -184,24 +194,27 @@ func newHarness(t *testing.T, cfg Config) *harness {
 	}
 
 	h := &harness{
-		up: up, store: porttest.NewStore(), logs: &syncBuffer{},
+		up: up, sidecars: &fakeSidecars{}, store: porttest.NewStore(), logs: &syncBuffer{},
 		clock: porttest.NewClock(time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)), key: []byte("gateway-test-key"),
 	}
 
 	cfg.Key = h.key
 
-	gw, err := New(Deps{
+	h.gw, err = New(Deps{
 		Definitions: definitions{factoryID: f},
-		Secrets:     porttest.Secrets{"ACME_TRACKER_TOKEN": trackerCred},
+		Secrets:     porttest.Secrets{"ACME_TRACKER_TOKEN": trackerCred, "ACME_DB_URL": dbURL},
 		Events:      h.store,
 		Clock:       h.clock,
 		Logger:      slog.New(slog.NewJSONHandler(h.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Sidecars:    h.sidecars,
 	}, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	ts := httptest.NewServer(gw)
+	t.Cleanup(h.gw.Close)
+
+	ts := httptest.NewServer(h.gw)
 	t.Cleanup(ts.Close)
 	h.url = ts.URL
 
@@ -211,7 +224,7 @@ func newHarness(t *testing.T, cfg Config) *harness {
 func (h *harness) claims() domain.TaskClaims {
 	return domain.TaskClaims{
 		FactoryID: factoryID, ItemID: itemID, Station: "build", Agent: "engineer", RunID: "run-1",
-		Connections: []string{"knowledge", tracker, "postgres", "crm"},
+		Connections: []string{"knowledge", tracker, "postgres", "crm", shopDB},
 		ExpiresAt:   h.clock.Now().Add(time.Hour).Unix(),
 	}
 }
@@ -245,10 +258,17 @@ const legacyProtocol = "2025-06-18"
 func (h *harness) connect(t *testing.T, protocol string) *mcp.ClientSession {
 	t.Helper()
 
+	return h.connectAs(t, protocol, h.claims())
+}
+
+// connectAs opens the session of the task c describes.
+func (h *harness) connectAs(t *testing.T, protocol string, c domain.TaskClaims) *mcp.ClientSession {
+	t.Helper()
+
 	cs, err := mcp.NewClient(&mcp.Implementation{Name: "acme-agent", Version: "1"}, nil).Connect(t.Context(),
 		&mcp.StreamableClientTransport{
 			Endpoint:             h.url,
-			HTTPClient:           &http.Client{Transport: bearer(h.token(t, h.claims()))},
+			HTTPClient:           &http.Client{Transport: bearer(h.token(t, c))},
 			DisableStandaloneSSE: true,
 		}, &mcp.ClientSessionOptions{ProtocolVersion: protocol})
 	if err != nil {
@@ -296,7 +316,10 @@ func testListTools(t *testing.T, protocol string) {
 		t.Fatal(err)
 	}
 
-	want := []string{"tracker__big", "tracker__echo", "tracker__get_issue", "tracker__get_repo", "tracker__leak", "tracker__whoami"}
+	want := []string{
+		"shop-db__env", "shop-db__query",
+		"tracker__big", "tracker__echo", "tracker__get_issue", "tracker__get_repo", "tracker__leak", "tracker__whoami",
+	}
 	if got := toolNames(res); !slices.Equal(got, want) {
 		t.Fatalf("tools = %v, want %v", got, want)
 	}
@@ -309,8 +332,9 @@ func testListTools(t *testing.T, protocol string) {
 	status, _ := res.Meta[metaConnections].(map[string]any)
 	wantStatus := map[string]string{
 		tracker:     "available",
+		shopDB:      "available",
 		"knowledge": "unavailable: builtin" + reasonKind,
-		"postgres":  "unavailable: " + reasonStdio,
+		"postgres":  "unavailable: " + reasonUnpinned,
 		"crm":       "unavailable: " + reasonCredentials,
 	}
 
@@ -325,11 +349,15 @@ func testListTools(t *testing.T, protocol string) {
 	}
 
 	if instr := cs.InitializeResult().Instructions; !strings.Contains(instr, "Connection postgres is unavailable") {
-		t.Errorf("instructions do not report the stdio connection: %q", instr)
+		t.Errorf("instructions do not report the unpinned stdio connection: %q", instr)
 	}
 
 	if logs := h.logs.String(); !strings.Contains(logs, `"connection":"postgres"`) {
-		t.Errorf("no warning logged for the stdio connection:\n%s", logs)
+		t.Errorf("no warning logged for the unpinned stdio connection:\n%s", logs)
+	}
+
+	if n := len(h.sidecars.started()); n != 1 {
+		t.Errorf("sidecars started = %d, want 1: shop-db only, never the unpinned image", n)
 	}
 }
 
@@ -408,6 +436,7 @@ func TestGateway_RejectsToolsTheAgentMayNotCall(t *testing.T) {
 		"tracker__delete_repo", // not allowed
 		"wiki__echo",           // connection not in the token
 		"postgres__query",      // connection not served
+		"shop-db__drop_table",  // denied on a sidecar
 		"tracker",              // no tool
 	} {
 		_, err := cs.CallTool(t.Context(), &mcp.CallToolParams{Name: name, Arguments: map[string]any{}})
@@ -422,12 +451,16 @@ func TestGateway_RejectsToolsTheAgentMayNotCall(t *testing.T) {
 		}
 	}
 
-	if n := len(h.events()); n != 5 {
+	if n := len(h.events()); n != 6 {
 		t.Fatalf("audit events = %d, want one per rejected call", n)
 	}
 
 	if seen := h.up.seen(); len(seen) != 0 {
 		t.Fatalf("rejected calls reached the upstream %d times", len(seen))
+	}
+
+	if n := len(h.sidecars.started()); n != 0 {
+		t.Fatalf("rejected calls started %d sidecars", n)
 	}
 }
 

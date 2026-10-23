@@ -2,10 +2,12 @@
 // the HTTP API (/v1/) and the MCP gateway agents use (/mcp), and starts agent tasks in Docker.
 //
 // All wiring happens here, by hand: PostgreSQL (store), the bucket (factory definitions),
-// environment secrets, git workspaces, the Docker runner and checker, the system clock, the
-// engine, the gateway and the API. Configuration comes from the environment; settings.go lists
-// every variable. goald keeps nothing another instance would need: work state is in
-// PostgreSQL, definitions are in the bucket, and its workspaces and run folders are scratch.
+// environment secrets, git workspaces, the Docker runner, checker and MCP sidecars, the system
+// clock, the engine, the gateway and the API. Configuration comes from the environment;
+// settings.go lists every variable. goald keeps nothing another instance would need: work state
+// is in PostgreSQL, definitions are in the bucket, and its workspaces and run folders are
+// scratch. The exception is the gateway's running MCP sidecars, which serve only the runs this
+// instance started (see internal/gateway).
 package main
 
 import (
@@ -134,9 +136,19 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	workspaces := gitworkspace.New(secrets, gitworkspace.Config{Root: s.WorkspaceRoot}, log)
 	runner := docker.New(dockerClient, defs, runnerCfg, log)
 
+	gw, err := gateway.New(gateway.Deps{
+		Definitions: defs, Secrets: secrets, Events: store, Clock: clock, Logger: log,
+		Sidecars: docker.NewSidecars(dockerClient, docker.Config{}, log),
+	}, gateway.Config{Key: []byte(key)})
+	if err != nil {
+		return err
+	}
+	// Runs after serve returns: HTTP is drained and the engine's runs have ended.
+	defer gw.Close()
+
 	eng, err = engine.New(engine.Deps{
 		Store: store, Runner: runner, Workspaces: workspaces, Checker: docker.NewChecker(dockerClient, runnerCfg, log),
-		Contracts: defs, Secrets: secrets, Clock: clock, Logger: log,
+		Contracts: defs, Secrets: secrets, Clock: clock, Logger: log, RunEnded: gw.EndRun,
 	}, engine.Config{
 		TickEvery: s.TickEvery, GatewayURL: s.GatewayURL, GatewayKeyRef: s.GatewayKeyRef, TaskEnv: s.TaskEnv,
 	})
@@ -152,12 +164,6 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	log.InfoContext(ctx, "factories loaded", slog.Int("count", len(loaded)), slog.String("bucket", objects.Bucket()))
 
 	reap(ctx, log, runner, workspaces)
-
-	gw, err := gateway.New(gateway.Deps{Definitions: defs, Secrets: secrets, Events: store, Clock: clock, Logger: log},
-		gateway.Config{Key: []byte(key)})
-	if err != nil {
-		return err
-	}
 
 	apiHandler, err := api.New(api.Deps{Engine: eng, Items: store, Factories: defs, Logger: log})
 	if err != nil {
