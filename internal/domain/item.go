@@ -2,7 +2,11 @@ package domain
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // FactoryID is a factory's immutable metadata.id (a UUID).
@@ -71,6 +75,44 @@ type Item struct {
 
 // Position returns the item's station and state.
 func (it Item) Position() Position { return Position{Station: it.Station, State: it.State} }
+
+// maxSlug bounds the title part of a branch name.
+const maxSlug = 40
+
+// Branch is the git branch an item's changes live on: goal/<number>-<title slug>. It depends
+// only on the item's number and title, so every run of the item, rework included, works on
+// the same branch.
+func (it Item) Branch() string {
+	var b strings.Builder
+
+	dash := false
+
+	for _, r := range strings.ToLower(it.Title) {
+		switch {
+		case r < utf8.RuneSelf && (unicode.IsLetter(r) || unicode.IsDigit(r)):
+			if dash && b.Len() > 0 {
+				b.WriteByte('-')
+			}
+
+			dash = false
+
+			b.WriteRune(r)
+		default:
+			dash = true
+		}
+
+		if b.Len() >= maxSlug {
+			break
+		}
+	}
+
+	slug := strings.TrimRight(b.String(), "-")
+	if slug == "" {
+		return fmt.Sprintf("goal/%d", it.Number)
+	}
+
+	return fmt.Sprintf("goal/%d-%s", it.Number, slug)
+}
 
 // NewItem is what intake supplies to create an item. The engine fills Station, State and Class.
 type NewItem struct {

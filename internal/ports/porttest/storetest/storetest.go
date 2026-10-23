@@ -22,8 +22,6 @@ type Harness struct {
 	Store ports.Store
 	// NewFactory returns a factory the store accepts items for.
 	NewFactory func(t *testing.T) domain.FactoryID
-	// Events returns an item's events in the order they were appended.
-	Events func(t *testing.T, id domain.ItemID) []domain.Event
 	// Runs returns an item's runs, oldest first.
 	Runs func(t *testing.T, id domain.ItemID) []domain.Run
 }
@@ -53,6 +51,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"RequeueExpiredLeases_OldestFirstUpToLimit", testRequeueLimit},
 		{"Runs_FinishOnceAndAddCost", testRuns},
 		{"AppendEvents_InOrder", testAppendEvents},
+		{"ItemEvents_PagesInAppendOrder", testItemEvents},
 		{"Concurrent_CreateItemNumbersAreUnique", testConcurrentCreate},
 		{"Concurrent_ClaimsNeverShareASlotOrAnItem", testConcurrentClaims},
 		{"Concurrent_RequeueOrTransitionWinsNeverBoth", testRequeueRace},
@@ -99,6 +98,18 @@ type fixture struct {
 
 	t       *testing.T
 	factory domain.FactoryID
+}
+
+// Events returns all of an item's events through the port, in append order.
+func (f *fixture) Events(t *testing.T, id domain.ItemID) []domain.Event {
+	t.Helper()
+
+	events, err := f.Store.ItemEvents(t.Context(), id, 0, 10_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return events
 }
 
 // create adds a queued standard item at the work station unless n says otherwise.
@@ -708,6 +719,48 @@ func testAppendEvents(f *fixture) {
 
 	if got[len(got)-2].ID >= got[len(got)-1].ID {
 		t.Errorf("event ids %d, %d; want increasing in append order", got[len(got)-2].ID, got[len(got)-1].ID)
+	}
+}
+
+func testItemEvents(f *fixture) {
+	t := f.t
+
+	it := f.create(t, domain.NewItem{})
+	other := f.create(t, domain.NewItem{})
+
+	for i := range 5 {
+		ev := domain.Event{FactoryID: f.factory, ItemID: it.ID, At: t1, Kind: "note", Actor: agWorker, Data: map[string]any{"i": i}}
+		if err := f.Store.AppendEvents(t.Context(), ev, domain.Event{FactoryID: f.factory, ItemID: other.ID, At: t1, Kind: "note", Actor: agWorker}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	all := f.Events(t, it.ID) // created, then the five notes
+	if len(all) != 6 {
+		t.Fatalf("%d events, want 6 (created and five notes)", len(all))
+	}
+
+	page, err := f.Store.ItemEvents(t.Context(), it.ID, all[2].ID, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sameEvents(t, page, all[3:5])
+
+	for _, e := range page {
+		if e.ID <= all[2].ID {
+			t.Errorf("event id %d is not after %d", e.ID, all[2].ID)
+		}
+	}
+
+	rest, err := f.Store.ItemEvents(t.Context(), it.ID, all[5].ID, 10)
+	if err != nil || len(rest) != 0 {
+		t.Errorf("events after the last = %v, %v; want none", rest, err)
+	}
+
+	none, err := f.Store.ItemEvents(t.Context(), missingItem, 0, 10)
+	if err != nil || len(none) != 0 {
+		t.Errorf("events of an unknown item = %v, %v; want none and no error", none, err)
 	}
 }
 

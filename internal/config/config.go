@@ -60,11 +60,20 @@ type Spec struct {
 
 // Runtime says where agents run and how they authenticate to the model.
 type Runtime struct {
-	Runner string  `json:"runner"`
-	Image  string  `json:"image"`
-	Auth   string  `json:"auth"`
-	Model  string  `json:"model,omitempty"`
-	Budget *Budget `json:"budget,omitempty"`
+	Runner string `json:"runner"`
+	Image  string `json:"image"`
+	Auth   string `json:"auth"`
+	Model  string `json:"model,omitempty"`
+	// Repository is the git repository agent tasks work on; nil means an empty workspace.
+	Repository *Repository `json:"repository,omitempty"`
+	Budget     *Budget     `json:"budget,omitempty"`
+}
+
+// Repository is the git repository goald clones into every task's workspace.
+type Repository struct {
+	URL string `json:"url"`
+	// Token is a secret reference used for the clone on the host only.
+	Token string `json:"token,omitempty"`
 }
 
 // Budget caps spend and agent turns.
@@ -159,6 +168,15 @@ type Station struct {
 	Checks []Check           `json:"checks,omitempty"`
 	Gate   *Gate             `json:"gate,omitempty"`
 }
+
+// Check kinds.
+const (
+	// CheckSchema validates the output against the station's contract (always done when the
+	// station has an output).
+	CheckSchema = "schema"
+	// CheckCommand runs a command against the run's workspace in an isolated container.
+	CheckCommand = "command"
+)
 
 // Check is a deterministic gate run before any reviewer sees the output.
 type Check struct {
@@ -350,12 +368,22 @@ func (f *Factory) validateStation(p *problems, s Station, agents, stations []str
 		p.add("station %s: output %q is not a declared contract", s.ID, s.Output)
 	}
 
+	validateChecks(p, s)
+
 	if s.Gate != nil && !slices.Contains(stations, s.Gate.OnReject) {
 		p.add("station %s: gate.onReject %q is not a station", s.ID, s.Gate.OnReject)
 	}
 
 	if s.Kind == "agent" && s.WIP > 0 && s.Agents > s.WIP {
 		p.add("station %s: %d agents exceed wip %d; extra agents would idle", s.ID, s.Agents, s.WIP)
+	}
+}
+
+func validateChecks(p *problems, s Station) {
+	for _, c := range s.Checks {
+		if c.Kind == CheckCommand && strings.TrimSpace(c.Run) == "" {
+			p.add("station %s: a command check needs run", s.ID)
+		}
 	}
 }
 

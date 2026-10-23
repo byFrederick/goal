@@ -127,6 +127,39 @@ func optional(s string) *string {
 	return &s
 }
 
+// convertAll converts every row, or fails on the first that does not convert.
+func convertAll[R, T any](rows []R, convert func(R) (T, error)) ([]T, error) {
+	out := make([]T, 0, len(rows))
+
+	for _, r := range rows {
+		v, err := convert(r)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, v)
+	}
+
+	return out, nil
+}
+
+func eventFrom(r db.ItemEvent) (domain.Event, error) {
+	e := domain.Event{
+		ID: r.ID, FactoryID: domain.FactoryID(r.FactoryID.String()), ItemID: domain.ItemID(r.ItemID.String()),
+		At: r.At.UTC(), Kind: domain.EventKind(r.Kind), Station: deref(r.Station), Actor: r.Actor,
+	}
+
+	if r.RunID != nil {
+		e.RunID = domain.RunID(r.RunID.String())
+	}
+
+	if err := json.Unmarshal(r.Data, &e.Data); err != nil {
+		return domain.Event{}, fmt.Errorf("event %d: data: %w", r.ID, err)
+	}
+
+	return e, nil
+}
+
 func deref(s *string) string {
 	if s == nil {
 		return ""

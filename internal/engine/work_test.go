@@ -327,7 +327,8 @@ func TestRun_TaskSpecCarriesAgentPolicy(t *testing.T) {
 		ToolsAllow: []string{"Read"}, ToolsDeny: []string{"Bash(git push*)"},
 		GatewayURL: "http://gateway.example.com/mcp", GatewayToken: spec.GatewayToken,
 		Brief: "Expire stale leases\n\nLeases must expire.", Inputs: spec.Inputs,
-		Env: map[string]string{"MODEL_ACCESS": "tok"}, Timeout: spec.Timeout,
+		WorkspaceDir: "/workspaces/" + string(spec.RunID) + "/repo",
+		Env:          map[string]string{"MODEL_ACCESS": "tok"}, Timeout: spec.Timeout,
 		Budget: ports.Budget{MaxTurns: 40, MaxUSD: 3},
 	}
 

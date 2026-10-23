@@ -356,6 +356,26 @@ func (s *Store) AppendEvents(_ context.Context, events ...domain.Event) error {
 	return nil
 }
 
+// ItemEvents implements ports.Store.
+func (s *Store) ItemEvents(_ context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := []domain.Event{}
+
+	for _, e := range s.events {
+		if len(out) == limit {
+			break
+		}
+
+		if e.ItemID == id && e.ID > after {
+			out = append(out, e)
+		}
+	}
+
+	return out, nil
+}
+
 // waiting returns the items waiting at a station in pull order. Callers hold s.mu.
 func (s *Store) waiting(factory domain.FactoryID, station string) []*domain.Item {
 	var w []*domain.Item

@@ -8,12 +8,13 @@
 // instances can run Tick and SweepLeases at once.
 //
 // Phase 1 scope. The engine pulls into every agent station with free capacity, releases
-// items waiting at queue stations straight to the next station, validates outputs against
-// station contracts, applies gates and human approvals, routes by lane and sweeps expired
-// leases. These arrive in later phases and are deliberately absent here: drum-buffer-rope
+// items waiting at queue stations straight to the next station, prepares a fresh workspace
+// (a clone of the factory's repository on the item's branch) for every run, validates outputs
+// against station contracts, runs the station's command checks against the workspace, applies
+// gates and human approvals, routes by lane and sweeps expired leases. These arrive in later phases and are deliberately absent here: drum-buffer-rope
 // release (the rope that limits release from queue stations), constraint detection,
 // station buffers, andon pulls, the expedite WIP limit, budget enforcement in the engine
-// (the worker enforces per-task limits), deterministic command checks, and Knowledge and
+// (the worker enforces per-task limits), and Knowledge and
 // ModelAuth ports. Singleton jobs that need them will run under a PostgreSQL advisory lock.
 package engine
 
@@ -36,12 +37,14 @@ var ErrNotWaitingHuman = errors.New("item is not waiting for a human")
 
 // Deps are the ports the engine works through.
 type Deps struct {
-	Store     ports.Store
-	Runner    ports.Runner
-	Contracts ports.Contracts
-	Secrets   ports.Secrets
-	Clock     ports.Clock
-	Logger    *slog.Logger // nil discards logs
+	Store      ports.Store
+	Runner     ports.Runner
+	Workspaces ports.Workspaces
+	Checker    ports.Checker
+	Contracts  ports.Contracts
+	Secrets    ports.Secrets
+	Clock      ports.Clock
+	Logger     *slog.Logger // nil discards logs
 }
 
 // Config is the engine's behaviour; zero durations take the defaults below.
@@ -56,6 +59,8 @@ type Config struct {
 	HeartbeatEvery time.Duration
 	// TaskTimeout stops an agent task that runs longer (default 2h).
 	TaskTimeout time.Duration
+	// CheckTimeout stops one command check that runs longer (default 30m).
+	CheckTimeout time.Duration
 	// SweepLimit caps leases requeued per sweep and items released per queue station per tick (default 100).
 	SweepLimit int
 	// GatewayURL is the MCP gateway agents use; when set, GatewayKeyRef names the secret
@@ -71,23 +76,28 @@ type Config struct {
 const keyReason = "reason"
 
 const (
-	defaultTickEvery   = 5 * time.Second
-	defaultLeaseTTL    = 2 * time.Minute
-	defaultTaskTimeout = 2 * time.Hour
-	defaultSweepLimit  = 100
-	cleanupTimeout     = 10 * time.Second
+	defaultTickEvery    = 5 * time.Second
+	defaultLeaseTTL     = 2 * time.Minute
+	defaultTaskTimeout  = 2 * time.Hour
+	defaultCheckTimeout = 30 * time.Minute
+	defaultSweepLimit   = 100
+	cleanupTimeout      = 10 * time.Second
 )
 
 // Engine runs factory lines. It is safe for concurrent use.
 type Engine struct {
-	store     ports.Store
-	runner    ports.Runner
-	contracts ports.Contracts
-	secrets   ports.Secrets
-	clock     ports.Clock
-	log       *slog.Logger
-	cfg       Config
-	lines     map[domain.FactoryID]domain.Line
+	store      ports.Store
+	runner     ports.Runner
+	workspaces ports.Workspaces
+	checker    ports.Checker
+	contracts  ports.Contracts
+	secrets    ports.Secrets
+	clock      ports.Clock
+	log        *slog.Logger
+	cfg        Config
+
+	mu    sync.RWMutex
+	lines map[domain.FactoryID]domain.Line
 
 	// runs tracks this instance's in-flight agent runs so shutdown can wait for them.
 	runs sync.WaitGroup
@@ -95,7 +105,8 @@ type Engine struct {
 
 // New returns an engine for the given lines.
 func New(d Deps, cfg Config) (*Engine, error) {
-	if d.Store == nil || d.Runner == nil || d.Contracts == nil || d.Secrets == nil || d.Clock == nil {
+	if d.Store == nil || d.Runner == nil || d.Workspaces == nil || d.Checker == nil || d.Contracts == nil ||
+		d.Secrets == nil || d.Clock == nil {
 		return nil, errors.New("engine: every port in Deps is required")
 	}
 
@@ -119,9 +130,25 @@ func New(d Deps, cfg Config) (*Engine, error) {
 	}
 
 	return &Engine{
-		store: d.Store, runner: d.Runner, contracts: d.Contracts, secrets: d.Secrets, clock: d.Clock,
-		log: log, cfg: cfg, lines: lines,
+		store: d.Store, runner: d.Runner, workspaces: d.Workspaces, checker: d.Checker, contracts: d.Contracts,
+		secrets: d.Secrets, clock: d.Clock, log: log, cfg: cfg, lines: lines,
 	}, nil
+}
+
+// SetLines replaces the lines the engine runs, for example after a factory definition was
+// pushed. Runs already started keep the line they started with. Items of a factory that is no
+// longer loaded stay where they are until it is loaded again.
+func (e *Engine) SetLines(ls []domain.Line) error {
+	lines, err := index(ls)
+	if err != nil {
+		return err
+	}
+
+	e.mu.Lock()
+	e.lines = lines
+	e.mu.Unlock()
+
+	return nil
 }
 
 // index keys lines by factory and rejects lines the engine cannot run.
@@ -158,6 +185,10 @@ func withDefaults(cfg Config) Config {
 
 	if cfg.TaskTimeout <= 0 {
 		cfg.TaskTimeout = defaultTaskTimeout
+	}
+
+	if cfg.CheckTimeout <= 0 {
+		cfg.CheckTimeout = defaultCheckTimeout
 	}
 
 	if cfg.SweepLimit <= 0 {
@@ -226,8 +257,12 @@ func (e *Engine) Submit(ctx context.Context, n domain.NewItem) (domain.Item, err
 func (e *Engine) Tick(ctx context.Context) error {
 	var errs []error
 
-	for _, id := range slices.Sorted(maps.Keys(e.lines)) {
-		l := e.lines[id]
+	e.mu.RLock()
+	lines := maps.Clone(e.lines)
+	e.mu.RUnlock()
+
+	for _, id := range slices.Sorted(maps.Keys(lines)) {
+		l := lines[id]
 		for _, st := range l.Stations {
 			switch st.Kind {
 			case domain.KindQueue:
@@ -348,7 +383,10 @@ func (e *Engine) arrive(it domain.Item, to domain.Station, actor string) (domain
 }
 
 func (e *Engine) line(id domain.FactoryID) (domain.Line, error) {
+	e.mu.RLock()
 	l, ok := e.lines[id]
+	e.mu.RUnlock()
+
 	if !ok {
 		return domain.Line{}, fmt.Errorf("factory %s is not loaded", id)
 	}

@@ -38,6 +38,18 @@ type Runtime struct {
 	// MaxTurnsPerTask and PerItemUSD are passed to the runner as limits; zero means unset.
 	MaxTurnsPerTask int
 	PerItemUSD      float64
+	// Repository is what every task's workspace is cloned from; the zero value means tasks
+	// get an empty workspace.
+	Repository Repository
+}
+
+// Repository is a git repository that agent tasks work on.
+type Repository struct {
+	// URL is an https clone URL without credentials.
+	URL string
+	// AuthRef is a secret reference to the token goald clones with, on the host only; it never
+	// reaches a task. Empty for a public repository.
+	AuthRef string
 }
 
 // Station is one step of the line.
@@ -52,6 +64,9 @@ type Station struct {
 	WIP    int
 	// Output names the contract the station's output must satisfy; empty means none.
 	Output string
+	// Checks are commands run against the run's workspace, isolated from the host, after the
+	// output satisfies its contract; each must exit 0 before the item moves on.
+	Checks []string
 	Gate   *Gate
 }
 

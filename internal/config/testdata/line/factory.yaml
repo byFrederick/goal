@@ -11,6 +11,7 @@ spec:
     image: ghcr.io/acme/agent:1.0.0
     auth: anthropic-api-key
     model: claude-sonnet-5-5
+    repository: { url: "https://git.example.com/acme/line.git", token: env:ACME_GIT_TOKEN }
     budget: { perItemUsd: 2.5, maxTurnsPerTask: 50 }
   knowledgeBase: { collections: [notes] }
   connections:
@@ -39,7 +40,12 @@ spec:
       - { id: inbox, kind: queue }
       - { id: spec, kind: agent, agent: architect, agents: 1, wip: 2, output: spec }
       - { id: approve-spec, kind: human, wip: 3 }
-      - { id: build, kind: agent, route: { backend: engineer, frontend: engineer }, agents: 2, wip: 2 }
+      - id: build
+        kind: agent
+        route: { backend: engineer, frontend: engineer }
+        agents: 2
+        wip: 2
+        checks: [{ kind: schema }, { kind: command, run: make test }]
       - { id: review, kind: agent, agent: reviewer, gate: { onReject: build, maxRework: 2 } }
       - { id: done, kind: done }
     flow:

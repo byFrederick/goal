@@ -38,7 +38,7 @@ spec:
   board:
     stations:
       - { id: inbox, kind: queue }
-      - { id: work, kind: agent, agent: ghost, gate: { onReject: nowhere } }
+      - { id: work, kind: agent, agent: ghost, gate: { onReject: nowhere }, checks: [{ kind: command }] }
       - { id: done, kind: done }
 `)}}
 
@@ -47,7 +47,10 @@ spec:
 		t.Fatal("expected errors")
 	}
 
-	for _, want := range []string{"missing.md", `unknown skill "nope"`, `unknown agent "ghost"`, `"nowhere" is not a station`} {
+	for _, want := range []string{
+		"missing.md", `unknown skill "nope"`, `unknown agent "ghost"`, `"nowhere" is not a station`,
+		"station work: a command check needs run",
+	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error does not mention %s:\n%v", want, err)
 		}

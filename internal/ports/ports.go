@@ -81,6 +81,11 @@ type Store interface {
 
 	// AppendEvents appends events that come with no state change.
 	AppendEvents(ctx context.Context, events ...domain.Event) error
+
+	// ItemEvents returns up to limit of an item's events with an id greater than after, in
+	// append order (ascending id). An unknown item has no events; an id no item could have is
+	// ErrNotFound.
+	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
 }
 
 // Claim asks for the next item at a station for one slot.
@@ -186,6 +191,72 @@ type Budget struct {
 	MaxTurns int
 	MaxUSD   float64
 }
+
+// Workspaces prepares the host folder an agent task works in: a fresh clone of the factory's
+// repository on the item's branch, or an empty folder when the factory has none. Credentials
+// for the clone are used on the host only; nothing in the folder holds them.
+type Workspaces interface {
+	// Prepare creates the workspace of one run. The caller removes it with Remove.
+	Prepare(ctx context.Context, w WorkspaceSpec) (Workspace, error)
+	// Remove deletes a workspace; removing one that is already gone is not an error.
+	Remove(ctx context.Context, w Workspace) error
+}
+
+// WorkspaceSpec describes the workspace of one run.
+type WorkspaceSpec struct {
+	FactoryID domain.FactoryID
+	ItemID    domain.ItemID
+	RunID     domain.RunID
+	// Repository is cloned into the workspace; the zero value means an empty workspace.
+	Repository domain.Repository
+	// Branch is checked out: the remote branch when it exists, otherwise a new branch from the
+	// repository's default branch.
+	Branch string
+}
+
+// Workspace is a prepared workspace.
+type Workspace struct {
+	RunID domain.RunID
+	// Dir is the host path of the checkout (TaskSpec.WorkspaceDir).
+	Dir string
+	// Branch is the branch checked out; empty for an empty workspace.
+	Branch string
+	// Existed reports whether the branch already existed in the repository.
+	Existed bool
+}
+
+// Checker runs a station's command checks against a run's workspace. Agent-written code is
+// never executed on the host: each check runs isolated (a hardened container on a laptop).
+type Checker interface {
+	// Check runs one command and reports how it exited. An error means the check could not be
+	// run at all, as opposed to a command that ran and failed.
+	Check(ctx context.Context, c CheckSpec) (CheckResult, error)
+}
+
+// CheckSpec is one command check.
+type CheckSpec struct {
+	FactoryID domain.FactoryID
+	ItemID    domain.ItemID
+	RunID     domain.RunID
+	Station   string
+	// Image runs the command; it is the factory's agent image.
+	Image string
+	// Command is a shell command line run in the workspace's root.
+	Command      string
+	WorkspaceDir string
+	Timeout      time.Duration
+}
+
+// CheckResult is how a command check ended.
+type CheckResult struct {
+	ExitCode int
+	// Output is the tail of the command's combined output.
+	Output   string
+	Duration time.Duration
+}
+
+// Passed reports whether the command exited 0.
+func (r CheckResult) Passed() bool { return r.ExitCode == 0 }
 
 // Secrets resolves secret references at the edge. A reference is either a literal value or
 // "env:NAME"; AWS Secrets Manager ARNs and op:// references come with their adapters.

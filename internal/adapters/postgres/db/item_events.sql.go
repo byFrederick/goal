@@ -6,6 +6,7 @@
 package db
 
 import (
+	"context"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,4 +21,48 @@ type InsertEventsParams struct {
 	Station   *string
 	Actor     string
 	Data      []byte
+}
+
+const itemEvents = `-- name: ItemEvents :many
+SELECT id, factory_id, item_id, run_id, at, kind, station, actor, data FROM item_events
+WHERE item_id = $1 AND id > $2::bigint
+ORDER BY id
+LIMIT $3::bigint
+`
+
+type ItemEventsParams struct {
+	ItemID    uuid.UUID
+	After     int64
+	MaxEvents int64
+}
+
+// One page of an item's history in append order, after a known event id (0 for the start).
+func (q *Queries) ItemEvents(ctx context.Context, arg ItemEventsParams) ([]ItemEvent, error) {
+	rows, err := q.db.Query(ctx, itemEvents, arg.ItemID, arg.After, arg.MaxEvents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ItemEvent
+	for rows.Next() {
+		var i ItemEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.FactoryID,
+			&i.ItemID,
+			&i.RunID,
+			&i.At,
+			&i.Kind,
+			&i.Station,
+			&i.Actor,
+			&i.Data,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

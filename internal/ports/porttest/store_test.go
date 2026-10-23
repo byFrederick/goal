@@ -24,8 +24,7 @@ func TestStore_Conformance(t *testing.T) {
 			NewFactory: func(*testing.T) domain.FactoryID {
 				return domain.FactoryID(fmt.Sprintf("00000000-0000-4000-8000-%012d", factories.Add(1)))
 			},
-			Events: func(_ *testing.T, id domain.ItemID) []domain.Event { return s.Events(id) },
-			Runs:   func(_ *testing.T, id domain.ItemID) []domain.Run { return s.Runs(id) },
+			Runs: func(_ *testing.T, id domain.ItemID) []domain.Run { return s.Runs(id) },
 		}
 	})
 }

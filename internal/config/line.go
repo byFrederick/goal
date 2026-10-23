@@ -19,6 +19,10 @@ func (f *Factory) Line() domain.Line {
 		Agents:    make([]domain.AgentSpec, 0, len(s.Agents)),
 	}
 
+	if r := s.Runtime.Repository; r != nil {
+		l.Runtime.Repository = domain.Repository{URL: r.URL, AuthRef: r.Token}
+	}
+
 	if b := s.Runtime.Budget; b != nil {
 		l.Runtime.MaxTurnsPerTask, l.Runtime.PerItemUSD = b.MaxTurnsPerTask, b.PerItemUSD
 	}
@@ -47,6 +51,12 @@ func station(st Station) domain.Station {
 	out := domain.Station{
 		ID: st.ID, Kind: domain.StationKind(st.Kind), Agent: st.Agent, Route: maps.Clone(st.Route),
 		Agents: st.Agents, WIP: st.WIP, Output: st.Output,
+	}
+
+	for _, c := range st.Checks {
+		if c.Kind == CheckCommand && c.Run != "" {
+			out.Checks = append(out.Checks, c.Run)
+		}
 	}
 
 	if st.Gate != nil {

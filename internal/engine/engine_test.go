@@ -26,6 +26,7 @@ const (
 	agWorker     = "worker"
 	stWork       = "work"
 	typeIncident = "incident"
+	typeFeature  = "feature"
 )
 
 const (
@@ -35,23 +36,27 @@ const (
 )
 
 type harness struct {
-	e         *engine.Engine
-	store     *porttest.Store
-	runner    *porttest.Runner
-	clock     *porttest.Clock
-	contracts *porttest.Contracts
-	line      domain.Line
+	e          *engine.Engine
+	store      *porttest.Store
+	runner     *porttest.Runner
+	workspaces *porttest.Workspaces
+	checker    *porttest.Checker
+	clock      *porttest.Clock
+	contracts  *porttest.Contracts
+	line       domain.Line
 }
 
 func newHarness(t *testing.T, line domain.Line, run porttest.RunFunc) *harness {
 	t.Helper()
 
 	h := &harness{
-		store:     porttest.NewStore(),
-		runner:    porttest.NewRunner(run),
-		clock:     porttest.NewClock(t0),
-		contracts: porttest.NewContracts(),
-		line:      line,
+		store:      porttest.NewStore(),
+		runner:     porttest.NewRunner(run),
+		workspaces: porttest.NewWorkspaces(),
+		checker:    porttest.NewChecker(),
+		clock:      porttest.NewClock(t0),
+		contracts:  porttest.NewContracts(),
+		line:       line,
 	}
 	h.e = h.engine(t, h.store)
 
@@ -63,7 +68,7 @@ func (h *harness) engine(t *testing.T, store ports.Store) *engine.Engine {
 	t.Helper()
 
 	e, err := engine.New(engine.Deps{
-		Store: store, Runner: h.runner, Contracts: h.contracts, Clock: h.clock,
+		Store: store, Runner: h.runner, Workspaces: h.workspaces, Checker: h.checker, Contracts: h.contracts, Clock: h.clock,
 		Secrets: porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y", "MODEL_ACCESS": "tok"},
 	}, engine.Config{
 		Lines:          []domain.Line{h.line},
@@ -90,7 +95,7 @@ func (h *harness) submit(t *testing.T, n domain.NewItem) domain.Item {
 	}
 
 	if n.Type == "" {
-		n.Type = "feature"
+		n.Type = typeFeature
 	}
 
 	it, err := h.e.Submit(t.Context(), n)
@@ -445,5 +450,42 @@ func TestRun_LoopTicksOnTheClock(t *testing.T) {
 
 	if err := <-done; err != nil {
 		t.Errorf("Run returned %v after cancel, want nil", err)
+	}
+}
+
+func TestSetLines_LoadsAndUnloadsFactories(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, lineOf(agentStation(stWork, agWorker, 1, 1)), porttest.Succeed(`{}`))
+
+	other := lineOf(agentStation(stWork, agWorker, 1, 1))
+	other.FactoryID = "5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a01"
+	n := domain.NewItem{FactoryID: other.FactoryID, Title: "an item", Type: typeFeature}
+
+	if _, err := h.e.Submit(t.Context(), n); err == nil {
+		t.Fatal("submit to a factory that is not loaded succeeded")
+	}
+
+	if err := h.e.SetLines([]domain.Line{h.line, other}); err != nil {
+		t.Fatal(err)
+	}
+
+	it, err := h.e.Submit(t.Context(), n)
+	if err != nil {
+		t.Fatalf("submit after loading the factory: %v", err)
+	}
+
+	h.step(t)
+
+	if got := h.item(t, it.ID); got.State != domain.StateDone {
+		t.Errorf("item of the new factory is %s, want done", got.State)
+	}
+
+	if err := h.e.SetLines([]domain.Line{other}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.e.Submit(t.Context(), domain.NewItem{FactoryID: factoryID, Title: "x", Type: typeFeature}); err == nil {
+		t.Error("submit to an unloaded factory succeeded")
 	}
 }

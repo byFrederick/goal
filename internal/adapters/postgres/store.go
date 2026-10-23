@@ -106,18 +106,7 @@ func (s *Store) Waiting(ctx context.Context, factory domain.FactoryID, station s
 		return nil, fmt.Errorf("station %s: waiting items: %w", station, err)
 	}
 
-	out := make([]domain.Item, 0, len(rows))
-
-	for _, r := range rows {
-		it, err := itemFrom(r)
-		if err != nil {
-			return nil, err
-		}
-
-		out = append(out, it)
-	}
-
-	return out, nil
+	return convertAll(rows, itemFrom)
 }
 
 // Leases implements ports.Store.
@@ -438,4 +427,19 @@ func moveParams(item uuid.UUID, t ports.Transition) db.MoveItemParams {
 // AppendEvents implements ports.Store.
 func (s *Store) AppendEvents(ctx context.Context, events ...domain.Event) error {
 	return appendEvents(ctx, s.q, events)
+}
+
+// ItemEvents implements ports.Store.
+func (s *Store) ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error) {
+	uid, err := parseID("item", string(id))
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.q.ItemEvents(ctx, db.ItemEventsParams{ItemID: uid, After: after, MaxEvents: int64(limit)})
+	if err != nil {
+		return nil, fmt.Errorf("events of item %s: %w", id, err)
+	}
+
+	return convertAll(rows, eventFrom)
 }

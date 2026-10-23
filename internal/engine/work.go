@@ -6,14 +6,26 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
 )
 
-// maxAttempts is one run plus one retry when the output breaks the station's contract.
+// maxAttempts is one run plus one retry when the output breaks the station's contract or
+// fails a command check.
 const maxAttempts = 2
+
+// errCheckFailed means a station's command check ran and exited non-zero.
+var errCheckFailed = errors.New("command check failed")
+
+// outputError is an output that failed its checks: a broken contract, an unusable verdict or a
+// failed command check. The agent gets one more attempt with the reason.
+type outputError struct{ err error }
+
+func (o *outputError) Error() string { return o.err.Error() }
+func (o *outputError) Unwrap() error { return o.err }
 
 // claimed is an item this instance holds a lease on at an agent station.
 type claimed struct {
@@ -44,7 +56,9 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 	brief := briefOf(it)
 
 	for attempt := 1; ; attempt++ {
-		res, err := e.runOnce(ctx, c, brief)
+		res, verdict, err := e.runOnce(ctx, c, brief)
+
+		var rejected *outputError
 
 		switch {
 		case errors.Is(err, ports.ErrLeaseLost):
@@ -53,48 +67,50 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 		case ctx.Err() != nil:
 			e.release(ctx, log, c)
 			return
+		case errors.As(err, &rejected):
 		case err != nil:
 			e.block(ctx, log, c, err.Error())
 			return
 		case res.Status != domain.RunSucceeded:
 			e.block(ctx, log, c, fmt.Sprintf("run %s: %s", res.Status, res.Error))
 			return
-		}
-
-		verdict, err := e.check(ctx, c, res.Output)
-		if err == nil {
+		default:
 			e.finish(ctx, log, c, res.Output, verdict)
 			return
 		}
 
-		if !e.contractFailed(ctx, log, c, attempt, err) {
+		if !e.outputFailed(ctx, log, c, attempt, rejected.err) {
 			return
 		}
 
-		brief = briefOf(it) + "\n\nYour previous output was rejected: " + err.Error() + "\nReturn output that satisfies the station contract."
+		brief = briefOf(it) + "\n\nYour previous attempt was rejected: " + rejected.err.Error() +
+			"\nFix that and return output that satisfies the station contract."
 	}
 }
 
-// contractFailed records a failed output check and reports whether to try again; when not,
-// it has blocked the item.
-func (e *Engine) contractFailed(ctx context.Context, log *slog.Logger, c claimed, attempt int, err error) bool {
-	retryable := errors.Is(err, ports.ErrContractViolation) || errors.Is(err, domain.ErrBadVerdict)
+// outputFailed records an output that failed its checks and reports whether to try again;
+// when not, it has blocked the item.
+func (e *Engine) outputFailed(ctx context.Context, log *slog.Logger, c claimed, attempt int, err error) bool {
+	retryable := errors.Is(err, ports.ErrContractViolation) || errors.Is(err, domain.ErrBadVerdict) ||
+		errors.Is(err, errCheckFailed)
 	if !retryable {
 		e.block(ctx, log, c, "check output: "+err.Error())
 		return false
 	}
 
-	ev := event(c.item, domain.EventContractFailed, e.clock.Now(), domain.ActorEngine,
-		map[string]any{"contract": c.station.Output, "error": err.Error(), "attempt": attempt})
-	if aerr := e.store.AppendEvents(ctx, ev); aerr != nil {
-		log.ErrorContext(ctx, "append contract_failed event", slog.Any("error", aerr))
+	if !errors.Is(err, errCheckFailed) { // a failed command check has its own check_failed event
+		ev := event(c.item, domain.EventContractFailed, e.clock.Now(), domain.ActorEngine,
+			map[string]any{"contract": c.station.Output, "error": err.Error(), "attempt": attempt})
+		if aerr := e.store.AppendEvents(ctx, ev); aerr != nil {
+			log.ErrorContext(ctx, "append contract_failed event", slog.Any("error", aerr))
+		}
 	}
 
 	if attempt < maxAttempts {
 		return true
 	}
 
-	e.block(ctx, log, c, fmt.Sprintf("output failed its contract %d times: %v", attempt, err))
+	e.block(ctx, log, c, fmt.Sprintf("output failed its checks %d times: %v", attempt, err))
 
 	return false
 }
@@ -119,21 +135,24 @@ func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (
 	return &v, nil
 }
 
-// runOnce records a run, starts the agent task, heartbeats the lease while it runs and
-// returns its result. It returns ErrLeaseLost when another instance took the item.
-func (e *Engine) runOnce(ctx context.Context, c claimed, brief string) (domain.RunResult, error) {
+// runOnce records a run and, while heartbeating the lease, prepares its workspace, runs the
+// agent task and checks its output. It returns ErrLeaseLost when another instance took the
+// item, an *outputError when the output failed its checks, and any other error when the run
+// could not be carried out.
+func (e *Engine) runOnce(ctx context.Context, c claimed, brief string) (domain.RunResult, *domain.Verdict, error) {
 	runID, err := e.store.StartRun(ctx, ports.NewRun{
 		FactoryID: c.line.FactoryID, ItemID: c.item.ID, Station: c.station.ID, Agent: c.agent.Name,
 		Model: modelOf(c), StartedAt: e.clock.Now(),
 	})
 	if err != nil {
-		return domain.RunResult{}, fmt.Errorf("record run: %w", err)
+		return domain.RunResult{}, nil, fmt.Errorf("record run: %w", err)
 	}
 
 	taskCtx, stop := context.WithTimeout(ctx, e.cfg.TaskTimeout)
 	defer stop()
 
-	// Heartbeat from before the start: starting a task (pulling an image) can outlast the TTL.
+	// Heartbeat from before the start: cloning, pulling an image and the checks can all
+	// outlast the TTL.
 	var (
 		beats sync.WaitGroup
 		lost  bool
@@ -143,17 +162,38 @@ func (e *Engine) runOnce(ctx context.Context, c claimed, brief string) (domain.R
 
 	beats.Go(func() { lost = e.heartbeat(beatCtx, c.lease, stop) })
 
-	task, err := e.start(taskCtx, c, runID, brief)
+	res, verdict, err := e.runInWorkspace(taskCtx, c, runID, brief)
+
+	stopBeat()
+	beats.Wait()
+
+	if lost {
+		return res, nil, ports.ErrLeaseLost
+	}
+
+	return res, verdict, err
+}
+
+// runInWorkspace prepares the run's workspace, runs the task in it, checks the output and
+// removes the workspace.
+func (e *Engine) runInWorkspace(ctx context.Context, c claimed, runID domain.RunID, brief string) (domain.RunResult, *domain.Verdict, error) {
+	ws, err := e.workspaces.Prepare(ctx, ports.WorkspaceSpec{
+		FactoryID: c.line.FactoryID, ItemID: c.item.ID, RunID: runID,
+		Repository: c.line.Runtime.Repository, Branch: c.item.Branch(),
+	})
 	if err != nil {
-		stopBeat()
-		beats.Wait()
+		err = fmt.Errorf("prepare workspace: %w", err)
 		e.finishRun(ctx, runID, domain.RunResult{Status: domain.RunFailed, Error: err.Error()})
 
-		if lost {
-			return domain.RunResult{}, ports.ErrLeaseLost
-		}
+		return domain.RunResult{}, nil, err
+	}
 
-		return domain.RunResult{}, err
+	defer e.removeWorkspace(ctx, ws)
+
+	task, err := e.start(ctx, c, runID, brief+workspaceNote(c.line.Runtime.Repository, ws), ws.Dir)
+	if err != nil {
+		e.finishRun(ctx, runID, domain.RunResult{Status: domain.RunFailed, Error: err.Error()})
+		return domain.RunResult{}, nil, err
 	}
 
 	var relayed sync.WaitGroup
@@ -163,8 +203,6 @@ func (e *Engine) runOnce(ctx context.Context, c claimed, brief string) (domain.R
 	res, err := task.Wait()
 
 	relayed.Wait()
-	stopBeat()
-	beats.Wait()
 
 	if err != nil {
 		res = domain.RunResult{Status: domain.RunFailed, Error: "wait for task: " + err.Error()}
@@ -172,15 +210,95 @@ func (e *Engine) runOnce(ctx context.Context, c claimed, brief string) (domain.R
 
 	e.finishRun(ctx, runID, res)
 
-	if lost {
-		return res, ports.ErrLeaseLost
+	if res.Status != domain.RunSucceeded {
+		return res, nil, nil
 	}
 
-	return res, nil
+	verdict, err := e.check(ctx, c, res.Output)
+	if err != nil {
+		return res, nil, &outputError{err: err}
+	}
+
+	if err := e.runChecks(ctx, c, runID, ws); err != nil {
+		return res, nil, err
+	}
+
+	return res, verdict, nil
+}
+
+// runChecks runs the station's command checks in order against the workspace and stops at the
+// first that fails, which is returned as an *outputError.
+func (e *Engine) runChecks(ctx context.Context, c claimed, runID domain.RunID, ws ports.Workspace) error {
+	for _, cmd := range c.station.Checks {
+		res, err := e.checker.Check(ctx, ports.CheckSpec{
+			FactoryID: c.line.FactoryID, ItemID: c.item.ID, RunID: runID, Station: c.station.ID,
+			Image: c.line.Runtime.Image, Command: cmd, WorkspaceDir: ws.Dir, Timeout: e.cfg.CheckTimeout,
+		})
+		if err != nil {
+			return fmt.Errorf("run check %q: %w", cmd, err)
+		}
+
+		kind := domain.EventCheckPassed
+		data := map[string]any{"command": cmd, "exit_code": res.ExitCode, "duration_ms": res.Duration.Milliseconds()}
+
+		if !res.Passed() {
+			kind, data["output"] = domain.EventCheckFailed, cut(res.Output, maxCheckOutput)
+		}
+
+		ev := event(c.item, kind, e.clock.Now(), domain.ActorEngine, data)
+		ev.RunID = runID
+
+		if err := e.store.AppendEvents(ctx, ev); err != nil {
+			e.log.WarnContext(ctx, "record check event", slog.String("item", string(c.item.ID)), slog.Any("error", err))
+		}
+
+		if !res.Passed() {
+			return &outputError{err: fmt.Errorf("%w: `%s` exited %d; the end of its output:\n%s",
+				errCheckFailed, cmd, res.ExitCode, cut(res.Output, maxCheckOutput))}
+		}
+	}
+
+	return nil
+}
+
+// maxCheckOutput bounds the check output kept in an event and quoted to the agent.
+const maxCheckOutput = 4000
+
+// cut keeps the last n bytes of s, where a failing command reports why.
+func cut(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+
+	return "…" + strings.ToValidUTF8(s[len(s)-n:], "")
+}
+
+func (e *Engine) removeWorkspace(ctx context.Context, ws ports.Workspace) {
+	ctx, cancel := cleanup(ctx)
+	defer cancel()
+
+	if err := e.workspaces.Remove(ctx, ws); err != nil {
+		e.log.WarnContext(ctx, "remove workspace", slog.String("run", string(ws.RunID)), slog.Any("error", err))
+	}
+}
+
+// workspaceNote tells the agent what its working directory holds.
+func workspaceNote(r domain.Repository, ws ports.Workspace) string {
+	if ws.Branch == "" {
+		return ""
+	}
+
+	state := "a new branch from the default branch"
+	if ws.Existed {
+		state = "it already exists: it holds the work of earlier runs of this item"
+	}
+
+	return fmt.Sprintf("\n\n## Workspace\n\nYour working directory is a clone of %s with branch `%s` checked out (%s). "+
+		"It holds no git credentials.", r.URL, ws.Branch, state)
 }
 
 // start builds the task spec, resolving secrets and signing the gateway token, and starts it.
-func (e *Engine) start(ctx context.Context, c claimed, runID domain.RunID, brief string) (ports.Task, error) {
+func (e *Engine) start(ctx context.Context, c claimed, runID domain.RunID, brief, workspace string) (ports.Task, error) {
 	env := make(map[string]string, len(e.cfg.TaskEnv))
 
 	for name, ref := range e.cfg.TaskEnv {
@@ -203,8 +321,9 @@ func (e *Engine) start(ctx context.Context, c claimed, runID domain.RunID, brief
 		FactoryID: c.line.FactoryID, ItemID: c.item.ID, RunID: runID, Station: c.station.ID, Agent: a.Name,
 		Image: rt.Image, Model: modelOf(c), PromptPath: a.PromptPath, Skills: a.Skills,
 		ToolsAllow: a.ToolsAllow, ToolsDeny: a.ToolsDeny, GatewayURL: e.cfg.GatewayURL, GatewayToken: token,
-		Brief: brief, Inputs: c.item.Outputs, Output: c.station.Output, Env: env, Timeout: e.cfg.TaskTimeout,
-		Budget: ports.Budget{MaxTurns: rt.MaxTurnsPerTask, MaxUSD: rt.PerItemUSD},
+		Brief: brief, Inputs: c.item.Outputs, Output: c.station.Output, WorkspaceDir: workspace, Env: env,
+		Timeout: e.cfg.TaskTimeout,
+		Budget:  ports.Budget{MaxTurns: rt.MaxTurnsPerTask, MaxUSD: rt.PerItemUSD},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start task: %w", err)

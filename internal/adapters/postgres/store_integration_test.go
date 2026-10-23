@@ -34,7 +34,6 @@ func TestStore_Conformance(t *testing.T) {
 		return storetest.Harness{
 			Store:      s,
 			NewFactory: func(t *testing.T) domain.FactoryID { t.Helper(); return saveFactory(t, s) },
-			Events:     func(t *testing.T, id domain.ItemID) []domain.Event { t.Helper(); return s.events(t, id) },
 			Runs:       func(t *testing.T, id domain.ItemID) []domain.Run { t.Helper(); return s.runs(t, id) },
 		}
 	})
@@ -187,38 +186,6 @@ func saveFactory(t *testing.T, s *Store) domain.FactoryID {
 	}
 
 	return domain.FactoryID(id)
-}
-
-// events reads an item's events straight from item_events; the port has no reader yet.
-func (s *Store) events(t *testing.T, id domain.ItemID) []domain.Event {
-	t.Helper()
-
-	rows, err := s.pool.Query(t.Context(), `
-		SELECT id, factory_id::text, item_id::text, coalesce(run_id::text, ''), at, kind, coalesce(station, ''), actor, data
-		FROM item_events WHERE item_id = $1 ORDER BY id`, string(id))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	events, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.Event, error) {
-		var (
-			e    domain.Event
-			data []byte
-		)
-
-		if err := row.Scan(&e.ID, &e.FactoryID, &e.ItemID, &e.RunID, &e.At, &e.Kind, &e.Station, &e.Actor, &data); err != nil {
-			return e, err
-		}
-
-		e.At = e.At.UTC()
-
-		return e, json.Unmarshal(data, &e.Data)
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return events
 }
 
 // runs reads an item's runs straight from agent_runs; the port has no reader yet.

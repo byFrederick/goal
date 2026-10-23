@@ -12,6 +12,8 @@ const (
 	EventRunStarted     EventKind = "run_started"
 	EventRunFinished    EventKind = "run_finished"
 	EventContractFailed EventKind = "contract_failed"
+	EventCheckPassed    EventKind = "check_passed"
+	EventCheckFailed    EventKind = "check_failed"
 	EventMoved          EventKind = "moved"
 	EventGateApproved   EventKind = "gate_approved"
 	EventGateRejected   EventKind = "gate_rejected"

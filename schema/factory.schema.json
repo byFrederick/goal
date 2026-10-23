@@ -70,6 +70,16 @@
         "image": { "type": "string" },
         "auth": { "enum": ["claude-subscription", "anthropic-api-key", "bedrock"] },
         "model": { "$ref": "#/$defs/model" },
+        "repository": {
+          "type": "object",
+          "description": "The git repository agent tasks work on. goald clones it on the host for every run, on the item's branch (goal/<number>-<slug>); the clone credential never reaches the agent container.",
+          "required": ["url"],
+          "additionalProperties": false,
+          "properties": {
+            "url": { "type": "string", "pattern": "^https://[^/@]+/.+", "description": "https clone URL without credentials" },
+            "token": { "$ref": "#/$defs/secretRef", "description": "Token for cloning a private repository (GitHub: a fine-grained PAT)" }
+          }
+        },
         "budget": {
           "type": "object",
           "additionalProperties": false,
