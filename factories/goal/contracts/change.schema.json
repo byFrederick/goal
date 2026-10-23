@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Change",
+  "type": "object",
+  "required": ["branch", "summary", "acceptance", "tests"],
+  "properties": {
+    "branch": { "type": "string", "pattern": "^goal/" },
+    "pull_request": { "type": "string" },
+    "summary": { "type": "string" },
+    "acceptance": {
+      "type": "array",
+      "items": { "type": "object", "required": ["criterion", "evidence"], "properties": { "criterion": { "type": "string" }, "evidence": { "type": "string" } } }
+    },
+    "tests": { "type": "array", "items": { "type": "string" }, "description": "Tests added or changed" },
+    "migrations": { "type": "array", "items": { "type": "string" } },
+    "screenshots": { "type": "array", "items": { "type": "string" } }
+  }
+}

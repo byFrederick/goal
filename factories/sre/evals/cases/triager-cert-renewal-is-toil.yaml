@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=../../../../schema/evals.schema.json
+apiVersion: goal/v1
+kind: EvalCase
+metadata:
+  id: 548a3db6-302e-47e0-9484-ea0a0637ce2b
+  name: triager-cert-renewal-is-toil
+  title: A scheduled hygiene task is toil at sev4, not an incident
+  tags: [triager, severity, balanced]
+  origin:
+    kind: manual
+    note: Balances triager-checkout-5xx-is-sev2 so the triager is not tuned to escalate everything.
+
+spec:
+  agent: triager
+  station: triage
+  purpose: regression
+  split: tune
+  state: active
+  input:
+    type: toil
+    title: TLS certificate for status.acme.example.com expires in 21 days
+    body: |
+      Daily health check: the certificate for status.acme.example.com expires on 2026-11-10.
+      It is not managed by ACM auto-renewal. Nothing is broken today.
+  reference:
+    output:
+      type: toil
+      severity: sev4
+      summary: Certificate for status.acme.example.com expires 2026-11-10 and is not auto-renewed; renew and move it to ACM-managed renewal.
+      size: S
+      affected: [status-page]
+      next: investigate
+  expect:
+    triage-type: { equals: toil }
+    triage-severity: { oneOf: [sev4] }
+    triage-size: { equals: S }
+    triage-next: { skip: true }

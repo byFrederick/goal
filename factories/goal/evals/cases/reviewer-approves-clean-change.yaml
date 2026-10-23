@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=../../../../schema/evals.schema.json
+apiVersion: goal/v1
+kind: EvalCase
+metadata:
+  id: e9e159e4-49f2-467e-87e4-d9624d355d66
+  name: reviewer-approves-clean-change
+  title: The review gate approves a small change with evidence for every criterion
+  tags: [review-gate, balanced]
+  origin:
+    kind: manual
+    note: The negative of reviewer-rejects-unevidenced-criterion, so the gate is not tuned to reject everything.
+
+spec:
+  station: review
+  purpose: regression
+  split: check
+  state: active
+  input:
+    type: fix
+    lane: backend
+    title: goal validate accepts duplicate factory ids
+    body: Two factory folders with the same metadata.id both validate.
+    outputs:
+      spec:
+        title: Reject duplicate factory ids in goal validate
+        lane: backend
+        why: Rows and S3 prefixes key on the id; a duplicate would merge two factories' data.
+        acceptance:
+          - goal validate exits 1 and names both folders when two factories share an id.
+          - Existing factories still validate.
+        touches: ["cmd/goal/**", "internal/config/**"]
+      build:
+        branch: goal/GOAL-12
+        pull_request: https://github.com/acme/goal/pull/12
+        summary: Tracks seen ids in goal validate and reports the first folder that used each.
+        acceptance:
+          - criterion: goal validate exits 1 and names both folders when two factories share an id.
+            evidence: TestValidateRejectsDuplicateIDs (cmd/goal/main_test.go) asserts exit code 1 and both folder names in the output.
+          - criterion: Existing factories still validate.
+            evidence: "go run ./cmd/goal validate: 3 factories, all marked valid (output attached to the PR)."
+        tests: [cmd/goal/main_test.go]
+  reference:
+    decision: approve
+  expect:
+    review-decision: { decision: approve }
+    review-reason-actionable: { skip: true }   # nothing to judge on an approval

@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=../../../../schema/evals.schema.json
+apiVersion: goal/v1
+kind: EvalCase
+metadata:
+  id: c63fd6a3-feac-40f4-b430-2fccd8340fc6
+  name: architect-splits-oversized-request
+  title: A request too big for one engineer session is split into child items
+  tags: [architect, splitting]
+  origin:
+    kind: manual
+    note: Seeded from the architect prompt's rule "if the work will not fit one agent session, list child items in split".
+
+spec:
+  agent: architect
+  station: spec
+  purpose: capability                 # the architect does not reliably split yet
+  split: tune
+  state: active
+  input:
+    type: feature
+    title: Online evaluation for every factory
+    body: |
+      Sample 25% of production agent runs, grade them with the factory's judges, show a drift chart
+      per agent, and add a screen where I can label traces pass/fail with notes. It should also alert
+      me when the pass rate drops.
+  reference:
+    output:
+      title: Online evaluation for every factory
+      lane: backend
+      why: Without online evals, quality drops at the constraint are found only through rework.
+      acceptance:
+        - Each child item below is merged and its own acceptance criteria are met.
+      touches: ["internal/**", "migrations/*.sql", "queries/*.sql", "web/src/**"]
+      migrations: true
+      split:
+        - Sampler that selects production runs by rate and strategy and stores online_samples
+        - Judge runner that grades samples and stores grader_results
+        - Drift detector that opens a remediation signal on a confident drop
+        - Labeling queue screen with pass, fail, defer and notes
+  expect:
+    spec-split: { minItems: 3 }
+    spec-lane: { oneOf: [backend] }
+    spec-touches: { minItems: 2 }
+  trials: 5
+  notes: The split must separate backend from frontend work; one child per independently mergeable change.

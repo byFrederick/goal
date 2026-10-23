@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=../../../../schema/evals.schema.json
+apiVersion: goal/v1
+kind: EvalCase
+metadata:
+  id: 085902b5-fb6e-4649-a15c-38827cd90b93
+  name: triager-splits-platform-migration
+  title: An open-ended multi-service project is sized L and split before investigation
+  tags: [triager, splitting]
+  origin:
+    kind: manual
+
+spec:
+  agent: triager
+  station: triage
+  purpose: capability
+  split: tune
+  state: active
+  input:
+    type: project
+    title: Move every acme-prod service from ECS on EC2 to Fargate
+    body: |
+      We run 14 services on ECS with EC2 capacity providers. Move them all to Fargate, update the
+      CloudWatch alarms and dashboards that reference instance metrics, and rewrite the runbooks
+      that mention SSH to hosts.
+  reference:
+    output:
+      type: project
+      severity: sev4
+      summary: "Split by service group: (1) inventory services and instance-level dependencies, (2) migrate stateless web services, (3) migrate workers, (4) replace instance alarms and dashboards, (5) rewrite SSH-based runbooks."
+      size: L
+      next: split
+  expect:
+    triage-type: { equals: project }
+    triage-size: { equals: L }
+    triage-next: { equals: split }
+  trials: 5

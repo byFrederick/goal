@@ -1,0 +1,6 @@
+[tools]
+go = "1.23"
+node = "22"
+terraform = "1.15"
+golangci-lint = "2"
+sqlc = "1"

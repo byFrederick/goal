@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Triage report",
+  "type": "object",
+  "required": ["type", "severity", "summary", "size", "next"],
+  "properties": {
+    "type": { "enum": ["incident", "change", "toil", "project"] },
+    "severity": { "enum": ["sev1", "sev2", "sev3", "sev4"] },
+    "summary": { "type": "string", "maxLength": 600 },
+    "size": { "enum": ["S", "M", "L"], "description": "L items are split before investigation" },
+    "affected": { "type": "array", "items": { "type": "string" } },
+    "next": { "enum": ["investigate", "split", "reject", "done"] }
+  },
+  "additionalProperties": false
+}

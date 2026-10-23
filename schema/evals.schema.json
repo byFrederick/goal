@@ -1,0 +1,563 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://goal.local/schema/evals.schema.json",
+  "title": "Goal evals (Jonah)",
+  "description": "Two document kinds. Evals (factories/<name>/evals/evals.yaml) defines a factory's suites, graders, judges, online sampling, flow targets and remediation policy. EvalCase (factories/<name>/evals/cases/*.yaml) is one task with its input, fixture, reference solution and expectations. Jonah never edits either.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": { "const": "goal/v1" },
+    "kind": { "enum": ["Evals", "EvalCase"] }
+  },
+  "allOf": [
+    { "if": { "properties": { "kind": { "const": "Evals" } } }, "then": { "$ref": "#/$defs/evals" } },
+    { "if": { "properties": { "kind": { "const": "EvalCase" } } }, "then": { "$ref": "#/$defs/case" } }
+  ],
+  "$defs": {
+    "slug": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,38}[a-z0-9]$" },
+    "caseName": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,78}[a-z0-9]$" },
+    "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+    "model": { "type": "string", "pattern": "^claude-[a-z0-9-]+$" },
+    "cron": { "type": "string", "description": "Five-field cron expression, evaluated in lane.timezone." },
+    "relPath": { "type": "string", "pattern": "^\\./", "description": "Path relative to the evals/ folder." },
+    "probability": { "type": "number", "minimum": 0, "maximum": 1 },
+    "usd": { "type": "number", "minimum": 0 },
+    "pointer": { "type": "string", "pattern": "^(/[^/]*)*$", "description": "JSON Pointer into the station output." },
+    "glob": { "type": "string", "minLength": 1 },
+    "lever": { "enum": ["prompt", "skill", "tool-policy", "connection", "model", "flow-config", "contract"] },
+
+    "evals": {
+      "type": "object",
+      "required": ["apiVersion", "kind", "metadata", "spec"],
+      "additionalProperties": false,
+      "properties": {
+        "apiVersion": { "const": "goal/v1" },
+        "kind": { "const": "Evals" },
+        "metadata": {
+          "type": "object",
+          "required": ["factoryId"],
+          "additionalProperties": false,
+          "properties": {
+            "factoryId": { "$ref": "#/$defs/uuid", "description": "Must equal metadata.id in the sibling factory.yaml." },
+            "owner": { "type": "string" },
+            "description": { "type": "string" }
+          }
+        },
+        "spec": {
+          "type": "object",
+          "required": ["lane", "cases", "graders", "suites"],
+          "additionalProperties": false,
+          "properties": {
+            "defaults": { "$ref": "#/$defs/defaults" },
+            "lane": { "$ref": "#/$defs/lane" },
+            "cases": { "$ref": "#/$defs/caseSources" },
+            "graders": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/grader" } },
+            "judges": { "type": "array", "items": { "$ref": "#/$defs/judge" } },
+            "suites": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/suite" } },
+            "online": { "$ref": "#/$defs/online" },
+            "flow": { "$ref": "#/$defs/flow" },
+            "remediation": { "$ref": "#/$defs/remediation" }
+          }
+        }
+      }
+    },
+
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "trials": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "timeoutMinutes": { "type": "integer", "minimum": 1, "maximum": 240 },
+        "maxCostUsdPerTrial": { "$ref": "#/$defs/usd" },
+        "network": {
+          "enum": ["gateway-only", "none"],
+          "description": "Trial containers reach only the MCP gateway (in replay mode) and the model API. There is no option for open egress."
+        }
+      }
+    },
+
+    "lane": {
+      "type": "object",
+      "description": "The eval lane: how evals, judges and Jonah share model capacity with production. Production always has priority.",
+      "required": ["wip"],
+      "additionalProperties": false,
+      "properties": {
+        "wip": { "type": "integer", "minimum": 1, "maximum": 8, "description": "Max concurrent eval trials for this factory." },
+        "maxShare": { "type": "number", "minimum": 0, "maximum": 0.5, "description": "Max fraction of the factory's model spend (rolling 7 days) that evals, judges and Jonah may use." },
+        "timezone": { "type": "string" },
+        "windows": {
+          "type": "array",
+          "description": "Local time ranges when scheduled suites may start. Empty means any time.",
+          "items": { "type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$" }
+        },
+        "yieldToProduction": { "type": "boolean", "default": true, "description": "Do not start a trial while an agent station has queued work and a free slot." },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "dailyUsd": { "$ref": "#/$defs/usd" },
+            "monthlyUsd": { "$ref": "#/$defs/usd" }
+          }
+        },
+        "dryRunCases": { "type": "integer", "minimum": 0, "maximum": 10, "description": "Cases run once before a new or changed suite's full run." }
+      }
+    },
+
+    "caseSources": {
+      "type": "object",
+      "required": ["sources"],
+      "additionalProperties": false,
+      "properties": {
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["kind"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": { "enum": ["files", "postgres", "synthetic"] },
+              "path": { "$ref": "#/$defs/relPath", "description": "files: a glob of EvalCase files." },
+              "splits": { "type": "array", "items": { "enum": ["tune", "check", "holdout"] } },
+              "dimensions": {
+                "type": "object",
+                "description": "synthetic: axes of variation that target expected failures. Tuples are drafted, reviewed by a human, then written as draft case files.",
+                "minProperties": 2,
+                "maxProperties": 5,
+                "additionalProperties": { "type": "array", "minItems": 2, "items": { "type": "string" } }
+              },
+              "tuples": { "type": "integer", "minimum": 5, "maximum": 200 }
+            },
+            "allOf": [
+              { "if": { "properties": { "kind": { "const": "files" } } }, "then": { "required": ["path"] } },
+              { "if": { "properties": { "kind": { "const": "postgres" } } }, "then": { "required": ["splits"] } },
+              { "if": { "properties": { "kind": { "const": "synthetic" } } }, "then": { "required": ["dimensions"] } }
+            ]
+          }
+        },
+        "holdout": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The sealed holdout lives only in Postgres. Jonah sees only the gate verdict, never cases or transcripts.",
+          "properties": {
+            "minCases": { "type": "integer", "minimum": 0 },
+            "maxRunsPerMonth": { "type": "integer", "minimum": 1, "maximum": 20 }
+          }
+        },
+        "quarantine": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "zeroPassTrials": { "type": "integer", "minimum": 5, "description": "Quarantine a case that no arm has passed in this many trials: usually a broken task, not an incapable agent." },
+            "flakeRate": { "$ref": "#/$defs/probability", "description": "Quarantine a case whose verdict flips this often between identical runs." }
+          }
+        },
+        "saturation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "passRate": { "$ref": "#/$defs/probability" },
+            "runs": { "type": "integer", "minimum": 1, "description": "Consecutive runs above passRate before a capability suite is flagged saturated." }
+          }
+        }
+      }
+    },
+
+    "grader": {
+      "type": "object",
+      "required": ["name", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/slug" },
+        "kind": {
+          "enum": ["contract", "command", "match", "evidence", "diff-scope", "verification", "tool-calls", "transcript", "state", "gate", "judge", "pairwise", "human"],
+          "description": "Code graders run in goald; judge and pairwise call Claude; human sends the trial to the labeling queue."
+        },
+        "description": { "type": "string" },
+        "required": { "type": "boolean", "default": true, "description": "false = advisory: recorded and shown, never part of pass/fail." },
+        "contract": { "type": "string", "description": "contract: name of a contract in factory.yaml." },
+        "run": { "type": "string", "description": "command: shell command run in the trial workspace after the agent finishes." },
+        "expectExit": { "type": "integer", "default": 0 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 },
+        "pointer": { "$ref": "#/$defs/pointer" },
+        "min": { "type": "integer", "minimum": 0 },
+        "grounded": { "type": "boolean", "description": "evidence: every link must appear in a tool result in the transcript." },
+        "allow": { "type": "array", "items": { "$ref": "#/$defs/glob" } },
+        "forbid": { "type": "array", "items": { "$ref": "#/$defs/glob" } },
+        "fromSpec": { "type": "boolean", "description": "diff-scope: also allow the globs in the item's spec.touches." },
+        "commands": { "type": "array", "items": { "type": "string" }, "description": "verification: commands the agent must have run after its last edit." },
+        "fromStationChecks": { "type": "boolean", "description": "verification: require the station's own checks." },
+        "requiredTools": { "type": "array", "items": { "type": "string" } },
+        "forbiddenTools": { "type": "array", "items": { "type": "string" }, "description": "Tool patterns, e.g. Bash(git push*) or mcp__github__create_pull_request." },
+        "failOnUnmatchedFixture": { "type": "boolean", "description": "tool-calls: a call with no recording fails the trial (otherwise it is an environment error)." },
+        "maxTurns": { "type": "integer", "minimum": 1 },
+        "maxCostUsd": { "$ref": "#/$defs/usd" },
+        "maxMinutes": { "type": "integer", "minimum": 1 },
+        "maxToolErrors": { "type": "integer", "minimum": 0 },
+        "forbidPatterns": { "type": "array", "items": { "type": "string" }, "description": "transcript: regexes that must not appear in outputs (secrets, internal hosts)." },
+        "judge": { "$ref": "#/$defs/slug" },
+        "sampleRate": { "$ref": "#/$defs/probability", "description": "human: fraction of trials sent to the labeling queue." }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": "contract" } } }, "then": { "required": ["contract"] } },
+        { "if": { "properties": { "kind": { "const": "command" } } }, "then": { "required": ["run"] } },
+        { "if": { "properties": { "kind": { "const": "match" } } }, "then": { "required": ["pointer"] } },
+        { "if": { "properties": { "kind": { "const": "evidence" } } }, "then": { "required": ["pointer"] } },
+        { "if": { "properties": { "kind": { "enum": ["judge", "pairwise"] } } }, "then": { "required": ["judge"] } },
+        { "if": { "properties": { "kind": { "const": "human" } } }, "then": { "required": ["sampleRate"] } }
+      ]
+    },
+
+    "judge": {
+      "type": "object",
+      "description": "A model grader for one failure mode: binary pass/fail with a critique first, calibrated against human labels before it may gate.",
+      "required": ["name", "criterion", "prompt", "model", "inputs"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/slug" },
+        "criterion": { "type": "string", "description": "The single failure mode this judge checks, in one sentence." },
+        "prompt": { "$ref": "#/$defs/relPath" },
+        "model": { "$ref": "#/$defs/model" },
+        "effort": { "enum": ["low", "medium", "high", "xhigh", "max"] },
+        "inputs": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Only what the judge needs, e.g. case.input, output, output/evidence, transcript.tool_results, item.outputs.spec.",
+          "items": { "type": "string", "pattern": "^(case\\.input|case\\.reference|output|transcript\\.tool_results|transcript\\.final|item\\.outputs\\.[a-z0-9-]+)(/[^/]+)*$" }
+        },
+        "allowUnknown": { "type": "boolean", "default": true, "description": "Unknown verdicts go to the labeling queue; they never count as pass." },
+        "calibration": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "gate": { "$ref": "#/$defs/rates", "description": "TPR and TNR on the sealed test split needed to gate." },
+            "advisory": { "$ref": "#/$defs/rates", "description": "Below this the judge is rejected; between advisory and gate it is advisory only." },
+            "minPerClass": { "type": "integer", "minimum": 20, "description": "Human-labeled passes and fails needed in dev+test." },
+            "recalibrateDays": { "type": "integer", "minimum": 7, "maximum": 180 }
+          }
+        }
+      }
+    },
+    "rates": {
+      "type": "object",
+      "required": ["tpr", "tnr"],
+      "additionalProperties": false,
+      "properties": { "tpr": { "$ref": "#/$defs/probability" }, "tnr": { "$ref": "#/$defs/probability" } }
+    },
+
+    "suite": {
+      "type": "object",
+      "required": ["name", "level", "purpose", "graders"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,62}[a-z0-9]$" },
+        "description": { "type": "string" },
+        "level": { "enum": ["agent", "station"], "description": "Factory-level evaluation is the flow section, measured on production." },
+        "purpose": { "enum": ["capability", "regression"], "description": "Capability suites start with a low pass rate (a hill to climb); regression suites stay near 100%." },
+        "agent": { "$ref": "#/$defs/slug" },
+        "station": { "$ref": "#/$defs/slug" },
+        "select": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tags": { "type": "array", "items": { "$ref": "#/$defs/slug" } },
+            "cases": { "type": "array", "items": { "$ref": "#/$defs/caseName" } },
+            "splits": { "type": "array", "items": { "enum": ["tune", "check", "holdout"] } }
+          }
+        },
+        "trials": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "graders": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/slug" } },
+        "scoring": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": { "enum": ["all", "weighted"], "default": "all", "description": "all: a trial passes when every required grader passes. weighted: the weighted score must reach threshold." },
+            "weights": { "type": "object", "additionalProperties": { "type": "number", "minimum": 0 } },
+            "threshold": { "$ref": "#/$defs/probability" }
+          }
+        },
+        "gate": {
+          "type": "object",
+          "description": "Pass condition for the suite run. Regression suites gate merges and proposals; capability suites only track.",
+          "required": ["metric", "min"],
+          "additionalProperties": false,
+          "properties": {
+            "metric": { "enum": ["pass@k", "pass^k", "pass-rate"] },
+            "k": { "type": "integer", "minimum": 1, "maximum": 10 },
+            "min": { "$ref": "#/$defs/probability" }
+          }
+        },
+        "schedule": { "$ref": "#/$defs/cron" },
+        "triggers": {
+          "type": "array",
+          "items": { "enum": ["schedule", "pull-request", "model-change", "proposal", "andon"] },
+          "description": "pull-request runs the suite when a PR changes this factory's agents, skills, contracts or factory.yaml."
+        }
+      },
+      "allOf": [
+        { "if": { "properties": { "level": { "const": "agent" } } }, "then": { "required": ["agent"] } },
+        { "if": { "properties": { "level": { "const": "station" } } }, "then": { "required": ["station"] } },
+        { "if": { "properties": { "purpose": { "const": "regression" } } }, "then": { "required": ["gate"] } }
+      ]
+    },
+
+    "online": {
+      "type": "object",
+      "description": "Online evaluation: sample production runs, grade them, track drift.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "sample": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "rate": { "$ref": "#/$defs/probability" },
+            "maxPerDay": { "type": "integer", "minimum": 1 },
+            "strategies": { "type": "array", "items": { "enum": ["random", "outlier", "failure", "uncertainty", "stratified"] } }
+          }
+        },
+        "stations": { "type": "array", "items": { "$ref": "#/$defs/slug" } },
+        "graders": { "type": "array", "items": { "$ref": "#/$defs/slug" } },
+        "spotCheck": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "rate": { "$ref": "#/$defs/probability", "description": "Fraction of judged samples also sent to a human." } }
+        },
+        "drift": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "window": { "type": "integer", "minimum": 10, "description": "Samples per comparison window." },
+            "minSamples": { "type": "integer", "minimum": 10 },
+            "maxDrop": { "$ref": "#/$defs/probability", "description": "Open a signal when the bias-corrected pass rate drops by more than this with confidence." },
+            "alpha": { "type": "number", "exclusiveMinimum": 0, "maximum": 0.2 }
+          }
+        }
+      }
+    },
+
+    "flow": {
+      "type": "object",
+      "description": "Factory-level outcome and flow targets, measured from item_events. The constraint is evaluated first.",
+      "additionalProperties": false,
+      "properties": {
+        "windowDays": { "type": "integer", "minimum": 7, "maximum": 90 },
+        "escapedDefectDays": { "type": "integer", "minimum": 1, "maximum": 90, "description": "A fix item linked to a done item within this many days counts as an escaped defect." },
+        "targets": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "throughputPerWeekMin": { "type": "number", "minimum": 0 },
+            "leadTimeP85HoursMax": { "type": "number", "exclusiveMinimum": 0 },
+            "firstPassYieldMin": { "$ref": "#/$defs/probability" },
+            "reworkRateMax": { "$ref": "#/$defs/probability" },
+            "escapedDefectRateMax": { "$ref": "#/$defs/probability" },
+            "costPerVerifiedItemUsdMax": { "$ref": "#/$defs/usd" },
+            "humanOverrideRateMax": { "$ref": "#/$defs/probability" },
+            "gateFalseAcceptRateMax": { "$ref": "#/$defs/probability" },
+            "gateFalseRejectRateMax": { "$ref": "#/$defs/probability" }
+          }
+        }
+      }
+    },
+
+    "remediation": {
+      "type": "object",
+      "description": "Jonah's policy for this factory. Only a human edits it; Jonah's diffs can never touch this file.",
+      "required": ["autonomy"],
+      "additionalProperties": false,
+      "properties": {
+        "autonomy": {
+          "enum": ["L0", "L1", "L2", "L3"],
+          "description": "L0 report only; L1 diagnose and draft a diff; L2 also verify offline and open a work item in the goal factory (human approves and merges); L3 also auto-merge low-risk flow-config changes."
+        },
+        "readiness": {
+          "type": "object",
+          "description": "Jonah runs below the configured level until these hold.",
+          "additionalProperties": false,
+          "properties": {
+            "minRegressionCases": { "type": "integer", "minimum": 0 },
+            "minHoldoutCases": { "type": "integer", "minimum": 0 },
+            "gatingJudges": { "type": "boolean", "description": "Every judge used by a regression suite is calibrated and gating." }
+          }
+        },
+        "levers": { "type": "array", "items": { "$ref": "#/$defs/lever" }, "description": "What Jonah may propose changing." },
+        "autoMerge": {
+          "type": "object",
+          "description": "L3 only. Low risk = flow-config changes within these steps.",
+          "additionalProperties": false,
+          "properties": {
+            "maxWipStep": { "type": "integer", "minimum": 0, "maximum": 1 },
+            "maxBufferStep": { "type": "integer", "minimum": 0, "maximum": 2 },
+            "maxAgentsStep": { "type": "integer", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxProposalsPerWeek": { "type": "integer", "minimum": 0, "maximum": 5 },
+            "cooldownDays": { "type": "integer", "minimum": 1, "maximum": 60, "description": "No new proposal on the same agent or station until this long after a rollout." },
+            "maxCandidatesPerSignal": { "type": "integer", "minimum": 1, "maximum": 3 },
+            "budgetUsdPerProposal": { "$ref": "#/$defs/usd" },
+            "monthlyUsd": { "$ref": "#/$defs/usd" }
+          }
+        },
+        "verify": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "trials": { "type": "integer", "minimum": 3, "maximum": 10 },
+            "alpha": { "type": "number", "exclusiveMinimum": 0, "maximum": 0.1 },
+            "minEffect": { "$ref": "#/$defs/probability", "description": "Smallest pass-rate gain on the targeted cases worth shipping." },
+            "margin": { "$ref": "#/$defs/probability", "description": "Non-inferiority margin on every regression suite." },
+            "costTolerance": { "type": "number", "minimum": 0, "maximum": 1, "description": "Max relative increase in mean cost per trial." },
+            "holdout": { "enum": ["required", "skip"] },
+            "guardSuites": { "type": "array", "items": { "type": "string" }, "description": "Regression suites that must not regress. Default: all regression suites." }
+          }
+        },
+        "rollout": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "watchItems": { "type": "integer", "minimum": 1 },
+            "watchDays": { "type": "integer", "minimum": 1, "maximum": 30 },
+            "rollbackOn": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "regressionFailure": { "type": "boolean" },
+                "andon": { "type": "boolean" },
+                "onlineDrop": { "$ref": "#/$defs/probability" },
+                "reworkRateIncrease": { "$ref": "#/$defs/probability" },
+                "costIncrease": { "type": "number", "minimum": 0 }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "case": {
+      "type": "object",
+      "required": ["apiVersion", "kind", "metadata", "spec"],
+      "additionalProperties": false,
+      "properties": {
+        "apiVersion": { "const": "goal/v1" },
+        "kind": { "const": "EvalCase" },
+        "metadata": {
+          "type": "object",
+          "required": ["id", "name"],
+          "additionalProperties": false,
+          "properties": {
+            "id": { "$ref": "#/$defs/uuid", "description": "Immutable. Results key on it, so the file can be renamed." },
+            "name": { "$ref": "#/$defs/caseName" },
+            "title": { "type": "string", "maxLength": 200 },
+            "tags": { "type": "array", "items": { "$ref": "#/$defs/slug" } },
+            "origin": {
+              "type": "object",
+              "required": ["kind"],
+              "additionalProperties": false,
+              "properties": {
+                "kind": { "enum": ["manual", "production", "synthetic", "incident"] },
+                "item": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*-[0-9]+$", "description": "Work item key the case came from." },
+                "run": { "$ref": "#/$defs/uuid" },
+                "note": { "type": "string" }
+              }
+            }
+          }
+        },
+        "spec": {
+          "type": "object",
+          "required": ["purpose", "split", "input", "expect"],
+          "additionalProperties": false,
+          "properties": {
+            "agent": { "$ref": "#/$defs/slug" },
+            "station": { "$ref": "#/$defs/slug" },
+            "purpose": { "enum": ["capability", "regression"] },
+            "split": {
+              "enum": ["tune", "check"],
+              "description": "tune: Jonah may read its transcripts. check: scored, never read. The sealed holdout is never a file."
+            },
+            "state": { "enum": ["draft", "active", "quarantined", "retired"], "default": "draft" },
+            "input": {
+              "type": "object",
+              "description": "The work item as it arrives at the station.",
+              "required": ["title", "body"],
+              "additionalProperties": false,
+              "properties": {
+                "type": { "type": "string" },
+                "lane": { "type": "string" },
+                "title": { "type": "string", "maxLength": 300 },
+                "body": { "type": "string" },
+                "outputs": { "type": "object", "description": "Upstream station outputs already on the item, keyed by station id." }
+              }
+            },
+            "fixture": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repo": {
+                  "type": "object",
+                  "required": ["ref"],
+                  "additionalProperties": false,
+                  "description": "A repository snapshot: checked out at ref, history squashed to one commit, optional patch applied.",
+                  "properties": {
+                    "ref": { "type": "string", "minLength": 1 },
+                    "patch": { "$ref": "#/$defs/relPath" }
+                  }
+                },
+                "cassette": { "$ref": "#/$defs/relPath", "description": "Recorded MCP tool responses (JSONL) served by the gateway in replay mode." },
+                "files": { "type": "array", "items": { "$ref": "#/$defs/relPath" } }
+              }
+            },
+            "reference": {
+              "type": "object",
+              "description": "A known-good solution. It must pass every grader (oracle check) before the case becomes active.",
+              "additionalProperties": false,
+              "properties": {
+                "output": { "type": "object" },
+                "patch": { "$ref": "#/$defs/relPath" },
+                "decision": { "enum": ["approve", "reject"] },
+                "note": { "type": "string" }
+              }
+            },
+            "expect": {
+              "type": "object",
+              "description": "Per-grader expectations, keyed by grader name. Graders define how to check; cases define what to expect.",
+              "minProperties": 1,
+              "propertyNames": { "$ref": "#/$defs/slug" },
+              "additionalProperties": { "$ref": "#/$defs/expectation" }
+            },
+            "trials": { "type": "integer", "minimum": 1, "maximum": 20 },
+            "timeoutMinutes": { "type": "integer", "minimum": 1, "maximum": 240 },
+            "notes": { "type": "string" }
+          },
+          "anyOf": [ { "required": ["agent"] }, { "required": ["station"] } ]
+        }
+      }
+    },
+
+    "expectation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "equals": {},
+        "oneOf": { "type": "array", "minItems": 1 },
+        "pattern": { "type": "string" },
+        "notPattern": { "type": "string" },
+        "minItems": { "type": "integer", "minimum": 0 },
+        "maxItems": { "type": "integer", "minimum": 0 },
+        "decision": { "enum": ["approve", "reject"], "description": "gate: the expected gate decision." },
+        "failToPass": { "type": "array", "items": { "type": "string" }, "description": "command: tests that must fail before and pass after." },
+        "passToPass": { "type": "array", "items": { "type": "string" }, "description": "command: tests that must keep passing." },
+        "added": { "type": "array", "items": { "$ref": "#/$defs/glob" }, "description": "diff-scope/state: at least one new file must match each glob." },
+        "unchanged": { "type": "array", "items": { "$ref": "#/$defs/glob" } },
+        "requiredTools": { "type": "array", "items": { "type": "string" } },
+        "forbiddenTools": { "type": "array", "items": { "type": "string" } },
+        "verdict": { "enum": ["pass", "fail"], "description": "judge: the label a human gave this case's reference output." },
+        "skip": { "type": "boolean", "description": "Do not apply this grader to this case." }
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform/backend.hcl
+terraform/terraform.tfvars
+.env
+/bin/
+node_modules/
+dist/
+.DS_Store
+coverage.out
+coverage.html
+.vercel/

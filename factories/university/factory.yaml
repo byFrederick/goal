@@ -1,0 +1,121 @@
+# yaml-language-server: $schema=../../schema/factory.schema.json
+apiVersion: goal/v1
+kind: Factory
+metadata:
+  id: 32ba7b1b-8167-445c-ae3a-9738f6467b14
+  name: university
+  title: University
+  description: Study partner for courses — plans assignments, researches sources, critiques my drafts against the rubric.
+
+spec:
+  runtime:
+    runner: docker
+    image: ghcr.io/byfrederick/goal-agent:0.1.0
+    auth: claude-subscription
+    model: claude-sonnet-5-5
+    budget:
+      dailyUsd: 8
+      perItemUsd: 2
+      maxTurnsPerTask: 50
+
+  knowledgeBase:
+    collections: [syllabi, lecture-notes, readings, rubrics, feedback, my-submissions]
+    retrieval:
+      topK: 10
+
+  secrets:
+    provider: env                      # env:NAME references; 1Password arrives in the last phase
+
+  connections:
+    - name: knowledge
+      type: builtin
+    - name: zotero
+      type: mcp
+      transport: stdio
+      image: ghcr.io/byfrederick/zotero-mcp:latest      # build from a community Zotero MCP server
+      env:
+        ZOTERO_API_KEY: env:GOAL_UNIVERSITY_ZOTERO_API_KEY
+    - name: scholar
+      type: mcp
+      transport: http
+      url: https://mcp.semanticscholar.example/mcp        # placeholder: pick a Semantic Scholar / arXiv MCP
+
+  skills:
+    - name: academic-research
+      source: ./skills/academic-research
+    - name: academic-paper-reviewer
+      source: skills.sh:imbad0202/academic-research-skills@academic-paper-reviewer
+
+  contracts:
+    study-plan: ./contracts/study-plan.schema.json
+
+  agents:
+    - name: planner
+      description: Reads the assignment, syllabus and rubric; produces a study plan with milestones.
+      prompt: ./agents/planner.md
+      skills: [academic-research]
+      connections: [knowledge]
+      tools: { allow: [Read, Grep, Glob] }
+    - name: researcher
+      description: Finds and summarizes credible sources; saves them to Zotero and the knowledge base.
+      prompt: ./agents/researcher.md
+      skills: [academic-research]
+      connections: [knowledge, zotero, scholar]
+      tools: { allow: [Read, Write, Grep, Glob, WebFetch, WebSearch] }
+    - name: critic
+      description: Grades my draft against the rubric and lists concrete improvements. Never rewrites it.
+      prompt: ./agents/critic.md
+      model: claude-opus-5-5
+      skills: [academic-paper-reviewer]
+      connections: [knowledge]
+      tools: { allow: [Read, Grep, Glob] }
+    - name: librarian
+      description: Files notes, sources and instructor feedback into the knowledge base.
+      prompt: ./agents/librarian.md
+      connections: [knowledge]
+      tools: { allow: [Read, Write, Grep, Glob] }
+
+  board:
+    workTypes: [assignment, exam-prep, reading, project]
+    intake:
+      - source: manual
+      - source: schedule
+        cron: "0 7 * * SUN"
+        template: weekly-review
+        type: exam-prep
+    stations:
+      - id: inbox
+        kind: queue
+      - id: plan
+        kind: agent
+        agent: planner
+        agents: 1
+        wip: 3
+        output: study-plan
+      - id: research
+        kind: agent
+        agent: researcher
+        agents: 2
+        wip: 4
+      - id: write
+        kind: human                     # I write; the factory never submits work on my behalf
+        wip: 2
+      - id: critique
+        kind: agent
+        agent: critic
+        agents: 1
+        wip: 2
+        gate:
+          onReject: write
+          maxRework: 3
+      - id: done
+        kind: done
+    flow:
+      constraint: write                 # the human writing step is the known bottleneck: protect it
+      release: drum-buffer-rope
+
+  learning:
+    librarian:
+      agent: librarian
+      after: [done]
+      writes: [readings, feedback]

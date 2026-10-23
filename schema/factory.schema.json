@@ -1,0 +1,289 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://goal.local/schema/factory.schema.json",
+  "title": "Goal factory",
+  "description": "One file defines a factory: its runtime, knowledge base, connections, skills, agents, board and learning loop.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "goal/v1" },
+    "kind": { "const": "Factory" },
+    "metadata": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "description": "Immutable UUID. Keys the database rows, the knowledge base prefix (<id>/) and every AWS resource, so the name and folder can change freely."
+        },
+        "name": { "$ref": "#/$defs/slug", "description": "Human-friendly slug shown in the UI and CLI. Safe to rename." },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "owner": { "type": "string" }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": ["runtime", "knowledgeBase", "agents", "board"],
+      "additionalProperties": false,
+      "properties": {
+        "runtime": { "$ref": "#/$defs/runtime" },
+        "knowledgeBase": { "$ref": "#/$defs/knowledgeBase" },
+        "secrets": {
+          "type": "object",
+          "required": ["provider"],
+          "additionalProperties": false,
+          "properties": {
+            "provider": { "enum": ["env", "aws-secrets-manager", "1password"], "description": "env now (goald resolves env:NAME from its environment or a local .env); aws-secrets-manager in the cloud; 1password in the last phase." },
+            "vault": { "type": "string" }
+          }
+        },
+        "connections": { "type": "array", "items": { "$ref": "#/$defs/connection" } },
+        "skills": { "type": "array", "items": { "$ref": "#/$defs/skill" } },
+        "contracts": {
+          "type": "object",
+          "description": "Named JSON Schemas that station outputs must satisfy.",
+          "additionalProperties": { "type": "string" }
+        },
+        "agents": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/agent" } },
+        "board": { "$ref": "#/$defs/board" },
+        "learning": { "$ref": "#/$defs/learning" }
+      }
+    }
+  },
+  "$defs": {
+    "slug": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,38}[a-z0-9]$" },
+    "model": { "type": "string", "pattern": "^claude-[a-z0-9-]+$" },
+    "secretRef": {
+      "type": "string",
+      "description": "A literal, an environment reference (env:NAME), or later an AWS Secrets Manager ARN or 1Password reference (op://vault/item/field). goald resolves references on the host; they never reach the agent container."
+    },
+    "runtime": {
+      "type": "object",
+      "required": ["runner", "image", "auth"],
+      "additionalProperties": false,
+      "properties": {
+        "runner": { "enum": ["docker", "ecs"] },
+        "image": { "type": "string" },
+        "auth": { "enum": ["claude-subscription", "anthropic-api-key", "bedrock"] },
+        "model": { "$ref": "#/$defs/model" },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "dailyUsd": { "type": "number", "minimum": 0 },
+            "perItemUsd": { "type": "number", "minimum": 0 },
+            "maxTurnsPerTask": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "knowledgeBase": {
+      "type": "object",
+      "required": ["collections"],
+      "additionalProperties": false,
+      "description": "Documents live under s3://<knowledge bucket>/<metadata.id>/<collection>/.",
+      "properties": {
+        "collections": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/slug" } },
+        "retrieval": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "topK": { "type": "integer", "minimum": 1, "maximum": 50 } }
+        },
+        "ingestion": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "schedule": { "type": "string" } }
+        }
+      }
+    },
+    "connection": {
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "$ref": "#/$defs/slug" },
+        "type": { "enum": ["builtin", "mcp", "aws"] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "mcp" } } },
+          "then": {
+            "required": ["transport"],
+            "properties": {
+              "transport": { "enum": ["http", "stdio"] },
+              "url": { "type": "string", "format": "uri" },
+              "image": { "type": "string" },
+              "command": { "type": "array", "items": { "type": "string" } },
+              "headers": { "type": "object", "additionalProperties": { "$ref": "#/$defs/secretRef" } },
+              "env": { "type": "object", "additionalProperties": { "$ref": "#/$defs/secretRef" } }
+            },
+            "oneOf": [
+              { "properties": { "transport": { "const": "http" } }, "required": ["url"] },
+              { "properties": { "transport": { "const": "stdio" } }, "anyOf": [ { "required": ["image"] }, { "required": ["command"] } ] }
+            ]
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "aws" } } },
+          "then": {
+            "required": ["roleArn"],
+            "properties": {
+              "roleArn": { "type": "string", "pattern": "^arn:aws:iam::\\d{12}:role/.+$" },
+              "region": { "type": "string" }
+            }
+          }
+        }
+      ]
+    },
+    "skill": {
+      "type": "object",
+      "required": ["name", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/slug" },
+        "source": {
+          "type": "string",
+          "description": "A local folder (./skills/x) or a skills.sh reference (skills.sh:owner/repo@skill), pinned by the lockfile.",
+          "pattern": "^(\\./.+|skills\\.sh:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+)$"
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "required": ["name", "prompt"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/slug" },
+        "description": { "type": "string" },
+        "prompt": { "type": "string" },
+        "model": { "$ref": "#/$defs/model" },
+        "skills": { "type": "array", "items": { "type": "string" } },
+        "connections": { "type": "array", "items": { "type": "string" } },
+        "tools": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "allow": { "type": "array", "items": { "type": "string" } },
+            "deny": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "station": {
+      "type": "object",
+      "required": ["id", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": { "enum": ["queue", "agent", "human", "done"] },
+        "agent": { "type": "string" },
+        "route": {
+          "type": "object",
+          "description": "Pick the agent by the item's lane instead of one fixed agent, e.g. { backend: backend-engineer, frontend: frontend-engineer }.",
+          "minProperties": 1,
+          "additionalProperties": { "type": "string" }
+        },
+        "agents": { "type": "integer", "minimum": 1, "maximum": 20, "description": "Parallel agent containers at this station." },
+        "wip": { "type": "integer", "minimum": 1, "description": "Max items in progress at this station." },
+        "buffer": { "type": "integer", "minimum": 0, "description": "Items kept ready in front of the station (use at the constraint)." },
+        "output": { "type": "string", "description": "Name of a contract the station's result must satisfy." },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["kind"],
+            "properties": {
+              "kind": { "enum": ["schema", "evidence-links", "command"] },
+              "min": { "type": "integer" },
+              "run": { "type": "string" }
+            }
+          }
+        },
+        "gate": {
+          "type": "object",
+          "required": ["onReject"],
+          "additionalProperties": false,
+          "properties": {
+            "onReject": { "type": "string" },
+            "maxRework": { "type": "integer", "minimum": 0, "maximum": 5 }
+          }
+        }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": "agent" } } }, "then": { "oneOf": [ { "required": ["agent"] }, { "required": ["route"] } ] } }
+      ]
+    },
+    "board": {
+      "type": "object",
+      "required": ["stations"],
+      "additionalProperties": false,
+      "properties": {
+        "workTypes": { "type": "array", "items": { "$ref": "#/$defs/slug" } },
+        "intake": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["source"],
+            "properties": {
+              "source": { "enum": ["manual", "github-issues", "schedule", "webhook", "email"] },
+              "repo": { "type": "string" },
+              "labels": { "type": "array", "items": { "type": "string" } },
+              "cron": { "type": "string" },
+              "template": { "type": "string" },
+              "type": { "type": "string" }
+            }
+          }
+        },
+        "stations": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/station" } },
+        "flow": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "expedite": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "types": { "type": "array", "items": { "type": "string" } },
+                "wip": { "type": "integer", "minimum": 1 }
+              }
+            },
+            "constraint": { "type": "string", "description": "auto, or a station id." },
+            "release": { "enum": ["drum-buffer-rope", "push"] },
+            "andon": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "reworkRate": { "type": "number", "minimum": 0, "maximum": 1 },
+                "window": { "type": "integer", "minimum": 1 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "learning": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "librarian": {
+          "type": "object",
+          "required": ["agent"],
+          "additionalProperties": false,
+          "properties": {
+            "agent": { "type": "string" },
+            "after": { "type": "array", "items": { "type": "string" }, "description": "Stations whose completion triggers the librarian." },
+            "writes": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "kaizen": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "schedule": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,58 @@
+# yaml-language-server: $schema=../../../../schema/evals.schema.json
+apiVersion: goal/v1
+kind: EvalCase
+metadata:
+  id: 3511f9ff-4c61-48f2-ba2c-2ae21d493539
+  name: investigator-bad-deploy-env-var
+  title: 5xx after a deploy that pointed checkout at an unresolvable payments host
+  tags: [investigator, deploys]
+  origin:
+    kind: incident
+    note: Shape of a common real failure; all names, accounts and hosts are neutral samples.
+
+spec:
+  agent: investigator
+  station: investigate
+  purpose: capability
+  split: tune
+  state: active
+  input:
+    type: incident
+    title: "ALARM: checkout-api-5xx-rate"
+    body: CloudWatch alarm checkout-api-5xx-rate in ALARM since 2026-10-20T14:07Z (acme-prod, us-east-1).
+    outputs:
+      triage:
+        type: incident
+        severity: sev2
+        summary: checkout-api 5xx ratio at 18% since 14:07Z; orders degraded, no data loss.
+        size: S
+        affected: [checkout-api]
+        next: investigate
+  fixture:
+    cassette: ./fixtures/acme-checkout-5xx.cassette.jsonl
+  reference:
+    output:
+      hypothesis: Task definition checkout-api:143, deployed at 14:02Z, changed PAYMENTS_API_URL to http://payments.internal:8080, a host that does not resolve; payment authorization fails and returns 5xx.
+      confidence: 0.85
+      evidence:
+        - source: aws
+          link: "aws ecs describe-services --cluster acme-prod --services checkout-api"
+          finding: Deployment of checkout-api:143 at 14:02:11Z; previous revision 142.
+        - source: aws
+          link: "aws ecs describe-task-definition --task-definition checkout-api:143"
+          finding: PAYMENTS_API_URL is http://payments.internal:8080 (revision 142 had https://payments.acme.example.com).
+        - source: aws
+          link: "aws logs start-query --log-group-name /ecs/checkout-api"
+          finding: '1842 "lookup payments.internal: no such host" errors since 14:02Z.'
+        - source: grafana
+          link: https://grafana.example.com/d/checkout-api/overview?from=1760967000000&to=1760970600000
+          finding: 5xx ratio steps from 0.2% to 17% between 14:00 and 14:05.
+        - source: aws
+          link: "aws rds describe-db-instances --db-instance-identifier acme-checkout-db"
+          finding: Ruled out the database; available, CPU 22%, 41 of 500 connections.
+      recommendation: Roll the service back to checkout-api:142, then fix PAYMENTS_API_URL in commit 7c2e91d and redeploy.
+      risk: medium
+      runbook: runbooks/checkout-api-5xx.md
+  expect:
+    hypothesis: { pattern: "(?i)PAYMENTS_API_URL|payments\\.internal" }
+    risk: { oneOf: [medium, high] }

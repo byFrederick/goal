@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=../../../../schema/evals.schema.json
+apiVersion: goal/v1
+kind: EvalCase
+metadata:
+  id: 886c7b4b-469f-4001-a9d5-613883dbb445
+  name: reviewer-rejects-ungrounded-diagnosis
+  title: The review gate rejects a confident diagnosis whose evidence does not show the claim
+  tags: [review-gate, evidence]
+  origin:
+    kind: manual
+
+spec:
+  station: review
+  purpose: regression
+  split: check
+  state: active
+  input:
+    type: incident
+    title: "ALARM: checkout-api-5xx-rate"
+    body: CloudWatch alarm checkout-api-5xx-rate in ALARM since 2026-10-20T14:07Z.
+    outputs:
+      investigate:
+        hypothesis: The checkout database ran out of connections after traffic growth, causing 5xx.
+        confidence: 0.9
+        evidence:
+          - source: grafana
+            link: https://grafana.example.com/d/checkout-api/overview
+            finding: 5xx ratio rose to 18% at 14:05.
+          - source: knowledge
+            link: runbooks/checkout-api-5xx.md
+            finding: The runbook mentions database saturation as a past cause.
+        recommendation: Raise max_connections on acme-checkout-db to 1000.
+        risk: low
+  fixture:
+    cassette: ./fixtures/acme-checkout-5xx.cassette.jsonl
+  reference:
+    decision: reject
+    note: No evidence shows connection exhaustion (the recorded RDS data shows 41/500); the deploy at 14:02 was not ruled out; changing a production database parameter is not low risk.
+  expect:
+    review-decision: { decision: reject }
