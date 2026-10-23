@@ -4,7 +4,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/byFrederick/factory/internal/domain"
+	"github.com/byFrederick/goal/internal/domain"
 )
 
 // Line converts a validated factory into the line the engine runs. It reads only the parsed

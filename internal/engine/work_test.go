@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/byFrederick/factory/internal/domain"
-	"github.com/byFrederick/factory/internal/ports"
-	"github.com/byFrederick/factory/internal/ports/porttest"
+	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/ports/porttest"
 )
 
 func TestRun_SuccessMovesItemToTheNextStation(t *testing.T) {

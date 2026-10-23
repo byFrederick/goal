@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/byFrederick/factory/internal/config"
+	"github.com/byFrederick/goal/internal/config"
 )
 
 const usage = `usage: goal validate [factory-dir ...]

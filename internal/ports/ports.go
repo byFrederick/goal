@@ -12,7 +12,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/byFrederick/factory/internal/domain"
+	"github.com/byFrederick/goal/internal/domain"
 )
 
 // Errors adapters return so the engine can tell expected races from failures. Adapters wrap

@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/byFrederick/factory/internal/domain"
-	"github.com/byFrederick/factory/internal/ports"
+	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/ports"
 )
 
 // maxAttempts is one run plus one retry when the output breaks the station's contract.

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/byFrederick/factory/internal/ports"
+	"github.com/byFrederick/goal/internal/ports"
 )
 
 var _ ports.Secrets = Secrets(nil)

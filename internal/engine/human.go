@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/byFrederick/factory/internal/domain"
-	"github.com/byFrederick/factory/internal/ports"
+	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/ports"
 )
 
 // Approve records a human's approval of an item waiting for one (at a human station, or a

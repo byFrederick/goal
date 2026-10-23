@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/byFrederick/factory/internal/domain"
+	"github.com/byFrederick/goal/internal/domain"
 )
 
 func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {

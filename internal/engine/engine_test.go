@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/byFrederick/factory/internal/domain"
-	"github.com/byFrederick/factory/internal/engine"
-	"github.com/byFrederick/factory/internal/ports"
-	"github.com/byFrederick/factory/internal/ports/porttest"
+	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/engine"
+	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/ports/porttest"
 )
 
 const factoryID domain.FactoryID = "31efd04e-b231-4939-9f13-8986bf7e462a"

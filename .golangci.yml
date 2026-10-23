@@ -118,14 +118,14 @@ linters:
         domain:
           files: ["**/internal/domain/**"]
           deny:
-            - pkg: github.com/byFrederick/factory/internal/
+            - pkg: github.com/byFrederick/goal/internal/
               desc: domain imports only the standard library
         engine:
           files: ["**/internal/engine/**", "**/internal/ports/**"]
           deny:
-            - pkg: github.com/byFrederick/factory/internal/adapters
+            - pkg: github.com/byFrederick/goal/internal/adapters
               desc: the engine talks to the outside world only through ports
-            - pkg: github.com/byFrederick/factory/internal/config
+            - pkg: github.com/byFrederick/goal/internal/config
               desc: the engine receives domain types, not file loaders
             - pkg: github.com/jackc/pgx
               desc: database access belongs in internal/adapters/postgres
@@ -136,7 +136,7 @@ linters:
         adapters:
           files: ["**/internal/adapters/**"]
           deny:
-            - pkg: github.com/byFrederick/factory/internal/engine
+            - pkg: github.com/byFrederick/goal/internal/engine
               desc: adapters implement ports; they never call the engine
     dupl:
       threshold: 100 # lower => stricter (tokens)

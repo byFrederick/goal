@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/byFrederick/factory/internal/domain"
-	"github.com/byFrederick/factory/internal/ports"
+	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/ports"
 )
 
 var _ ports.Store = (*Store)(nil)

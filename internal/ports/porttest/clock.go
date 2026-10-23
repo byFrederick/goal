@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/byFrederick/factory/internal/ports"
+	"github.com/byFrederick/goal/internal/ports"
 )
 
 var _ ports.Clock = (*Clock)(nil)

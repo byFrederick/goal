@@ -4,9 +4,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/byFrederick/factory/internal/domain"
-	"github.com/byFrederick/factory/internal/engine"
-	"github.com/byFrederick/factory/internal/ports/porttest"
+	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/engine"
+	"github.com/byFrederick/goal/internal/ports/porttest"
 )
 
 // humanLine is spec → approve (human) → done.

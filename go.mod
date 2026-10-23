@@ -1,4 +1,4 @@
-module github.com/byFrederick/factory
+module github.com/byFrederick/goal
 
 go 1.26.10
 

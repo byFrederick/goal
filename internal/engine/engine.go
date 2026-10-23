@@ -27,8 +27,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/byFrederick/factory/internal/domain"
-	"github.com/byFrederick/factory/internal/ports"
+	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/ports"
 )
 
 // ErrNotWaitingHuman means a human decision was made on an item that is not waiting for one.

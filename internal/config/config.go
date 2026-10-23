@@ -18,7 +18,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"sigs.k8s.io/yaml"
 
-	"github.com/byFrederick/factory/schema"
+	"github.com/byFrederick/goal/schema"
 )
 
 // Factory is one parsed factories/<name>/factory.yaml.
