@@ -21,12 +21,12 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object s
 | `internal/domain` | standard library | anything else in `internal/` |
 | `internal/ports` | `domain` | adapters, engine |
 | `internal/engine` | `domain`, `ports` | `adapters`, `config`, database or cloud SDKs |
-| `internal/adapters/*` | `domain`, `ports`, their own SDK | `engine`, other adapters |
+| `internal/adapters/*` | `domain`, `ports`, their own SDK | `engine`, `api`, other adapters |
 | `internal/config` | `domain` | adapters, engine |
 | `internal/factorystore` | `config`, `ports` | adapters, engine, cloud SDKs |
 | `internal/gateway` | `domain`, `ports`, `config`, the MCP Go SDK | adapters, engine, `factorystore`, cloud SDKs |
 | `internal/definitions` | `domain`, `ports`, `config`, `factorystore` | adapters, engine, cloud SDKs |
-| `internal/api` (+ generated `api/gen`) | `domain`, `ports`, `config`, `engine` | adapters, `factorystore`, `gateway`, cloud SDKs |
+| `internal/api` (+ generated `api/gen`) | `domain`, `ports`, `config`, `engine` | adapters, `factorystore`, `definitions`, `gateway`, cloud SDKs |
 | `cmd/*` | everything | — (wiring only) |
 
 `depguard` in `.golangci.yml` enforces every row but the last. A new external system is a new adapter behind an existing or new port; it never adds an import to the engine.
@@ -46,12 +46,16 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object s
 | `Checker` | A station's command checks against a run's workspace, isolated from the host | `docker` (laptop); ECS later |
 | `Sidecars` | A run's stdio MCP servers, each in its own hardened container, used by the gateway | `docker` (laptop); ECS later |
 | `Contracts` | Station outputs against the factory's JSON Schema contracts | `definitions` (over the bucket) |
+| `ItemNotices` | A notice of every committed item event, for the realtime stream | `postgres` (`LISTEN goal_events`) |
+| `CodeHost` | Read, merge and clean up the pull requests of a factory's repository, on the host | `github` (REST API) |
 
 #### Phase 1 signatures
 
 `internal/ports/ports.go` is the source of truth; this is the shape adapters implement.
 
-- `Store`: `CreateItem`, `Item`, `Waiting` (pull order), `Leases`, `ClaimNext(Claim{Station, Slot, Now, ExpiresAt})`, `HeartbeatLease`, `RequeueExpiredLeases`, `StartRun`, `FinishRun`, `Transition` (compare-and-set on station and state, fenced by the lease's `AcquiredAt`), `AppendEvents`, `ItemEvents(item, after, limit)` (paged history for the API). WIP is not counted: the unique `(factory_id, station, slot)` lease makes a claim beyond capacity fail with `ErrSlotTaken`.
+- `Store`: `CreateItem`, `Item`, `Waiting` (pull order), `Leases`, `ClaimNext(Claim{Station, Slot, Now, ExpiresAt})`, `HeartbeatLease`, `RequeueExpiredLeases`, `StartRun`, `FinishRun`, `Transition` (compare-and-set on station and state, fenced by the lease's `AcquiredAt`), `AppendEvents`, `ItemEvents(item, after, limit)` (paged history for the API). WIP is not counted: the unique `(factory_id, station, slot)` lease makes a claim beyond capacity fail with `ErrSlotTaken`. Phase 2 adds the reads behind the board and metrics: `ItemByNumber(factory, n)`, `ListItems(ItemQuery{States, Station, Before, Limit})` (newest first, paged by number), `StationLoads(factory)` (waiting and in progress per station, from the `station_wip` view) and `FlowMetrics(factory, since, until)` (done per UTC day, lead-time p50/p85 by linear interpolation, reworked, WIP now, spend of runs started in the window).
+- `ItemNotices`: `Listen(ctx, deliver)` calls `deliver` for every committed item event (`ItemNotice{EventID, FactoryID, ItemID, Number, Kind, Station, State, At}`, the state being the item's right after the event) until `ctx` ends. Every time it starts listening, the first time and after each reconnection, it first delivers a `Resync` notice, because events committed while it was disconnected are lost. The `postgres` adapter listens on a connection of its own (not a pooled one) and reconnects with backoff (100 ms doubling to 10 s); the `item_events` trigger (migration 00003) puts the item's number and state in the payload.
+- `CodeHost`: `PullRequest(repo, url)`, `Merge(repo, url, Merge{Method, HeadSHA})` and `DeleteBranch(repo, branch)`. A pull request must belong to `repo` (the factory's `runtime.repository`) and refusals wrap `ErrNotMergeable`. The `github` adapter resolves `repo.AuthRef` through `Secrets` per call, sends it only as the `Authorization` header to the configured API (`GOAL_GITHUB_API_URL`), follows no redirects and scrubs it from every error.
 - `Runner`: `Start(ctx, TaskSpec) (Task, error)`; `Task` has `Events() <-chan RunEvent` and `Wait() (RunResult, error)`. Cancelling `ctx` stops the task. `TaskSpec.WorkspaceDir` is the host path of the run's prepared git checkout. The `docker` adapter runs one hardened container of the worker image per task, stages the agent's prompt, skills and output schema through its `AgentFiles` dependency, and maps the worker's stdout protocol to events and a result; `worker/README.md` is the container contract.
 - `Secrets`: `Resolve(ctx, ref)` for literals and `env:NAME`. `Contracts`: `Validate(ctx, factory, contract, output)`, wrapping `ErrContractViolation` for bad output.
 - `Workspaces`: `Prepare(ctx, WorkspaceSpec{Run, Repository, Branch}) (Workspace, error)` and `Remove`. `Checker`: `Check(ctx, CheckSpec{Image, Command, WorkspaceDir, Timeout}) (CheckResult, error)`; a command that ran and failed is a result, not an error. [ADR 0006](../adr/0006-workspaces-and-command-checks.md) has the decisions behind both.
@@ -77,19 +81,55 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object s
 
 ### HTTP API
 
-`api/openapi.yaml` is the contract ([ADR 0004](../adr/0004-frontend-and-monorepo.md)); `task api:gen` regenerates the Go server interface, models and client in `internal/api/gen` (oapi-codegen, pinned in `Taskfile.yml`; generated code is committed). `internal/api` implements the strict server over three small interfaces (the engine, the store's item reads, the definitions cache) and answers errors as RFC 9457 problem details: 404 for unknown items and factories, 400 for invalid requests, 409 for a decision on an item that is not waiting for a human.
+`api/openapi.yaml` is the contract ([ADR 0004](../adr/0004-frontend-and-monorepo.md)); `task api:gen` regenerates the Go server interface, models and client in `internal/api/gen` (oapi-codegen, pinned in `Taskfile.yml`) and the TypeScript types in `packages/api-client/src/schema.ts` (openapi-typescript); both are committed, and `task check` fails when the TypeScript side is stale. `internal/api` implements the strict server over small interfaces (the engine, the store's reads, the definitions cache, the stream feed, the clock) and answers errors as RFC 9457 problem details: 404 for unknown items and factories, 400 for invalid requests, 409 when the item's state does not allow the action (a decision on an item not waiting for a human, a retry of an item that is not blocked, a merge away from a merge station or one the pull request refuses).
+
+`{item}` is the item's id or `<factory>#<number>` (`goal#2`, the factory by name or id; `#` percent-encoded as `%23`), and every item carries its `ref`. `{factory}` is a factory's id or name.
 
 | Method and path | Does |
 | --- | --- |
 | `GET /v1/health` | liveness |
-| `GET /v1/factories` | the loaded factories with their stations and work types |
-| `POST /v1/factories/{id or name}/items` | submit `{title, type, body?, lane?, priority?}`; the type must be one of the factory's work types |
+| `GET /v1/factories` | the loaded factories with their stations (and a station's `action`) and work types |
+| `POST /v1/factories/{factory}/items` | submit `{title, type, body?, lane?, priority?}`; the type must be one of the factory's work types |
+| `GET /v1/factories/{factory}/items?state=&station=&limit=&after=` | one page of item cards, newest first, and `next_after` (the last number, or null) |
+| `GET /v1/factories/{factory}/board` | the stations in line order with their agents, `wip_limit`, `waiting`, `in_progress` and cards (every open item up to 500, the 20 newest done), and the `constraint` |
+| `GET /v1/factories/{factory}/metrics?window=7d` | throughput per UTC day, lead-time p50/p85 in hours, WIP, rework rate, spend and items done over the last N days |
+| `GET /v1/stream?factory=` | Server-Sent Events of item events (below) |
 | `GET /v1/items/{item}` | the item, with each station's output |
 | `GET /v1/items/{item}/events?after=&limit=` | one page of its history, oldest first, and `next_after` |
 | `POST /v1/items/{item}/approve` | `{by}`: a human approves an item waiting for one |
 | `POST /v1/items/{item}/reject` | `{by, reason}`: sends it back for rework |
+| `POST /v1/items/{item}/retry` | `{by}`: a blocked item goes back to its station's queue; its rework count is unchanged |
+| `POST /v1/items/{item}/merge` | `{by, method?: squash}`: merge the item's pull request, then approve it (below) |
 
-Phase 1 has no API authentication: `goald` refuses to listen on anything but a loopback address. The CLI (`goal run`, `follow`, `item`, `approve`, `reject`) uses the generated client.
+An item card is `{id, ref, number, title, type, lane, station, state, class_of_service, rework_count, cost_usd, created_at, updated_at, age_seconds, agent, pr_url}`: `agent` is the lease holder's agent while the item is in progress, `pr_url` the `pull_request` field of the item's latest station output, `age_seconds` the time since creation (created to done for a done item).
+
+The board's `constraint` is the agent station with the most work per slot right now, `(waiting + in_progress) / min(agents, wip)`, ties to the upstream station, null when no agent station has work. It is a snapshot heuristic; constraint detection over time (phase 4) replaces it. Metrics count items that reached done in the window (the last N UTC calendar days, today included, 1d to 90d) and the cost of agent runs started in it; WIP is the items now neither done nor cancelled, the rework rate the share of the items done in the window that were sent back at least once.
+
+No API authentication yet: `goald` refuses to listen on anything but a loopback address. The CLI (`goal run`, `follow`, `item`, `approve`, `reject`, `retry`, `merge`) uses the generated Go client; a bare item number resolves when exactly one factory has an item with it (`--factory` otherwise). The web UI uses `@goal/api-client` (`packages/api-client`): `createGoalClient(baseUrl)` (openapi-fetch over the generated types) and `subscribe(baseUrl, handlers, factory?)` over the stream.
+
+#### Realtime stream
+
+`GET /v1/stream` is `text/event-stream`. Each committed item event is `event: item`, `id:` the event id, `data:` `{item_id, ref, factory_id, kind, station, state, at}` (`StreamEvent` in the contract); `?factory=` keeps one factory's. `event: resync` (`data: {}`) says events may have been missed, so the client re-reads what it shows; a `: heartbeat` comment comes every 15 s and `retry: 3000` opens the stream. There is no replay (`Last-Event-ID` is ignored): a client re-reads on every (re)connection, which `subscribe` signals as a resync.
+
+```
+item_events INSERT ── trigger notify_item_event() ── pg_notify('goal_events', {id, factory_id, item_id, number, kind, station, state, at})
+        │  (any goald instance, in the transaction that changes the item)
+        ▼
+goald: postgres.Notices.Listen (one connection, reconnect + Resync) ──▶ api.Feed (fan-out) ──▶ each SSE client of this instance
+```
+
+Each instance listens once and fans out to its own clients, so `goald` stays stateless and any instance serves any client. A client that falls 256 notices behind has its stream ended (it reconnects and re-reads) so it never holds up the others; at shutdown the feed ends every stream before HTTP drains.
+
+#### Merge stations
+
+A human station may declare `action: merge` (schema: human stations only; the factory needs `runtime.repository`). `POST /v1/items/{item}/merge` (`goal merge <item>`) is `engine.Merge`:
+
+1. The item must be waiting at that station (409 otherwise), and one of its outputs must name a `pull_request` URL on the factory's repository (409 otherwise). The latest station on the line that names one wins.
+2. Through `CodeHost` with the repository's token: read the pull request; refuse (409, nothing changed) unless it is open and GitHub reports it mergeable. Then merge it with `merge_method` squash and the head SHA just read, so GitHub refuses if the branch moved; never forced. Read it again and require `merged`.
+3. Delete the pull request's head branch, only when it lives on the same repository and is not its base branch; a failure there is logged, not fatal. Nothing else is ever deleted.
+4. Approve the item in one transition with a `merged` event (`pull_request`, `sha`, `method`, `branch_deleted`) and an `approved` event by `by`.
+
+A pull request that is already merged (a merge whose approval failed) is approved again, so the step is safe to retry. No credential reaches events, errors or logs.
 
 ### Factory definitions in object storage
 
@@ -116,14 +156,16 @@ settings (env) ─┬─ envsecrets.New ─────────────�
                 ├─ s3store.New → factorystore.New → definitions.New(catalog, load) ─┐
                 │      Contracts, gateway.Definitions, docker.AgentFiles ◀──────────┘
                 ├─ gitworkspace.New(secrets) ─────────────────────┤ Workspaces
+                ├─ github.New(secrets, GOAL_GITHUB_API_URL) ──────┤ CodeHost
                 ├─ docker client → docker.New(defs) / NewChecker ─┤ Runner, Checker
                 │      docker.NewSidecars → gateway.New(defs, secrets, store, sidecars)
                 └─ sysclock.Clock ────────────────────────────────┤ Clock
                                                                   ▼
                         engine.New(Deps{..., RunEnded: gateway.EndRun}, Config{GatewayURL, GatewayKeyRef, TaskEnv})
    load hook: every refresh → store.SaveFactory(each) → engine.SetLines(lines)
-   http.ServeMux: /v1/ → api.New(engine, store, defs)    /mcp → gateway
-   goroutines: engine.Run (ticks + lease sweep), definitions refresh (GOAL_REFRESH_EVERY), HTTP
+   postgres.NewNotices(pool's conn config) → api.NewFeed ─────────── ItemNotices for /v1/stream
+   http.ServeMux: /v1/ → api.New(engine, store, defs, feed, clock)    /mcp → gateway
+   goroutines: engine.Run (ticks + lease sweep), definitions refresh (GOAL_REFRESH_EVERY), feed.Run, HTTP
    startup: Refresh, then reap orphaned containers (task, check, sidecar), run folders and workspaces
    shutdown: HTTP, then the engine, then gateway.Close (stops every sidecar)
    SIGTERM: HTTP shutdown, engine context cancelled → runs stopped, items released to their queue
@@ -153,7 +195,8 @@ goal run goal "Add a goal version subcommand"
                           (retry once with the failing output)
       Workspaces.Remove
   → Transition to the next station (approve-spec: waiting_human)
-goal approve <item>       POST /v1/items/<id>/approve → build, then review, then merge (human)
+goal approve goal#N       POST /v1/items/goal%23N/approve → build, then review, then merge (human)
+goal merge goal#N         POST /v1/items/goal%23N/merge → squash-merge the build's pull request, approve → done
 ``` A constructor takes its dependencies as interfaces and returns a concrete type.
 
 ## Scale and failure

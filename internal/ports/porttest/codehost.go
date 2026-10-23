@@ -55,7 +55,7 @@ func (c *CodeHost) PullRequest(_ context.Context, _ domain.Repository, url strin
 
 	pr, ok := c.prs[url]
 	if !ok {
-		return ports.PullRequest{}, fmt.Errorf("pull request %s: %w", url, ports.ErrNotFound)
+		return ports.PullRequest{}, fmt.Errorf("pull request %s does not exist: %w", url, ports.ErrNotMergeable)
 	}
 
 	return *pr, nil
@@ -71,7 +71,7 @@ func (c *CodeHost) Merge(_ context.Context, _ domain.Repository, url string, m p
 	pr, ok := c.prs[url]
 	switch {
 	case !ok:
-		return "", fmt.Errorf("pull request %s: %w", url, ports.ErrNotFound)
+		return "", fmt.Errorf("pull request %s does not exist: %w", url, ports.ErrNotMergeable)
 	case !pr.Open || !pr.Mergeable:
 		return "", fmt.Errorf("pull request %s: %w", url, ports.ErrNotMergeable)
 	case pr.HeadSHA != m.HeadSHA:

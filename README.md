@@ -5,13 +5,14 @@ Goal runs AI agent factories on your machine. A factory is a definition: `factor
 Factory definitions are content, not code. They live in one versioned S3-compatible bucket, not in this repository (ADR 0005). The first factory, `goal`, builds this repository; others (`sre`, `university`) run the same engine on other work.
 
 ```
-cmd/goal/              CLI: goal up, run, follow, item, approve, reject; goal factory validate|push|pull|list; goal storage init
-cmd/goald/             daemon: flow engine, HTTP API (/v1/), MCP gateway (/mcp), Docker agent runs
-api/                   openapi.yaml: the HTTP API contract (Go types generated into internal/api/gen)
+cmd/goal/              CLI: goal up, run, follow, item, approve, reject, retry, merge; goal factory validate|push|pull|list; goal storage init
+cmd/goald/             daemon: flow engine, HTTP API (/v1/, with an SSE stream), MCP gateway (/mcp), Docker agent runs
+api/                   openapi.yaml: the HTTP API contract (Go types in internal/api/gen, TypeScript in packages/api-client)
 internal/engine/       flow engine: pull, WIP, gates, workspaces and command checks per run
 internal/config/       loader and cross-reference validation (reads a folder or a bucket prefix)
 internal/factorystore/ bucket layout factories/<id>/: push, pull, list
-internal/adapters/     postgres, s3store (S3 and RustFS), docker (runner, checker), gitworkspace, envsecrets, sysclock
+internal/adapters/     postgres (store, LISTEN/NOTIFY), s3store (S3 and RustFS), docker (runner, checker), gitworkspace, github (merges), envsecrets, sysclock
+packages/api-client/   @goal/api-client: typed TypeScript client of the API (generated types + openapi-fetch) for the UI
 schema/                factory.schema.json, evals.schema.json (editor autocompletion + validation)
 migrations/            PostgreSQL schema (goose, forward-only)
 queries/               SQL for sqlc (pgx/v5)
@@ -53,10 +54,14 @@ task worker:image-dev                              # the agent image the goal fa
 task up                                            # PostgreSQL + RustFS, bucket, then goald in the foreground
 task factory:push DIR=../goal-factories/goal       # in another terminal: the definition goald runs
 bin/goal run goal "Add a goal version subcommand"  # submit; prints the timeline until a human must act
-bin/goal item <item>                               # read the spec the architect wrote
-bin/goal approve <item> --by "$USER"               # approve-spec → build → review → merge (you)
-bin/goal follow <item>                             # follow it again
+bin/goal item goal#2                               # read the spec the architect wrote (or: goal item 2)
+bin/goal approve goal#2 --by "$USER"               # approve-spec → build → review → merge (you)
+bin/goal follow goal#2                             # follow it again
+bin/goal merge goal#2                              # at the merge station: goald merges the pull request, then approves
+bin/goal retry goal#2                              # a blocked item goes back to its station's queue
 ```
+
+An item is `<factory>#<number>` (`goal#2`), its id, or a bare number when only one factory has an item with it (`--factory` picks one otherwise). `goal merge` works at a human station marked `action: merge` in `factory.yaml`: goald squash-merges the pull request named by the item's latest `pull_request` output on `runtime.repository`, with that repository's token, only if GitHub reports it open and mergeable; it never forces, and deletes only the pull request's head branch afterwards.
 
 `goal up` does not push factories: goald runs what the bucket holds and picks up pushes within `GOAL_REFRESH_EVERY` (or at once when `goal run` names a new factory). Ctrl-C stops goald and returns in-flight items to their queue; `docker compose down` stops PostgreSQL and RustFS (volumes stay). Each agent run works in a fresh clone of the factory's `runtime.repository` on the item's branch (`goal/<number>-<slug>`); the GitHub token is used on the host only, for the clone and inside the MCP gateway, and never reaches a container. Station command checks (`task check`, `task migrate-check`) run in a separate hardened container of the same image ([ADR 0006](docs/adr/0006-workspaces-and-command-checks.md)).
 
