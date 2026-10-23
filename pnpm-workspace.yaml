@@ -1,5 +1,6 @@
 packages:
   - worker
+  - packages/*
 
 # pnpm holds back releases younger than its minimum release age. The worker pins the newest
 # Claude Agent SDK on purpose; these exact versions (and the SDK's peers) are exempt. Drop an

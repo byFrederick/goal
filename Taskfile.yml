@@ -85,9 +85,11 @@ tasks:
       - sqlc generate
 
   api:gen:
-    desc: Regenerate the Go server types and client in internal/api/gen from api/openapi.yaml
+    desc: Regenerate both clients of api/openapi.yaml, the Go server and client (internal/api/gen) and the TypeScript types (packages/api-client)
+    deps: [worker:install]
     cmds:
       - go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@{{.OAPI_CODEGEN_VERSION}} -config internal/api/gen/oapi-codegen.yaml api/openapi.yaml
+      - pnpm --filter @goal/api-client run --silent gen
 
   validate:
     desc: Validate factory definitions (the test fixtures by default; FACTORIES=<glob> for others)
@@ -143,12 +145,13 @@ tasks:
       - task: lint
       - task: test
       - task: worker:check
+      - task: api-client:check
       - task: validate
       - task: tf-check
 
   worker:install:
     desc: Install the pnpm workspace's dependencies from the lockfile
-    sources: [package.json, pnpm-lock.yaml, pnpm-workspace.yaml, worker/package.json]
+    sources: [package.json, pnpm-lock.yaml, pnpm-workspace.yaml, worker/package.json, packages/*/package.json]
     cmds:
       - pnpm install --frozen-lockfile
 
@@ -160,6 +163,14 @@ tasks:
       - pnpm run --silent typecheck
       - pnpm run --silent lint
       - pnpm run --silent test
+
+  api-client:check:
+    desc: TypeScript API client typecheck, and its generated types match api/openapi.yaml
+    deps: [worker:install]
+    dir: packages/api-client
+    cmds:
+      - pnpm run --silent check:gen
+      - pnpm run --silent typecheck
 
   worker:image:
     desc: Build the agent worker image locally (WORKER_IMAGE); never pushes
