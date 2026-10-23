@@ -117,12 +117,19 @@ func startUpstream(t *testing.T) (*upstream, string) {
 	srv.AddTool(&mcp.Tool{Name: "leak", InputSchema: anyInput}, func(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return nil, &jsonrpc.Error{Code: jsonrpc.CodeInternalError, Message: "bad credential " + req.Extra.Header.Get("Authorization")}
 	})
+	// get_repo mirrors its repo argument into an Mcp-Param-Repo header, which servers on the
+	// 2026 protocol require (GitHub's MCP server does).
+	repoInput := json.RawMessage(`{"type":"object","properties":{"repo":{"type":"string","x-mcp-header":"Repo"}}}`)
+	srv.AddTool(&mcp.Tool{Name: "get_repo", InputSchema: repoInput}, func(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "repo " + req.Extra.Header.Get("Mcp-Param-Repo")}}}, nil
+	})
 	srv.AddTool(&mcp.Tool{Name: "big", InputSchema: anyInput}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: strings.Repeat("x", 64<<10)}}}, nil
 	})
 
 	u := &upstream{}
-	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil)
+	// Stateless, like GitHub's MCP server: sessions negotiate the 2026 protocol.
+	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, &mcp.StreamableHTTPOptions{Stateless: true})
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		u.auths = append(u.auths, r.Header.Get("Authorization"))
@@ -289,7 +296,7 @@ func testListTools(t *testing.T, protocol string) {
 		t.Fatal(err)
 	}
 
-	want := []string{"tracker__big", "tracker__echo", "tracker__get_issue", "tracker__leak", "tracker__whoami"}
+	want := []string{"tracker__big", "tracker__echo", "tracker__get_issue", "tracker__get_repo", "tracker__leak", "tracker__whoami"}
 	if got := toolNames(res); !slices.Equal(got, want) {
 		t.Fatalf("tools = %v, want %v", got, want)
 	}
@@ -351,6 +358,22 @@ func TestGateway_CallProxiesWithHostCredentialsAndAudits(t *testing.T) {
 	}
 
 	checkEchoEvent(t, events[0])
+}
+
+func TestGateway_CallSendsTheParamHeadersTheUpstreamRequires(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, Config{})
+	cs := h.connect(t, "")
+
+	res, err := cs.CallTool(t.Context(), &mcp.CallToolParams{Name: "tracker__get_repo", Arguments: map[string]any{"repo": "acme/app"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if text, _ := res.Content[0].(*mcp.TextContent); res.IsError || text == nil || text.Text != "repo acme/app" {
+		t.Fatalf("result = %v (error %v), want the upstream to have received Mcp-Param-Repo", res.Content[0], res.IsError)
+	}
 }
 
 func checkEchoEvent(t *testing.T, e domain.Event) {

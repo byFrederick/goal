@@ -265,6 +265,18 @@ func (s *session) callTool(ctx context.Context, p *mcp.CallToolParamsRaw) (*mcp.
 
 var errResultTooLarge = errors.New("tool result exceeds the gateway's size limit")
 
+// learnTool lists the upstream's tools until it has seen tool. Servers on the 2026 protocol
+// require Mcp-Param-* headers that mirror arguments the tool's schema annotates
+// (x-mcp-header), and the SDK adds them only for tools this client session has listed. A failed
+// listing is left to the call itself to report.
+func learnTool(ctx context.Context, cs *mcp.ClientSession, tool string) {
+	for t, err := range cs.Tools(ctx, nil) {
+		if err != nil || t.Name == tool {
+			return
+		}
+	}
+}
+
 // forward calls tool on c and returns its result with credentials scrubbed, and its size.
 func (s *session) forward(ctx context.Context, c *connection, tool string, args json.RawMessage) (*mcp.CallToolResult, int, error) {
 	ctx, cancel := upstreamContext(ctx, s.g.cfg.CallTimeout)
@@ -280,6 +292,8 @@ func (s *session) forward(ctx context.Context, c *connection, tool string, args 
 	if len(args) > 0 {
 		params.Arguments = args
 	}
+
+	learnTool(ctx, cs, tool)
 
 	res, err := cs.CallTool(ctx, params)
 	if err != nil {
