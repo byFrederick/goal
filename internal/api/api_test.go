@@ -1,0 +1,289 @@
+package api_test
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/byFrederick/goal/internal/api"
+	"github.com/byFrederick/goal/internal/api/gen"
+	"github.com/byFrederick/goal/internal/config"
+	"github.com/byFrederick/goal/internal/definitions"
+	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/engine"
+	"github.com/byFrederick/goal/internal/factorystore"
+	"github.com/byFrederick/goal/internal/ports/porttest"
+)
+
+const (
+	acmeID    = "8d4f2b1a-3c5e-4f60-9a7b-1c2d3e4f5a6b"
+	acmeItems = "/v1/factories/acme/items"
+)
+
+// acme is inbox → approve (human) → done: enough to submit, read and decide on items.
+const acme = `apiVersion: goal/v1
+kind: Factory
+metadata: { id: ` + acmeID + `, name: acme, title: Acme }
+spec:
+  runtime: { runner: docker, image: ghcr.io/acme/agent:1.0.0, auth: anthropic-api-key }
+  knowledgeBase: { collections: [notes] }
+  agents:
+    - { name: writer, prompt: ./agents/writer.md }
+  board:
+    workTypes: [feature, fix]
+    stations:
+      - { id: inbox, kind: queue }
+      - { id: approve, kind: human }
+      - { id: done, kind: done }
+`
+
+type harness struct {
+	srv    *httptest.Server
+	engine *engine.Engine
+	store  *porttest.Store
+}
+
+func newHarness(t *testing.T) *harness {
+	t.Helper()
+
+	dir := t.TempDir()
+	for name, body := range map[string]string{"factory.yaml": acme, "agents/writer.md": "# writer\n"} {
+		if err := os.MkdirAll(filepath.Join(dir, filepath.Dir(name)), 0o750); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	catalog := factorystore.New(porttest.NewObjectStore())
+	if _, _, err := catalog.Push(t.Context(), dir); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &harness{store: porttest.NewStore()}
+
+	e, err := engine.New(engine.Deps{
+		Store: h.store, Runner: porttest.NewRunner(porttest.Succeed(`{}`)), Workspaces: porttest.NewWorkspaces(),
+		Checker: porttest.NewChecker(), Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{},
+		Clock: porttest.NewClock(time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)),
+	}, engine.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.engine = e
+
+	// As goald does: the definitions cache hands every loaded factory's line to the engine.
+	defs := definitions.New(catalog, func(_ context.Context, fs []*config.Factory) error {
+		lines := make([]domain.Line, 0, len(fs))
+		for _, f := range fs {
+			lines = append(lines, f.Line())
+		}
+
+		return e.SetLines(lines)
+	}, nil)
+
+	handler, err := api.New(api.Deps{Engine: e, Items: h.store, Factories: defs})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.srv = httptest.NewServer(handler)
+	t.Cleanup(h.srv.Close)
+
+	return h
+}
+
+// call sends a JSON request and decodes the response into out (when not nil), returning the
+// status code.
+func (h *harness) call(t *testing.T, method, path, body string, out any) int {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(t.Context(), method, h.srv.URL+path, strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = res.Body.Close() }()
+
+	raw, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if res.StatusCode >= 400 && res.Header.Get("Content-Type") != "application/problem+json" {
+		t.Errorf("%s %s: error content type %q, want problem details", method, path, res.Header.Get("Content-Type"))
+	}
+
+	if out != nil {
+		if err := json.Unmarshal(raw, out); err != nil {
+			t.Fatalf("%s %s: decode %s: %v", method, path, raw, err)
+		}
+	}
+
+	return res.StatusCode
+}
+
+func (h *harness) submit(t *testing.T) gen.Item {
+	t.Helper()
+
+	var it gen.Item
+	if code := h.call(t, http.MethodPost, acmeItems, `{"title":"Add a version command","type":"feature"}`, &it); code != http.StatusCreated {
+		t.Fatalf("submit = %d, want 201", code)
+	}
+
+	return it
+}
+
+func TestAPI_HealthAndFactories(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	var health gen.Health
+	if code := h.call(t, http.MethodGet, "/v1/health", "", &health); code != http.StatusOK || health.Status != "ok" {
+		t.Errorf("health = %d %+v", code, health)
+	}
+
+	var list gen.FactoryList
+	if code := h.call(t, http.MethodGet, "/v1/factories", "", &list); code != http.StatusOK {
+		t.Fatalf("list factories = %d", code)
+	}
+
+	// The factory was pushed before goald looked: a submit by name finds it, and from then on
+	// it is listed.
+	h.submit(t)
+
+	if code := h.call(t, http.MethodGet, "/v1/factories", "", &list); code != http.StatusOK || len(list.Factories) != 1 {
+		t.Fatalf("list factories = %d %+v", code, list)
+	}
+
+	f := list.Factories[0]
+	if got := fmt.Sprintf("%s %s %v %d", f.Id, f.Name, f.WorkTypes, len(f.Stations)); got != acmeID+" acme [feature fix] 3" {
+		t.Errorf("factory = %s", got)
+	}
+}
+
+func TestAPI_SubmitValidatesAgainstTheFactory(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	tests := []struct {
+		name, path, body string
+		want             int
+	}{
+		{name: "by name", path: acmeItems, body: `{"title":"t","type":"fix"}`, want: http.StatusCreated},
+		{name: "by id", path: "/v1/factories/" + acmeID + "/items", body: `{"title":"t","type":"fix","priority":2}`, want: http.StatusCreated},
+		{name: "unknown factory", path: "/v1/factories/nope/items", body: `{"title":"t","type":"fix"}`, want: http.StatusNotFound},
+		{name: "unknown work type", path: acmeItems, body: `{"title":"t","type":"chore"}`, want: http.StatusBadRequest},
+		{name: "blank title", path: acmeItems, body: `{"title":"  ","type":"fix"}`, want: http.StatusBadRequest},
+		{name: "malformed body", path: acmeItems, body: `{"title":`, want: http.StatusBadRequest},
+	}
+
+	for _, tt := range tests {
+		if code := h.call(t, http.MethodPost, tt.path, tt.body, nil); code != tt.want {
+			t.Errorf("%s: status %d, want %d", tt.name, code, tt.want)
+		}
+	}
+}
+
+func TestAPI_GetItem(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	submitted := h.submit(t)
+
+	if err := h.engine.Tick(t.Context()); err != nil { // inbox → approve
+		t.Fatal(err)
+	}
+
+	var it gen.Item
+	if code := h.call(t, http.MethodGet, "/v1/items/"+submitted.Id, "", &it); code != http.StatusOK {
+		t.Fatalf("get item = %d", code)
+	}
+
+	if it.Station != "approve" || it.State != gen.ItemState(domain.StateWaitingHuman) || it.Number != 1 {
+		t.Errorf("item at %s/%s number %d, want approve/waiting_human number 1", it.Station, it.State, it.Number)
+	}
+
+	if code := h.call(t, http.MethodGet, "/v1/items/00000000-0000-7000-8000-ffffffffffff", "", nil); code != http.StatusNotFound {
+		t.Errorf("unknown item = %d, want 404", code)
+	}
+}
+
+func TestAPI_EventPages(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	it := h.submit(t)
+
+	if err := h.engine.Tick(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	var first, rest gen.EventPage
+	if code := h.call(t, http.MethodGet, "/v1/items/"+it.Id+"/events?limit=2", "", &first); code != http.StatusOK || len(first.Events) != 2 {
+		t.Fatalf("first page = %d %+v, want 2 events", code, first)
+	}
+
+	path := fmt.Sprintf("/v1/items/%s/events?after=%d", it.Id, first.NextAfter)
+	if code := h.call(t, http.MethodGet, path, "", &rest); code != http.StatusOK || len(rest.Events) == 0 {
+		t.Fatalf("next page = %d %+v, want the remaining events", code, rest)
+	}
+
+	if rest.Events[0].Id <= first.NextAfter || first.Events[0].Kind != string(domain.EventCreated) {
+		t.Errorf("pages %+v then %+v; want created first and the second page after the first", first.Events, rest.Events)
+	}
+
+	if code := h.call(t, http.MethodGet, "/v1/items/"+it.Id+"/events?limit=5000", "", nil); code != http.StatusBadRequest {
+		t.Errorf("limit 5000 = %d, want 400", code)
+	}
+}
+
+func TestAPI_HumanDecisions(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	it := h.submit(t)
+
+	path := "/v1/items/" + it.Id
+
+	if code := h.call(t, http.MethodPost, path+"/approve", `{"by":"pat"}`, nil); code != http.StatusConflict {
+		t.Errorf("approve while queued = %d, want 409", code)
+	}
+
+	if err := h.engine.Tick(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	if code := h.call(t, http.MethodPost, path+"/reject", `{"by":"pat","reason":" "}`, nil); code != http.StatusBadRequest {
+		t.Errorf("reject without a reason = %d, want 400", code)
+	}
+
+	var done gen.Item
+	if code := h.call(t, http.MethodPost, path+"/approve", `{"by":"pat"}`, &done); code != http.StatusOK || done.Station != "done" {
+		t.Errorf("approve = %d at %s, want 200 at done", code, done.Station)
+	}
+
+	events := h.store.Events(domain.ItemID(it.Id))
+	if last := events[len(events)-3]; last.Kind != domain.EventApproved || last.Actor != "pat" {
+		t.Errorf("events %+v, want an approval by pat", events)
+	}
+}

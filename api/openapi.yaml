@@ -1,0 +1,251 @@
+# The contract between goald and its clients (the goal CLI now, the web UI and its generated
+# TypeScript client later). Change it first, then regenerate (`task api:gen`); the Go server
+# types in internal/api/gen are generated from this file and committed.
+#
+# Phase 1: no authentication. goald binds its API to 127.0.0.1 and serves one person on their
+# own machine. Authentication arrives with the first shared deployment.
+openapi: 3.0.3
+info:
+  title: Goal API
+  version: 0.1.0
+  description: Factories, work items, their history and human decisions.
+servers:
+  - url: http://127.0.0.1:8080
+paths:
+  /v1/health:
+    get:
+      operationId: getHealth
+      summary: Liveness of goald
+      responses:
+        "200":
+          description: goald is up
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+  /v1/factories:
+    get:
+      operationId: listFactories
+      summary: The factories goald runs, from the bucket
+      responses:
+        "200":
+          description: Factories ordered by name
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FactoryList" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/factories/{factory}/items:
+    parameters:
+      - name: factory
+        in: path
+        required: true
+        description: The factory's metadata.id or metadata.name
+        schema: { type: string }
+    post:
+      operationId: submitItem
+      summary: Submit a work item to a factory's first station
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewItem" }
+      responses:
+        "201":
+          description: The item, waiting at the first station
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/items/{item}:
+    parameters:
+      - $ref: "#/components/parameters/ItemID"
+    get:
+      operationId: getItem
+      summary: One work item
+      responses:
+        "200":
+          description: The item
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/items/{item}/events:
+    parameters:
+      - $ref: "#/components/parameters/ItemID"
+    get:
+      operationId: listItemEvents
+      summary: One page of an item's history, oldest first
+      parameters:
+        - name: after
+          in: query
+          description: Return events with an id greater than this (0 for the start)
+          schema: { type: integer, format: int64, minimum: 0, default: 0 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 200 }
+      responses:
+        "200":
+          description: Events in append order
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventPage" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/items/{item}/approve:
+    parameters:
+      - $ref: "#/components/parameters/ItemID"
+    post:
+      operationId: approveItem
+      summary: Approve an item waiting for a human; it moves to the next station
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Approval" }
+      responses:
+        "200":
+          description: The item after the decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/items/{item}/reject:
+    parameters:
+      - $ref: "#/components/parameters/ItemID"
+    post:
+      operationId: rejectItem
+      summary: Reject an item waiting for a human; it goes back for rework with the reason
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Rejection" }
+      responses:
+        "200":
+          description: The item after the decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        default: { $ref: "#/components/responses/Problem" }
+components:
+  parameters:
+    ItemID:
+      name: item
+      in: path
+      required: true
+      description: The item's id (a UUID)
+      schema: { type: string }
+  responses:
+    Problem:
+      description: An error (RFC 9457 problem details)
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok] }
+    Problem:
+      type: object
+      required: [title, status]
+      properties:
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+    FactoryList:
+      type: object
+      required: [factories]
+      properties:
+        factories:
+          type: array
+          items: { $ref: "#/components/schemas/Factory" }
+    Factory:
+      type: object
+      required: [id, name, stations, work_types]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        title: { type: string }
+        description: { type: string }
+        work_types:
+          type: array
+          items: { type: string }
+        stations:
+          type: array
+          items: { $ref: "#/components/schemas/Station" }
+    Station:
+      type: object
+      required: [id, kind]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [queue, agent, human, done] }
+    NewItem:
+      type: object
+      required: [title, type]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        body: { type: string, maxLength: 20000 }
+        type: { type: string, minLength: 1, description: "One of the factory's work types" }
+        lane: { type: string }
+        priority: { type: integer, default: 0 }
+    Approval:
+      type: object
+      required: [by]
+      properties:
+        by: { type: string, minLength: 1, description: Who decided }
+    Rejection:
+      type: object
+      required: [by, reason]
+      properties:
+        by: { type: string, minLength: 1 }
+        reason: { type: string, minLength: 1, description: What the agent must change }
+    Item:
+      type: object
+      required: [id, factory_id, number, type, title, body, station, state, class_of_service, priority, rework_count, cost_usd, outputs, created_at, updated_at]
+      properties:
+        id: { type: string }
+        factory_id: { type: string }
+        number: { type: integer, format: int64 }
+        parent_id: { type: string }
+        type: { type: string }
+        lane: { type: string }
+        title: { type: string }
+        body: { type: string }
+        station: { type: string }
+        state: { type: string, enum: [queued, ready, in_progress, waiting_human, blocked, done, cancelled] }
+        class_of_service: { type: string, enum: [standard, expedite] }
+        priority: { type: integer }
+        rework_count: { type: integer }
+        cost_usd: { type: number, format: double }
+        outputs:
+          type: object
+          description: Each station's output, by station id
+          additionalProperties: {}
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        done_at: { type: string, format: date-time }
+    EventPage:
+      type: object
+      required: [events, next_after]
+      properties:
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/Event" }
+        next_after:
+          type: integer
+          format: int64
+          description: Pass as `after` to get the events that follow this page
+    Event:
+      type: object
+      required: [id, item_id, at, kind, actor, data]
+      properties:
+        id: { type: integer, format: int64 }
+        item_id: { type: string }
+        run_id: { type: string }
+        at: { type: string, format: date-time }
+        kind: { type: string }
+        station: { type: string }
+        actor: { type: string }
+        data:
+          type: object
+          additionalProperties: {}
