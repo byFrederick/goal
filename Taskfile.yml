@@ -8,12 +8,18 @@ dotenv: [".env"]
 vars:
   GOLANGCI: '{{.GOLANGCI | default "golangci-lint"}}'
   PG_IMAGE: postgres:18
+  OAPI_CODEGEN_VERSION: v2.8.0
   # Working copy of the factory definitions: outside this repository, never committed.
   FACTORIES_DIR: '{{.GOAL_FACTORIES_DIR | default "../goal-factories"}}'
   # Fixtures that `task validate` checks; override to validate a working copy.
   FACTORIES: '{{.FACTORIES | default "internal/config/testdata/*/"}}'
-  # The agent image factories name in runtime.image; built locally, never pushed from here.
+  # The agent images factories name in runtime.image; built locally, never pushed from here.
   WORKER_IMAGE: '{{.WORKER_IMAGE | default "ghcr.io/byfrederick/goal-agent:0.1.0"}}'
+  WORKER_DEV_IMAGE: '{{.WORKER_DEV_IMAGE | default "ghcr.io/byfrederick/goal-agent-dev:0.1.0"}}'
+  # Where migrate-check gets its throwaway PostgreSQL 18: Docker, or a local cluster where there is
+  # no Docker (the dev agent image, in which station checks run, ships the server).
+  MIGRATE_WITH:
+    sh: command -v docker >/dev/null 2>&1 && echo docker || echo local
 
 # The storage tasks talk to the local RustFS from compose.yaml unless .env or the shell says
 # otherwise. For an AWS bucket run bin/goal directly with GOAL_S3_BUCKET and AWS credentials.
@@ -66,6 +72,11 @@ tasks:
     cmds:
       - sqlc generate
 
+  api:gen:
+    desc: Regenerate the Go server types and client in internal/api/gen from api/openapi.yaml
+    cmds:
+      - go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@{{.OAPI_CODEGEN_VERSION}} -config internal/api/gen/oapi-codegen.yaml api/openapi.yaml
+
   validate:
     desc: Validate factory definitions (the test fixtures by default; FACTORIES=<glob> for others)
     cmds:
@@ -80,7 +91,12 @@ tasks:
       - terraform validate
 
   migrate-check:
-    desc: Apply all migrations to a throwaway PostgreSQL 18
+    desc: Apply all migrations to a throwaway PostgreSQL 18 (in Docker, or a local cluster without Docker)
+    cmds:
+      - task: migrate-check:{{.MIGRATE_WITH}}
+
+  migrate-check:docker:
+    internal: true
     cmds:
       - docker rm -f goal-migrate-check >/dev/null 2>&1 || true
       - docker run -d --rm --name goal-migrate-check -e POSTGRES_PASSWORD=check -e POSTGRES_DB=goal {{.PG_IMAGE}} >/dev/null
@@ -89,6 +105,23 @@ tasks:
       - |
         for f in migrations/*.sql; do
           docker exec -i goal-migrate-check psql -U postgres -d goal -v ON_ERROR_STOP=1 -q < "$f" || exit 1
+          echo "applied $f"
+        done
+
+  migrate-check:local:
+    internal: true
+    vars:
+      PGTMP:
+        sh: mktemp -d
+    cmds:
+      - defer: pg_ctl -D "{{.PGTMP}}/data" -m immediate stop >/dev/null 2>&1; rm -rf "{{.PGTMP}}"
+      - postgres --version | grep -q " 18\." || { echo "migrate-check needs PostgreSQL 18 (postgres --version)"; exit 1; }
+      - initdb -D "{{.PGTMP}}/data" -U postgres --auth=trust >/dev/null
+      - pg_ctl -D "{{.PGTMP}}/data" -l "{{.PGTMP}}/server.log" -o "-k {{.PGTMP}} -c listen_addresses=''" -w start >/dev/null
+      - createdb -h "{{.PGTMP}}" -U postgres goal
+      - |
+        for f in migrations/*.sql; do
+          psql -h "{{.PGTMP}}" -U postgres -d goal -v ON_ERROR_STOP=1 -q < "$f" || exit 1
           echo "applied $f"
         done
 
@@ -119,7 +152,12 @@ tasks:
   worker:image:
     desc: Build the agent worker image locally (WORKER_IMAGE); never pushes
     cmds:
-      - docker build -f worker/Dockerfile -t {{.WORKER_IMAGE}} .
+      - docker build -f worker/Dockerfile --target runtime -t {{.WORKER_IMAGE}} .
+
+  worker:image-dev:
+    desc: Build the dev agent image (WORKER_DEV_IMAGE) with Go, task, golangci-lint, pnpm, Terraform and PostgreSQL 18
+    cmds:
+      - docker build -f worker/Dockerfile --target dev -t {{.WORKER_DEV_IMAGE}} .
 
   hooks:install:
     desc: Use the versioned git hooks in .githooks (pre-push runs task check)

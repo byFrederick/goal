@@ -22,7 +22,7 @@ type hardening struct {
 func hardeningOf(cc *container.Config, hc *container.HostConfig) hardening {
 	mounts := make([]string, 0, len(hc.Mounts))
 	for _, m := range hc.Mounts {
-		mounts = append(mounts, fmt.Sprintf("%s:%s:ro=%v", m.Source, m.Target, m.ReadOnly))
+		mounts = append(mounts, fmt.Sprintf("%s %s:%s:ro=%v", m.Type, m.Source, m.Target, m.ReadOnly))
 	}
 
 	return hardening{
@@ -45,10 +45,10 @@ func TestContainerOf_IsHardened(t *testing.T) {
 	got := hardeningOf(containerOf(Config{}.withDefaults(), spec, "/runs/r1"))
 	want := hardening{
 		User: "1000:1000", CapDrop: "[ALL]", SecurityOpt: "[no-new-privileges:true]",
-		Mounts:     "[/runs/r1:/goal:ro=true /work/r1:/workspace:ro=false]",
+		Mounts:     "[bind /runs/r1:/goal:ro=true bind /work/r1:/workspace:ro=false volume :/home/node:ro=false]",
 		Labels:     "map[goal.agent:engineer goal.factory:f1 goal.item:i1 goal.run:r1 goal.station:build]",
 		Env:        "[CLAUDE_CODE_OAUTH_TOKEN=oauth-token-123 GOAL_GATEWAY_TOKEN=gateway-token-123 HOME=/home/node]",
-		Tmpfs:      "map[/home/node:rw,nosuid,nodev,size=1g,mode=0700,uid=1000,gid=1000 /tmp:rw,nosuid,nodev,size=1g,mode=1777]",
+		Tmpfs:      "map[/tmp:rw,nosuid,nodev,size=1g,mode=1777]",
 		Privileged: false, ReadOnlyRoot: true, Init: true,
 		CPUs: 2e9, Memory: 4 << 30, Swap: 4 << 30, PIDs: 1024,
 	}

@@ -4,8 +4,13 @@ The agent container image: TypeScript on Node 22 with the Claude Agent SDK (pinn
 
 ```bash
 task worker:check   # typecheck, Biome, Vitest (part of task check)
-task worker:image   # docker build -f worker/Dockerfile -t ghcr.io/byfrederick/goal-agent:0.1.0 .
+task worker:image       # docker build -f worker/Dockerfile --target runtime -t ghcr.io/byfrederick/goal-agent:0.1.0 .
+task worker:image-dev   # the dev variant, ghcr.io/byfrederick/goal-agent-dev:0.1.0 (below)
 ```
+
+## Dev variant
+
+`--target dev` adds the toolchain a factory that builds this repository needs: Go (with a C compiler for `-race`), task, golangci-lint v2, pnpm, Terraform with the AWS provider mirrored (`TF_CLI_CONFIG_FILE`), and a PostgreSQL 18 server, which `task migrate-check` uses for a throwaway local cluster when there is no Docker. Go modules from `go.mod` are prewarmed as a read-only local `GOPROXY`; anything new still downloads. The goal factory names this image in `runtime.image`, so its agents and its station command checks run with it. Checks run in their own container of the same image (`docker.Checker`): same hardening, the run's workspace at `/workspace`, `HOME` and `CI` only in the environment, no secrets, no gateway token, no Docker socket.
 
 The image is built locally and never pushed from this repository.
 
@@ -18,7 +23,8 @@ The image is built locally and never pushed from this repository.
 | `/goal/agent/skills/<name>/SKILL.md` | read-only | one folder per skill the agent loads, with its other files |
 | `/goal/agent/output.schema.json` | read-only | the station's output contract (JSON Schema), only when the station has one |
 | `/workspace` | read-write | the run's git checkout, prepared by goald; the agent's working directory. No git or GitHub credentials are mounted or passed. |
-| `/tmp`, `/home/node` | tmpfs | scratch space and `HOME`; everything else is a read-only root filesystem |
+| `/tmp` | tmpfs (noexec) | scratch space |
+| `/home/node` | anonymous volume | `HOME`, disk-backed so toolchain caches fit; removed with the container. Everything else is a read-only root filesystem |
 
 The runner writes `spec.json` into a per-run host folder (`$TMPDIR/goal-runs/<run id>/` by default) and has goald's `AgentFiles` write `agent/` next to it, then mounts the folder at `/goal`. The container runs as uid 1000 with every capability dropped, `no-new-privileges`, an init process, and CPU, memory and PID limits; it carries the labels `goal.factory`, `goal.item`, `goal.run`, `goal.station` and `goal.agent`, and `Runner.Reap` removes containers and folders of runs that are no longer live.
 

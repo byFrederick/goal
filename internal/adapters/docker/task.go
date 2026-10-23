@@ -172,7 +172,7 @@ func (t *task) remove(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
 	defer cancel()
 
-	_, err := t.r.docker.ContainerRemove(ctx, t.id, client.ContainerRemoveOptions{Force: true})
+	_, err := t.r.docker.ContainerRemove(ctx, t.id, client.ContainerRemoveOptions{Force: true, RemoveVolumes: true})
 	if err != nil && !cerrdefs.IsNotFound(err) {
 		t.log.WarnContext(ctx, "remove task container; Reap will retry", slog.Any("error", err))
 	}

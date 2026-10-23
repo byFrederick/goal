@@ -149,7 +149,7 @@ linters:
             - pkg: github.com/byFrederick/goal/internal/factorystore
               desc: adapters implement ports; the factory layout in the bucket is factorystore's job
         definitions:
-          files: ["**/internal/config/**", "**/internal/factorystore/**"]
+          files: ["**/internal/config/**", "**/internal/factorystore/**", "**/internal/definitions/**"]
           deny:
             - pkg: github.com/byFrederick/goal/internal/adapters
               desc: factory definitions reach storage only through ports.ObjectStore
@@ -172,6 +172,21 @@ linters:
               desc: AWS access belongs in internal/adapters
             - pkg: github.com/jackc/pgx
               desc: database access belongs in internal/adapters/postgres
+        api:
+          files: ["**/internal/api/**", "!$test"]
+          deny:
+            - pkg: github.com/byFrederick/goal/internal/adapters
+              desc: the API reaches the store and the engine through its own interfaces; cmd/goald wires adapters
+            - pkg: github.com/byFrederick/goal/internal/factorystore
+              desc: factory definitions arrive through api.Factories
+            - pkg: github.com/byFrederick/goal/internal/gateway
+              desc: the gateway is a sibling HTTP component, mounted by cmd/goald
+            - pkg: github.com/aws
+              desc: AWS access belongs in internal/adapters
+            - pkg: github.com/jackc/pgx
+              desc: database access belongs in internal/adapters/postgres
+            - pkg: github.com/moby
+              desc: container access belongs in internal/adapters/docker
         sqlc:
           files: ["**/internal/**", "**/cmd/**", "!**/internal/adapters/postgres/**"]
           deny:

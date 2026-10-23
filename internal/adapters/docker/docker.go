@@ -123,7 +123,7 @@ func (r *Runner) Start(ctx context.Context, t ports.TaskSpec) (ports.Task, error
 }
 
 func (r *Runner) start(ctx context.Context, t ports.TaskSpec, runDir string) (*task, error) {
-	if err := r.ensureImage(ctx, t.Image); err != nil {
+	if err := ensureImage(ctx, r.docker, r.log, t.Image); err != nil {
 		return nil, err
 	}
 
@@ -206,8 +206,9 @@ func (r *Runner) removeDir(ctx context.Context, dir string) {
 	}
 }
 
-func (r *Runner) ensureImage(ctx context.Context, ref string) error {
-	_, err := r.docker.ImageInspect(ctx, ref)
+// ensureImage pulls ref unless the local Docker already has it.
+func ensureImage(ctx context.Context, docker *client.Client, log *slog.Logger, ref string) error {
+	_, err := docker.ImageInspect(ctx, ref)
 	if err == nil {
 		return nil
 	}
@@ -216,9 +217,9 @@ func (r *Runner) ensureImage(ctx context.Context, ref string) error {
 		return fmt.Errorf("inspect image %s: %w", ref, err)
 	}
 
-	r.log.InfoContext(ctx, "pulling agent image", slog.String("image", ref))
+	log.InfoContext(ctx, "pulling agent image", slog.String("image", ref))
 
-	pull, err := r.docker.ImagePull(ctx, ref, client.ImagePullOptions{})
+	pull, err := docker.ImagePull(ctx, ref, client.ImagePullOptions{})
 	if err != nil {
 		return fmt.Errorf("pull image %s: %w", ref, err)
 	}
@@ -249,7 +250,7 @@ func (r *Runner) Reap(ctx context.Context, live func(domain.RunID) bool) (int, e
 			continue
 		}
 
-		if _, err := r.docker.ContainerRemove(ctx, c.ID, client.ContainerRemoveOptions{Force: true}); err != nil && !cerrdefs.IsNotFound(err) {
+		if _, err := r.docker.ContainerRemove(ctx, c.ID, client.ContainerRemoveOptions{Force: true, RemoveVolumes: true}); err != nil && !cerrdefs.IsNotFound(err) {
 			errs = append(errs, fmt.Errorf("remove container of run %s: %w", run, err))
 			continue
 		}

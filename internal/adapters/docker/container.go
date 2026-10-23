@@ -174,9 +174,9 @@ func validate(t ports.TaskSpec) error {
 func containerName(run domain.RunID) string { return "goal-run-" + string(run) }
 
 // containerOf is the hardened container for one task: non-root, read-only root filesystem with
-// tmpfs /tmp and home, every capability dropped, no privilege escalation, CPU, memory and PID
-// limits. The run directory is mounted read-only at /goal and the workspace read-write at
-// /workspace.
+// a tmpfs /tmp and a throwaway home volume, every capability dropped, no privilege escalation,
+// CPU, memory and PID limits. The run directory is mounted read-only at /goal and the workspace
+// read-write at /workspace.
 func containerOf(cfg Config, t ports.TaskSpec, runDir string) (*container.Config, *container.HostConfig) {
 	cc := &container.Config{
 		Image:      t.Image,
@@ -189,25 +189,32 @@ func containerOf(cfg Config, t ports.TaskSpec, runDir string) (*container.Config
 		},
 	}
 
+	hc := hardened(cfg,
+		mount.Mount{Type: mount.TypeBind, Source: runDir, Target: containerGoal, ReadOnly: true},
+		mount.Mount{Type: mount.TypeBind, Source: t.WorkspaceDir, Target: containerWorkspace},
+	)
+	hc.ExtraHosts = []string{hostAlias + ":host-gateway"}
+
+	return cc, hc
+}
+
+// hardened is the host configuration every goal container shares: non-root (set on the
+// container), read-only root filesystem, tmpfs /tmp, an anonymous volume as home (disk-backed,
+// so toolchain caches fit; removed with the container), every capability dropped, no privilege
+// escalation, an init process and CPU, memory and PID limits, plus the given mounts.
+func hardened(cfg Config, mounts ...mount.Mount) *container.HostConfig {
 	useInit := true // reaps the agent's child processes
 	pids := cfg.PIDs
 	memory := cfg.MemoryBytes
 
-	hc := &container.HostConfig{
+	return &container.HostConfig{
 		Privileged:     false,
 		ReadonlyRootfs: true,
 		CapDrop:        []string{"ALL"},
 		SecurityOpt:    []string{"no-new-privileges:true"},
 		Init:           &useInit,
-		Tmpfs: map[string]string{
-			"/tmp":        "rw,nosuid,nodev,size=1g,mode=1777",
-			containerHome: "rw,nosuid,nodev,size=1g,mode=0700,uid=" + containerUID + ",gid=" + containerUID,
-		},
-		Mounts: []mount.Mount{
-			{Type: mount.TypeBind, Source: runDir, Target: containerGoal, ReadOnly: true},
-			{Type: mount.TypeBind, Source: t.WorkspaceDir, Target: containerWorkspace},
-		},
-		ExtraHosts: []string{hostAlias + ":host-gateway"},
+		Tmpfs:          map[string]string{"/tmp": "rw,nosuid,nodev,size=1g,mode=1777"},
+		Mounts:         append(mounts, mount.Mount{Type: mount.TypeVolume, Target: containerHome}),
 		Resources: container.Resources{
 			NanoCPUs:   int64(cfg.CPUs * 1e9),
 			Memory:     memory,
@@ -215,6 +222,4 @@ func containerOf(cfg Config, t ports.TaskSpec, runDir string) (*container.Config
 			PidsLimit:  &pids,
 		},
 	}
-
-	return cc, hc
 }
