@@ -143,14 +143,18 @@
   }
 }
 
-/* Unlayered, so it wins over every utility without !important. */
+/* Unlayered, so it wins over every utility without !important. No duration at all, not a tiny
+   one: transition-property defaults to all, so any transition duration here would make every
+   style change of every element a transition, and an animation would start from its first frame
+   (a fade from opacity 0); either way the old look shows until the next frame is drawn. A
+   zero-length animation still ends at once, with its animationend. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms;
+    animation-duration: 0s;
     animation-iteration-count: 1;
-    transition-duration: 0.01ms;
+    transition-duration: 0s;
     scroll-behavior: auto;
   }
 }
