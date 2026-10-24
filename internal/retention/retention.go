@@ -48,9 +48,6 @@ func New(orgs Orgs, objects ports.ObjectStore, clock ports.Clock, retention time
 	return &Purger{orgs: orgs, objects: objects, clock: clock, retention: retention, log: log}
 }
 
-// PurgeAfter is when an organization deleted at deletedAt may be purged.
-func (p *Purger) PurgeAfter(deletedAt time.Time) time.Time { return deletedAt.Add(p.retention) }
-
 // Purge purges every organization deleted more than the retention ago, each on its own, and
 // returns those it purged: an organization's rows (goal_purge_org) and then its bucket objects,
 // committed only when both are gone. One that fails is kept, rows and objects, for the next run

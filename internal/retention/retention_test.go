@@ -95,10 +95,6 @@ func TestPurge_AfterTheRetentionRowsAndObjectsGo(t *testing.T) {
 	f := newFixture(t)
 	p := f.purger(t, f.objects)
 
-	if got := p.PurgeAfter(t0); !got.Equal(t0.Add(week)) {
-		t.Errorf("PurgeAfter = %s; want a week after the deletion", got)
-	}
-
 	f.clock.Advance(week - time.Second)
 
 	if ids, err := p.Purge(t.Context()); err != nil || len(ids) != 0 || f.objectsOf(t, f.gone) != 1 {
