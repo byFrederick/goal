@@ -16,8 +16,10 @@ SELECT id::uuid FROM goal_active_orgs() AS id;
 SELECT id::uuid FROM goal_deleted_orgs(sqlc.arg(before)::timestamptz, sqlc.arg(max_orgs)::integer) AS id;
 
 -- name: TryLockOrgPurge :one
--- One purge at a time across goald instances; released when the purge's transaction ends.
-SELECT pg_try_advisory_xact_lock(hashtextextended('goal.orgs.purge', 0)) AS locked;
+-- One purge at a time across the goald instances of an install, keyed by its schema as the
+-- migration lock is, so installs sharing a PostgreSQL do not wait for each other; released when
+-- the purge's transaction ends.
+SELECT pg_try_advisory_xact_lock(hashtextextended('goal.orgs.purge.' || current_schema(), 0)) AS locked;
 
 -- name: PurgeOrg :exec
 SELECT goal_purge_org(sqlc.arg(org_id)::uuid);

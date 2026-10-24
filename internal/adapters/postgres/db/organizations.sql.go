@@ -217,10 +217,12 @@ func (q *Queries) SoftDeleteOrg(ctx context.Context, deletedAt *time.Time) error
 }
 
 const tryLockOrgPurge = `-- name: TryLockOrgPurge :one
-SELECT pg_try_advisory_xact_lock(hashtextextended('goal.orgs.purge', 0)) AS locked
+SELECT pg_try_advisory_xact_lock(hashtextextended('goal.orgs.purge.' || current_schema(), 0)) AS locked
 `
 
-// One purge at a time across goald instances; released when the purge's transaction ends.
+// One purge at a time across the goald instances of an install, keyed by its schema as the
+// migration lock is, so installs sharing a PostgreSQL do not wait for each other; released when
+// the purge's transaction ends.
 func (q *Queries) TryLockOrgPurge(ctx context.Context) (bool, error) {
 	row := q.db.QueryRow(ctx, tryLockOrgPurge)
 	var locked bool
