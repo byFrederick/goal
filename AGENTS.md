@@ -22,7 +22,7 @@ cmd/goal/            CLI            (main: parse flags, wire, run)
 cmd/goald/           daemon         (main: wire adapters into the engine)
 internal/domain/     plain types and rules: factory, item, station, lease. Imports nothing internal.
 internal/engine/     flow engine: pull, WIP, drum-buffer-rope, andon. Imports domain + ports only.
-internal/ports/      interfaces: Store, Runner, Workspaces, Checker, Secrets, Contracts, ObjectStore, ItemNotices, CodeHost, Clock, Tenancy, Audit, DefinitionStore, DefinitionNotices, SkillSource (Identity, Access, Platform in phase 3; Knowledge, ModelAuth later)
+internal/ports/      interfaces: Store, Runner, Reaper, Workspaces, Checker, Secrets, Contracts, ObjectStore, ItemNotices, CodeHost, Clock, Tenancy, Audit, DefinitionStore, DefinitionNotices, SkillSource (Identity, Access, Platform in phase 3; Knowledge, ModelAuth later)
 internal/adapters/   s3store/ postgres/ docker/ gitworkspace/ github/ envsecrets/ sysclock/ skillssh/ (ecs/ awssecrets/ bedrockkb/ onepassword/ later)
 internal/api/        HTTP API handlers for api/openapi.yaml (generated types in internal/api/gen); no adapter imports
 internal/gateway/    MCP gateway inside goald: task-token auth, per-agent tools, credentials added on the host

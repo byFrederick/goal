@@ -56,6 +56,7 @@ const (
 	ttl       = time.Minute
 	heartbeat = 20 * time.Second
 	tickEvery = 5 * time.Second
+	reapEvery = 30 * time.Second
 )
 
 type harness struct {
@@ -68,6 +69,7 @@ type harness struct {
 	clock      *porttest.Clock
 	contracts  *porttest.Contracts
 	codehost   *porttest.CodeHost
+	host       *porttest.Host // the Docker host every engine of the harness shares
 	line       domain.Line
 	logs       *logBuffer // what every engine of the harness logs
 
@@ -117,10 +119,12 @@ func newHarness(t *testing.T, line domain.Line, run porttest.RunFunc) *harness {
 		clock:      clock,
 		contracts:  porttest.NewContracts(),
 		codehost:   porttest.NewCodeHost(),
+		host:       porttest.NewHost(),
 		line:       line,
 		logs:       &logBuffer{},
 	}
 
+	run = porttest.LeavingOn(h.host, run)
 	h.runner = porttest.NewRunner(func(ctx context.Context, spec ports.TaskSpec, events chan<- ports.RunEvent) domain.RunResult {
 		h.mu.Lock()
 		ticking := h.ticking
@@ -171,13 +175,15 @@ func (h *harness) engineWith(t *testing.T, store ports.Store, maxRuns int, lines
 	e, err := engine.New(engine.Deps{
 		Store: store, Orgs: h.tenancy, Runner: h.runner, Workspaces: h.workspaces, Checker: h.checker, Contracts: h.contracts, Clock: h.clock,
 		Secrets: porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y", "MODEL_ACCESS": "tok"}, CodeHost: h.codehost, RunEnded: h.runEnded,
-		Logger: slog.New(slog.NewJSONHandler(h.logs, nil)),
+		Reapers: []ports.Reaper{h.host},
+		Logger:  slog.New(slog.NewJSONHandler(h.logs, nil)),
 	}, engine.Config{
 		Lines:          lines,
 		MaxRuns:        maxRuns,
 		TickEvery:      tickEvery,
 		LeaseTTL:       ttl,
 		HeartbeatEvery: heartbeat,
+		ReapEvery:      reapEvery,
 		GatewayURL:     "http://gateway.example.com/mcp",
 		GatewayKeyRef:  "env:GOAL_GATEWAY_KEY",
 		TaskEnv:        map[string]string{"MODEL_ACCESS": "env:MODEL_ACCESS"},

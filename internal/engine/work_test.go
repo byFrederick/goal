@@ -338,7 +338,7 @@ func TestRun_TaskSpecCarriesAgentPolicy(t *testing.T) {
 
 	spec := h.runner.Started()[0]
 	want := ports.TaskSpec{
-		FactoryID: factoryID, DefinitionVersionID: v1, ItemID: spec.ItemID, RunID: spec.RunID, Station: stWork, Agent: agWorker,
+		OrgID: testOrg, FactoryID: factoryID, DefinitionVersionID: v1, ItemID: spec.ItemID, RunID: spec.RunID, Station: stWork, Agent: agWorker,
 		Image: "ghcr.io/acme/agent:1", Model: "claude-opus-5-5", PromptPath: "./agents/worker.md",
 		Skills:     []domain.SkillRef{{Name: "conventions", Source: "./skills/conventions"}},
 		ToolsAllow: []string{"Read"}, ToolsDeny: []string{"Bash(git push*)"},

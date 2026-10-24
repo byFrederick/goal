@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -274,7 +275,9 @@ func TestPrepare_EmptyWorkspaceWithoutARepository(t *testing.T) {
 	}
 }
 
-func TestReap_RemovesWorkspacesOfRunsThatAreNotLive(t *testing.T) {
+// The workspaces are leftovers of their runs, with no organization; Reap removes the given
+// runs' workspaces only.
+func TestReap_RemovesTheWorkspacesOfTheGivenRuns(t *testing.T) {
 	t.Parallel()
 
 	w := newWorkspaces(t)
@@ -285,9 +288,13 @@ func TestReap_RemovesWorkspacesOfRunsThatAreNotLive(t *testing.T) {
 		}
 	}
 
-	n, err := w.Reap(func(r domain.RunID) bool { return r == "live" })
-	if err != nil || n != 1 {
-		t.Fatalf("Reap = %d, %v; want 1 removed", n, err)
+	left, err := w.Leftovers(t.Context())
+	if want := []ports.Leftover{{Run: "live"}, {Run: "orphan"}}; err != nil || !slices.Equal(left, want) {
+		t.Fatalf("Leftovers = %v, %v; want %v", left, err, want)
+	}
+
+	if err := w.Reap(t.Context(), []domain.RunID{"orphan", "never-prepared", "../escape"}); err != nil {
+		t.Fatalf("Reap: %v", err)
 	}
 
 	if _, err := os.Stat(filepath.Join(w.cfg.Root, "live")); err != nil {

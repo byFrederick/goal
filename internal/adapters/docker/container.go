@@ -30,8 +30,11 @@ const (
 	agentDir           = "agent"
 )
 
-// Labels on every task container, so orphans can be found and reaped.
+// Labels on every task container, so orphans can be found and reaped. Check and sidecar
+// containers carry the same run labels; LabelOrg names the organization whose store knows the
+// run (ports.Leftover.Org).
 const (
+	LabelOrg     = "goal.org"
 	LabelFactory = "goal.factory"
 	LabelItem    = "goal.item"
 	LabelRun     = "goal.run"
@@ -185,7 +188,7 @@ func containerOf(cfg Config, t ports.TaskSpec, runDir string) (*container.Config
 		Env:        taskEnv(t),
 		WorkingDir: containerWorkspace,
 		Labels: map[string]string{
-			LabelFactory: string(t.FactoryID), LabelItem: string(t.ItemID), LabelRun: string(t.RunID),
+			LabelOrg: string(t.OrgID), LabelFactory: string(t.FactoryID), LabelItem: string(t.ItemID), LabelRun: string(t.RunID),
 			LabelStation: t.Station, LabelAgent: t.Agent,
 		},
 	}

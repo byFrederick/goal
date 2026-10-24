@@ -91,6 +91,15 @@ type Store interface {
 	// to the next call.
 	FinishLostRuns(ctx context.Context, endedBefore, now time.Time, limit int) ([]domain.Run, error)
 
+	// RunsOver returns those of runs, of the organization in ctx, that are over for good: no
+	// longer running (finished by their instance or by the sweeps) and no longer holding their
+	// lease (the item's lease at the run's station acquired no later than the run started, which
+	// a run's checks use after its agent task ended): it was released, taken, or swept as expired
+	// (RequeueExpiredLeases). What such a run left on a host may be reaped (Reaper). Ids that name
+	// no run of the organization are not returned: they may be another deployment's runs on a
+	// shared host. Order is unspecified.
+	RunsOver(ctx context.Context, runs []domain.RunID) ([]domain.RunID, error)
+
 	// StartRun records a running agent run and appends a run_started event.
 	StartRun(ctx context.Context, r NewRun) (domain.RunID, error)
 
@@ -563,6 +572,25 @@ type Runner interface {
 	Start(ctx context.Context, t TaskSpec) (Task, error)
 }
 
+// Reaper finds and removes what agent runs leave on this instance's host: containers (task,
+// check, sidecar), run folders and workspaces. They outlive their run when the goald running it
+// dies, and several goald instances may share one host, so a reaper never decides which runs are
+// over: the engine asks the store (Store.RunsOver) and has only those reaped.
+type Reaper interface {
+	// Leftovers lists the runs that have something on this host, live ones included.
+	Leftovers(ctx context.Context) ([]Leftover, error)
+	// Reap removes what the given runs left on this host. What is already gone is not an error.
+	Reap(ctx context.Context, runs []domain.RunID) error
+}
+
+// Leftover is a run that has something on a host.
+type Leftover struct {
+	Run domain.RunID
+	// Org is the run's organization when the reaper recorded it (a container label); empty
+	// when it cannot tell (a folder).
+	Org domain.OrgID
+}
+
 // Task is a started agent task.
 type Task interface {
 	// Events streams the task's progress (tool calls, messages). It is closed when the task
@@ -582,6 +610,9 @@ type RunEvent struct {
 
 // TaskSpec is everything a runner needs to run one agent on one item.
 type TaskSpec struct {
+	// OrgID is the organization of the run; runners record it with what they create, so a
+	// Reaper can tell which organization's store knows the run.
+	OrgID     domain.OrgID
 	FactoryID domain.FactoryID
 	// DefinitionVersionID is the version the run started on; its prompt, skills and contract
 	// are the ones the runner stages.
@@ -666,6 +697,8 @@ type Checker interface {
 
 // CheckSpec is one command check.
 type CheckSpec struct {
+	// OrgID is the organization of the run, recorded like TaskSpec.OrgID.
+	OrgID     domain.OrgID
 	FactoryID domain.FactoryID
 	ItemID    domain.ItemID
 	RunID     domain.RunID
@@ -700,6 +733,8 @@ type Sidecars interface {
 
 // SidecarSpec is one stdio MCP server for one run.
 type SidecarSpec struct {
+	// OrgID is the organization of the run, recorded like TaskSpec.OrgID.
+	OrgID      domain.OrgID
 	FactoryID  domain.FactoryID
 	ItemID     domain.ItemID
 	RunID      domain.RunID

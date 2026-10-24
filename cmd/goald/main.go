@@ -8,8 +8,9 @@
 // definition authoring, the API and its stream feed. Configuration comes from the environment;
 // settings.go lists every variable. goald keeps nothing another instance would need: work state
 // and definition versions are in PostgreSQL, file content is in the bucket, and its workspaces
-// and run folders are scratch. The exception is the gateway's running MCP sidecars,
-// which serve only the runs this instance started (see internal/gateway).
+// and run folders are scratch, reaped by any instance once their run is over. The exception is
+// the gateway's running MCP sidecars, which serve only the runs this instance started (see
+// internal/gateway).
 package main
 
 import (
@@ -174,6 +175,9 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Runner: runner, Workspaces: workspaces, Checker: docker.NewChecker(dockerClient, runnerCfg, log),
 		Contracts: defs, Secrets: secrets, CodeHost: codehost, Clock: clock, Logger: log, RunEnded: gw.EndRun,
+		// The engine reaps what runs that are over left in Docker and on disk, whichever goald on
+		// this host started them: at its start and every ReapEvery.
+		Reapers: []ports.Reaper{runner, workspaces},
 	}, engine.Config{
 		TickEvery: s.TickEvery, GatewayURL: s.GatewayURL, GatewayKeyRef: s.GatewayKeyRef, TaskEnv: s.TaskEnv, MaxRuns: s.MaxRuns,
 	})
@@ -189,8 +193,6 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	log.InfoContext(ctx, "factories loaded", slog.Int("count", len(loaded)), slog.String("bucket", objects.Bucket()))
 
 	definitionNotices := postgres.NewDefinitionNotices(store, log)
-
-	reap(ctx, log, runner, workspaces)
 
 	// The engine hears every item notice, so a person's move, pause or send-back of an item this
 	// instance runs stops its run at once.
@@ -404,20 +406,5 @@ func refresh(ctx context.Context, log *slog.Logger, defs *definitions.Cache, eve
 		if _, err := defs.Refresh(ctx); err != nil && ctx.Err() == nil {
 			log.WarnContext(ctx, "refresh factory definitions", slog.Any("error", err))
 		}
-	}
-}
-
-// reap removes containers, run folders and workspaces left by an earlier goald that died
-// mid-run. On a laptop one goald owns the local Docker, so at startup no run here is live; the
-// items those runs held return to their queue when their leases expire.
-func reap(ctx context.Context, log *slog.Logger, runner *docker.Runner, workspaces *gitworkspace.Workspaces) {
-	none := func(domain.RunID) bool { return false }
-
-	if n, err := runner.Reap(ctx, none); err != nil || n > 0 {
-		log.InfoContext(ctx, "reaped orphaned agent runs", slog.Int("runs", n), slog.Any("error", err))
-	}
-
-	if n, err := workspaces.Reap(none); err != nil || n > 0 {
-		log.InfoContext(ctx, "reaped orphaned workspaces", slog.Int("workspaces", n), slog.Any("error", err))
 	}
 }

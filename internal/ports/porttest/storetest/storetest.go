@@ -59,6 +59,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"RequeueExpiredLeases_OldestFirstUpToLimit", testRequeueLimit},
 		{"FinishLostRuns_CancelsRunsWhoseLeaseEndedBeforeTheCutoff", testFinishLostRuns},
 		{"FinishLostRuns_EarliestLeaseEndFirstUpToLimit", testFinishLostRunsLimit},
+		{"RunsOver_NeitherRunningNorHoldingTheirLease", testRunsOver},
 		{"Runs_FinishOnceAndAddCost", testRuns},
 		{"Runs_OldestFirstUpToLimitAndOneByID", testRunReads},
 		{"AppendEvents_InOrder", testAppendEvents},

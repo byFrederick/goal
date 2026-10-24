@@ -31,7 +31,10 @@ import (
 	"github.com/byFrederick/goal/internal/ports"
 )
 
-var _ ports.Workspaces = (*Workspaces)(nil)
+var (
+	_ ports.Workspaces = (*Workspaces)(nil)
+	_ ports.Reaper     = (*Workspaces)(nil)
+)
 
 // Config tunes the workspaces. The zero value of each field means its default.
 type Config struct {
@@ -188,38 +191,45 @@ func (w *Workspaces) Remove(_ context.Context, ws ports.Workspace) error {
 	return removeAll(w.runDir(ws.RunID))
 }
 
-// Reap removes the workspaces of runs that are no longer live, for example after goald crashed
-// mid-run, and returns how many it removed.
-func (w *Workspaces) Reap(live func(domain.RunID) bool) (int, error) {
+// Leftovers implements ports.Reaper: the runs with a workspace here. A folder records no
+// organization.
+func (w *Workspaces) Leftovers(context.Context) ([]ports.Leftover, error) {
 	entries, err := os.ReadDir(w.cfg.Root)
 	if errors.Is(err, fs.ErrNotExist) {
-		return 0, nil
+		return nil, nil
 	}
 
 	if err != nil {
-		return 0, fmt.Errorf("list workspaces: %w", err)
+		return nil, fmt.Errorf("list workspaces: %w", err)
 	}
 
-	var (
-		n    int
-		errs []error
-	)
+	var left []ports.Leftover
 
 	for _, e := range entries {
-		run := domain.RunID(e.Name())
-		if !e.IsDir() || !safeRun.MatchString(e.Name()) || live(run) {
+		if e.IsDir() && safeRun.MatchString(e.Name()) {
+			left = append(left, ports.Leftover{Run: domain.RunID(e.Name())})
+		}
+	}
+
+	return left, nil
+}
+
+// Reap implements ports.Reaper: it removes the given runs' workspaces, for example after the
+// goald running them died.
+func (w *Workspaces) Reap(_ context.Context, runs []domain.RunID) error {
+	var errs []error
+
+	for _, run := range runs {
+		if !safeRun.MatchString(string(run)) {
 			continue
 		}
 
 		if err := removeAll(w.runDir(run)); err != nil {
 			errs = append(errs, err)
-			continue
 		}
-
-		n++
 	}
 
-	return n, errors.Join(errs...)
+	return errors.Join(errs...)
 }
 
 func (w *Workspaces) runDir(run domain.RunID) string { return filepath.Join(w.cfg.Root, string(run)) }

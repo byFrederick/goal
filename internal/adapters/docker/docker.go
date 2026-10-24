@@ -33,7 +33,10 @@ import (
 	"github.com/byFrederick/goal/internal/ports"
 )
 
-var _ ports.Runner = (*Runner)(nil)
+var (
+	_ ports.Runner = (*Runner)(nil)
+	_ ports.Reaper = (*Runner)(nil)
+)
 
 // AgentFiles writes one task's agent files into dir, which the container sees read-only at
 // /goal/agent:
@@ -232,51 +235,80 @@ func ensureImage(ctx context.Context, docker *client.Client, log *slog.Logger, r
 	return nil
 }
 
-// Reap removes task, check and sidecar containers and run folders whose run is no longer live,
-// for example after goald crashed mid-run. live reports whether a run is still running; goald
-// answers it from the store. It returns how many runs it cleaned up.
-func (r *Runner) Reap(ctx context.Context, live func(domain.RunID) bool) (int, error) {
-	list, err := r.docker.ContainerList(ctx, client.ContainerListOptions{All: true, Filters: make(client.Filters).Add("label", LabelRun)})
+// Leftovers implements ports.Reaper: the runs with task, check or sidecar containers on this
+// Docker host (whichever goald started them), with the organization they are labelled with, and
+// those with a run folder (no organization).
+func (r *Runner) Leftovers(ctx context.Context) ([]ports.Leftover, error) {
+	list, err := r.runContainers(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("list task containers: %w", err)
+		return nil, err
 	}
 
-	reaped := map[domain.RunID]bool{}
+	left := make([]ports.Leftover, 0, len(list))
+	for _, c := range list {
+		left = append(left, ports.Leftover{Run: domain.RunID(c.Labels[LabelRun]), Org: domain.OrgID(c.Labels[LabelOrg])})
+	}
+
+	entries, err := os.ReadDir(r.cfg.RunDir)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("list run dirs: %w", err)
+	}
+
+	for _, e := range entries {
+		if e.IsDir() {
+			left = append(left, ports.Leftover{Run: domain.RunID(e.Name())})
+		}
+	}
+
+	return left, nil
+}
+
+// Reap implements ports.Reaper: it removes the given runs' task, check and sidecar containers
+// and their run folders. Containers of other runs are never touched.
+func (r *Runner) Reap(ctx context.Context, runs []domain.RunID) error {
+	reap := make(map[domain.RunID]bool, len(runs))
+	for _, run := range runs {
+		reap[run] = true
+	}
+
+	list, err := r.runContainers(ctx)
+	if err != nil {
+		return err
+	}
 
 	var errs []error
 
-	for _, c := range list.Items {
+	for _, c := range list {
 		run := domain.RunID(c.Labels[LabelRun])
-		if live(run) {
+		if !reap[run] {
 			continue
 		}
 
 		if _, err := r.docker.ContainerRemove(ctx, c.ID, client.ContainerRemoveOptions{Force: true, RemoveVolumes: true}); err != nil && !cerrdefs.IsNotFound(err) {
 			errs = append(errs, fmt.Errorf("remove container of run %s: %w", run, err))
-			continue
 		}
-
-		reaped[run] = true
 	}
 
-	entries, err := os.ReadDir(r.cfg.RunDir)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		errs = append(errs, fmt.Errorf("list run dirs: %w", err))
-	}
-
-	for _, e := range entries {
-		run := domain.RunID(e.Name())
-		if !e.IsDir() || live(run) {
+	for run := range reap {
+		// A run id names a folder only when it is one path element under RunDir.
+		if !filepath.IsLocal(string(run)) || filepath.Base(string(run)) != string(run) {
 			continue
 		}
 
 		if err := os.RemoveAll(r.runDir(run)); err != nil {
 			errs = append(errs, fmt.Errorf("remove run dir %s: %w", run, err))
-			continue
 		}
-
-		reaped[run] = true
 	}
 
-	return len(reaped), errors.Join(errs...)
+	return errors.Join(errs...)
+}
+
+// runContainers lists every container labelled with a run, running or not.
+func (r *Runner) runContainers(ctx context.Context) ([]container.Summary, error) {
+	list, err := r.docker.ContainerList(ctx, client.ContainerListOptions{All: true, Filters: make(client.Filters).Add("label", LabelRun)})
+	if err != nil {
+		return nil, fmt.Errorf("list run containers: %w", err)
+	}
+
+	return list.Items, nil
 }

@@ -178,7 +178,7 @@ func sidecarContainerOf(cfg Config, s ports.SidecarSpec, imageUser string) (*con
 		AttachStdout: true,
 		AttachStderr: true,
 		Labels: map[string]string{
-			LabelFactory: string(s.FactoryID), LabelItem: string(s.ItemID), LabelRun: string(s.RunID),
+			LabelOrg: string(s.OrgID), LabelFactory: string(s.FactoryID), LabelItem: string(s.ItemID), LabelRun: string(s.RunID),
 			LabelConnection: s.Connection,
 		},
 	}

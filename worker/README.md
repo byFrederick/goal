@@ -26,7 +26,7 @@ The image is built locally and never pushed from this repository.
 | `/tmp` | tmpfs (noexec) | scratch space |
 | `/home/node` | anonymous volume | `HOME`, disk-backed so toolchain caches fit; removed with the container. Everything else is a read-only root filesystem |
 
-The runner writes `spec.json` into a per-run host folder (`$TMPDIR/goal-runs/<run id>/` by default) and has goald's `AgentFiles` write `agent/` next to it, then mounts the folder at `/goal`. The container runs as uid 1000 with every capability dropped, `no-new-privileges`, an init process, and CPU, memory and PID limits; it carries the labels `goal.factory`, `goal.item`, `goal.run`, `goal.station` and `goal.agent`, and `Runner.Reap` removes containers and folders of runs that are no longer live.
+The runner writes `spec.json` into a per-run host folder (`$TMPDIR/goal-runs/<run id>/` by default) and has goald's `AgentFiles` write `agent/` next to it, then mounts the folder at `/goal`. The container runs as uid 1000 with every capability dropped, `no-new-privileges`, an init process, and CPU, memory and PID limits; it carries the labels `goal.org`, `goal.factory`, `goal.item`, `goal.run`, `goal.station` and `goal.agent`, and goald's reaper removes the containers and folders of runs that are over (neither running nor holding their lease, whichever goald on the host started them).
 
 Environment: only the task's `Env` from goald (which carries `CLAUDE_CODE_OAUTH_TOKEN`), `GOAL_GATEWAY_TOKEN` and `HOME`. `ANTHROPIC_API_KEY` is removed by the runner and again by the worker before the SDK starts; the gateway token is removed from the agent's environment too and reaches the gateway only as a header.
 

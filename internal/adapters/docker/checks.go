@@ -202,7 +202,7 @@ func checkContainerOf(cfg Config, c ports.CheckSpec) (*container.Config, *contai
 		Env:        []string{envHome + "=" + containerHome, "CI=true"},
 		WorkingDir: containerWorkspace,
 		Labels: map[string]string{
-			LabelFactory: string(c.FactoryID), LabelItem: string(c.ItemID), LabelRun: string(c.RunID),
+			LabelOrg: string(c.OrgID), LabelFactory: string(c.FactoryID), LabelItem: string(c.ItemID), LabelRun: string(c.RunID),
 			LabelStation: c.Station, LabelCheck: c.Command,
 		},
 	}

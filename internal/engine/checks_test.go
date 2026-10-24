@@ -118,8 +118,8 @@ func TestChecks_FailureRetriesWithItsOutputThenBlocks(t *testing.T) {
 
 			checked := h.checker.Checked()
 			if checked[0].Command != "make lint" || checked[0].WorkspaceDir != started[0].WorkspaceDir ||
-				checked[0].Image != "ghcr.io/acme/agent:1" || checked[0].RunID != started[0].RunID {
-				t.Errorf("first check = %+v, want make lint in the first run's workspace and image", checked[0])
+				checked[0].Image != "ghcr.io/acme/agent:1" || checked[0].RunID != started[0].RunID || checked[0].OrgID != testOrg {
+				t.Errorf("first check = %+v, want make lint in the first run's workspace and image, of its organization", checked[0])
 			}
 
 			if n := h.workspaces.Live(); n != 0 {

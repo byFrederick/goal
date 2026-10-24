@@ -85,7 +85,7 @@ func buildMCPStub(ctx context.Context, dir string, docker *client.Client) error 
 
 func sidecarSpec(network bool) ports.SidecarSpec {
 	return ports.SidecarSpec{
-		FactoryID: "factory-1", ItemID: "item-1", RunID: domain.RunID(fmt.Sprintf("it-mcp-%d-%d", time.Now().UnixNano(), runSeq.Add(1))),
+		OrgID: testOrg, FactoryID: "factory-1", ItemID: "item-1", RunID: domain.RunID(fmt.Sprintf("it-mcp-%d-%d", time.Now().UnixNano(), runSeq.Add(1))),
 		Connection: "shop-db", Image: mcpStubImage, Command: []string{"--read-only", "--schema=public"},
 		Env: map[string]string{"STUB_SECRET": stubSecret}, Network: network,
 	}
@@ -289,10 +289,14 @@ func TestRunner_ReapRemovesOrphanedSidecars(t *testing.T) {
 		started = append(started, sc)
 	}
 
-	// Other tests' and goald's containers carry the run label too; only the orphan is not live.
-	n, err := r.Reap(t.Context(), func(run domain.RunID) bool { return run != orphan.RunID })
-	if err != nil || n != 1 {
-		t.Errorf("Reap = %d, %v; want 1 run reaped", n, err)
+	left, err := r.Leftovers(t.Context())
+	if err != nil || !slices.Contains(left, ports.Leftover{Run: orphan.RunID, Org: testOrg}) {
+		t.Errorf("Leftovers = %v, %v; want the orphan's sidecar labelled with its organization", left, err)
+	}
+
+	// Other tests' and goald's containers carry the run label too; only the orphan is reaped.
+	if err := r.Reap(t.Context(), []domain.RunID{orphan.RunID}); err != nil {
+		t.Errorf("Reap: %v", err)
 	}
 
 	if left := sidecarContainers(t, docker, orphan.RunID); len(left) != 0 {

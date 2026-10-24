@@ -883,3 +883,33 @@ func clone(it *domain.Item) domain.Item {
 
 	return c
 }
+
+// RunsOver implements ports.Store.
+func (s *Store) RunsOver(ctx context.Context, runs []domain.RunID) ([]domain.RunID, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var over []domain.RunID
+
+	for _, id := range slices.Compact(slices.Sorted(slices.Values(runs))) {
+		r, ok := s.runs[id]
+		if !ok {
+			continue
+		}
+
+		if _, ok := s.visible(r.ItemID, org); !ok {
+			continue
+		}
+
+		if _, gone := s.leaseEnded(r); r.Result.Status != domain.RunRunning && gone {
+			over = append(over, id)
+		}
+	}
+
+	return over, nil
+}

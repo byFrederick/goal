@@ -39,7 +39,7 @@ func TestContainerOf_IsHardened(t *testing.T) {
 	t.Parallel()
 
 	spec := ports.TaskSpec{
-		FactoryID: "f1", ItemID: "i1", RunID: "r1", Station: "build", Agent: "engineer", Image: "img:1",
+		OrgID: "o1", FactoryID: "f1", ItemID: "i1", RunID: "r1", Station: "build", Agent: "engineer", Image: "img:1",
 		WorkspaceDir: "/work/r1", GatewayToken: "gateway-token-123",
 		Env: map[string]string{"CLAUDE_CODE_OAUTH_TOKEN": "oauth-token-123", "ANTHROPIC_API_KEY": "sk-ant-not-passed"}, //nolint:gosec // fake values
 	}
@@ -48,7 +48,7 @@ func TestContainerOf_IsHardened(t *testing.T) {
 	want := hardening{
 		User: "1000:1000", CapDrop: "[ALL]", SecurityOpt: "[no-new-privileges:true]",
 		Mounts:     "[bind /runs/r1:/goal:ro=true bind /work/r1:/workspace:ro=false volume :/home/node:ro=false]",
-		Labels:     "map[goal.agent:engineer goal.factory:f1 goal.item:i1 goal.run:r1 goal.station:build]",
+		Labels:     "map[goal.agent:engineer goal.factory:f1 goal.item:i1 goal.org:o1 goal.run:r1 goal.station:build]",
 		Env:        "[CLAUDE_CODE_OAUTH_TOKEN=oauth-token-123 GOAL_GATEWAY_TOKEN=gateway-token-123 HOME=/home/node]",
 		Tmpfs:      "map[/tmp:rw,nosuid,nodev,size=1g,mode=1777]",
 		Privileged: false, ReadOnlyRoot: true, Init: true,

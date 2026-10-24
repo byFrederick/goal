@@ -364,6 +364,29 @@ func (s *Store) FinishLostRuns(ctx context.Context, endedBefore, now time.Time, 
 	return out, nil
 }
 
+// RunsOver implements ports.Store. An id that is not a UUID names no run.
+func (s *Store) RunsOver(ctx context.Context, runs []domain.RunID) ([]domain.RunID, error) {
+	ids := make([]uuid.UUID, 0, len(runs))
+
+	for _, r := range runs {
+		if id, err := uuid.Parse(string(r)); err == nil {
+			ids = append(ids, id)
+		}
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]uuid.UUID, error) { return q.RunsOver(ctx, ids) })
+	if err != nil {
+		return nil, fmt.Errorf("runs over: %w", err)
+	}
+
+	over := make([]domain.RunID, len(rows))
+	for i, id := range rows {
+		over[i] = domain.RunID(id.String())
+	}
+
+	return over, nil
+}
+
 // StartRun implements ports.Store.
 func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, error) {
 	factory, err := parseID("factory", string(r.FactoryID))

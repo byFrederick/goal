@@ -244,7 +244,7 @@ func (e *Engine) runInWorkspace(ctx context.Context, c claimed, runID domain.Run
 func (e *Engine) runChecks(ctx context.Context, c claimed, runID domain.RunID, ws ports.Workspace) error {
 	for _, cmd := range c.station.Checks {
 		res, err := e.checker.Check(ctx, ports.CheckSpec{
-			FactoryID: c.line.FactoryID, ItemID: c.item.ID, RunID: runID, Station: c.station.ID,
+			OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, ItemID: c.item.ID, RunID: runID, Station: c.station.ID,
 			Image: c.line.Runtime.Image, Command: cmd, WorkspaceDir: ws.Dir, Timeout: e.cfg.CheckTimeout,
 		})
 		if err != nil {
@@ -332,7 +332,7 @@ func (e *Engine) start(ctx context.Context, c claimed, runID domain.RunID, brief
 	maxTurns, maxUSD := a.Limits(rt)
 
 	task, err := e.runner.Start(ctx, ports.TaskSpec{
-		FactoryID: c.line.FactoryID, DefinitionVersionID: c.line.VersionID, ItemID: c.item.ID, RunID: runID,
+		OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, DefinitionVersionID: c.line.VersionID, ItemID: c.item.ID, RunID: runID,
 		Station: c.station.ID, Agent: a.Name, Image: rt.Image, Model: modelOf(c), PromptPath: a.PromptPath, Skills: a.Skills,
 		ToolsAllow: a.ToolsAllow, ToolsDeny: a.ToolsDeny, GatewayURL: e.cfg.GatewayURL, GatewayToken: token,
 		Purpose: c.line.Purpose, Brief: brief, Inputs: c.item.Outputs, Output: c.station.Output, WorkspaceDir: workspace, Env: env,

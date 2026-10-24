@@ -28,6 +28,8 @@ import (
 )
 
 const (
+	// testOrg labels the tests' containers; no store knows it.
+	testOrg   = "org-reap-it"
 	stubImage = "goal-runner-stub:test"
 	oauth     = "oauth-token-for-tests-only"
 	gateway   = "gateway-token-for-tests-only"
@@ -141,7 +143,7 @@ func stubSpec(t *testing.T, brief string) ports.TaskSpec {
 	}
 
 	return ports.TaskSpec{
-		FactoryID: "factory-1", ItemID: "item-1", RunID: domain.RunID(fmt.Sprintf("it-%s-%d-%d", brief, time.Now().UnixNano(), runSeq.Add(1))),
+		OrgID: testOrg, FactoryID: "factory-1", ItemID: "item-1", RunID: domain.RunID(fmt.Sprintf("it-%s-%d-%d", brief, time.Now().UnixNano(), runSeq.Add(1))),
 		Station: "build", Agent: "engineer", Image: stubImage, Brief: brief, WorkspaceDir: workspace,
 		GatewayURL: "http://127.0.0.1:8081/mcp", GatewayToken: gateway,
 		Env: map[string]string{"CLAUDE_CODE_OAUTH_TOKEN": oauth, "ANTHROPIC_API_KEY": "sk-ant-must-not-reach-the-task"},
@@ -315,7 +317,10 @@ func TestRunner_CrashReportsRedactedStderr(t *testing.T) {
 	assertCleanedUp(t, docker, r, spec)
 }
 
-func TestRunner_ReapRemovesOnlyOrphans(t *testing.T) {
+// Several goalds may share one Docker host, so Leftovers lists every run's containers, labelled
+// with the run's organization, and its run folder, while Reap removes only the runs it is given:
+// here this test's orphan, never another test's or goald's containers.
+func TestRunner_ReapRemovesOnlyTheGivenRuns(t *testing.T) {
 	t.Parallel()
 
 	r, docker := newTestRunner(t)
@@ -331,6 +336,11 @@ func TestRunner_ReapRemovesOnlyOrphans(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Should Reap fail, the orphan this test created goes anyway (by its unique name).
+	t.Cleanup(func() {
+		_, _ = docker.ContainerRemove(context.Background(), containerName(orphan.RunID), client.ContainerRemoveOptions{Force: true})
+	})
+
 	live := stubSpec(t, "sleep")
 	ctx, cancel := context.WithCancel(t.Context())
 
@@ -339,16 +349,29 @@ func TestRunner_ReapRemovesOnlyOrphans(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Other tests' and goald's containers carry the run label too; only the orphan is not live.
-	n, err := r.Reap(t.Context(), func(run domain.RunID) bool { return run != orphan.RunID })
-	if err != nil || n != 1 {
-		t.Errorf("Reap = %d, %v; want 1 run reaped", n, err)
+	left, err := r.Leftovers(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []ports.Leftover{{Run: orphan.RunID, Org: testOrg}, {Run: orphan.RunID}, {Run: live.RunID, Org: testOrg}, {Run: live.RunID}} {
+		if !slices.Contains(left, want) {
+			t.Errorf("Leftovers lacks %+v (container labelled with its organization, or run folder)", want)
+		}
+	}
+
+	if err := r.Reap(t.Context(), []domain.RunID{orphan.RunID}); err != nil {
+		t.Errorf("Reap: %v", err)
 	}
 
 	assertCleanedUp(t, docker, r, orphan)
 
 	if _, err := docker.ContainerInspect(t.Context(), containerName(live.RunID), client.ContainerInspectOptions{}); err != nil {
-		t.Errorf("Reap removed a live run's container: %v", err)
+		t.Errorf("Reap removed another run's container: %v", err)
+	}
+
+	if _, err := os.Stat(r.runDir(live.RunID)); err != nil {
+		t.Errorf("Reap removed another run's folder: %v", err)
 	}
 
 	cancel()

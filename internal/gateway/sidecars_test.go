@@ -155,7 +155,7 @@ func TestGateway_SidecarStartsOnceForTheRunAndStopsWhenTheRunEnds(t *testing.T) 
 	}
 
 	want := ports.SidecarSpec{
-		FactoryID: factoryID, ItemID: itemID, RunID: "run-1", Connection: shopDB, Image: "ghcr.io/acme/shop-db-mcp:1.4.2",
+		OrgID: "org-1", FactoryID: factoryID, ItemID: itemID, RunID: "run-1", Connection: shopDB, Image: "ghcr.io/acme/shop-db-mcp:1.4.2",
 		Command: []string{"--read-only", dbURL}, Env: map[string]string{"DATABASE_URL": dbURL, "LOG_LEVEL": "info"}, Network: true,
 	}
 	if got := specs[0]; fmt.Sprint(got) != fmt.Sprint(want) {

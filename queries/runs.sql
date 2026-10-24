@@ -63,6 +63,15 @@ LIMIT sqlc.arg(max_runs)::bigint
 FOR UPDATE OF r SKIP LOCKED
 FOR NO KEY UPDATE OF w SKIP LOCKED;
 
+-- name: RunsOver :many
+-- The runs among ids that are over: no longer running and no longer holding their lease (the
+-- item's lease at the run's station acquired no later than the run started). Looked up by
+-- primary key.
+SELECT r.id FROM agent_runs r
+WHERE r.id = ANY (sqlc.arg(ids)::uuid[]) AND r.status <> 'running' AND NOT EXISTS (
+  SELECT 1 FROM leases l WHERE l.item_id = r.item_id AND l.station = r.station AND l.acquired_at <= r.started_at
+);
+
 -- name: CancelLostRuns :many
 UPDATE agent_runs SET status = 'cancelled', error = sqlc.arg(error), ended_at = sqlc.arg(ended_at)
 WHERE id = ANY (sqlc.arg(ids)::uuid[]) AND status = 'running'

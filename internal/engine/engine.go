@@ -5,7 +5,8 @@
 // another goald instance would need: every decision reads and writes the Store, claims are
 // slot leases that never exceed a station's capacity, every transition is compare-and-set,
 // and work held by a dead instance returns to the queue when its lease expires. Several
-// instances can run Tick and SweepLeases at once.
+// instances can run Tick and SweepLeases at once, and share one host: ReapOrphans (reap.go)
+// removes only what runs the store says are over left there.
 //
 // Organizations. Every line belongs to one organization, and every store call the engine makes
 // for a line is bound to it (domain.WithOrg), so row-level security keeps each organization's
@@ -88,6 +89,9 @@ type Deps struct {
 	// RunEnded, when set, is told each run whose agent task has ended (goald stops the run's
 	// MCP sidecars). It is called once per run, with the run's result already recorded.
 	RunEnded func(ctx context.Context, run domain.RunID)
+	// Reapers hold what runs leave on this instance's host (containers, run folders,
+	// workspaces); ReapOrphans removes what runs that are over left there. None: nothing to reap.
+	Reapers []ports.Reaper
 }
 
 func (d Deps) complete() bool {
@@ -105,6 +109,9 @@ type Config struct {
 	LeaseTTL time.Duration
 	// HeartbeatEvery must be shorter than LeaseTTL (default LeaseTTL/3).
 	HeartbeatEvery time.Duration
+	// ReapEvery is how often Run reaps what runs that are over left on the host, the first time
+	// when it starts (default LeaseTTL/2).
+	ReapEvery time.Duration
 	// TaskTimeout stops an agent task that runs longer (default 2h).
 	TaskTimeout time.Duration
 	// CheckTimeout stops one command check that runs longer (default 30m).
@@ -157,6 +164,7 @@ type Engine struct {
 	clock      ports.Clock
 	log        *slog.Logger
 	runEnded   func(context.Context, domain.RunID)
+	reapers    []ports.Reaper
 	cfg        Config
 
 	mu    sync.RWMutex
@@ -211,7 +219,7 @@ func New(d Deps, cfg Config) (*Engine, error) {
 
 	return &Engine{
 		store: d.Store, orgs: d.Orgs, runner: d.Runner, workspaces: d.Workspaces, checker: d.Checker, contracts: d.Contracts,
-		secrets: d.Secrets, codehost: d.CodeHost, clock: d.Clock, log: log, runEnded: d.RunEnded, cfg: cfg, lines: lines,
+		secrets: d.Secrets, codehost: d.CodeHost, clock: d.Clock, log: log, runEnded: d.RunEnded, reapers: d.Reapers, cfg: cfg, lines: lines,
 		active: map[domain.ItemID]*activeRun{}, exhausted: map[domain.FactoryID]bool{},
 	}, nil
 }
@@ -280,6 +288,10 @@ func withDefaults(cfg Config) Config {
 		cfg.HeartbeatEvery = cfg.LeaseTTL / 3
 	}
 
+	if cfg.ReapEvery <= 0 {
+		cfg.ReapEvery = cfg.LeaseTTL / 2
+	}
+
 	if cfg.TaskTimeout <= 0 {
 		cfg.TaskTimeout = defaultTaskTimeout
 	}
@@ -295,16 +307,33 @@ func withDefaults(cfg Config) Config {
 	return cfg
 }
 
-// Run sweeps expired leases and pulls work every TickEvery until ctx ends. On return, every
-// run this instance started has finished or released its item.
+// Run sweeps expired leases and pulls work every TickEvery until ctx ends, and reaps what runs
+// that are over left on the host when it starts and every ReapEvery, right after a sweep, so
+// the leftovers of the leases it swept go at once. On return, every run this instance started
+// has finished or released its item.
 func (e *Engine) Run(ctx context.Context) error {
 	t := e.clock.NewTicker(e.cfg.TickEvery)
 	defer t.Stop()
 	defer e.runs.Wait()
 
+	var reapedAt time.Time
+
 	for {
 		if _, err := e.SweepLeases(ctx); err != nil && ctx.Err() == nil {
 			e.log.ErrorContext(ctx, "sweep leases", slog.Any("error", err))
+		}
+
+		if now := e.clock.Now(); reapedAt.IsZero() || now.Sub(reapedAt) >= e.cfg.ReapEvery {
+			reapedAt = now
+
+			n, err := e.ReapOrphans(ctx)
+			if n > 0 {
+				e.log.InfoContext(ctx, "reaped orphaned runs", slog.Int("runs", n))
+			}
+
+			if err != nil && ctx.Err() == nil {
+				e.log.ErrorContext(ctx, "reap orphaned runs", slog.Any("error", err))
+			}
 		}
 
 		if err := e.Tick(ctx); err != nil && ctx.Err() == nil {

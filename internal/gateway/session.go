@@ -124,7 +124,7 @@ func (s *session) prepareSidecar(ctx context.Context, c config.Connection, conn 
 	}
 
 	spec := &ports.SidecarSpec{
-		FactoryID: s.claims.FactoryID, ItemID: s.claims.ItemID, RunID: s.claims.RunID, Connection: c.Name,
+		OrgID: s.claims.OrgID, FactoryID: s.claims.FactoryID, ItemID: s.claims.ItemID, RunID: s.claims.RunID, Connection: c.Name,
 		Image: c.Image, Network: c.Network, Env: make(map[string]string, len(c.Env)),
 	}
 

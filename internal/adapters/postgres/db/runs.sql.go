@@ -323,3 +323,33 @@ func (q *Queries) RunItem(ctx context.Context, id uuid.UUID) (uuid.UUID, error) 
 	err := row.Scan(&item_id)
 	return item_id, err
 }
+
+const runsOver = `-- name: RunsOver :many
+SELECT r.id FROM agent_runs r
+WHERE r.id = ANY ($1::uuid[]) AND r.status <> 'running' AND NOT EXISTS (
+  SELECT 1 FROM leases l WHERE l.item_id = r.item_id AND l.station = r.station AND l.acquired_at <= r.started_at
+)
+`
+
+// The runs among ids that are over: no longer running and no longer holding their lease (the
+// item's lease at the run's station acquired no later than the run started). Looked up by
+// primary key.
+func (q *Queries) RunsOver(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, runsOver, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
