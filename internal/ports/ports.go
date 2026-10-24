@@ -145,7 +145,8 @@ type Store interface {
 	ListItems(ctx context.Context, q ItemQuery) ([]domain.Item, error)
 
 	// StationLoads returns the load of every station of a factory that has open items: how
-	// many wait (queued or ready) and how many are in progress. Order is unspecified.
+	// many wait (queued or ready), how many are in progress and how many wait for a person's
+	// decision. Order is unspecified.
 	StationLoads(ctx context.Context, factory domain.FactoryID) ([]domain.StationLoad, error)
 
 	// SpendSince is the summed cost_usd of the factory's agent runs started at or after since;

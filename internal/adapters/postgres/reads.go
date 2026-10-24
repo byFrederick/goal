@@ -76,7 +76,9 @@ func (s *Store) StationLoads(ctx context.Context, factory domain.FactoryID) ([]d
 
 	out := make([]domain.StationLoad, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, domain.StationLoad{Station: r.Station, Waiting: int(r.Waiting), InProgress: int(r.InProgress)})
+		out = append(out, domain.StationLoad{
+			Station: r.Station, Waiting: int(r.Waiting), InProgress: int(r.InProgress), WaitingHuman: int(r.WaitingHuman),
+		})
 	}
 
 	return out, nil

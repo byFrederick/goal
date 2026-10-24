@@ -431,15 +431,24 @@ func (q *Queries) StartItem(ctx context.Context, arg StartItemParams) (WorkItem,
 }
 
 const stationLoads = `-- name: StationLoads :many
-SELECT station, waiting, in_progress FROM station_wip WHERE factory_id = $1
+SELECT station,
+       count(*) FILTER (WHERE state IN ('queued', 'ready')) AS waiting,
+       count(*) FILTER (WHERE state = 'in_progress')        AS in_progress,
+       count(*) FILTER (WHERE state = 'waiting_human')      AS waiting_human
+FROM work_items
+WHERE factory_id = $1 AND state NOT IN ('done', 'cancelled')
+GROUP BY station
 `
 
 type StationLoadsRow struct {
-	Station    string
-	Waiting    int64
-	InProgress int64
+	Station      string
+	Waiting      int64
+	InProgress   int64
+	WaitingHuman int64
 }
 
+// The open items of a factory by station: waiting to be pulled, in progress, waiting for a
+// person's decision. (The station_wip view counts only the first two.)
 func (q *Queries) StationLoads(ctx context.Context, factoryID uuid.UUID) ([]StationLoadsRow, error) {
 	rows, err := q.db.Query(ctx, stationLoads, factoryID)
 	if err != nil {
@@ -449,7 +458,12 @@ func (q *Queries) StationLoads(ctx context.Context, factoryID uuid.UUID) ([]Stat
 	var items []StationLoadsRow
 	for rows.Next() {
 		var i StationLoadsRow
-		if err := rows.Scan(&i.Station, &i.Waiting, &i.InProgress); err != nil {
+		if err := rows.Scan(
+			&i.Station,
+			&i.Waiting,
+			&i.InProgress,
+			&i.WaitingHuman,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -77,5 +77,13 @@ ORDER BY number DESC
 LIMIT sqlc.arg(max_items)::bigint;
 
 -- name: StationLoads :many
-SELECT station, waiting, in_progress FROM station_wip WHERE factory_id = $1;
+-- The open items of a factory by station: waiting to be pulled, in progress, waiting for a
+-- person's decision. (The station_wip view counts only the first two.)
+SELECT station,
+       count(*) FILTER (WHERE state IN ('queued', 'ready')) AS waiting,
+       count(*) FILTER (WHERE state = 'in_progress')        AS in_progress,
+       count(*) FILTER (WHERE state = 'waiting_human')      AS waiting_human
+FROM work_items
+WHERE factory_id = $1 AND state NOT IN ('done', 'cancelled')
+GROUP BY station;
 

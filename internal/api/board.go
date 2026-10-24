@@ -72,7 +72,7 @@ func (s *server) GetBoard(ctx context.Context, req gen.GetBoardRequestObject) (g
 	for _, st := range l.Stations {
 		bs := gen.BoardStation{
 			Id: st.ID, Kind: gen.StationKind(st.Kind), Action: actionOf(string(st.Action)), Agents: agentsAt(st),
-			Waiting: loads[st.ID].Waiting, InProgress: loads[st.ID].InProgress, Items: byStation[st.ID],
+			Waiting: loads[st.ID].Waiting, InProgress: loads[st.ID].Busy(), Items: byStation[st.ID],
 		}
 
 		if st.WIP > 0 {

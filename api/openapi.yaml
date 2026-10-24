@@ -2161,7 +2161,7 @@ components:
           nullable: true
           description: The station's wip setting, or null when it has none
         waiting: { type: integer, description: Items queued or ready here }
-        in_progress: { type: integer, description: Items being worked here }
+        in_progress: { type: integer, description: "Items being worked here: in progress, and waiting for a person's decision (a human station's work). Blocked items count in neither" }
         items:
           type: array
           items: { $ref: "#/components/schemas/ItemCard" }

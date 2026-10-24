@@ -199,7 +199,8 @@ func TestAPI_BoardShowsEveryStationInLineOrder(t *testing.T) {
 	want := []boardStation{
 		{ID: "inbox", Agents: []string{}, Waiting: 1, Items: []int64{1}},
 		{ID: stBuild, Agents: []string{agBackend, "frontend"}, WIP: 2, Waiting: 1, InProgress: 2, Items: []int64{4, 3, 2}},
-		{ID: stMerge, Action: stMerge, Agents: []string{}, Items: []int64{5}},
+		// An item waiting for a person's decision is the human station's work in progress.
+		{ID: stMerge, Action: stMerge, Agents: []string{}, InProgress: 1, Items: []int64{5}},
 		{ID: stDone, Agents: []string{}, Items: []int64{6}},
 	}
 	if got := stationsOf(board); !reflect.DeepEqual(got, want) {

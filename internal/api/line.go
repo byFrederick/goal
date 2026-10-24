@@ -27,7 +27,7 @@ func (s *server) boardLine(
 ) (gen.BoardLine, error) {
 	line := gen.BoardLine{
 		Status:   gen.BoardLineStatusRunning,
-		Wip:      lineWIP(l, loads, cards),
+		Wip:      lineWIP(l, loads),
 		Release:  gen.LineRelease{Policy: gen.Push, InBuffer: loads[drum].Waiting},
 		Expedite: lineExpedite(l, cards),
 	}
@@ -70,7 +70,7 @@ func (s *server) boardLine(
 
 // lineWIP counts the items in progress or waiting on a person at the stations with a wip limit,
 // against the sum of those limits (none when no station has one).
-func lineWIP(l domain.Line, loads map[string]domain.StationLoad, cards map[string][]gen.ItemCard) gen.LineWip {
+func lineWIP(l domain.Line, loads map[string]domain.StationLoad) gen.LineWip {
 	var wip gen.LineWip
 
 	limit := 0
@@ -81,13 +81,7 @@ func lineWIP(l domain.Line, loads map[string]domain.StationLoad, cards map[strin
 		}
 
 		limit += st.WIP
-		wip.InProgress += loads[st.ID].InProgress
-
-		for _, c := range cards[st.ID] {
-			if c.State == gen.ItemState(domain.StateWaitingHuman) {
-				wip.InProgress++
-			}
-		}
+		wip.InProgress += loads[st.ID].Busy()
 	}
 
 	if limit > 0 {

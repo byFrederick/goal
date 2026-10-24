@@ -949,7 +949,7 @@ type BoardStation struct {
 	DoneToday *int   `json:"done_today"`
 	Id        string `json:"id"`
 
-	// InProgress Items being worked here
+	// InProgress Items being worked here: in progress, and waiting for a person's decision (a human station's work). Blocked items count in neither
 	InProgress int         `json:"in_progress"`
 	Items      []ItemCard  `json:"items"`
 	Kind       StationKind `json:"kind"`

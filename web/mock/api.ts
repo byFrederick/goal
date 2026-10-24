@@ -712,7 +712,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         agents: config[s.id]?.agents ?? [],
         wip_limit: config[s.id]?.wip_limit ?? null,
         waiting: here.filter((it) => it.state === 'queued' || it.state === 'ready').length,
-        in_progress: here.filter((it) => it.state === 'in_progress').length,
+        // In progress, and waiting for a person's decision (a human station's work).
+        in_progress: here.filter((it) => it.state === 'in_progress' || it.state === 'waiting_human').length,
         items: here.map(card),
         ...stationStats(factory.name, s, here),
       };
@@ -744,10 +745,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       status: andon ? 'stopped' : 'running',
       andon,
       wip: {
-        in_progress: limited.reduce(
-          (n, s) => n + s.in_progress + s.items.filter((it) => it.state === 'waiting_human').length,
-          0,
-        ),
+        in_progress: limited.reduce((n, s) => n + s.in_progress, 0),
         limit: limited.length > 0 ? limited.reduce((n, s) => n + (s.wip_limit ?? 0), 0) : null,
       },
       release: {

@@ -59,12 +59,18 @@ func (it Item) latestOutput(l Line, field func(map[string]any) string) string {
 	return ""
 }
 
-// StationLoad is the work at one station now: items waiting to be pulled and items being worked.
+// StationLoad is the work at one station now: items waiting to be pulled, items being worked
+// and items waiting for a person's decision. A blocked item is in none of them.
 type StationLoad struct {
-	Station    string
-	Waiting    int
-	InProgress int
+	Station      string
+	Waiting      int
+	InProgress   int
+	WaitingHuman int
 }
+
+// Busy is the work in progress at the station: items being worked, and items waiting for a
+// person's decision, which hold a human station's WIP the same way.
+func (ld StationLoad) Busy() int { return ld.InProgress + ld.WaitingHuman }
 
 // Constraint returns the agent station whose load is highest relative to its capacity,
 // (waiting + in progress) / capacity, from a snapshot of the line's loads. Ties go to the

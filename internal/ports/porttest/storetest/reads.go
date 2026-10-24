@@ -141,7 +141,7 @@ func testStationLoads(f *fixture) {
 	slices.SortFunc(loads, func(a, b domain.StationLoad) int { return cmp.Compare(a.Station, b.Station) })
 
 	want := []domain.StationLoad{
-		{Station: stNext, Waiting: 1},
+		{Station: stNext, Waiting: 1, WaitingHuman: 1},
 		{Station: stWork, Waiting: 2, InProgress: 1},
 	}
 	if !reflect.DeepEqual(loads, want) {

@@ -89,6 +89,8 @@ func (s *Store) StationLoads(ctx context.Context, factory domain.FactoryID) ([]d
 			ld.Waiting++
 		case it.State == domain.StateInProgress:
 			ld.InProgress++
+		case it.State == domain.StateWaitingHuman:
+			ld.WaitingHuman++
 		}
 	}
 
