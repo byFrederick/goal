@@ -54,10 +54,17 @@ export function clip(s: string, max: number): string {
   return s.length > max ? `${s.slice(0, max)}…` : s;
 }
 
-/** Turns SDK messages into protocol events. It remembers which API messages it has counted. */
+type Usage = Omit<Extract<WorkerEvent, { type: 'usage' }>, 'type' | 'at'>;
+
+/**
+ * Turns SDK messages into protocol events. Usage comes from the stream: the assistant messages
+ * carry only the opening counts of their API message (output_tokens 1), the final ones arrive in
+ * its message_delta, so the mapper keeps each open API message's opening counts, by session
+ * thread (the main one or a subagent's tool call).
+ */
 export class EventMapper {
   readonly #now: () => Date;
-  readonly #counted = new Set<string>();
+  readonly #opened = new Map<string | null, Usage>();
   readonly #skills: ReadonlySet<string>;
 
   /** skills are the ones the agent may use; Claude Code's init lists every skill it found. */
@@ -86,6 +93,8 @@ export class EventMapper {
         return this.#assistant(msg.message, at);
       case 'user':
         return toolResults(msg.message.content, at);
+      case 'stream_event':
+        return this.#usage(msg.event, msg.parent_tool_use_id, at);
       case 'result':
         return [finished(msg, at)];
       default:
@@ -108,20 +117,40 @@ export class EventMapper {
         });
       }
     }
-    // The SDK splits one API message into one SDK message per content block; count it once.
-    if (!this.#counted.has(message.id)) {
-      this.#counted.add(message.id);
-      const u = message.usage;
-      events.push({
-        type: 'usage',
-        at,
+    return events;
+  }
+
+  /** One usage event per API message, when its message_delta brings the final counts. */
+  #usage(
+    event: Extract<SDKMessage, { type: 'stream_event' }>['event'],
+    thread: string | null,
+    at: string,
+  ): WorkerEvent[] {
+    if (event.type === 'message_start') {
+      const u = event.message.usage;
+      this.#opened.set(thread, {
         input_tokens: u.input_tokens,
         output_tokens: u.output_tokens,
         cache_read_input_tokens: u.cache_read_input_tokens ?? 0,
         cache_creation_input_tokens: u.cache_creation_input_tokens ?? 0,
       });
+      return [];
     }
-    return events;
+    if (event.type !== 'message_delta') return [];
+    const opened = this.#opened.get(thread);
+    if (!opened) return [];
+    this.#opened.delete(thread);
+    const u = event.usage;
+    return [
+      {
+        type: 'usage',
+        at,
+        input_tokens: u.input_tokens ?? opened.input_tokens,
+        output_tokens: u.output_tokens,
+        cache_read_input_tokens: u.cache_read_input_tokens ?? opened.cache_read_input_tokens,
+        cache_creation_input_tokens: u.cache_creation_input_tokens ?? opened.cache_creation_input_tokens,
+      },
+    ];
   }
 }
 

@@ -62,6 +62,8 @@ export function agentQuery(
         }
       : {},
     strictMcpConfig: true,
+    // The stream's message_delta events carry each API call's final token counts.
+    includePartialMessages: true,
     persistSession: false,
     env: agentEnv(env),
     abortController,

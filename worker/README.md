@@ -67,7 +67,7 @@ One JSON object per line, each with `type` and `at` (RFC 3339). Logs go to stder
 | `tool_use` | `id`, `tool`, `input` (JSON, cut to 500 chars) | `tool_call` |
 | `tool_result` | `id`, `is_error`, `summary` (cut to 500 chars) | `tool_result` |
 | `message` | `text` (assistant text, cut to 2000 chars) | `agent_message` |
-| `usage` | `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` (per API message) | `usage` |
+| `usage` | `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`: one event per API call (one model turn), with that call's final counts, not a running total. They come from the stream's `message_delta` (`includePartialMessages`): the SDK's assistant messages carry only the opening counts (`output_tokens` 1). The run's totals are in `finished` | `usage` |
 | `finished` | `status` (`succeeded` or `failed`), `subtype`, `output`, `error`, `cost_usd`, `turns`, `input_tokens`, `output_tokens`, `session_id`, `permission_denials` (`[{tool, id}]`, the calls the policy refused; absent when none) | the run's result; goald records each denial as a `tool_denied` event |
 
 `finished` is always the last line. The exit code is 0 when the agent produced a result (even a failed one) and 1 when the worker crashed; a container that exits without a `finished` line is a failed run quoting the tail of stderr.

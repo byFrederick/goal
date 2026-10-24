@@ -97,6 +97,7 @@ describe('runTask', () => {
         },
       },
       strictMcpConfig: true,
+      includePartialMessages: true,
       maxTurns: 40,
       maxBudgetUsd: 6,
       outputFormat: { type: 'json_schema', schema: { type: 'object' } },
@@ -182,10 +183,11 @@ describe('runTask', () => {
   it('streams progress events and ends with the result', async () => {
     const assistant = (content: unknown[]) => ({
       type: 'assistant',
-      message: { id: 'msg_1', content, usage },
+      message: { id: 'msg_1', content, usage: { ...usage, output_tokens: 1 } },
       parent_tool_use_id: null,
       session_id: 's1',
     });
+    const stream = (event: unknown) => ({ type: 'stream_event', event, parent_tool_use_id: null, session_id: 's1' });
     const { code, events } = await run([
       {
         type: 'system',
@@ -196,8 +198,11 @@ describe('runTask', () => {
         skills: ['acme-conventions'],
         mcp_servers: [{ name: 'goal', status: 'connected' }],
       },
+      stream({ type: 'message_start', message: { id: 'msg_1', usage: { ...usage, output_tokens: 1 } } }),
       assistant([{ type: 'text', text: 'Looking at the router.' }]),
       assistant([{ type: 'tool_use', id: 'tu_1', name: 'Bash', input: { command: 'npm test' } }]),
+      stream({ type: 'message_delta', delta: { stop_reason: 'tool_use' }, usage: { output_tokens: 45 } }),
+      stream({ type: 'message_stop' }),
       {
         type: 'user',
         message: {
@@ -210,7 +215,17 @@ describe('runTask', () => {
     ]);
 
     expect(code).toBe(0);
-    expect(events.map((e) => e.type)).toEqual(['started', 'message', 'usage', 'tool_use', 'tool_result', 'finished']);
+    expect(events.map((e) => e.type)).toEqual(['started', 'message', 'tool_use', 'usage', 'tool_result', 'finished']);
+    // One usage event per API call, with its final counts: the assistant messages only carry
+    // the stream's opening placeholder (output_tokens 1).
+    expect(events).toContainEqual({
+      type: 'usage',
+      at: at.toISOString(),
+      input_tokens: 100,
+      output_tokens: 45,
+      cache_read_input_tokens: 5,
+      cache_creation_input_tokens: 0,
+    });
     expect(events).toContainEqual({
       type: 'tool_use',
       at: at.toISOString(),
