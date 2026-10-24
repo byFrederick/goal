@@ -1,10 +1,11 @@
 // The pieces the rail and the phone's top row share: one stop of the arrow-key movement, a
-// factory's square, a screen a later phase builds, and the account.
+// factory's square, a screen a later phase builds, and the account menu.
 import { Link } from '@tanstack/react-router';
 import { type KeyboardEvent, type ReactNode, useCallback } from 'react';
 import type { OrgSummary } from '../api/types';
 import { cn } from '../ui/cn';
 import { Avatar, Mark } from '../ui/mark';
+import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '../ui/menu';
 import { Tooltip } from '../ui/tooltip';
 import type { FactorySquare } from './factory-squares';
 import { type RailAxis, railFocusTarget } from './rail-focus';
@@ -21,6 +22,9 @@ export const railItem = { 'data-rail-item': '' } as const;
 export function useRailKeys(axis: RailAxis) {
   return useCallback(
     (e: KeyboardEvent<HTMLElement>) => {
+      // Keys pressed in a menu, sheet or dialog a rail item opened bubble here through React's
+      // portals; they are not the rail's.
+      if (!e.currentTarget.contains(e.target as Node)) return;
       const items = [...e.currentTarget.querySelectorAll<HTMLElement>('[data-rail-item]')];
       const index = items.indexOf(document.activeElement as HTMLElement);
       const target = railFocusTarget(e.key, index, items.length, axis);
@@ -106,13 +110,51 @@ export function LaterRailItem({
 }
 
 /**
- * The person using the install. Phase 2.2 has one local user and no sign-in (no-auth); C4 makes
- * this the account menu's trigger ("Local user", "This install").
+ * A menu trigger on the rail opens its menu with Enter or Space; ArrowDown keeps moving along the
+ * rail, as on every other rail item (Radix would open the menu on it).
  */
-export function AccountMark({ size }: { size: Size }) {
-  return (
-    <span role="img" aria-label="LU, Local user" className={railItemClass}>
+export function keepArrowsOnRail(e: KeyboardEvent<HTMLElement>) {
+  if (e.key === 'ArrowDown') e.preventDefault();
+}
+
+/**
+ * The person using the install and its menu. Phase 2.2 has one local user and no sign-in
+ * (no-auth): the menu names them and the install; their role and Sign out arrive with phase 4.
+ */
+export function AccountMenu({ size }: { size: Size }) {
+  const trigger = (
+    <MenuTrigger
+      aria-label="LU, Local user, account"
+      className={railItemClass}
+      onKeyDown={size === 'rail' ? keepArrowsOnRail : undefined}
+      {...railItem}
+    >
       <Avatar initials="LU" size={size} />
-    </span>
+    </MenuTrigger>
+  );
+  return (
+    <Menu>
+      {size === 'rail' ? (
+        <Tooltip label="Local user" detail="This install">
+          {trigger}
+        </Tooltip>
+      ) : (
+        trigger
+      )}
+      <MenuContent side={size === 'rail' ? 'right' : 'bottom'} align="end" className="w-64">
+        <MenuLabel className="mt-1 flex items-center gap-3 text-ink">
+          <Avatar initials="LU" size="phone" />
+          <span className="min-w-0">
+            <span className="block text-[15px] font-medium">Local user</span>
+            <span className="block font-normal text-muted">This install</span>
+          </span>
+        </MenuLabel>
+        <MenuSeparator />
+        <MenuItem disabled>
+          Sign-in and accounts
+          <span className="ml-auto text-xs">{laterText}</span>
+        </MenuItem>
+      </MenuContent>
+    </Menu>
   );
 }

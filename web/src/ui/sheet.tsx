@@ -11,6 +11,8 @@ interface SheetContentProps {
   children: ReactNode;
   /** What takes focus when the sheet opens (the current entry); the first focusable otherwise. */
   initialFocus?: RefObject<HTMLElement | null>;
+  /** Called as the sheet closes; preventDefault keeps Radix from returning focus to its trigger. */
+  onCloseAutoFocus?: (e: Event) => void;
 }
 
 /**
@@ -18,7 +20,7 @@ interface SheetContentProps {
  * is trapped and returns to the trigger, Escape closes it). Used for the organization sheet and
  * the tab bar's More.
  */
-export function SheetContent({ title, children, initialFocus }: SheetContentProps) {
+export function SheetContent({ title, children, initialFocus, onCloseAutoFocus }: SheetContentProps) {
   return (
     <D.Portal>
       <D.Overlay className="fixed inset-0 z-40 bg-ink/50 data-[state=open]:animate-[fade-in_150ms_ease-out]" />
@@ -29,6 +31,7 @@ export function SheetContent({ title, children, initialFocus }: SheetContentProp
           e.preventDefault();
           initialFocus.current.focus();
         }}
+        onCloseAutoFocus={onCloseAutoFocus}
         className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-1 overflow-y-auto rounded-t-[16px] bg-surface px-3 pt-2 pb-[max(28px,env(safe-area-inset-bottom))] shadow-[0_-12px_32px_-12px_rgb(29_39_51/0.35)] outline-none data-[state=open]:animate-[fade-in_150ms_ease-out]"
       >
         <span aria-hidden="true" className="mx-auto mb-1.5 block h-1 w-10 rounded-sm bg-rule" />

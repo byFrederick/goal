@@ -9,7 +9,7 @@ import { cn } from '../ui/cn';
 import { Sheet, SheetContent, SheetLabel, SheetTrigger } from '../ui/sheet';
 import { useFactorySquares } from './factory-squares';
 import { OrgMark } from './org-mark';
-import { AccountMark, FactorySquareLink, LaterRailItem, useRailKeys } from './rail-items';
+import { AccountMenu, FactorySquareLink, LaterRailItem, useRailKeys } from './rail-items';
 import { factoriesScreen, factoryScreens, laterText, newFactoryScreen } from './screens';
 
 export function PhoneTopRow({ org }: { org: OrgSummary }) {
@@ -37,7 +37,7 @@ export function PhoneTopRow({ org }: { org: OrgSummary }) {
           </LaterRailItem>
         </li>
       </ul>
-      <AccountMark size="phone" />
+      <AccountMenu size="phone" />
     </nav>
   );
 }

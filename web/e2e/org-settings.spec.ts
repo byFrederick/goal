@@ -1,7 +1,7 @@
 // Organization settings (C §13 Playwright 5): rename, short mark, address, slot limits, the
 // unsaved-changes prompt and Delete, at every width against the mock.
 import { expect, type Page, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll, isPhone, orgNav } from './support';
+import { expectAccessible, expectNoHorizontalScroll, isPhone, orgMarkOf, orgNav } from './support';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
@@ -49,7 +49,7 @@ test('a new name and short mark show in the rail once saved', async ({ page }) =
 
   await expect(page.getByText('Saved', { exact: true })).toBeVisible();
   await expect(save(page)).toBeDisabled();
-  await expect(orgNav(page).getByRole('link', { name: /^AR, Acme Robotics organization/ })).toBeVisible();
+  await expect(orgMarkOf(page, 'AR, Acme Robotics organization, switch organization')).toBeVisible();
   await expect(page.getByText('Settings for Acme Robotics and all 3 of its factories.')).toBeVisible();
   await expect(page).toHaveTitle('Settings · Acme Robotics · Goal');
 });

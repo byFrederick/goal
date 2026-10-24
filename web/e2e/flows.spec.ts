@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll, isPhone, orgNav } from './support';
+import { expectAccessible, expectNoHorizontalScroll, isPhone, orgMarkOf, orgNav } from './support';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
@@ -156,7 +156,7 @@ test('the rail moves by arrow keys and opens a factory', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeVisible();
 
   const rail = orgNav(page);
-  const mark = rail.getByRole('link', { name: 'Ac, Acme organization, factories' });
+  const mark = orgMarkOf(page);
   await page.keyboard.press('Tab'); // skip link
   await page.keyboard.press('Tab');
   await expect(mark).toBeFocused();
@@ -170,6 +170,8 @@ test('the rail moves by arrow keys and opens a factory', async ({ page }) => {
   await expect(tip).toContainText('3 waiting on you');
 
   await page.keyboard.press('End');
+  await expect(rail.getByRole('button', { name: 'LU, Local user, account' })).toBeFocused();
+  await page.keyboard.press('ArrowUp');
   await expect(rail.getByRole('button', { name: 'Credentials' })).toBeFocused();
   await page.keyboard.press('Home');
   await expect(mark).toBeFocused();
@@ -215,7 +217,9 @@ test('a decision made elsewhere updates the badges without a reload', async ({ p
 test('the organization pages have the organization sidebar', async ({ page }) => {
   test.skip(isPhone(page), 'sidebars are the 768 px and wider navigation');
   await page.goto('/o/acme/f/goal');
-  await orgNav(page).getByRole('link', { name: 'Ac, Acme organization, factories' }).click();
+  // The current organization in the menu opens its Factories home.
+  await orgMarkOf(page).click();
+  await page.getByRole('menuitemradio', { name: /^Acme/ }).click();
   await expect(page).toHaveURL(/\/o\/acme$/);
   const sidebar = page.getByRole('navigation', { name: 'Acme organization' });
   await expect(sidebar.getByRole('link', { name: /^Factories\s?3 factories$/ })).toHaveAttribute(
@@ -343,4 +347,183 @@ test('on a phone: More opens a sheet that leads to the factories', async ({ page
   await expect(page).toHaveURL(/\/o\/acme$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Factory' })).toHaveCount(0);
+});
+
+test('switch organization from the menu by keyboard', async ({ page }) => {
+  test.skip(isPhone(page), 'the menu is the 768 px and wider navigation; phones have the sheet');
+  await page.goto('/o/acme/f/sre');
+  await expect(page.getByRole('heading', { level: 1, name: 'SRE floor' })).toBeVisible();
+  const mark = orgMarkOf(page);
+  await mark.focus();
+
+  // Escape closes the menu and returns focus to the mark.
+  await page.keyboard.press('Enter');
+  const menu = page.getByRole('menu', { name: 'Ac, Acme organization, switch organization' });
+  await expect(menu).toBeVisible();
+  await expect(mark).toHaveAttribute('aria-expanded', 'true');
+  await expect(menu.getByRole('menuitemradio', { name: /^Acme\s?3 factories$/ })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await expect(menu.getByRole('menuitemradio', { name: /^Example Labs\s?1 factory$/ })).toHaveAttribute(
+    'aria-checked',
+    'false',
+  );
+  await expect(menu.getByRole('menuitem', { name: /Credentials/ })).toHaveAttribute('aria-disabled', 'true');
+  await expect(menu.getByRole('menuitem', { name: 'Organization settings' })).toHaveAttribute(
+    'href',
+    '/o/acme/settings',
+  );
+  await expect(menu.getByRole('menuitem', { name: /Members/ })).toHaveCount(0);
+  await expectAccessible(page);
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await expect(mark).toBeFocused();
+
+  // Arrow keys and Enter choose another organization: its Factories home, its rail.
+  await page.keyboard.press('Enter');
+  await expect(menu.getByRole('menuitemradio', { name: /^Acme/ })).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(menu.getByRole('menuitemradio', { name: /^Example Labs/ })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/\/o\/example-labs$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeFocused();
+  await expect(orgNav(page).getByRole('link', { name: /factory/ })).toHaveCount(1);
+  await expect(orgMarkOf(page, 'EL, Example Labs organization, switch organization')).toBeVisible();
+
+  // The organization used last is where / returns.
+  await page.goto('/');
+  await expect(page).toHaveURL(/\/o\/example-labs$/);
+});
+
+test('switch organization from the sheet on a phone', async ({ page }) => {
+  test.skip(!isPhone(page), 'the sheet is the phone navigation');
+  await page.goto('/o/acme/f/sre');
+  const mark = orgMarkOf(page);
+
+  await expect(mark).toHaveAttribute('aria-haspopup', 'dialog');
+  await mark.click();
+  const sheet = page.getByRole('dialog', { name: 'Switch organization' });
+  await expect(sheet).toBeVisible();
+  const acme = sheet.getByRole('link', { name: /^Acme\s?3 factories/ });
+  await expect(acme).toHaveAttribute('aria-current', 'true');
+  await expect(acme).toBeFocused();
+  await expect(sheet.getByRole('link', { name: /Members/ })).toHaveCount(0);
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+
+  // Escape closes the sheet and returns focus to the mark.
+  await page.keyboard.press('Escape');
+  await expect(sheet).toBeHidden();
+  await expect(mark).toBeFocused();
+
+  await mark.click();
+  await sheet.getByRole('link', { name: /^Example Labs/ }).click();
+  await expect(page).toHaveURL(/\/o\/example-labs$/);
+  await expect(sheet).toBeHidden();
+  await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeFocused();
+  await expect(orgNav(page).getByRole('link', { name: /factory/ })).toHaveCount(1);
+});
+
+/** Opens Create organization from the menu, or from the sheet on a phone. */
+async function openCreateOrg(page: Page) {
+  await orgMarkOf(page).click();
+  const create = isPhone(page)
+    ? page.getByRole('dialog', { name: 'Switch organization' }).getByRole('button', { name: 'Create organization' })
+    : page.getByRole('menuitem', { name: 'Create organization' });
+  await create.click();
+  const dialog = page.getByRole('dialog', { name: 'Create organization' });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+test('create an organization and land on its empty factories', async ({ page }) => {
+  await page.goto('/o/acme/f/goal');
+  await expect(page.getByRole('heading', { level: 1, name: 'Goal floor' })).toBeVisible();
+
+  const dialog = await openCreateOrg(page);
+  const name = dialog.getByRole('textbox', { name: 'Name' });
+  const address = dialog.getByRole('textbox', { name: 'Address' });
+  await expect(name).toBeFocused();
+  await expectAccessible(page);
+
+  // The address follows the name; a taken one is refused and named.
+  await name.fill('Acme');
+  await expect(address).toHaveValue('acme');
+  await dialog.getByRole('button', { name: 'Create organization' }).click();
+  await expect(dialog.getByText('acme is taken. Choose another address.')).toBeVisible();
+  await expect(address).toHaveAttribute('aria-invalid', 'true');
+  await expect(address).toBeFocused();
+
+  await name.fill('Acme Two');
+  await expect(address).toHaveValue('acme-two');
+  await dialog.getByRole('button', { name: 'Create organization' }).click();
+
+  await expect(page).toHaveURL(/\/o\/acme-two$/);
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeVisible();
+  await expect(orgNav(page).getByRole('link', { name: /factory/ })).toHaveCount(0);
+  const newMark = orgMarkOf(page, 'AT, Acme Two organization, switch organization');
+  await expect(newMark).toBeVisible();
+  await expectNoHorizontalScroll(page);
+
+  // The new organization is in the menu, current.
+  await newMark.click();
+  const current = isPhone(page)
+    ? page.getByRole('dialog', { name: 'Switch organization' }).getByRole('link', { name: /^Acme Two\s?0 factories/ })
+    : page.getByRole('menuitemradio', { name: /^Acme Two\s?0 factories$/ });
+  // On its own Factories home the sheet's link is the current page.
+  await expect(current).toHaveAttribute(
+    isPhone(page) ? 'aria-current' : 'aria-checked',
+    isPhone(page) ? 'page' : 'true',
+  );
+});
+
+test('a malformed address is caught before sending, and Escape returns to the mark', async ({ page }) => {
+  await page.goto('/o/acme');
+  const dialog = await openCreateOrg(page);
+  const name = dialog.getByRole('textbox', { name: 'Name' });
+  const address = dialog.getByRole('textbox', { name: 'Address' });
+
+  await dialog.getByRole('button', { name: 'Create organization' }).click();
+  await expect(dialog.getByText('Give the organization a name.')).toBeVisible();
+  await expect(name).toBeFocused();
+
+  await name.fill('North Star');
+  await address.fill('-north');
+  await dialog.getByRole('button', { name: 'Create organization' }).click();
+  await expect(address).toHaveAccessibleDescription(/^3 to 40 lowercase letters/);
+  await address.fill('settings');
+  await expect(address).toHaveAccessibleDescription(/^That address is reserved/);
+  await expect(address).toBeFocused();
+
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(orgMarkOf(page)).toBeFocused();
+  await expect(page).toHaveURL(/\/o\/acme$/);
+});
+
+test('the account menu names the local user', async ({ page }) => {
+  await page.goto('/o/acme');
+  const account = orgNav(page).getByRole('button', { name: 'LU, Local user, account' });
+  await account.click();
+  const menu = page.getByRole('menu', { name: 'LU, Local user, account' });
+  await expect(menu.getByText('Local user', { exact: true })).toBeVisible();
+  await expect(menu.getByText('This install')).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: /Sign out/ })).toHaveCount(0);
+  await expectAccessible(page);
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await expect(account).toBeFocused();
+});
+
+test('the organization menu opens organization settings', async ({ page }) => {
+  await page.goto('/o/acme/f/goal');
+  await orgMarkOf(page).click();
+  const settings = isPhone(page)
+    ? page.getByRole('dialog', { name: 'Switch organization' }).getByRole('link', { name: 'Organization settings' })
+    : page.getByRole('menuitem', { name: 'Organization settings' });
+  await settings.click();
+  await expect(page).toHaveURL(/\/o\/acme\/settings$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Organization settings' })).toBeFocused();
 });

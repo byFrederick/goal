@@ -41,3 +41,8 @@ export function defaultOrg(orgs: readonly OrgSummary[]): OrgSummary | undefined 
   const last = lastOrgSlug();
   return (last ? findOrg(orgs, last) : undefined) ?? orgs[0];
 }
+
+/** "3 factories", "1 factory". */
+export function factoryCount(n: number): string {
+  return `${n} ${n === 1 ? 'factory' : 'factories'}`;
+}

@@ -355,8 +355,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       const body = await readBody(req);
       const name = typeof body.name === 'string' ? body.name.trim() : '';
       const slug = typeof body.slug === 'string' ? body.slug : '';
-      if (!name || !slugRule.test(slug) || reserved.includes(slug) || findOrg(slug)) {
-        return problem(res, 409, 'Conflict', `slug "${slug}" is taken, reserved or malformed, or the name is empty`);
+      if (findOrg(slug)) return problem(res, 409, 'Conflict', `slug "${slug}" is taken`, 'slug-taken');
+      if (!name || !slugRule.test(slug) || reserved.includes(slug)) {
+        return problem(res, 409, 'Conflict', `slug "${slug}" is reserved or malformed, or the name is empty`);
       }
       const words = name.split(/\s+/);
       const initials = words.length > 1 ? `${words[0]?.[0]}${words[1]?.[0]}`.toUpperCase() : name.slice(0, 2);

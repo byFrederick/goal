@@ -18,6 +18,20 @@ const reservedSlugs = new Set([
   'default',
 ]);
 
+const slugMax = 40;
+
+/** The address a new organization's name suggests: "Acme Two" → "acme-two". */
+export function slugFromName(name: string): string {
+  return name
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+/, '')
+    .slice(0, slugMax)
+    .replace(/-+$/, '');
+}
+
 /** Why `slug` cannot be an address, or null when it can. */
 export function checkSlug(slug: string): string | null {
   if (!slugPattern.test(slug))

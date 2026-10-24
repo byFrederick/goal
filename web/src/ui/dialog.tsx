@@ -14,14 +14,24 @@ interface ContentProps {
   className?: string;
   /** What takes focus on open (a field, the safe choice); otherwise Radix's first focusable, the close button. */
   initialFocus?: RefObject<HTMLElement | null>;
+  /** Called as the dialog closes; preventDefault keeps Radix from returning focus to its trigger. */
+  onCloseAutoFocus?: (e: Event) => void;
 }
 
 /** A modal with a required title (Radix traps focus and restores it on close). */
-export function DialogContent({ title, description, children, className, initialFocus }: ContentProps) {
+export function DialogContent({
+  title,
+  description,
+  children,
+  className,
+  initialFocus,
+  onCloseAutoFocus,
+}: ContentProps) {
   return (
     <D.Portal>
       <D.Overlay className="fixed inset-0 z-40 bg-ink/45 data-[state=open]:animate-[fade-in_150ms_ease-out]" />
       <D.Content
+        onCloseAutoFocus={onCloseAutoFocus}
         className={cn(
           'fixed z-50 flex flex-col gap-4 bg-card p-5 shadow-dialog outline-none',
           'top-1/2 left-1/2 max-h-[calc(100dvh-32px)] w-[calc(100vw-32px)] max-w-[480px] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-contain rounded-card',

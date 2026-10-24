@@ -3,13 +3,10 @@
 // "Factories"). Members and roles arrive with phase 4 (no-auth).
 import { Link } from '@tanstack/react-router';
 import type { OrgSummary } from '../api/types';
+import { factoryCount } from '../shared/org';
 import { Count } from '../ui/count';
 import { orgScreens } from './screens';
 import { entryClass, iconProps, LaterEntry, Sidebar, SidebarGroup } from './sidebar';
-
-function factoryCount(n: number): string {
-  return `${n} ${n === 1 ? 'factory' : 'factories'}`;
-}
 
 export function OrgSidebar({ org }: { org: OrgSummary }) {
   return (

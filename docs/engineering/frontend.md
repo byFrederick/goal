@@ -75,13 +75,14 @@ routes/       file-based route files (TanStack Router plugin; routeTree.gen.ts i
                   /o/$org/new/$step             → reserved for D's New factory wizard (rail only, no sidebar)
 api/          the only HTTP code: types.ts (generated contract shapes), client.ts (requests over @goal/api-client), queries.ts (keys, queryOptions)
 app/          the shell: AppShell and ShellFrame, Rail, PhoneTopRow, PhoneCrumb, TabBar, FactorySidebar,
-              OrgSidebar, OrgMark, screens.ts (the screen registry), attention, route focus and titles,
+              OrgSidebar, OrgMark (the organization menu's trigger: OrgMenu on the rail, OrgSheet on
+              phones), CreateOrgDialog, AccountMenu, screens.ts (the screen registry), attention, route focus and titles,
               loading/error/not-found screens
 features/
   factories/  floor/  board/  items/  org-settings/   one folder per screen: page, cards, feature-only logic (items/timeline.ts, org-settings/form.ts)
 shared/       code more than one feature uses: decisions (approve, send back, merge, retry), new item,
               the organization's live stream, org and factory helpers, marks, formatting (Intl), state labels, the address rule (org-rules.ts)
-ui/           design-system primitives on Radix: button, dialog, confirm-dialog (typed confirmation), field and input, sheet, tooltip,
+ui/           design-system primitives on Radix: button, dialog, confirm-dialog (typed confirmation), field and input, sheet, menu, tooltip,
               card (SectionCard, StatGrid), chip, count, mark, hatch (Meter, HatchBars), page-header, list-row, empty-state, logo
 ```
 
