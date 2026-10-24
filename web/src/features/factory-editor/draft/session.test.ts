@@ -55,6 +55,7 @@ function fakeApi() {
         new Promise<SaveResult>((resolve, reject) => saves.push({ section, etag, save, resolve, reject })),
     ),
     revertDraftSection: vi.fn(async () => result(++revision, 'reverted')),
+    discardDraft: vi.fn(async () => undefined),
     putDraftFile: vi.fn(
       (_org: string, _f: string, path: string, text: string, base: unknown) =>
         new Promise<SaveResult>((resolve, reject) => files.push({ path, text, base, resolve, reject })),
@@ -406,5 +407,65 @@ describe('undo', () => {
     session.undo();
     expect(session.getSnapshot()).toMatchObject({ canUndo: false, canRedo: true });
     expect(session.getSnapshot().sections.line.dirty).toBe(false);
+  });
+});
+
+describe('typing', () => {
+  it('is one undo step per field until another edit comes between', () => {
+    const basics = () => session.getSnapshot().sections.basics.local;
+    for (const title of ['G', 'Go', 'Goa']) session.edit(setBasics(basics(), 'title', title), { coalesce: 'title' });
+    session.edit(setBasics(basics(), 'purpose', 'Builds'), { coalesce: 'purpose' });
+    session.edit(setBasics(basics(), 'title', 'Goal 2'), { coalesce: 'title' });
+
+    session.undo();
+    expect(basics().title).toBe('Goa');
+    session.undo();
+    expect([basics().title, basics().purpose]).toEqual(['Goa', undefined]);
+    session.undo();
+    expect(basics().title).toBe('Goal');
+  });
+});
+
+describe('discard', () => {
+  it('drops unsaved edits and the draft; the next edit opens a new one', async () => {
+    session.edit(setStationField(line(session), 'build', 'wip', 3));
+
+    await session.discard();
+
+    expect(fake.api.discardDraft).toHaveBeenCalledWith('acme', 'f1', 42);
+    expect(session.getSnapshot()).toMatchObject({ hasDraft: false, status: 'saved', changeCount: 0, canUndo: false });
+    expect(wipOf(line(session), 'build')).toBe(2);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fake.saves).toHaveLength(0);
+
+    session.adoptVersion({ model: model() as unknown as FactoryModel, ranges: {} });
+    session.edit(setStationField(line(session), 'build', 'wip', 4));
+    void session.flush();
+    await flushPromises();
+    expect(fake.api.openDraft).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the draft when it moved since (412)', async () => {
+    vi.mocked(fake.api.discardDraft).mockRejectedValueOnce(
+      new ApiError({ title: 'Precondition Failed', status: 412, code: 'draft-conflict' }),
+    );
+
+    await expect(session.discard()).rejects.toBeInstanceOf(ApiError);
+
+    expect(session.getSnapshot().hasDraft).toBe(true);
+  });
+});
+
+describe('mounting', () => {
+  it('takes goald answers again after an unmount and a remount (React StrictMode)', () => {
+    const s = new DraftSession({ org: 'acme', factory: 'f1', api: fake.api });
+    s.activate();
+    s.dispose();
+    s.activate();
+
+    s.adopt(draftModel(model(), 7));
+
+    expect(s.getSnapshot()).toMatchObject({ ready: true, revision: 7 });
+    s.dispose();
   });
 });

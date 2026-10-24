@@ -58,13 +58,14 @@ const tab =
 const tabActive = { className: 'font-semibold text-ink shadow-[inset_0_2px_0_var(--color-ink)]' } as const;
 
 /**
- * Floor, Board, Items, Build, More. Until a Build screen exists, Build is disabled; More opens a
- * sheet with Knowledge and Jonah (later) and the organization's Factories. The phase that ships
- * the first of those screens turns the tab into a link to it.
+ * Floor, Board, Items, Build, More. Build goes to the first Build screen that exists (Definition);
+ * More opens a sheet with Knowledge and Jonah (later) and the organization's Factories.
  */
 export function TabBar({ org, factory }: { org: OrgSummary; factory: Factory }) {
   const params = { org: org.slug, factory: factory.name };
   const work = factoryScreens.filter((s) => s.group === 'work');
+  // Build goes to the first Build screen that exists.
+  const build = factoryScreens.find((s) => s.group === 'build' && s.available);
 
   return (
     <nav
@@ -86,11 +87,18 @@ export function TabBar({ org, factory }: { org: OrgSummary; factory: Factory }) 
           </Link>
         ) : null,
       )}
-      <span aria-disabled="true" className={cn(tab, 'cursor-default')}>
-        <Bot size={20} strokeWidth={1.5} aria-hidden="true" />
-        Build
-        <span className="sr-only">, {laterText}</span>
-      </span>
+      {build?.available ? (
+        <Link to={build.to} params={params} className={tab} activeProps={tabActive}>
+          <Bot size={20} strokeWidth={1.5} aria-hidden="true" />
+          Build
+        </Link>
+      ) : (
+        <span aria-disabled="true" className={cn(tab, 'cursor-default')}>
+          <Bot size={20} strokeWidth={1.5} aria-hidden="true" />
+          Build
+          <span className="sr-only">, {laterText}</span>
+        </span>
+      )}
       <MoreSheet org={org} />
     </nav>
   );

@@ -9,7 +9,9 @@ import { entryClass, iconProps, LaterEntry, Sidebar, SidebarGroup } from './side
 
 export function FactorySidebar({ org, factory }: { org: OrgSummary; factory: Factory }) {
   const params = { org: org.slug, factory: factory.name };
-  const waiting = useFactorySquares(org).find((s) => s.factory.id === factory.id)?.attention.waiting ?? 0;
+  const square = useFactorySquares(org).find((s) => s.factory.id === factory.id);
+  const waiting = square?.attention.waiting ?? 0;
+  const version = versionBadge(square?.factory ?? factory);
   // The title, unless it only repeats the name ("SRE" under "sre").
   const subtitle = factory.title && factory.title.toLowerCase() !== factory.name.toLowerCase() ? factory.title : null;
 
@@ -28,6 +30,12 @@ export function FactorySidebar({ org, factory }: { org: OrgSummary; factory: Fac
                     {s.id === 'items' && waiting > 0 ? (
                       <Count value={waiting} label=" waiting on you" tone="you" />
                     ) : null}
+                    {s.id === 'definition' && version ? (
+                      <span className="ml-auto text-xs text-muted group-aria-[current=page]:text-white/80">
+                        <span className="sr-only">, </span>
+                        {version}
+                      </span>
+                    ) : null}
                   </Link>
                 </li>
               ) : (
@@ -38,4 +46,10 @@ export function FactorySidebar({ org, factory }: { org: OrgSummary; factory: Fac
       ))}
     </Sidebar>
   );
+}
+
+/** The Definition entry's badge: "v9", "v8 + draft", "draft" before the first publish. */
+function versionBadge(factory: Factory): string | null {
+  if (factory.current) return factory.draft ? `v${factory.current.number} + draft` : `v${factory.current.number}`;
+  return factory.draft ? 'draft' : null;
 }

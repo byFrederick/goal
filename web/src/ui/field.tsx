@@ -14,6 +14,8 @@ const FieldContext = createContext<FieldControl | null>(null);
 
 interface FieldProps {
   label: ReactNode;
+  /** Beside the label, outside it: a mark or a small action ("Edited · Undo"). */
+  aside?: ReactNode;
   /** Under the control, always shown. */
   help?: ReactNode;
   /** Under the control; marks it invalid. */
@@ -23,7 +25,7 @@ interface FieldProps {
   children: ReactNode;
 }
 
-export function Field({ label, help, error, className, children }: FieldProps) {
+export function Field({ label, aside, help, error, className, children }: FieldProps) {
   const id = useId();
   const helpId = `${id}-help`;
   const errorId = `${id}-error`;
@@ -31,9 +33,18 @@ export function Field({ label, help, error, className, children }: FieldProps) {
 
   return (
     <div className={cn('flex min-w-0 flex-col gap-1.5', className)}>
-      <label htmlFor={id} className="text-sm font-medium text-ink">
-        {label}
-      </label>
+      {aside ? (
+        <div className="flex min-h-6 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <label htmlFor={id} className="text-sm font-medium text-ink">
+            {label}
+          </label>
+          {aside}
+        </div>
+      ) : (
+        <label htmlFor={id} className="text-sm font-medium text-ink">
+          {label}
+        </label>
+      )}
       <FieldContext value={{ id, describedBy, invalid: Boolean(error) }}>{children}</FieldContext>
       {error ? (
         <p id={errorId} className="col-span-full m-0 text-[13px] leading-snug text-rework-ink">
@@ -59,6 +70,42 @@ export function Input({ className, ...props }: ComponentProps<'input'>) {
       aria-invalid={field?.invalid || undefined}
       className={cn(
         'h-11 w-full min-w-0 rounded-control border border-rule bg-surface px-3 text-base text-ink transition-colors duration-200 md:h-10 md:text-[15px]',
+        'hover:border-faint aria-[invalid=true]:border-rework',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+/** A multi-line text input, as tall as `rows` and resizable vertically; 16 px text on phones. */
+export function Textarea({ className, ...props }: ComponentProps<'textarea'>) {
+  const field = use(FieldContext);
+  return (
+    <textarea
+      id={field?.id}
+      aria-describedby={field?.describedBy}
+      aria-invalid={field?.invalid || undefined}
+      className={cn(
+        'w-full min-w-0 resize-y rounded-control border border-rule bg-surface px-3 py-2.5 text-base leading-normal text-ink transition-colors duration-200 md:text-[15px]',
+        'hover:border-faint aria-[invalid=true]:border-rework',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+/** A native select, the height of an Input. */
+export function NativeSelect({ className, ...props }: ComponentProps<'select'>) {
+  const field = use(FieldContext);
+  return (
+    <select
+      id={field?.id}
+      aria-describedby={field?.describedBy}
+      aria-invalid={field?.invalid || undefined}
+      className={cn(
+        'h-11 w-full min-w-0 cursor-pointer rounded-control border border-rule bg-surface px-3 text-base text-ink transition-colors duration-200 md:h-10 md:text-[15px]',
         'hover:border-faint aria-[invalid=true]:border-rework',
         className,
       )}

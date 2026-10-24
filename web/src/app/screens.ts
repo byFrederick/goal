@@ -24,7 +24,11 @@ interface Screen {
 }
 
 /** Paths of a factory's screens; their params are the organization's slug and the factory's name. */
-export type FactoryPath = '/o/$org/f/$factory' | '/o/$org/f/$factory/board' | '/o/$org/f/$factory/items';
+export type FactoryPath =
+  | '/o/$org/f/$factory'
+  | '/o/$org/f/$factory/board'
+  | '/o/$org/f/$factory/items'
+  | '/o/$org/f/$factory/definition';
 /** Paths of the organization's screens; their only param is its slug. */
 export type OrgPath = '/o/$org' | '/o/$org/settings';
 
@@ -46,8 +50,15 @@ export const factoryScreens: readonly FactoryScreen[] = [
   },
   { id: 'board', label: 'Board', icon: Kanban, group: 'work', available: true, to: '/o/$org/f/$factory/board' },
   { id: 'items', label: 'Items', icon: TextAlignStart, group: 'work', available: true, to: '/o/$org/f/$factory/items' },
-  // D: /definition/:section (current on /agents/* too).
-  { id: 'definition', label: 'Definition', icon: Code, group: 'build', available: false },
+  // D: /definition/:section (current on E's /agents/* too, once it exists).
+  {
+    id: 'definition',
+    label: 'Definition',
+    icon: Code,
+    group: 'build',
+    available: true,
+    to: '/o/$org/f/$factory/definition',
+  },
   // Phase 3.2: /connections.
   { id: 'connections', label: 'Connections', icon: Plug, group: 'build', available: false },
   // Later: /knowledge, /jonah.

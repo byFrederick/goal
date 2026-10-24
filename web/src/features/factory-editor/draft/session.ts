@@ -28,7 +28,7 @@ import { equal } from './pointer';
 /** The draft routes the session calls (definitions.ts; tests pass a fake of goald). */
 export type SessionApi = Pick<
   typeof definitions,
-  'getDraftModel' | 'openDraft' | 'saveDraftSection' | 'revertDraftSection' | 'putDraftFile'
+  'getDraftModel' | 'openDraft' | 'saveDraftSection' | 'revertDraftSection' | 'putDraftFile' | 'discardDraft'
 >;
 
 export interface SessionOptions {
@@ -125,6 +125,18 @@ export interface SessionState {
 
 interface UndoEntry {
   changes: { section: Section; before: unknown; after: unknown }[];
+  /** Typing into one field: the next edit with the same key extends this step. */
+  coalesce?: string;
+}
+
+export interface EditOptions {
+  /** false: not an undo step (a value goald put back). */
+  undoable?: boolean;
+  /**
+   * Typing: consecutive edits with the same key (a field's pointer) are one undo step, so
+   * Ctrl/Cmd+Z outside the field puts back what was there before the typing started.
+   */
+  coalesce?: string;
 }
 
 const backoff = [1000, 2000, 4000, 8000, 16000, 30000];
@@ -197,6 +209,16 @@ export class DraftSession {
       canUndo: false,
       canRedo: false,
     };
+  }
+
+  /** The organization's id. */
+  get org(): string {
+    return this.opts.org;
+  }
+
+  /** The factory's id. */
+  get factory(): string {
+    return this.opts.factory;
   }
 
   // The store.
@@ -318,7 +340,7 @@ export class DraftSession {
   // Edits.
 
   /** Replaces sections' local values (ops.ts), queues their saves, and records one undo step. */
-  edit(edits: AnyEdit | AnyEdit[], { undoable = true }: { undoable?: boolean } = {}): void {
+  edit(edits: AnyEdit | AnyEdit[], { undoable = true, coalesce }: EditOptions = {}): void {
     const list = Array.isArray(edits) ? edits : [edits];
     const changes: UndoEntry['changes'] = [];
     for (const e of list) {
@@ -339,7 +361,16 @@ export class DraftSession {
       this.setLocal(e.section, e.value);
     }
     if (undoable && changes.length > 0) {
-      this.undoStack = [...this.undoStack.slice(-(undoDepth - 1)), { changes }];
+      const last = this.undoStack.at(-1);
+      if (coalesce !== undefined && last?.coalesce === coalesce && this.redoStack.length === 0) {
+        last.changes = last.changes.map((c) => ({
+          ...c,
+          after: changes.find((n) => n.section === c.section)?.after ?? c.after,
+        }));
+        this.set({});
+        return;
+      }
+      this.undoStack = [...this.undoStack.slice(-(undoDepth - 1)), { changes, ...(coalesce ? { coalesce } : {}) }];
       this.redoStack = [];
       this.set({});
     }
@@ -364,6 +395,8 @@ export class DraftSession {
   undo(): boolean {
     const entry = this.undoStack.pop();
     if (!entry) return false;
+    const below = this.undoStack.at(-1);
+    if (below) delete below.coalesce;
     this.redoStack.push(entry);
     for (const c of [...entry.changes].reverse()) this.setLocal(c.section, c.before as SectionValues[Section]);
     this.set({});
@@ -682,17 +715,64 @@ export class DraftSession {
     this.settle();
   }
 
+  /**
+   * "Discard draft…": deletes the open draft at this session's revision and drops every unsaved
+   * edit; the editor then shows the running version (adoptVersion) and the next edit opens a new
+   * draft. A 412 (the draft moved since) throws and keeps everything.
+   */
+  async discard(): Promise<void> {
+    await this.api.discardDraft(this.opts.org, this.opts.factory, this.state.revision);
+    for (const t of this.timers.values()) clearTimeout(t);
+    this.timers.clear();
+    clearTimeout(this.retryTimer);
+    this.retryTimer = undefined;
+    this.pendingFiles.clear();
+    this.failed.clear();
+    this.undoStack = [];
+    this.redoStack = [];
+    const sectionsNext = {} as Record<Section, SectionState>;
+    for (const s of sections) {
+      const cur = this.state.sections[s];
+      sectionsNext[s] = { ...cur, local: cur.server, dirty: false, inFlight: false, serverEtag: '' };
+    }
+    this.set({
+      hasDraft: false,
+      revision: 0,
+      lastSaved: 0,
+      sections: sectionsNext as SectionStates,
+      files: new Map(),
+      edited: {},
+      summaries: [],
+      changeCount: 0,
+      problemCount: 0,
+      retryAt: null,
+      error: null,
+      conflicts: {},
+      fileConflicts: {},
+      parseError: null,
+      updatedElsewhereAt: null,
+      discarded: false,
+    });
+  }
+
   /** The guard's condition: something is unsaved, in flight, or waiting on a retry or a decision. */
   hasUnsaved(): boolean {
     const s = this.state;
     return s.status !== 'saved' || s.discarded;
   }
 
+  /** The editor mounted (again: React StrictMode unmounts and remounts once in development). */
+  activate(): void {
+    this.disposed = false;
+    if (this.state.retryAt !== null) this.retryNow();
+    else this.scheduleDirty();
+  }
+
+  /** The editor unmounted: timers stop and goald's answers are ignored until it mounts again. */
   dispose(): void {
     for (const t of this.timers.values()) clearTimeout(t);
     this.timers.clear();
     clearTimeout(this.retryTimer);
-    this.listeners.clear();
     this.disposed = true;
   }
 }

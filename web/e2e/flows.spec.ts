@@ -61,10 +61,10 @@ test('the factories home shows each factory’s week and what waits on you', asy
     await expect(card('goal').getByRole('img', { name: /^Items done per day, .+: (\d+, ){6}\d+$/ })).toBeVisible();
     await expect(card('goal').getByText(/^[+−]\d\.\d vs last week$|^Same as last week$/)).toBeVisible();
     await expect(card('support').getByText('No budget set')).toBeVisible();
-    // The wizard and the definition editor arrive with D: said, not linked.
-    await expect(card('goal').getByRole('button', { name: 'Definition Later' })).toHaveAttribute(
-      'aria-disabled',
-      'true',
+    // The definition editor is linked; the wizard arrives later (D13): said, not linked.
+    await expect(card('goal').getByRole('link', { name: 'Definition' })).toHaveAttribute(
+      'href',
+      '/o/acme/f/goal/definition',
     );
     await expect(page.getByRole('button', { name: 'New factory Later' })).toHaveAttribute('aria-disabled', 'true');
   }

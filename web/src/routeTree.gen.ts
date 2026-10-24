@@ -16,8 +16,12 @@ import { Route as OOrgOrgRouteImport } from './routes/o.$org._org'
 import { Route as OOrgOrgIndexRouteImport } from './routes/o.$org._org.index'
 import { Route as OOrgOrgSettingsRouteImport } from './routes/o.$org._org.settings'
 import { Route as OOrgFFactoryRouteImport } from './routes/o.$org.f.$factory'
+import { Route as OOrgNewStepRouteImport } from './routes/o.$org.new.$step'
 import { Route as OOrgFFactoryIndexRouteImport } from './routes/o.$org.f.$factory.index'
 import { Route as OOrgFFactoryBoardRouteImport } from './routes/o.$org.f.$factory.board'
+import { Route as OOrgFFactoryDefinitionRouteImport } from './routes/o.$org.f.$factory.definition'
+import { Route as OOrgFFactoryDefinitionIndexRouteImport } from './routes/o.$org.f.$factory.definition.index'
+import { Route as OOrgFFactoryDefinitionSectionRouteImport } from './routes/o.$org.f.$factory.definition.$section'
 import { Route as OOrgFFactoryItemsIndexRouteImport } from './routes/o.$org.f.$factory.items.index'
 import { Route as OOrgFFactoryItemsRefRouteImport } from './routes/o.$org.f.$factory.items.$ref'
 
@@ -55,6 +59,11 @@ const OOrgFFactoryRoute = OOrgFFactoryRouteImport.update({
   path: '/f/$factory',
   getParentRoute: () => OOrgRoute,
 } as any)
+const OOrgNewStepRoute = OOrgNewStepRouteImport.update({
+  id: '/new/$step',
+  path: '/new/$step',
+  getParentRoute: () => OOrgRoute,
+} as any)
 const OOrgFFactoryIndexRoute = OOrgFFactoryIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -65,6 +74,23 @@ const OOrgFFactoryBoardRoute = OOrgFFactoryBoardRouteImport.update({
   path: '/board',
   getParentRoute: () => OOrgFFactoryRoute,
 } as any)
+const OOrgFFactoryDefinitionRoute = OOrgFFactoryDefinitionRouteImport.update({
+  id: '/definition',
+  path: '/definition',
+  getParentRoute: () => OOrgFFactoryRoute,
+} as any)
+const OOrgFFactoryDefinitionIndexRoute =
+  OOrgFFactoryDefinitionIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => OOrgFFactoryDefinitionRoute,
+  } as any)
+const OOrgFFactoryDefinitionSectionRoute =
+  OOrgFFactoryDefinitionSectionRouteImport.update({
+    id: '/$section',
+    path: '/$section',
+    getParentRoute: () => OOrgFFactoryDefinitionRoute,
+  } as any)
 const OOrgFFactoryItemsIndexRoute = OOrgFFactoryItemsIndexRouteImport.update({
   id: '/items/',
   path: '/items/',
@@ -82,10 +108,14 @@ export interface FileRoutesByFullPath {
   '/o/$org': typeof OOrgRouteWithChildren
   '/o/$org/settings': typeof OOrgOrgSettingsRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
+  '/o/$org/new/$step': typeof OOrgNewStepRoute
   '/o/$org/': typeof OOrgOrgIndexRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
+  '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionRouteWithChildren
   '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
+  '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
   '/o/$org/f/$factory/items/$ref': typeof OOrgFFactoryItemsRefRoute
+  '/o/$org/f/$factory/definition/': typeof OOrgFFactoryDefinitionIndexRoute
   '/o/$org/f/$factory/items/': typeof OOrgFFactoryItemsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -93,9 +123,12 @@ export interface FileRoutesByTo {
   '/f/$': typeof FSplatRoute
   '/o/$org': typeof OOrgOrgIndexRoute
   '/o/$org/settings': typeof OOrgOrgSettingsRoute
+  '/o/$org/new/$step': typeof OOrgNewStepRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryIndexRoute
+  '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
   '/o/$org/f/$factory/items/$ref': typeof OOrgFFactoryItemsRefRoute
+  '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionIndexRoute
   '/o/$org/f/$factory/items': typeof OOrgFFactoryItemsIndexRoute
 }
 export interface FileRoutesById {
@@ -106,10 +139,14 @@ export interface FileRoutesById {
   '/o/$org/_org': typeof OOrgOrgRouteWithChildren
   '/o/$org/_org/settings': typeof OOrgOrgSettingsRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
+  '/o/$org/new/$step': typeof OOrgNewStepRoute
   '/o/$org/_org/': typeof OOrgOrgIndexRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
+  '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionRouteWithChildren
   '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
+  '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
   '/o/$org/f/$factory/items/$ref': typeof OOrgFFactoryItemsRefRoute
+  '/o/$org/f/$factory/definition/': typeof OOrgFFactoryDefinitionIndexRoute
   '/o/$org/f/$factory/items/': typeof OOrgFFactoryItemsIndexRoute
 }
 export interface FileRouteTypes {
@@ -120,10 +157,14 @@ export interface FileRouteTypes {
     | '/o/$org'
     | '/o/$org/settings'
     | '/o/$org/f/$factory'
+    | '/o/$org/new/$step'
     | '/o/$org/'
     | '/o/$org/f/$factory/board'
+    | '/o/$org/f/$factory/definition'
     | '/o/$org/f/$factory/'
+    | '/o/$org/f/$factory/definition/$section'
     | '/o/$org/f/$factory/items/$ref'
+    | '/o/$org/f/$factory/definition/'
     | '/o/$org/f/$factory/items/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -131,9 +172,12 @@ export interface FileRouteTypes {
     | '/f/$'
     | '/o/$org'
     | '/o/$org/settings'
+    | '/o/$org/new/$step'
     | '/o/$org/f/$factory/board'
     | '/o/$org/f/$factory'
+    | '/o/$org/f/$factory/definition/$section'
     | '/o/$org/f/$factory/items/$ref'
+    | '/o/$org/f/$factory/definition'
     | '/o/$org/f/$factory/items'
   id:
     | '__root__'
@@ -143,10 +187,14 @@ export interface FileRouteTypes {
     | '/o/$org/_org'
     | '/o/$org/_org/settings'
     | '/o/$org/f/$factory'
+    | '/o/$org/new/$step'
     | '/o/$org/_org/'
     | '/o/$org/f/$factory/board'
+    | '/o/$org/f/$factory/definition'
     | '/o/$org/f/$factory/'
+    | '/o/$org/f/$factory/definition/$section'
     | '/o/$org/f/$factory/items/$ref'
+    | '/o/$org/f/$factory/definition/'
     | '/o/$org/f/$factory/items/'
   fileRoutesById: FileRoutesById
 }
@@ -207,6 +255,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OOrgFFactoryRouteImport
       parentRoute: typeof OOrgRoute
     }
+    '/o/$org/new/$step': {
+      id: '/o/$org/new/$step'
+      path: '/new/$step'
+      fullPath: '/o/$org/new/$step'
+      preLoaderRoute: typeof OOrgNewStepRouteImport
+      parentRoute: typeof OOrgRoute
+    }
     '/o/$org/f/$factory/': {
       id: '/o/$org/f/$factory/'
       path: '/'
@@ -220,6 +275,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/o/$org/f/$factory/board'
       preLoaderRoute: typeof OOrgFFactoryBoardRouteImport
       parentRoute: typeof OOrgFFactoryRoute
+    }
+    '/o/$org/f/$factory/definition': {
+      id: '/o/$org/f/$factory/definition'
+      path: '/definition'
+      fullPath: '/o/$org/f/$factory/definition'
+      preLoaderRoute: typeof OOrgFFactoryDefinitionRouteImport
+      parentRoute: typeof OOrgFFactoryRoute
+    }
+    '/o/$org/f/$factory/definition/': {
+      id: '/o/$org/f/$factory/definition/'
+      path: '/'
+      fullPath: '/o/$org/f/$factory/definition/'
+      preLoaderRoute: typeof OOrgFFactoryDefinitionIndexRouteImport
+      parentRoute: typeof OOrgFFactoryDefinitionRoute
+    }
+    '/o/$org/f/$factory/definition/$section': {
+      id: '/o/$org/f/$factory/definition/$section'
+      path: '/$section'
+      fullPath: '/o/$org/f/$factory/definition/$section'
+      preLoaderRoute: typeof OOrgFFactoryDefinitionSectionRouteImport
+      parentRoute: typeof OOrgFFactoryDefinitionRoute
     }
     '/o/$org/f/$factory/items/': {
       id: '/o/$org/f/$factory/items/'
@@ -251,8 +327,25 @@ const OOrgOrgRouteChildren: OOrgOrgRouteChildren = {
 const OOrgOrgRouteWithChildren =
   OOrgOrgRoute._addFileChildren(OOrgOrgRouteChildren)
 
+interface OOrgFFactoryDefinitionRouteChildren {
+  OOrgFFactoryDefinitionSectionRoute: typeof OOrgFFactoryDefinitionSectionRoute
+  OOrgFFactoryDefinitionIndexRoute: typeof OOrgFFactoryDefinitionIndexRoute
+}
+
+const OOrgFFactoryDefinitionRouteChildren: OOrgFFactoryDefinitionRouteChildren =
+  {
+    OOrgFFactoryDefinitionSectionRoute: OOrgFFactoryDefinitionSectionRoute,
+    OOrgFFactoryDefinitionIndexRoute: OOrgFFactoryDefinitionIndexRoute,
+  }
+
+const OOrgFFactoryDefinitionRouteWithChildren =
+  OOrgFFactoryDefinitionRoute._addFileChildren(
+    OOrgFFactoryDefinitionRouteChildren,
+  )
+
 interface OOrgFFactoryRouteChildren {
   OOrgFFactoryBoardRoute: typeof OOrgFFactoryBoardRoute
+  OOrgFFactoryDefinitionRoute: typeof OOrgFFactoryDefinitionRouteWithChildren
   OOrgFFactoryIndexRoute: typeof OOrgFFactoryIndexRoute
   OOrgFFactoryItemsRefRoute: typeof OOrgFFactoryItemsRefRoute
   OOrgFFactoryItemsIndexRoute: typeof OOrgFFactoryItemsIndexRoute
@@ -260,6 +353,7 @@ interface OOrgFFactoryRouteChildren {
 
 const OOrgFFactoryRouteChildren: OOrgFFactoryRouteChildren = {
   OOrgFFactoryBoardRoute: OOrgFFactoryBoardRoute,
+  OOrgFFactoryDefinitionRoute: OOrgFFactoryDefinitionRouteWithChildren,
   OOrgFFactoryIndexRoute: OOrgFFactoryIndexRoute,
   OOrgFFactoryItemsRefRoute: OOrgFFactoryItemsRefRoute,
   OOrgFFactoryItemsIndexRoute: OOrgFFactoryItemsIndexRoute,
@@ -272,11 +366,13 @@ const OOrgFFactoryRouteWithChildren = OOrgFFactoryRoute._addFileChildren(
 interface OOrgRouteChildren {
   OOrgOrgRoute: typeof OOrgOrgRouteWithChildren
   OOrgFFactoryRoute: typeof OOrgFFactoryRouteWithChildren
+  OOrgNewStepRoute: typeof OOrgNewStepRoute
 }
 
 const OOrgRouteChildren: OOrgRouteChildren = {
   OOrgOrgRoute: OOrgOrgRouteWithChildren,
   OOrgFFactoryRoute: OOrgFFactoryRouteWithChildren,
+  OOrgNewStepRoute: OOrgNewStepRoute,
 }
 
 const OOrgRouteWithChildren = OOrgRoute._addFileChildren(OOrgRouteChildren)

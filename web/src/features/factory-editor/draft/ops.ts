@@ -259,6 +259,12 @@ function mapAgent(agents: AgentsSection, name: string, f: (a: ModelAgent) => Mod
 
 const promptPathFor = (name: string) => `./agents/${name}.md`;
 
+/** The model agents use when they name none (Basics › Advanced); undefined leaves goald's default. */
+export function setDefaultModel(agents: AgentsSection, model: string | undefined): Edit<'agents'> {
+  const { default_model: _old, ...rest } = agents;
+  return edit('agents', model === undefined ? rest : { ...rest, default_model: model });
+}
+
 /** Adds an agent with `prompt: ./agents/<name>.md`, and that file, in the same save. */
 export function addAgent(agents: AgentsSection, name: string): Edit<'agents'> {
   const path = promptPathFor(name);

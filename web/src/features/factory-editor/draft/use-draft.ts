@@ -38,7 +38,10 @@ export function DraftSessionProvider({ org, factory, children }: DraftSessionPro
         refresh: () => void client.invalidateQueries({ queryKey: defKeys.draft(org, factory) }),
       }),
   );
-  useEffect(() => () => session.dispose(), [session]);
+  useEffect(() => {
+    session.activate();
+    return () => session.dispose();
+  }, [session]);
 
   const draft = useQuery(draftModelQuery(org, factory));
   const refusal = draft.error instanceof ApiError ? draft.error : undefined;

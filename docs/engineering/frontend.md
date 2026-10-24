@@ -73,7 +73,9 @@ routes/       file-based route files (TanStack Router plugin; routeTree.gen.ts i
                   /o/$org/f/$factory/board      → Board        (?station= picks the station on phones)
                   /o/$org/f/$factory/items      → Items list   (?state= filters)
                   /o/$org/f/$factory/items/$ref → Item         ($ref: the number, goal#12 or the id)
-                  /o/$org/new/$step             → reserved for D's New factory wizard (rail only, no sidebar)
+                  /o/$org/f/$factory/definition → D's editor: frame + draft session; its index → /definition/line
+                  /o/$org/f/$factory/definition/$section → basics|line|agents|connections|review|versions (?mode=yaml, ?station=, ?agent=, …)
+                  /o/$org/new/$step             → D's New factory wizard (rail only, no sidebar; ?factory= from step 2)
 api/          the only HTTP code: types.ts (generated contract shapes), client.ts (requests over @goal/api-client), definitions.ts and builder.ts (B's and D's routes), queries.ts (keys, queryOptions)
 app/          the shell: AppShell and ShellFrame, Rail, PhoneTopRow, PhoneCrumb, TabBar, FactorySidebar,
               OrgSidebar, OrgMark (the organization menu's trigger: OrgMenu on the rail, OrgSheet on
@@ -81,7 +83,8 @@ app/          the shell: AppShell and ShellFrame, Rail, PhoneTopRow, PhoneCrumb,
               loading/error/not-found screens
 features/
   factories/  floor/  board/  items/  org-settings/   one folder per screen: page, cards, feature-only logic (items/timeline.ts, org-settings/form.ts)
-  factory-editor/   the wizard and Definition (D); draft/: the draft session (session.ts, use-draft.ts), merge.ts, ops.ts, pointer.ts
+  factory-editor/   the wizard and Definition (D); draft/: the draft session (session.ts, use-draft.ts), merge.ts, ops.ts, pointer.ts;
+                    frame/: the editor frame, status line, tiles, dialogs and unsaved guard; section-views.tsx: each section's view (basics/, …)
 shared/       code more than one feature uses: decisions (approve, send back, merge, retry), new item,
               definition/ (typed views of B's FactoryModel, where an agent works, slots at full WIP, pointer ↔ line),
               the organization's live stream, org and factory helpers, marks, formatting (Intl), state labels, the address rule (org-rules.ts)
