@@ -302,8 +302,10 @@ func newHarness(t *testing.T) *harness {
 
 	authors := authoring.New(authoring.Deps{
 		Store: h.defs, Loads: h.store, Templates: h.objects, Clock: h.clock,
-		Credentials: authoring.EnvReferences{Secrets: porttest.Secrets{"REPO_TOKEN": "a-token"}, Reserved: []string{"GOAL_DATABASE_URL"}},
-		NewID:       func() string { return fmt.Sprintf("0b6f1c9e-0000-7000-8000-%012d", ids.Add(1)) },
+		Credentials: authoring.EnvReferences{
+			Secrets: porttest.Secrets{"REPO_TOKEN": "a-token"}, Policy: domain.SecretPolicy{Reserved: []string{"GOAL_DATABASE_URL"}},
+		},
+		NewID: func() string { return fmt.Sprintf("0b6f1c9e-0000-7000-8000-%012d", ids.Add(1)) },
 	})
 
 	for _, files := range []map[string]string{acmeFiles, lineFiles} {

@@ -164,7 +164,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Secrets: secrets, Events: store, Clock: clock, Logger: log,
 		Sidecars: docker.NewSidecars(dockerClient, docker.Config{}, log),
-	}, gateway.Config{Key: []byte(key)})
+	}, gateway.Config{Key: []byte(key), SecretPolicy: s.secretPolicy()})
 	if err != nil {
 		return err
 	}

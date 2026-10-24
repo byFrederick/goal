@@ -161,8 +161,11 @@ func TestEnvReferences_RepositoryTokenServesOnlyTheRepositoryAndItsHosts(t *test
 	t.Parallel()
 
 	e := authoring.EnvReferences{
-		Secrets: porttest.Secrets{"ACME_REPO_TOKEN": "t0ken", "ACME_TICKETS_TOKEN": "t1cket"}, Reserved: []string{"ACME_MODEL_TOKEN"},
-		RepositoryOnly: []string{"ACME_REPO_TOKEN"}, RepositoryHosts: []string{"git.example.com"}, ConnectionHosts: []string{"code.example.com"},
+		Secrets: porttest.Secrets{"ACME_REPO_TOKEN": "t0ken", "ACME_TICKETS_TOKEN": "t1cket"},
+		Policy: domain.SecretPolicy{
+			Reserved: []string{"ACME_MODEL_TOKEN"}, RepositoryOnly: []string{"ACME_REPO_TOKEN"}, ConnectionHosts: []string{"code.example.com"},
+		},
+		RepositoryHosts: []string{"git.example.com"},
 	}
 	header := func(url, ref string) config.SecretUse {
 		return config.SecretUse{Path: "header " + url, Purpose: config.PurposeConnection, Connection: "c", URL: url, Ref: ref}

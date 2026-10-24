@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/byFrederick/goal/internal/domain"
 )
 
 // refPrefixes start the words of a header value that are secret references: "Bearer
@@ -25,10 +27,27 @@ const minSecretLen = 6
 
 const redacted = "[redacted]"
 
-// resolve resolves every secret reference word in a header value through ports.Secrets and
-// remembers the values so they can be scrubbed.
-func (s *session) resolve(ctx context.Context, value string) (string, error) {
+// errRefused marks a reference the install's SecretPolicy does not let a connection send.
+var errRefused = errors.New("refused by the install's secret policy")
+
+// resolve resolves every secret reference word in a value bound for target (a connection's
+// url, or "" for a sidecar) through ports.Secrets and remembers the values so they can be
+// scrubbed. It first checks every word against the install's SecretPolicy and resolves
+// nothing when one is refused: the definition version may predate the check that refuses it.
+func (s *session) resolve(ctx context.Context, value, target string) (string, error) {
 	words := strings.Split(value, " ")
+	policy := s.g.cfg.SecretPolicy
+
+	for _, w := range words {
+		switch policy.ForConnection(w, target) {
+		case domain.SecretAllowed:
+		case domain.SecretReserved:
+			return "", fmt.Errorf("%w: %s is a setting or platform secret of this install, which no connection gets", errRefused, w)
+		case domain.SecretOffHost:
+			return "", fmt.Errorf("%w: %s is sent only in the headers of https://%s",
+				errRefused, w, strings.Join(policy.ConnectionHosts, " or https://"))
+		}
+	}
 
 	for i, w := range words {
 		if !hasRefPrefix(w) {

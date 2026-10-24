@@ -39,6 +39,18 @@
 // business and are ignored here. Deny wins; a connection with at least one allow entry serves
 // only the tools its allow entries match; a connection with none serves all its tools.
 //
+// # Secret policy
+//
+// Before it resolves a header value, env value or command word, the gateway checks each of its
+// env:NAME references against Config.SecretPolicy, the same domain.SecretPolicy goald's
+// credentials check validates definitions with: a reserved variable goes to no connection, and
+// a host-bound one (the install's repository token) only in the headers of an https connection
+// to one of the policy's hosts (GitHub's MCP server), never to a sidecar, whose network reaches
+// any host. A refused connection is unavailable (its tools are not listed and calling one is an
+// error): the refused reference is never resolved, nothing is sent to its server or sidecar,
+// and the refusal is logged with the reference, never a value. This protects versions
+// published before the credentials check refused them.
+//
 // # State
 //
 // The gateway is stateless towards agents: every HTTP request is verified and served on its own
@@ -123,6 +135,9 @@ type Config struct {
 	SidecarStartTimeout time.Duration
 	// MaxSidecars caps the sidecars this goald runs at once (default 16).
 	MaxSidecars int
+	// SecretPolicy says which env:NAME references a connection may send where; goald passes
+	// the policy authoring validates with. The zero value restricts nothing.
+	SecretPolicy domain.SecretPolicy
 }
 
 const (

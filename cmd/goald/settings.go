@@ -21,6 +21,7 @@ import (
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/definitions"
+	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
 )
 
@@ -141,7 +142,7 @@ var forbiddenTaskEnv = []string{"ANTHROPIC_API_KEY", "GOAL_GATEWAY_KEY", reposit
 // repositoryToken is the install's GitHub token, for the factory's runtime.repository (clones,
 // merges). Until phase 4's connectors give each connection its own credential, a definition may
 // also send it to GitHub's remote MCP server (githubMCPHost) in an https connection's headers,
-// and nowhere else (authoring.EnvReferences.RepositoryOnly).
+// and nowhere else (domain.SecretPolicy.RepositoryOnly, which authoring and the gateway apply).
 const (
 	repositoryToken = "GOAL_GITHUB_TOKEN" //nolint:gosec // a variable name, not a credential
 	githubMCPHost   = "api.githubcopilot.com"
@@ -199,16 +200,21 @@ func (s settings) reserved() []string {
 	return out
 }
 
-// credentials is the check of a definition's secret references until phase 4: env:NAME
-// references resolve through secrets, the reserved variables are refused (env-reserved), and
-// the repository token serves only the repository and GitHub's MCP server, and a repository must
-// be on the install's GitHub host (GOAL_GITHUB_WEB_URL), the only one clones reach.
-func (s settings) credentials(secrets ports.Secrets) authoring.EnvReferences {
-	return authoring.EnvReferences{
-		Secrets: secrets, Reserved: s.reserved(),
-		RepositoryOnly: []string{repositoryToken}, ConnectionHosts: []string{githubMCPHost},
-		RepositoryHosts: []string{s.GitHubWebHost},
+// secretPolicy is the install's rule for definitions' env:NAME references until phase 4: the
+// reserved variables go nowhere, and the repository token, besides the repository, only to
+// GitHub's MCP server. Authoring validates with it (credentials) and the MCP gateway enforces
+// it again before resolving a reference for a version already published.
+func (s settings) secretPolicy() domain.SecretPolicy {
+	return domain.SecretPolicy{
+		Reserved: s.reserved(), RepositoryOnly: []string{repositoryToken}, ConnectionHosts: []string{githubMCPHost},
 	}
+}
+
+// credentials is the check of a definition's secret references until phase 4: env:NAME
+// references resolve through secrets, they follow secretPolicy (env-reserved), and a repository
+// must be on the install's GitHub host (GOAL_GITHUB_WEB_URL), the only one clones reach.
+func (s settings) credentials(secrets ports.Secrets) authoring.EnvReferences {
+	return authoring.EnvReferences{Secrets: secrets, Policy: s.secretPolicy(), RepositoryHosts: []string{s.GitHubWebHost}}
 }
 
 func settingsFrom(getenv func(string) string) (settings, error) {

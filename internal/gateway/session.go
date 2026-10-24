@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -27,6 +28,7 @@ const (
 	reasonKind        = " connections are not served yet"
 	reasonURL         = "its url is not https (plain http is allowed to loopback only)"
 	reasonCredentials = "its credentials are not configured"
+	reasonRefused     = "it references a secret this install does not send there"
 	reasonUpstream    = "the upstream server did not answer"
 )
 
@@ -91,10 +93,10 @@ func (s *session) prepare(ctx context.Context, c config.Connection) *connection 
 
 	conn.headers = make(map[string]string, len(c.Headers))
 
-	for name, value := range c.Headers {
-		v, err := s.resolve(ctx, value)
+	for _, name := range slices.Sorted(maps.Keys(c.Headers)) {
+		v, err := s.resolve(ctx, c.Headers[name], c.URL)
 		if err != nil {
-			conn.unavailable, conn.err = reasonCredentials, fmt.Errorf("header %s: %w", name, err)
+			s.unresolved(ctx, conn, fmt.Errorf("header %s: %w", name, err))
 
 			return conn
 		}
@@ -103,6 +105,19 @@ func (s *session) prepare(ctx context.Context, c config.Connection) *connection 
 	}
 
 	return conn
+}
+
+// unresolved makes conn unavailable because one of its references was refused or did not
+// resolve. A refusal is logged as it happens: it means a published version names a secret
+// where the install's policy does not send it.
+func (s *session) unresolved(ctx context.Context, conn *connection, err error) {
+	conn.unavailable, conn.err = reasonCredentials, err
+
+	if errors.Is(err, errRefused) {
+		conn.unavailable = reasonRefused
+		s.g.log.WarnContext(ctx, "gateway refused to send a secret", claimAttrs(s.claims,
+			"connection", conn.name, "error", s.redactErr(err))...)
+	}
 }
 
 // prepareSidecar describes the sidecar of a stdio connection, with its env values and command
@@ -128,10 +143,11 @@ func (s *session) prepareSidecar(ctx context.Context, c config.Connection, conn 
 		Image: c.Image, Network: c.Network, Env: make(map[string]string, len(c.Env)),
 	}
 
-	for name, value := range c.Env {
-		v, err := s.resolve(ctx, value)
+	// A sidecar has no url: its network, when it has one, reaches any host.
+	for _, name := range slices.Sorted(maps.Keys(c.Env)) {
+		v, err := s.resolve(ctx, c.Env[name], "")
 		if err != nil {
-			conn.unavailable, conn.err = reasonCredentials, fmt.Errorf("env %s: %w", name, err)
+			s.unresolved(ctx, conn, fmt.Errorf("env %s: %w", name, err))
 
 			return
 		}
@@ -140,9 +156,9 @@ func (s *session) prepareSidecar(ctx context.Context, c config.Connection, conn 
 	}
 
 	for i, arg := range c.Command {
-		v, err := s.resolve(ctx, arg)
+		v, err := s.resolve(ctx, arg, "")
 		if err != nil {
-			conn.unavailable, conn.err = reasonCredentials, fmt.Errorf("command argument %d: %w", i+1, err)
+			s.unresolved(ctx, conn, fmt.Errorf("command argument %d: %w", i+1, err))
 
 			return
 		}

@@ -177,7 +177,7 @@ Credential names: the factory slug pattern `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, uni
 
 `domain.Runtime` gains `ModelCredential string` (a credential name; empty = the organization's model access). `domain.Repository.AuthRef` now holds `credential:<name>` (or a legacy `env:` ref until cutover).
 
-**Credential host binding (keeps 2.2's repository host binding).** A credential is sent only to the host(s) of its code host or service, never to a URL a definition names: a `github-token` clones and merges only on its GitHub's web host (`GOAL_GITHUB_WEB_URL`'s, or the credential's own once `api_url` is used) and reaches its API only, so both the credentials check (`repository-host-not-allowed`) and `gitworkspace`'s clone-time refusal before resolving keep applying to `credential:` references, as they do to `env:GOAL_GITHUB_TOKEN` today (architecture.md, `Workspaces`).
+**Credential host binding (keeps 2.2's repository host binding).** A credential is sent only to the host(s) of its code host or service, never to a URL a definition names: a `github-token` clones and merges only on its GitHub's web host (`GOAL_GITHUB_WEB_URL`'s, or the credential's own once `api_url` is used) and reaches its API only, so both the credentials check (`repository-host-not-allowed`) and `gitworkspace`'s clone-time refusal before resolving keep applying to `credential:` references, as they do to `env:GOAL_GITHUB_TOKEN` today (architecture.md, `Workspaces`). The same holds in the gateway: every credential carries its host bindings (the hosts a connection may send it to; a `github-token`'s include its MCP server, `api.githubcopilot.com`), and the gateway checks them, scheme https and host, before it resolves a `credential:` header word for an upstream request, and never gives a host-bound credential to a sidecar, as it checks 2.2's `domain.SecretPolicy` for `env:` references today (architecture.md, MCP gateway, "Secret policy"); a refused credential makes the connection unavailable without being resolved. Binding is checked at run time, not only at validation, so a version published before a binding changed cannot send the credential elsewhere.
 
 #### 4.2 Engine
 
@@ -464,7 +464,7 @@ type RouterConfig struct {
 | `internal/adapters/github` | `CodeHost` methods take `ports.RepoRef{Repository domain.Repository; Scope ports.SecretScope}` instead of `domain.Repository`; implements `CredentialProbe` |
 | `internal/adapters/envsecrets` | new signature; `credential:` added to foreign prefixes |
 | `internal/adapters/docker` | `taskEnv` per 4.3 |
-| `internal/gateway` | `refPrefixes` gains `credential:`; `session.resolve` passes `{OrgID, FactoryID, RunID, PurposeConnection}` from the task claims (A adds `OrgID` to `TaskClaims`); a `CredentialError` makes the connection unavailable for that request with the reason in the `goal/connections` `_meta` ("credential grafana-acme expired") and is logged without values |
+| `internal/gateway` | `refPrefixes` gains `credential:`; `session.resolve` passes `{OrgID, FactoryID, RunID, PurposeConnection}` from the task claims (A adds `OrgID` to `TaskClaims`) and the target url (`""` for a sidecar), checked against the credential's host bindings before resolving, as `domain.SecretPolicy` is today; a `CredentialError` makes the connection unavailable for that request with the reason in the `goal/connections` `_meta` ("credential grafana-acme expired") and is logged without values |
 
 #### 5.8 depguard
 

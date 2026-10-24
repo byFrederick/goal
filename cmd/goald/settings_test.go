@@ -3,6 +3,7 @@ package main
 import (
 	"maps"
 	"net/netip"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -432,7 +433,12 @@ func TestSettings_ReservesPlatformSecrets(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			got := s.credentials(envsecrets.New(func(string) (string, bool) { return "", false }))
+			// Authoring and the gateway apply one policy.
+			got := s.secretPolicy()
+			if check := s.credentials(envsecrets.New(func(string) (string, bool) { return "", false })); !reflect.DeepEqual(check.Policy, got) {
+				t.Errorf("the credentials check's policy %+v is not the gateway's %+v", check.Policy, got)
+			}
+
 			for _, name := range tt.reserved {
 				if !slices.Contains(got.Reserved, name) {
 					t.Errorf("reserved %v, want %s among them", got.Reserved, name)

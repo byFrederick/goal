@@ -54,22 +54,19 @@ var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 // until phase 4"): model and repository access are platform secrets of the install, so every
 // env:NAME reference must name a variable that is set and non-empty in goald's environment
 // (resolved through Secrets, the value discarded) and is not one of goald's own settings
-// (Reserved, such as GOAL_DATABASE_URL and GOAL_GATEWAY_KEY), and the repository's token is
+// (Policy.Reserved, such as GOAL_DATABASE_URL and GOAL_GATEWAY_KEY), and the repository's token is
 // refused for a repository on a host the install does not clone from (RepositoryHosts); a
 // credential: reference is an
 // error until credentials arrive with phase 4. There is nothing to grant before phase 4, so
 // there are no grant, expiry or purpose checks.
 type EnvReferences struct {
 	Secrets ports.Secrets
-	// Reserved are the variables definitions may not read: goald's own settings and the
-	// platform's secrets (the model's access, keys that never reach a task).
-	Reserved []string
-	// RepositoryOnly are variables holding the install's repository token: a definition may use
-	// them for runtime.repository and, in a connection, only in the headers of an https
-	// connection to one of ConnectionHosts (host names, matched exactly). Phase 4's connectors
-	// replace this with a credential per connection.
-	RepositoryOnly  []string
-	ConnectionHosts []string
+	// Policy names the variables definitions may not read (Reserved) and those holding the
+	// install's repository token (RepositoryOnly), which serve runtime.repository and, in a
+	// connection, only the headers of an https connection to one of its ConnectionHosts. goald
+	// hands the MCP gateway the same policy, which enforces it again on published versions.
+	// Phase 4's connectors replace this with a credential per connection.
+	Policy domain.SecretPolicy
 	// RepositoryHosts are the hosts the install clones and merges on (host[:port], matched
 	// exactly without case; default github.com), the binding gitworkspace enforces at clone
 	// time: a runtime.repository whose url is on another host is refused at its token
@@ -157,21 +154,17 @@ func (e EnvReferences) offHost(u config.SecretUse) *CredentialFinding {
 }
 
 // misplaced refuses (env-reserved) a repository token used anywhere but the repository and the
-// https headers of a connection to one of ConnectionHosts; nil when u may use its reference.
+// https headers of a connection to one of Policy.ConnectionHosts; nil when u may use its
+// reference.
 func (e EnvReferences) misplaced(u config.SecretUse) *CredentialFinding {
-	name, ok := strings.CutPrefix(u.Ref, "env:")
-	if !ok || !slices.Contains(e.RepositoryOnly, name) || u.Purpose == config.PurposeRepository {
-		return nil
-	}
-
-	if target, err := url.Parse(u.URL); err == nil && target.Scheme == "https" && slices.Contains(e.ConnectionHosts, target.Hostname()) {
+	if u.Purpose == config.PurposeRepository || e.Policy.ForConnection(u.Ref, u.URL) != domain.SecretOffHost {
 		return nil
 	}
 
 	return &CredentialFinding{
 		Use: u, Code: CodeEnvReserved, Severity: domain.SeverityError,
-		Message: fmt.Sprintf("env:%s is the repository's token: a connection may send it only in the headers of https://%s",
-			name, strings.Join(e.ConnectionHosts, " or https://")),
+		Message: fmt.Sprintf("%s is the repository's token: a connection may send it only in the headers of https://%s",
+			u.Ref, strings.Join(e.Policy.ConnectionHosts, " or https://")),
 	}
 }
 
@@ -200,7 +193,7 @@ func (e EnvReferences) check(ctx context.Context, ref string) (*CredentialFindin
 		return finding(CodeSecretEnvUnset, "%q does not name an environment variable", ref), nil
 	}
 
-	if slices.Contains(e.Reserved, name) {
+	if e.Policy.Reserves(name) {
 		return finding(CodeEnvReserved, "env:%s is a setting of goald itself; a definition cannot read it", name), nil
 	}
 
