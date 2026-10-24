@@ -157,6 +157,15 @@ func (q *Queries) Draft(ctx context.Context, factoryID uuid.UUID) (DefinitionVer
 	return i, err
 }
 
+const endLegacyImport = `-- name: EndLegacyImport :exec
+DELETE FROM legacy_import_pending WHERE org_id = goal_org()
+`
+
+func (q *Queries) EndLegacyImport(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, endLegacyImport)
+	return err
+}
+
 const factoryRecord = `-- name: FactoryRecord :one
 SELECT id, org_id, name, title, last_version_number, paused_at, paused_by, created_at, created_by, current_id, current_number, current_revision, current_at, current_by, draft_id, draft_revision, draft_at, draft_by FROM factory_records WHERE id = $1
 `
@@ -374,6 +383,18 @@ func (q *Queries) InsertVersion(ctx context.Context, arg InsertVersionParams) (D
 		&i.PublishedAt,
 	)
 	return i, err
+}
+
+const legacyImportPending = `-- name: LegacyImportPending :one
+SELECT EXISTS (SELECT 1 FROM legacy_import_pending WHERE org_id = goal_org())
+`
+
+// Whether the transaction's organization has yet to import its legacy factories (00039).
+func (q *Queries) LegacyImportPending(ctx context.Context) (bool, error) {
+	row := q.db.QueryRow(ctx, legacyImportPending)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listVersions = `-- name: ListVersions :many

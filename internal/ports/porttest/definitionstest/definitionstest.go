@@ -36,6 +36,9 @@ type Harness struct {
 	// LegacyFactory registers a factory with no version in org, as goald did before versions
 	// existed (SaveFactory).
 	LegacyFactory func(t *testing.T, org domain.OrgID, id domain.FactoryID, name string)
+	// LegacyOrg makes org's legacy import pending, as migration 00039 did for every
+	// organization that existed before versions.
+	LegacyOrg func(t *testing.T, org domain.OrgID)
 }
 
 // Run runs the suite. Tests run in parallel and call newHarness once each; each test works in
@@ -71,6 +74,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"DeleteUnpublished_RefusesAPublishedFactory", testDeleteUnpublished},
 		{"ImportLegacy_PublishesVersionOneOnce", testImportLegacy},
 		{"ImportLegacy_InvalidBecomesADraft", testImportLegacyDraft},
+		{"LegacyImportPending_UntilEnded", testLegacyImportPending},
 		{"Notices_AfterEveryCommit", testNotices},
 		{"Tenancy_NoOrgIsAnError", testNoOrg},
 		{"Tenancy_OtherOrgSeesNothing", testOtherOrg},

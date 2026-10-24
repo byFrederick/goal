@@ -125,7 +125,16 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	definitionStore := postgres.NewDefinitions(pool, objects, log)
 
-	if err := importLegacy(ctx, s, objects, definitionStore, store, log); err != nil {
+	// Definition authoring writes versions to PostgreSQL and file content to the bucket; until
+	// phase 4 a definition's secret references are checked against goald's environment. The
+	// legacy import validates through it too.
+	authors := authoring.New(authoring.Deps{
+		Store: definitionStore, Loads: store, Templates: objects,
+		Credentials: s.credentials(secrets),
+		Clock:       clock, DefaultImage: s.DefaultAgentImage,
+	})
+
+	if err := importLegacy(ctx, s, objects, definitionStore, store, publishProblems(authors), log); err != nil {
 		return err
 	}
 
@@ -182,14 +191,6 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	definitionNotices := postgres.NewDefinitionNotices(pool.Config().ConnConfig, log)
 
 	reap(ctx, log, runner, workspaces)
-
-	// Definition authoring writes versions to PostgreSQL and file content to the bucket; until
-	// phase 4 a definition's secret references are checked against goald's environment.
-	authors := authoring.New(authoring.Deps{
-		Store: definitionStore, Loads: store, Templates: objects,
-		Credentials: s.credentials(secrets),
-		Clock:       clock, DefaultImage: s.DefaultAgentImage,
-	})
 
 	// The engine hears every item notice, so a person's move, pause or send-back of an item this
 	// instance runs stops its run at once.
@@ -317,27 +318,37 @@ func openDatabase(ctx context.Context, s settings, log *slog.Logger) (*pgxpool.P
 	return pool, nil
 }
 
-// importLegacy brings the bucket's older layouts up to date before anything reads definitions:
-// factories stored before organizations move into the default one (which holds the rows from
-// before organizations too), then every factory with no version yet becomes version 1 of
-// itself (GOAL_LEGACY_IMPORT). Both are idempotent: a goald that already did them finds nothing
-// to do.
+// importLegacy brings the bucket's older layouts up to date before anything reads definitions,
+// for the organizations whose legacy import is pending (those from before versions, until it
+// ends): factories stored before organizations move into the default one (which holds the rows
+// from before organizations too), then every factory with no version yet becomes version 1 of
+// itself, or a draft when validate finds a blocking problem (GOAL_LEGACY_IMPORT). Once an
+// organization's import ran it is never read again, so the step is a no-op on every later start.
 func importLegacy(ctx context.Context, s settings, objects ports.ObjectStore, defs ports.DefinitionStore, orgs definitions.Orgs,
-	log *slog.Logger,
+	validate definitions.LegacyValidator, log *slog.Logger,
 ) error {
-	moved, err := factorystore.MigrateLegacy(ctx, objects, postgres.DefaultOrgID)
+	pending, err := defs.LegacyImportPending(domain.WithOrg(ctx, postgres.DefaultOrgID))
 	if err != nil {
-		return fmt.Errorf("move legacy factory definitions into the default organization: %w", err)
+		return fmt.Errorf("legacy import of the default organization: %w", err)
 	}
 
-	log.InfoContext(ctx, "legacy bucket layout migrated", slog.Int("copied", moved.Copied), slog.Int("present", moved.Present),
-		slog.Int("gone", moved.Gone), slog.Int("deleted", moved.Deleted))
+	if pending {
+		moved, err := factorystore.MigrateLegacy(ctx, objects, postgres.DefaultOrgID)
+		if err != nil {
+			return fmt.Errorf("move legacy factory definitions into the default organization: %w", err)
+		}
+
+		log.InfoContext(ctx, "legacy bucket layout migrated", slog.Int("copied", moved.Copied), slog.Int("present", moved.Present),
+			slog.Int("gone", moved.Gone), slog.Int("deleted", moved.Deleted))
+	}
 
 	if !s.LegacyImport {
 		return nil
 	}
 
-	res, err := definitions.ImportLegacy(ctx, factorystore.New(objects), defs, orgs, log)
+	res, err := definitions.ImportLegacy(ctx, definitions.Legacy{
+		Catalog: factorystore.New(objects), Store: defs, Orgs: orgs, Validate: validate, Log: log,
+	})
 	if err != nil {
 		return fmt.Errorf("import legacy factory definitions: %w", err)
 	}
@@ -346,6 +357,19 @@ func importLegacy(ctx context.Context, s settings, objects ports.ObjectStore, de
 		slog.Int("drafts", res.Drafts), slog.Int("present", res.Present), slog.Int("problems", res.Problems))
 
 	return nil
+}
+
+// publishProblems is the legacy import's validation: authoring's, as a publish of the files
+// would run it.
+func publishProblems(authors *authoring.Service) definitions.LegacyValidator {
+	return func(ctx context.Context, files map[string][]byte) ([]domain.DefinitionProblem, error) {
+		v, err := authors.ValidateFiles(ctx, files)
+		if err != nil {
+			return nil, err
+		}
+
+		return v.Problems, nil
+	}
 }
 
 // refresh reconciles the current definition versions with PostgreSQL until ctx ends, behind the

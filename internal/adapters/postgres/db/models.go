@@ -181,6 +181,10 @@ type LeaseSpan struct {
 	Outcome     string
 }
 
+type LegacyImportPending struct {
+	OrgID uuid.UUID
+}
+
 type Organization struct {
 	ID        uuid.UUID
 	Slug      string

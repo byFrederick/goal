@@ -53,9 +53,9 @@ func TestMigrateLegacy_MovesFactoriesIntoTheOrgAndKeepsOldVersions(t *testing.T)
 		assertMoved(t, store, key, version)
 	}
 
-	entries, err := New(store).List(ctx, org)
-	if err != nil || len(entries) != 1 || entries[0].Err != nil || entries[0].Factory.Metadata.Name != "acme-notes" {
-		t.Fatalf("the organization lists %+v (%v), want acme-notes", entries, err)
+	entries := readAll(t, New(store), org)
+	if len(entries) != 1 || entries[0].Err != nil || entries[0].Factory.Metadata.Name != "acme-notes" {
+		t.Fatalf("the organization lists %+v, want acme-notes", entries)
 	}
 
 	again, err := MigrateLegacy(ctx, store, org)

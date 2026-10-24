@@ -39,6 +39,8 @@ type Definitions struct {
 	versions  map[domain.DefinitionVersionID]*domain.DefinitionVersion
 	blobs     map[domain.OrgID]map[domain.BlobHash]int64
 	ids       int
+	// legacyPending are the organizations whose legacy import is still to do (PendLegacyImport).
+	legacyPending map[domain.OrgID]bool
 }
 
 // DefinitionsDeps is what Definitions works with. Only Objects is required.
@@ -80,7 +82,46 @@ func NewDefinitions(d DefinitionsDeps) *Definitions {
 		factories: map[domain.FactoryID]*factoryRow{},
 		versions:  map[domain.DefinitionVersionID]*domain.DefinitionVersion{},
 		blobs:     map[domain.OrgID]map[domain.BlobHash]int64{},
+
+		legacyPending: map[domain.OrgID]bool{},
 	}
+}
+
+// PendLegacyImport makes org's legacy import pending, as migration 00039 does for every
+// organization that existed before versions.
+func (d *Definitions) PendLegacyImport(org domain.OrgID) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.legacyPending[org] = true
+}
+
+// LegacyImportPending implements ports.DefinitionStore.
+func (d *Definitions) LegacyImportPending(ctx context.Context) (bool, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	return d.legacyPending[org], nil
+}
+
+// EndLegacyImport implements ports.DefinitionStore.
+func (d *Definitions) EndLegacyImport(ctx context.Context) error {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return err
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	delete(d.legacyPending, org)
+
+	return nil
 }
 
 // AddLegacyFactory registers a factory with no version in org, as goald's SaveFactory did

@@ -2,6 +2,7 @@ package definitionstest
 
 import (
 	"bytes"
+	"context"
 	"maps"
 	"slices"
 	"strings"
@@ -327,4 +328,43 @@ func testImportLegacyDraft(f *fixture) {
 
 	_, _, err = other.Definitions.ImportLegacy(other.ctx(t), imp)
 	expect(t, "ImportLegacy of another org's factory", err, ports.ErrConflict)
+}
+
+// Only an organization from before versions has a legacy import to do, until it ends; a new one
+// never has, and one organization's import is not another's.
+func testLegacyImportPending(f *fixture) {
+	t := f.t
+	ctx := f.ctx(t)
+
+	pending := func(what string, ctx context.Context, want bool) {
+		t.Helper()
+
+		if got, err := f.Definitions.LegacyImportPending(ctx); err != nil || got != want {
+			t.Errorf("%s: LegacyImportPending = %v, %v; want %v", what, got, err, want)
+		}
+	}
+
+	pending("a new organization", ctx, false)
+
+	f.LegacyOrg(t, f.org)
+
+	other := f.NewOrg(t)
+	otherCtx := domain.WithOrg(t.Context(), other)
+
+	pending("an organization from before versions", ctx, true)
+	pending("another new organization", otherCtx, false)
+
+	if err := f.Definitions.EndLegacyImport(otherCtx); err != nil {
+		t.Fatal(err)
+	}
+
+	pending("after another organization's end", ctx, true)
+
+	for range 2 {
+		if err := f.Definitions.EndLegacyImport(ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		pending("after its end", ctx, false)
+	}
 }

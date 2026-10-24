@@ -102,6 +102,14 @@ type DefinitionStore interface {
 	// imported is false. Audit: factory.created for a new row, definition.published when it
 	// publishes.
 	ImportLegacy(ctx context.Context, i LegacyImport) (v domain.DefinitionVersion, imported bool, err error)
+	// LegacyImportPending reports whether the organization in ctx has yet to import the
+	// factories of the bucket's pre-2.2 layout: true for each organization that existed when
+	// versions arrived (migration 00039) until EndLegacyImport, never for a newer one, so files
+	// written under a legacy prefix later are never read.
+	LegacyImportPending(ctx context.Context) (bool, error)
+	// EndLegacyImport records that the organization in ctx imported its legacy factories. Ending
+	// an import that ended is a no-op.
+	EndLegacyImport(ctx context.Context) error
 }
 
 // NewFactory is a factory to create with its first draft.

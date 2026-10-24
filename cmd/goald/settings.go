@@ -64,7 +64,8 @@ type settings struct {
 	// on a version no longer current (GOAL_DEFINITION_CACHE_BYTES, default 64 MiB).
 	DefinitionCacheBytes int64
 	// LegacyImport imports, at startup, the factories of the bucket layout before versions that
-	// have no version yet (GOAL_LEGACY_IMPORT, default true).
+	// have no version yet (GOAL_LEGACY_IMPORT, default true for this release). It is a no-op once
+	// every organization's import ran: each organization from before versions imports once.
 	LegacyImport bool
 	// MaxRuns caps the agent runs this goald has in flight at once (GOAL_MAX_RUNS, default 0:
 	// no cap). With a cap, claims are shared out fairly across organizations.

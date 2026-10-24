@@ -1,6 +1,7 @@
 package factorystore
 
 import (
+	"context"
 	"errors"
 	"maps"
 	"testing"
@@ -52,6 +53,55 @@ func putFactory(t *testing.T, store ports.ObjectStore, o domain.OrgID, id string
 	}
 }
 
+// readAll lists org's factories and reads each.
+func readAll(t *testing.T, c *Catalog, o domain.OrgID) []Entry {
+	t.Helper()
+
+	listed, err := c.List(t.Context(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out := make([]Entry, 0, len(listed))
+
+	for _, l := range listed {
+		e, err := c.Read(t.Context(), l)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		out = append(out, e)
+	}
+
+	return out
+}
+
+// failingGets is a bucket that lists but cannot read an object.
+type failingGets struct{ ports.ObjectStore }
+
+func (failingGets) Get(context.Context, string, string) (ports.Object, error) {
+	return ports.Object{}, errors.New("bucket unreachable")
+}
+
+// List reads no file: the import reads only the factories it has yet to import. A bucket that
+// fails while a factory is read is an error, not a broken factory, so the import is retried.
+func TestList_ReadsNoFileAndReadFailsOnTheBucketsError(t *testing.T) {
+	t.Parallel()
+
+	store := porttest.NewObjectStore()
+	putFactory(t, store, org, acmeID, acmeFactory("acme-notes"))
+	c := New(failingGets{store})
+
+	listed, err := c.List(t.Context(), org)
+	if err != nil || len(listed) != 1 || listed[0].ID != acmeID || len(listed[0].Files) != len(acmeFactory("")) {
+		t.Fatalf("list = %+v, %v; want acme's files listed without reading them", listed, err)
+	}
+
+	if e, err := c.Read(t.Context(), listed[0]); err == nil {
+		t.Errorf("read = %+v; want the bucket's error", e)
+	}
+}
+
 func TestList_ReadsEachFactoryWithoutKnowledge(t *testing.T) {
 	t.Parallel()
 
@@ -59,9 +109,9 @@ func TestList_ReadsEachFactoryWithoutKnowledge(t *testing.T) {
 	putFactory(t, store, org, acmeID, acmeFactory("acme-notes"))
 	putFactory(t, store, org, acmeID, map[string]string{"knowledge/notes/remote.md": "# remote\n", "agents/": ""})
 
-	entries, err := New(store).List(t.Context(), org)
-	if err != nil || len(entries) != 1 || entries[0].Err != nil {
-		t.Fatalf("list = %+v, %v", entries, err)
+	entries := readAll(t, New(store), org)
+	if len(entries) != 1 || entries[0].Err != nil {
+		t.Fatalf("list = %+v", entries)
 	}
 
 	got := map[string]string{}
@@ -89,10 +139,7 @@ func TestList_ReportsEveryFactoryAndWhyOneIsBroken(t *testing.T) {
 	const brokenID = "00000000-0000-4000-8000-0000000000bb"
 	putFactory(t, store, org, brokenID, map[string]string{"knowledge/notes/a.md": "# A\n"})
 
-	entries, err := New(store).List(t.Context(), org)
-	if err != nil {
-		t.Fatal(err)
-	}
+	entries := readAll(t, New(store), org)
 
 	if len(entries) != 2 {
 		t.Fatalf("got %d entries, want 2", len(entries))

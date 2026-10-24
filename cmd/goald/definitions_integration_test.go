@@ -19,7 +19,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/byFrederick/goal/internal/adapters/envsecrets"
 	"github.com/byFrederick/goal/internal/adapters/postgres"
+	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/factorystore"
@@ -167,25 +169,36 @@ func TestStartup_ImportsALegacyFactoryOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	s, err := settingsFrom(envOf(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	authors := authoring.New(authoring.Deps{
+		Store: defs, Loads: store, Templates: objects, Credentials: s.credentials(envsecrets.New(os.LookupEnv)),
+	})
+
 	startup := func() string {
 		t.Helper()
 
 		var logs bytes.Buffer
-		if err := importLegacy(t.Context(), settings{LegacyImport: true}, objects, defs, store, slog.New(slog.NewTextHandler(&logs, nil))); err != nil {
+		if err := importLegacy(t.Context(), s, objects, defs, store, publishProblems(authors), slog.New(slog.NewTextHandler(&logs, nil))); err != nil {
 			t.Fatal(err)
 		}
 
 		return logs.String()
 	}
 
-	if logs := startup(); !strings.Contains(logs, `msg="legacy definitions imported" factories=1 versions=1 drafts=0 present=0 problems=0`) {
-		t.Errorf("startup log does not report one version:\n%s", logs)
+	if logs := startup(); !strings.Contains(logs, `msg="legacy definitions imported" factories=1 versions=1 drafts=0 present=0 problems=0`) ||
+		!strings.Contains(logs, `msg="legacy bucket layout migrated" copied=2`) {
+		t.Errorf("startup log does not report the move and one version:\n%s", logs)
 	}
 
 	v1 := importedV1(ctx, t, defs, files)
 
-	if logs := startup(); !strings.Contains(logs, "versions=0 drafts=0 present=1") {
-		t.Errorf("second startup did not leave the factory alone:\n%s", logs)
+	// The default organization's import ended: the next start reads no legacy prefix.
+	if logs := startup(); strings.Contains(logs, "layout migrated") || !strings.Contains(logs, "factories=0 versions=0") {
+		t.Errorf("second startup read the legacy layout again:\n%s", logs)
 	}
 
 	if vs, err := defs.Versions(ctx, acmeID, 0, 10); err != nil || len(vs) != 1 {

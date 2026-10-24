@@ -347,6 +347,34 @@ func (d *Definitions) ImportLegacy(ctx context.Context, i ports.LegacyImport) (d
 	return v, v.ID != "", nil
 }
 
+// LegacyImportPending implements ports.DefinitionStore: the organization has a row in
+// legacy_import_pending (migration 00039).
+func (d *Definitions) LegacyImportPending(ctx context.Context) (bool, error) {
+	var pending bool
+
+	err := d.store.inTx(ctx, func(q *db.Queries) error {
+		var err error
+
+		pending, err = q.LegacyImportPending(ctx)
+
+		return err
+	})
+	if err != nil {
+		return false, fmt.Errorf("read the legacy import: %w", err)
+	}
+
+	return pending, nil
+}
+
+// EndLegacyImport implements ports.DefinitionStore.
+func (d *Definitions) EndLegacyImport(ctx context.Context) error {
+	if err := d.store.inTx(ctx, func(q *db.Queries) error { return q.EndLegacyImport(ctx) }); err != nil {
+		return fmt.Errorf("end the legacy import: %w", err)
+	}
+
+	return nil
+}
+
 // importLegacy imports i, as p, into a factory that has no version yet.
 func importLegacy(ctx context.Context, q *db.Queries, i ports.LegacyImport, p db.InsertVersionParams, exists bool,
 	f db.LockFactoryRow,

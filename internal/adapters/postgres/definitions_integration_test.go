@@ -39,8 +39,47 @@ func TestDefinitions_Conformance(t *testing.T) {
 
 				legacyFactory(t, pool, org, id, name)
 			},
+			LegacyOrg: func(t *testing.T, org domain.OrgID) { t.Helper(); legacyOrg(t, pool, org) },
 		}
 	})
+}
+
+// legacyOrg makes org's legacy import pending, as migration 00039 did for the organizations it
+// found; goal_app may only read and end it, so the row is written as goal_owner.
+func legacyOrg(t *testing.T, pool *pgxpool.Pool, org domain.OrgID) {
+	t.Helper()
+
+	err := pgx.BeginFunc(t.Context(), pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(t.Context(), "SET LOCAL ROLE "+OwnerRole); err != nil {
+			return err
+		}
+
+		_, err := tx.Exec(t.Context(), "INSERT INTO legacy_import_pending (org_id) VALUES ($1)", string(org))
+
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Migration 00039 makes the legacy import pending for every organization that existed then
+// (here the default one, from 00005) and for none created later.
+func TestMigration_LegacyImportPendsOnlyTheOrganizationsFromBefore(t *testing.T) {
+	t.Parallel()
+
+	db := newTestDB(t, OwnerRole)
+	migrateTo(t, openPool(t, db.owner), 38)
+	migrate(t, db.owner)
+
+	pool := openPool(t, db.app)
+	defs := NewDefinitions(pool, porttest.NewObjectStore(), nil)
+
+	for org, want := range map[domain.OrgID]bool{DefaultOrgID: true, newOrgID(t, New(pool)): false} {
+		if got, err := defs.LegacyImportPending(domain.WithOrg(t.Context(), org)); err != nil || got != want {
+			t.Errorf("organization %s: LegacyImportPending = %v, %v; want %v", org, got, err, want)
+		}
+	}
 }
 
 // definitionsFixture is a definition store on a fresh schema with one published factory in org.

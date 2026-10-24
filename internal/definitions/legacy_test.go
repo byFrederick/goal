@@ -2,11 +2,13 @@ package definitions
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"log/slog"
 	"maps"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/byFrederick/goal/internal/config"
@@ -34,10 +36,29 @@ func (h *harness) seedLegacy(t *testing.T, o domain.OrgID, id domain.FactoryID, 
 	return versions
 }
 
+// legacyOrgs makes the import pending for org and other, the organizations from before versions.
+func (h *harness) legacyOrgs() {
+	h.store.PendLegacyImport(org)
+	h.store.PendLegacyImport(other)
+}
+
+// valid is authoring's verdict on a definition with no problem.
+func valid(context.Context, map[string][]byte) ([]domain.DefinitionProblem, error) { return nil, nil }
+
 func (h *harness) importLegacy(t *testing.T, log *slog.Logger) LegacyImport {
 	t.Helper()
 
-	res, err := ImportLegacy(t.Context(), factorystore.New(h.objects), h.store, h.orgs, log)
+	return h.importWith(t, Legacy{Catalog: factorystore.New(h.objects), Validate: valid, Log: log})
+}
+
+// importWith runs the import with l's catalog, validation and log over the harness's store and
+// organizations.
+func (h *harness) importWith(t *testing.T, l Legacy) LegacyImport {
+	t.Helper()
+
+	l.Store, l.Orgs = h.store, h.orgs
+
+	res, err := ImportLegacy(t.Context(), l)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,6 +70,8 @@ func TestImportLegacy_PublishesVersionOneWithTheSameBytesOnce(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
+	h.legacyOrgs()
+
 	files := acme(acmeName, noteContract)
 	files["agents/writer.md"] = "# writer\r\n\n  kept exactly, trailing spaces too  \n" // no reformatting
 	objectVersions := h.seedLegacy(t, org, acmeID, files)
@@ -62,8 +85,8 @@ func TestImportLegacy_PublishesVersionOneWithTheSameBytesOnce(t *testing.T) {
 
 	v := h.importedV1(t, files, objectVersions)
 
-	if res := h.importLegacy(t, nil); res != (LegacyImport{Factories: 1, Present: 1}) {
-		t.Errorf("second import = %+v, want the factory left alone", res)
+	if res := h.importLegacy(t, nil); res != (LegacyImport{}) {
+		t.Errorf("second import = %+v, want nothing read: the organizations' imports ended", res)
 	}
 
 	if vs, err := h.store.Versions(ctx, acmeID, 0, 10); err != nil || len(vs) != 1 {
@@ -120,6 +143,7 @@ func TestImportLegacy_AFactoryThatDoesNotValidateBecomesADraft(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
+	h.legacyOrgs()
 
 	broken := acme(acmeName, noteContract)
 	delete(broken, "agents/writer.md") // the prompt is missing: it loads no more
@@ -150,9 +174,42 @@ func TestImportLegacy_AFactoryThatDoesNotValidateBecomesADraft(t *testing.T) {
 	if lines, err := h.cache(t, nil).Refresh(t.Context()); err != nil || len(lines) != 0 {
 		t.Errorf("lines = %+v (%v), want none: a draft does not run", lines, err)
 	}
+}
 
-	if res := h.importLegacy(t, nil); res != (LegacyImport{Factories: 2, Present: 1, Problems: 1}) {
-		t.Errorf("second import = %+v, want the draft left alone", res)
+// A definition that loads but that authoring would refuse to publish, such as one reading one of
+// goald's own settings, is imported as a draft: the import runs nothing a publish would not.
+func TestImportLegacy_WhatAuthoringRefusesBecomesADraft(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.legacyOrgs()
+	h.seedLegacy(t, org, acmeID, acme(acmeName, noteContract))
+
+	var asked atomic.Int32
+
+	refuse := func(_ context.Context, files map[string][]byte) ([]domain.DefinitionProblem, error) {
+		asked.Add(1)
+
+		if _, ok := files[config.FileName]; !ok {
+			t.Errorf("validated files %v, want the factory's", slices.Sorted(maps.Keys(files)))
+		}
+
+		return []domain.DefinitionProblem{{Code: "env-reserved", Severity: domain.SeverityError, Message: "env:GOAL_DATABASE_URL is reserved"}}, nil
+	}
+
+	var logs bytes.Buffer
+
+	res := h.importWith(t, Legacy{Catalog: factorystore.New(h.objects), Validate: refuse, Log: slog.New(slog.NewTextHandler(&logs, nil))})
+	if res != (LegacyImport{Factories: 1, Drafts: 1}) || asked.Load() != 1 {
+		t.Fatalf("import = %+v after %d validations, want one draft after one", res, asked.Load())
+	}
+
+	if rec, err := h.store.FactoryRecord(ctxOf(t, org), acmeID); err != nil || rec.Current != nil || rec.Draft == nil {
+		t.Errorf("factory = %+v (%v), want a draft and no current version", rec, err)
+	}
+
+	if !strings.Contains(logs.String(), "env:GOAL_DATABASE_URL is reserved") {
+		t.Errorf("logs do not say why it is a draft:\n%s", logs.String())
 	}
 }
 
@@ -160,6 +217,7 @@ func TestImportLegacy_ImportsEachOrganizationsFactories(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
+	h.legacyOrgs()
 	h.seedLegacy(t, org, acmeID, acme(acmeName, noteContract))
 	h.seedLegacy(t, other, otherID, withID(acme(acmeName, noteContract), otherID))
 
@@ -174,21 +232,109 @@ func TestImportLegacy_ImportsEachOrganizationsFactories(t *testing.T) {
 	}
 }
 
-func TestImportLegacy_WarnsWhenLegacyObjectsChangeAfterTheImport(t *testing.T) {
+// Once an organization's import ran, deleting a factory it imported as a draft deletes it for
+// good: the next start does not import it again.
+func TestImportLegacy_ADeletedImportedDraftIsNotRecreated(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
+	h.legacyOrgs()
+
+	broken := acme(acmeName, noteContract)
+	delete(broken, "agents/writer.md")
+	h.seedLegacy(t, org, acmeID, broken)
+
+	if res := h.importLegacy(t, nil); res != (LegacyImport{Factories: 1, Drafts: 1}) {
+		t.Fatalf("import = %+v, want one draft", res)
+	}
+
+	if err := h.store.DeleteUnpublished(ctxOf(t, org), acmeID, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	if res := h.importLegacy(t, nil); res != (LegacyImport{}) {
+		t.Errorf("import after the delete = %+v, want nothing", res)
+	}
+
+	if _, err := h.store.FactoryRecord(ctxOf(t, org), acmeID); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("deleted draft = %v, want it gone", err)
+	}
+}
+
+// goald ignores definition files written to the bucket directly: files planted under a legacy
+// prefix after the organization's import, or under that of an organization created after
+// versions, never become a factory.
+func TestImportLegacy_FilesPlantedLaterAreIgnored(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.store.PendLegacyImport(org) // other was created after versions: it has no import to do
+	h.seedLegacy(t, org, acmeID, acme(acmeName, noteContract))
+
+	if res := h.importLegacy(t, nil); res != (LegacyImport{Factories: 1, Published: 1}) {
+		t.Fatalf("import = %+v, want acme published", res)
+	}
+
+	h.seedLegacy(t, org, otherID, withID(acme("planted", noteContract), otherID))
+	h.seedLegacy(t, other, otherID, withID(acme("planted", noteContract), otherID))
+
+	if res := h.importLegacy(t, nil); res != (LegacyImport{}) {
+		t.Errorf("import after the planting = %+v, want nothing", res)
+	}
+
+	for _, o := range []domain.OrgID{org, other} {
+		if _, err := h.store.FactoryRecord(ctxOf(t, o), otherID); !errors.Is(err, ports.ErrNotFound) {
+			t.Errorf("planted factory in %s = %v, want not imported", o, err)
+		}
+	}
+}
+
+// countingObjects counts the objects read from a bucket.
+type countingObjects struct {
+	ports.ObjectStore
+
+	gets atomic.Int32
+}
+
+func (c *countingObjects) Get(ctx context.Context, key, version string) (ports.Object, error) {
+	c.gets.Add(1)
+
+	return c.ObjectStore.Get(ctx, key, version)
+}
+
+// An import that did not end (goald stopped part-way) is finished by the next start, which reads
+// only the files of the factories it has yet to import, and warns when the legacy objects of an
+// imported factory changed meanwhile (an old CLI pushed).
+func TestImportLegacy_AnUnfinishedImportReadsOnlyWhatIsLeft(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.legacyOrgs()
 	h.seedLegacy(t, org, acmeID, acme(acmeName, noteContract))
 	h.importLegacy(t, nil)
 
-	var quiet bytes.Buffer
-	h.importLegacy(t, slog.New(slog.NewTextHandler(&quiet, nil)))
+	h.store.PendLegacyImport(org) // as if goald had stopped before the end of the import
+	h.seedLegacy(t, org, otherID, withID(acme("notes", noteContract), otherID))
 
+	objects := &countingObjects{ObjectStore: h.objects}
+
+	var quiet bytes.Buffer
+
+	res := h.importWith(t, Legacy{Catalog: factorystore.New(objects), Validate: valid, Log: slog.New(slog.NewTextHandler(&quiet, nil))})
+	if res != (LegacyImport{Factories: 2, Published: 1, Present: 1}) {
+		t.Fatalf("import = %+v, want acme left alone and the other factory published", res)
+	}
+
+	if got, want := int(objects.gets.Load()), len(acme("notes", noteContract)); got != want {
+		t.Errorf("read %d objects, want only the %d of the factory not imported yet", got, want)
+	}
+
+	h.store.PendLegacyImport(org)
 	h.seedLegacy(t, org, acmeID, map[string]string{"agents/writer.md": "# writer, pushed by an old CLI\n"})
 
 	var logs bytes.Buffer
-	if res := h.importLegacy(t, slog.New(slog.NewTextHandler(&logs, nil))); res != (LegacyImport{Factories: 1, Present: 1}) {
-		t.Errorf("import = %+v, want the factory left alone", res)
+	if res := h.importLegacy(t, slog.New(slog.NewTextHandler(&logs, nil))); res != (LegacyImport{Factories: 2, Present: 2}) {
+		t.Errorf("import = %+v, want both left alone", res)
 	}
 
 	const warning = "changed after the import"

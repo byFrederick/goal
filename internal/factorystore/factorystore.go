@@ -7,7 +7,8 @@
 // prefix is reserved for the factory's knowledge base, which this package never reads. The
 // organization id always comes from the database, never from a definition.
 //
-// List reads an organization's factories as the import needs them. MigrateLegacy moves the
+// List lists an organization's factories and Read reads one, as the import needs them: it reads
+// the files only of those it has yet to import. MigrateLegacy moves the
 // factories of the layout before organizations (factories/<id>/) into one organization, and
 // DeleteOrg empties a deleted organization's prefix.
 package factorystore
@@ -63,40 +64,69 @@ type Snapshot struct {
 // FS returns the snapshot as a read-only file tree rooted at the factory's folder.
 func (s *Snapshot) FS() fs.FS { return s.files }
 
-// open reads the definition of org's factory with this id from its listed objects (everything
-// but knowledge/). It returns an error wrapping ports.ErrNotFound when they hold no factory.yaml.
-func (c *Catalog) open(ctx context.Context, org domain.OrgID, id string, objects []ports.ObjectInfo) (*Snapshot, error) {
-	prefix := Prefix(org, id)
-	s := &Snapshot{Org: org, ID: id, files: config.Files{}}
-
-	for _, o := range objects {
-		rel := strings.TrimPrefix(o.Key, prefix)
-		if strings.HasSuffix(rel, "/") || strings.HasPrefix(rel, KnowledgeDir) {
-			continue // folder markers and the knowledge base are not part of the definition
-		}
-
-		if !fs.ValidPath(rel) {
-			return nil, fmt.Errorf("factory %s: object key %q is not a valid file path", id, o.Key)
-		}
-
-		// Read the listed version, not the latest: a concurrent write cannot mix two definitions.
-		obj, err := c.store.Get(ctx, o.Key, o.Version)
-		if err != nil {
-			return nil, err
-		}
-
-		s.files[rel] = obj.Body
-		s.Files = append(s.Files, ports.ObjectInfo{Key: rel, Version: obj.Version, Size: obj.Size})
-	}
-
-	if _, ok := s.files[config.FileName]; !ok {
-		return nil, fmt.Errorf("factory %s: no %s%s: %w", id, prefix, config.FileName, ports.ErrNotFound)
-	}
-
-	return s, nil
+// Listed is one factory of an organization's legacy prefix as listed, before any of its files
+// is read.
+type Listed struct {
+	Org domain.OrgID
+	ID  string
+	// Files are the definition's objects (no folder markers, nothing under knowledge/), with
+	// keys relative to the factory's root, ordered by key.
+	Files []ports.ObjectInfo
 }
 
-// Entry is one factory found in the bucket. Factory is nil when its definition does not load;
+// Versions are the object versions listed, by path.
+func (l Listed) Versions() map[string]string {
+	out := make(map[string]string, len(l.Files))
+	for _, o := range l.Files {
+		out[o.Key] = o.Version
+	}
+
+	return out
+}
+
+// List lists every factory of org's legacy prefix, ordered by id, reading no file.
+func (c *Catalog) List(ctx context.Context, org domain.OrgID) ([]Listed, error) {
+	root := OrgPrefix(org) + factoriesDir
+
+	objects, err := c.store.List(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+
+	byID := map[string]*Listed{}
+
+	for _, o := range objects {
+		id, _, ok := strings.Cut(strings.TrimPrefix(o.Key, root), "/")
+		if !ok || id == "" {
+			continue
+		}
+
+		l := byID[id]
+		if l == nil {
+			l = &Listed{Org: org, ID: id}
+			byID[id] = l
+		}
+
+		rel := strings.TrimPrefix(o.Key, Prefix(org, id))
+
+		// Folder markers and the knowledge base are not part of the definition.
+		if !strings.HasSuffix(rel, "/") && !strings.HasPrefix(rel, KnowledgeDir) {
+			l.Files = append(l.Files, ports.ObjectInfo{Key: rel, Version: o.Version, Size: o.Size})
+		}
+	}
+
+	out := make([]Listed, 0, len(byID))
+	for _, l := range byID {
+		slices.SortFunc(l.Files, func(a, b ports.ObjectInfo) int { return cmp.Compare(a.Key, b.Key) })
+		out = append(out, *l)
+	}
+
+	slices.SortFunc(out, func(a, b Listed) int { return cmp.Compare(a.ID, b.ID) })
+
+	return out, nil
+}
+
+// Entry is one factory read from the bucket. Factory is nil when its definition does not load;
 // Err then says why.
 type Entry struct {
 	ID       string
@@ -105,42 +135,38 @@ type Entry struct {
 	Err      error
 }
 
-// List reads and validates every factory of org, ordered by id.
-func (c *Catalog) List(ctx context.Context, org domain.OrgID) ([]Entry, error) {
-	root := OrgPrefix(org) + factoriesDir
+// Read reads and validates a listed factory: each file at the version listed, so a concurrent
+// write cannot mix two definitions. A factory that cannot be one (a bad key, no factory.yaml,
+// a definition that does not load) is an Entry with Err; an error is the bucket's.
+func (c *Catalog) Read(ctx context.Context, l Listed) (Entry, error) {
+	e := Entry{ID: l.ID}
+	s := &Snapshot{Org: l.Org, ID: l.ID, Files: l.Files, files: config.Files{}}
 
-	objects, err := c.store.List(ctx, root)
-	if err != nil {
-		return nil, err
-	}
-
-	byID := map[string][]ports.ObjectInfo{}
-
-	for _, o := range objects {
-		id, _, ok := strings.Cut(strings.TrimPrefix(o.Key, root), "/")
-		if ok && id != "" {
-			byID[id] = append(byID[id], o)
+	for _, o := range l.Files {
+		if !fs.ValidPath(o.Key) {
+			e.Err = fmt.Errorf("factory %s: object key %q is not a valid file path", l.ID, Prefix(l.Org, l.ID)+o.Key)
+			return e, nil
 		}
 	}
 
-	entries := make([]Entry, 0, len(byID))
-
-	for id, objs := range byID {
-		e := Entry{ID: id}
-
-		e.Snapshot, e.Err = c.open(ctx, org, id, objs)
-		if e.Err == nil {
-			e.Factory, e.Err = config.Load(e.Snapshot.FS())
+	for _, o := range l.Files {
+		obj, err := c.store.Get(ctx, Prefix(l.Org, l.ID)+o.Key, o.Version)
+		if err != nil {
+			return Entry{}, fmt.Errorf("read factory %s: %w", l.ID, err)
 		}
 
-		if e.Err == nil && e.Factory.Metadata.ID != id {
-			e.Factory, e.Err = nil, fmt.Errorf("metadata.id %s does not match its prefix %s", e.Factory.Metadata.ID, Prefix(org, id))
-		}
-
-		entries = append(entries, e)
+		s.files[o.Key] = obj.Body
 	}
 
-	slices.SortFunc(entries, func(a, b Entry) int { return cmp.Compare(a.ID, b.ID) })
+	if _, ok := s.files[config.FileName]; !ok {
+		e.Err = fmt.Errorf("factory %s: no %s%s: %w", l.ID, Prefix(l.Org, l.ID), config.FileName, ports.ErrNotFound)
+		return e, nil
+	}
 
-	return entries, nil
+	e.Snapshot = s
+	if e.Factory, e.Err = config.Load(s.FS()); e.Err == nil && e.Factory.Metadata.ID != l.ID {
+		e.Factory, e.Err = nil, fmt.Errorf("metadata.id %s does not match its prefix %s", e.Factory.Metadata.ID, Prefix(l.Org, l.ID))
+	}
+
+	return e, nil
 }
