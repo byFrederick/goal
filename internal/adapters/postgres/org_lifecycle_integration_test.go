@@ -170,7 +170,7 @@ func TestProvisionOrg_WithAnOwner(t *testing.T) {
 	t.Parallel()
 
 	d := newIdentityDB(t)
-	owner := d.user("F. Cruz")
+	owner := d.user(nameCruz)
 	member, id := newUUID(t), newUUID(t)
 	by := "user:" + owner
 
@@ -190,7 +190,7 @@ func TestProvisionOrg_WithAnOwner(t *testing.T) {
 	}
 
 	entries, err := d.s.AuditLog(domain.WithOrg(t.Context(), domain.OrgID(id)), ports.AuditQuery{Action: domain.AuditOrgCreated, Limit: 10})
-	if want := (domain.Actor{Kind: domain.ActorUser, ID: owner, Name: "F. Cruz"}); err != nil || len(entries) != 1 || entries[0].Actor != want {
+	if want := (domain.Actor{Kind: domain.ActorUser, ID: owner, Name: nameCruz}); err != nil || len(entries) != 1 || entries[0].Actor != want {
 		t.Errorf("org.created of the provisioned org = %+v, %v; want one by %+v (the user's name)", entries, err, want)
 	}
 }
@@ -252,7 +252,7 @@ func TestPurgeOrg_RemovesBetterAuthRows(t *testing.T) {
 
 	d := newIdentityDB(t)
 	acme, labs := d.org("acme"), d.org("labs")
-	owner := d.user("F. Cruz")
+	owner := d.user(nameCruz)
 
 	for _, o := range []domain.Org{acme, labs} {
 		d.member(o.ID, owner, "owner")
@@ -356,10 +356,10 @@ func TestTransferOwnership_OwnerToAdmin(t *testing.T) {
 
 	d := newIdentityDB(t)
 	acme := d.org("acme")
-	owner, admin, member := d.user("F. Cruz"), d.user("M. Okafor"), d.user("J. Lindqvist")
+	owner, admin, member := d.user(nameCruz), d.user("M. Okafor"), d.user("J. Lindqvist")
 	d.member(acme.ID, owner, "owner")
 	d.member(acme.ID, admin, "admin")
-	d.member(acme.ID, member, "member")
+	d.member(acme.ID, member, roleMember)
 
 	transfer := func(org domain.OrgID, from, to string) error {
 		return inOrgTx(t, d.app, org, func(tx pgx.Tx) error {
@@ -381,7 +381,7 @@ func TestTransferOwnership_OwnerToAdmin(t *testing.T) {
 	}
 
 	entries, err := d.s.AuditLog(domain.WithOrg(t.Context(), acme.ID), ports.AuditQuery{Action: "org.ownership_transferred", Limit: 10})
-	want := domain.Actor{Kind: domain.ActorUser, ID: owner, Name: "F. Cruz"}
+	want := domain.Actor{Kind: domain.ActorUser, ID: owner, Name: nameCruz}
 
 	if err != nil || len(entries) != 1 || entries[0].Actor != want || entries[0].Data["from"] != owner || entries[0].Data["to"] != admin {
 		t.Errorf("org.ownership_transferred = %+v, %v; want one by %+v from %s to %s", entries, err, want, owner, admin)

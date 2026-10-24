@@ -368,8 +368,12 @@ CREATE TABLE platform_admins (
   added_by text NOT NULL,                                -- Actor.Ref()
   added_at timestamptz NOT NULL DEFAULT now()
 );
--- (3-6) a deferred constraint trigger refuses deleting the last row once any user exists,
--- with the table locked first (same pattern as goal_keep_an_owner).
+-- (3-6) a deferred constraint trigger (platform_admins_keep_one) refuses deleting the last row
+-- once any user exists, serialized first. As built the serialization is the transaction lock
+-- pg_advisory_xact_lock(hashtext('goal.platform_admins')), which goal_claim_bootstrap takes too:
+-- a self-conflicting LOCK TABLE also conflicts with each DELETE's row-exclusive lock, so two
+-- removals would deadlock instead of one being refused. added_by and granted_by are CHECKed to
+-- be actor refs.
 
 -- Factory roles of members. RLS like every org table; a role exists only for a member of the
 -- same organization and a factory of it, enforced by composite keys.
@@ -407,8 +411,11 @@ CREATE INDEX auth_events_subject_idx ON auth_events (kind, subject, at DESC);
 CREATE INDEX auth_events_user_idx    ON auth_events (user_id, at DESC);
 CREATE INDEX auth_events_at_idx      ON auth_events (at);
 
-ALTER TABLE audit_log DROP CONSTRAINT audit_log_actor_kind_check,
-  ADD CONSTRAINT audit_log_actor_kind_check CHECK (actor_kind IN ('user', 'agent', 'system', 'service'));
+-- As built: added NOT VALID, then validated (the 2.2 database review's pattern).
+ALTER TABLE audit_log DROP CONSTRAINT audit_log_actor_kind_check;
+ALTER TABLE audit_log ADD CONSTRAINT audit_log_actor_kind_check
+  CHECK (actor_kind IN ('user', 'agent', 'system', 'service')) NOT VALID;
+ALTER TABLE audit_log VALIDATE CONSTRAINT audit_log_actor_kind_check;
 ```
 
 `auth_events.kind` values: `sign_in.succeeded {method: email_code|google|device}`, `sign_up.refused`, `user.created`, `otp.sent`, `otp.suppressed {reason: unknown|cap|locked}`, `otp.failed`, `otp.locked`, `device.requested {client_id}`, `device.approved`, `device.denied`, `session.revoked`, `platform_admin.added`, `platform_admin.removed`, `recovery.used`.
@@ -425,7 +432,9 @@ ALTER TABLE audit_log DROP CONSTRAINT audit_log_actor_kind_check,
 
 The actor is `changedBy` when `changedAt` is within the last minute (set by the auth service's stamp hook, §8.6, or by a definer), else `inviterId` for a new invitation, else the member themself for a new member (they accepted an invitation), else `system:auth`. The name is the user's name at that moment. Two people changing the same row at the same moment can be attributed to either one; both changes are recorded. Nothing is written for an organization being purged.
 
-`goal_notify_access()` triggers send `pg_notify('goal_access', {kind, org_id?, user_id?, session_id?, key_id?})` on `auth.member` UPDATE OF role or DELETE, `auth.session` DELETE, `factory_roles` changes, `organizations.deleted_at` set and (from `00046`) `api_keys.revoked_at` set. A notice only ends streams (§8.8); it never grants anything, since any role can `NOTIFY`.
+As built (3-6): `goal_audit_member()` and `goal_audit_invitation()` behind the triggers `member_audit_added`, `member_audit_role_changed` (only when the role changes), `member_audit_removed`, `invitation_audit_created`, `invitation_audit_answered` (only into `accepted`, `rejected` or `canceled`: Better Auth's return of a failed acceptance to `pending` writes nothing); the stamp rule is `goal_auth_actor(changedBy, changedAt, fallback)` (±1 minute of `clock_timestamp()`, a malformed ref ignored), the entries go through `goal_append_audit` (00042) with target `member:<user id>` or `invitation:<id>` and no request id. `via` is `bootstrap`/`recovery` by the stamps `system:bootstrap`/`system:recovery`, `invitation` when the user's accepted invitation of the organization exists (Better Auth marks it accepted before inserting the member), else `org_created`. A soft delete's canceled invitations are by `system:org-deleted`. "Being purged" is "no `organizations` row": `goal_purge_org` deletes it before Better Auth's rows.
+
+`goal_notify_access()` triggers send `pg_notify('goal_access', {kind, org_id?, user_id?, session_id?, key_id?})` on `auth.member` UPDATE OF role or DELETE, `auth.session` DELETE, `factory_roles` changes, `organizations.deleted_at` set and (from `00046`) `api_keys.revoked_at` set. A notice only ends streams (§8.8); it never grants anything, since any role can `NOTIFY`. As built, kinds are `member {org_id, user_id}`, `session {user_id, session_id}`, `factory_role {org_id, user_id, factory_id}` and `org {org_id}`; triggers `member_access_role_changed`, `member_access_removed`, `session_access_ended`, `factory_roles_access`, `organizations_access_deleted`.
 
 ### 6.5 `00044` and `00045`: definer functions
 

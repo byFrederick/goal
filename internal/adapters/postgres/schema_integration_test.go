@@ -17,13 +17,18 @@ import (
 )
 
 // orgTables are the tables 00006 gave org_id, then those later phases added with theirs.
-var orgTables = []string{"factories", "work_items", "leases", "agent_runs", "item_events", "andon_pulls", "audit_log", "item_spans", "lease_spans"}
+var orgTables = []string{
+	"factories", "work_items", "leases", "agent_runs", "item_events", "andon_pulls", "audit_log", "item_spans", "lease_spans",
+	"factory_roles",
+}
 
 // withoutOrgID are the tables that carry no org_id, and why. A phase that adds a table without
 // org_id adds it here in the same pull request, with its reason.
 var withoutOrgID = map[string]string{
 	"goose_db_version": "the migration log, goal_owner's alone",
 	"organizations":    "the tenant itself; its policy compares id with goal_org()",
+	"platform_admins":  "install-level: who may create organizations; reached only through definers",
+	"auth_events":      "install-level security log (sign-ins, codes, devices); reached only through definers",
 }
 
 // The tenancy kit, checked on the fully migrated schema: every table with org_id has row-level

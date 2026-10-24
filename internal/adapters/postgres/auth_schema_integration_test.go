@@ -16,9 +16,26 @@ import (
 // OTP, organization, device authorization and bearer plugins).
 var betterAuthTables = []string{"account", "deviceCode", "invitation", "member", "organization", "rateLimit", "session", "user", "verification"}
 
+// authFunctions are the definer functions of Goal's schema the identity service may run (spec 3
+// §6.5 "auth"); 00044 adds them. goal_app runs the "app" ones.
+var authFunctions = []string{}
+
+// authTriggers are the triggers on Better Auth's tables, by table: the owner rule (00042), the
+// audit and the access notices (00043). A regenerated table that lost one fails here.
+var authTriggers = map[string][]string{
+	"invitation": {"invitation_audit_answered", "invitation_audit_created"},
+	"member": {
+		"member_access_removed", "member_access_role_changed", "member_audit_added", "member_audit_removed",
+		"member_audit_role_changed", "member_keeps_an_owner",
+	},
+	"session": {"session_access_ended"},
+}
+
 // Schema auth belongs to Better Auth and the identity service (spec 3 §6.0): goal_owner owns it
-// and its tables; goal_auth uses it with exactly SELECT, INSERT, UPDATE and DELETE on each table
-// and has no table privilege in Goal's schema; goal_app cannot even use it.
+// and its tables; goal_auth uses it with exactly SELECT, INSERT, UPDATE and DELETE on each table,
+// has no table privilege in Goal's schema and runs only the "auth" definers; goal_app cannot even
+// use it. No definer is PUBLIC's, the install-level tables are the definers' alone, and Better
+// Auth's rows keep their triggers.
 func TestSchema_AuthSchemaIsolation(t *testing.T) {
 	t.Parallel()
 
@@ -40,6 +57,54 @@ func TestSchema_AuthSchemaIsolation(t *testing.T) {
 	}
 
 	checkAuthPrivileges(t, admin)
+	checkDefinerGrants(t, admin)
+	checkAuthTriggers(t, admin)
+}
+
+// checkDefinerGrants checks who may run the definer functions of Goal's schema and that the
+// install-level tables have no grant at all.
+func checkDefinerGrants(t *testing.T, admin *pgxpool.Pool) {
+	t.Helper()
+
+	if open := queryStrings(t, admin, `
+		SELECT p.oid::regprocedure::text FROM pg_proc p
+		WHERE p.pronamespace = 'public'::regnamespace AND p.prosecdef AND has_function_privilege('public', p.oid, 'EXECUTE')`); len(open) != 0 {
+		t.Errorf("PUBLIC may run the definers %v; want none", open)
+	}
+
+	got := queryStrings(t, admin, `
+		SELECT p.proname::text FROM pg_proc p
+		WHERE p.pronamespace = 'public'::regnamespace AND p.prosecdef AND has_function_privilege('goal_auth', p.oid, 'EXECUTE')
+		ORDER BY 1`)
+	if len(got)+len(authFunctions) > 0 && !slices.Equal(got, authFunctions) {
+		t.Errorf("goal_auth may run the definers %v; want %v", got, authFunctions)
+	}
+
+	for _, table := range []string{"platform_admins", "auth_events"} {
+		for _, role := range []string{AppRole, AuthRole} {
+			for _, priv := range []string{"SELECT", "INSERT", "UPDATE", "DELETE"} {
+				var has bool
+				if err := admin.QueryRow(t.Context(), "SELECT has_table_privilege($1, $2, $3)", role, table, priv).
+					Scan(&has); err != nil || has {
+					t.Errorf("%s %s on %s = %v, %v; want no (definers only)", role, priv, table, has, err)
+				}
+			}
+		}
+	}
+}
+
+// checkAuthTriggers checks the triggers on schema auth's tables are exactly authTriggers.
+func checkAuthTriggers(t *testing.T, admin *pgxpool.Pool) {
+	t.Helper()
+
+	for _, table := range betterAuthTables {
+		got := queryStrings(t, admin, `
+			SELECT tgname::text FROM pg_trigger
+			WHERE tgrelid = format('auth.%I', $1::text)::regclass AND NOT tgisinternal ORDER BY 1`, table)
+		if want := authTriggers[table]; len(got)+len(want) > 0 && !slices.Equal(got, want) {
+			t.Errorf("triggers on auth.%s = %v; want %v", table, got, want)
+		}
+	}
 }
 
 // checkAuthPrivileges checks the privileges of TestSchema_AuthSchemaIsolation.
