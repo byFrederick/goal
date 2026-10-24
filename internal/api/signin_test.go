@@ -45,11 +45,18 @@ type signedIn struct {
 func newSignedIn(t *testing.T) signedIn {
 	t.Helper()
 
+	return newSignedInWith(t, nil)
+}
+
+// newSignedInWith is newSignedIn with goald's log written to logs when it is set.
+func newSignedInWith(t *testing.T, logs io.Writer) signedIn {
+	t.Helper()
+
 	var h *harness
 
 	id := porttest.NewIdentity(func() time.Time { return h.clock.Now() })
 	in := &signIn{identity: id, access: porttest.NewAccessNotices(), google: true}
-	h = newHarnessWith(t, in) // adds acme and example-labs, with acme's factories, to id
+	h = newHarnessLogged(t, in, logs) // adds acme and example-labs, with acme's factories, to id
 
 	people := []struct {
 		user          domain.UserID

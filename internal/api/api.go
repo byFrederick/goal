@@ -10,7 +10,8 @@
 // definitions only through the small interfaces below and Definitions; cmd/goald wires the real
 // ones.
 //
-// Every request goes through the same layers: cross-origin protection (a browser may change
+// Every request goes through the same layers: the access log (accesslog.go: one line per
+// request naming its principal and credential by id, never a secret), cross-origin protection (a browser may change
 // things only from goald's own origin), a body limit, a request id (X-Request-Id), the request's
 // credential (credential.go: the local user under GOAL_AUTH=none), then, per operation, its
 // principal and the organization of the path (identity.go: under GOAL_AUTH=session an unknown,
@@ -241,7 +242,7 @@ func New(d Deps) (http.Handler, error) {
 		s.problem(w, r, errCrossOrigin)
 	}))
 
-	return cop.Handler(limitBodies(withRequestID(withClientAddr(d.TrustedProxies, s.withCredential(h))))), nil
+	return s.accessLog(cop.Handler(limitBodies(withRequestID(withClientAddr(d.TrustedProxies, s.withCredential(h)))))), nil
 }
 
 // limitBodies refuses request bodies over the route's limit (413): the definitions routes take

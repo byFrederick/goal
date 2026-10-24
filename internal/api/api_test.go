@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -304,6 +305,22 @@ type signIn struct {
 func newHarnessWith(t *testing.T, in *signIn) *harness {
 	t.Helper()
 
+	return newHarnessLogged(t, in, nil)
+}
+
+// jsonLog is a JSON logger writing to w; nil (the API's discarding default) without w.
+func jsonLog(w io.Writer) *slog.Logger {
+	if w == nil {
+		return nil
+	}
+
+	return slog.New(slog.NewJSONHandler(w, nil))
+}
+
+// newHarnessLogged is newHarnessWith with goald's log written to logs (JSON) when it is set.
+func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
+	t.Helper()
+
 	tenancy := newTenancy(t)
 
 	h := &harness{
@@ -404,7 +421,7 @@ func newHarnessWith(t *testing.T, in *signIn) *harness {
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
 		Access: h.keys, OrgRetention: retention, Authorizer: h.seam, Auth: api.AuthConfig{Mode: api.AuthNone}, Platform: h.platform, Feed: feed,
 		Builder: h.builder,
-		Clock:   h.clock,
+		Clock:   h.clock, Logger: jsonLog(logs),
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity

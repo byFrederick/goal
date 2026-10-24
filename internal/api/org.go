@@ -41,10 +41,14 @@ func (s *server) scope(next gen.StrictHandlerFunc, operation string) gen.StrictH
 	op := operationID(operation)
 
 	return func(ctx context.Context, w http.ResponseWriter, r *http.Request, req any) (any, error) {
+		noteOperation(ctx, op)
+
 		ctx, err := s.bindRequest(withOperation(ctx, op), op, r.PathValue("org"))
 		if err != nil {
 			return nil, err
 		}
+
+		notePrincipal(ctx)
 
 		if err := s.authorize(ctx, "", errOrgNotFound); err != nil {
 			return nil, err

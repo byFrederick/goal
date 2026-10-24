@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -27,7 +28,14 @@ var secretForm = regexp.MustCompile(`^goal_sk_[A-Za-z0-9_-]{43}$`)
 func keyed(t *testing.T) signedIn {
 	t.Helper()
 
-	h := newSignedIn(t)
+	return keyedWith(t, nil)
+}
+
+// keyedWith is keyed with goald's log written to logs when it is set.
+func keyedWith(t *testing.T, logs io.Writer) signedIn {
+	t.Helper()
+
+	h := newSignedInWith(t, logs)
 	h.identity.AddSession(freshToken, ownerID, domain.Session{ID: "fresh-owner", CreatedAt: t0, ExpiresAt: t0.Add(7 * 24 * time.Hour)})
 	h.identity.AddSession(freshViewerToken, viewerID, domain.Session{ID: "fresh-viewer", CreatedAt: t0, ExpiresAt: t0.Add(7 * 24 * time.Hour)})
 
