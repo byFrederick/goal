@@ -459,17 +459,20 @@ func TestHumanControl_WindingDownRunLeavesTheNextClaimRunning(t *testing.T) {
 }
 
 // An old lease_taken notice, from before the item's current claim or of another station, never
-// stops the run working it now.
+// stops the run working it now, and neither does any other notice of the current claim, such as
+// the run's own relayed progress.
 func TestInterrupt_IgnoresNoticesOfAnEarlierClaim(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name    string
+		kind    domain.EventKind
 		station string
 		at      time.Time
 	}{
-		{name: "taken before this claim", station: stWork, at: t0.Add(-time.Minute)},
-		{name: "taken at another station", station: stSpec, at: t0.Add(time.Hour)},
+		{name: "taken before this claim", kind: domain.EventLeaseTaken, station: stWork, at: t0.Add(-time.Minute)},
+		{name: "taken at another station", kind: domain.EventLeaseTaken, station: stSpec, at: t0.Add(time.Hour)},
+		{name: "another notice of this claim", kind: domain.EventRunStarted, station: stWork, at: t0.Add(time.Hour)},
 	}
 
 	for _, tt := range tests {
@@ -488,7 +491,7 @@ func TestInterrupt_IgnoresNoticesOfAnEarlierClaim(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			h.e.Interrupt(ports.ItemNotice{OrgID: testOrg, ItemID: it.ID, Kind: domain.EventLeaseTaken, Station: tt.station, At: tt.at})
+			h.e.Interrupt(ports.ItemNotice{OrgID: testOrg, ItemID: it.ID, Kind: tt.kind, Station: tt.station, At: tt.at})
 			close(release)
 			h.wait(t, h.e)
 
