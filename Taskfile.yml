@@ -238,13 +238,14 @@ tasks:
       - pnpm run --silent build
 
   web:check:
-    desc: Web typecheck, Biome lint and Vitest unit tests (no browser)
+    desc: Web typecheck, Biome lint, Vitest unit tests (no browser) and pnpm audit of its production dependencies (SECURITY.md)
     deps: [web:install]
     dir: web
     cmds:
       - pnpm run --silent typecheck
       - pnpm run --silent lint
       - pnpm run --silent test
+      - pnpm audit --prod --filter @goal/web
 
   web:e2e:
     desc: Playwright on the critical flows at 375, 768 and 1440 px with axe, against vite preview and the mock API (Chromium)

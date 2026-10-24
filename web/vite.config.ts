@@ -40,6 +40,11 @@ export default defineConfig({
       // monaco-yaml's worker imports Monaco's editor worker by its pre-0.57 path, which Monaco's
       // package exports now name without the esm/vs prefix.
       { find: 'monaco-editor/esm/vs/editor/editor.worker.js', replacement: 'monaco-editor/editor/editor.worker' },
+      // Monaco's sanitizer imports its own copy of DOMPurify (3.4.15 in 0.57.0, which has
+      // advisories); this makes it import the dompurify package Monaco depends on, which
+      // pnpm-workspace.yaml's override pins to a fixed release (SECURITY.md). Drop both once a
+      // Monaco release vendors a fixed DOMPurify.
+      { find: /^\.\/dompurify\/dompurify\.js$/, replacement: 'dompurify' },
     ],
   },
   server: { port: 5173, strictPort: true, ...(proxy ? { proxy } : {}) },

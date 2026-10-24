@@ -25,3 +25,10 @@ minimumReleaseAgeExclude:
   - '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.309'
   - '@anthropic-ai/sdk@1.2.0'
   - '@modelcontextprotocol/sdk@1.32.2'
+
+# Security overrides of transitive dependencies (SECURITY.md lists each with its assessment).
+# Drop an entry once the parent depends on a fixed version itself.
+overrides:
+  # monaco-editor 0.57.0 pins dompurify 3.4.15 (GHSA-cg2g-xh64-v4q7, GHSA-mrv2-3pqr-j5jr and
+  # three low advisories); 3.4.17 fixes them all and is a patch release of the same line.
+  dompurify: 3.4.17
