@@ -7,8 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/byFrederick/goal/internal/adapters/envsecrets"
 	"github.com/byFrederick/goal/internal/adapters/s3store"
+	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
+	"github.com/byFrederick/goal/internal/config"
 )
 
 func envOf(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
@@ -154,5 +157,32 @@ func TestSettings_EveryVariableGoaldReadsIsReserved(t *testing.T) {
 
 	if !slices.Contains(custom.reserved(), "ACME_SIGNING_KEY") {
 		t.Errorf("reserved %v, want the variable the gateway key reference names", custom.reserved())
+	}
+}
+
+// The credentials check goald authors definitions with refuses a reference to one of its own
+// settings with env-reserved, even though the variable is set, and passes another set variable.
+func TestSettings_CredentialsRefuseGoaldsOwnVariables(t *testing.T) {
+	t.Parallel()
+
+	env := map[string]string{"GOAL_DATABASE_URL": "postgres://app@db.example.com/goal", "ACME_GIT_TOKEN": "t0ken"}
+
+	s, err := settingsFrom(envOf(env))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lookup := func(k string) (string, bool) { v, ok := env[k]; return v, ok }
+
+	findings, err := s.credentials(envsecrets.New(lookup)).Check(t.Context(), "", []config.SecretUse{
+		{Path: "runtime.repository.token", Ref: "env:GOAL_DATABASE_URL"},
+		{Path: "spec.connections[0].headers.Authorization", Ref: "env:ACME_GIT_TOKEN"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(findings) != 1 || findings[0].Code != authoring.CodeEnvReserved || findings[0].Use.Ref != "env:GOAL_DATABASE_URL" {
+		t.Errorf("findings = %+v; want only env:GOAL_DATABASE_URL refused with %s", findings, authoring.CodeEnvReserved)
 	}
 }

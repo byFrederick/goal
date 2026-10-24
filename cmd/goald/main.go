@@ -184,10 +184,10 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	reap(ctx, log, runner, workspaces)
 
 	// Definition authoring writes versions to PostgreSQL and file content to the bucket; until
-	// phase 3 a definition's secret references are checked against goald's environment.
+	// phase 4 a definition's secret references are checked against goald's environment.
 	authors := authoring.New(authoring.Deps{
 		Store: definitionStore, Loads: store, Templates: objects,
-		Credentials: authoring.EnvReferences{Secrets: secrets, Reserved: s.reserved()},
+		Credentials: s.credentials(secrets),
 		Clock:       clock, DefaultImage: s.DefaultAgentImage,
 	})
 

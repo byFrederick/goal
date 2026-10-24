@@ -16,8 +16,10 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/adapters/postgres"
+	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/definitions"
+	"github.com/byFrederick/goal/internal/ports"
 )
 
 // settings is goald's configuration, read from the environment (12-factor). Secrets appear here
@@ -118,6 +120,12 @@ func (s settings) reserved() []string {
 	}
 
 	return out
+}
+
+// credentials is the check of a definition's secret references until phase 4: env:NAME
+// references resolve through secrets, and goald's own variables are refused (env-reserved).
+func (s settings) credentials(secrets ports.Secrets) authoring.EnvReferences {
+	return authoring.EnvReferences{Secrets: secrets, Reserved: s.reserved()}
 }
 
 func settingsFrom(getenv func(string) string) (settings, error) {
