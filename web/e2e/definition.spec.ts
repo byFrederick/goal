@@ -144,6 +144,8 @@ test('a field changed here and elsewhere asks which value to keep', async ({ pag
 
 test('discard the draft: the running version shows, and the next change opens a new draft', async ({ page }) => {
   await openBasics(page);
+  const review = page.getByRole('link', { name: 'Review and publish', exact: true }).first();
+  await expect(review).not.toHaveAccessibleDescription('No changes yet');
 
   await page.getByRole('button', { name: 'Discard draft…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Discard the draft of v9?' });
@@ -155,12 +157,15 @@ test('discard the draft: the running version shows, and the next change opens a 
   await expect(page.getByText('v8', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Discard draft…' })).toHaveCount(0);
   await expect(tile(page, /^Line, No changes$/)).toBeAttached();
+  // Nothing to publish: Review and publish is not the page's primary action.
+  await expect(review).toHaveAccessibleDescription('No changes yet');
 
   await title(page).fill('Fresh start');
   await expect(status(page)).toContainText('Based on v8, the version running now.');
   await expect(status(page)).toContainText('Autosaved');
   await expect(page.getByText('Draft of v9', { exact: true })).toBeVisible();
   await expect(tile(page, /^Basics, 1 change$/)).toBeAttached();
+  await expect(review).not.toHaveAccessibleDescription('No changes yet');
 });
 
 test('a draft discarded elsewhere keeps the changes here for a new draft', async ({ page, request }) => {

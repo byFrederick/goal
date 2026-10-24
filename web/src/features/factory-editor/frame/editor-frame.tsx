@@ -6,7 +6,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useLinkProps, useNavigate, useSearch } from '@tanstack/react-router';
 import { ChevronRight, Clock, Code, SlidersHorizontal } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useId, useState } from 'react';
 import { draftQuery, factoryQuery } from '../../../api/queries';
 import type { Draft } from '../../../api/types';
 import { laterText } from '../../../app/screens';
@@ -93,6 +93,10 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
   const current = detail?.current ?? draft?.current ?? null;
   const base = s.hasDraft ? (draft?.base ?? null) : null;
   const changes = changesSentence(changeCount, summaries);
+  // Nothing to publish (no draft, or a draft of a running factory without changes): Review and
+  // publish is then not the page's primary action.
+  const unchanged = !s.hasDraft || (current !== null && changeCount === 0);
+  const unchangedId = useId();
   const firstProblem = validation?.problems.find((p) => p.severity !== 'info');
   const hasFileConflicts = Object.keys(s.fileConflicts).length > 0;
   const chip =
@@ -151,12 +155,21 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
                 Discard draft…
               </Button>
             ) : null}
-            <Button asChild variant="primary" className="h-11 md:h-10">
-              <Link to="/o/$org/f/$factory/definition/$section" params={{ ...params, section: 'review' }}>
+            <Button asChild variant={unchanged ? 'white' : 'primary'} className="h-11 md:h-10">
+              <Link
+                to="/o/$org/f/$factory/definition/$section"
+                params={{ ...params, section: 'review' }}
+                aria-describedby={unchanged ? unchangedId : undefined}
+              >
                 Review and publish
                 <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
               </Link>
             </Button>
+            {unchanged ? (
+              <span id={unchangedId} className="text-sm text-muted max-md:sr-only">
+                No changes yet
+              </span>
+            ) : null}
           </div>
         </div>
         <StatusLine
