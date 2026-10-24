@@ -331,6 +331,8 @@ Dependency violations found in the specs' own breakdowns and fixed (history): A8
 
 ## Not resolved here
 
+- Database review L3, factory ids are unique across organizations (`factories.id` is the primary key, so `goal factory push` with `keep_id` into a second organization is refused when another has that `metadata.id`): kept. Factories are keyed by `metadata.id` (AGENTS.md rule 2, ADR 0005), a deliberate 2.2 choice; copying a definition into another organization takes a new id.
+- Database review L6, NOTIFY channels and `DefaultOrgID` are not per install: not needed. One install per database is the supported setup; the integration tests that share a database filter notices by their own factory, and the schema-keyed migration lock stays.
 - Exact rewrites of every SQL block in B, phase 4.1, E and phase 4.2 to the tenancy kit: the specs carry a binding kit note per migration, and the guard test `TestSchema_EveryOrgTableHasRLS` enforces it. The literal SQL is fixed in the PRs.
 - Phase 4.1's and phase 4.2's port signatures still show explicit `org` parameters in the code blocks; the README convention and a note at each port say to drop them.
 - Whether the canvas's "1 of 3" pages candidates or insights cannot be confirmed from the board's text; E's reading was kept.

@@ -1,6 +1,6 @@
 # Phase 3 — Identity and access
 
-Status: reviewed 2026-10-24, owner decisions applied · follows phase 2.2 (3-1 to 3-3 and 3-7 need only A's seams and can start now; 3-4, the first migration, merges after E's `00030–00033`, since goose refuses a lower number after a higher one; the screens need C–E's boards) · migrations `00040–00049` (`00040–00046` planned, `00047–00049` reserved) · OpenAPI tag `identity` · PRs `3-1…3-16` · decision record [ADR 0007](../adr/0007-identity-better-auth.md)
+Status: reviewed 2026-10-24, owner decisions applied · follows phase 2.2 (3-1 to 3-3 and 3-7 need only A's seams and can start now; 3-4, the first migration (`00040`), merges after 2.2's last, `00039` (E's `00030–00035`, the 2.2 review's `00036–00039`), since goose refuses a lower number after a higher one; the screens need C–E's boards) · migrations `00040–00049` (`00040–00046` planned, `00047–00049` reserved) · OpenAPI tag `identity` · PRs `3-1…3-16` · decision record [ADR 0007](../adr/0007-identity-better-auth.md)
 
 Phase 3 takes everything the README listed under "Out of 2.2". It replaces A's two seams (A §5.3), the request actor and the `Authorizer`, without changing handlers. Phase 4 (credentials, connectors and the MCP gateway) and phase 5 (the Goal MCP server) build on it.
 
