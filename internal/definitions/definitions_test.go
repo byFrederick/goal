@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/domain"
@@ -48,6 +50,9 @@ spec:
 
 const note = "note"
 
+// acmeName is the metadata.name the tests give acme.
+const acmeName = "acme"
+
 const noteContract = `{
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
@@ -55,18 +60,49 @@ const noteContract = `{
   "properties": { "title": { "type": "string", "minLength": 1 } }
 }`
 
-// bucket is a catalog over an in-memory bucket.
+// org and other are the organizations of the tests: newBucket creates them in this order.
+const (
+	org   domain.OrgID = "00000000-0000-7000-8000-000000000001"
+	other domain.OrgID = "00000000-0000-7000-8000-000000000002"
+)
+
+func ctxOf(t *testing.T, o domain.OrgID) context.Context {
+	t.Helper()
+
+	return domain.WithOrg(t.Context(), o)
+}
+
+// bucket is a catalog over an in-memory bucket, with the organizations org and other.
 type bucket struct {
 	objects *porttest.ObjectStore
 	catalog *factorystore.Catalog
+	orgs    *porttest.Tenancy
 }
 
-func newBucket() *bucket {
+func newBucket(t *testing.T) *bucket {
+	t.Helper()
+
 	objects := porttest.NewObjectStore()
-	return &bucket{objects: objects, catalog: factorystore.New(objects)}
+	b := &bucket{objects: objects, catalog: factorystore.New(objects), orgs: porttest.NewTenancy(time.Now)}
+
+	for _, want := range []domain.OrgID{org, other} {
+		o, err := b.orgs.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: "org-" + string(want[len(want)-1:]), Name: "An org"})
+		if err != nil || o.ID != want {
+			t.Fatalf("create organization = %v (%v), want %s", o.ID, err, want)
+		}
+	}
+
+	return b
 }
 
+// push pushes a factory to org.
 func (b *bucket) push(t *testing.T, files map[string]string) {
+	t.Helper()
+
+	b.pushTo(t, org, files)
+}
+
+func (b *bucket) pushTo(t *testing.T, o domain.OrgID, files map[string]string) {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -82,7 +118,7 @@ func (b *bucket) push(t *testing.T, files map[string]string) {
 		}
 	}
 
-	if _, _, err := b.catalog.Push(t.Context(), dir); err != nil {
+	if _, _, err := b.catalog.Push(t.Context(), o, dir); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -90,10 +126,10 @@ func (b *bucket) push(t *testing.T, files map[string]string) {
 func loadedCache(t *testing.T, files map[string]string) *Cache {
 	t.Helper()
 
-	b := newBucket()
+	b := newBucket(t)
 	b.push(t, files)
 
-	c := New(b.catalog, nil, nil)
+	c := New(b.catalog, b.orgs, nil, nil)
 	if _, err := c.Refresh(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +140,7 @@ func loadedCache(t *testing.T, files map[string]string) *Cache {
 func TestValidate_OutputAgainstTheFactorysContract(t *testing.T) {
 	t.Parallel()
 
-	c := loadedCache(t, acme("acme", noteContract))
+	c := loadedCache(t, acme(acmeName, noteContract))
 
 	tests := []struct {
 		name      string
@@ -124,14 +160,14 @@ func TestValidate_OutputAgainstTheFactorysContract(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := c.Validate(t.Context(), acmeID, tt.contract, json.RawMessage(tt.output))
+			err := c.Validate(ctxOf(t, org), acmeID, tt.contract, json.RawMessage(tt.output))
 			if (err != nil) != tt.fails || errors.Is(err, ports.ErrContractViolation) != tt.violation {
 				t.Errorf("Validate = %v; want failure %v, contract violation %v", err, tt.fails, tt.violation)
 			}
 		})
 	}
 
-	if err := c.Validate(t.Context(), "00000000-0000-4000-8000-000000000000", note, json.RawMessage(`{}`)); !errors.Is(err, ports.ErrNotFound) {
+	if err := c.Validate(ctxOf(t, org), "00000000-0000-4000-8000-000000000000", note, json.RawMessage(`{}`)); !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("Validate for an unloaded factory = %v, want ErrNotFound", err)
 	}
 }
@@ -146,9 +182,9 @@ func TestValidate_ContractsCannotReferenceOutsideThemselves(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := loadedCache(t, acme("acme", `{"$ref": "file://`+filepath.ToSlash(secret)+`"}`))
+	c := loadedCache(t, acme(acmeName, `{"$ref": "file://`+filepath.ToSlash(secret)+`"}`))
 
-	err := c.Validate(t.Context(), acmeID, note, json.RawMessage(`{}`))
+	err := c.Validate(ctxOf(t, org), acmeID, note, json.RawMessage(`{}`))
 	if err == nil || errors.Is(err, ports.ErrContractViolation) {
 		t.Errorf("Validate with a file $ref = %v; want a contract error that is not a violation", err)
 	}
@@ -157,10 +193,10 @@ func TestValidate_ContractsCannotReferenceOutsideThemselves(t *testing.T) {
 func TestWriteAgentFiles_StagesPromptLocalSkillsAndSchema(t *testing.T) {
 	t.Parallel()
 
-	c := loadedCache(t, acme("acme", noteContract))
+	c := loadedCache(t, acme(acmeName, noteContract))
 	dir := t.TempDir()
 
-	err := c.WriteAgentFiles(t.Context(), ports.TaskSpec{
+	err := c.WriteAgentFiles(ctxOf(t, org), ports.TaskSpec{
 		FactoryID: acmeID, Agent: "writer", PromptPath: "./agents/writer.md", Output: note,
 		Skills: []domain.SkillRef{
 			{Name: "acme-notes", Source: "./skills/acme-notes"},
@@ -215,14 +251,14 @@ func TestWriteAgentFiles_StagesPromptLocalSkillsAndSchema(t *testing.T) {
 func TestRefresh_KeepsTheLastValidDefinitionAndReportsLoads(t *testing.T) {
 	t.Parallel()
 
-	b := newBucket()
+	b := newBucket(t)
 
 	var loads [][]string
 
-	c := New(b.catalog, func(_ context.Context, fs []*config.Factory) error {
+	c := New(b.catalog, b.orgs, func(_ context.Context, fs []Loaded) error {
 		names := []string{}
 		for _, f := range fs {
-			names = append(names, f.Metadata.Name)
+			names = append(names, f.Factory.Metadata.Name)
 		}
 
 		loads = append(loads, names)
@@ -230,20 +266,20 @@ func TestRefresh_KeepsTheLastValidDefinitionAndReportsLoads(t *testing.T) {
 		return nil
 	}, nil)
 
-	if _, err := c.Lookup(t.Context(), "acme"); !errors.Is(err, ports.ErrNotFound) {
+	if _, err := c.Lookup(ctxOf(t, org), acmeName); !errors.Is(err, ports.ErrNotFound) {
 		t.Fatalf("Lookup in an empty bucket = %v, want ErrNotFound", err)
 	}
 
-	b.push(t, acme("acme", noteContract))
+	b.push(t, acme(acmeName, noteContract))
 
-	f, err := c.Lookup(t.Context(), "acme") // pushed after the last refresh
+	f, err := c.Lookup(ctxOf(t, org), acmeName) // pushed after the last refresh
 	if err != nil || f.Metadata.ID != string(acmeID) {
 		t.Fatalf("Lookup by name after a push = %v, %v; want the factory", f, err)
 	}
 
 	// A definition broken in the bucket (written past push's validation) leaves the last
 	// valid one in use.
-	if _, err := b.objects.Put(t.Context(), factorystore.Prefix(string(acmeID))+config.FileName, []byte("kind: nonsense\n")); err != nil {
+	if _, err := b.objects.Put(t.Context(), factorystore.Prefix(org, string(acmeID))+config.FileName, []byte("kind: nonsense\n")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -251,16 +287,146 @@ func TestRefresh_KeepsTheLastValidDefinitionAndReportsLoads(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if f, err := c.Factory(t.Context(), acmeID); err != nil || f.Metadata.Name != "acme" {
+	if f, err := c.Factory(ctxOf(t, org), acmeID); err != nil || f.Metadata.Name != acmeName {
 		t.Errorf("Factory after a broken push = %v, %v; want the last valid definition", f, err)
 	}
 
-	want := [][]string{{}, {"acme"}, {"acme"}}
+	want := [][]string{{}, {acmeName}, {acmeName}}
 	if !slices.EqualFunc(loads, want, slices.Equal) {
 		t.Errorf("loads = %v, want %v", loads, want)
 	}
 
-	if !strings.Contains(c.Factories()[0].Metadata.Name, "acme") {
-		t.Errorf("Factories = %v, want acme", c.Factories())
+	if !strings.Contains(c.Factories(ctxOf(t, org))[0].Metadata.Name, acmeName) {
+		t.Errorf("Factories = %v, want acme", c.Factories(ctxOf(t, org)))
+	}
+}
+
+const otherID domain.FactoryID = "5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a01"
+
+// withID is files with another metadata.id.
+func withID(files map[string]string, id domain.FactoryID) map[string]string {
+	out := maps.Clone(files)
+	out[config.FileName] = strings.ReplaceAll(out[config.FileName], string(acmeID), string(id))
+
+	return out
+}
+
+func TestRefresh_FactoriesOfTwoOrgsWithTheSameNameLoadSideBySide(t *testing.T) {
+	t.Parallel()
+
+	b := newBucket(t)
+	b.push(t, acme(acmeName, noteContract))
+	b.pushTo(t, other, withID(acme(acmeName, noteContract), otherID))
+
+	var lines []domain.Line
+
+	c := New(b.catalog, b.orgs, func(_ context.Context, fs []Loaded) error {
+		lines = lines[:0]
+		for _, f := range fs {
+			lines = append(lines, f.Line())
+		}
+
+		return nil
+	}, nil)
+
+	if _, err := c.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tt := range []struct {
+		org domain.OrgID
+		id  domain.FactoryID
+	}{{org, acmeID}, {other, otherID}} {
+		f, err := c.Lookup(ctxOf(t, tt.org), acmeName)
+		if err != nil || f.Metadata.ID != string(tt.id) {
+			t.Errorf("Lookup(acme) in %s = %v (%v), want %s", tt.org, f, err, tt.id)
+		}
+
+		if fs := c.Factories(ctxOf(t, tt.org)); len(fs) != 1 || fs[0].Metadata.ID != string(tt.id) {
+			t.Errorf("Factories of %s = %v, want only %s", tt.org, fs, tt.id)
+		}
+
+		if _, err := c.Factory(ctxOf(t, tt.org), tt.id); err != nil {
+			t.Errorf("Factory(%s) in its own organization: %v", tt.id, err)
+		}
+	}
+
+	want := map[domain.FactoryID]domain.OrgID{acmeID: org, otherID: other}
+	if len(lines) != 2 || want[lines[0].FactoryID] != lines[0].OrgID || want[lines[1].FactoryID] != lines[1].OrgID {
+		t.Errorf("lines = %+v, want each in the organization that stores it", lines)
+	}
+}
+
+func TestReads_SeeOnlyTheOrgInTheirContext(t *testing.T) {
+	t.Parallel()
+
+	c := loadedCache(t, acme(acmeName, noteContract))
+
+	if _, err := c.Factory(ctxOf(t, other), acmeID); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("Factory from another organization = %v, want ErrNotFound", err)
+	}
+
+	if err := c.Validate(ctxOf(t, other), acmeID, note, json.RawMessage(`{"title":"x"}`)); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("Validate from another organization = %v, want ErrNotFound", err)
+	}
+
+	if _, err := c.Lookup(ctxOf(t, other), acmeName); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("Lookup from another organization = %v, want ErrNotFound", err)
+	}
+
+	if _, err := c.Lookup(t.Context(), acmeName); !errors.Is(err, domain.ErrNoOrg) {
+		t.Errorf("Lookup without an organization = %v, want ErrNoOrg", err)
+	}
+
+	if _, err := c.Factory(t.Context(), acmeID); !errors.Is(err, domain.ErrNoOrg) {
+		t.Errorf("Factory without an organization = %v, want ErrNoOrg", err)
+	}
+
+	if fs := c.Factories(t.Context()); len(fs) != 0 {
+		t.Errorf("Factories without an organization = %v, want none", fs)
+	}
+}
+
+func TestRefresh_DropsTheFactoriesOfADeletedOrg(t *testing.T) {
+	t.Parallel()
+
+	b := newBucket(t)
+	b.pushTo(t, other, acme(acmeName, noteContract))
+
+	c := New(b.catalog, b.orgs, nil, nil)
+	if _, err := c.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := b.orgs.DeleteOrg(ctxOf(t, other), domain.LocalUser, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := c.Refresh(t.Context())
+	if err != nil || len(loaded) != 0 {
+		t.Errorf("Refresh after deleting the organization = %v (%v), want nothing loaded", loaded, err)
+	}
+}
+
+func TestRefresh_AFactoryIDInTwoOrgsStaysInTheFirst(t *testing.T) {
+	t.Parallel()
+
+	b := newBucket(t)
+	b.pushTo(t, other, acme(acmeName, noteContract))
+
+	c := New(b.catalog, b.orgs, nil, nil)
+	if _, err := c.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	b.push(t, acme("copied", noteContract)) // the same id in org, which sorts first
+
+	loaded, err := c.Refresh(t.Context())
+	if err != nil || len(loaded) != 1 || loaded[0].Org != other || loaded[0].Factory.Metadata.Name != acmeName {
+		t.Fatalf("Refresh = %+v (%v), want acme kept in the organization it was loaded in", loaded, err)
+	}
+
+	if _, err := c.Factory(ctxOf(t, org), acmeID); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("Factory in the copying organization = %v, want ErrNotFound", err)
 	}
 }

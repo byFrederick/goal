@@ -70,7 +70,7 @@ func (e *Engine) waitingHuman(ctx context.Context, id domain.ItemID) (domain.Ite
 		return domain.Item{}, domain.Line{}, fmt.Errorf("item %s is %s: %w", id, it.State, ErrNotWaitingHuman)
 	}
 
-	l, err := e.line(it.FactoryID)
+	l, err := e.lineIn(ctx, it.FactoryID)
 	if err != nil {
 		return domain.Item{}, domain.Line{}, err
 	}
@@ -103,7 +103,7 @@ func (e *Engine) Retry(ctx context.Context, id domain.ItemID, by string) (domain
 		return domain.Item{}, fmt.Errorf("retry %s: item is %s: %w", id, it.State, ErrNotBlocked)
 	}
 
-	l, err := e.line(it.FactoryID)
+	l, err := e.lineIn(ctx, it.FactoryID)
 	if err != nil {
 		return domain.Item{}, fmt.Errorf("retry %s: %w", id, err)
 	}

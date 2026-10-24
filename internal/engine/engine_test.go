@@ -16,8 +16,9 @@ import (
 
 const factoryID domain.FactoryID = "31efd04e-b231-4939-9f13-8986bf7e462a"
 
-// testOrg is the organization the tests' items belong to: every store call carries one.
-const testOrg domain.OrgID = "019a1c00-0000-7000-8000-0000000000aa"
+// testOrg is the organization the tests' factories and items belong to (the first one the
+// harness creates): every store call carries one.
+const testOrg domain.OrgID = "00000000-0000-7000-8000-000000000001"
 
 // inOrg is the test's context bound to testOrg.
 func inOrg(t *testing.T) context.Context {
@@ -39,6 +40,7 @@ const (
 	stWork       = "work"
 	typeIncident = "incident"
 	typeFeature  = "feature"
+	anItem       = "an item"
 )
 
 const (
@@ -50,6 +52,7 @@ const (
 type harness struct {
 	e          *engine.Engine
 	store      *porttest.Store
+	tenancy    *porttest.Tenancy
 	runner     *porttest.Runner
 	workspaces *porttest.Workspaces
 	checker    *porttest.Checker
@@ -79,30 +82,57 @@ func (h *harness) endedRuns() []domain.RunID {
 func newHarness(t *testing.T, line domain.Line, run porttest.RunFunc) *harness {
 	t.Helper()
 
+	clock := porttest.NewClock(t0)
 	h := &harness{
 		store:      porttest.NewStore(),
+		tenancy:    porttest.NewTenancy(clock.Now),
 		runner:     porttest.NewRunner(run),
 		workspaces: porttest.NewWorkspaces(),
 		checker:    porttest.NewChecker(),
-		clock:      porttest.NewClock(t0),
+		clock:      clock,
 		contracts:  porttest.NewContracts(),
 		codehost:   porttest.NewCodeHost(),
 		line:       line,
 	}
+
+	if org := h.newOrg(t, "acme"); org != testOrg {
+		t.Fatalf("the first organization is %s, want %s", org, testOrg)
+	}
+
 	h.e = h.engine(t, h.store)
 
 	return h
+}
+
+// newOrg creates an organization and returns its id.
+func (h *harness) newOrg(t *testing.T, slug string) domain.OrgID {
+	t.Helper()
+
+	o, err := h.tenancy.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: slug, Name: slug})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return o.ID
 }
 
 // engine builds another goald instance on the same store, as a second process would.
 func (h *harness) engine(t *testing.T, store ports.Store) *engine.Engine {
 	t.Helper()
 
+	return h.engineWith(t, store, 0, h.line)
+}
+
+// engineWith builds an instance running lines with at most maxRuns runs at once (0: no cap).
+func (h *harness) engineWith(t *testing.T, store ports.Store, maxRuns int, lines ...domain.Line) *engine.Engine {
+	t.Helper()
+
 	e, err := engine.New(engine.Deps{
-		Store: store, Runner: h.runner, Workspaces: h.workspaces, Checker: h.checker, Contracts: h.contracts, Clock: h.clock,
+		Store: store, Orgs: h.tenancy, Runner: h.runner, Workspaces: h.workspaces, Checker: h.checker, Contracts: h.contracts, Clock: h.clock,
 		Secrets: porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y", "MODEL_ACCESS": "tok"}, CodeHost: h.codehost, RunEnded: h.runEnded,
 	}, engine.Config{
-		Lines:          []domain.Line{h.line},
+		Lines:          lines,
+		MaxRuns:        maxRuns,
 		TickEvery:      tickEvery,
 		LeaseTTL:       ttl,
 		HeartbeatEvery: heartbeat,
@@ -122,7 +152,7 @@ func (h *harness) submit(t *testing.T, n domain.NewItem) domain.Item {
 
 	n.FactoryID = factoryID
 	if n.Title == "" {
-		n.Title = "an item"
+		n.Title = anItem
 	}
 
 	if n.Type == "" {
@@ -185,15 +215,24 @@ func bounded(t *testing.T) context.Context {
 func (h *harness) claimAsDeadInstance(t *testing.T, it domain.Item, station string) {
 	t.Helper()
 
-	if _, err := h.store.Transition(inOrg(t), ports.Transition{
+	h.claimDead(t, h.line, it, station)
+}
+
+// claimDead is claimAsDeadInstance for an item of any line.
+func (h *harness) claimDead(t *testing.T, l domain.Line, it domain.Item, station string) {
+	t.Helper()
+
+	ctx := domain.WithOrg(t.Context(), l.OrgID)
+
+	if _, err := h.store.Transition(ctx, ports.Transition{
 		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: station, State: domain.StateQueued}, At: t0,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	st, _ := h.line.Station(station)
-	if _, _, err := h.store.ClaimNext(inOrg(t), ports.Claim{
-		FactoryID: factoryID, Station: st, Slot: 0, Now: h.clock.Now(), ExpiresAt: h.clock.Now().Add(ttl),
+	st, _ := l.Station(station)
+	if _, _, err := h.store.ClaimNext(ctx, ports.Claim{
+		FactoryID: l.FactoryID, Station: st, Slot: 0, Now: h.clock.Now(), ExpiresAt: h.clock.Now().Add(ttl),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -242,6 +281,7 @@ func lineOf(stations ...domain.Station) domain.Line {
 	}
 
 	return domain.Line{
+		OrgID:         testOrg,
 		FactoryID:     factoryID,
 		Runtime:       domain.Runtime{Image: "ghcr.io/acme/agent:1", Model: "claude-sonnet-5-5", MaxTurnsPerTask: 40, PerItemUSD: 3},
 		Stations:      all,
@@ -491,7 +531,7 @@ func TestSetLines_LoadsAndUnloadsFactories(t *testing.T) {
 
 	other := lineOf(agentStation(stWork, agWorker, 1, 1))
 	other.FactoryID = "5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a01"
-	n := domain.NewItem{FactoryID: other.FactoryID, Title: "an item", Type: typeFeature}
+	n := domain.NewItem{FactoryID: other.FactoryID, Title: anItem, Type: typeFeature}
 
 	if _, err := h.e.Submit(inOrg(t), n); err == nil {
 		t.Fatal("submit to a factory that is not loaded succeeded")

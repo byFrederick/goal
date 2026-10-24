@@ -28,7 +28,7 @@ const (
 // skill is not staged in phase 1: the agent loads it by name from the checkout's own
 // .claude/skills when the repository vendors it, and does without it otherwise.
 func (c *Cache) WriteAgentFiles(ctx context.Context, t ports.TaskSpec, dir string) error {
-	l, err := c.get(t.FactoryID)
+	l, err := c.get(ctx, t.FactoryID)
 	if err != nil {
 		return err
 	}

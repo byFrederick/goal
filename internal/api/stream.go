@@ -186,7 +186,7 @@ func (st stream) send(write func(string, ...any) bool, n ports.ItemNotice) bool 
 	}
 
 	data, err := json.Marshal(gen.StreamEvent{
-		ItemId: string(n.ItemID), Ref: st.s.ref(n.FactoryID, n.Number), FactoryId: string(n.FactoryID),
+		ItemId: string(n.ItemID), Ref: st.s.ref(st.ctx, n.FactoryID, n.Number), FactoryId: string(n.FactoryID),
 		Kind: string(n.Kind), Station: optional(n.Station), State: gen.ItemState(n.State), At: n.At,
 	})
 	if err != nil {

@@ -29,6 +29,10 @@ const ActionMerge StationAction = "merge"
 // Line is the part of a factory definition the engine needs: its stations in order, its
 // agents and its flow policy. internal/config builds it from factory.yaml.
 type Line struct {
+	// OrgID is the organization that owns the factory; the engine binds every store call it
+	// makes for the line to it. It comes from where the definition is stored, never from the
+	// definition itself.
+	OrgID     OrgID
 	FactoryID FactoryID
 	Runtime   Runtime
 	Stations  []Station

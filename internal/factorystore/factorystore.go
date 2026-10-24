@@ -1,11 +1,15 @@
-// Package factorystore keeps factory definitions in object storage. A factory is one prefix,
-// factories/<metadata.id>/, holding factory.yaml, agents/, skills/, contracts/ and evals/.
-// knowledge/ under the same prefix is reserved for the factory's knowledge base, which this
-// package never reads or writes.
+// Package factorystore keeps factory definitions in object storage. Every object an
+// organization owns lives under orgs/<org-id>/ (OrgPrefix), and a factory is one prefix in it,
+// orgs/<org-id>/factories/<metadata.id>/ (Prefix), holding factory.yaml, agents/, skills/,
+// contracts/ and evals/. knowledge/ under the same prefix is reserved for the factory's
+// knowledge base, which this package never reads or writes. The organization id always comes
+// from the database (the organization a request or a line belongs to), never from a definition.
 //
-// It pushes a local working copy to that prefix, pulls a prefix into a folder, lists the
-// factories in the bucket and reads one factory as an fs.FS that config.Load accepts. The
+// It pushes a local working copy to that prefix, pulls a prefix into a folder, lists an
+// organization's factories and reads one factory as an fs.FS that config.Load accepts. The
 // bucket is versioned, so every push leaves the previous object versions readable for rollback.
+// MigrateLegacy moves the factories of the layout before organizations (factories/<id>/) into
+// one organization.
 package factorystore
 
 import (
@@ -21,19 +25,26 @@ import (
 	"strings"
 
 	"github.com/byFrederick/goal/internal/config"
+	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
 )
 
 const (
-	// Root is the prefix under which every factory lives.
-	Root = "factories/"
+	// OrgsRoot is the prefix under which every organization's objects live.
+	OrgsRoot = "orgs/"
+	// factoriesDir is the folder of an organization's prefix that holds its factories.
+	factoriesDir = "factories/"
 	// KnowledgeDir is the folder inside a factory reserved for its knowledge base. Definitions
 	// never include it: push neither uploads nor deletes anything under it, and reads skip it.
 	KnowledgeDir = "knowledge/"
 )
 
-// Prefix is a factory's folder in the bucket. It uses the id, so renames never move objects.
-func Prefix(id string) string { return Root + id + "/" }
+// OrgPrefix is an organization's folder in the bucket; every object the organization owns is
+// under it. It is the only place that prefix is built.
+func OrgPrefix(org domain.OrgID) string { return OrgsRoot + string(org) + "/" }
+
+// Prefix is a factory's folder in the bucket. It uses the ids, so renames never move objects.
+func Prefix(org domain.OrgID, id string) string { return OrgPrefix(org) + factoriesDir + id + "/" }
 
 // Action says what a push did to one file.
 type Action string
@@ -63,11 +74,11 @@ type Catalog struct {
 // New returns a catalog over store.
 func New(store ports.ObjectStore) *Catalog { return &Catalog{store: store} }
 
-// Push validates the factory in dir and makes its prefix match it: new and changed files are
+// Push validates the factory in dir and makes its prefix in org match it: new and changed files are
 // uploaded (factory.yaml last, so readers never see it point at files not yet written) and
 // files no longer in dir are deleted. knowledge/ is left alone on both sides. Unchanged files
 // are not rewritten, so their versions stay put.
-func (c *Catalog) Push(ctx context.Context, dir string) (*config.Factory, []Change, error) {
+func (c *Catalog) Push(ctx context.Context, org domain.OrgID, dir string) (*config.Factory, []Change, error) {
 	f, err := config.LoadDir(dir)
 	if err != nil {
 		return nil, nil, fmt.Errorf("validate %s: %w", dir, err)
@@ -78,7 +89,7 @@ func (c *Catalog) Push(ctx context.Context, dir string) (*config.Factory, []Chan
 		return nil, nil, fmt.Errorf("read %s: %w", dir, err)
 	}
 
-	prefix := Prefix(f.Metadata.ID)
+	prefix := Prefix(org, f.Metadata.ID)
 
 	remote, err := c.store.List(ctx, prefix)
 	if err != nil {
@@ -167,7 +178,8 @@ func (c *Catalog) upload(ctx context.Context, prefix string, local map[string][]
 // Snapshot is one factory's files as read from the bucket in one pass, each at a known object
 // version, so a caller can record or pin exactly what it loaded.
 type Snapshot struct {
-	ID string
+	Org domain.OrgID
+	ID  string
 	// Files are the objects read, with keys relative to the factory's root, ordered by key.
 	Files []ports.ObjectInfo
 	files memFS
@@ -176,20 +188,20 @@ type Snapshot struct {
 // FS returns the snapshot as a read-only file tree rooted at the factory's folder.
 func (s *Snapshot) FS() fs.FS { return s.files }
 
-// Open reads the definition of the factory with this id (everything but knowledge/). It
+// Open reads the definition of org's factory with this id (everything but knowledge/). It
 // returns an error wrapping ports.ErrNotFound when the prefix has no factory.yaml.
-func (c *Catalog) Open(ctx context.Context, id string) (*Snapshot, error) {
-	objects, err := c.store.List(ctx, Prefix(id))
+func (c *Catalog) Open(ctx context.Context, org domain.OrgID, id string) (*Snapshot, error) {
+	objects, err := c.store.List(ctx, Prefix(org, id))
 	if err != nil {
 		return nil, err
 	}
 
-	return c.open(ctx, id, objects)
+	return c.open(ctx, org, id, objects)
 }
 
-func (c *Catalog) open(ctx context.Context, id string, objects []ports.ObjectInfo) (*Snapshot, error) {
-	prefix := Prefix(id)
-	s := &Snapshot{ID: id, files: memFS{}}
+func (c *Catalog) open(ctx context.Context, org domain.OrgID, id string, objects []ports.ObjectInfo) (*Snapshot, error) {
+	prefix := Prefix(org, id)
+	s := &Snapshot{Org: org, ID: id, files: memFS{}}
 
 	for _, o := range objects {
 		rel := strings.TrimPrefix(o.Key, prefix)
@@ -227,9 +239,11 @@ type Entry struct {
 	Err      error
 }
 
-// List reads and validates every factory in the bucket, ordered by id.
-func (c *Catalog) List(ctx context.Context) ([]Entry, error) {
-	objects, err := c.store.List(ctx, Root)
+// List reads and validates every factory of org, ordered by id.
+func (c *Catalog) List(ctx context.Context, org domain.OrgID) ([]Entry, error) {
+	root := OrgPrefix(org) + factoriesDir
+
+	objects, err := c.store.List(ctx, root)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +251,7 @@ func (c *Catalog) List(ctx context.Context) ([]Entry, error) {
 	byID := map[string][]ports.ObjectInfo{}
 
 	for _, o := range objects {
-		id, _, ok := strings.Cut(strings.TrimPrefix(o.Key, Root), "/")
+		id, _, ok := strings.Cut(strings.TrimPrefix(o.Key, root), "/")
 		if ok && id != "" {
 			byID[id] = append(byID[id], o)
 		}
@@ -248,13 +262,13 @@ func (c *Catalog) List(ctx context.Context) ([]Entry, error) {
 	for id, objs := range byID {
 		e := Entry{ID: id}
 
-		e.Snapshot, e.Err = c.open(ctx, id, objs)
+		e.Snapshot, e.Err = c.open(ctx, org, id, objs)
 		if e.Err == nil {
 			e.Factory, e.Err = config.Load(e.Snapshot.FS())
 		}
 
 		if e.Err == nil && e.Factory.Metadata.ID != id {
-			e.Factory, e.Err = nil, fmt.Errorf("metadata.id %s does not match its prefix %s", e.Factory.Metadata.ID, Prefix(id))
+			e.Factory, e.Err = nil, fmt.Errorf("metadata.id %s does not match its prefix %s", e.Factory.Metadata.ID, Prefix(org, id))
 		}
 
 		entries = append(entries, e)
@@ -265,10 +279,10 @@ func (c *Catalog) List(ctx context.Context) ([]Entry, error) {
 	return entries, nil
 }
 
-// Resolve finds the id of the factory that ref names: its id, or the metadata.name of a factory
-// that loads. It returns an error wrapping ports.ErrNotFound when nothing matches.
-func (c *Catalog) Resolve(ctx context.Context, ref string) (string, error) {
-	entries, err := c.List(ctx)
+// Resolve finds the id of org's factory that ref names: its id, or the metadata.name of a
+// factory that loads. It returns an error wrapping ports.ErrNotFound when nothing matches.
+func (c *Catalog) Resolve(ctx context.Context, org domain.OrgID, ref string) (string, error) {
+	entries, err := c.List(ctx, org)
 	if err != nil {
 		return "", err
 	}
@@ -291,19 +305,19 @@ func (c *Catalog) Resolve(ctx context.Context, ref string) (string, error) {
 	}
 }
 
-// Pull writes the definition of the factory that ref names into dir, which must be missing or
+// Pull writes the definition of org's factory that ref names into dir, which must be missing or
 // empty so that no local edit is ever overwritten.
-func (c *Catalog) Pull(ctx context.Context, ref, dir string) (*Snapshot, error) {
+func (c *Catalog) Pull(ctx context.Context, org domain.OrgID, ref, dir string) (*Snapshot, error) {
 	if err := mustBeEmpty(dir); err != nil {
 		return nil, err
 	}
 
-	id, err := c.Resolve(ctx, ref)
+	id, err := c.Resolve(ctx, org, ref)
 	if err != nil {
 		return nil, err
 	}
 
-	s, err := c.Open(ctx, id)
+	s, err := c.Open(ctx, org, id)
 	if err != nil {
 		return nil, err
 	}

@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,6 +46,9 @@ type settings struct {
 	// often factory definitions are re-read from the bucket (GOAL_REFRESH_EVERY, default 30s).
 	TickEvery    time.Duration
 	RefreshEvery time.Duration
+	// MaxRuns caps the agent runs this goald has in flight at once (GOAL_MAX_RUNS, default 0:
+	// no cap). With a cap, claims are shared out fairly across organizations.
+	MaxRuns int
 	// GitHubAPIURL is the GitHub REST API goald merges pull requests through
 	// (GOAL_GITHUB_API_URL, default https://api.github.com; http only on a loopback address).
 	GitHubAPIURL string
@@ -105,6 +109,10 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 
 	if s.RefreshEvery, err = duration(or("GOAL_REFRESH_EVERY", "30s")); err != nil {
 		errs = append(errs, fmt.Errorf("GOAL_REFRESH_EVERY: %w", err))
+	}
+
+	if s.MaxRuns, err = strconv.Atoi(or("GOAL_MAX_RUNS", "0")); err != nil || s.MaxRuns < 0 {
+		errs = append(errs, fmt.Errorf("GOAL_MAX_RUNS %q is not a count of runs (0 for no cap)", getenv("GOAL_MAX_RUNS")))
 	}
 
 	if err := s.LogLevel.UnmarshalText([]byte(or("GOAL_LOG_LEVEL", "info"))); err != nil {

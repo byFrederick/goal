@@ -34,7 +34,6 @@ import (
 	"github.com/byFrederick/goal/internal/adapters/s3store"
 	"github.com/byFrederick/goal/internal/adapters/sysclock"
 	"github.com/byFrederick/goal/internal/api"
-	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/engine"
@@ -102,12 +101,9 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}
 	defer pool.Close()
 
+	// One value is the Store, Tenancy and Audit. Each binds its transactions to the organization
+	// in ctx: the engine takes it from each line, the API from the request.
 	store := postgres.New(pool)
-
-	// Every factory, item and run is in the default organization until the engine and the
-	// definitions take each line's organization from the bucket (phase 2.2 A4): the store binds
-	// each transaction to the organization in ctx, and the engine's work inherits this one.
-	ctx = domain.WithOrg(ctx, postgres.DefaultOrgID)
 
 	s3cfg, err := s3store.ConfigFromEnv(os.Getenv)
 	if err != nil {
@@ -118,6 +114,16 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+
+	// Factories stored before organizations move into the default one, which holds the rows
+	// from before organizations too.
+	moved, err := factorystore.MigrateLegacy(ctx, objects, postgres.DefaultOrgID)
+	if err != nil {
+		return fmt.Errorf("move legacy factory definitions into the default organization: %w", err)
+	}
+
+	log.InfoContext(ctx, "legacy bucket layout migrated", slog.Int("copied", moved.Copied), slog.Int("present", moved.Present),
+		slog.Int("gone", moved.Gone), slog.Int("deleted", moved.Deleted))
 
 	dockerClient, err := client.New(client.FromEnv)
 	if err != nil {
@@ -132,7 +138,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// The engine is built after the definitions it reads; the load hook reaches it through eng.
 	var eng *engine.Engine
 
-	defs := definitions.New(factorystore.New(objects), func(ctx context.Context, fs []*config.Factory) error {
+	defs := definitions.New(factorystore.New(objects), store, func(ctx context.Context, fs []definitions.Loaded) error {
 		return load(ctx, store, eng, fs)
 	}, log)
 
@@ -153,10 +159,10 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	codehost := github.New(secrets, github.Config{APIURL: s.GitHubAPIURL})
 
 	eng, err = engine.New(engine.Deps{
-		Store: store, Runner: runner, Workspaces: workspaces, Checker: docker.NewChecker(dockerClient, runnerCfg, log),
+		Store: store, Orgs: store, Runner: runner, Workspaces: workspaces, Checker: docker.NewChecker(dockerClient, runnerCfg, log),
 		Contracts: defs, Secrets: secrets, CodeHost: codehost, Clock: clock, Logger: log, RunEnded: gw.EndRun,
 	}, engine.Config{
-		TickEvery: s.TickEvery, GatewayURL: s.GatewayURL, GatewayKeyRef: s.GatewayKeyRef, TaskEnv: s.TaskEnv,
+		TickEvery: s.TickEvery, GatewayURL: s.GatewayURL, GatewayKeyRef: s.GatewayKeyRef, TaskEnv: s.TaskEnv, MaxRuns: s.MaxRuns,
 	})
 	if err != nil {
 		return err
@@ -297,25 +303,27 @@ func refresh(ctx context.Context, log *slog.Logger, defs *definitions.Cache, eve
 	}
 }
 
-// load registers every loaded factory in the store (items reference their factory row) and
-// hands their lines to the engine.
-func load(ctx context.Context, store *postgres.Store, eng *engine.Engine, fs []*config.Factory) error {
+// load registers every loaded factory in the store, in its organization (items reference their
+// factory row), and hands their lines to the engine.
+func load(ctx context.Context, store *postgres.Store, eng *engine.Engine, fs []definitions.Loaded) error {
 	lines := make([]domain.Line, 0, len(fs))
 
-	for _, f := range fs {
+	for _, l := range fs {
+		f := l.Factory
+
 		def, err := json.Marshal(f)
 		if err != nil {
 			return fmt.Errorf("factory %s: %w", f.Metadata.ID, err)
 		}
 
-		err = store.SaveFactory(ctx, postgres.Factory{
+		err = store.SaveFactory(domain.WithOrg(ctx, l.Org), postgres.Factory{
 			ID: domain.FactoryID(f.Metadata.ID), Name: f.Metadata.Name, Title: f.Metadata.Title, Definition: def,
 		})
 		if err != nil {
 			return err
 		}
 
-		lines = append(lines, f.Line())
+		lines = append(lines, l.Line())
 	}
 
 	return eng.SetLines(lines)

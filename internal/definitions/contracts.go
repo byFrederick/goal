@@ -20,8 +20,8 @@ var _ ports.Contracts = (*Cache)(nil)
 // Validate implements ports.Contracts: output must satisfy the JSON Schema the factory's
 // current definition declares for contract. A schema can reference only itself; nothing is
 // fetched from the network or the host's files.
-func (c *Cache) Validate(_ context.Context, factory domain.FactoryID, contract string, output json.RawMessage) error {
-	l, err := c.get(factory)
+func (c *Cache) Validate(ctx context.Context, factory domain.FactoryID, contract string, output json.RawMessage) error {
+	l, err := c.get(ctx, factory)
 	if err != nil {
 		return err
 	}

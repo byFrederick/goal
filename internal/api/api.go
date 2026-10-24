@@ -59,8 +59,10 @@ type Items interface {
 
 // Factories are the definitions goald runs; *definitions.Cache satisfies it.
 type Factories interface {
-	Factories() []*config.Factory
-	// Lookup finds a factory by id or name, or returns an error wrapping ports.ErrNotFound.
+	// Factories lists the factories of the organization in ctx.
+	Factories(ctx context.Context) []*config.Factory
+	// Lookup finds a factory of the organization in ctx by id or name, or returns an error
+	// wrapping ports.ErrNotFound.
 	Lookup(ctx context.Context, ref string) (*config.Factory, error)
 }
 
@@ -133,9 +135,9 @@ func (s *server) GetHealth(context.Context, gen.GetHealthRequestObject) (gen.Get
 	return gen.GetHealth200JSONResponse{Status: "ok"}, nil
 }
 
-func (s *server) ListFactories(context.Context, gen.ListFactoriesRequestObject) (gen.ListFactoriesResponseObject, error) {
+func (s *server) ListFactories(ctx context.Context, _ gen.ListFactoriesRequestObject) (gen.ListFactoriesResponseObject, error) {
 	out := gen.ListFactories200JSONResponse{Factories: []gen.Factory{}}
-	for _, f := range s.factories.Factories() {
+	for _, f := range s.factories.Factories(ctx) {
 		out.Factories = append(out.Factories, factoryOf(f))
 	}
 
@@ -166,7 +168,7 @@ func (s *server) SubmitItem(ctx context.Context, req gen.SubmitItemRequestObject
 		return nil, err
 	}
 
-	return gen.SubmitItem201JSONResponse(s.itemOf(it)), nil
+	return gen.SubmitItem201JSONResponse(s.itemOf(ctx, it)), nil
 }
 
 func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen.GetItemResponseObject, error) {
@@ -175,7 +177,7 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 		return nil, err
 	}
 
-	return gen.GetItem200JSONResponse(s.itemOf(it)), nil
+	return gen.GetItem200JSONResponse(s.itemOf(ctx, it)), nil
 }
 
 // item finds an item by its id or by <factory>#<number>.
@@ -237,7 +239,7 @@ func (s *server) ApproveItem(ctx context.Context, req gen.ApproveItemRequestObje
 		return nil, err
 	}
 
-	return gen.ApproveItem200JSONResponse(s.itemOf(it)), nil
+	return gen.ApproveItem200JSONResponse(s.itemOf(ctx, it)), nil
 }
 
 func (s *server) RejectItem(ctx context.Context, req gen.RejectItemRequestObject) (gen.RejectItemResponseObject, error) {
@@ -255,7 +257,7 @@ func (s *server) RejectItem(ctx context.Context, req gen.RejectItemRequestObject
 		return nil, err
 	}
 
-	return gen.RejectItem200JSONResponse(s.itemOf(it)), nil
+	return gen.RejectItem200JSONResponse(s.itemOf(ctx, it)), nil
 }
 
 func (s *server) RetryItem(ctx context.Context, req gen.RetryItemRequestObject) (gen.RetryItemResponseObject, error) {
@@ -273,7 +275,7 @@ func (s *server) RetryItem(ctx context.Context, req gen.RetryItemRequestObject) 
 		return nil, err
 	}
 
-	return gen.RetryItem200JSONResponse(s.itemOf(it)), nil
+	return gen.RetryItem200JSONResponse(s.itemOf(ctx, it)), nil
 }
 
 func (s *server) MergeItem(ctx context.Context, req gen.MergeItemRequestObject) (gen.MergeItemResponseObject, error) {
@@ -297,7 +299,7 @@ func (s *server) MergeItem(ctx context.Context, req gen.MergeItemRequestObject) 
 		return nil, err
 	}
 
-	return gen.MergeItem200JSONResponse(s.itemOf(it)), nil
+	return gen.MergeItem200JSONResponse(s.itemOf(ctx, it)), nil
 }
 
 // problem writes err as problem details with the status its kind maps to.
@@ -358,10 +360,10 @@ func actionOf(a string) *gen.StationAction {
 
 // ref writes an item's reference with its factory's current name, or its id when the factory
 // is not loaded.
-func (s *server) ref(factory domain.FactoryID, number int64) string {
+func (s *server) ref(ctx context.Context, factory domain.FactoryID, number int64) string {
 	name := string(factory)
 
-	for _, f := range s.factories.Factories() {
+	for _, f := range s.factories.Factories(ctx) {
 		if f.Metadata.ID == string(factory) {
 			name = f.Metadata.Name
 			break
@@ -371,9 +373,9 @@ func (s *server) ref(factory domain.FactoryID, number int64) string {
 	return domain.ItemRef{Factory: name, Number: number}.String()
 }
 
-func (s *server) itemOf(it domain.Item) gen.Item {
+func (s *server) itemOf(ctx context.Context, it domain.Item) gen.Item {
 	out := gen.Item{
-		Id: string(it.ID), Ref: s.ref(it.FactoryID, it.Number), FactoryId: string(it.FactoryID), Number: it.Number,
+		Id: string(it.ID), Ref: s.ref(ctx, it.FactoryID, it.Number), FactoryId: string(it.FactoryID), Number: it.Number,
 		ParentId: optional(string(it.ParentID)), Type: it.Type, Lane: optional(it.Lane), Title: it.Title, Body: it.Body,
 		Station: it.Station, State: gen.ItemState(it.State), ClassOfService: gen.ClassOfService(it.Class), Priority: it.Priority,
 		ReworkCount: it.ReworkCount, CostUsd: it.CostUSD, Outputs: map[string]any{},

@@ -15,11 +15,11 @@ import (
 
 	"github.com/byFrederick/goal/internal/api"
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/engine"
 	"github.com/byFrederick/goal/internal/factorystore"
+	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/ports/porttest"
 )
 
@@ -71,8 +71,9 @@ spec:
 
 const lineID = "0b6f1c9e-5d0a-4c39-9a51-6f1f3f0e2a10"
 
-// testOrg is the organization the tests' items belong to: every store call carries one.
-const testOrg domain.OrgID = "019a1c00-0000-7000-8000-0000000000aa"
+// testOrg is the organization the tests' factories and items belong to (the first the harness
+// creates): every store call carries one.
+const testOrg domain.OrgID = "00000000-0000-7000-8000-000000000001"
 
 // inOrg is the test's context bound to testOrg.
 func inOrg(t *testing.T) context.Context {
@@ -97,6 +98,11 @@ func newHarness(t *testing.T) *harness {
 
 	catalog := factorystore.New(porttest.NewObjectStore())
 
+	tenancy := porttest.NewTenancy(time.Now)
+	if o, err := tenancy.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: "acme", Name: "Acme"}); err != nil || o.ID != testOrg {
+		t.Fatalf("create organization = %v (%v), want %s", o.ID, err, testOrg)
+	}
+
 	for _, files := range []map[string]string{
 		{"factory.yaml": acme, "agents/writer.md": "# writer\n"},
 		{"factory.yaml": line, "agents/backend.md": "# backend\n", "agents/frontend.md": "# frontend\n"},
@@ -112,7 +118,7 @@ func newHarness(t *testing.T) *harness {
 			}
 		}
 
-		if _, _, err := catalog.Push(inOrg(t), dir); err != nil {
+		if _, _, err := catalog.Push(t.Context(), testOrg, dir); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -123,7 +129,7 @@ func newHarness(t *testing.T) *harness {
 	}
 
 	e, err := engine.New(engine.Deps{
-		Store: h.store, Runner: porttest.NewRunner(porttest.Succeed(`{}`)), Workspaces: porttest.NewWorkspaces(),
+		Store: h.store, Orgs: tenancy, Runner: porttest.NewRunner(porttest.Succeed(`{}`)), Workspaces: porttest.NewWorkspaces(),
 		Checker: porttest.NewChecker(), Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{},
 		CodeHost: h.codehost, Clock: h.clock,
 	}, engine.Config{})
@@ -134,7 +140,7 @@ func newHarness(t *testing.T) *harness {
 	h.engine = e
 
 	// As goald does: the definitions cache hands every loaded factory's line to the engine.
-	defs := definitions.New(catalog, func(_ context.Context, fs []*config.Factory) error {
+	defs := definitions.New(catalog, tenancy, func(_ context.Context, fs []definitions.Loaded) error {
 		lines := make([]domain.Line, 0, len(fs))
 		for _, f := range fs {
 			lines = append(lines, f.Line())

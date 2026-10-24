@@ -167,7 +167,7 @@ Manual constructor injection. `cmd/goald/main.go` reads the environment (`cmd/go
 settings (env) ─┬─ envsecrets.New ───────────────────────────────┐ Secrets
                 ├─ postgres.Open(migrate URL, goal_owner) → Migrate → close
                 ├─ postgres.Open(goal_app) → CheckAppRole → New ───┤ Store (+ SaveFactory)
-                ├─ s3store.New → factorystore.New → definitions.New(catalog, load) ─┐
+                ├─ s3store.New → MigrateLegacy → factorystore.New → definitions.New(catalog, tenancy, load) ─┐
                 │      Contracts, gateway.Definitions, docker.AgentFiles ◀──────────┘
                 ├─ gitworkspace.New(secrets) ─────────────────────┤ Workspaces
                 ├─ github.New(secrets, GOAL_GITHUB_API_URL) ──────┤ CodeHost
@@ -175,8 +175,8 @@ settings (env) ─┬─ envsecrets.New ─────────────�
                 │      docker.NewSidecars → gateway.New(defs, secrets, store, sidecars)
                 └─ sysclock.Clock ────────────────────────────────┤ Clock
                                                                   ▼
-                        engine.New(Deps{..., RunEnded: gateway.EndRun}, Config{GatewayURL, GatewayKeyRef, TaskEnv})
-   load hook: every refresh → store.SaveFactory(each) → engine.SetLines(lines)
+                        engine.New(Deps{..., Orgs: tenancy, RunEnded: gateway.EndRun}, Config{GatewayURL, GatewayKeyRef, TaskEnv, MaxRuns})
+   load hook: every refresh → store.SaveFactory(each, in its org) → engine.SetLines(lines, each with its OrgID)
    postgres.NewNotices(pool's conn config) → api.NewFeed ─────────── ItemNotices for /v1/stream
    http.ServeMux: /v1/ → api.New(engine, store, defs, feed, clock)    /mcp → gateway
    goroutines: engine.Run (ticks + lease sweep), definitions refresh (GOAL_REFRESH_EVERY), feed.Run, HTTP
@@ -185,7 +185,9 @@ settings (env) ─┬─ envsecrets.New ─────────────�
    SIGTERM: HTTP shutdown, engine context cancelled → runs stopped, items released to their queue
 ```
 
-The definitions cache refreshes from the bucket at startup, every `GOAL_REFRESH_EVERY` (30s) and when the API is asked for a factory it does not know, so `goal factory push` followed by `goal run` works without a restart. A definition that stops loading keeps its last valid version in use.
+The definitions cache refreshes from the bucket at startup, every `GOAL_REFRESH_EVERY` (30s) and when the API is asked for a factory it does not know, so `goal factory push` followed by `goal run` works without a restart. A definition that stops loading keeps its last valid version in use. It loads the factories under `orgs/<org-id>/factories/` of every organization `Tenancy.ActiveOrgs` lists (a factory's organization is where it is stored, `factorystore.Prefix(org, id)`), and every read (`Factories`, `Lookup`, `Factory`, contracts, agent files) sees only the organization in its context. At startup `factorystore.MigrateLegacy` copies the layout before organizations (`factories/<id>/`) into the default organization and, once every copy matches, deletes the legacy keys (delete markers; old versions stay readable); the CLI's `factory` commands run it too, so a push never lands before it.
+
+**Engine across organizations.** Each `domain.Line` carries its `OrgID`, and every store call the engine makes for a line, the run's included, is bound to it (`domain.WithOrg`); `Submit` and the decisions find only factories of the organization in their context (another's is `ErrNotFound`). `Tick` releases queue stations line by line, then claims with two-level round-robin: in each pass every organization with work claims at most one item, trying its factories in turn and their agent stations in line order, until nothing more can be claimed or the instance runs `GOAL_MAX_RUNS` runs (0: no cap). The order of organizations and of each one's factories rotates every tick; the tick counter and the run count are local scheduling hints, not state. `SweepLeases` requeues expired leases once per organization `ActiveOrgs` lists, so leases on factories no longer loaded are swept too.
 
 ### One run, end to end
 

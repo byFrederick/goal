@@ -18,9 +18,14 @@ import (
 	"runtime/debug"
 	"syscall"
 
+	"github.com/google/uuid"
+
+	"github.com/byFrederick/goal/internal/adapters/postgres"
 	"github.com/byFrederick/goal/internal/adapters/s3store"
 	"github.com/byFrederick/goal/internal/config"
+	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/factorystore"
+	"github.com/byFrederick/goal/internal/ports"
 )
 
 const usage = `usage:
@@ -36,16 +41,20 @@ const usage = `usage:
   goal merge <item> [--by NAME]                   merge the item's pull request, then approve it
                                                   (at a station with action: merge)
   goal factory validate <dir> ...                 validate local factory folders (alias: goal validate)
-  goal factory push <dir>                         validate, then upload to factories/<metadata.id>/
-  goal factory pull <id|name> <dir>               download a factory into a new folder
-  goal factory list                               show and validate every factory in the bucket
+  goal factory push <dir> [--org ID]              validate, then upload to
+                                                  orgs/<org>/factories/<metadata.id>/
+  goal factory pull <id|name> <dir> [--org ID]    download a factory into a new folder
+  goal factory list [--org ID]                    show and validate every factory of the organization
   goal storage init                               create the bucket if missing and enable versioning
   goal db init                                    create the database roles goald runs as (goal_owner,
                                                   goal_app) and hand the schema to goal_owner
   goal version                                    print the module version and build info
 
 <item> is goal#2 (factory and number), the item's id, or a bare number such as 2 when one
-factory has that item (--factory F picks the factory of a bare number)`
+factory has that item (--factory F picks the factory of a bare number)
+
+--org is an organization's id; without it the factory commands use the default organization,
+which holds every factory from before organizations`
 
 // errUsage marks a command line that names no valid command; main exits 2 for it.
 var errUsage = errors.New(usage)
@@ -106,31 +115,79 @@ func factory(ctx context.Context, out *printer, getenv func(string) string, args
 		return validate(out, args[1:])
 	}
 
+	cmd := args[0]
+
+	org, rest, err := factoryArgs(cmd, args[1:])
+	if err != nil {
+		return err
+	}
+
 	store, err := newStore(ctx, getenv)
 	if err != nil {
 		return err
 	}
 
+	if err := migrateLegacy(ctx, out, store); err != nil {
+		return err
+	}
+
 	catalog := factorystore.New(store)
 
-	switch cmd, rest := args[0], args[1:]; cmd {
+	switch cmd {
 	case "push":
-		if len(rest) != 1 {
-			return errUsage
-		}
-
-		return push(ctx, out, catalog, store.Bucket(), rest[0])
+		return push(ctx, out, catalog, store.Bucket(), org, rest[0])
 	case "pull":
-		return pull(ctx, out, catalog, rest)
-	case "list":
-		if len(rest) != 0 {
-			return errUsage
-		}
-
-		return list(ctx, out, catalog, store.Bucket())
+		return pull(ctx, out, catalog, org, rest)
 	default:
-		return errUsage
+		return list(ctx, out, catalog, store.Bucket(), org)
 	}
+}
+
+// factoryArgs parses the flags and arguments of goal factory push|pull|list.
+func factoryArgs(cmd string, args []string) (domain.OrgID, []string, error) {
+	want, known := map[string]int{"push": 1, "pull": 2, "list": 0}[cmd]
+	if !known {
+		return "", nil, errUsage
+	}
+
+	fs := newFlags("factory " + cmd)
+	orgFlag := fs.String("org", string(postgres.DefaultOrgID), "the id of the organization that owns the factories")
+
+	rest, err := parseInterspersed(fs, args)
+	if err != nil || len(rest) != want {
+		return "", nil, errUsage
+	}
+
+	org, err := orgID(*orgFlag)
+
+	return org, rest, err
+}
+
+// migrateLegacy moves the bucket layout before organizations into the default organization, as
+// goald does at startup. The CLI runs it before it writes or reads the new layout, so a push
+// never lands before the migration and is then overwritten by it.
+func migrateLegacy(ctx context.Context, out *printer, store ports.ObjectStore) error {
+	m, err := factorystore.MigrateLegacy(ctx, store, postgres.DefaultOrgID)
+	if err != nil {
+		return fmt.Errorf("move legacy factory definitions into the default organization: %w", err)
+	}
+
+	if m.Copied+m.Deleted > 0 {
+		out.printf("moved %d legacy objects from %s into %s (%d copied)\n", m.Deleted, factorystore.LegacyRoot,
+			factorystore.OrgPrefix(postgres.DefaultOrgID), m.Copied)
+	}
+
+	return nil
+}
+
+// orgID checks an organization id given on the command line: it becomes part of bucket keys.
+func orgID(s string) (domain.OrgID, error) {
+	id, err := uuid.Parse(s)
+	if err != nil {
+		return "", fmt.Errorf("--org %q is not an organization id", s)
+	}
+
+	return domain.OrgID(id.String()), nil
 }
 
 func newStore(ctx context.Context, getenv func(string) string) (*s3store.Store, error) {
@@ -170,9 +227,8 @@ func validate(out *printer, dirs []string) error {
 		}
 
 		seen[f.Metadata.ID] = dir
-		out.printf("✓ %s (%s) — %d agents, %d stations, stored at %s\n",
-			f.Metadata.Name, f.Metadata.ID[:8], len(f.Spec.Agents), len(f.Spec.Board.Stations),
-			factorystore.Prefix(f.Metadata.ID))
+		out.printf("✓ %s (%s) — %d agents, %d stations\n",
+			f.Metadata.Name, f.Metadata.ID[:8], len(f.Spec.Agents), len(f.Spec.Board.Stations))
 
 		for _, w := range f.Warnings() {
 			out.printf("  ⚠ %s\n", w)
@@ -186,8 +242,8 @@ func validate(out *printer, dirs []string) error {
 	return nil
 }
 
-func push(ctx context.Context, out *printer, catalog *factorystore.Catalog, bucket, dir string) error {
-	f, changes, err := catalog.Push(ctx, dir)
+func push(ctx context.Context, out *printer, catalog *factorystore.Catalog, bucket string, org domain.OrgID, dir string) error {
+	f, changes, err := catalog.Push(ctx, org, dir)
 	for _, c := range changes {
 		out.printf("  %-9s %-50s %s\n", c.Action, c.Path, c.Version)
 	}
@@ -196,7 +252,7 @@ func push(ctx context.Context, out *printer, catalog *factorystore.Catalog, buck
 		return err
 	}
 
-	out.printf("✓ pushed %s to s3://%s/%s\n", f.Metadata.Name, bucket, factorystore.Prefix(f.Metadata.ID))
+	out.printf("✓ pushed %s to s3://%s/%s\n", f.Metadata.Name, bucket, factorystore.Prefix(org, f.Metadata.ID))
 
 	for _, w := range f.Warnings() {
 		out.printf("  ⚠ %s\n", w)
@@ -205,14 +261,10 @@ func push(ctx context.Context, out *printer, catalog *factorystore.Catalog, buck
 	return nil
 }
 
-func pull(ctx context.Context, out *printer, catalog *factorystore.Catalog, args []string) error {
-	if len(args) != 2 {
-		return errUsage
-	}
-
+func pull(ctx context.Context, out *printer, catalog *factorystore.Catalog, org domain.OrgID, args []string) error {
 	id, dir := args[0], args[1]
 
-	s, err := catalog.Pull(ctx, id, dir)
+	s, err := catalog.Pull(ctx, org, id, dir)
 	if err != nil {
 		return err
 	}
@@ -226,8 +278,8 @@ func pull(ctx context.Context, out *printer, catalog *factorystore.Catalog, args
 	return nil
 }
 
-func list(ctx context.Context, out *printer, catalog *factorystore.Catalog, bucket string) error {
-	entries, err := catalog.List(ctx)
+func list(ctx context.Context, out *printer, catalog *factorystore.Catalog, bucket string, org domain.OrgID) error {
+	entries, err := catalog.List(ctx, org)
 	if err != nil {
 		return err
 	}
@@ -247,7 +299,7 @@ func list(ctx context.Context, out *printer, catalog *factorystore.Catalog, buck
 			len(e.Factory.Spec.Agents), len(e.Factory.Spec.Board.Stations), len(e.Snapshot.Files))
 	}
 
-	out.printf("%d factories in s3://%s/%s\n", len(entries), bucket, factorystore.Root)
+	out.printf("%d factories in s3://%s/%s\n", len(entries), bucket, factorystore.OrgPrefix(org))
 
 	if invalid > 0 {
 		return fmt.Errorf("%d factories in the bucket are invalid", invalid)

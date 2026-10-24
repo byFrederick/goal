@@ -7,6 +7,12 @@
 // and work held by a dead instance returns to the queue when its lease expires. Several
 // instances can run Tick and SweepLeases at once.
 //
+// Organizations. Every line belongs to one organization, and every store call the engine makes
+// for a line is bound to it (domain.WithOrg), so row-level security keeps each organization's
+// work apart even through a bug. Tick claims fairly across organizations (claim.go), sweeps run
+// once per active organization, and Submit and the human decisions act only on factories of the
+// organization in their context.
+//
 // Phase 1 scope. The engine pulls into every agent station with free capacity, releases
 // items waiting at queue stations straight to the next station, prepares a fresh workspace
 // (a clone of the factory's repository on the item's branch) for every run, validates outputs
@@ -29,6 +35,7 @@ import (
 	"maps"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/byFrederick/goal/internal/domain"
@@ -38,9 +45,15 @@ import (
 // ErrNotWaitingHuman means a human decision was made on an item that is not waiting for one.
 var ErrNotWaitingHuman = errors.New("item is not waiting for a human")
 
+// Orgs lists the organizations whose leases the engine sweeps; ports.Tenancy satisfies it.
+type Orgs interface {
+	ActiveOrgs(ctx context.Context) ([]domain.OrgID, error)
+}
+
 // Deps are the ports the engine works through.
 type Deps struct {
 	Store      ports.Store
+	Orgs       Orgs
 	Runner     ports.Runner
 	Workspaces ports.Workspaces
 	Checker    ports.Checker
@@ -55,7 +68,7 @@ type Deps struct {
 }
 
 func (d Deps) complete() bool {
-	return d.Store != nil && d.Runner != nil && d.Workspaces != nil && d.Checker != nil && d.Contracts != nil &&
+	return d.Store != nil && d.Orgs != nil && d.Runner != nil && d.Workspaces != nil && d.Checker != nil && d.Contracts != nil &&
 		d.Secrets != nil && d.CodeHost != nil && d.Clock != nil
 }
 
@@ -82,6 +95,9 @@ type Config struct {
 	// TaskEnv maps environment variables for every task to secret references, resolved
 	// through Secrets when the task starts (for example model credentials).
 	TaskEnv map[string]string
+	// MaxRuns caps the agent runs this instance has in flight at once; 0 means no cap. With a
+	// cap, a busy organization cannot fill the instance before a quiet one's first item starts.
+	MaxRuns int
 }
 
 // keyReason is the event data key that explains a block, rejection or escalation.
@@ -99,6 +115,7 @@ const (
 // Engine runs factory lines. It is safe for concurrent use.
 type Engine struct {
 	store      ports.Store
+	orgs       Orgs
 	runner     ports.Runner
 	workspaces ports.Workspaces
 	checker    ports.Checker
@@ -113,8 +130,13 @@ type Engine struct {
 	mu    sync.RWMutex
 	lines map[domain.FactoryID]domain.Line
 
-	// runs tracks this instance's in-flight agent runs so shutdown can wait for them.
-	runs sync.WaitGroup
+	// runs tracks this instance's in-flight agent runs so shutdown can wait for them, and
+	// running counts them for MaxRuns.
+	runs    sync.WaitGroup
+	running atomic.Int64
+	// ticks rotates the order in which organizations and factories claim, tick after tick.
+	// Like running, it is a local scheduling hint, not state.
+	ticks atomic.Uint64
 }
 
 // New returns an engine for the given lines.
@@ -132,6 +154,10 @@ func New(d Deps, cfg Config) (*Engine, error) {
 		return nil, errors.New("engine: a gateway URL needs a gateway key reference")
 	}
 
+	if cfg.MaxRuns < 0 {
+		return nil, fmt.Errorf("engine: max runs %d is negative", cfg.MaxRuns)
+	}
+
 	lines, err := index(cfg.Lines)
 	if err != nil {
 		return nil, err
@@ -143,7 +169,7 @@ func New(d Deps, cfg Config) (*Engine, error) {
 	}
 
 	return &Engine{
-		store: d.Store, runner: d.Runner, workspaces: d.Workspaces, checker: d.Checker, contracts: d.Contracts,
+		store: d.Store, orgs: d.Orgs, runner: d.Runner, workspaces: d.Workspaces, checker: d.Checker, contracts: d.Contracts,
 		secrets: d.Secrets, codehost: d.CodeHost, clock: d.Clock, log: log, runEnded: d.RunEnded, cfg: cfg, lines: lines,
 	}, nil
 }
@@ -171,6 +197,10 @@ func index(ls []domain.Line) (map[domain.FactoryID]domain.Line, error) {
 	for _, l := range ls {
 		if _, dup := lines[l.FactoryID]; dup {
 			return nil, fmt.Errorf("engine: factory %s has two lines", l.FactoryID)
+		}
+
+		if l.OrgID == "" {
+			return nil, fmt.Errorf("engine: factory %s belongs to no organization", l.FactoryID)
 		}
 
 		if len(l.Stations) == 0 || l.Stations[len(l.Stations)-1].Kind != domain.KindDone {
@@ -238,9 +268,10 @@ func (e *Engine) Run(ctx context.Context) error {
 // Wait blocks until every agent run started by this instance's ticks has finished.
 func (e *Engine) Wait() { e.runs.Wait() }
 
-// Submit creates an item at the first station of its factory's line.
+// Submit creates an item at the first station of its factory's line. The factory must belong
+// to the organization in ctx; any other is ports.ErrNotFound.
 func (e *Engine) Submit(ctx context.Context, n domain.NewItem) (domain.Item, error) {
-	l, err := e.line(n.FactoryID)
+	l, err := e.lineIn(ctx, n.FactoryID)
 	if err != nil {
 		return domain.Item{}, err
 	}
@@ -264,9 +295,10 @@ func (e *Engine) Submit(ctx context.Context, n domain.NewItem) (domain.Item, err
 	return it, nil
 }
 
-// Tick does one round of pulling for every line: items waiting at queue stations move to the
-// next station, and every agent station claims work into its free slots and starts runs.
-// Runs continue in the background under ctx; Wait waits for them.
+// Tick does one round of pulling: items waiting at queue stations move to the next station,
+// line by line, then agent stations claim work into their free slots and start runs, fairly
+// across organizations (claim). Each line's store calls are bound to its organization, whatever
+// ctx carries. Runs continue in the background under ctx; Wait waits for them.
 func (e *Engine) Tick(ctx context.Context) error {
 	var errs []error
 
@@ -276,34 +308,50 @@ func (e *Engine) Tick(ctx context.Context) error {
 
 	for _, id := range slices.Sorted(maps.Keys(lines)) {
 		l := lines[id]
+		lctx := domain.WithOrg(ctx, l.OrgID)
+
 		for _, st := range l.Stations {
-			switch st.Kind {
-			case domain.KindQueue:
-				errs = append(errs, e.releaseQueue(ctx, l, st))
-			case domain.KindAgent:
-				errs = append(errs, e.pull(ctx, l, st))
-			case domain.KindHuman, domain.KindDone:
+			if st.Kind == domain.KindQueue {
+				errs = append(errs, e.releaseQueue(lctx, l, st))
 			}
 		}
 	}
+
+	errs = append(errs, e.claim(ctx, lines))
 
 	return errors.Join(errs...)
 }
 
 // SweepLeases returns items whose lease expired (their holder died or stalled) to the queue
-// at the same station and reports how many it requeued.
+// at the same station, in every active organization, including leases on factories that are no
+// longer loaded, and reports how many it requeued.
 func (e *Engine) SweepLeases(ctx context.Context) (int, error) {
-	leases, err := e.store.RequeueExpiredLeases(ctx, e.clock.Now(), e.cfg.SweepLimit)
+	orgs, err := e.orgs.ActiveOrgs(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("sweep leases: %w", err)
+		return 0, fmt.Errorf("sweep leases: list organizations: %w", err)
 	}
 
-	for _, l := range leases {
-		e.log.WarnContext(ctx, "lease expired; item requeued",
-			slog.String("factory", string(l.FactoryID)), slog.String("item", string(l.ItemID)), slog.String("station", l.Station))
+	var (
+		swept int
+		errs  []error
+	)
+
+	for _, org := range orgs {
+		leases, err := e.store.RequeueExpiredLeases(domain.WithOrg(ctx, org), e.clock.Now(), e.cfg.SweepLimit)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("sweep leases of organization %s: %w", org, err))
+			continue
+		}
+
+		for _, l := range leases {
+			e.log.WarnContext(ctx, "lease expired; item requeued", slog.String("org_id", string(org)),
+				slog.String("factory", string(l.FactoryID)), slog.String("item", string(l.ItemID)), slog.String("station", l.Station))
+		}
+
+		swept += len(leases)
 	}
 
-	return len(leases), nil
+	return swept, errors.Join(errs...)
 }
 
 // releaseQueue moves items waiting at a queue station to the next station.
@@ -327,44 +375,6 @@ func (e *Engine) releaseQueue(ctx context.Context, l domain.Line, st domain.Stat
 		if err != nil && !errors.Is(err, ports.ErrConflict) {
 			return fmt.Errorf("station %s: release item %s: %w", st.ID, it.ID, err)
 		}
-	}
-
-	return nil
-}
-
-// pull fills the station's free slots with claims and starts a run for each.
-func (e *Engine) pull(ctx context.Context, l domain.Line, st domain.Station) error {
-	leases, err := e.store.Leases(ctx, l.FactoryID, st.ID)
-	if err != nil {
-		return fmt.Errorf("station %s: list leases: %w", st.ID, err)
-	}
-
-	taken := make(map[int]bool, len(leases))
-	for _, ls := range leases {
-		taken[ls.Slot] = true
-	}
-
-	for slot := range st.Capacity() {
-		if taken[slot] {
-			continue
-		}
-
-		now := e.clock.Now()
-
-		it, lease, err := e.store.ClaimNext(ctx, ports.Claim{
-			FactoryID: l.FactoryID, Station: st, Slot: slot, Now: now, ExpiresAt: now.Add(e.cfg.LeaseTTL),
-		})
-
-		switch {
-		case errors.Is(err, ports.ErrNoWork):
-			return nil
-		case errors.Is(err, ports.ErrSlotTaken):
-			continue
-		case err != nil:
-			return fmt.Errorf("station %s: claim slot %d: %w", st.ID, slot, err)
-		}
-
-		e.runs.Go(func() { e.work(ctx, l, st, it, lease) })
 	}
 
 	return nil
@@ -395,13 +405,23 @@ func (e *Engine) arrive(it domain.Item, to domain.Station, actor string) (domain
 	return pos, events, doneAt
 }
 
-func (e *Engine) line(id domain.FactoryID) (domain.Line, error) {
+// lineIn returns the line of a factory of the organization in ctx. A factory of another
+// organization is ports.ErrNotFound, so an API bug cannot act on another organization's work.
+func (e *Engine) lineIn(ctx context.Context, id domain.FactoryID) (domain.Line, error) {
+	org, ok := domain.OrgFrom(ctx)
+	if !ok {
+		return domain.Line{}, fmt.Errorf("factory %s: %w", id, domain.ErrNoOrg)
+	}
+
 	e.mu.RLock()
 	l, ok := e.lines[id]
 	e.mu.RUnlock()
 
-	if !ok {
+	switch {
+	case !ok:
 		return domain.Line{}, fmt.Errorf("factory %s is not loaded", id)
+	case l.OrgID != org:
+		return domain.Line{}, fmt.Errorf("factory %s: %w", id, ports.ErrNotFound)
 	}
 
 	return l, nil

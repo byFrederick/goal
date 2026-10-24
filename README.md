@@ -10,7 +10,7 @@ cmd/goald/             daemon: flow engine, HTTP API (/v1/, with an SSE stream),
 api/                   openapi.yaml: the HTTP API contract (Go types in internal/api/gen, TypeScript in packages/api-client)
 internal/engine/       flow engine: pull, WIP, gates, workspaces and command checks per run
 internal/config/       loader and cross-reference validation (reads a folder or a bucket prefix)
-internal/factorystore/ bucket layout factories/<id>/: push, pull, list
+internal/factorystore/ bucket layout orgs/<org-id>/factories/<id>/: push, pull, list, the legacy move
 internal/adapters/     postgres (store, LISTEN/NOTIFY), s3store (S3 and RustFS), docker (runner, checker), gitworkspace, github (merges), envsecrets, sysclock
 packages/api-client/   @goal/api-client: typed TypeScript client of the API (generated types + openapi-fetch) for the UI
 schema/                factory.schema.json, evals.schema.json (editor autocompletion + validation)
@@ -76,7 +76,7 @@ Read `AGENTS.md` before changing anything.
 One bucket, versioned. Locally it is `goal-local` on RustFS (`compose.yaml`); on AWS it is `goal-<account>-<region>`.
 
 ```
-s3://<bucket>/factories/<factory-id>/
+s3://<bucket>/orgs/<org-id>/factories/<factory-id>/
   factory.yaml
   agents/*.md
   skills/<name>/SKILL.md
@@ -105,7 +105,7 @@ task factory:push DIR=../goal-factories/sre         # validate, then upload; pri
 
 ## Factories are keyed by UUID
 
-Every factory has an immutable `metadata.id`. Its bucket prefix (`factories/<id>/`), database rows and every AWS resource use it, so you can rename a factory or its folder at any time. When you copy a factory, give the copy a new id (`uuidgen | tr A-Z a-z`); `goal factory validate` rejects duplicates among the folders it checks.
+Every factory has an immutable `metadata.id`. Its bucket prefix (`orgs/<org-id>/factories/<id>/`), database rows and every AWS resource use it, so you can rename a factory or its folder at any time. When you copy a factory, give the copy a new id (`uuidgen | tr A-Z a-z`); `goal factory validate` rejects duplicates among the folders it checks.
 
 ## Add a factory
 
