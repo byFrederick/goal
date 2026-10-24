@@ -4,7 +4,7 @@ Goal is a config-driven platform for AI agent factories. It runs on a laptop tod
 
 ## Non-negotiables
 
-1. **Config-driven.** Domain behavior lives in factory definitions in the bucket (`s3://<bucket>/factories/<id>/`), never in this repository. No station, agent, work-type or factory name is hard-coded in Go, SQL or TypeScript, and no factory definition is committed here: the repo keeps only the JSON Schemas and small test fixtures (`internal/config/testdata`, sample org `acme`).
+1. **Config-driven.** Domain behavior lives in factory definitions (content in the bucket, versions in PostgreSQL; ADR 0005), never in this repository. No station, agent, work-type or factory name is hard-coded in Go, SQL or TypeScript, and no factory definition is committed here: the repo keeps only the JSON Schemas and small test fixtures (`internal/config/testdata`, sample org `acme`).
 2. **Factories are keyed by `metadata.id` (UUID).** Rows, S3 prefixes and AWS resources use the id, never the name.
 3. **PostgreSQL is the only database.** No SQLite, Redis, queues or caches. The one versioned object storage bucket (S3; RustFS locally) holds factory definitions and, later, knowledge documents; nothing else. Work claims use `FOR UPDATE SKIP LOCKED`; realtime uses `LISTEN/NOTIFY`; scheduled jobs take a `pg_try_advisory_lock`.
 4. **Stateless processes.** `goald` keeps no state in memory or on local disk that another instance would need. Any instance can die at any time; leases and idempotent steps recover the work.
@@ -28,7 +28,7 @@ internal/api/        HTTP API handlers for api/openapi.yaml (generated types in 
 internal/gateway/    MCP gateway inside goald: task-token auth, per-agent tools, credentials added on the host
 internal/definitions/ goald's cache of the bucket's factory definitions: contracts, agent files, gateway lookups
 internal/config/     loads and validates one factory definition from an fs.FS (bucket prefix or local folder)
-internal/factorystore/ bucket layout factories/<id>/: push, pull, list, fs.FS view. Imports config + ports only.
+internal/factorystore/ legacy per-factory bucket prefixes, read once by the import into versions (2.2-B). Imports config + ports only.
 migrations/          forward-only SQL (goose); never edit an applied file
 queries/             SQL for sqlc
 api/                 openapi.yaml + events.schema.json: the only contract between goald and TypeScript
@@ -43,7 +43,7 @@ Taskfile.yml         task check = everything the pre-push hook and CI run
 compose.yaml         local PostgreSQL 18 and RustFS (S3-compatible)
 ```
 
-Factory definitions are not in this tree. They live in the bucket under `factories/<metadata.id>/` (`factory.yaml`, `agents/`, `skills/`, `contracts/`, `evals/`; `knowledge/` is reserved for the knowledge base). Edit them in a working copy outside the repo: `goal factory pull` → edit → `goal factory validate` → `goal factory push` (ADR 0005).
+Factory definitions are not in this tree. A definition is a file tree (`factory.yaml`, `agents/`, `skills/`, `contracts/`, `evals/`) whose files are stored in the bucket as content-addressed blobs (`orgs/<org-id>/blobs/<sha256>`); PostgreSQL holds each draft and published version as a manifest (path → sha256) and points each factory at the version that runs (`definition_versions`, `factories.current_version_id`). Edit them in the builder or in a working copy outside the repo: `goal factory pull` → edit → `goal factory validate` → `goal factory push` (ADR 0005 and its 2.2 amendment).
 
 Create a package only when it has a clear single responsibility and at least one caller. No `util`, `common`, `helpers` or `misc` packages.
 

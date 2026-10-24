@@ -133,18 +133,27 @@ A pull request that is already merged (a merge whose approval failed) is approve
 
 ### Factory definitions in object storage
 
-Definitions are content, not code ([ADR 0005](../adr/0005-factory-definitions-in-object-storage.md)). One versioned bucket holds every factory under its id:
+Definitions are content, not code ([ADR 0005](../adr/0005-factory-definitions-in-object-storage.md) and its 2.2 amendment). The content lives in the bucket; the versions and the pointer to the running one live in PostgreSQL:
 
 ```
-s3://<bucket>/factories/<factory-id>/
-  factory.yaml  agents/  skills/  contracts/  evals/     the definition
-  knowledge/<collection>/                                reserved for the knowledge base (later, unscheduled)
+s3://<bucket>/
+  orgs/<org-id>/blobs/<sha256>          every definition file (factory.yaml, agents/, skills/, contracts/, evals/), once per org, never overwritten
+  catalog/templates/<name>/<version>/   curated starting points; catalog/skills/ (D) and catalog/connectors/ (phase 3) beside it
+
+PostgreSQL
+  definition_versions   one row per draft or published version: manifest {path → sha256}, number, revision, author, publisher
+  definition_blobs      the hashes each org has stored
+  factories.current_version_id          the published version that runs; publish and restore move it in one transaction
+  agent_runs.definition_version_id      the version a run started on, and finishes on
 ```
 
-- `internal/config` loads a definition from any `fs.FS`; `LoadDir` wraps a local working copy. Paths in `factory.yaml` resolve inside that tree only.
-- `internal/factorystore` owns the layout. `Push` validates a folder, uploads new and changed files (`factory.yaml` last), deletes files that were removed and never touches `knowledge/`. `Open` reads a factory's prefix at the listed object versions into an in-memory `fs.FS` (`Snapshot`), so a reader never mixes two pushes and can record exactly which versions it ran. `Pull` writes a snapshot into an empty folder; `List` validates every factory in the bucket.
-- `internal/adapters/s3store` implements `ObjectStore` with the AWS SDK for Go v2: a custom endpoint with path-style addressing for RustFS, the standard credential chain on AWS. `EnsureBucket` (used by `goal storage init`) creates the bucket and turns versioning on.
-- Rollback restores earlier object versions; the bucket keeps them for the lifecycle window.
+- **Content.** A blob's key is the lowercase hex SHA-256 of its bytes. It is written with a conditional put and never rewritten, so a version's tree is reproducible from its manifest alone and identical files are stored once across versions and clones. Readers verify the hash of every blob they fetch.
+- **Versions.** A factory has at most one open draft, shared by its editors and saved with optimistic concurrency on its revision. Publishing makes it version N+1, moves `current_version_id` and writes the audit row in one transaction; a trigger NOTIFYs `goal_definitions`, and every goald reloads. Published versions never change; restore moves the pointer back, and numbers are never reused.
+- **Runs.** A run keeps the version it started on (contract, checks, agent files, gateway tools); an item's next step uses the current version.
+- `internal/config` loads a definition from any `fs.FS`, built from a manifest and its blobs or, for a local working copy, by `LoadDir`. Paths in `factory.yaml` resolve inside that tree only.
+- `internal/adapters/s3store` implements `ObjectStore` with the AWS SDK for Go v2: a custom endpoint with path-style addressing for RustFS, the standard credential chain on AWS. `EnsureBucket` (used by `goal storage init`) creates the bucket and turns versioning on, which stays as protection against deletes, no longer as the version mechanism.
+- Editing goes through goald's API: the builder and the CLI (`goal factory pull/push/validate/publish`) write the draft.
+- **Transition (2.2-B).** The pre-2.2 layout, one prefix of mutable files per factory read by `internal/factorystore` (`factories/<id>/`, moved by 2.2-A to the interim `orgs/<org-id>/factories/<id>/`), is imported once as v1 of each factory and then ignored. Until that import ships (B7), goald and the CLI still read and write that prefix.
 
 ### Wiring
 

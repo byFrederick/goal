@@ -1,6 +1,6 @@
 # ADR 0005 — Factory definitions in object storage
 
-Status: accepted · 2026-10-23 · Amends [ADR 0001](0001-technology-stack.md) and [ADR 0002](0002-jonah-evals.md)
+Status: accepted · 2026-10-23 · Amends [ADR 0001](0001-technology-stack.md) and [ADR 0002](0002-jonah-evals.md) · Amended in 2.2: decisions 1, 2, 4, 5 and 7 are replaced by the [amendment](#amendment--22-versions-in-postgresql-content-as-blobs) at the end
 
 ## Context
 
@@ -38,3 +38,44 @@ A factory's behavior is its definition: `factory.yaml`, agent prompts, skills, c
 - `task check` validates the test fixtures; real definitions are validated on every push and by `goal factory list`.
 - Local development needs RustFS (`task storage:up`, `task storage:init`); `task test-integration` runs the adapter against it.
 - Factory content can no longer be reviewed in this repository's pull requests. Review happens in the working copy before a push, and every push is attributable and reversible by object version.
+
+## Amendment — 2.2: versions in PostgreSQL, content as blobs
+
+Status: accepted · 2026-10-23 · amends decisions 1, 2, 4, 5 and 7. Specified in [2.2-B](../specs/2.2-b-definitions.md); built in its pull requests B2–B10.
+
+**Context.** A version was "whatever object versions a listing returned". A bucket has no transaction across objects, so a refresh that lists a prefix halfway through a push can load new prompts with the old `factory.yaml`; pushing `factory.yaml` last narrows that window but does not close it. The builder adds shared drafts, publishing by people in the UI, rollback, per-run version pinning and questions such as "which factories use this credential", all of which need atomic writes, foreign keys and queries. Organizations (2.2-A) also make the tenant part of every key.
+
+**Decision.**
+
+1. The bucket stays the home of definition **content**: every file is stored once per organization under its SHA-256, `orgs/<org-id>/blobs/<sha256>` (lowercase hex, no extension), written with a conditional put (`PutIfAbsent`) and never overwritten. Readers verify the hash of every blob they fetch.
+2. PostgreSQL is the **index of versions**: `definition_versions` holds each draft and published version of a factory as a manifest (slash path relative to the factory root → sha256) with its number, author and publisher; `factories.current_version_id` names the version that runs. A factory has at most one open draft. Publishing (and restoring) is one transaction that also writes the audit row; a trigger NOTIFYs `goal_definitions` and every goald reloads. Published versions are immutable; rollback (restore) moves the pointer, and numbers are never reused.
+3. Agent runs record the version they started on (`agent_runs.definition_version_id`) and finish on it; the next step of an item uses the current version. Items are not pinned to versions.
+4. `internal/config` still loads a definition from an `fs.FS`; the tree now comes from a manifest and its blobs.
+5. Editing happens through goald's API: the builder (Visual and YAML) and the CLI both write a draft; `goal factory pull/push/validate/list/publish` call the API instead of the bucket. Validation runs on save and before publish and includes secret references (credential grants once phase 3 lands).
+6. Jonah's remediations become drafts published like any other; their rollback pin is the previous version id.
+7. Templates are definitions saved as data under `catalog/templates/<name>/<version>/`. The other two curated catalogs are definition content too: vendorable skills under `catalog/skills/` (phase D) and connector specs under `catalog/connectors/` (phase 3). Nothing else goes in the bucket.
+
+The layout after this amendment:
+
+```
+s3://<bucket>/
+  orgs/<org-id>/blobs/<sha256>             one definition file, written once, never overwritten
+  catalog/templates/<name>/<version>/      template.yaml + factory/ (a definition tree)
+  catalog/skills/                          vendorable skills (phase D)
+  catalog/connectors/                      connector specs (phase 3)
+```
+
+**Rejected.**
+
+- Keeping versions implicit in object versions: no atomicity across files, no foreign keys, no queries.
+- Moving file content into PostgreSQL: definitions are file trees that agents and Bedrock read as files; the bucket keeps them cheap and readable.
+- Per-factory prefixes of mutable files: the blob store deduplicates across versions and clones and makes every version reproducible.
+
+**Consequences.**
+
+- A version is reproducible from its manifest alone. Paths that ADRs 0001 and 0002 write as `factories/<id>/…` (evals, cases) now name files of a version's tree, not bucket keys.
+- The legacy prefix (`factories/<id>/`, which 2.2-A moves to the interim `orgs/<org-id>/factories/<id>/`) is imported once as v1 of each factory and then ignored; its objects stay in place for rollback until removed by hand.
+- Unreferenced blobs (abandoned uploads, discarded drafts) accumulate until a garbage collector is added.
+- The bucket's object versioning stays on as protection, no longer as the version mechanism.
+- Where knowledge documents live in the bucket is decided with the knowledge base (later, unscheduled); decision 6 is unchanged.
+
