@@ -2,7 +2,8 @@
 // id (['org', org, …], C §10.10, so a slug rename does not split the cache), then factory (by id,
 // as stream events name it) → resource, so the stream can invalidate exactly what an event
 // touches and a resync everything of one organization. Requests name the factory by id too.
-import { type QueryClient, queryOptions } from '@tanstack/react-query';
+import { keepPreviousData, type QueryClient, queryOptions } from '@tanstack/react-query';
+import { getBuilderMeta, getSkillFiles, type SkillKey, searchSkills } from './builder';
 import {
   ApiError,
   getAttention,
@@ -243,6 +244,42 @@ export const templateQuery = (org: string, name: string, version?: number) =>
     queryKey: defKeys.template(org, name, version),
     queryFn: ({ signal }) => getTemplate(org, name, version, signal),
     staleTime: version === undefined ? 300_000 : Number.POSITIVE_INFINITY,
+  });
+
+/**
+ * The builder keys (D §10.4), under the organization: the editor's metadata, catalog searches by
+ * their text, and catalog skill folders by key.
+ */
+export const builderKeys = {
+  meta: (org: string) => ['org', org, 'builder', 'meta'] as const,
+  skills: (org: string, q: string) => ['org', org, 'builder', 'skills', q] as const,
+  skillFiles: (org: string, key: string) => ['org', org, 'builder', 'skill', key] as const,
+};
+
+/** Models and capabilities change only when goald restarts. */
+export const builderMetaQuery = (org: string) =>
+  queryOptions({
+    queryKey: builderKeys.meta(org),
+    queryFn: ({ signal }) => getBuilderMeta(org, signal),
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+
+/** The catalog's first page for q; the previous answer stays on screen while the next loads. */
+export const skillsQuery = (org: string, q: string) =>
+  queryOptions({
+    queryKey: builderKeys.skills(org, q),
+    queryFn: ({ signal }) => searchSkills(org, { q }, signal),
+    staleTime: 300_000,
+    placeholderData: keepPreviousData,
+  });
+
+/** A catalog skill is pinned at a commit: its files never change. */
+export const skillFilesQuery = (org: string, key: SkillKey) =>
+  queryOptions({
+    queryKey: builderKeys.skillFiles(org, key),
+    queryFn: ({ signal }) => getSkillFiles(org, key, signal),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: retryUnlessRefused,
   });
 
 /** Retries a failed read, but not goald's refusals (4xx): asking again gets the same answer. */
