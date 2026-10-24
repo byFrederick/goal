@@ -291,12 +291,18 @@ export const draftFileQuery = (org: string, factory: string, path: string) =>
     retry: retryUnlessRefused,
   });
 
-/** The draft validated at one revision: a result never goes stale, the next save is a new key. */
+/** The draft validated at one revision: a result of that revision never goes stale, the next save is a new key. */
 export const validationQuery = (org: string, factory: string, revision: number) =>
   queryOptions({
     queryKey: defKeys.validation(org, factory, revision),
-    queryFn: ({ signal }) => validateDraft(org, factory, {}, signal),
-    staleTime: Number.POSITIVE_INFINITY,
+    // goald validates the draft as it is when the request arrives (the request names no revision):
+    // a later revision's result is cached under its own revision, and is stale under this one.
+    queryFn: async ({ signal, client }) => {
+      const result = await validateDraft(org, factory, {}, signal);
+      if (result.revision !== revision) client.setQueryData(defKeys.validation(org, factory, result.revision), result);
+      return result;
+    },
+    staleTime: (query) => (query.state.data?.revision === revision ? Number.POSITIVE_INFINITY : 0),
   });
 
 export const versionsQuery = (org: string, factory: string) =>
