@@ -12,6 +12,56 @@ import (
 	"github.com/google/uuid"
 )
 
+const cancelLostRuns = `-- name: CancelLostRuns :many
+UPDATE agent_runs SET status = 'cancelled', error = $1, ended_at = $2
+WHERE id = ANY ($3::uuid[]) AND status = 'running'
+RETURNING id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id
+`
+
+type CancelLostRunsParams struct {
+	Error   *string
+	EndedAt *time.Time
+	Ids     []uuid.UUID
+}
+
+func (q *Queries) CancelLostRuns(ctx context.Context, arg CancelLostRunsParams) ([]AgentRun, error) {
+	rows, err := q.db.Query(ctx, cancelLostRuns, arg.Error, arg.EndedAt, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AgentRun
+	for rows.Next() {
+		var i AgentRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.FactoryID,
+			&i.ItemID,
+			&i.Station,
+			&i.Agent,
+			&i.Model,
+			&i.SessionID,
+			&i.Status,
+			&i.Turns,
+			&i.InputTokens,
+			&i.OutputTokens,
+			&i.CostUsd,
+			&i.Error,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.OrgID,
+			&i.DefinitionVersionID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const factorySpendSince = `-- name: FactorySpendSince :one
 SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd
 FROM agent_runs
@@ -205,6 +255,57 @@ func (q *Queries) ItemRuns(ctx context.Context, arg ItemRunsParams) ([]AgentRun,
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockLostRuns = `-- name: LockLostRuns :many
+WITH lost AS (
+  SELECT r.id, coalesce((
+    SELECT max(s.ended_at) FROM lease_spans s
+    WHERE s.item_id = r.item_id AND s.station = r.station AND s.acquired_at <= r.started_at
+  ), r.started_at)::timestamptz AS lease_ended_at
+  FROM agent_runs r
+  WHERE r.status = 'running' AND NOT EXISTS (
+    SELECT 1 FROM leases l WHERE l.item_id = r.item_id AND l.station = r.station AND l.acquired_at <= r.started_at
+  )
+)
+SELECT r.id FROM lost
+JOIN agent_runs r ON r.id = lost.id
+JOIN work_items w ON w.id = r.item_id
+WHERE lost.lease_ended_at < $1::timestamptz AND r.status = 'running'
+ORDER BY lost.lease_ended_at, r.started_at, r.id
+LIMIT $2::bigint
+FOR UPDATE OF r SKIP LOCKED
+FOR NO KEY UPDATE OF w SKIP LOCKED
+`
+
+type LockLostRunsParams struct {
+	EndedBefore time.Time
+	MaxRuns     int64
+}
+
+// Running runs whose lease is gone and ended before ended_before, the earliest end first. A run's
+// lease is the item's lease at the run's station acquired no later than the run started: none of
+// those is live, and the latest of their spans ended before the cutoff (or, when they left no
+// span, the run started before it). Skips runs whose item another transaction holds (a
+// transition or a finish in flight); agent_runs_running_idx keeps the read on running runs.
+func (q *Queries) LockLostRuns(ctx context.Context, arg LockLostRunsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockLostRuns, arg.EndedBefore, arg.MaxRuns)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

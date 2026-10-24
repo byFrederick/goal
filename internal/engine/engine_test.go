@@ -543,6 +543,60 @@ func TestSweep_ExpiredLeaseRequeues(t *testing.T) {
 	}
 }
 
+// A person pauses an item while the instance running it is dead: nobody hears the pause, so the
+// sweep finishes the dead instance's run as cancelled once a lease TTL has passed since the pause,
+// the time its instance would have had to notice at its next heartbeat.
+func TestSweep_RunLostWithItsInstanceIsCancelledAfterTheGrace(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, lineOf(agentStation(stWork, agWorker, 1, 1)), porttest.Succeed(`{}`))
+	crashed := h.submit(t, domain.NewItem{})
+
+	h.claimAsDeadInstance(t, crashed, stWork)
+
+	run, err := h.store.StartRun(inOrg(t), ports.NewRun{
+		FactoryID: h.line.FactoryID, ItemID: crashed.ID, Station: stWork, Agent: agWorker, StartedAt: h.clock.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.e.Pause(inOrg(t), crashed.ID, human, "the vendor is away"); err != nil {
+		t.Fatal(err)
+	}
+
+	runOf := func() domain.Run {
+		t.Helper()
+
+		r, err := h.store.Run(inOrg(t), run)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return r
+	}
+
+	h.clock.Advance(ttl)
+
+	if _, err := h.e.SweepLeases(inOrg(t)); err != nil || runOf().Result.Status != domain.RunRunning {
+		t.Fatalf("sweep within the grace: run %+v (%v); want still running", runOf(), err)
+	}
+
+	h.clock.Advance(time.Second)
+
+	if _, err := h.e.SweepLeases(inOrg(t)); err != nil {
+		t.Fatal(err)
+	}
+
+	if r := runOf(); r.Result.Status != domain.RunCancelled || r.Result.Error != domain.RunLostError || !r.EndedAt.Equal(h.clock.Now()) {
+		t.Errorf("run after the grace = %+v; want cancelled as lost, ended now", r)
+	}
+
+	if got := h.item(t, crashed.ID); got.Position() != (domain.Position{Station: stWork, State: domain.StateBlocked}) {
+		t.Errorf("item at %+v; want still paused at work", got.Position())
+	}
+}
+
 func TestRun_LoopTicksOnTheClock(t *testing.T) {
 	t.Parallel()
 

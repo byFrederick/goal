@@ -377,7 +377,10 @@ func (e *Engine) Tick(ctx context.Context) error {
 
 // SweepLeases returns items whose lease expired (their holder died or stalled) to the queue
 // at the same station, in every active organization, including leases on factories that are no
-// longer loaded, and reports how many it requeued.
+// longer loaded, and reports how many it requeued. It also finishes, as cancelled, the runs that
+// lost their instance after a person took their lease (Move, Pause, Reject, send back): a run
+// whose lease ended more than a LeaseTTL ago and that is still running has no instance left to
+// finish it, since the live one notices at its next heartbeat, within the TTL.
 func (e *Engine) SweepLeases(ctx context.Context) (int, error) {
 	orgs, err := e.orgs.ActiveOrgs(ctx)
 	if err != nil {
@@ -402,6 +405,18 @@ func (e *Engine) SweepLeases(ctx context.Context) (int, error) {
 		}
 
 		swept += len(leases)
+
+		now := e.clock.Now()
+
+		runs, err := e.store.FinishLostRuns(domain.WithOrg(ctx, org), now.Add(-e.cfg.LeaseTTL), now, e.cfg.SweepLimit)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("sweep lost runs of organization %s: %w", org, err))
+		}
+
+		for _, r := range runs {
+			e.log.WarnContext(ctx, "run lost with its instance; cancelled", slog.String("org_id", string(org)),
+				slog.String("factory", string(r.FactoryID)), slog.String("item", string(r.ItemID)), slog.String("run", string(r.ID)))
+		}
 	}
 
 	return swept, errors.Join(errs...)

@@ -430,6 +430,74 @@ func (s *Store) RequeueExpiredLeases(ctx context.Context, now time.Time, limit i
 	return expired, nil
 }
 
+// FinishLostRuns implements ports.Store.
+func (s *Store) FinishLostRuns(ctx context.Context, endedBefore, now time.Time, limit int) ([]domain.Run, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.changes.signal()
+	defer s.mu.Unlock()
+
+	type lostRun struct {
+		run   *domain.Run
+		ended time.Time
+	}
+
+	var lost []lostRun
+
+	for _, r := range s.runs {
+		if _, ok := s.visible(r.ItemID, org); !ok || r.Result.Status != domain.RunRunning {
+			continue
+		}
+
+		if ended, gone := s.leaseEnded(r); gone && ended.Before(endedBefore) {
+			lost = append(lost, lostRun{run: r, ended: ended})
+		}
+	}
+
+	slices.SortFunc(lost, func(a, b lostRun) int {
+		return cmp.Or(a.ended.Compare(b.ended), a.run.StartedAt.Compare(b.run.StartedAt), cmp.Compare(a.run.ID, b.run.ID))
+	})
+
+	out := make([]domain.Run, 0, min(limit, len(lost)))
+
+	for _, l := range lost[:min(limit, len(lost))] {
+		r := l.run
+		r.Result, r.EndedAt = domain.RunResult{Status: domain.RunCancelled, Error: domain.RunLostError}, now
+		s.append(domain.Event{
+			FactoryID: r.FactoryID, ItemID: r.ItemID, RunID: r.ID, At: now, Kind: domain.EventRunFinished,
+			Station: r.Station, Actor: r.Agent, Data: map[string]any{
+				"status": string(domain.RunCancelled), "error": domain.RunLostError, "cost_usd": 0.0, "turns": 0,
+			},
+		})
+		out = append(out, *r)
+	}
+
+	return out, nil
+}
+
+// leaseEnded reports whether a run's lease (the item's lease at the run's station acquired no
+// later than the run started) is gone and when it ended: its latest span's end, or the run's
+// start when it left none. Callers hold s.mu.
+func (s *Store) leaseEnded(r *domain.Run) (time.Time, bool) {
+	if l, ok := s.leases[r.ItemID]; ok && l.Station == r.Station && !l.AcquiredAt.After(r.StartedAt) {
+		return time.Time{}, false
+	}
+
+	ended := r.StartedAt
+
+	for _, sp := range s.leaseLog[r.ItemID] {
+		if sp.Station == r.Station && !sp.AcquiredAt.After(r.StartedAt) && sp.EndedAt.After(ended) {
+			ended = sp.EndedAt
+		}
+	}
+
+	return ended, true
+}
+
 // StartRun implements ports.Store.
 func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, error) {
 	org, err := orgOf(ctx)

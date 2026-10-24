@@ -37,3 +37,33 @@ LIMIT sqlc.arg(max_runs)::bigint;
 
 -- name: GetRun :one
 SELECT * FROM agent_runs WHERE id = $1;
+
+-- name: LockLostRuns :many
+-- Running runs whose lease is gone and ended before ended_before, the earliest end first. A run's
+-- lease is the item's lease at the run's station acquired no later than the run started: none of
+-- those is live, and the latest of their spans ended before the cutoff (or, when they left no
+-- span, the run started before it). Skips runs whose item another transaction holds (a
+-- transition or a finish in flight); agent_runs_running_idx keeps the read on running runs.
+WITH lost AS (
+  SELECT r.id, coalesce((
+    SELECT max(s.ended_at) FROM lease_spans s
+    WHERE s.item_id = r.item_id AND s.station = r.station AND s.acquired_at <= r.started_at
+  ), r.started_at)::timestamptz AS lease_ended_at
+  FROM agent_runs r
+  WHERE r.status = 'running' AND NOT EXISTS (
+    SELECT 1 FROM leases l WHERE l.item_id = r.item_id AND l.station = r.station AND l.acquired_at <= r.started_at
+  )
+)
+SELECT r.id FROM lost
+JOIN agent_runs r ON r.id = lost.id
+JOIN work_items w ON w.id = r.item_id
+WHERE lost.lease_ended_at < sqlc.arg(ended_before)::timestamptz AND r.status = 'running'
+ORDER BY lost.lease_ended_at, r.started_at, r.id
+LIMIT sqlc.arg(max_runs)::bigint
+FOR UPDATE OF r SKIP LOCKED
+FOR NO KEY UPDATE OF w SKIP LOCKED;
+
+-- name: CancelLostRuns :many
+UPDATE agent_runs SET status = 'cancelled', error = sqlc.arg(error), ended_at = sqlc.arg(ended_at)
+WHERE id = ANY (sqlc.arg(ids)::uuid[]) AND status = 'running'
+RETURNING *;

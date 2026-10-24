@@ -317,6 +317,53 @@ func (s *Store) RequeueExpiredLeases(ctx context.Context, now time.Time, limit i
 	return expired, nil
 }
 
+// FinishLostRuns implements ports.Store. Runs whose item a transaction in flight holds are
+// skipped; a later sweep sees them if they are still lost.
+func (s *Store) FinishLostRuns(ctx context.Context, endedBefore, now time.Time, limit int) ([]domain.Run, error) {
+	var out []domain.Run
+
+	err := s.inTx(ctx, func(q *db.Queries) error {
+		ids, err := q.LockLostRuns(ctx, db.LockLostRunsParams{EndedBefore: endedBefore, MaxRuns: int64(limit)})
+		if err != nil || len(ids) == 0 {
+			return err
+		}
+
+		msg := domain.RunLostError
+
+		rows, err := q.CancelLostRuns(ctx, db.CancelLostRunsParams{Error: &msg, EndedAt: &now, Ids: ids})
+		if err != nil {
+			return err
+		}
+
+		byID := make(map[uuid.UUID]domain.Run, len(rows))
+		for _, r := range rows {
+			byID[r.ID] = runFrom(r)
+		}
+
+		events := make([]domain.Event, 0, len(ids))
+
+		for _, id := range ids { // in the order the runs' leases ended
+			r, ok := byID[id]
+			if !ok {
+				continue
+			}
+
+			out = append(out, r)
+			events = append(events, domain.Event{
+				FactoryID: r.FactoryID, ItemID: r.ItemID, RunID: r.ID, At: now, Kind: domain.EventRunFinished,
+				Station: r.Station, Actor: r.Agent, Data: runFinished(r.Result),
+			})
+		}
+
+		return appendEvents(ctx, q, events)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("finish lost runs: %w", err)
+	}
+
+	return out, nil
+}
+
 // StartRun implements ports.Store.
 func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, error) {
 	factory, err := parseID("factory", string(r.FactoryID))

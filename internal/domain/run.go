@@ -40,6 +40,10 @@ const (
 	RunCancelled RunStatus = "cancelled"
 )
 
+// RunLostError is the error of a run that was still running when its lease ended without it: the
+// instance running it stopped before it could finish it, so its cost and turns are not known.
+const RunLostError = "the instance running it stopped before finishing it; cost and turns unknown"
+
 // Run is one agent run as recorded by the store.
 type Run struct {
 	ID        RunID

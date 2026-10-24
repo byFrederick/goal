@@ -82,6 +82,15 @@ type Store interface {
 	// item. It returns the leases it removed.
 	RequeueExpiredLeases(ctx context.Context, now time.Time, limit int) ([]domain.Lease, error)
 
+	// FinishLostRuns finishes, as cancelled with error domain.RunLostError and ended at now, up to
+	// limit of the organization's running runs whose lease is gone and ended before endedBefore,
+	// those whose lease ended first. Such a run lost its instance: a person took the item's lease
+	// (Transition.TakeLease) and the instance that would have finished the run with its real cost
+	// had died. A newer lease of the item at the run's station is not the run's. Each run gets a
+	// run_finished event. It returns the runs it finished; runs another transaction holds are left
+	// to the next call.
+	FinishLostRuns(ctx context.Context, endedBefore, now time.Time, limit int) ([]domain.Run, error)
+
 	// StartRun records a running agent run and appends a run_started event.
 	StartRun(ctx context.Context, r NewRun) (domain.RunID, error)
 
