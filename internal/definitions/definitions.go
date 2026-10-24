@@ -408,7 +408,8 @@ func (c *Cache) Lookup(ctx context.Context, ref string) (*config.Factory, error)
 }
 
 // catchUp reloads org when the store names a current version of ref's factory that the cache
-// lacks, and reports whether it did. A failure is logged: the lookup stays a miss.
+// lacks, and reports whether the cache has that version now (reloaded here, or by a concurrent
+// lookup since this one missed). A failure is logged: the lookup stays a miss.
 func (c *Cache) catchUp(ctx context.Context, org domain.OrgID, ref string) bool {
 	log := c.log.With(slog.String("org_id", string(org)), slog.String("factory", ref))
 
@@ -419,11 +420,16 @@ func (c *Cache) catchUp(ctx context.Context, org domain.OrgID, ref string) bool 
 	}
 
 	i := slices.IndexFunc(recs, func(r ports.FactoryRecord) bool { return matches(string(r.ID), r.Name, ref) })
-	if i < 0 || recs[i].Current == nil || c.has(recs[i].Current.ID) {
+	if i < 0 || recs[i].Current == nil {
 		return false
 	}
 
 	want := recs[i].Current.ID
+
+	// Another lookup's reload brought it in since this one missed: find it again.
+	if c.has(want) {
+		return true
+	}
 
 	// The reload outlives a caller that gives up: others may be waiting on it.
 	_, err, _ = c.misses.Do(string(org), func() (any, error) {
