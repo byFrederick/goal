@@ -271,6 +271,25 @@ func (h *harness) item(t *testing.T, id domain.ItemID) domain.Item {
 	return it
 }
 
+// outcomes are how an item's leases ended, in order.
+func (h *harness) outcomes(id domain.ItemID) []domain.LeaseOutcome {
+	var out []domain.LeaseOutcome
+	for _, l := range h.store.LeaseSpans(testOrg, id) {
+		out = append(out, l.Outcome)
+	}
+
+	return out
+}
+
+// expectOutcomes checks how an item's leases ended.
+func (h *harness) expectOutcomes(t *testing.T, id domain.ItemID, want ...domain.LeaseOutcome) {
+	t.Helper()
+
+	if got := h.outcomes(id); !slices.Equal(got, want) {
+		t.Errorf("lease outcomes = %v, want %v (events %v)", got, want, h.kinds(id))
+	}
+}
+
 func (h *harness) kinds(id domain.ItemID) []domain.EventKind {
 	var out []domain.EventKind
 	for _, e := range h.store.Events(id) {
@@ -508,6 +527,8 @@ func TestSweep_ExpiredLeaseRequeues(t *testing.T) {
 	if len(h.eventsOf(crashed.ID, domain.EventLeaseExpired)) != 1 {
 		t.Errorf("events %v, want one lease_expired", h.kinds(crashed.ID))
 	}
+
+	h.expectOutcomes(t, crashed.ID, domain.LeaseExpired)
 
 	if n, err := h.e.SweepLeases(inOrg(t)); err != nil || n != 0 {
 		t.Errorf("second sweep requeued %d (%v), want 0", n, err)

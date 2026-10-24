@@ -302,7 +302,7 @@ func (f *fixture) finish(t *testing.T, it domain.Item, l domain.Lease) {
 
 	_, err := f.Items.Transition(f.ctx(t), ports.Transition{
 		ItemID: it.ID, From: domain.Position{Station: it.Station, State: domain.StateInProgress},
-		To: domain.Position{Station: stReview, State: domain.StateQueued}, Lease: &l, At: t0,
+		To: domain.Position{Station: stReview, State: domain.StateQueued}, Lease: &l, Outcome: domain.LeaseAdvanced, At: t0,
 	})
 	if err != nil {
 		t.Fatalf("Transition: %v", err)

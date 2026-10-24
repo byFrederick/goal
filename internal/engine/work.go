@@ -432,7 +432,8 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output
 
 	t := ports.Transition{
 		ItemID: c.item.ID, From: domain.Position{Station: c.station.ID, State: domain.StateInProgress},
-		Lease: &c.lease, Lane: domain.LaneFrom(output), OutputStation: c.station.ID, Output: output, At: e.clock.Now(),
+		Lease: &c.lease, Outcome: domain.LeaseAdvanced, Lane: domain.LaneFrom(output), OutputStation: c.station.ID,
+		Output: output, At: e.clock.Now(),
 	}
 
 	var err error
@@ -477,7 +478,7 @@ func (e *Engine) gateReject(c claimed, l domain.Line, reason string, t *ports.Tr
 		map[string]any{keyReason: reason, "rework_count": it.ReworkCount}))
 
 	if !gate.CanRework(it.ReworkCount) {
-		t.To = domain.Position{Station: it.Station, State: domain.StateWaitingHuman}
+		t.To, t.Outcome = domain.Position{Station: it.Station, State: domain.StateWaitingHuman}, domain.LeaseEscalated
 		t.Events = append(t.Events, event(it, domain.EventWaitingHuman, t.At, domain.ActorEngine,
 			map[string]any{keyReason: fmt.Sprintf("rejected after %d reworks (max %d)", it.ReworkCount, gate.MaxRework)}))
 
@@ -490,7 +491,7 @@ func (e *Engine) gateReject(c claimed, l domain.Line, reason string, t *ports.Tr
 	}
 
 	pos, events, doneAt := e.arrive(it, target, domain.ActorEngine)
-	t.To, t.DoneAt, t.Rework = pos, doneAt, true
+	t.To, t.DoneAt, t.Rework, t.Outcome = pos, doneAt, true, domain.LeaseRejected
 	t.Events = append(t.Events, events...)
 
 	return nil
@@ -502,7 +503,8 @@ func (e *Engine) block(ctx context.Context, log *slog.Logger, c claimed, reason 
 
 	e.transition(ctx, log, ports.Transition{
 		ItemID: c.item.ID, From: domain.Position{Station: c.station.ID, State: domain.StateInProgress},
-		To: domain.Position{Station: c.station.ID, State: domain.StateBlocked}, Lease: &c.lease, At: now,
+		To: domain.Position{Station: c.station.ID, State: domain.StateBlocked}, Lease: &c.lease, Outcome: domain.LeaseBlocked,
+		At:     now,
 		Events: []domain.Event{event(c.item, domain.EventBlocked, now, domain.ActorEngine, map[string]any{keyReason: reason})},
 	})
 }
@@ -514,7 +516,8 @@ func (e *Engine) release(ctx context.Context, log *slog.Logger, c claimed) {
 
 	e.transition(ctx, log, ports.Transition{
 		ItemID: c.item.ID, From: domain.Position{Station: c.station.ID, State: domain.StateInProgress},
-		To: domain.Position{Station: c.station.ID, State: domain.StateQueued}, Lease: &c.lease, At: now,
+		To: domain.Position{Station: c.station.ID, State: domain.StateQueued}, Lease: &c.lease, Outcome: domain.LeaseReleased,
+		At:     now,
 		Events: []domain.Event{releaseEvent(c.item, context.Cause(ctx), now)},
 	})
 }

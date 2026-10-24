@@ -125,7 +125,7 @@ func testStationLoads(f *fixture) {
 
 	// A blocked item is open but neither waiting nor in progress; a done one is not counted.
 	if _, err := f.Store.Transition(f.ctx(t), ports.Transition{
-		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: stWork, State: domain.StateBlocked}, Lease: &l, At: t1,
+		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: stWork, State: domain.StateBlocked}, Lease: &l, Outcome: domain.LeaseBlocked, At: t1,
 	}); err != nil {
 		t.Fatal(err)
 	}

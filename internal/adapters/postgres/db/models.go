@@ -162,6 +162,20 @@ type Lease struct {
 	OrgID       uuid.UUID
 }
 
+type LeaseSpan struct {
+	ID          int64
+	OrgID       uuid.UUID
+	FactoryID   uuid.UUID
+	ItemID      uuid.UUID
+	Station     string
+	Agent       string
+	Slot        int32
+	ReworkRound int32
+	AcquiredAt  time.Time
+	EndedAt     time.Time
+	Outcome     string
+}
+
 type Organization struct {
 	ID        uuid.UUID
 	Slug      string

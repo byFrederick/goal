@@ -475,9 +475,15 @@ func (s *Store) Transition(ctx context.Context, t ports.Transition) (domain.Item
 			return fmt.Errorf("lock item: %w", err)
 		}
 
-		// Releasing first is safe: a failed guard below rolls the release back.
+		// Releasing first is safe: a failed guard below rolls the release back, its lease span too.
 		if t.Lease != nil {
-			n, err := q.ReleaseLease(ctx, db.ReleaseLeaseParams{ItemID: item, AcquiredAt: t.Lease.AcquiredAt})
+			if t.Outcome == "" {
+				return fmt.Errorf("item %s: releasing its lease needs an outcome", t.ItemID)
+			}
+
+			n, err := q.ReleaseLease(ctx, db.ReleaseLeaseParams{
+				ItemID: item, AcquiredAt: t.Lease.AcquiredAt, EndedAt: t.At, Outcome: string(t.Outcome),
+			})
 			if err != nil {
 				return fmt.Errorf("release lease: %w", err)
 			}

@@ -77,8 +77,9 @@ type Store interface {
 	HeartbeatLease(ctx context.Context, l domain.Lease, now, expiresAt time.Time) (domain.Lease, error)
 
 	// RequeueExpiredLeases deletes up to limit leases that expired before now (SKIP LOCKED),
-	// returns each item to queued at its station, marks the item's running runs failed, and
-	// appends a lease_expired event per item. It returns the leases it removed.
+	// records each as a lease span ended now with outcome expired, returns each item to queued at
+	// its station, marks the item's running runs failed, and appends a lease_expired event per
+	// item. It returns the leases it removed.
 	RequeueExpiredLeases(ctx context.Context, now time.Time, limit int) ([]domain.Lease, error)
 
 	// StartRun records a running agent run and appends a run_started event.
@@ -97,6 +98,7 @@ type Store interface {
 
 	// Transition moves an item as described by t, compare-and-set on t.From (and on t.Lease
 	// when set). It returns ErrConflict or ErrLeaseLost when the guard fails; nothing changes.
+	// Releasing a lease records its lease span, so t.Lease needs t.Outcome (an error otherwise).
 	Transition(ctx context.Context, t Transition) (domain.Item, error)
 
 	// AppendEvents appends events that come with no state change.
@@ -364,8 +366,10 @@ type Transition struct {
 	// From guards the change: the item must still be at this station in this state.
 	From domain.Position
 	To   domain.Position
-	// Lease, when set, must still be held (same item and AcquiredAt); it is released.
-	Lease *domain.Lease
+	// Lease, when set, must still be held (same item and AcquiredAt); it is released and recorded
+	// as a lease span with Outcome, which it requires.
+	Lease   *domain.Lease
+	Outcome domain.LeaseOutcome
 	// Lane, when non-empty, replaces the item's lane.
 	Lane string
 	// Output, when set, is stored as the item's output for OutputStation.

@@ -25,7 +25,16 @@ WHERE item_id = sqlc.arg(item_id) AND acquired_at = sqlc.arg(acquired_at)
 RETURNING *;
 
 -- name: ReleaseLease :execrows
-DELETE FROM leases WHERE item_id = $1 AND acquired_at = $2;
+-- Deletes the lease the holder names and records it as a lease span with its outcome and the
+-- item's rework count before the transition (the item row is not updated yet). It never ends
+-- before it was acquired, whatever the caller's clock says. No row: the lease was lost.
+WITH gone AS (
+  DELETE FROM leases l WHERE l.item_id = sqlc.arg(item_id)::uuid AND l.acquired_at = sqlc.arg(acquired_at)::timestamptz RETURNING l.*
+)
+INSERT INTO lease_spans (org_id, factory_id, item_id, station, agent, slot, rework_round, acquired_at, ended_at, outcome)
+SELECT g.org_id, g.factory_id, g.item_id, g.station, g.agent, g.slot, w.rework_count, g.acquired_at,
+       greatest(sqlc.arg(ended_at)::timestamptz, g.acquired_at), sqlc.arg(outcome)::text
+FROM gone g JOIN work_items w ON w.id = g.item_id;
 
 -- name: LockExpiredLeases :many
 -- Skips leases whose item another transaction holds (a transition in flight); the next sweep
@@ -38,9 +47,15 @@ FOR UPDATE OF l SKIP LOCKED
 FOR NO KEY UPDATE OF w SKIP LOCKED;
 
 -- name: RequeueLeases :exec
--- Deletes the leases and returns their items to the queue at the same station.
+-- Deletes the leases, records each as a lease span that expired now, and returns their items to
+-- the queue at the same station.
 WITH gone AS (
-  DELETE FROM leases WHERE item_id = ANY (sqlc.arg(item_ids)::uuid[]) RETURNING item_id, station
+  DELETE FROM leases WHERE item_id = ANY (sqlc.arg(item_ids)::uuid[]) RETURNING *
+), spans AS (
+  INSERT INTO lease_spans (org_id, factory_id, item_id, station, agent, slot, rework_round, acquired_at, ended_at, outcome)
+  SELECT g.org_id, g.factory_id, g.item_id, g.station, g.agent, g.slot, w.rework_count, g.acquired_at,
+         greatest(sqlc.arg(now)::timestamptz, g.acquired_at), 'expired'
+  FROM gone g JOIN work_items w ON w.id = g.item_id
 )
 UPDATE work_items w SET state = 'queued', updated_at = sqlc.arg(now)
 FROM gone

@@ -35,8 +35,13 @@ func TestStore_Conformance(t *testing.T) {
 		s := New(newTestPool(t))
 
 		return storetest.Harness{
-			Store:  s,
-			Flow:   s,
+			Store: s,
+			Flow:  s,
+			LeaseSpans: func(t *testing.T, org domain.OrgID, id domain.ItemID) []domain.LeaseSpan {
+				t.Helper()
+
+				return s.leaseSpans(domain.WithOrg(t.Context(), org), t, id)
+			},
 			NewOrg: func(t *testing.T) domain.OrgID { t.Helper(); return newOrgID(t, s) },
 			NewFactory: func(t *testing.T, org domain.OrgID) domain.FactoryID {
 				t.Helper()
@@ -275,6 +280,40 @@ func legacyFactory(t *testing.T, pool *pgxpool.Pool, org domain.OrgID, id domain
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// leaseSpans reads an item's lease spans straight from lease_spans in the organization of ctx, in
+// the order they ended; no port reads them one item at a time.
+func (s *Store) leaseSpans(ctx context.Context, t *testing.T, id domain.ItemID) []domain.LeaseSpan {
+	t.Helper()
+
+	org, _ := domain.OrgFrom(ctx)
+
+	var spans []domain.LeaseSpan
+
+	err := inOrgTx(t, s.pool, org, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+			SELECT item_id::text, station, agent, slot, rework_round, acquired_at, ended_at, outcome
+			FROM lease_spans WHERE item_id = $1 ORDER BY ended_at, id`, string(id))
+		if err != nil {
+			return err
+		}
+
+		spans, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.LeaseSpan, error) {
+			var l domain.LeaseSpan
+
+			err := row.Scan(&l.ItemID, &l.Station, &l.Agent, &l.Slot, &l.ReworkRound, &l.AcquiredAt, &l.EndedAt, &l.Outcome)
+
+			return l, err
+		})
+
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return spans
 }
 
 // recordAndon inserts an andon pull straight into andon_pulls in the organization of ctx, as

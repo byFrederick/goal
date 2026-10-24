@@ -22,6 +22,9 @@ func TestStore_Conformance(t *testing.T) {
 		return storetest.Harness{
 			Store: s,
 			Flow:  s,
+			LeaseSpans: func(_ *testing.T, org domain.OrgID, id domain.ItemID) []domain.LeaseSpan {
+				return s.LeaseSpans(org, id)
+			},
 			NewOrg: func(*testing.T) domain.OrgID {
 				return domain.OrgID(fmt.Sprintf("00000000-0000-4000-9000-%012d", orgs.Add(1)))
 			},

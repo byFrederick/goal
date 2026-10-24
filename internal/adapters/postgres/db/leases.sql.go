@@ -145,16 +145,32 @@ func (q *Queries) LockExpiredLeases(ctx context.Context, arg LockExpiredLeasesPa
 }
 
 const releaseLease = `-- name: ReleaseLease :execrows
-DELETE FROM leases WHERE item_id = $1 AND acquired_at = $2
+WITH gone AS (
+  DELETE FROM leases l WHERE l.item_id = $3::uuid AND l.acquired_at = $4::timestamptz RETURNING l.item_id, l.factory_id, l.station, l.agent, l.slot, l.container, l.acquired_at, l.heartbeat_at, l.expires_at, l.org_id
+)
+INSERT INTO lease_spans (org_id, factory_id, item_id, station, agent, slot, rework_round, acquired_at, ended_at, outcome)
+SELECT g.org_id, g.factory_id, g.item_id, g.station, g.agent, g.slot, w.rework_count, g.acquired_at,
+       greatest($1::timestamptz, g.acquired_at), $2::text
+FROM gone g JOIN work_items w ON w.id = g.item_id
 `
 
 type ReleaseLeaseParams struct {
+	EndedAt    time.Time
+	Outcome    string
 	ItemID     uuid.UUID
 	AcquiredAt time.Time
 }
 
+// Deletes the lease the holder names and records it as a lease span with its outcome and the
+// item's rework count before the transition (the item row is not updated yet). It never ends
+// before it was acquired, whatever the caller's clock says. No row: the lease was lost.
 func (q *Queries) ReleaseLease(ctx context.Context, arg ReleaseLeaseParams) (int64, error) {
-	result, err := q.db.Exec(ctx, releaseLease, arg.ItemID, arg.AcquiredAt)
+	result, err := q.db.Exec(ctx, releaseLease,
+		arg.EndedAt,
+		arg.Outcome,
+		arg.ItemID,
+		arg.AcquiredAt,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -163,7 +179,12 @@ func (q *Queries) ReleaseLease(ctx context.Context, arg ReleaseLeaseParams) (int
 
 const requeueLeases = `-- name: RequeueLeases :exec
 WITH gone AS (
-  DELETE FROM leases WHERE item_id = ANY ($2::uuid[]) RETURNING item_id, station
+  DELETE FROM leases WHERE item_id = ANY ($2::uuid[]) RETURNING item_id, factory_id, station, agent, slot, container, acquired_at, heartbeat_at, expires_at, org_id
+), spans AS (
+  INSERT INTO lease_spans (org_id, factory_id, item_id, station, agent, slot, rework_round, acquired_at, ended_at, outcome)
+  SELECT g.org_id, g.factory_id, g.item_id, g.station, g.agent, g.slot, w.rework_count, g.acquired_at,
+         greatest($1::timestamptz, g.acquired_at), 'expired'
+  FROM gone g JOIN work_items w ON w.id = g.item_id
 )
 UPDATE work_items w SET state = 'queued', updated_at = $1
 FROM gone
@@ -175,7 +196,8 @@ type RequeueLeasesParams struct {
 	ItemIds []uuid.UUID
 }
 
-// Deletes the leases and returns their items to the queue at the same station.
+// Deletes the leases, records each as a lease span that expired now, and returns their items to
+// the queue at the same station.
 func (q *Queries) RequeueLeases(ctx context.Context, arg RequeueLeasesParams) error {
 	_, err := q.db.Exec(ctx, requeueLeases, arg.Now, arg.ItemIds)
 	return err

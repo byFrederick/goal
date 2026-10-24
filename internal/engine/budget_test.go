@@ -206,6 +206,8 @@ func TestWeeklyBudget_StopCancelsRunningAndRequeues(t *testing.T) {
 		t.Errorf("runs = %+v; want the one run cancelled", runs)
 	}
 
+	h.expectOutcomes(t, running.ID, domain.LeaseReleased)
+
 	h.tick(t) // still over budget: nothing is claimed again
 	h.wait(t, h.e)
 

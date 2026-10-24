@@ -17,7 +17,7 @@ import (
 )
 
 // orgTables are the tables 00006 gave org_id, then those later phases added with theirs.
-var orgTables = []string{"factories", "work_items", "leases", "agent_runs", "item_events", "andon_pulls", "audit_log", "item_spans"}
+var orgTables = []string{"factories", "work_items", "leases", "agent_runs", "item_events", "andon_pulls", "audit_log", "item_spans", "lease_spans"}
 
 // withoutOrgID are the tables that carry no org_id, and why. A phase that adds a table without
 // org_id adds it here in the same pull request, with its reason.
@@ -136,7 +136,7 @@ func checkAppPrivileges(t *testing.T, admin *pgxpool.Pool) {
 		t.Errorf("goal_app owns %v; want nothing", owned)
 	}
 
-	for _, table := range []string{"audit_log", "item_events"} {
+	for _, table := range []string{"audit_log", "item_events", "lease_spans"} {
 		for _, priv := range []string{"UPDATE", "DELETE", "TRUNCATE"} {
 			var has bool
 			if err := admin.QueryRow(t.Context(), "SELECT has_table_privilege('goal_app', current_schema() || '.' || $1, $2)",
@@ -276,9 +276,26 @@ func TestRLS_RawSQLWithoutOrgFails(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := New(pool).CreateItem(ctx, domain.NewItem{ // its span fills item_spans
+	// An item of today with its span, claimed and blocked: its lease span fills lease_spans.
+	s, now := New(pool), time.Now()
+	if _, err := s.CreateItem(ctx, domain.NewItem{
 		FactoryID: before.factory, Type: typeTask, Title: "after", Station: stWork,
-		State: domain.StateQueued, Class: domain.ClassStandard, CreatedAt: time.Now(),
+		State: domain.StateQueued, Class: domain.ClassStandard, CreatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	it, l, err := s.ClaimNext(ctx, ports.Claim{
+		FactoryID: before.factory, Station: domain.Station{ID: stWork, Kind: domain.KindAgent, Agent: agWorker, Agents: 2},
+		Slot: 1, Now: now, ExpiresAt: now.Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.Transition(ctx, ports.Transition{
+		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: stWork, State: domain.StateBlocked},
+		Lease: &l, Outcome: domain.LeaseBlocked, At: now,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -290,7 +307,7 @@ func TestRLS_RawSQLWithoutOrgFails(t *testing.T) {
 		}
 	}
 
-	_, err := pool.Exec(t.Context(),
+	_, err = pool.Exec(t.Context(),
 		"INSERT INTO factories (id, name, definition, definition_sha256) VALUES ($1, 'acme-raw', '{}', 'sha')", uuid.NewString())
 	if err == nil {
 		t.Error("INSERT into factories without an org succeeded; want an error")
@@ -318,7 +335,7 @@ func TestRLS_OtherOrgInvisible(t *testing.T) {
 
 	if _, _, err := s.ClaimNext(ctxA, ports.Claim{FactoryID: factory, Station: domain.Station{
 		ID: stWork, Kind: domain.KindAgent,
-		Agent: "worker", Agents: 1,
+		Agent: agWorker, Agents: 1,
 	}, Now: time.Now(), ExpiresAt: time.Now().Add(time.Minute)}); err != nil {
 		t.Fatal(err)
 	}

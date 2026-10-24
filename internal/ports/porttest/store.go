@@ -35,6 +35,7 @@ type Store struct {
 	runs      map[domain.RunID]*domain.Run
 	events    []domain.Event
 	spans     map[domain.ItemID][]domain.Span
+	leaseLog  map[domain.ItemID][]domain.LeaseSpan
 	andon     []andonRecord
 	ids       int
 	changes   changes
@@ -59,6 +60,7 @@ func NewStore() *Store {
 		leases:    map[domain.ItemID]domain.Lease{},
 		runs:      map[domain.RunID]*domain.Run{},
 		spans:     map[domain.ItemID][]domain.Span{},
+		leaseLog:  map[domain.ItemID][]domain.LeaseSpan{},
 	}
 }
 
@@ -129,6 +131,7 @@ func (s *Store) purge(org domain.OrgID) {
 			delete(s.items, id)
 			delete(s.leases, id)
 			delete(s.spans, id)
+			delete(s.leaseLog, id)
 		}
 	}
 
@@ -415,6 +418,7 @@ func (s *Store) RequeueExpiredLeases(ctx context.Context, now time.Time, limit i
 
 	for _, l := range expired {
 		delete(s.leases, l.ItemID)
+		s.recordLease(l, domain.LeaseExpired, now)
 
 		if it := s.items[l.ItemID]; it.State == domain.StateInProgress && it.Station == l.Station {
 			before := *it
@@ -569,11 +573,8 @@ func (s *Store) Transition(ctx context.Context, t ports.Transition) (domain.Item
 		return domain.Item{}, fmt.Errorf("item %s: %w", t.ItemID, ports.ErrNotFound)
 	}
 
-	if t.Lease != nil {
-		held, ok := s.leases[t.ItemID]
-		if !ok || !held.AcquiredAt.Equal(t.Lease.AcquiredAt) {
-			return domain.Item{}, fmt.Errorf("item %s: %w", t.ItemID, ports.ErrLeaseLost)
-		}
+	if err := s.checkLease(t); err != nil {
+		return domain.Item{}, err
 	}
 
 	if it.Position() != t.From {
@@ -582,6 +583,7 @@ func (s *Store) Transition(ctx context.Context, t ports.Transition) (domain.Item
 	}
 
 	if t.Lease != nil {
+		s.recordLease(s.leases[t.ItemID], t.Outcome, t.At)
 		delete(s.leases, t.ItemID)
 	}
 
@@ -611,6 +613,25 @@ func (s *Store) Transition(ctx context.Context, t ports.Transition) (domain.Item
 	}
 
 	return clone(it), nil
+}
+
+// checkLease refuses a transition that releases a lease without an outcome, or one no longer held
+// (ErrLeaseLost). Callers hold s.mu.
+func (s *Store) checkLease(t ports.Transition) error {
+	if t.Lease == nil {
+		return nil
+	}
+
+	if t.Outcome == "" {
+		return fmt.Errorf("item %s: releasing its lease needs an outcome", t.ItemID)
+	}
+
+	held, ok := s.leases[t.ItemID]
+	if !ok || !held.AcquiredAt.Equal(t.Lease.AcquiredAt) {
+		return fmt.Errorf("item %s: %w", t.ItemID, ports.ErrLeaseLost)
+	}
+
+	return nil
 }
 
 // AppendEvents implements ports.Store.

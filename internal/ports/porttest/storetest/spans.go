@@ -60,12 +60,12 @@ func testSpansFollowEveryTransition(f *fixture) {
 	_, l = f.claim(t, nextSt, 0, at(3))
 	f.move(t, ports.Transition{ // the gate at next rejects: back to work, round 1
 		ItemID: it.ID, From: pos(stNext, domain.StateInProgress), To: pos(stWork, domain.StateQueued),
-		Lease: &l, Rework: true, At: at(4),
+		Lease: &l, Outcome: domain.LeaseRejected, Rework: true, At: at(4),
 	})
 
 	_, l = f.claim(t, work, 0, at(5))
 	f.move(t, ports.Transition{ // blocked
-		ItemID: it.ID, From: pos(stWork, domain.StateInProgress), To: pos(stWork, domain.StateBlocked), Lease: &l, At: at(6),
+		ItemID: it.ID, From: pos(stWork, domain.StateInProgress), To: pos(stWork, domain.StateBlocked), Lease: &l, Outcome: domain.LeaseBlocked, At: at(6),
 	})
 	f.move(t, ports.Transition{ // a person retries
 		ItemID: it.ID, From: pos(stWork, domain.StateBlocked), To: pos(stWork, domain.StateQueued), At: at(7),
@@ -81,7 +81,7 @@ func testSpansFollowEveryTransition(f *fixture) {
 	f.move(t, next(it, l, at(12)))
 	_, l = f.claim(t, nextSt, 0, at(13))
 	f.move(t, ports.Transition{ // rejected past its rework allowance: a person decides at next
-		ItemID: it.ID, From: pos(stNext, domain.StateInProgress), To: pos(stNext, domain.StateWaitingHuman), Lease: &l, At: at(14),
+		ItemID: it.ID, From: pos(stNext, domain.StateInProgress), To: pos(stNext, domain.StateWaitingHuman), Lease: &l, Outcome: domain.LeaseEscalated, At: at(14),
 	})
 	f.move(t, ports.Transition{ // approved on to review
 		ItemID: it.ID, From: pos(stNext, domain.StateWaitingHuman), To: pos(stReview, domain.StateWaitingHuman), At: at(15),

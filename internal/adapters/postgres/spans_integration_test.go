@@ -13,30 +13,33 @@ import (
 	"github.com/byFrederick/goal/internal/ports"
 )
 
-// Migration 00030 rebuilds spans from item events for the items that existed before it. For the
-// same scripted history, written once before 00030 (then backfilled) and once after it (the
-// trigger), every item gets the same spans.
+// Migration 00030 rebuilds spans from item events for the items that existed before it. A scripted
+// history is written through the store on the current schema, where the trigger makes its spans;
+// its factories, items and events are copied into a schema at version 11, which then migrates:
+// every item gets the same spans from the backfill.
 func TestMigrate_BackfillMatchesTheTrigger(t *testing.T) {
 	t.Parallel()
 
+	now := newTestDB(t, OwnerRole)
+	migrate(t, now.owner)
+	triggered := New(openPool(t, now.app))
+	items := writeHistory(t, triggered)
+
 	before := newTestDB(t, OwnerRole)
 	migrateTo(t, openPool(t, before.owner), 11)
-	backfilled := New(openPool(t, before.app))
-	oldItems := writeHistory(t, backfilled)
+	copyHistory(t, before, now)
 	migrate(t, before.owner)
-
-	triggered := New(newTestPool(t))
-	newItems := writeHistory(t, triggered)
+	backfilled := New(openPool(t, before.app))
 
 	ctx := domain.WithOrg(t.Context(), DefaultOrgID)
 
-	for i := range oldItems {
-		got, err := backfilled.ItemSpans(ctx, oldItems[i])
+	for i, id := range items {
+		got, err := backfilled.ItemSpans(ctx, id)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		want, err := triggered.ItemSpans(ctx, newItems[i])
+		want, err := triggered.ItemSpans(ctx, id)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -51,6 +54,22 @@ func TestMigrate_BackfillMatchesTheTrigger(t *testing.T) {
 	}
 }
 
+// copyHistory copies the factories, items and events of from into to, a schema before 00030,
+// naming only columns that schema has; event ids are kept, so their order is.
+func copyHistory(t *testing.T, to, from testDB) {
+	t.Helper()
+
+	for _, table := range []struct{ name, columns, overriding string }{
+		{"factories", "id, org_id, name, title, definition, definition_sha256, created_at, updated_at, last_item_number", ""},
+		{"work_items", "id, org_id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, " +
+			"priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at", ""},
+		{"item_events", "id, org_id, factory_id, item_id, run_id, at, kind, station, actor, data", "OVERRIDING SYSTEM VALUE"},
+	} {
+		execSQL(t, to.admin, "INSERT INTO "+to.schema+"."+table.name+" ("+table.columns+") "+table.overriding+
+			" SELECT "+table.columns+" FROM "+from.schema+"."+table.name)
+	}
+}
+
 // Stations of the scripted line: inbox (queue), work (agent), review (agent with a gate back to
 // work), approve (human), done.
 const (
@@ -60,8 +79,11 @@ const (
 	stDone    = "done"
 )
 
-// scriptActor acts in the scripted history.
-const scriptActor = "scripted-agent"
+// scriptActor acts in the scripted history; agWorker works at its agent stations.
+const (
+	scriptActor = "scripted-agent"
+	agWorker    = "worker"
+)
 
 // history writes items through the store with the events the engine writes for each step, at
 // times one minute apart; each item in a factory of its own, so items never pull each other.
@@ -205,7 +227,7 @@ func (h *history) claim(it domain.Item, station string) (domain.Item, domain.Lea
 	now := h.tick()
 
 	got, l, err := h.s.ClaimNext(h.ctx(), ports.Claim{
-		FactoryID: h.factory, Station: domain.Station{ID: station, Kind: domain.KindAgent, Agent: "worker", Agents: 1},
+		FactoryID: h.factory, Station: domain.Station{ID: station, Kind: domain.KindAgent, Agent: agWorker, Agents: 1},
 		Now: now, ExpiresAt: now.Add(time.Minute),
 	})
 	if err != nil || got.ID != it.ID {
@@ -240,7 +262,7 @@ func (h *history) arrive(it domain.Item, station string, l *domain.Lease, rework
 
 	return h.transition(ports.Transition{
 		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: station, State: state}, Lease: l,
-		Rework: rework, At: at, DoneAt: at, Events: events,
+		Outcome: outcomeOf(l, rework), Rework: rework, At: at, DoneAt: at, Events: events,
 	})
 }
 
@@ -254,8 +276,21 @@ func (h *history) stay(it domain.Item, state domain.ItemState, l *domain.Lease, 
 	}
 
 	return h.transition(ports.Transition{
-		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: it.Station, State: state}, Lease: l, At: at, Events: events,
+		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: it.Station, State: state}, Lease: l,
+		Outcome: outcomeOf(l, false), At: at, Events: events,
 	})
+}
+
+// outcomeOf is the outcome a scripted step gives the lease it releases, if any.
+func outcomeOf(l *domain.Lease, rework bool) domain.LeaseOutcome {
+	switch {
+	case l == nil:
+		return ""
+	case rework:
+		return domain.LeaseRejected
+	default:
+		return domain.LeaseAdvanced
+	}
 }
 
 func (h *history) transition(tr ports.Transition) domain.Item {

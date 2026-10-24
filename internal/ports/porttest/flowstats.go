@@ -66,6 +66,31 @@ func (s *Store) CurrentRun(ctx context.Context, id domain.ItemID) (*domain.Curre
 	return cur, nil
 }
 
+// LeaseSpans returns the lease spans of an item of org in the order they ended.
+func (s *Store) LeaseSpans(org domain.OrgID, id domain.ItemID) []domain.LeaseSpan {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.visible(id, org); !ok {
+		return nil
+	}
+
+	return slices.Clone(s.leaseLog[id])
+}
+
+// recordLease records a lease that ends now as lease_spans does: with the item's rework count
+// before the change that ends it, never ending before it was acquired. Callers hold s.mu.
+func (s *Store) recordLease(l domain.Lease, outcome domain.LeaseOutcome, at time.Time) {
+	if at.Before(l.AcquiredAt) {
+		at = l.AcquiredAt
+	}
+
+	s.leaseLog[l.ItemID] = append(s.leaseLog[l.ItemID], domain.LeaseSpan{
+		ItemID: l.ItemID, Station: l.Station, Agent: l.Agent, Slot: l.Slot, ReworkRound: s.items[l.ItemID].ReworkCount,
+		AcquiredAt: l.AcquiredAt, EndedAt: at, Outcome: outcome,
+	})
+}
+
 // trackSpan keeps an item's spans as the item_spans trigger does in PostgreSQL: called after a
 // change to it with what it was before (nil for a new item) and when the change happened. A
 // change of station, state or rework count closes the open span at that time (never before it

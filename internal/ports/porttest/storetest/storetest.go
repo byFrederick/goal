@@ -29,6 +29,9 @@ type Harness struct {
 	NewFactory func(t *testing.T, org domain.OrgID) domain.FactoryID
 	// SetSlotCaps sets org's slot cap and those of the named factories of org; 0 clears a cap.
 	SetSlotCaps func(t *testing.T, org domain.OrgID, maxSlots int, factories map[domain.FactoryID]int)
+	// LeaseSpans returns the lease spans of an item of org in the order they ended; no port reads
+	// them one item at a time.
+	LeaseSpans func(t *testing.T, org domain.OrgID, id domain.ItemID) []domain.LeaseSpan
 	// RecordAndon records an andon pull on a factory of org, already cleared when cleared is
 	// set; the port pulls none itself until phase 2.2-E.
 	RecordAndon func(t *testing.T, org domain.OrgID, factory domain.FactoryID, p domain.AndonPull, cleared bool)
@@ -83,6 +86,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"ItemSpans_FollowEveryTransition", testSpansFollowEveryTransition},
 		{"ItemSpans_OnlyOnChangeAndOnlyTheOrgs", testSpansOnlyOnChangeAndOnlyTheOrgs},
 		{"CurrentRun_RunningRunWithSlotAndTurns", testCurrentRun},
+		{"Transition_RecordsTheLeaseSpanWithItsOutcome", testLeaseSpansOnTransition},
+		{"RequeueExpiredLeases_RecordsExpiredLeaseSpans", testLeaseSpansOnRequeue},
 	}
 
 	for _, tc := range tests {
@@ -242,11 +247,12 @@ func (f *fixture) leases(t *testing.T, station string) []domain.Lease {
 	return ls
 }
 
-// next is a transition that finishes a claimed item: on to the next station, lease released.
+// next is a transition that finishes a claimed item: on to the next station, lease released as
+// advanced.
 func next(it domain.Item, l domain.Lease, at time.Time) ports.Transition {
 	return ports.Transition{
 		ItemID: it.ID, From: domain.Position{Station: stWork, State: domain.StateInProgress},
-		To: domain.Position{Station: stNext, State: domain.StateQueued}, Lease: &l, At: at,
+		To: domain.Position{Station: stNext, State: domain.StateQueued}, Lease: &l, Outcome: domain.LeaseAdvanced, At: at,
 	}
 }
 

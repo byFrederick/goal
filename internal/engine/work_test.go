@@ -57,6 +57,8 @@ func TestRun_SuccessMovesItemToTheNextStation(t *testing.T) {
 				t.Fatalf("item at %+v, want %+v (events %v)", got.Position(), tt.want, h.kinds(it.ID))
 			}
 
+			h.expectOutcomes(t, it.ID, domain.LeaseAdvanced)
+
 			if string(got.Outputs[stWork]) != `{"answer":42}` {
 				t.Errorf("outputs = %s, want the work station's output stored", got.Outputs)
 			}
@@ -158,14 +160,18 @@ func TestGate_ApproveAdvancesRejectSendsBack(t *testing.T) {
 		want    domain.Position
 		rework  int
 		event   domain.EventKind
+		// review is how the review's lease ended (the build's advanced).
+		review domain.LeaseOutcome
 	}{
 		{
 			name: "approve", verdict: `{"decision":"approve"}`,
 			want: domain.Position{Station: stDone, State: domain.StateDone}, event: domain.EventGateApproved,
+			review: domain.LeaseAdvanced,
 		},
 		{
 			name: "reject", verdict: `{"decision":"reject","reason":"no test for the sweep"}`,
 			want: domain.Position{Station: "build", State: domain.StateQueued}, rework: 1, event: domain.EventGateRejected,
+			review: domain.LeaseRejected,
 		},
 	}
 
@@ -188,6 +194,8 @@ func TestGate_ApproveAdvancesRejectSendsBack(t *testing.T) {
 			if len(h.eventsOf(it.ID, tt.event)) != 1 {
 				t.Errorf("events %v, want one %s", h.kinds(it.ID), tt.event)
 			}
+
+			h.expectOutcomes(t, it.ID, domain.LeaseAdvanced, tt.review)
 
 			if tt.rework > 0 {
 				if reason := h.eventsOf(it.ID, domain.EventGateRejected)[0].Data["reason"]; reason != "no test for the sweep" {
@@ -236,6 +244,14 @@ func TestGate_RejectBeyondMaxReworkGoesToHuman(t *testing.T) {
 			if len(h.eventsOf(it.ID, domain.EventWaitingHuman)) != 1 {
 				t.Errorf("events %v, want one waiting_human", h.kinds(it.ID))
 			}
+
+			// Each round: the build advances, the review rejects; the last rejection escalates.
+			var rounds []domain.LeaseOutcome
+			for range tt.maxRework {
+				rounds = append(rounds, domain.LeaseAdvanced, domain.LeaseRejected)
+			}
+
+			h.expectOutcomes(t, it.ID, append(rounds, domain.LeaseAdvanced, domain.LeaseEscalated)...)
 		})
 	}
 }
@@ -426,6 +442,8 @@ func TestRun_FailedTaskBlocksItem(t *testing.T) {
 	if reason, _ := h.eventsOf(it.ID, domain.EventBlocked)[0].Data["reason"].(string); !strings.Contains(reason, "container exited 1") {
 		t.Errorf("blocked reason %q does not carry the run error", reason)
 	}
+
+	h.expectOutcomes(t, it.ID, domain.LeaseBlocked)
 }
 
 func TestRun_HeartbeatKeepsLeaseAlive(t *testing.T) {
@@ -525,6 +543,8 @@ func TestRun_ShutdownReleasesItemsToTheQueue(t *testing.T) {
 		if got.State != domain.StateQueued || held || len(h.eventsOf(id, domain.EventReleased)) != 1 {
 			t.Errorf("item %s, lease held %v, events %v; want queued, released", got.State, held, h.kinds(id))
 		}
+
+		h.expectOutcomes(t, id, domain.LeaseReleased)
 	}
 }
 
