@@ -1,8 +1,9 @@
+import { createHash } from 'node:crypto';
 import { ApiError } from '@goal/api-client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Draft, DraftModel, FactoryModel, SaveResult, Section, SectionSave } from '../../../api/types';
 import type { LineSection, Model } from '../../../shared/definition/model';
-import { addAgent, setBasics, setStationField } from './ops';
+import { addAgent, renameAgent, setBasics, setStationField } from './ops';
 import { DraftSession, type SessionApi } from './session';
 
 const model = (): Model => ({
@@ -557,6 +558,39 @@ describe('files', () => {
       text: 'agent: spec-writer\n',
       serverSha: 'aaa',
     });
+  });
+
+  it('shows a file an edit writes before its save lands, and forgets one it removes', () => {
+    session.adoptFile('agents/engineer.md', { text: '# engineer\n', sha256: 'aaa' });
+    const { sections: s } = session.getSnapshot();
+    const now: Model = {
+      basics: s.basics.local,
+      line: s.line.local,
+      agents: s.agents.local,
+      connections: s.connections.local,
+      review: s.review.local,
+    };
+
+    session.edit(renameAgent(now, 'engineer', 'builder', '# engineer\n'));
+
+    expect(fake.saves).toHaveLength(0);
+    const files = session.getSnapshot().files;
+    expect(files.get('agents/builder.md')).toMatchObject({ text: '# engineer\n', dirty: false });
+    expect(files.has('agents/engineer.md')).toBe(false);
+  });
+
+  it('saves typing into a file an edit wrote over the text that edit saved', async () => {
+    session.edit(addAgent(session.getSnapshot().sections.agents.local, 'reviewer'));
+    void session.flush();
+    await flushPromises();
+    await fake.ok();
+
+    session.editFile('agents/reviewer.md', '# reviewer\n\nReview the change.\n');
+    void session.flush();
+    await flushPromises();
+
+    const sha = createHash('sha256').update('# reviewer\n').digest('hex');
+    expect(fake.files[0]).toMatchObject({ path: 'agents/reviewer.md', base: { sha256: sha } });
   });
 
   it('forgets a deleted file and its pending save', async () => {

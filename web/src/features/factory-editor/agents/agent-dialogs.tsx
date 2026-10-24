@@ -151,8 +151,6 @@ export function AddAgentButton() {
         taken={(agents.agents ?? []).map((a) => a.name)}
         onSubmit={async (name) => {
           session.edit(addAgent(agents, name));
-          // The prompt file exists once the save lands: then the editor can load it.
-          await session.flush();
           setSearch({ agent: name, add: undefined });
         }}
       />

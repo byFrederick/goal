@@ -120,7 +120,7 @@ test('the agent page’s link opens the skill picker focused', async ({ page }) 
   await expect(page.getByRole('button', { name: 'Remove acme-conventions' })).toBeVisible();
 });
 
-test('add, rename and remove an agent; a station keeps its agent from being removed', async ({ page }) => {
+test('add, rename and remove an agent; a station keeps its agent from being removed', async ({ page, request }) => {
   await page.goto(agents);
   await page.getByRole('button', { name: 'Add agent' }).click();
   const add = page.getByRole('dialog', { name: 'Add agent' });
@@ -134,13 +134,19 @@ test('add, rename and remove an agent; a station keeps its agent from being remo
   await expect(page.getByText('Not on the line yet: give it a station in Line.')).toBeVisible();
   await expect(prompt(page, 'docs-writer')).toBeVisible();
 
+  // goald takes its time over the save that moves the prompt: the moved prompt shows meanwhile.
+  await request.post('/__mock/fail', { data: { path: '/draft/model/agents', method: 'PUT', delay_ms: 3000 } });
   await page.getByRole('button', { name: 'Rename…' }).click();
   const rename = page.getByRole('dialog', { name: 'Rename docs-writer' });
   await rename.getByRole('textbox', { name: 'Name' }).fill('writer');
   await rename.getByRole('button', { name: 'Rename' }).click();
   await expect(page).toHaveURL(/\?agent=writer$/);
   await expect(page.getByRole('heading', { level: 3, name: 'writer' })).toBeVisible();
-  await expect(page.getByText('agents/writer.md')).toBeVisible();
+  await expect(prompt(page, 'writer')).toBeVisible();
+  await expect(page.getByText('agents/writer.md', { exact: true })).toBeVisible();
+  await expect(status(page)).toContainText('Saving');
+  await expect(status(page)).toContainText('Autosaved');
+  await expect(prompt(page, 'writer')).toBeVisible();
 
   await page.getByRole('button', { name: 'Remove…' }).click();
   const remove = page.getByRole('dialog', { name: 'Remove writer?' });

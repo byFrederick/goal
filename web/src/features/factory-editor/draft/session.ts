@@ -387,6 +387,7 @@ export class DraftSession {
           pending.remove.add(p);
         }
         this.pendingFiles.set(e.section, pending);
+        this.showFiles(e.files ?? {}, e.removeFiles ?? []);
       }
       this.setLocal(e.section, e.value);
     }
@@ -403,6 +404,23 @@ export class DraftSession {
       this.undoStack = [...this.undoStack.slice(-(undoDepth - 1)), { changes, ...(coalesce ? { coalesce } : {}) }];
       this.redoStack = [];
       this.set({});
+    }
+  }
+
+  /**
+   * The files a section save will write are the files' text from the edit on, as goald will have
+   * them (a renamed agent's prompt is not read at its new path before that save lands, when goald
+   * would say it isn't in the draft); the files it removes are forgotten.
+   */
+  private showFiles(files: FileMap, remove: string[]): void {
+    for (const path of remove) this.forgetFile(path);
+    for (const [path, content] of Object.entries(files)) {
+      if (!('text' in content)) continue;
+      const { text } = content;
+      this.setFile(path, { server: text, serverSha: null, text, dirty: false, inFlight: false });
+      void sha256(text).then((sha) => {
+        if (this.state.files.get(path)?.server === text) this.setFile(path, { serverSha: sha });
+      });
     }
   }
 
