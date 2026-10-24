@@ -120,6 +120,24 @@ test('the agent page’s link opens the skill picker focused', async ({ page }) 
   await expect(page.getByRole('button', { name: 'Remove acme-conventions' })).toBeVisible();
 });
 
+test('undoing a rename moves the prompt back', async ({ page }) => {
+  await openAgent(page, 'frontend-engineer');
+  await page.getByRole('button', { name: 'Rename…' }).click();
+  const rename = page.getByRole('dialog', { name: 'Rename frontend-engineer' });
+  await rename.getByRole('textbox', { name: 'Name' }).fill('web-engineer');
+  await rename.getByRole('button', { name: 'Rename' }).click();
+  await expect(page.getByRole('heading', { level: 3, name: 'web-engineer' })).toBeVisible();
+  await expect(status(page)).toContainText('Autosaved');
+
+  await page.keyboard.press('ControlOrMeta+Z');
+  await expect(status(page)).toContainText('Saving');
+  await expect(status(page)).toContainText('Autosaved');
+  await openAgent(page, 'frontend-engineer');
+  await expect(prompt(page, 'frontend-engineer')).toBeVisible();
+  await expect(page.getByText('agents/frontend-engineer.md', { exact: true })).toBeVisible();
+  await expect(page.getByText(/isn’t in the draft/)).toHaveCount(0);
+});
+
 test('add, rename and remove an agent; a station keeps its agent from being removed', async ({ page, request }) => {
   await page.goto(agents);
   await page.getByRole('button', { name: 'Add agent' }).click();

@@ -132,8 +132,15 @@ export interface SessionState {
   canRedo: boolean;
 }
 
+/** Files a section save writes and removes. */
+interface FileChange {
+  files: FileMap;
+  remove: string[];
+}
+
 interface UndoEntry {
-  changes: { section: Section; before: unknown; after: unknown }[];
+  /** `files` the edit's file changes; `undoFiles` theirs undone (what the session knew of the files before). */
+  changes: { section: Section; before: unknown; after: unknown; files?: FileChange; undoFiles?: FileChange }[];
   /** Typing into one field: the next edit with the same key extends this step. */
   coalesce?: string;
 }
@@ -375,20 +382,14 @@ export class DraftSession {
     const changes: UndoEntry['changes'] = [];
     for (const e of list) {
       const cur = this.state.sections[e.section];
-      changes.push({ section: e.section, before: cur.local, after: e.value });
-      if (e.files || e.removeFiles) {
-        const pending = this.pendingFiles.get(e.section) ?? { files: {}, remove: new Set<string>() };
-        for (const [p, c] of Object.entries(e.files ?? {})) {
-          pending.files[p] = c;
-          pending.remove.delete(p);
-        }
-        for (const p of e.removeFiles ?? []) {
-          delete pending.files[p];
-          pending.remove.add(p);
-        }
-        this.pendingFiles.set(e.section, pending);
-        this.showFiles(e.files ?? {}, e.removeFiles ?? []);
-      }
+      const files = e.files || e.removeFiles ? { files: e.files ?? {}, remove: e.removeFiles ?? [] } : undefined;
+      changes.push({
+        section: e.section,
+        before: cur.local,
+        after: e.value,
+        ...(files ? { files, undoFiles: this.undoneFiles(files) } : {}),
+      });
+      if (files) this.changeFiles(e.section, files);
       this.setLocal(e.section, e.value);
     }
     if (undoable && changes.length > 0) {
@@ -408,11 +409,21 @@ export class DraftSession {
   }
 
   /**
-   * The files a section save will write are the files' text from the edit on, as goald will have
-   * them (a renamed agent's prompt is not read at its new path before that save lands, when goald
-   * would say it isn't in the draft); the files it removes are forgotten.
+   * Queues files with a section's next save. From then on they are the files' text, as goald will
+   * have them (a renamed agent's prompt is not read at its new path before that save lands, when
+   * goald would say it isn't in the draft); the files it removes are forgotten.
    */
-  private showFiles(files: FileMap, remove: string[]): void {
+  private changeFiles(section: Section, { files, remove }: FileChange): void {
+    const pending = this.pendingFiles.get(section) ?? { files: {}, remove: new Set<string>() };
+    for (const [p, c] of Object.entries(files)) {
+      pending.files[p] = c;
+      pending.remove.delete(p);
+    }
+    for (const p of remove) {
+      delete pending.files[p];
+      pending.remove.add(p);
+    }
+    this.pendingFiles.set(section, pending);
     for (const path of remove) this.forgetFile(path);
     for (const [path, content] of Object.entries(files)) {
       if (!('text' in content)) continue;
@@ -422,6 +433,20 @@ export class DraftSession {
         if (this.state.files.get(path)?.server === text) this.setFile(path, { serverSha: sha });
       });
     }
+  }
+
+  /**
+   * What undoes a file change: the files' text as the session has it now is written back (a
+   * renamed agent's prompt at its old path); a file it writes that the session did not have goes.
+   */
+  private undoneFiles({ files, remove }: FileChange): FileChange {
+    const back: FileChange = { files: {}, remove: [] };
+    for (const path of [...remove, ...Object.keys(files)]) {
+      const known = this.state.files.get(path);
+      if (known) back.files[path] = { text: known.text };
+      else if (path in files) back.remove.push(path);
+    }
+    return back;
   }
 
   private setLocal<S extends Section>(section: S, value: SectionValues[S]): void {
@@ -448,7 +473,10 @@ export class DraftSession {
     const below = this.undoStack.at(-1);
     if (below) delete below.coalesce;
     this.redoStack.push(entry);
-    for (const c of [...entry.changes].reverse()) this.setLocal(c.section, c.before as SectionValues[Section]);
+    for (const c of [...entry.changes].reverse()) {
+      if (c.undoFiles) this.changeFiles(c.section, c.undoFiles);
+      this.setLocal(c.section, c.before as SectionValues[Section]);
+    }
     this.set({});
     return true;
   }
@@ -458,7 +486,10 @@ export class DraftSession {
     const entry = this.redoStack.pop();
     if (!entry) return false;
     this.undoStack.push(entry);
-    for (const c of entry.changes) this.setLocal(c.section, c.after as SectionValues[Section]);
+    for (const c of entry.changes) {
+      if (c.files) this.changeFiles(c.section, c.files);
+      this.setLocal(c.section, c.after as SectionValues[Section]);
+    }
     this.set({});
     return true;
   }

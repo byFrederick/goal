@@ -89,6 +89,16 @@ const conflict = (section: Section, value: unknown, etag: string) =>
   new ApiError({ title: 'Precondition Failed', status: 412, code: 'draft-conflict', section, value, etag });
 
 const line = (s: DraftSession) => s.getSnapshot().sections.line.local as LineSection;
+const shown = (s: DraftSession): Model => {
+  const { sections: v } = s.getSnapshot();
+  return {
+    basics: v.basics.local,
+    line: v.line.local,
+    agents: v.agents.local,
+    connections: v.connections.local,
+    review: v.review.local,
+  };
+};
 const wipOf = (l: LineSection, id: string) => l.stations?.find((s) => s.id === id)?.wip;
 
 let fake: ReturnType<typeof fakeApi>;
@@ -458,6 +468,36 @@ describe('undo', () => {
     expect(session.getSnapshot()).toMatchObject({ canUndo: false, canRedo: true });
     expect(session.getSnapshot().sections.line.dirty).toBe(false);
   });
+
+  it('moves a renamed agent’s prompt back and forth with the rename, at goald and in the editor', async () => {
+    // The rename saves the line too (engineer's stations): every save is answered in turn.
+    const saved = async () => {
+      void session.flush();
+      await flushPromises();
+      const agents = fake.saves.find((c) => c.section === 'agents')?.save;
+      while (fake.saves.length > 0) await fake.ok();
+      return agents;
+    };
+    session.adoptFile('agents/engineer.md', { text: '# engineer\n', sha256: 'aaa' });
+    session.edit(renameAgent(shown(session), 'engineer', 'builder', '# engineer\n'));
+    await saved();
+
+    session.undo();
+    expect(session.getSnapshot().files.get('agents/engineer.md')).toMatchObject({ text: '# engineer\n', dirty: false });
+    expect(session.getSnapshot().files.has('agents/builder.md')).toBe(false);
+    expect(await saved()).toMatchObject({
+      files: { 'agents/engineer.md': { text: '# engineer\n' } },
+      remove_files: ['agents/builder.md'],
+    });
+
+    session.redo();
+    expect(session.getSnapshot().files.get('agents/builder.md')).toMatchObject({ text: '# engineer\n' });
+    expect(session.getSnapshot().files.has('agents/engineer.md')).toBe(false);
+    expect(await saved()).toMatchObject({
+      files: { 'agents/builder.md': { text: '# engineer\n' } },
+      remove_files: ['agents/engineer.md'],
+    });
+  });
 });
 
 describe('typing', () => {
@@ -562,16 +602,8 @@ describe('files', () => {
 
   it('shows a file an edit writes before its save lands, and forgets one it removes', () => {
     session.adoptFile('agents/engineer.md', { text: '# engineer\n', sha256: 'aaa' });
-    const { sections: s } = session.getSnapshot();
-    const now: Model = {
-      basics: s.basics.local,
-      line: s.line.local,
-      agents: s.agents.local,
-      connections: s.connections.local,
-      review: s.review.local,
-    };
 
-    session.edit(renameAgent(now, 'engineer', 'builder', '# engineer\n'));
+    session.edit(renameAgent(shown(session), 'engineer', 'builder', '# engineer\n'));
 
     expect(fake.saves).toHaveLength(0);
     const files = session.getSnapshot().files;
