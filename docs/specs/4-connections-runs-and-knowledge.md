@@ -1,6 +1,6 @@
 # Phase 4 — Connections, runs and knowledge
 
-Status: owner-approved design (2026-10-24), not built · follows phase 3 · migrations `00050–00059` (`00050–00052` planned) · OpenAPI tags `connections` and `knowledge` · PRs `4-1…4-23` · decision records [ADR 0008](../adr/0008-portable-runs-connections-and-knowledge.md), [ADR 0009](../adr/0009-agent-network-isolation.md) (amended), [ADR 0005](../adr/0005-factory-definitions-in-object-storage.md) (amended)
+Status: owner-approved design (2026-10-24), not built · follows phase 3 · migrations `00050–00059` (`00050–00054` planned) · OpenAPI tags `connections` and `knowledge` (touch metrics under `work`) · PRs `4-1…4-27` · decision records [ADR 0008](../adr/0008-portable-runs-connections-and-knowledge.md), [ADR 0009](../adr/0009-agent-network-isolation.md) (amended), [ADR 0005](../adr/0005-factory-definitions-in-object-storage.md) (amended)
 
 (phase 4 redesign) This file was `4-credentials-and-connectors.md` (parts 4.1 vault and credentials, 4.2 connectors and MCP gateway, PRs `4.1-n`/`4.2-n`). The design pass replaced it. Kept, simplified: credentials encrypted in PostgreSQL, write-only values, RLS, audit, AWS STS, remote MCP through the gateway, the merge station. Cut: the Credentials page, credential grants, the connector catalog and `kind: Connector` files, scopes, CLI exec sidecars, stdio sidecar containers, `ModelAuth`, `CredentialProbe`, per-org data keys, vault settings, the MCP Registry import, multi-instance forwarding. Deferred: approval-gated tool calls, OAuth connections, the GitHub App. References to "4.1 §x" or "4.2 §x" in older text point at retired parts.
 
@@ -8,7 +8,7 @@ Security here is proportionate to a personal platform that is multi-organization
 
 ## 1. Summary
 
-An organization's admins add **connections** on one Connections page: a GitHub, GitLab, AWS, Jira, Datadog or PagerDuty account, a model API key or anything an org-defined **connection kind** describes. Each connection carries its credential, encrypted in PostgreSQL and never readable back, and a factory definition names the connections it uses. Every agent run is a **disposable dev box**: one container per run, started through a new `ports.Sandboxes` port (Docker locally, Cloudflare Containers in the cloud, the same engine code), with public internet, the run's connections as environment variables, tools installed with mise and the factory's repository pre-cloned; the agent works there freely, and the box is deleted when the run ends. Each organization also gets one **knowledge base** of uploaded and synced sources, indexed in PostgreSQL with pgvector, which agents search through the gateway's `knowledge__search` tool. Goal can then run unchanged on a laptop with Docker Compose and on Cloudflare, with Terraform only for the platform itself.
+An organization's admins add **connections** on one Connections page: a GitHub, GitLab, AWS, Jira, Datadog or PagerDuty account, a model API key or anything an org-defined **connection kind** describes. Each connection carries its credential, encrypted in PostgreSQL and never readable back, and a factory definition names the connections it uses. Every agent run is a **disposable dev box**: one container per run, started through a new `ports.Sandboxes` port (Docker locally, Cloudflare Containers in the cloud, the same engine code), with public internet, the run's connections as environment variables, tools installed with mise and the factory's repository pre-cloned; the agent works there freely, and the box is deleted when the run ends. Each organization also gets one **knowledge base** of uploaded and synced sources, indexed in PostgreSQL with pgvector, which agents search through the gateway's `knowledge__search` tool. Goal can then run unchanged on a laptop with Docker Compose and on Cloudflare, with Terraform only for the platform itself. Because a factory's end goal is to take an item from start to finish with as little human help as possible, **human touches per item** becomes a headline metric, and the guidance people give on items is turned into reviewed **Learned** knowledge that later runs receive and search, so nobody has to say the same thing twice.
 
 ## 2. Scope
 
@@ -23,6 +23,8 @@ An organization's admins add **connections** on one Connections page: a GitHub, 
 - `ObjectStore` without object versions, so RustFS and R2 behave the same; deletion of the legacy import (`internal/factorystore`).
 - Local Docker Compose with goald, the auth service, the egress proxy and agents in containers; the Cloudflare target: the `cloudflare` adapter, a small control Worker under `deploy/cloudflare/`, and Terraform for the platform's own infrastructure (wrangler where Terraform cannot).
 - Web: Connections (list, new, detail), Knowledge (sources, new source, documents, search), the builder's Basics runtime and Connections sections; their phone layouts.
+- **Human touches per item** (§4.9): derived from existing item events; touches per finished item, touchless rate, by station, kind and reason, planned gates apart from unplanned interventions; on the Floor, the Board header, each Item, the API and `goal status`.
+- **Learning from guidance** (§4.10): the organization's built-in Learned source, entries proposed by the run that received the guidance, accepted by an editor in one click (or automatically), given to later runs up front and through `knowledge__search`; touch reasons and repeat-guidance flags.
 
 **Out**
 - Approval-gated tool calls, OAuth connections (MCP authorization to outside servers), the GitHub App: deferred, unscheduled. Their designs in the retired parts remain valid inputs.
@@ -46,6 +48,10 @@ A designer updates the boards from the same decisions in parallel; names may be 
 | `Define-Basics.dc.html` | runtime: model, model connection, repository (URL and connection), size, tools; no image, runner or auth | 4-15 |
 | `Define-Connections.dc.html`, `New-Connections.dc.html` | pick org connections for the factory and per agent; the kind's mode badges (env, MCP, CLI); knowledge sources the factory may search; no catalog, no credential picker, no approval rules | 4-15, 4-20 |
 | `Mobile-Connections.dc.html` (new), `Mobile-Knowledge.dc.html` | phone layouts of the two org pages (read, test, sync, replace secret) | 4-15, 4-20 |
+| `Main.dc.html` (Floor overview), `Factories.dc.html`, `Mobile-Floor.dc.html`, `Mobile-Factories.dc.html` | headline "Human touches per item" with trend and touchless rate per factory; on the Floor a Touches panel: by station, by kind, planned gates against unplanned interventions, by reason, repeat guidance | 4-24 |
+| `Board.dc.html`, `Mobile-Board.dc.html` | the header's touches per finished item and touchless rate over the board's window; a card's touch count | 4-24 |
+| `Item.dc.html`, `Mobile-Item.dc.html` | the item's touch count and list (who, what, station, when, planned or not, reason with an edit select, "repeat of" link to the Learned entry) | 4-24, 4-26 |
+| `Knowledge.dc.html` (Learned tab) | proposed entries with the guidance that taught them and the item, station and factory; Accept, Edit and accept, Dismiss; accepted entries; the factory's auto-accept state | 4-26 |
 
 Retired: `Credentials.dc.html`, `Credential-New.dc.html`, `Catalog.dc.html` (the Connections page owns credentials; kinds replace the catalog), `Approval.dc.html` (approvals deferred). Not delivered: the factory Connections board's per-tool usage panel beyond the gateway's existing `gateway_tool_call` counts, and Knowledge's "Recently written" (agents do not write to the knowledge base in phase 4).
 
@@ -115,6 +121,7 @@ spec:
   connections: [github, datadog, playwright]   # org connections the factory uses (by name)
   knowledge:
     sources: [handbook, goal-docs]     # org knowledge sources the factory may search
+    learned: {own: true, autoAccept: false}   # §4.10; the defaults
   agents:
     - name: builder
       connections: [github, playwright]   # what this agent's runs get; tools.allow/deny unchanged
@@ -178,6 +185,26 @@ One knowledge base per organization, made of **sources**:
 - **Schedule**: `sync_every` (default 1 hour, at least 15 minutes); "Sync now" sets `next_sync_at = now()`; an upload marks its document `pending` and makes its source due.
 - **Search**: one SQL statement with two candidate lists, the 50 nearest chunks by cosine distance (`SET LOCAL hnsw.iterative_scan = relaxed_order`) and the 50 best by `ts_rank` on a `simple` `tsvector`, fused by reciprocal rank (k = 60), both filtered by `source_id = ANY($sources)` under RLS. Without an embedder (`GOAL_EMBED_URL` unset) it is keyword search only. Results: snippet, title, source, score and `url` (synced) or the document id (uploads, which `knowledge__read` returns whole, at most 200 KiB).
 - **Embedding space**: one model per install (`GOAL_EMBED_MODEL`), 1024 dimensions stored as `halfvec(1024)`; chunks record their model, search uses only chunks of the current model, and changing the model makes every source due for a full re-embed.
+
+### 4.9 Human touches per item
+
+The end goal of every factory is to finish an item from start to finish with as little human interaction as possible, so the number of times a person had to act on an item is a headline metric next to lead time and throughput. It is derived from the item events already recorded; nothing new is stored to count it.
+
+- **A touch** is one action by a person on an item: the item events of one item with the same person as `data.actor` (`user:<id>`, `user:local` included) and the same `at` (one transition) count once. API keys (`service:…`), agents and the engine never touch. `created` (the submission is the input) and `lease_taken` (it accompanies the person's own event) never count. The touch is named by its most specific event: `merged` > `rejected` > `gate_rejected` > `gate_approved` > `approved` > `moved` > `paused` > `retried` > `note` > `released` > any other kind. An answer to an agent's question is a note or a decision's reason today (a dedicated "ask a person" tool is deferred with approvals).
+- **Planned and unplanned.** A *planned* touch is a decision a line requires: an approval, gate approval or merge at a human station. Everything else is *unplanned*: rejections and send-backs, moves, pauses, retries, notes, approvals of an escalation (a gate after too many reworks). From 4-23 on decision events carry `data.planned`; older approvals, gate approvals and merges count as planned. The headline counts both; both stay visible.
+- **Metrics** over a window (UTC days, as E's metrics; one work type optional), for the items **finished** (done) in it: touches per finished item (mean and median), the **touchless rate** (finished with zero touches), planned and unplanned per item, touches by station (the event's station) and by kind, by reason (§4.10), the repeat-guidance count, a weekly trend (E's weekly buckets) and, beside them, the line stops people made (andon pulls in the window, which belong to the line, not an item). Organization level sums the factories the principal may read; factory level is the line.
+- **Where it shows**: the Floor and factory overview (headline and trend), the Board header (over the board's window), each item card (its count) and the Item (count and list), the API (§8.2) and `goal status` (§9). Permissions are the existing ones: `factory:read` for a factory and an item, `org:read` with per-factory visibility for the organization view; RLS as for every item read.
+- `FlowStats` computes it in SQL over `item_events` with a partial index on person events (`00053`); `porttest.Store` keeps the same rule in memory and `storetest` checks both agree.
+
+### 4.10 Learning from guidance
+
+A touch often means the agent did not know something. Goal closes that loop with the knowledge base, not a new service:
+
+1. **Guidance becomes Learned knowledge.** Each organization has one built-in source, `learned` (kind `learned`, written only by Goal, created on first use). The text a person gives on an item (a rejection or send-back reason, a note, the reason of a move or pause) is guidance. The next agent run of the item receives it in its brief as today and, in its bundle, as `guidance` (event id, kind, station, text). When that run finishes and it received guidance, the worker spends one short extra turn (no tools, a JSON schema) proposing concise, reusable entries from it (`title`, `text`, the event ids that taught it) and a suggested reason per guidance touch. Each proposal is a `learned` document in state `proposed`, linked to its factory, station, item and events. An editor of that factory (`definition:edit`; owners and admins hold it) accepts it as it is, edits and accepts, or dismisses it, in one click on the Item or the Knowledge page; a review is audited, never an item event, so it is not a touch. `spec.knowledge.learned.autoAccept: true` accepts a factory's proposals without review. Accepted entries are indexed by the ingestion loop like uploads (text in the bucket, content-addressed).
+2. **Agents use it.** Every factory searches its own accepted entries by default (`spec.knowledge.learned.own`, default true); listing `learned` in `spec.knowledge.sources` widens that to every factory's entries in the organization. The `/run` bundle carries the five best entries for the item (a search on its title and body over the factory's entries, those of the run's station first), which the worker puts in the system prompt under "What people taught this factory"; and the prompt tells agents to search the knowledge base with `knowledge__search` before asking a person or guessing.
+3. **Measured.** Each touch may carry a reason: `missing_knowledge`, `wrong_decision`, `required_gate` (planned touches start as this) or `other`, suggested by the run that received the guidance and editable by anyone with `item:operate` (the edit is audited, not a touch). **Repeat guidance**: when an embedder is configured, the ingestion loop embeds each new guidance text and flags it when it is within cosine similarity `GOAL_REPEAT_GUIDANCE_SIMILARITY` (0.85) of an accepted Learned entry the run could have searched; the touch then links that entry ("the knowledge existed but was not used"). The touch metrics count reasons and repeats.
+
+Stored: one small table for touch reasons and repeat flags (`item_touch_labels`, a row per touch event, filled by a trigger on person events and then by the worker's suggestions, people's edits and the repeat check) and a few columns that let a `learned` document point at its factory, station, item and guidance (`00054`). The rest reuses the knowledge pipeline, `ports.Knowledge`, item events and the worker's `finished` line.
 
 ## 5. Ports and adapters
 
@@ -354,6 +381,26 @@ type SourceReader interface {
 
 Adapters: `postgres` (Knowledge, pgvector), `openaiembed` (`POST <GOAL_EMBED_URL>/embeddings` with `model`, `input`, `dimensions: 1024`; bearer `GOAL_EMBED_KEY`; Workers AI's OpenAI-compatible endpoint on Cloudflare, Ollama or any compatible server locally), `gitdocs` (go-git, pure Go: a depth-1 fetch of the branch into a temporary directory removed after the pass, blob ids as versions; https with the connection's git credentials; any git host), `confluence` (REST v2: pages of a space with their version numbers, body as storage format → text). `domain.SyncSpec` carries the source's config and the resolved connection. Chunking, extraction, fusion and the ingestion loop are in `internal/knowledge` (domain, ports, standard library, `golang.org/x/net/html`).
 
+**Touches and learning** (4-23, 4-25) add, without a new port:
+
+```go
+// FlowStats
+Touches(ctx context.Context, q FlowQuery) (domain.TouchStats, error)        // §4.9, items finished in the window
+OrgTouches(ctx context.Context, factories []domain.FactoryID, q FlowQuery) (domain.TouchStats, []domain.FactoryTouchStats, error)
+ItemTouches(ctx context.Context, item domain.ItemID) ([]domain.Touch, error) // with planned, reason, repeat_of
+// Store
+LabelTouch(ctx context.Context, event int64, reason domain.TouchReason, by domain.Actor) error // a person's edit (audited)
+SuggestTouchReasons(ctx context.Context, run domain.RunID, s []domain.TouchReasonSuggestion) error // never over a person's choice
+// Knowledge
+ProposeLearned(ctx context.Context, p []domain.LearnedProposal, autoAccept bool) error
+Learned(ctx context.Context, q domain.LearnedQuery) ([]domain.LearnedEntry, error) // by factory and state
+ReviewLearned(ctx context.Context, id domain.KnowledgeDocumentID, r domain.LearnedReview, by domain.Actor) error
+NextRepeatChecks(ctx context.Context, limit int) ([]domain.Guidance, error)
+RecordRepeat(ctx context.Context, event int64, of *domain.KnowledgeDocumentID, similarity float32) error
+```
+
+`domain.KnowledgeQuery` gains `OwnLearned domain.FactoryID` (that factory's accepted entries, besides `Sources`). The worker's `finished` line gains `learned` (`[{title, text, events}]`) and `touch_reasons` (`[{event, reason}]`), both optional; spec.json gains `guidance` and `learned` (the up-front entries). The engine stores both after `FinishRun`; a malformed or oversized one (more than 10 entries, 2 000 characters each) is dropped with a log line, never failing the run.
+
 ### 5.7 `ports.ObjectStore` (changed: no object versions)
 
 R2 implements neither bucket versioning nor `ListObjectVersions`, so the port stops relying on them: `Get(ctx, key)`, `Put`, `PutIfAbsent` (unchanged, `If-None-Match: *`), `List(prefix)` over `ListObjectsV2`, `Delete(key)` (gone for good on an unversioned bucket), `DeletePrefix(prefix)` (list and batch delete). `ObjectInfo` is `{Key, ETag, Size}`. `EnsureBucket` creates the bucket and calls no versioning API. The builder's skills index is cached by ETag instead of version id. Definitions already use immutable content-addressed blobs, so nothing else changes. `internal/factorystore`, the legacy import (`internal/definitions/legacy.go`) and `GOAL_LEGACY_IMPORT` are deleted (they read object versions); `internal/retention` purges with `ObjectStore.DeletePrefix("orgs/<org-id>/")` instead of `factorystore.DeleteOrg`; goald refuses to start while an organization still has a pending legacy import ("start the previous release once").
@@ -404,7 +451,7 @@ R2 through `s3store` (endpoint and keys in settings), managed PostgreSQL over a 
 
 ### 5.13 Settings
 
-New: `GOAL_SANDBOX` (`docker` | `cloudflare`, default `docker`), `GOAL_AGENT_IMAGE` (replaces `GOAL_DEFAULT_AGENT_IMAGE`), `GOAL_SANDBOX_NETWORK`, `GOAL_SANDBOX_URL`, `GOAL_SANDBOX_KEY`, `GOAL_MASTER_KEYS` / `GOAL_MASTER_KEY_FILE`, `GOAL_EMBED_URL`, `GOAL_EMBED_MODEL`, `GOAL_EMBED_KEY`, `GOAL_KB_WORKERS`, `GOAL_UPLOAD_MAX_BYTES` (25 MiB), `GOAL_ALLOW_PRIVATE_UPSTREAMS`; `GOAL_EGRESS_GATEWAY` for `goal-egress`. Removed: `GOAL_TASK_ENV`, `GOAL_GITHUB_TOKEN`, `GOAL_GITHUB_API_URL`, `GOAL_GITHUB_WEB_URL`, `GOAL_AGENT_EGRESS`, `GOAL_EGRESS_NAME`, `GOAL_EGRESS_IMAGE`, `GOAL_WORKSPACE_ROOT`, `GOAL_RUN_DIR`, `GOAL_LEGACY_IMPORT`; goald warns when one is still set and ignores it. Every secret setting joins goald's reserved list.
+New: `GOAL_SANDBOX` (`docker` | `cloudflare`, default `docker`), `GOAL_AGENT_IMAGE` (replaces `GOAL_DEFAULT_AGENT_IMAGE`), `GOAL_SANDBOX_NETWORK`, `GOAL_SANDBOX_URL`, `GOAL_SANDBOX_KEY`, `GOAL_MASTER_KEYS` / `GOAL_MASTER_KEY_FILE`, `GOAL_EMBED_URL`, `GOAL_EMBED_MODEL`, `GOAL_EMBED_KEY`, `GOAL_KB_WORKERS`, `GOAL_UPLOAD_MAX_BYTES` (25 MiB), `GOAL_ALLOW_PRIVATE_UPSTREAMS`, `GOAL_REPEAT_GUIDANCE_SIMILARITY` (0.85); `GOAL_EGRESS_GATEWAY` for `goal-egress`. Removed: `GOAL_TASK_ENV`, `GOAL_GITHUB_TOKEN`, `GOAL_GITHUB_API_URL`, `GOAL_GITHUB_WEB_URL`, `GOAL_AGENT_EGRESS`, `GOAL_EGRESS_NAME`, `GOAL_EGRESS_IMAGE`, `GOAL_WORKSPACE_ROOT`, `GOAL_RUN_DIR`, `GOAL_LEGACY_IMPORT`; goald warns when one is still set and ignores it. Every secret setting joins goald's reserved list.
 
 ## 6. Data model
 
@@ -415,6 +462,8 @@ Every org table: `org_id uuid NOT NULL DEFAULT goal_org()` referencing `organiza
 | `00050_drop_legacy_import.sql` | 4-3 | drops 00039's `legacy_import_pending` and the functions only the legacy import used |
 | `00051_connections.sql` | 4-8 | `connection_kinds`, `connections`, `goal_sync_platform_kinds(jsonb)` |
 | `00052_knowledge.sql` | 4-16 | `knowledge_sources`, `knowledge_documents`, `knowledge_chunks`; requires the `vector` extension |
+| `00053_touches.sql` | 4-23 | the partial index on person events; `item_touch_labels` and the trigger that adds a row per person event |
+| `00054_learned.sql` | 4-25 | source kind `learned` (one per org); documents' `factory_id`, `station`, `item_id`, `guidance_events`, states `proposed` and `dismissed`, review columns; chunks' `factory_id` |
 
 ```sql
 -- 00051_connections.sql
@@ -526,6 +575,33 @@ CREATE INDEX knowledge_chunks_tsv_idx ON knowledge_chunks USING gin (tsv);
 CREATE INDEX knowledge_chunks_embedding_idx ON knowledge_chunks USING hnsw (embedding halfvec_cosine_ops);
 ```
 
+```sql
+-- 00053_touches.sql
+CREATE INDEX item_events_person_idx ON item_events (factory_id, at) WHERE data->>'actor' LIKE 'user:%';
+
+CREATE TABLE item_touch_labels (
+  event_id          bigint PRIMARY KEY REFERENCES item_events (id) ON DELETE CASCADE,
+  org_id            uuid NOT NULL DEFAULT goal_org() REFERENCES organizations(id) ON DELETE CASCADE,
+  item_id           uuid NOT NULL,
+  guidance          boolean NOT NULL,                  -- the event carries text a person wrote
+  reason            text CHECK (reason IN ('missing_knowledge', 'wrong_decision', 'required_gate', 'other')),
+  reason_by         text,                              -- agent:<name> (suggested) or user:<id> (chosen)
+  repeat_of         uuid,                              -- an accepted learned document
+  similarity        real,
+  repeat_checked_at timestamptz,
+  updated_at        timestamptz NOT NULL DEFAULT now(),
+  FOREIGN KEY (org_id, item_id) REFERENCES work_items (org_id, id) ON DELETE CASCADE,
+  FOREIGN KEY (org_id, repeat_of) REFERENCES knowledge_documents (org_id, id) ON DELETE SET NULL (repeat_of)
+);
+CREATE INDEX item_touch_labels_org_item_idx ON item_touch_labels (org_id, item_id);
+CREATE INDEX item_touch_labels_repeat_due_idx ON item_touch_labels (org_id) WHERE guidance AND repeat_checked_at IS NULL;
+-- AFTER INSERT trigger on item_events, for events whose data.actor starts with 'user:' and
+-- that are not lease_taken or created: one row, reason 'required_gate' when data.planned (or,
+-- before 4-23, for approved, gate_approved and merged), guidance when the event has a reason or text.
+```
+
+A touch that groups several events (a merge's `merged` and `approved`) reads the label of the event that names it (§4.9). `00054` widens the source and document `CHECK`s (`kind IN ('upload','synced','live','learned')`, `(kind IN ('upload','learned')) = (connection_id IS NULL)`, a unique index on `(org_id) WHERE kind = 'learned'`; `status` adds `proposed` and `dismissed`), adds to `knowledge_documents` `factory_id uuid`, `station text`, `item_id uuid`, `guidance_events bigint[]`, `reviewed_by text`, `reviewed_at timestamptz` (all null outside `learned`; composite FKs to the factory and the item, `ON DELETE SET NULL`), and to `knowledge_chunks` `factory_id uuid` with an index `(org_id, source_id, factory_id)`, so the own-entries filter stays inside the one search query.
+
 - No `agent_runs` change: a box is named by its run id, and reaping reads `Store.RunsOver`.
 - `knowledge_chunks` is partitioned by hash of `org_id` when it passes about 10 million rows (later; the queries already filter by org).
 - sqlc queries in `queries/connections.sql` and `queries/knowledge.sql`. Conformance: `connectiontest` (create, update, replace secret, resolve, two-org RLS, no plaintext in any column, AAD mismatch refused, rekey), `knowledgetest` (lease claim and expiry, replace chunks, unseen deletion, hybrid ranking fixtures, sources filter, two-org RLS with the vector scan).
@@ -578,6 +654,20 @@ They replace spec 3's proposed `credential:read|manage|grant`, `vault:manage`, `
 | `DELETE /v1/orgs/{org}/knowledge/documents/{document}` | `knowledge:manage` | an uploaded document; 409 `not-an-upload-source` otherwise |
 | `GET /v1/orgs/{org}/knowledge/search?q=&source=&limit=` | `knowledge:read` | `searchKnowledge`: what `knowledge__search` returns, over every source or the named ones |
 
+**Touches and learning** (tag `work` for the metrics, `knowledge` for entries):
+
+| Method and path | Scope | Does |
+| --- | --- | --- |
+| `GET /v1/orgs/{org}/factories/{factory}/metrics/touches?from=&to=&type=&weeks=` | `factory:read` | `getTouchMetrics`: `TouchStats` for the line (§4.9): finished items, touches per item (mean, median), touchless rate, planned and unplanned per item, by station, by kind, by reason, repeat guidance, weekly trend, line stops by people |
+| `GET /v1/orgs/{org}/metrics/touches?from=&to=` | `org:read` | `getOrgTouchMetrics`: the organization's total and each factory the principal may read |
+| `PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason` | `item:operate` | `{reason}`: a person's choice, audited (`touch.labelled`); 404 `touch-not-found` for an event that is not a touch |
+| `GET /v1/orgs/{org}/knowledge/learned?state=proposed\|accepted\|dismissed&factory=&after=&limit=` | `knowledge:read` | Learned entries with their factory, station, item and the guidance that taught them |
+| `POST /v1/orgs/{org}/knowledge/learned/{entry}/accept` | `definition:edit` on the entry's factory | `{title?, text?}`: accept as it is or edited; audited (`learned_entry.accepted`); 409 `entry-not-proposed` |
+| `POST /v1/orgs/{org}/knowledge/learned/{entry}/dismiss` | `definition:edit` on the entry's factory | audited (`learned_entry.dismissed`) |
+| `PATCH`, `DELETE /v1/orgs/{org}/knowledge/learned/{entry}` | `definition:edit` on the entry's factory | edit or remove an accepted entry |
+
+Changed shared schemas: `Item` gains `touches` (`{count, planned, unplanned, list: [Touch]}`, `Touch` = `{event_id, kind, station, at, actor, planned, reason, reason_by, repeat_of}`); `ItemCard` gains `touch_count`; the board's `line` gains `touches` (`{per_item_mean, per_item_median, touchless_rate}` over the board's window); `getFactoryOverview`'s factories gain the same headline with last week's against the week before.
+
 Upload routes take bodies up to `GOAL_UPLOAD_MAX_BYTES`; every other route keeps the 1 MiB cap. Secret values appear in no response, log line, event or audit entry. Changed shared schemas: `Problem.code` adds the codes above; `Factory` gains nothing (the builder reads connections by `?factory=`). Removed from the registry: `/v1/oauth/callback` and `/oauth/client-metadata.json` (deferred with OAuth connections).
 
 ### 8.3 Stream
@@ -591,6 +681,8 @@ On `/v1/orgs/{org}/stream`, through `goal_org_events`: `connection` (`{connectio
 - `goal knowledge sources|add <name> --kind upload|synced|live [--connection c] [--config k=v]…|sync <source>|upload <source> <file>…|rm <document>|search "<query>" [--source s]…`.
 - `goal connection import-env` (4-14, one-time): creates `github` (kind `github`, from `GOAL_GITHUB_TOKEN`) and `claude` (kind `claude-subscription` from `CLAUDE_CODE_OAUTH_TOKEN`, or `anthropic` from `ANTHROPIC_API_KEY`) in the current organization from the CLI's environment, skipping existing names.
 - `goal db rekey` (needs the database and `GOAL_MASTER_KEYS`, like `goal db recover-*`), `goal db init` creates the `vector` extension.
+- `goal status [--factory f] [--window 7d]` (new): per factory, WIP, items done, lead time p85, **touches per finished item**, touchless rate and the station with the most unplanned touches; `goal item <ref>` lists the item's touches.
+- `goal knowledge learned [--factory f] [--state proposed]`, `goal knowledge accept <entry> [--edit]` (opens `$EDITOR`), `goal knowledge dismiss <entry>`.
 - Removed: nothing the CLI uses today; `goal factory validate` shows the quick fixes of §4.4.
 
 ## 10. Web UI
@@ -600,6 +692,8 @@ On `/v1/orgs/{org}/stream`, through `goal_org_events`: `connection` (`{connectio
 - **Connections**: a table on desktop, cards under 768 px; status badge with text (never color only); "New connection" and row actions only with `connection:manage` in `can`. New: kind picker (search, platform and org kinds), then generated fields; secret inputs `type=password`, `autocomplete=off`, cleared after submit; Test before or after create. Detail: "Replace secret" opens a dialog per secret field; Delete shows `used_by` and needs the name typed. A fresh sign-in (403 `reauth-required`) opens phase 3's re-auth dialog and retries.
 - **Knowledge**: sources with live status from the stream; documents with failure reasons; drop zone with per-file progress and refusals (size, type); "Try a search" shows ranked snippets with source and link.
 - **Builder**: Basics shows the model connection select (kinds with `model`), repository URL and connection, size and tools (chips with mise spec validation); Connections lists the org's connections with checkboxes for the factory and per agent, kind modes as badges, a link to the Connections page, and the knowledge sources the factory may search.
+- **Touches**: a headline tile on the Floor and each factory tile ("1.4 touches per item, 38% touchless", trend against the previous window), the Touches panel on the Floor (by station, kind, planned against unplanned, reason, repeat guidance, each linking to the items), the Board header's figures and a count on cards with any touch, and on the Item the count and list with a reason select (`item:operate`) and a "repeat of" link. Query keys `['org', id, 'factory', f, 'touches', window]` and `['org', id, 'touches', window]`; item events on the stream invalidate them with the board's metrics.
+- **Learned**: a tab of the Knowledge page with proposals (guidance quoted beside each, Accept, Edit and accept, Dismiss for editors of the factory), accepted entries and each factory's auto-accept state; the Item shows its own proposals inline once it is done. Query key `['org', id, 'knowledge', 'learned', {factory, state}]`.
 - **States**: loading skeletons, empty states with the next action ("No connections yet. Add the GitHub token your agents use."), problem details inline. Accessibility: labelled inputs, focus kept in dialogs, keyboard-operable drop zone, axe clean. Layout per `design-system/goal/MASTER.md`, full viewport.
 
 ## 11. Security and tenancy
@@ -648,13 +742,15 @@ On `/v1/orgs/{org}/stream`, through `goal_org_events`: `connection` (`{connectio
 10. **A goald redeploy on Cloudflare ends runs in flight**; they are claimed again.
 11. **The Claude subscription kind is for one person's own runs**; a shared install uses an API key or Bedrock.
 12. **The embedding provider sees indexed text** (choose a local model to avoid it).
+13. **Learned entries are model-written summaries of people's guidance.** With auto-accept on, a wrong or careless one reaches every later run of the factory until someone edits or removes it; review is the control, and entries always link the item that taught them.
 
 ## 12. Observability
 
 - Logs: `sandbox created|deleted` (run, size, seconds), `sandbox exec` (step `prepare|agent|check`, exit, seconds), `connection used` (run, connection names; never values), `knowledge sync` (source, listed, fetched, deleted, chunks, embed tokens, seconds, error).
 - Metrics (OpenTelemetry once goald exports them; log attributes until then): `goal_sandboxes_running`, `goal_sandbox_start_seconds`, `goal_sandbox_prepare_seconds`, `goal_kb_sync_seconds`, `goal_kb_chunks`, `goal_embed_tokens_total`.
 - Item events: `sandbox_started` and `prepared` (with seconds and tool count) before `agent_started`; check events as today.
-- Audit actions: `connection.created|updated|secret_replaced|deleted|tested|used`, `connection_kind.created|updated|deleted`, `knowledge_source.created|updated|deleted`, `knowledge_document.uploaded|deleted`.
+- Touches: `goal_item_touches` (a histogram per finished item, by factory) once metrics are exported; the API's figures meanwhile.
+- Audit actions: `touch.labelled`, `learned_entry.accepted|dismissed|updated|deleted`, `connection.created|updated|secret_replaced|deleted|tested|used`, `connection_kind.created|updated|deleted`, `knowledge_source.created|updated|deleted`, `knowledge_document.uploaded|deleted`.
 
 ## 13. Testing
 
@@ -665,6 +761,8 @@ On `/v1/orgs/{org}/stream`, through `goal_org_events`: `connection` (`{connectio
 - **Worker** (Vitest): prepare (bundle, git credential helper reads env, mise invocation, clone and branch), MCP config with stdio servers, connections section of the prompt.
 - **Control Worker** (Vitest with the Workers runtime): routing, sandbox API auth, env allow-list, alarm destroy.
 - **Web** (Playwright on the mock API, 375/768/1440 px, axe): create, test, replace secret and delete a connection; add a source, upload, search.
+- **Touches** (`storetest`, fake and PostgreSQL): one action counted once (merge, a send-back with its `lease_taken`), the naming precedence, agents, the engine and API keys never counted, `created` excluded, planned against unplanned with and without `data.planned`, touchless rate, by station and kind, the window by finish time, two-org RLS; the trigger's label rows.
+- **Learning**: the worker's extra turn only when guidance was given, malformed proposals dropped without failing the run, a person's reason never overwritten by a suggestion, accept and dismiss not counted as touches, own entries searched by default and other factories' only through `learned`, the up-front entries in the bundle, repeat detection on fixed embeddings (fake embedder) above and below the threshold.
 - **End to end** on Compose: the goal factory takes an item to done with a GitHub connection and a model connection.
 
 ## 14. Rollout and migration
@@ -678,6 +776,8 @@ From today (goald on the host, `env:GOAL_GITHUB_TOKEN` and `runtime.image` in pu
 5. **Cutover** (4-14): goald refuses to run a version that still has `env:` references or no model connection, with the block reason "publish a version with connections (spec 4 §4.4)"; the interim rule in the specs README ends; `GOAL_TASK_ENV`, `GOAL_GITHUB_TOKEN` and `GOAL_AGENT_EGRESS` are ignored with a warning.
 6. **Knowledge** (4-16): switch `compose.yaml`'s PostgreSQL image to pgvector (same major, same volume), `goal db init`, migrate.
 7. **Cloudflare** (4-21, 4-22): a fresh install; moving a local install's data is `pg_dump`/`pg_restore` plus a bucket copy, with the same master key.
+
+8. **Touches** (4-23) are computed from the history already recorded, so existing items count from the first release; the trigger adds labels for new events only (older touches have no reason, and older approvals and merges count as planned).
 
 No table is rewritten; every migration is additive except 00050's drop of the legacy flag.
 
@@ -709,9 +809,13 @@ Each row is one PR on `goal/4-<n>-<slug>`, passing `task check`, plus `task migr
 | 4-20 | **Web: Knowledge** (sources, new source, documents, search; phone) | §10 | Playwright + axe |
 | 4-21 | **Cloudflare target**: `internal/adapters/cloudflare`, `api/sandbox.yaml`, `deploy/cloudflare` control Worker (routing, goald and auth containers, sandbox API, run DOs with deadline alarm) and wrangler config | `sandboxtest` green against staging; row 10; an item to done on staging | Worker Vitest, staging run |
 | 4-22 | **Terraform for the platform on Cloudflare** (R2, DNS, Secrets Store, route, Access for staging); delete the AWS Terraform; runbook (deploy, master key escrow and rotation, restore) | `terraform validate`/`plan` clean; nothing per org | `task check`, plan review |
-| 4-23 | **Docs as built**: architecture.md, AGENTS.md, worker README, threat rows checked against tests | every §11.2 row names a passing test | review |
+| 4-23 | **Human touches: metrics** (§4.9): `00053`, `FlowStats.Touches`, `OrgTouches`, `ItemTouches`, `data.planned` on decisions, `getTouchMetrics`, `getOrgTouchMetrics`, `touches` on `Item`, `touch_count` on cards, the board's and the overview's headline | §13's touch cases on fake and PostgreSQL; golden matrix rows | storetest, handler tests |
+| 4-24 | **Human touches: screens and CLI**: Floor headline and Touches panel, factory tiles, Board header, cards, Item list; `goal status`, `goal item` touches | §10 Touches; boards of §3 | Playwright 375/768/1440 + axe, CLI tests |
+| 4-25 | **Learned knowledge** (§4.10): `00054`, the `learned` source, `guidance` and `learned` in the bundle, the worker's proposal turn and touch-reason suggestions, `ProposeLearned`, `Learned`, `ReviewLearned`, review endpoints and CLI, own-entries search, the prompt's knowledge-first instruction, `spec.knowledge.learned` | §13's learning cases; an item with a send-back ends with a proposal that a later item's run receives | engine, worker (Vitest), knowledge conformance, handler tests |
+| 4-26 | **Touch reasons and repeat guidance + Learned screens**: the reason endpoint, the repeat check in the ingestion loop, the Learned tab, the Item's proposals and reason select | reasons counted in the metrics; a repeated guidance text is flagged with its entry | integration, Playwright + axe |
+| 4-27 | **Docs as built**: architecture.md, AGENTS.md, worker README, threat rows checked against tests | every §11.2 row names a passing test | review |
 
-Migration numbers rise with PR order (4-3 → `00050`, 4-8 → `00051`, 4-16 → `00052`); a PR that lands out of order renumbers before merging. 4-3, 4-4 and 4-8 can start in parallel after the prototypes; 4-21 needs 4-7; the web PRs need their API PRs.
+Migration numbers rise with PR order (4-3 → `00050`, 4-8 → `00051`, 4-16 → `00052`, 4-23 → `00053`, 4-25 → `00054`); a PR that lands out of order renumbers before merging. 4-3, 4-4 and 4-8 can start in parallel after the prototypes; 4-21 needs 4-7; 4-23 needs only 2.2-E and can be built any time after the prototypes; 4-25 needs the knowledge PRs (4-16, 4-17); the web PRs need their API PRs.
 
 ## 16. Cross-spec contracts
 
@@ -720,6 +824,8 @@ Migration numbers rise with PR order (4-3 → `00050`, 4-8 → `00051`, 4-16 →
 - Permissions `connection:read|manage`, `knowledge:read|manage`; endpoints and events of §8; query keys of §10.
 - `Knowledge.Search` with an explicit sources list, which phase 5's `search_knowledge` tool calls with every source the person may read.
 - The Cloudflare topology (§5.12) phase 5's OAuth endpoints route through.
+- Human touches per item (§4.9): `getTouchMetrics`, `getOrgTouchMetrics`, `Item.touches`; Jonah (later) can rank remediations by the unplanned touches they remove.
+- The Learned source (§4.10) and `item_touch_labels`, for any later evaluation of how well factories learn.
 - For the canvas designer: the boards of §3.
 
 **Phase 4 needs**
