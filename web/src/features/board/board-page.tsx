@@ -22,6 +22,7 @@ import {
   columnCount,
   constraintNote,
   expediteUse,
+  firstStation,
   lineSentence,
   stationMeter,
   stationNote,
@@ -252,12 +253,7 @@ export function BoardPage() {
   const { data: board } = useSuspenseQuery(boardQuery(org.id, factory.id));
   const search = useSearch({ from: '/o/$org/f/$factory/board' });
   const expedite = board.stations.flatMap((s) => s.items.filter(isExpedite));
-  const selected =
-    board.stations.find((s) => s.id === search.station)?.id ??
-    board.constraint ??
-    board.stations.find((s) => s.items.length > 0)?.id ??
-    board.stations[0]?.id ??
-    '';
+  const selected = board.stations.find((s) => s.id === search.station)?.id ?? firstStation(board);
   const [moving, setMoving] = useState<{ item: ItemCard; to?: string | undefined } | null>(null);
   const onMove: OnMove = (item, to) => setMoving({ item, to });
 

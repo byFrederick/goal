@@ -1,6 +1,6 @@
 // What the board says about stations and cards, in words, from the board's statistics. Derived
 // only from station kinds and the API's numbers, never from station or factory names.
-import type { BoardLine, BoardStation, ItemCard } from '../../api/types';
+import type { Board, BoardLine, BoardStation, ItemCard } from '../../api/types';
 import { formatDuration, formatPercent, formatUsd, formatUsdCompact, humanize, plural } from '../../shared/format';
 import { describeState, type StateLabel, waitingOnYou } from '../../shared/item-state';
 import type { HatchTone } from '../../ui/hatch';
@@ -104,6 +104,16 @@ export function lineSentence(line: BoardLine): { text: string; notEnforced: bool
 }
 
 /** "WIP 9 of 15": work in progress at the stations with a limit, against their limits. */
+/**
+ * The station the phone board opens on: the first, in line order, with an item waiting on a
+ * person, else with a blocked item (what needs attention), else the constraint, else the first.
+ */
+export function firstStation(board: Pick<Board, 'stations' | 'constraint'>): string {
+  const withState = (state: ItemCard['state']) =>
+    board.stations.find((s) => s.items.some((it) => it.state === state))?.id;
+  return withState('waiting_human') ?? withState('blocked') ?? board.constraint ?? board.stations[0]?.id ?? '';
+}
+
 export function wipText(line: BoardLine): string {
   return `WIP ${line.wip.in_progress}${line.wip.limit !== null ? ` of ${line.wip.limit}` : ''}`;
 }

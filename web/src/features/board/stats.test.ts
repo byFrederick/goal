@@ -6,6 +6,7 @@ import {
   columnCount,
   constraintNote,
   expediteUse,
+  firstStation,
   lineSentence,
   stationMeter,
   stationNote,
@@ -228,5 +229,25 @@ describe('cardState', () => {
     expect(cardState(card({ rework_count: 1, in_buffer: true })).text).toBe('Ready in buffer');
     expect(cardState(card({ rope_held: true }))).toEqual({ text: 'Waiting for buffer room', tone: 'muted' });
     expect(cardState(card({})).text).toBe('Waiting');
+  });
+});
+
+describe('firstStation', () => {
+  const card = (state: ItemCard['state']) => ({ state }) as ItemCard;
+  const inbox = station({ id: 'inbox', kind: 'queue', items: [card('queued')] });
+  const build = station({ id: 'build', items: [card('in_progress')] });
+  const fixes = station({ id: 'fixes', items: [card('blocked')] });
+  const approve = station({ id: 'approve', kind: 'human', items: [card('waiting_human')] });
+  const done = station({ id: 'done', kind: 'done' });
+
+  it('opens where items wait on a person first, then where they are blocked', () => {
+    expect(firstStation({ stations: [inbox, build, fixes, approve, done], constraint: 'build' })).toBe('approve');
+    expect(firstStation({ stations: [inbox, build, fixes, done], constraint: 'build' })).toBe('fixes');
+  });
+
+  it('else opens the constraint, else the first station', () => {
+    expect(firstStation({ stations: [inbox, build, done], constraint: 'build' })).toBe('build');
+    expect(firstStation({ stations: [station({ id: 'inbox', kind: 'queue' }), done], constraint: null })).toBe('inbox');
+    expect(firstStation({ stations: [], constraint: null })).toBe('');
   });
 });

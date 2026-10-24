@@ -490,15 +490,15 @@ test('the line shows its rope, not enforced yet, its work in progress and the ex
   await expect(page.getByText('Not enforced yet')).toHaveCount(0);
 });
 
-test('on a phone the board picks a station, the constraint first', async ({ page }) => {
+test('on a phone the board opens where a person is needed, then picks any station', async ({ page }) => {
   test.skip(!isPhone(page), 'the station picker is the phone board');
   await page.goto('/o/acme/f/sre/board');
 
+  // Items waiting on a person come first: the board opens on Approve, not the constraint.
   const picker = page.getByRole('tablist', { name: 'Stations' });
-  await expect(picker.getByRole('tab', { name: 'Investigate 3 of 3, 2 ready' })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
+  await expect(picker.getByRole('tab', { name: /^Approve/ })).toHaveAttribute('aria-selected', 'true');
+  await picker.getByRole('tab', { name: 'Investigate 3 of 3, 2 ready' }).click();
+  await expect(page).toHaveURL(/station=investigate/);
   await expect(page.getByText('The constraint: busy 94%, queue growing')).toBeVisible();
   await expect(page.getByRole('article').filter({ hasText: 'billing-svc' })).toContainText(
     'sre#8, Incident, 1 hbilling-svc deploy rolled back twiceinvestigator-1, turn 3',
@@ -555,7 +555,7 @@ test('on a phone: floor to board to item and back', async ({ page }) => {
 
   await tabs.getByRole('link', { name: 'Board' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Goal board' })).toBeVisible();
-  await expect(page.getByRole('tab', { name: /Build/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tab', { name: /^Approve spec/ })).toHaveAttribute('aria-selected', 'true');
 
   await page.getByRole('tab', { name: /Merge/ }).click();
   await expect(page).toHaveURL(/station=merge/);
