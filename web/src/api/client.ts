@@ -13,6 +13,8 @@ import {
   unwrap,
 } from '@goal/api-client';
 import type {
+  AuditFilter,
+  AuditPage,
   Board,
   EventPage,
   Factory,
@@ -27,6 +29,9 @@ import type {
   NewOrg,
   Org,
   OrgAttention,
+  OrgDeleted,
+  OrgSettings,
+  OrgSettingsPatch,
   OrgSummary,
 } from './types';
 
@@ -81,6 +86,25 @@ export function getInbox(org: string, { factory, limit }: InboxFilter = {}, sign
       ...cancel(signal),
     }),
   );
+}
+
+export function getOrgSettings(org: string, signal?: AbortSignal): Promise<OrgSettings> {
+  return unwrap(goal.GET(orgPath('/settings'), { params: { path: { org } }, ...cancel(signal) }));
+}
+
+/** Changes only the fields patch names; `slots.max: null` clears a cap. Answers the settings after it. */
+export function patchOrgSettings(org: string, patch: OrgSettingsPatch): Promise<OrgSettings> {
+  return unwrap(goal.PATCH(orgPath('/settings'), { params: { path: { org } }, body: patch }));
+}
+
+/** Deletes the organization; `confirm` must be its name. It 404s at once and is purged after purge_after. */
+export function deleteOrg(org: string, confirm: string): Promise<OrgDeleted> {
+  return unwrap(goal.DELETE('/v1/orgs/{org}', { params: { path: { org } }, body: { confirm } }));
+}
+
+/** One page of the organization's audit log, newest first; pass next_before as `before` for the next. */
+export function listAudit(org: string, filter: AuditFilter = {}, signal?: AbortSignal): Promise<AuditPage> {
+  return unwrap(goal.GET(orgPath('/audit'), { params: { path: { org }, query: filter }, ...cancel(signal) }));
 }
 
 export async function listFactories(org: string, signal?: AbortSignal): Promise<Factory[]> {

@@ -1,9 +1,11 @@
 // The contract's shapes, generated from api/openapi.yaml into @goal/api-client, under the names
 // the screens use. Nothing here is written by hand: a shape changes in the contract first.
-import type { ItemPage, MergeRequest } from '@goal/api-client';
+import type { ItemPage, MergeRequest, operations } from '@goal/api-client';
 
 export type {
   AndonPull,
+  AuditEntry,
+  AuditPage,
   Board,
   BoardStation,
   ClassOfService,
@@ -14,6 +16,7 @@ export type {
   FactoryList,
   FactoryOverview,
   FactoryOverviewList,
+  FactorySlots,
   Inbox,
   InboxEntry,
   InboxEntryKind,
@@ -26,6 +29,10 @@ export type {
   NewOrg,
   Org,
   OrgAttention,
+  OrgDeleted,
+  OrgSettings,
+  OrgSettingsPatch,
+  OrgSlots,
   OrgSummary,
   Problem,
   Station,
@@ -39,3 +46,6 @@ export type ItemList = ItemPage;
 
 /** How goald merges a pull request (POST /v1/orgs/{org}/items/{item}/merge). */
 export type MergeMethod = NonNullable<MergeRequest['method']>;
+
+/** The filters and cursor of GET /v1/orgs/{org}/audit (all optional; newest first). */
+export type AuditFilter = NonNullable<operations['listAudit']['parameters']['query']>;

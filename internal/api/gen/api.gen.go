@@ -21,6 +21,27 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for ActorKind.
+const (
+	ActorKindAgent  ActorKind = "agent"
+	ActorKindSystem ActorKind = "system"
+	ActorKindUser   ActorKind = "user"
+)
+
+// Valid indicates whether the value is a known member of the ActorKind enum.
+func (e ActorKind) Valid() bool {
+	switch e {
+	case ActorKindAgent:
+		return true
+	case ActorKindSystem:
+		return true
+	case ActorKindUser:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ClassOfService.
 const (
 	Expedite ClassOfService = "expedite"
@@ -177,6 +198,17 @@ func (e StationKind) Valid() bool {
 	}
 }
 
+// Actor Who did something; in phase 2.2 every person is the local user
+type Actor struct {
+	// Id "local" for the local user, an agent's name or a job's name
+	Id   string    `json:"id"`
+	Kind ActorKind `json:"kind"`
+	Name string    `json:"name"`
+}
+
+// ActorKind defines model for Actor.Kind.
+type ActorKind string
+
 // AndonPull An open stop of a factory's line
 type AndonPull struct {
 	PulledAt time.Time `json:"pulled_at"`
@@ -184,6 +216,40 @@ type AndonPull struct {
 	// PulledBy Who pulled the cord, as an actor ref: "system:engine" or "user:local"
 	PulledBy string `json:"pulled_by"`
 	Reason   string `json:"reason"`
+}
+
+// AuditEntry defines model for AuditEntry.
+type AuditEntry struct {
+	// Action <noun>.<past_verb>, as in org.updated
+	Action string `json:"action"`
+
+	// Actor Who did something; in phase 2.2 every person is the local user
+	Actor Actor     `json:"actor"`
+	At    time.Time `json:"at"`
+
+	// Data What changed; for org.updated each changed field's {from, to}, slot caps as max_slots and factory_slots (by factory id), a missing cap as null
+	Data map[string]interface{} `json:"data"`
+
+	// FactoryId Set when the entry concerns one factory
+	FactoryId *string     `json:"factory_id,omitempty"`
+	Id        int64       `json:"id"`
+	Target    AuditTarget `json:"target"`
+}
+
+// AuditPage defines model for AuditPage.
+type AuditPage struct {
+	Entries []AuditEntry `json:"entries"`
+
+	// NextBefore The before of the next page; null on the last page
+	NextBefore *int64 `json:"next_before"`
+}
+
+// AuditTarget defines model for AuditTarget.
+type AuditTarget struct {
+	Id string `json:"id"`
+
+	// Kind What the entry is about
+	Kind string `json:"kind"`
 }
 
 // Board defines model for Board.
@@ -325,6 +391,20 @@ type FactoryOverviewList struct {
 
 	// Window The window asked for, as in 7d
 	Window string `json:"window"`
+}
+
+// FactorySlots defines model for FactorySlots.
+type FactorySlots struct {
+	FactoryId string `json:"factory_id"`
+	Max       *int   `json:"max"`
+	Name      string `json:"name"`
+}
+
+// FactorySlotsPatch defines model for FactorySlotsPatch.
+type FactorySlotsPatch struct {
+	// FactoryId The factory's metadata.id or metadata.name
+	FactoryId string `json:"factory_id"`
+	Max       *int   `json:"max"`
 }
 
 // Health defines model for Health.
@@ -512,9 +592,54 @@ type OrgAttention struct {
 	WaitingOnYou int `json:"waiting_on_you"`
 }
 
+// OrgDeleted defines model for OrgDeleted.
+type OrgDeleted struct {
+	// PurgeAfter When the purge job may remove everything
+	PurgeAfter time.Time `json:"purge_after"`
+}
+
+// OrgDeletion defines model for OrgDeletion.
+type OrgDeletion struct {
+	// Confirm The organization's name, typed to confirm
+	Confirm string `json:"confirm"`
+}
+
 // OrgList defines model for OrgList.
 type OrgList struct {
 	Orgs []OrgSummary `json:"orgs"`
+}
+
+// OrgSettings defines model for OrgSettings.
+type OrgSettings struct {
+	Mark string `json:"mark"`
+	Name string `json:"name"`
+
+	// Slots Slot caps: how many agents may run at once across the organization's factories (max) and in each factory. null is no cap.
+	Slots OrgSlots `json:"slots"`
+	Slug  string   `json:"slug"`
+}
+
+// OrgSettingsPatch defines model for OrgSettingsPatch.
+type OrgSettingsPatch struct {
+	Mark *string `json:"mark,omitempty"`
+	Name *string `json:"name,omitempty"`
+
+	// Slots When present, max sets the organization's cap (null clears it) and each listed factory's max sets its cap (null clears it); factories left out keep theirs.
+	Slots *OrgSlotsPatch `json:"slots,omitempty"`
+	Slug  *string        `json:"slug,omitempty"`
+}
+
+// OrgSlots Slot caps: how many agents may run at once across the organization's factories (max) and in each factory. null is no cap.
+type OrgSlots struct {
+	// Factories Every factory of the organization, by name
+	Factories []FactorySlots `json:"factories"`
+	Max       *int           `json:"max"`
+}
+
+// OrgSlotsPatch When present, max sets the organization's cap (null clears it) and each listed factory's max sets its cap (null clears it); factories left out keep theirs.
+type OrgSlotsPatch struct {
+	Factories *[]FactorySlotsPatch `json:"factories,omitempty"`
+	Max       *int                 `json:"max"`
 }
 
 // OrgSummary An organization as the organization list shows it
@@ -532,7 +657,7 @@ type OrgSummary struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, ...)
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, ...)
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 	Status int     `json:"status"`
@@ -617,6 +742,21 @@ type ItemRef = string
 // OrgRef defines model for OrgRef.
 type OrgRef = string
 
+// ListAuditParams defines parameters for ListAudit.
+type ListAuditParams struct {
+	// Before The cursor of the next page (next_before); entries with a smaller id
+	Before *int64 `form:"before,omitempty" json:"before,omitempty"`
+	Limit  *int   `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Action Only entries of this action, as in org.updated
+	Action     *string `form:"action,omitempty" json:"action,omitempty"`
+	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty"`
+	TargetId   *string `form:"target_id,omitempty" json:"target_id,omitempty"`
+
+	// Factory Only entries about this factory (its metadata.id or metadata.name)
+	Factory *string `form:"factory,omitempty" json:"factory,omitempty"`
+}
+
 // ListItemsParams defines parameters for ListItems.
 type ListItemsParams struct {
 	// State Only items in this state
@@ -665,6 +805,9 @@ type StreamEventsParams struct {
 // CreateOrgJSONRequestBody defines body for CreateOrg for application/json ContentType.
 type CreateOrgJSONRequestBody = NewOrg
 
+// DeleteOrgJSONRequestBody defines body for DeleteOrg for application/json ContentType.
+type DeleteOrgJSONRequestBody = OrgDeletion
+
 // SubmitItemJSONRequestBody defines body for SubmitItem for application/json ContentType.
 type SubmitItemJSONRequestBody = NewItem
 
@@ -673,6 +816,9 @@ type MergeItemJSONRequestBody = MergeRequest
 
 // RejectItemJSONRequestBody defines body for RejectItem for application/json ContentType.
 type RejectItemJSONRequestBody = Rejection
+
+// UpdateOrgSettingsJSONRequestBody defines body for UpdateOrgSettings for application/json ContentType.
+type UpdateOrgSettingsJSONRequestBody = OrgSettingsPatch
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -776,6 +922,24 @@ type ClientInterface interface {
 	// Corresponds with POST /v1/orgs (the `CreateOrg` operationId).
 	CreateOrg(ctx context.Context, body CreateOrgJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// DeleteOrgWithBody Delete an organization
+	//
+	// The organization disappears at once (every route under it answers 404, as for an unknown one) and is purged, with every row it owns and its objects in the bucket, after the install's retention (GOAL_ORG_RETENTION, default 7 days). `confirm` must be the organization's name exactly; otherwise 409 (code confirmation-mismatch) and nothing changes. Audited as org.deleted.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with DELETE /v1/orgs/{org} (the `DeleteOrg` operationId).
+	DeleteOrgWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteOrg Delete an organization
+	//
+	// The organization disappears at once (every route under it answers 404, as for an unknown one) and is purged, with every row it owns and its objects in the bucket, after the install's retention (GOAL_ORG_RETENTION, default 7 days). `confirm` must be the organization's name exactly; otherwise 409 (code confirmation-mismatch) and nothing changes. Audited as org.deleted.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /v1/orgs/{org} (the `DeleteOrg` operationId).
+	DeleteOrg(ctx context.Context, org OrgRef, body DeleteOrgJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetOrg One organization
 	//
 	// Corresponds with GET /v1/orgs/{org} (the `GetOrg` operationId).
@@ -787,6 +951,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/attention (the `GetOrgAttention` operationId).
 	GetOrgAttention(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListAudit The organization's audit log, newest first
+	//
+	// Corresponds with GET /v1/orgs/{org}/audit (the `ListAudit` operationId).
+	ListAudit(ctx context.Context, org OrgRef, params *ListAuditParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListFactories The organization's factories goald runs, from the bucket
 	//
@@ -888,6 +1057,29 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/overview (the `GetFactoryOverview` operationId).
 	GetFactoryOverview(ctx context.Context, org OrgRef, params *GetFactoryOverviewParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetOrgSettings The organization's settings, slot caps included
+	//
+	// Corresponds with GET /v1/orgs/{org}/settings (the `GetOrgSettings` operationId).
+	GetOrgSettings(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateOrgSettingsWithBody Change the organization's settings
+	//
+	// Every field is optional and changes only what it names, in one transaction audited as one org.updated entry (none when nothing changes). A new slug resolves at once and the old one is 404. A taken slug is 409 with code slug-taken; a reserved or malformed slug, name or mark, or a slot cap outside 1 to 1000, is 409. A factory that is not the organization's is 404. Per-factory caps may add up to more than the organization's.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
+	UpdateOrgSettingsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateOrgSettings Change the organization's settings
+	//
+	// Every field is optional and changes only what it names, in one transaction audited as one org.updated entry (none when nothing changes). A new slug resolves at once and the old one is 404. A taken slug is 409 with code slug-taken; a reserved or malformed slug, name or mark, or a slot cap outside 1 to 1000, is 409. A factory that is not the organization's is 404. Per-factory caps may add up to more than the organization's.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
+	UpdateOrgSettings(ctx context.Context, org OrgRef, body UpdateOrgSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	//
 	// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
@@ -964,6 +1156,44 @@ func (c *Client) CreateOrg(ctx context.Context, body CreateOrgJSONRequestBody, r
 	return c.Client.Do(req)
 }
 
+// DeleteOrgWithBody Delete an organization
+//
+// The organization disappears at once (every route under it answers 404, as for an unknown one) and is purged, with every row it owns and its objects in the bucket, after the install's retention (GOAL_ORG_RETENTION, default 7 days). `confirm` must be the organization's name exactly; otherwise 409 (code confirmation-mismatch) and nothing changes. Audited as org.deleted.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with DELETE /v1/orgs/{org} (the `DeleteOrg` operationId).
+func (c *Client) DeleteOrgWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteOrgRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteOrg Delete an organization
+//
+// The organization disappears at once (every route under it answers 404, as for an unknown one) and is purged, with every row it owns and its objects in the bucket, after the install's retention (GOAL_ORG_RETENTION, default 7 days). `confirm` must be the organization's name exactly; otherwise 409 (code confirmation-mismatch) and nothing changes. Audited as org.deleted.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /v1/orgs/{org} (the `DeleteOrg` operationId).
+func (c *Client) DeleteOrg(ctx context.Context, org OrgRef, body DeleteOrgJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteOrgRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetOrg One organization
 //
 // Corresponds with GET /v1/orgs/{org} (the `GetOrg` operationId).
@@ -986,6 +1216,21 @@ func (c *Client) GetOrg(ctx context.Context, org OrgRef, reqEditors ...RequestEd
 // Corresponds with GET /v1/orgs/{org}/attention (the `GetOrgAttention` operationId).
 func (c *Client) GetOrgAttention(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetOrgAttentionRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListAudit The organization's audit log, newest first
+//
+// Corresponds with GET /v1/orgs/{org}/audit (the `ListAudit` operationId).
+func (c *Client) ListAudit(ctx context.Context, org OrgRef, params *ListAuditParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListAuditRequest(c.Server, org, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1256,6 +1501,59 @@ func (c *Client) GetFactoryOverview(ctx context.Context, org OrgRef, params *Get
 	return c.Client.Do(req)
 }
 
+// GetOrgSettings The organization's settings, slot caps included
+//
+// Corresponds with GET /v1/orgs/{org}/settings (the `GetOrgSettings` operationId).
+func (c *Client) GetOrgSettings(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetOrgSettingsRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateOrgSettingsWithBody Change the organization's settings
+//
+// Every field is optional and changes only what it names, in one transaction audited as one org.updated entry (none when nothing changes). A new slug resolves at once and the old one is 404. A taken slug is 409 with code slug-taken; a reserved or malformed slug, name or mark, or a slot cap outside 1 to 1000, is 409. A factory that is not the organization's is 404. Per-factory caps may add up to more than the organization's.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
+func (c *Client) UpdateOrgSettingsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateOrgSettingsRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateOrgSettings Change the organization's settings
+//
+// Every field is optional and changes only what it names, in one transaction audited as one org.updated entry (none when nothing changes). A new slug resolves at once and the old one is 404. A taken slug is 409 with code slug-taken; a reserved or malformed slug, name or mark, or a slot cap outside 1 to 1000, is 409. A factory that is not the organization's is 404. Per-factory caps may add up to more than the organization's.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
+func (c *Client) UpdateOrgSettings(ctx context.Context, org OrgRef, body UpdateOrgSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateOrgSettingsRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // StreamEvents The organization's events as they happen (Server-Sent Events)
 //
 // A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
@@ -1367,6 +1665,53 @@ func NewCreateOrgRequestWithBody(server string, contentType string, body io.Read
 	return req, nil
 }
 
+// NewDeleteOrgRequest calls the generic DeleteOrg builder with application/json body
+func NewDeleteOrgRequest(server string, org OrgRef, body DeleteOrgJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDeleteOrgRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewDeleteOrgRequestWithBody constructs an http.Request for the DeleteOrg method, with any body, and a specified content type
+func NewDeleteOrgRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetOrgRequest constructs an http.Request for the GetOrg method
 func NewGetOrgRequest(server string, org OrgRef) (*http.Request, error) {
 	var err error
@@ -1425,6 +1770,127 @@ func NewGetOrgAttentionRequest(server string, org OrgRef) (*http.Request, error)
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListAuditRequest constructs an http.Request for the ListAudit method
+func NewListAuditRequest(server string, org OrgRef, params *ListAuditParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/audit", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Before != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "before", *params.Before, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Action != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "action", *params.Action, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.TargetKind != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "target_kind", *params.TargetKind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.TargetId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "target_id", *params.TargetId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Factory != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "factory", *params.Factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
@@ -2181,6 +2647,87 @@ func NewGetFactoryOverviewRequest(server string, org OrgRef, params *GetFactoryO
 	return req, nil
 }
 
+// NewGetOrgSettingsRequest constructs an http.Request for the GetOrgSettings method
+func NewGetOrgSettingsRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/settings", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateOrgSettingsRequest calls the generic UpdateOrgSettings builder with application/json body
+func NewUpdateOrgSettingsRequest(server string, org OrgRef, body UpdateOrgSettingsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateOrgSettingsRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewUpdateOrgSettingsRequestWithBody constructs an http.Request for the UpdateOrgSettings method, with any body, and a specified content type
+func NewUpdateOrgSettingsRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/settings", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewStreamEventsRequest constructs an http.Request for the StreamEvents method
 func NewStreamEventsRequest(server string, org OrgRef, params *StreamEventsParams) (*http.Request, error) {
 	var err error
@@ -2318,6 +2865,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs (the `CreateOrg` operationId).
 	CreateOrgWithResponse(ctx context.Context, body CreateOrgJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateOrgResponse, error)
 
+	// DeleteOrgWithBodyWithResponse Delete an organization
+	//
+	// The organization disappears at once (every route under it answers 404, as for an unknown one) and is purged, with every row it owns and its objects in the bucket, after the install's retention (GOAL_ORG_RETENTION, default 7 days). `confirm` must be the organization's name exactly; otherwise 409 (code confirmation-mismatch) and nothing changes. Audited as org.deleted.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org} (the `DeleteOrg` operationId).
+	DeleteOrgWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DeleteOrgResponse, error)
+
+	// DeleteOrgWithResponse Delete an organization
+	//
+	// The organization disappears at once (every route under it answers 404, as for an unknown one) and is purged, with every row it owns and its objects in the bucket, after the install's retention (GOAL_ORG_RETENTION, default 7 days). `confirm` must be the organization's name exactly; otherwise 409 (code confirmation-mismatch) and nothing changes. Audited as org.deleted.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org} (the `DeleteOrg` operationId).
+	DeleteOrgWithResponse(ctx context.Context, org OrgRef, body DeleteOrgJSONRequestBody, reqEditors ...RequestEditorFn) (*DeleteOrgResponse, error)
+
 	// GetOrgWithResponse One organization
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -2333,6 +2898,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/attention (the `GetOrgAttention` operationId).
 	GetOrgAttentionWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetOrgAttentionResponse, error)
+
+	// ListAuditWithResponse The organization's audit log, newest first
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/audit (the `ListAudit` operationId).
+	ListAuditWithResponse(ctx context.Context, org OrgRef, params *ListAuditParams, reqEditors ...RequestEditorFn) (*ListAuditResponse, error)
 
 	// ListFactoriesWithResponse The organization's factories goald runs, from the bucket
 	//
@@ -2453,6 +3025,31 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/overview (the `GetFactoryOverview` operationId).
 	GetFactoryOverviewWithResponse(ctx context.Context, org OrgRef, params *GetFactoryOverviewParams, reqEditors ...RequestEditorFn) (*GetFactoryOverviewResponse, error)
+
+	// GetOrgSettingsWithResponse The organization's settings, slot caps included
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/settings (the `GetOrgSettings` operationId).
+	GetOrgSettingsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetOrgSettingsResponse, error)
+
+	// UpdateOrgSettingsWithBodyWithResponse Change the organization's settings
+	//
+	// Every field is optional and changes only what it names, in one transaction audited as one org.updated entry (none when nothing changes). A new slug resolves at once and the old one is 404. A taken slug is 409 with code slug-taken; a reserved or malformed slug, name or mark, or a slot cap outside 1 to 1000, is 409. A factory that is not the organization's is 404. Per-factory caps may add up to more than the organization's.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
+	UpdateOrgSettingsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateOrgSettingsResponse, error)
+
+	// UpdateOrgSettingsWithResponse Change the organization's settings
+	//
+	// Every field is optional and changes only what it names, in one transaction audited as one org.updated entry (none when nothing changes). A new slug resolves at once and the old one is 404. A taken slug is 409 with code slug-taken; a reserved or malformed slug, name or mark, or a slot cap outside 1 to 1000, is 409. A factory that is not the organization's is 404. Per-factory caps may add up to more than the organization's.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
+	UpdateOrgSettingsWithResponse(ctx context.Context, org OrgRef, body UpdateOrgSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateOrgSettingsResponse, error)
 
 	// StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
 	//
@@ -2601,6 +3198,54 @@ func (r CreateOrgResponse) ContentType() string {
 	return ""
 }
 
+type DeleteOrgResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *OrgDeleted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r DeleteOrgResponse) GetJSON202() *OrgDeleted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r DeleteOrgResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteOrgResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteOrgResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteOrgResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteOrgResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetOrgResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -2691,6 +3336,54 @@ func (r GetOrgAttentionResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetOrgAttentionResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListAuditResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AuditPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListAuditResponse) GetJSON200() *AuditPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListAuditResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListAuditResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListAuditResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListAuditResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListAuditResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -3321,6 +4014,102 @@ func (r GetFactoryOverviewResponse) ContentType() string {
 	return ""
 }
 
+type GetOrgSettingsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *OrgSettings
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetOrgSettingsResponse) GetJSON200() *OrgSettings {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetOrgSettingsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetOrgSettingsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetOrgSettingsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetOrgSettingsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetOrgSettingsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateOrgSettingsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *OrgSettings
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UpdateOrgSettingsResponse) GetJSON200() *OrgSettings {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r UpdateOrgSettingsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateOrgSettingsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateOrgSettingsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateOrgSettingsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateOrgSettingsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type StreamEventsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3418,6 +4207,36 @@ func (c *ClientWithResponses) CreateOrgWithResponse(ctx context.Context, body Cr
 	return ParseCreateOrgResponse(rsp)
 }
 
+// DeleteOrgWithBodyWithResponse Delete an organization
+//
+// The organization disappears at once (every route under it answers 404, as for an unknown one) and is purged, with every row it owns and its objects in the bucket, after the install's retention (GOAL_ORG_RETENTION, default 7 days). `confirm` must be the organization's name exactly; otherwise 409 (code confirmation-mismatch) and nothing changes. Audited as org.deleted.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org} (the `DeleteOrg` operationId).
+func (c *ClientWithResponses) DeleteOrgWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DeleteOrgResponse, error) {
+	rsp, err := c.DeleteOrgWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteOrgResponse(rsp)
+}
+
+// DeleteOrgWithResponse Delete an organization
+//
+// The organization disappears at once (every route under it answers 404, as for an unknown one) and is purged, with every row it owns and its objects in the bucket, after the install's retention (GOAL_ORG_RETENTION, default 7 days). `confirm` must be the organization's name exactly; otherwise 409 (code confirmation-mismatch) and nothing changes. Audited as org.deleted.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org} (the `DeleteOrg` operationId).
+func (c *ClientWithResponses) DeleteOrgWithResponse(ctx context.Context, org OrgRef, body DeleteOrgJSONRequestBody, reqEditors ...RequestEditorFn) (*DeleteOrgResponse, error) {
+	rsp, err := c.DeleteOrg(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteOrgResponse(rsp)
+}
+
 // GetOrgWithResponse One organization
 //
 // Returns a wrapper object for the known response body format(s).
@@ -3444,6 +4263,19 @@ func (c *ClientWithResponses) GetOrgAttentionWithResponse(ctx context.Context, o
 		return nil, err
 	}
 	return ParseGetOrgAttentionResponse(rsp)
+}
+
+// ListAuditWithResponse The organization's audit log, newest first
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/audit (the `ListAudit` operationId).
+func (c *ClientWithResponses) ListAuditWithResponse(ctx context.Context, org OrgRef, params *ListAuditParams, reqEditors ...RequestEditorFn) (*ListAuditResponse, error) {
+	rsp, err := c.ListAudit(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListAuditResponse(rsp)
 }
 
 // ListFactoriesWithResponse The organization's factories goald runs, from the bucket
@@ -3662,6 +4494,49 @@ func (c *ClientWithResponses) GetFactoryOverviewWithResponse(ctx context.Context
 	return ParseGetFactoryOverviewResponse(rsp)
 }
 
+// GetOrgSettingsWithResponse The organization's settings, slot caps included
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/settings (the `GetOrgSettings` operationId).
+func (c *ClientWithResponses) GetOrgSettingsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetOrgSettingsResponse, error) {
+	rsp, err := c.GetOrgSettings(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetOrgSettingsResponse(rsp)
+}
+
+// UpdateOrgSettingsWithBodyWithResponse Change the organization's settings
+//
+// Every field is optional and changes only what it names, in one transaction audited as one org.updated entry (none when nothing changes). A new slug resolves at once and the old one is 404. A taken slug is 409 with code slug-taken; a reserved or malformed slug, name or mark, or a slot cap outside 1 to 1000, is 409. A factory that is not the organization's is 404. Per-factory caps may add up to more than the organization's.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
+func (c *ClientWithResponses) UpdateOrgSettingsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateOrgSettingsResponse, error) {
+	rsp, err := c.UpdateOrgSettingsWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateOrgSettingsResponse(rsp)
+}
+
+// UpdateOrgSettingsWithResponse Change the organization's settings
+//
+// Every field is optional and changes only what it names, in one transaction audited as one org.updated entry (none when nothing changes). A new slug resolves at once and the old one is 404. A taken slug is 409 with code slug-taken; a reserved or malformed slug, name or mark, or a slot cap outside 1 to 1000, is 409. A factory that is not the organization's is 404. Per-factory caps may add up to more than the organization's.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
+func (c *ClientWithResponses) UpdateOrgSettingsWithResponse(ctx context.Context, org OrgRef, body UpdateOrgSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateOrgSettingsResponse, error) {
+	rsp, err := c.UpdateOrgSettings(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateOrgSettingsResponse(rsp)
+}
+
 // StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
 //
 // A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
@@ -3769,6 +4644,39 @@ func ParseCreateOrgResponse(rsp *http.Response) (*CreateOrgResponse, error) {
 	return response, nil
 }
 
+// ParseDeleteOrgResponse parses an HTTP response from a DeleteOrgWithResponse call
+func ParseDeleteOrgResponse(rsp *http.Response) (*DeleteOrgResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteOrgResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest OrgDeleted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetOrgResponse parses an HTTP response from a GetOrgWithResponse call
 func ParseGetOrgResponse(rsp *http.Response) (*GetOrgResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -3818,6 +4726,39 @@ func ParseGetOrgAttentionResponse(rsp *http.Response) (*GetOrgAttentionResponse,
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest OrgAttention
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListAuditResponse parses an HTTP response from a ListAuditWithResponse call
+func ParseListAuditResponse(rsp *http.Response) (*ListAuditResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListAuditResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AuditPage
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4264,6 +5205,72 @@ func ParseGetFactoryOverviewResponse(rsp *http.Response) (*GetFactoryOverviewRes
 	return response, nil
 }
 
+// ParseGetOrgSettingsResponse parses an HTTP response from a GetOrgSettingsWithResponse call
+func ParseGetOrgSettingsResponse(rsp *http.Response) (*GetOrgSettingsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetOrgSettingsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OrgSettings
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateOrgSettingsResponse parses an HTTP response from a UpdateOrgSettingsWithResponse call
+func ParseUpdateOrgSettingsResponse(rsp *http.Response) (*UpdateOrgSettingsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateOrgSettingsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OrgSettings
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseStreamEventsResponse parses an HTTP response from a StreamEventsWithResponse call
 func ParseStreamEventsResponse(rsp *http.Response) (*StreamEventsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -4301,12 +5308,18 @@ type ServerInterface interface {
 	// CreateOrg Create an organization
 	// (POST /v1/orgs)
 	CreateOrg(w http.ResponseWriter, r *http.Request)
+	// DeleteOrg Delete an organization
+	// (DELETE /v1/orgs/{org})
+	DeleteOrg(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// GetOrg One organization
 	// (GET /v1/orgs/{org})
 	GetOrg(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// GetOrgAttention What each factory of the organization needs from people now, for the rail's badges
 	// (GET /v1/orgs/{org}/attention)
 	GetOrgAttention(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// ListAudit The organization's audit log, newest first
+	// (GET /v1/orgs/{org}/audit)
+	ListAudit(w http.ResponseWriter, r *http.Request, org OrgRef, params ListAuditParams)
 	// ListFactories The organization's factories goald runs, from the bucket
 	// (GET /v1/orgs/{org}/factories)
 	ListFactories(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -4346,6 +5359,12 @@ type ServerInterface interface {
 	// GetFactoryOverview Every factory of the organization summarized for the Factories home, ordered by name
 	// (GET /v1/orgs/{org}/overview)
 	GetFactoryOverview(w http.ResponseWriter, r *http.Request, org OrgRef, params GetFactoryOverviewParams)
+	// GetOrgSettings The organization's settings, slot caps included
+	// (GET /v1/orgs/{org}/settings)
+	GetOrgSettings(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// UpdateOrgSettings Change the organization's settings
+	// (PATCH /v1/orgs/{org}/settings)
+	UpdateOrgSettings(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	// (GET /v1/orgs/{org}/stream)
 	StreamEvents(w http.ResponseWriter, r *http.Request, org OrgRef, params StreamEventsParams)
@@ -4402,6 +5421,32 @@ func (siw *ServerInterfaceWrapper) CreateOrg(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteOrg operation middleware
+func (siw *ServerInterfaceWrapper) DeleteOrg(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteOrg(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetOrg operation middleware
 func (siw *ServerInterfaceWrapper) GetOrg(w http.ResponseWriter, r *http.Request) {
 
@@ -4445,6 +5490,113 @@ func (siw *ServerInterfaceWrapper) GetOrgAttention(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetOrgAttention(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAudit operation middleware
+func (siw *ServerInterfaceWrapper) ListAudit(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAuditParams
+
+	// ------------- Optional query parameter "before" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "before", r.URL.Query(), &params.Before, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "before"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "before", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "action" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "action", r.URL.Query(), &params.Action, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "action"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "action", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "target_kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "target_kind", r.URL.Query(), &params.TargetKind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "target_kind"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "target_kind", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "target_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "target_id", r.URL.Query(), &params.TargetId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "target_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "target_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "factory" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "factory", r.URL.Query(), &params.Factory, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "factory"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAudit(w, r, org, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5027,6 +6179,58 @@ func (siw *ServerInterfaceWrapper) GetFactoryOverview(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// GetOrgSettings operation middleware
+func (siw *ServerInterfaceWrapper) GetOrgSettings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOrgSettings(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateOrgSettings operation middleware
+func (siw *ServerInterfaceWrapper) UpdateOrgSettings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateOrgSettings(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // StreamEvents operation middleware
 func (siw *ServerInterfaceWrapper) StreamEvents(w http.ResponseWriter, r *http.Request) {
 
@@ -5192,7 +6396,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/health", wrapper.GetHealth)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs", wrapper.ListOrgs)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs", wrapper.CreateOrg)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}", wrapper.DeleteOrg)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}", wrapper.GetOrg)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/settings", wrapper.GetOrgSettings)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/settings", wrapper.UpdateOrgSettings)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/audit", wrapper.ListAudit)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/attention", wrapper.GetOrgAttention)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/overview", wrapper.GetFactoryOverview)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/inbox", wrapper.GetInbox)
@@ -5312,6 +6520,46 @@ func (response CreateOrgdefaultApplicationProblemPlusJSONResponse) VisitCreateOr
 	return err
 }
 
+type DeleteOrgRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *DeleteOrgJSONRequestBody
+}
+
+type DeleteOrgResponseObject interface {
+	VisitDeleteOrgResponse(w http.ResponseWriter) error
+}
+
+type DeleteOrg202JSONResponse OrgDeleted
+
+func (response DeleteOrg202JSONResponse) VisitDeleteOrgResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteOrgdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteOrgdefaultApplicationProblemPlusJSONResponse) VisitDeleteOrgResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetOrgRequestObject struct {
 	Org OrgRef `json:"org"`
 }
@@ -5379,6 +6627,46 @@ type GetOrgAttentiondefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetOrgAttentiondefaultApplicationProblemPlusJSONResponse) VisitGetOrgAttentionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAuditRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params ListAuditParams
+}
+
+type ListAuditResponseObject interface {
+	VisitListAuditResponse(w http.ResponseWriter) error
+}
+
+type ListAudit200JSONResponse AuditPage
+
+func (response ListAudit200JSONResponse) VisitListAuditResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAuditdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListAuditdefaultApplicationProblemPlusJSONResponse) VisitListAuditResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -5915,6 +7203,85 @@ func (response GetFactoryOverviewdefaultApplicationProblemPlusJSONResponse) Visi
 	return err
 }
 
+type GetOrgSettingsRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type GetOrgSettingsResponseObject interface {
+	VisitGetOrgSettingsResponse(w http.ResponseWriter) error
+}
+
+type GetOrgSettings200JSONResponse OrgSettings
+
+func (response GetOrgSettings200JSONResponse) VisitGetOrgSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOrgSettingsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetOrgSettingsdefaultApplicationProblemPlusJSONResponse) VisitGetOrgSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateOrgSettingsRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *UpdateOrgSettingsJSONRequestBody
+}
+
+type UpdateOrgSettingsResponseObject interface {
+	VisitUpdateOrgSettingsResponse(w http.ResponseWriter) error
+}
+
+type UpdateOrgSettings200JSONResponse OrgSettings
+
+func (response UpdateOrgSettings200JSONResponse) VisitUpdateOrgSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateOrgSettingsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UpdateOrgSettingsdefaultApplicationProblemPlusJSONResponse) VisitUpdateOrgSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type StreamEventsRequestObject struct {
 	Org    OrgRef `json:"org"`
 	Params StreamEventsParams
@@ -5995,12 +7362,18 @@ type StrictServerInterface interface {
 	// CreateOrg Create an organization
 	// (POST /v1/orgs)
 	CreateOrg(ctx context.Context, request CreateOrgRequestObject) (CreateOrgResponseObject, error)
+	// DeleteOrg Delete an organization
+	// (DELETE /v1/orgs/{org})
+	DeleteOrg(ctx context.Context, request DeleteOrgRequestObject) (DeleteOrgResponseObject, error)
 	// GetOrg One organization
 	// (GET /v1/orgs/{org})
 	GetOrg(ctx context.Context, request GetOrgRequestObject) (GetOrgResponseObject, error)
 	// GetOrgAttention What each factory of the organization needs from people now, for the rail's badges
 	// (GET /v1/orgs/{org}/attention)
 	GetOrgAttention(ctx context.Context, request GetOrgAttentionRequestObject) (GetOrgAttentionResponseObject, error)
+	// ListAudit The organization's audit log, newest first
+	// (GET /v1/orgs/{org}/audit)
+	ListAudit(ctx context.Context, request ListAuditRequestObject) (ListAuditResponseObject, error)
 	// ListFactories The organization's factories goald runs, from the bucket
 	// (GET /v1/orgs/{org}/factories)
 	ListFactories(ctx context.Context, request ListFactoriesRequestObject) (ListFactoriesResponseObject, error)
@@ -6040,6 +7413,12 @@ type StrictServerInterface interface {
 	// GetFactoryOverview Every factory of the organization summarized for the Factories home, ordered by name
 	// (GET /v1/orgs/{org}/overview)
 	GetFactoryOverview(ctx context.Context, request GetFactoryOverviewRequestObject) (GetFactoryOverviewResponseObject, error)
+	// GetOrgSettings The organization's settings, slot caps included
+	// (GET /v1/orgs/{org}/settings)
+	GetOrgSettings(ctx context.Context, request GetOrgSettingsRequestObject) (GetOrgSettingsResponseObject, error)
+	// UpdateOrgSettings Change the organization's settings
+	// (PATCH /v1/orgs/{org}/settings)
+	UpdateOrgSettings(ctx context.Context, request UpdateOrgSettingsRequestObject) (UpdateOrgSettingsResponseObject, error)
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	// (GET /v1/orgs/{org}/stream)
 	StreamEvents(ctx context.Context, request StreamEventsRequestObject) (StreamEventsResponseObject, error)
@@ -6163,6 +7542,39 @@ func (sh *strictHandler) CreateOrg(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// DeleteOrg operation middleware
+func (sh *strictHandler) DeleteOrg(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request DeleteOrgRequestObject
+
+	request.Org = org
+
+	var body DeleteOrgJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteOrg(ctx, request.(DeleteOrgRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteOrg")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteOrgResponseObject); ok {
+		if err := validResponse.VisitDeleteOrgResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetOrg operation middleware
 func (sh *strictHandler) GetOrg(w http.ResponseWriter, r *http.Request, org OrgRef) {
 	var request GetOrgRequestObject
@@ -6208,6 +7620,33 @@ func (sh *strictHandler) GetOrgAttention(w http.ResponseWriter, r *http.Request,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetOrgAttentionResponseObject); ok {
 		if err := validResponse.VisitGetOrgAttentionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAudit operation middleware
+func (sh *strictHandler) ListAudit(w http.ResponseWriter, r *http.Request, org OrgRef, params ListAuditParams) {
+	var request ListAuditRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAudit(ctx, request.(ListAuditRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAudit")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAuditResponseObject); ok {
+		if err := validResponse.VisitListAuditResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -6585,6 +8024,65 @@ func (sh *strictHandler) GetFactoryOverview(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetFactoryOverviewResponseObject); ok {
 		if err := validResponse.VisitGetFactoryOverviewResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetOrgSettings operation middleware
+func (sh *strictHandler) GetOrgSettings(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request GetOrgSettingsRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetOrgSettings(ctx, request.(GetOrgSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetOrgSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetOrgSettingsResponseObject); ok {
+		if err := validResponse.VisitGetOrgSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateOrgSettings operation middleware
+func (sh *strictHandler) UpdateOrgSettings(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request UpdateOrgSettingsRequestObject
+
+	request.Org = org
+
+	var body UpdateOrgSettingsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateOrgSettings(ctx, request.(UpdateOrgSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateOrgSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateOrgSettingsResponseObject); ok {
+		if err := validResponse.VisitUpdateOrgSettingsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -231,10 +231,15 @@ type probe struct {
 const submitFix = `{"title":"t","type":"fix"}`
 
 var probes = map[string]probe{
-	"getHealth":          {method: http.MethodGet, path: "/v1/health"},
-	"listOrgs":           {method: http.MethodGet, path: "/v1/orgs"},
-	"createOrg":          {method: http.MethodPost, path: "/v1/orgs", body: `{"name":"Acme Two","slug":"acme-two"}`},
-	"getOrg":             {method: http.MethodGet, path: "/v1/orgs/acme", org: testOrg},
+	"getHealth": {method: http.MethodGet, path: "/v1/health"},
+	"listOrgs":  {method: http.MethodGet, path: "/v1/orgs"},
+	"createOrg": {method: http.MethodPost, path: "/v1/orgs", body: `{"name":"Acme Two","slug":"acme-two"}`},
+	"getOrg":    {method: http.MethodGet, path: "/v1/orgs/acme", org: testOrg},
+	// A wrong confirmation, so the probe deletes nothing the later probes need.
+	"deleteOrg":          {method: http.MethodDelete, path: "/v1/orgs/acme", body: `{"confirm":"nope"}`, org: testOrg},
+	"getOrgSettings":     {method: http.MethodGet, path: "/v1/orgs/acme/settings", org: testOrg},
+	"updateOrgSettings":  {method: http.MethodPatch, path: "/v1/orgs/acme/settings", body: `{"mark":"AC"}`, org: testOrg},
+	"listAudit":          {method: http.MethodGet, path: "/v1/orgs/acme/audit?factory=acme", org: testOrg, factory: acmeID},
 	"listFactories":      {method: http.MethodGet, path: "/v1/orgs/acme/factories", org: testOrg},
 	"getOrgAttention":    {method: http.MethodGet, path: "/v1/orgs/acme/attention", org: testOrg},
 	"getFactoryOverview": {method: http.MethodGet, path: "/v1/orgs/acme/overview", org: testOrg},

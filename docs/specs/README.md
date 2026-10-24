@@ -87,6 +87,7 @@ These keep the specs from colliding. A spec that needs to break one says so in i
 ### New packages and their depguard rules (review)
 | Package | Phase | May import | Rule |
 | --- | --- | --- | --- |
+| `internal/retention` | A (A6) | `domain`, `ports`, `factorystore` | `retention` rule: no adapters, engine, `api`, AWS or pgx |
 | `internal/factorymodel`, `internal/authoring` | B | `domain`, `ports`, `config`, yaml | `definitions` rule + `authoring` rule (B §5.4) |
 | `internal/builder` | D | `domain`, `ports`, `config` | `builder` rule (D §5.2) |
 | `internal/adapters/skillssh` | D | own deps | adapters rule |
@@ -95,7 +96,7 @@ These keep the specs from colliding. A spec that needs to break one says so in i
 | `internal/connectors` | 3.2 | `domain`, `ports`, `config`, `authoring` (to implement `authoring.Check`), `schema`, yaml, jsonschema | `connectors` rule (3.2 §5.5) |
 | `internal/adapters/oauthclient`, `awssts`, `mcpregistry` | 3.2 | own deps | adapters rule |
 
-A adds no package (no-auth: `internal/adapters/oidc` moved to phase 4). The `api` rule also denies `internal/authoring`, `factorymodel` and `builder` in 2.2, and `secrets` and `connectors` when phase 3 adds them (handlers reach them through interfaces declared in `internal/api`). The `engine` rule should become an allow-list (`domain`, `ports` only), since a deny-list misses the new core packages. Each new row goes into `docs/engineering/architecture.md`'s import table in the PR that adds the package.
+A adds one package, `internal/retention` (A6: the purge job of deleted organizations; no-auth: `internal/adapters/oidc` moved to phase 4). The `api` rule also denies `internal/authoring`, `factorymodel` and `builder` in 2.2, and `secrets` and `connectors` when phase 3 adds them (handlers reach them through interfaces declared in `internal/api`). The `engine` rule should become an allow-list (`domain`, `ports` only), since a deny-list misses the new core packages. Each new row goes into `docs/engineering/architecture.md`'s import table in the PR that adds the package.
 
 ### Rules (binding, from AGENTS.md)
 Config-driven; factories keyed by UUID; PostgreSQL is the only database; stateless goald; hexagonal architecture enforced by depguard; manual constructor injection in `cmd/*/main.go`; 12-factor config; Terraform only in `terraform/` and not in this phase; no employer names (use `acme`, `example.com`); UI follows `design-system/goal/MASTER.md`; tests protect behaviour; forward-only migrations; one work item, one small pull request; load the AGENTS.md skills for the area a PR touches.

@@ -19,6 +19,9 @@ var (
 	ErrInvalid = errors.New("invalid")
 	// ErrNoOrg means a call that acts on an organization's rows got a context without one.
 	ErrNoOrg = errors.New("no organization in context")
+	// ErrSlugTaken means another organization, live or deleted and not yet purged, holds the
+	// slug. It wraps ErrInvalid.
+	ErrSlugTaken = fmt.Errorf("slug taken: %w", ErrInvalid)
 )
 
 // OrgID is an organization's id (a UUID), the tenant boundary of every org-owned row.

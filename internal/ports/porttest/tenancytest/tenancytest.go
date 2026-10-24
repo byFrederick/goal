@@ -47,6 +47,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"OrgMethods_NoOrgIsAnError", testNoOrg},
 		{"UpdateOrg_SlotCaps", testSlotCaps},
 		{"UpdateOrg_SlotCapRulesRefused", testSlotCapRules},
+		{"PurgeDeletedOrgs_AllOfTheBatchOrNone", testPurgeHook},
 	}
 
 	for _, tc := range tests {
@@ -205,7 +206,7 @@ func (f *fixture) log(o domain.Org, q ports.AuditQuery) []domain.AuditEntry {
 func (f *fixture) purge(cutoff time.Time) []domain.OrgID {
 	f.t.Helper()
 
-	ids, err := f.Tenancy.PurgeDeletedOrgs(f.t.Context(), cutoff, 10)
+	ids, err := f.Tenancy.PurgeDeletedOrgs(f.t.Context(), cutoff, 10, nil)
 	if err != nil {
 		f.t.Fatal(err)
 	}

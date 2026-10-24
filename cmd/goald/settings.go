@@ -49,6 +49,9 @@ type settings struct {
 	// MaxRuns caps the agent runs this goald has in flight at once (GOAL_MAX_RUNS, default 0:
 	// no cap). With a cap, claims are shared out fairly across organizations.
 	MaxRuns int
+	// OrgRetention is how long a deleted organization is kept before it is purged with its rows
+	// and bucket objects (GOAL_ORG_RETENTION, default 7d; a Go duration or a number of days).
+	OrgRetention time.Duration
 	// GitHubAPIURL is the GitHub REST API goald merges pull requests through
 	// (GOAL_GITHUB_API_URL, default https://api.github.com; http only on a loopback address).
 	GitHubAPIURL string
@@ -109,6 +112,10 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 
 	if s.RefreshEvery, err = duration(or("GOAL_REFRESH_EVERY", "30s")); err != nil {
 		errs = append(errs, fmt.Errorf("GOAL_REFRESH_EVERY: %w", err))
+	}
+
+	if s.OrgRetention, err = duration(or("GOAL_ORG_RETENTION", "7d")); err != nil {
+		errs = append(errs, fmt.Errorf("GOAL_ORG_RETENTION: %w", err))
 	}
 
 	if s.MaxRuns, err = strconv.Atoi(or("GOAL_MAX_RUNS", "0")); err != nil || s.MaxRuns < 0 {
@@ -200,7 +207,14 @@ func taskEnv(raw string) (map[string]string, error) {
 	return out, nil
 }
 
+// duration parses a positive Go duration, or a whole number of days such as 7d.
 func duration(s string) (time.Duration, error) {
+	if days, ok := strings.CutSuffix(s, "d"); ok {
+		if n, err := strconv.Atoi(days); err == nil {
+			s = strconv.Itoa(n*24) + "h"
+		}
+	}
+
 	d, err := time.ParseDuration(s)
 	if err == nil && d <= 0 {
 		err = fmt.Errorf("%s is not positive", s)

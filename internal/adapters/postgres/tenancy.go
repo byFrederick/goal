@@ -225,24 +225,40 @@ func (s *Store) DeleteOrg(ctx context.Context, by domain.Actor, now time.Time) e
 	return nil
 }
 
-// PurgeDeletedOrgs implements ports.Tenancy: in one transaction it locks up to limit deleted
-// organizations (skipping those another instance is purging) and purges each with
-// goal_purge_org.
-func (s *Store) PurgeDeletedOrgs(ctx context.Context, cutoff time.Time, limit int) ([]domain.OrgID, error) {
+// PurgeDeletedOrgs implements ports.Tenancy: in one transaction it takes the purge lock (or
+// returns nothing when another instance holds it), locks up to limit deleted organizations and
+// purges each with goal_purge_org, then calls also. The transaction commits only when every
+// organization of the batch is purged.
+func (s *Store) PurgeDeletedOrgs(ctx context.Context, cutoff time.Time, limit int,
+	also func(context.Context, domain.OrgID) error,
+) ([]domain.OrgID, error) {
 	var out []domain.OrgID
 
 	err := s.systemTx(ctx, func(q *db.Queries) error {
+		locked, err := q.TryLockOrgPurge(ctx)
+		if err != nil || !locked {
+			return err
+		}
+
 		ids, err := q.DeletedOrgs(ctx, db.DeletedOrgsParams{Before: cutoff, MaxOrgs: int32(min(limit, 1000))}) //nolint:gosec // capped
 		if err != nil {
 			return err
 		}
 
 		for _, id := range ids {
+			org := domain.OrgID(id.String())
+
 			if err := q.PurgeOrg(ctx, id); err != nil {
 				return fmt.Errorf("org %s: %w", id, err)
 			}
 
-			out = append(out, domain.OrgID(id.String()))
+			if also != nil {
+				if err := also(ctx, org); err != nil {
+					return fmt.Errorf("org %s: %w", id, err)
+				}
+			}
+
+			out = append(out, org)
 		}
 
 		return nil
@@ -369,7 +385,7 @@ func ruleError(err error, slug string) error {
 
 	switch {
 	case pgErr.Code == uniqueViolation && pgErr.ConstraintName == "organizations_slug_key":
-		return fmt.Errorf("slug %q is taken: %w", slug, domain.ErrInvalid)
+		return fmt.Errorf("slug %q: %w", slug, domain.ErrSlugTaken)
 	case pgErr.Code == checkViolation:
 		return fmt.Errorf("%s: %w", pgErr.ConstraintName, domain.ErrInvalid)
 	default:

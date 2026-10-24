@@ -47,6 +47,11 @@ const usage = `usage:
   goal org list                                   the organizations (* the one commands act in)
   goal org use <slug>                             act in this organization from now on (config file)
   goal org create <slug> --name N [--mark M]      create an organization
+  goal org update <slug> [--name N] [--slug S] [--mark M] [--max-slots N]
+                                                  rename it, or cap the agents running at once
+                                                  across its factories (--max-slots 0: no cap)
+  goal org delete <slug> [--yes]                  delete it after typing its name (--yes: no prompt);
+                                                  it is purged after GOAL_ORG_RETENTION
   goal storage init                               create the bucket if missing and enable versioning
   goal db init                                    create the database roles goald runs as (goal_owner,
                                                   goal_app) and hand the schema to goal_owner
@@ -66,7 +71,7 @@ var errUsage = errors.New(usage)
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
-	out := &printer{w: os.Stdout}
+	out := &printer{w: os.Stdout, in: os.Stdin}
 	err := errors.Join(run(ctx, os.Args[1:], out, os.Getenv, debug.ReadBuildInfo), out.err)
 
 	stop()
@@ -327,7 +332,9 @@ func list(ctx context.Context, out *printer, catalog *factorystore.Catalog, buck
 // printer writes command output to stdout and keeps the first write error, so a closed pipe
 // fails the command once instead of being ignored.
 type printer struct {
-	w   io.Writer
+	w io.Writer
+	// in is the terminal's input, read for confirmations.
+	in  io.Reader
 	err error
 }
 

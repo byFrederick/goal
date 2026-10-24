@@ -101,6 +101,38 @@ func (s *Store) RecordAndon(org domain.OrgID, factory domain.FactoryID, p domain
 	s.andon = append(s.andon, andonRecord{org: org, factory: factory, pull: p, cleared: cleared})
 }
 
+// purge removes every row of org, as goal_purge_org does.
+func (s *Store) purge(org domain.OrgID) {
+	s.mu.Lock()
+	defer s.changes.signal()
+	defer s.mu.Unlock()
+
+	gone := map[domain.ItemID]bool{}
+
+	for id, it := range s.items {
+		if it.OrgID == org {
+			gone[id] = true
+
+			delete(s.items, id)
+			delete(s.leases, id)
+		}
+	}
+
+	maps.DeleteFunc(s.runs, func(_ domain.RunID, r *domain.Run) bool { return gone[r.ItemID] })
+	s.events = slices.DeleteFunc(s.events, func(e domain.Event) bool { return gone[e.ItemID] })
+
+	for id, owner := range s.factories {
+		if owner == org {
+			delete(s.factories, id)
+			delete(s.numbers, id)
+			delete(s.factCaps, id)
+		}
+	}
+
+	delete(s.orgCaps, org)
+	s.andon = slices.DeleteFunc(s.andon, func(a andonRecord) bool { return a.org == org })
+}
+
 // orgOf returns the organization in ctx, as row-level security requires.
 func orgOf(ctx context.Context) (domain.OrgID, error) {
 	org, ok := domain.OrgFrom(ctx)

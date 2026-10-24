@@ -4,6 +4,7 @@ import (
 	"maps"
 	"strings"
 	"testing"
+	"time"
 )
 
 func envOf(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
@@ -31,6 +32,10 @@ func TestSettings_Defaults(t *testing.T) {
 		t.Errorf("database url = %s, want the compose database as goal_app", s.DatabaseURL)
 	}
 
+	if s.OrgRetention != 7*24*time.Hour {
+		t.Errorf("org retention = %s, want 7 days", s.OrgRetention)
+	}
+
 	want := map[string]string{"CLAUDE_CODE_OAUTH_TOKEN": "env:CLAUDE_CODE_OAUTH_TOKEN"} //nolint:gosec // a reference, not a secret
 	if !maps.Equal(s.TaskEnv, want) {
 		t.Errorf("task env = %v, want %v", s.TaskEnv, want)
@@ -51,6 +56,7 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 		{name: "literal secret for tasks", env: map[string]string{"GOAL_TASK_ENV": "CLAUDE_CODE_OAUTH_TOKEN=sk-literal"}, want: "NAME=env:REF"},
 		{name: "bad duration", env: map[string]string{"GOAL_TICK_EVERY": "-1s"}, want: "GOAL_TICK_EVERY"},
 		{name: "negative run cap", env: map[string]string{"GOAL_MAX_RUNS": "-2"}, want: "GOAL_MAX_RUNS"},
+		{name: "no retention", env: map[string]string{"GOAL_ORG_RETENTION": "0d"}, want: "GOAL_ORG_RETENTION"},
 		{name: "GitHub API in clear text", env: map[string]string{"GOAL_GITHUB_API_URL": "http://api.example.com"}, want: "must be https"},
 	}
 

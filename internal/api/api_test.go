@@ -196,21 +196,29 @@ func (r reads) FlowMetrics(ctx context.Context, f domain.FactoryID, since, until
 	return r.Store.FlowMetrics(ctx, f, since, until)
 }
 
-func newHarness(t *testing.T) *harness {
+// newTenancy holds acme (testOrg) and example-labs (otherOrg).
+func newTenancy(t *testing.T) *porttest.Tenancy {
 	t.Helper()
-
-	catalog := factorystore.New(porttest.NewObjectStore())
 
 	tenancy := porttest.NewTenancy(time.Now)
 
 	for _, o := range []struct {
 		id         domain.OrgID
 		slug, name string
-	}{{testOrg, "acme", "Acme"}, {otherOrg, "example-labs", "Example Labs"}} {
+	}{{testOrg, acmeSlug, "Acme"}, {otherOrg, labsSlug, "Example Labs"}} {
 		if got, err := tenancy.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: o.slug, Name: o.name}); err != nil || got.ID != o.id {
 			t.Fatalf("create organization %s = %v (%v), want %s", o.slug, got.ID, err, o.id)
 		}
 	}
+
+	return tenancy
+}
+
+func newHarness(t *testing.T) *harness {
+	t.Helper()
+
+	catalog := factorystore.New(porttest.NewObjectStore())
+	tenancy := newTenancy(t)
 
 	for _, files := range []map[string]string{
 		{"factory.yaml": acme, "agents/writer.md": "# writer\n"},
@@ -236,6 +244,7 @@ func newHarness(t *testing.T) *harness {
 		store: porttest.NewStore(), clock: porttest.NewClock(t0), codehost: porttest.NewCodeHost(),
 		notices: porttest.NewItemNotices(),
 	}
+	tenancy.WithStore(h.store) // one database holds the organizations and their factories' rows
 
 	e, err := engine.New(engine.Deps{
 		Store: h.store, Orgs: tenancy, Runner: porttest.NewRunner(porttest.Succeed(`{}`)), Workspaces: porttest.NewWorkspaces(),
@@ -248,15 +257,22 @@ func newHarness(t *testing.T) *harness {
 
 	h.engine = e
 
-	// As goald does: the definitions cache hands every loaded factory's line to the engine.
+	// As goald does: the definitions cache registers every loaded factory in its organization and
+	// hands its line to the engine.
 	defs := definitions.New(catalog, tenancy, func(_ context.Context, fs []definitions.Loaded) error {
 		lines := make([]domain.Line, 0, len(fs))
 		for _, f := range fs {
+			h.store.AddFactory(f.Org, domain.FactoryID(f.Factory.Metadata.ID))
 			lines = append(lines, f.Line())
 		}
 
 		return e.SetLines(lines)
 	}, nil)
+
+	// As goald does at startup: load every organization's factories once.
+	if _, err := defs.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 
 	feed := api.NewFeed(h.notices, nil)
 	ctx, stop := context.WithCancel(domain.WithOrg(context.Background(), testOrg))
@@ -267,8 +283,8 @@ func newHarness(t *testing.T) *harness {
 	h.seam, h.tenancy = &seam{}, tenancy
 
 	handler, err := api.New(api.Deps{
-		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Orgs: tenancy, Authorizer: h.seam,
-		Feed: feed, Clock: h.clock,
+		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Orgs: tenancy, Audit: tenancy,
+		OrgRetention: retention, Authorizer: h.seam, Feed: feed, Clock: h.clock,
 	})
 	if err != nil {
 		t.Fatal(err)

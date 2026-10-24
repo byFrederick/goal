@@ -82,6 +82,10 @@ type Deps struct {
 	Items     Items
 	Factories Factories
 	Orgs      Orgs
+	Audit     AuditLog
+	// OrgRetention is how long a deleted organization is kept before the purge removes it
+	// (GOAL_ORG_RETENTION); a deletion answers when that will be.
+	OrgRetention time.Duration
 	// Authorizer decides every request (AllowAll in phase 2.2).
 	Authorizer Authorizer
 	// Feed serves /v1/orgs/{org}/stream; the caller runs it (Feed.Run).
@@ -106,9 +110,9 @@ var errInvalid = errors.New("invalid request")
 
 // New returns the API's handler for the /v1/ routes.
 func New(d Deps) (http.Handler, error) {
-	if d.Engine == nil || d.Items == nil || d.Factories == nil || d.Orgs == nil || d.Authorizer == nil || d.Feed == nil ||
-		d.Clock == nil {
-		return nil, errors.New("api: Engine, Items, Factories, Orgs, Authorizer, Feed and Clock are required")
+	if d.Engine == nil || d.Items == nil || d.Factories == nil || d.Orgs == nil || d.Audit == nil || d.Authorizer == nil ||
+		d.Feed == nil || d.Clock == nil || d.OrgRetention <= 0 {
+		return nil, errors.New("api: Engine, Items, Factories, Orgs, Audit, Authorizer, Feed, Clock and a positive OrgRetention are required")
 	}
 
 	log := d.Logger
@@ -117,8 +121,8 @@ func New(d Deps) (http.Handler, error) {
 	}
 
 	s := &server{
-		engine: d.Engine, items: d.Items, factories: d.Factories, orgs: d.Orgs, authz: d.Authorizer, feed: d.Feed,
-		clock: d.Clock, log: log,
+		engine: d.Engine, items: d.Items, factories: d.Factories, orgs: d.Orgs, audit: d.Audit, retention: d.OrgRetention,
+		authz: d.Authorizer, feed: d.Feed, clock: d.Clock, log: log,
 	}
 	s.inbox = append([]InboxSource{decisions{s: s}}, d.InboxSources...)
 
@@ -162,6 +166,8 @@ type server struct {
 	items     Items
 	factories Factories
 	orgs      Orgs
+	audit     AuditLog
+	retention time.Duration
 	authz     Authorizer
 	feed      *Feed
 	inbox     []InboxSource
@@ -356,7 +362,10 @@ func problemOf(err error) gen.Problem {
 		return p
 	case errors.Is(err, domain.ErrInvalid), errors.Is(err, engine.ErrNotWaitingHuman), errors.Is(err, engine.ErrNotBlocked),
 		errors.Is(err, engine.ErrNotMergeStep), errors.Is(err, ports.ErrNotMergeable):
-		return detailed(http.StatusConflict, err)
+		p := detailed(http.StatusConflict, err)
+		p.Code = optional(problemCode(err))
+
+		return p
 	case errors.As(err, &tooLarge):
 		return detailed(http.StatusRequestEntityTooLarge, err)
 	case errors.Is(err, errInvalid):

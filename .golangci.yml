@@ -161,6 +161,19 @@ linters:
               desc: AWS access belongs in internal/adapters
             - pkg: github.com/jackc/pgx
               desc: database access belongs in internal/adapters/postgres
+        retention:
+          files: ["**/internal/retention/**"]
+          deny:
+            - pkg: github.com/byFrederick/goal/internal/adapters
+              desc: the purge reaches the database and the bucket only through ports
+            - pkg: github.com/byFrederick/goal/internal/engine
+              desc: the purge is a sibling job of the engine
+            - pkg: github.com/byFrederick/goal/internal/api
+              desc: the purge is a background job; the HTTP API never calls it
+            - pkg: github.com/aws
+              desc: AWS access belongs in internal/adapters
+            - pkg: github.com/jackc/pgx
+              desc: database access belongs in internal/adapters/postgres
         authoring:
           files: ["**/internal/authoring/**"]
           deny:

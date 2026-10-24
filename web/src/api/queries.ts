@@ -11,13 +11,15 @@ import {
   getItem,
   getMetrics,
   getOrg,
+  getOrgSettings,
   type ItemFilter,
+  listAudit,
   listFactories,
   listItemEvents,
   listItems,
   listOrgs,
 } from './client';
-import type { ItemEvent } from './types';
+import type { AuditFilter, ItemEvent } from './types';
 
 export const keys = {
   orgs: ['orgs'] as const,
@@ -26,6 +28,8 @@ export const keys = {
   orgDetail: (org: string) => ['org', org, 'detail'] as const,
   /** What each factory needs from people now (the rail's badges). */
   attention: (org: string) => ['org', org, 'attention'] as const,
+  settings: (org: string) => ['org', org, 'settings'] as const,
+  audit: (org: string, filter: AuditFilter) => ['org', org, 'audit', filter] as const,
   factories: (org: string) => ['org', org, 'factories'] as const,
   /** The prefix of every factory overview window. */
   overviews: (org: string) => ['org', org, 'overview'] as const,
@@ -70,6 +74,16 @@ export const overviewQuery = (org: string, window = '7d') =>
 /** The inbox at goald's default limit; `factory` narrows it to one factory. */
 export const inboxQuery = (org: string, factory?: string) =>
   queryOptions({ queryKey: keys.inbox(org, factory), queryFn: ({ signal }) => getInbox(org, { factory }, signal) });
+
+export const settingsQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.settings(org),
+    queryFn: ({ signal }) => getOrgSettings(org, signal),
+    staleTime: 30_000,
+  });
+
+export const auditQuery = (org: string, filter: AuditFilter = {}) =>
+  queryOptions({ queryKey: keys.audit(org, filter), queryFn: ({ signal }) => listAudit(org, filter, signal) });
 
 export const factoriesQuery = (org: string) =>
   queryOptions({

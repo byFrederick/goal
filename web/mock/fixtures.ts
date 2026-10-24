@@ -3,7 +3,16 @@
 // decisions waiting, as on the canvas, and an empty support factory whose line is stopped by an
 // andon pull); Example Labs has one, empty. Times are relative to when the mock starts, so ages
 // read like a live floor.
-import type { AndonPull, ClassOfService, Factory, ItemEvent, ItemState, Metrics, Org } from '@goal/api-client';
+import type {
+  AndonPull,
+  AuditEntry,
+  ClassOfService,
+  Factory,
+  ItemEvent,
+  ItemState,
+  Metrics,
+  Org,
+} from '@goal/api-client';
 
 export interface MockItem {
   id: string;
@@ -32,9 +41,19 @@ export interface MockStationConfig {
   wip_limit: number | null;
 }
 
+/** An organization's slot caps (null: no cap), by factory id for the factories. */
+export interface MockSlots {
+  max: number | null;
+  factories: Record<string, number | null>;
+}
+
 export interface MockState {
   /** Organizations by name; factory_count is computed from factories. */
   orgs: Org[];
+  slots: Record<string, MockSlots>;
+  /** Every organization's audit log, oldest first. */
+  audit: { org: string; entry: AuditEntry }[];
+  nextAuditId: number;
   factories: Factory[];
   stations: Record<string, Record<string, MockStationConfig>>;
   constraint: Record<string, string | null>;
@@ -849,6 +868,13 @@ export function seed(now = Date.now()): MockState {
       { id: labsOrg, slug: 'example-labs', name: 'Example Labs', mark: 'EL', factory_count: 0, created_at: created },
     ],
     factories: [goalFactory, sreFactory, supportFactory, researchFactory],
+    // Acme shares 6 slots, at most 3 for goal and 2 for sre (Org-Settings board); labs has no caps.
+    slots: {
+      [acmeOrg]: { max: 6, factories: { [goalFactory.id]: 3, [sreFactory.id]: 2 } },
+      [labsOrg]: { max: null, factories: {} },
+    },
+    audit: [],
+    nextAuditId: 1,
     stations: {
       goal: {
         inbox: { agents: [], wip_limit: null },
@@ -893,6 +919,35 @@ export function seed(now = Date.now()): MockState {
     events: [],
     nextEventId: 1,
   };
+
+  const localUser = { kind: 'user', id: 'local', name: 'Local user' } as const;
+  for (const org of state.orgs) {
+    state.audit.push({
+      org: org.id,
+      entry: {
+        id: state.nextAuditId++,
+        at: created,
+        actor: localUser,
+        action: 'org.created',
+        target: { kind: 'org', id: org.id },
+        data: { slug: org.slug, name: org.name },
+      },
+    });
+  }
+  state.audit.push({
+    org: acmeOrg,
+    entry: {
+      id: state.nextAuditId++,
+      at: new Date(now - 30 * 86_400_000).toISOString(),
+      actor: localUser,
+      action: 'org.updated',
+      target: { kind: 'org', id: acmeOrg },
+      data: {
+        max_slots: { from: null, to: 6 },
+        factory_slots: { [goalFactory.id]: { from: null, to: 3 }, [sreFactory.id]: { from: null, to: 2 } },
+      },
+    },
+  });
 
   build(goalFactory, 0, goalSeeds, now, state);
   build(sreFactory, 1, sreSeeds, now, state);

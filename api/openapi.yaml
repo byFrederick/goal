@@ -81,6 +81,100 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Org" }
         default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteOrg
+      tags: [orgs]
+      summary: Delete an organization
+      description: >-
+        The organization disappears at once (every route under it answers 404, as for an unknown
+        one) and is purged, with every row it owns and its objects in the bucket, after the
+        install's retention (GOAL_ORG_RETENTION, default 7 days). `confirm` must be the
+        organization's name exactly; otherwise 409 (code confirmation-mismatch) and nothing
+        changes. Audited as org.deleted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrgDeletion" }
+      responses:
+        "202":
+          description: Deleted; the purge is scheduled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrgDeleted" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/settings:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: getOrgSettings
+      tags: [orgs]
+      summary: The organization's settings, slot caps included
+      responses:
+        "200":
+          description: The settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrgSettings" }
+        default: { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: updateOrgSettings
+      tags: [orgs]
+      summary: Change the organization's settings
+      description: >-
+        Every field is optional and changes only what it names, in one transaction audited as
+        one org.updated entry (none when nothing changes). A new slug resolves at once and the
+        old one is 404. A taken slug is 409 with code slug-taken; a reserved or malformed slug,
+        name or mark, or a slot cap outside 1 to 1000, is 409. A factory that is not the
+        organization's is 404. Per-factory caps may add up to more than the organization's.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrgSettingsPatch" }
+      responses:
+        "200":
+          description: The settings after the change
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrgSettings" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/audit:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listAudit
+      tags: [orgs]
+      summary: The organization's audit log, newest first
+      parameters:
+        - name: before
+          in: query
+          description: The cursor of the next page (next_before); entries with a smaller id
+          schema: { type: integer, format: int64, minimum: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+        - name: action
+          in: query
+          description: Only entries of this action, as in org.updated
+          schema: { type: string }
+        - name: target_kind
+          in: query
+          schema: { type: string }
+        - name: target_id
+          in: query
+          schema: { type: string }
+        - name: factory
+          in: query
+          description: Only entries about this factory (its metadata.id or metadata.name)
+          schema: { type: string }
+      responses:
+        "200":
+          description: One page of entries
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuditPage" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/attention:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -428,7 +522,9 @@ components:
         code:
           type: string
           pattern: "^[a-z]+(-[a-z]+)*$"
-          description: A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, ...)
+          description: >-
+            A stable, kebab-case name of the error for clients to branch on (org-not-found,
+            forbidden, slug-taken, confirmation-mismatch, ...)
     OrgList:
       type: object
       required: [orgs]
@@ -463,6 +559,101 @@ components:
         name: { type: string, minLength: 1, maxLength: 80 }
         slug: { type: string, pattern: "^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$" }
         mark: { type: string, minLength: 1, maxLength: 2, description: Defaults to the name's initials }
+    OrgDeletion:
+      type: object
+      required: [confirm]
+      properties:
+        confirm: { type: string, description: "The organization's name, typed to confirm" }
+    OrgDeleted:
+      type: object
+      required: [purge_after]
+      properties:
+        purge_after: { type: string, format: date-time, description: When the purge job may remove everything }
+    OrgSettings:
+      type: object
+      required: [name, slug, mark, slots]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        mark: { type: string }
+        slots: { $ref: "#/components/schemas/OrgSlots" }
+    OrgSlots:
+      type: object
+      description: >-
+        Slot caps: how many agents may run at once across the organization's factories (max) and
+        in each factory. null is no cap.
+      required: [max, factories]
+      properties:
+        max: { type: integer, nullable: true, minimum: 1, maximum: 1000 }
+        factories:
+          type: array
+          description: Every factory of the organization, by name
+          items: { $ref: "#/components/schemas/FactorySlots" }
+    FactorySlots:
+      type: object
+      required: [factory_id, name, max]
+      properties:
+        factory_id: { type: string }
+        name: { type: string }
+        max: { type: integer, nullable: true, minimum: 1, maximum: 1000 }
+    OrgSettingsPatch:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        slug: { type: string, pattern: "^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$" }
+        mark: { type: string, minLength: 1, maxLength: 2 }
+        slots: { $ref: "#/components/schemas/OrgSlotsPatch" }
+    OrgSlotsPatch:
+      type: object
+      description: >-
+        When present, max sets the organization's cap (null clears it) and each listed factory's
+        max sets its cap (null clears it); factories left out keep theirs.
+      required: [max]
+      properties:
+        max: { type: integer, nullable: true, minimum: 1, maximum: 1000 }
+        factories:
+          type: array
+          items: { $ref: "#/components/schemas/FactorySlotsPatch" }
+    FactorySlotsPatch:
+      type: object
+      required: [factory_id, max]
+      properties:
+        factory_id: { type: string, description: "The factory's metadata.id or metadata.name" }
+        max: { type: integer, nullable: true, minimum: 1, maximum: 1000 }
+    AuditPage:
+      type: object
+      required: [entries, next_before]
+      properties:
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/AuditEntry" }
+        next_before:
+          type: integer
+          format: int64
+          nullable: true
+          description: The before of the next page; null on the last page
+    AuditEntry:
+      type: object
+      required: [id, at, actor, action, target, data]
+      properties:
+        id: { type: integer, format: int64 }
+        at: { type: string, format: date-time }
+        actor: { $ref: "#/components/schemas/Actor" }
+        action: { type: string, description: "<noun>.<past_verb>, as in org.updated" }
+        target: { $ref: "#/components/schemas/AuditTarget" }
+        factory_id: { type: string, description: Set when the entry concerns one factory }
+        data:
+          type: object
+          additionalProperties: true
+          description: >-
+            What changed; for org.updated each changed field's {from, to}, slot caps as max_slots
+            and factory_slots (by factory id), a missing cap as null
+    AuditTarget:
+      type: object
+      required: [kind, id]
+      properties:
+        kind: { type: string, description: What the entry is about, as in org or factory }
+        id: { type: string }
     Actor:
       type: object
       description: Who did something; in phase 2.2 every person is the local user

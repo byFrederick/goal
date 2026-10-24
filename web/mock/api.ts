@@ -7,6 +7,7 @@
 // POST /__mock/reset restores the seed.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
+  AuditPage,
   Board,
   BoardStation,
   Factory,
@@ -21,9 +22,10 @@ import type {
   ItemPage,
   Org,
   OrgAttention,
+  OrgSettings,
   StreamEvent,
 } from '@goal/api-client';
-import { type MockItem, type MockState, seed } from './fixtures.ts';
+import { type MockItem, type MockSlots, type MockState, seed } from './fixtures.ts';
 
 type Next = (err?: unknown) => void;
 
@@ -35,6 +37,9 @@ interface Subscriber {
 
 /** Who decides: goald's request actor in phase 2.2. */
 const localUser = 'Local user';
+
+/** How long goald keeps a deleted organization by default (GOAL_ORG_RETENTION). */
+const retentionMs = 7 * 86_400_000;
 
 /** The slug rule and reserved words of POST /v1/orgs. */
 const slugRule = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
@@ -60,8 +65,12 @@ const json = (res: ServerResponse, status: number, body: unknown) => {
   res.end(JSON.stringify(body));
 };
 
-const problem = (res: ServerResponse, status: number, title: string, detail?: string) =>
-  json(res, status, { title, status, ...(detail ? { detail } : {}) });
+const problem = (res: ServerResponse, status: number, title: string, detail?: string, code?: string) =>
+  json(res, status, { title, status, ...(detail ? { detail } : {}), ...(code ? { code } : {}) });
+
+/** A slot cap of a request: null clears it; otherwise 1 to 1000. */
+const isCap = (v: unknown): v is number | null =>
+  v === null || (Number.isInteger(v) && Number(v) >= 1 && Number(v) <= 1000);
 
 async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
@@ -123,6 +132,82 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return state.items.find((it) => it.factory === factory?.name && it.number === Number(num));
     }
     return state.items.find((it) => it.id === key && findFactory(it.factory)?.org_id === org);
+  };
+
+  const settingsOf = (o: Org): OrgSettings => {
+    const slots = state.slots[o.id] ?? { max: null, factories: {} };
+    const factories = state.factories
+      .filter((f) => f.org_id === o.id)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((f) => ({ factory_id: f.id, name: f.name, max: slots.factories[f.id] ?? null }));
+    return { name: o.name, slug: o.slug, mark: o.mark, slots: { max: slots.max, factories } };
+  };
+
+  const audit = (org: Org, action: string, data: Record<string, unknown>) => {
+    state.audit.push({
+      org: org.id,
+      entry: {
+        id: state.nextAuditId++,
+        at: new Date().toISOString(),
+        actor: { kind: 'user', id: 'local', name: localUser },
+        action,
+        target: { kind: 'org', id: org.id },
+        data,
+      },
+    });
+  };
+
+  /** PATCH /settings as goald applies it: every rule checked first, then one org.updated. */
+  const patchSettings = (org: Org, body: Record<string, unknown>, res: ServerResponse) => {
+    const changed: Record<string, unknown> = {};
+    const next = { ...org };
+    for (const field of ['name', 'slug', 'mark'] as const) {
+      const raw = body[field];
+      if (raw === undefined) continue;
+      const to = typeof raw === 'string' ? (field === 'name' ? raw.trim() : raw) : '';
+      const ok =
+        field === 'name'
+          ? to.length >= 1 && to.length <= 80
+          : field === 'mark'
+            ? to.length >= 1 && to.length <= 2
+            : slugRule.test(to) && !reserved.includes(to);
+      if (!ok) return problem(res, 409, 'Conflict', `${field} "${to}" breaks the organization rules`);
+      if (field === 'slug' && to !== org.slug && findOrg(to)) {
+        return problem(res, 409, 'Conflict', `slug "${to}" is taken`, 'slug-taken');
+      }
+      if (to !== org[field]) {
+        changed[field] = { from: org[field], to };
+        next[field] = to;
+      }
+    }
+
+    const current = state.slots[org.id] ?? { max: null, factories: {} };
+    const slots: MockSlots = { max: current.max, factories: { ...current.factories } };
+    const patch = body.slots as { max?: unknown; factories?: { factory_id?: unknown; max?: unknown }[] } | undefined;
+    if (patch !== undefined) {
+      const max = patch.max ?? null;
+      if (!isCap(max)) return problem(res, 409, 'Conflict', 'a slot cap is 1 to 1000 agents');
+      if (max !== current.max) changed.max_slots = { from: current.max, to: max };
+      slots.max = max;
+      const factories: Record<string, unknown> = {};
+      for (const f of patch.factories ?? []) {
+        const factory = findFactory(String(f.factory_id ?? ''), org.id);
+        if (!factory) return problem(res, 404, 'Not Found', `factory ${String(f.factory_id)}`);
+        const cap = f.max ?? null;
+        if (!isCap(cap)) return problem(res, 409, 'Conflict', 'a slot cap is 1 to 1000 agents');
+        const from = current.factories[factory.id] ?? null;
+        if (cap !== from) factories[factory.id] = { from, to: cap };
+        slots.factories[factory.id] = cap;
+      }
+      if (Object.keys(factories).length > 0) changed.factory_slots = factories;
+    }
+
+    if (Object.keys(changed).length > 0) {
+      Object.assign(org, next);
+      state.slots[org.id] = slots;
+      audit(org, 'org.updated', changed);
+    }
+    return json(res, 200, settingsOf(org));
   };
 
   const emit = (it: MockItem, kind: string, actor: string, data: Record<string, unknown> = {}) => {
@@ -295,6 +380,50 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const rest = scoped[2] ?? '';
 
     if (rest === '' && method === 'GET') return json(res, 200, withCount(org));
+    if (rest === '' && method === 'DELETE') {
+      const body = await readBody(req);
+      if (body.confirm !== org.name) {
+        return problem(
+          res,
+          409,
+          'Conflict',
+          "the confirmation is not the organization's name",
+          'confirmation-mismatch',
+        );
+      }
+      audit(org, 'org.deleted', { slug: org.slug, name: org.name });
+      state.orgs = state.orgs.filter((o) => o.id !== org.id);
+      return json(res, 202, { purge_after: new Date(Date.now() + retentionMs).toISOString() });
+    }
+    if (rest === '/settings' && method === 'GET') return json(res, 200, settingsOf(org));
+    if (rest === '/settings' && method === 'PATCH') return patchSettings(org, await readBody(req), res);
+    if (rest === '/audit' && method === 'GET') {
+      const q = url.searchParams;
+      const limit = Number(q.get('limit') ?? 100);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 500)
+        return problem(res, 400, 'Bad Request', 'limit is 1 to 500');
+      const before = Number(q.get('before') ?? 0);
+      const factory = q.get('factory');
+      const factoryId = factory ? findFactory(factory, org.id)?.id : undefined;
+      if (factory && !factoryId) return problem(res, 404, 'Not Found', `factory ${factory}`);
+      const matching = state.audit
+        .filter(({ org: o, entry: e }) => o === org.id && (!before || e.id < before))
+        .map(({ entry }) => entry)
+        .filter(
+          (e) =>
+            (!q.get('action') || e.action === q.get('action')) &&
+            (!q.get('target_kind') || e.target.kind === q.get('target_kind')) &&
+            (!q.get('target_id') || e.target.id === q.get('target_id')) &&
+            (!factoryId || e.factory_id === factoryId),
+        )
+        .reverse();
+      const entries = matching.slice(0, limit);
+      const page: AuditPage = {
+        entries,
+        next_before: matching.length > limit ? (entries.at(-1)?.id ?? null) : null,
+      };
+      return json(res, 200, page);
+    }
     if (rest === '/factories') {
       return json(res, 200, { factories: state.factories.filter((f) => f.org_id === org.id) });
     }

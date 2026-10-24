@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -14,12 +15,16 @@ import (
 	"github.com/byFrederick/goal/internal/ports"
 )
 
-// Orgs are the install's organizations as the API reads and creates them; ports.Tenancy
-// satisfies it. Org, Orgs and CreateOrg need no organization in ctx.
+// Orgs are the install's organizations as the API reads and changes them; ports.Tenancy
+// satisfies it. Org, Orgs and CreateOrg need no organization in ctx; the others act on the one
+// in ctx.
 type Orgs interface {
 	Orgs(ctx context.Context) ([]domain.OrgSummary, error)
 	Org(ctx context.Context, ref string) (domain.Org, error)
 	CreateOrg(ctx context.Context, by domain.Actor, n ports.NewOrg) (domain.Org, error)
+	UpdateOrg(ctx context.Context, by domain.Actor, u ports.OrgUpdate) (domain.Org, error)
+	DeleteOrg(ctx context.Context, by domain.Actor, now time.Time) error
+	FactorySlots(ctx context.Context) (map[domain.FactoryID]int, error)
 }
 
 // errOrgNotFound answers an unknown or deleted organization alike: 404 with one body.

@@ -56,6 +56,54 @@ export interface paths {
         get: operations["getOrg"];
         put?: never;
         post?: never;
+        /**
+         * Delete an organization
+         * @description The organization disappears at once (every route under it answers 404, as for an unknown one) and is purged, with every row it owns and its objects in the bucket, after the install's retention (GOAL_ORG_RETENTION, default 7 days). `confirm` must be the organization's name exactly; otherwise 409 (code confirmation-mismatch) and nothing changes. Audited as org.deleted.
+         */
+        delete: operations["deleteOrg"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /** The organization's settings, slot caps included */
+        get: operations["getOrgSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change the organization's settings
+         * @description Every field is optional and changes only what it names, in one transaction audited as one org.updated entry (none when nothing changes). A new slug resolves at once and the old one is 404. A taken slug is 409 with code slug-taken; a reserved or malformed slug, name or mark, or a slot cap outside 1 to 1000, is 409. A factory that is not the organization's is 404. Per-factory caps may add up to more than the organization's.
+         */
+        patch: operations["updateOrgSettings"];
+        trace?: never;
+    };
+    "/v1/orgs/{org}/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /** The organization's audit log, newest first */
+        get: operations["listAudit"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -388,7 +436,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, ...) */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, ...) */
             code?: string;
         };
         OrgList: {
@@ -418,6 +466,79 @@ export interface components {
             slug: string;
             /** @description Defaults to the name's initials */
             mark?: string;
+        };
+        OrgDeletion: {
+            /** @description The organization's name, typed to confirm */
+            confirm: string;
+        };
+        OrgDeleted: {
+            /**
+             * Format: date-time
+             * @description When the purge job may remove everything
+             */
+            purge_after: string;
+        };
+        OrgSettings: {
+            name: string;
+            slug: string;
+            mark: string;
+            slots: components["schemas"]["OrgSlots"];
+        };
+        /** @description Slot caps: how many agents may run at once across the organization's factories (max) and in each factory. null is no cap. */
+        OrgSlots: {
+            max: number | null;
+            /** @description Every factory of the organization, by name */
+            factories: components["schemas"]["FactorySlots"][];
+        };
+        FactorySlots: {
+            factory_id: string;
+            name: string;
+            max: number | null;
+        };
+        OrgSettingsPatch: {
+            name?: string;
+            slug?: string;
+            mark?: string;
+            slots?: components["schemas"]["OrgSlotsPatch"];
+        };
+        /** @description When present, max sets the organization's cap (null clears it) and each listed factory's max sets its cap (null clears it); factories left out keep theirs. */
+        OrgSlotsPatch: {
+            max: number | null;
+            factories?: components["schemas"]["FactorySlotsPatch"][];
+        };
+        FactorySlotsPatch: {
+            /** @description The factory's metadata.id or metadata.name */
+            factory_id: string;
+            max: number | null;
+        };
+        AuditPage: {
+            entries: components["schemas"]["AuditEntry"][];
+            /**
+             * Format: int64
+             * @description The before of the next page; null on the last page
+             */
+            next_before: number | null;
+        };
+        AuditEntry: {
+            /** Format: int64 */
+            id: number;
+            /** Format: date-time */
+            at: string;
+            actor: components["schemas"]["Actor"];
+            /** @description <noun>.<past_verb>, as in org.updated */
+            action: string;
+            target: components["schemas"]["AuditTarget"];
+            /** @description Set when the entry concerns one factory */
+            factory_id?: string;
+            /** @description What changed; for org.updated each changed field's {from, to}, slot caps as max_slots and factory_slots (by factory id), a missing cap as null */
+            data: {
+                [key: string]: unknown;
+            };
+        };
+        AuditTarget: {
+            /** @description What the entry is about */
+            kind: string;
+            id: string;
         };
         /** @description Who did something; in phase 2.2 every person is the local user */
         Actor: {
@@ -892,6 +1013,120 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Org"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteOrg: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrgDeletion"];
+            };
+        };
+        responses: {
+            /** @description Deleted; the purge is scheduled */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgDeleted"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getOrgSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgSettings"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateOrgSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrgSettingsPatch"];
+            };
+        };
+        responses: {
+            /** @description The settings after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgSettings"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAudit: {
+        parameters: {
+            query?: {
+                /** @description The cursor of the next page (next_before); entries with a smaller id */
+                before?: number;
+                limit?: number;
+                /** @description Only entries of this action, as in org.updated */
+                action?: string;
+                target_kind?: string;
+                target_id?: string;
+                /** @description Only entries about this factory (its metadata.id or metadata.name) */
+                factory?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of entries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditPage"];
                 };
             };
             default: components["responses"]["Problem"];

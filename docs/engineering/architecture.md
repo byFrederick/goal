@@ -28,6 +28,7 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object s
 | `internal/authoring` | `domain`, `ports`, `config`, `factorymodel`, `go.yaml.in/yaml/v3` | adapters, engine, `api`, `gateway`, `definitions`, `factorystore`, cloud SDKs |
 | `internal/gateway` | `domain`, `ports`, `config`, the MCP Go SDK | adapters, engine, `factorystore`, `authoring`, cloud SDKs |
 | `internal/definitions` | `domain`, `ports`, `config`, `factorystore` | adapters, engine, cloud SDKs |
+| `internal/retention` | `domain`, `ports`, `factorystore` | adapters, engine, `api`, cloud SDKs |
 | `internal/api` (+ generated `api/gen`) | `domain`, `ports`, `config`, `engine` | adapters, `factorystore`, `definitions`, `factorymodel`, `authoring`, `gateway`, cloud SDKs |
 | `cmd/*` | everything | — (wiring only) |
 

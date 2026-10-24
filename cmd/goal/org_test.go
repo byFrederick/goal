@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 )
@@ -22,6 +23,9 @@ const cmdOrg = "org"
 
 // fromConfig is the org a test writes to the config file.
 const fromConfig = "from-config"
+
+// flagName is goal org's --name.
+const flagName = "--name"
 
 // orgAcme is the stub installs' first organization.
 const orgAcme = "acme"
@@ -87,6 +91,26 @@ func newOrgGoald(t *testing.T, slugs ...string) *orgGoald {
 
 		_ = json.NewDecoder(r.Body).Decode(&n)
 		reply(w, http.StatusCreated, gen.Org{Id: "019a1c00-0000-7000-8000-0000000000ff", Slug: n.Slug, Name: n.Name, Mark: deref(n.Mark)})
+	})
+
+	mux.HandleFunc("PATCH /v1/orgs/{org}/settings", func(w http.ResponseWriter, r *http.Request) {
+		var p gen.OrgSettingsPatch
+
+		_ = json.NewDecoder(r.Body).Decode(&p)
+
+		s := gen.OrgSettings{Name: "Acme", Slug: r.PathValue("org"), Mark: "Ac", Slots: gen.OrgSlots{Factories: []gen.FactorySlots{}}}
+		if p.Name != nil {
+			s.Name = *p.Name
+		}
+
+		if p.Slots != nil {
+			s.Slots.Max = p.Slots.Max
+		}
+
+		reply(w, http.StatusOK, s)
+	})
+	mux.HandleFunc("DELETE /v1/orgs/{org}", func(w http.ResponseWriter, _ *http.Request) {
+		reply(w, http.StatusAccepted, gen.OrgDeleted{PurgeAfter: time.Date(2026, 10, 30, 9, 0, 0, 0, time.UTC)})
 	})
 
 	g.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -228,5 +252,91 @@ func TestUsage_DecisionsTakeNoBy(t *testing.T) {
 
 	if strings.Contains(usage, "--by") {
 		t.Error("the usage still offers --by; decisions are the local user's")
+	}
+}
+
+// sent returns the requests the stub got whose method and path start with prefix.
+func (g *orgGoald) sent(prefix string) []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	var out []string
+
+	for _, r := range g.requests {
+		if strings.HasPrefix(r, prefix) {
+			out = append(out, strings.TrimSpace(r))
+		}
+	}
+
+	return out
+}
+
+func TestOrgUpdate_PatchesOnlyTheNamedSettings(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		args []string
+		want string
+	}{
+		{[]string{flagName, "Acme Co", "--mark", "AC"}, `PATCH /v1/orgs/acme/settings {"mark":"AC","name":"Acme Co"}`},
+		{[]string{"--slug", "acme-co"}, `PATCH /v1/orgs/acme/settings {"slug":"acme-co"}`},
+		{[]string{"--max-slots", "6"}, `PATCH /v1/orgs/acme/settings {"slots":{"max":6}}`},
+		{[]string{"--max-slots", "0"}, `PATCH /v1/orgs/acme/settings {"slots":{"max":null}}`},
+	}
+
+	for _, tt := range tests {
+		g := newOrgGoald(t, orgAcme)
+		env := testEnv(t, g.srv.URL, nil)
+
+		var out bytes.Buffer
+		if err := run(t.Context(), append([]string{cmdOrg, "update", orgAcme}, tt.args...), &printer{w: &out}, env, nil); err != nil {
+			t.Fatalf("goal org update %v: %v", tt.args, err)
+		}
+
+		if got := g.sent("PATCH"); len(got) != 1 || got[0] != tt.want {
+			t.Errorf("goal org update %v sent %q, want %s", tt.args, got, tt.want)
+		}
+	}
+
+	g := newOrgGoald(t, orgAcme)
+
+	for _, args := range [][]string{{cmdOrg, "update", orgAcme}, {cmdOrg, "update", flagName, "N"}} {
+		if err := run(t.Context(), args, &printer{w: io.Discard}, testEnv(t, g.srv.URL, nil), nil); !errors.Is(err, errUsage) {
+			t.Errorf("goal %v = %v, want a usage error", args, err)
+		}
+	}
+}
+
+func TestOrgDelete_AsksForTheNameUnlessYes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		args  []string
+		typed string
+		sends bool
+	}{
+		{name: "the name typed", args: []string{orgAcme}, typed: "Acme\n", sends: true},
+		{name: "another name typed", args: []string{orgAcme}, typed: "acme\n"},
+		{name: "nothing typed", args: []string{orgAcme}},
+		{name: "--yes", args: []string{orgAcme, "--yes"}, sends: true},
+	}
+
+	for _, tt := range tests {
+		g := newOrgGoald(t, orgAcme)
+
+		var out bytes.Buffer
+
+		err := run(t.Context(), append([]string{cmdOrg, "delete"}, tt.args...), &printer{w: &out, in: strings.NewReader(tt.typed)},
+			testEnv(t, g.srv.URL, nil), nil)
+
+		got := g.sent("DELETE")
+
+		switch {
+		case tt.sends && (err != nil || len(got) != 1 || got[0] != `DELETE /v1/orgs/acme {"confirm":"Acme"}`):
+			t.Errorf("%s: %v, sent %q; want the delete confirmed with the name", tt.name, err, got)
+		case !tt.sends && (err == nil || len(got) != 0):
+			t.Errorf("%s: %v, sent %q; want an error and nothing sent", tt.name, err, got)
+		}
 	}
 }

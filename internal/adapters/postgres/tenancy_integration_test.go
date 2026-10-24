@@ -5,6 +5,7 @@ package postgres
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -31,6 +32,48 @@ func TestTenancy_Conformance(t *testing.T) {
 			},
 		}
 	})
+}
+
+// While another instance holds the purge lock, a purge does nothing; once it is released, the
+// next purge takes the organizations.
+func TestPurgeDeletedOrgs_OneInstanceAtATime(t *testing.T) {
+	t.Parallel()
+
+	pool := newTestPool(t)
+	s := New(pool)
+
+	o, err := s.CreateOrg(t.Context(), domain.LocalUser, newOrg("acme", "Acme"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deleted := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
+	if err := s.DeleteOrg(domain.WithOrg(t.Context(), o.ID), domain.LocalUser, deleted); err != nil {
+		t.Fatal(err)
+	}
+
+	holder, err := pool.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := holder.Exec(t.Context(), "SELECT pg_advisory_xact_lock(hashtextextended('goal.orgs.purge', 0))"); err != nil {
+		t.Fatal(err)
+	}
+
+	cutoff := deleted.Add(time.Second)
+
+	if ids, err := s.PurgeDeletedOrgs(t.Context(), cutoff, 10, nil); err != nil || len(ids) != 0 {
+		t.Errorf("PurgeDeletedOrgs while another holds the lock = %v, %v; want nothing", ids, err)
+	}
+
+	if err := holder.Rollback(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	if ids, err := s.PurgeDeletedOrgs(t.Context(), cutoff, 10, nil); err != nil || len(ids) != 1 || ids[0] != o.ID {
+		t.Errorf("PurgeDeletedOrgs after the lock is released = %v, %v; want [%s]", ids, err, o.ID)
+	}
 }
 
 func TestMigrate_CreatesTheDefaultOrg(t *testing.T) {

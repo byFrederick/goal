@@ -152,8 +152,12 @@ type Tenancy interface {
 	// see it. It appends org.deleted. (org)
 	DeleteOrg(ctx context.Context, by domain.Actor, now time.Time) error
 	// PurgeDeletedOrgs hard-deletes up to limit organizations deleted before cutoff, with every
-	// row they own, and returns their ids. It needs no org (a system job).
-	PurgeDeletedOrgs(ctx context.Context, cutoff time.Time, limit int) ([]domain.OrgID, error)
+	// row they own, and returns their ids. For each one, once its rows are gone and before that
+	// is committed, it calls also (when not nil) to remove what the organization keeps outside
+	// the database; an error from it keeps the organization, rows and all, for the next run. One
+	// purge runs at a time across goald instances: while another holds the purge lock it returns
+	// no ids. It needs no org (a system job).
+	PurgeDeletedOrgs(ctx context.Context, cutoff time.Time, limit int, also func(context.Context, domain.OrgID) error) ([]domain.OrgID, error)
 }
 
 // NewOrg is an organization to create.

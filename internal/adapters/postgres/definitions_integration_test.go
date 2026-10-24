@@ -212,7 +212,7 @@ func TestPurge_RemovesDefinitions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	purged, err := f.s.PurgeDeletedOrgs(t.Context(), time.Now(), 10)
+	purged, err := f.s.PurgeDeletedOrgs(t.Context(), time.Now(), 10, nil)
 	if err != nil || len(purged) != 1 || purged[0] != f.org {
 		t.Fatalf("PurgeDeletedOrgs = %v, %v; want %s purged", purged, err, f.org)
 	}

@@ -39,6 +39,7 @@ import (
 	"github.com/byFrederick/goal/internal/engine"
 	"github.com/byFrederick/goal/internal/factorystore"
 	"github.com/byFrederick/goal/internal/gateway"
+	"github.com/byFrederick/goal/internal/retention"
 	"github.com/byFrederick/goal/web"
 )
 
@@ -47,6 +48,9 @@ const minKeyBytes = 32
 
 // shutdownGrace bounds draining HTTP requests at shutdown; agent runs are released to the queue.
 const shutdownGrace = 10 * time.Second
+
+// purgeEvery is how often goald looks for deleted organizations whose retention has passed.
+const purgeEvery = time.Hour
 
 func main() { os.Exit(goald()) }
 
@@ -180,7 +184,8 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	feed := api.NewFeed(postgres.NewNotices(pool.Config().ConnConfig, log), log)
 
 	apiHandler, err := api.New(api.Deps{
-		Engine: eng, Items: store, Factories: defs, Orgs: store, Authorizer: api.AllowAll{}, Feed: feed, Clock: clock, Logger: log,
+		Engine: eng, Items: store, Factories: defs, Orgs: store, Audit: store, OrgRetention: s.OrgRetention,
+		Authorizer: api.AllowAll{}, Feed: feed, Clock: clock, Logger: log,
 	})
 	if err != nil {
 		return err
@@ -193,14 +198,17 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	srv := &http.Server{Addr: s.Listen, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 
-	return serve(ctx, log, s, srv, eng, defs, feed)
+	// Deleted organizations go, rows and bucket objects, once their retention has passed.
+	purger := retention.New(store, objects, clock, s.OrgRetention, log)
+
+	return serve(ctx, log, s, srv, eng, defs, feed, purger)
 }
 
-// serve runs the HTTP server, the engine, the stream feed and the definitions refresh until ctx
-// ends, then shuts them down: the feed ends every stream, HTTP drains, then the engine releases
-// the items its runs held.
+// serve runs the HTTP server, the engine, the stream feed, the definitions refresh and the purge
+// of deleted organizations until ctx ends, then shuts them down: the feed ends every stream,
+// HTTP drains, then the engine releases the items its runs held.
 func serve(ctx context.Context, log *slog.Logger, s settings, srv *http.Server, eng *engine.Engine, defs *definitions.Cache,
-	feed *api.Feed,
+	feed *api.Feed, purger *retention.Purger,
 ) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -231,6 +239,7 @@ func serve(ctx context.Context, log *slog.Logger, s settings, srv *http.Server, 
 	})
 
 	wg.Go(func() { refresh(ctx, log, defs, s.RefreshEvery) })
+	wg.Go(func() { purger.Run(ctx, purgeEvery) })
 
 	wg.Go(func() {
 		if err := feed.Run(ctx); err != nil {

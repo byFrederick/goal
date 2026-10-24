@@ -15,6 +15,10 @@ SELECT id::uuid FROM goal_active_orgs() AS id;
 -- name: DeletedOrgs :many
 SELECT id::uuid FROM goal_deleted_orgs(sqlc.arg(before)::timestamptz, sqlc.arg(max_orgs)::integer) AS id;
 
+-- name: TryLockOrgPurge :one
+-- One purge at a time across goald instances; released when the purge's transaction ends.
+SELECT pg_try_advisory_xact_lock(hashtextextended('goal.orgs.purge', 0)) AS locked;
+
 -- name: PurgeOrg :exec
 SELECT goal_purge_org(sqlc.arg(org_id)::uuid);
 

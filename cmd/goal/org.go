@@ -1,15 +1,18 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 )
@@ -191,7 +194,8 @@ func getOrg(ctx context.Context, c *gen.ClientWithResponses, ref string) (*gen.O
 	return res.JSON200, nil
 }
 
-// orgCommand runs goal org list | use <slug> | create <slug> --name N [--mark M].
+// orgCommand runs goal org list | use <slug> | create <slug> --name N [--mark M] |
+// update <slug> [--name N] [--slug S] [--mark M] [--max-slots N] | delete <slug> [--yes].
 func orgCommand(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	if len(args) == 0 {
 		return errUsage
@@ -217,6 +221,10 @@ func orgCommand(ctx context.Context, out *printer, getenv func(string) string, a
 		return orgUse(ctx, out, c, getenv, rest[0])
 	case "create":
 		return orgCreate(ctx, out, c, rest)
+	case "update":
+		return orgUpdate(ctx, out, c, rest)
+	case "delete":
+		return orgDelete(ctx, out, c, rest)
 	default:
 		return errUsage
 	}
@@ -295,4 +303,115 @@ func orgCreate(ctx context.Context, out *printer, c *gen.ClientWithResponses, ar
 		res.JSON201.Name, res.JSON201.Slug, res.JSON201.Mark, res.JSON201.Slug, res.JSON201.Slug)
 
 	return nil
+}
+
+func orgUpdate(ctx context.Context, out *printer, c *gen.ClientWithResponses, args []string) error {
+	fs := newFlags("org update")
+	name := fs.String("name", "", "the organization's new name")
+	slug := fs.String("slug", "", "the organization's new slug (links with the old one stop working)")
+	mark := fs.String("mark", "", "one or two characters for the organization rail")
+	maxSlots := fs.Int("max-slots", 0, "how many agents may run at once across its factories (0: no cap)")
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 1 {
+		return errUsage
+	}
+
+	var body gen.OrgSettingsPatch
+
+	fs.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "name":
+			body.Name = new(strings.TrimSpace(*name))
+		case "slug":
+			body.Slug = slug
+		case "mark":
+			body.Mark = mark
+		case "max-slots":
+			body.Slots = &gen.OrgSlotsPatch{}
+			if *maxSlots != 0 {
+				body.Slots.Max = maxSlots
+			}
+		}
+	})
+
+	if body == (gen.OrgSettingsPatch{}) {
+		return errUsage
+	}
+
+	res, err := c.UpdateOrgSettingsWithResponse(ctx, pos[0], body)
+	if err != nil {
+		return apiDown(err)
+	}
+
+	if res.JSON200 == nil {
+		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+
+	s := res.JSON200
+
+	slots := "no slot cap"
+	if s.Slots.Max != nil {
+		slots = fmt.Sprintf("at most %d agents at once", *s.Slots.Max)
+	}
+
+	out.printf("✓ %s (%s, mark %s): %s\n", s.Name, s.Slug, s.Mark, slots)
+
+	return nil
+}
+
+func orgDelete(ctx context.Context, out *printer, c *gen.ClientWithResponses, args []string) error {
+	fs := newFlags("org delete")
+	yes := fs.Bool("yes", false, "delete without asking to type the name")
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 1 {
+		return errUsage
+	}
+
+	o, err := getOrg(ctx, c, pos[0])
+	if err != nil {
+		return err
+	}
+
+	confirm := o.Name
+
+	if !*yes {
+		out.printf("This deletes %s (%s) and its %d factories with their history. Type its name to confirm: ", o.Name, o.Slug, o.FactoryCount)
+
+		if confirm, err = readLine(out.in); err != nil {
+			return err
+		}
+	}
+
+	if confirm != o.Name {
+		return fmt.Errorf("%q is not %q; nothing was deleted", confirm, o.Name)
+	}
+
+	res, err := c.DeleteOrgWithResponse(ctx, o.Slug, gen.OrgDeletion{Confirm: confirm})
+	if err != nil {
+		return apiDown(err)
+	}
+
+	if res.JSON202 == nil {
+		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+
+	out.printf("✓ deleted %s (%s); it is purged after %s\n", o.Name, o.Slug, res.JSON202.PurgeAfter.Local().Format(time.RFC1123))
+
+	return nil
+}
+
+// readLine reads one line of the terminal's input, without its line ending.
+func readLine(in io.Reader) (string, error) {
+	if in == nil {
+		return "", errors.New("no input to confirm with; pass --yes")
+	}
+
+	line, err := bufio.NewReader(in).ReadString('\n')
+	if err != nil && (!errors.Is(err, io.EOF) || line == "") {
+		return "", fmt.Errorf("read the confirmation: %w", err)
+	}
+
+	return strings.TrimRight(line, "\r\n"), nil
 }
