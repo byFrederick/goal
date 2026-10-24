@@ -3,7 +3,7 @@
 import type { QueryKey } from '@tanstack/react-query';
 import { savedHere } from '../api/definitions';
 import { defKeys, keys } from '../api/queries';
-import type { DefinitionEvent, StreamEvent } from '../api/types';
+import type { DefinitionEvent, FactoryEvent, StreamEvent } from '../api/types';
 
 /**
  * The factory's work keys an item event can change, named one by one: never the factory's bare
@@ -36,6 +36,20 @@ export function invalidationsFor(org: string, event: StreamEvent): QueryKey[] {
 /** Every work key of one factory (by id), for a change that moves its items: never its bare prefix. */
 export function factoryWorkInvalidations(org: string, factory: string): QueryKey[] {
   return workKeys.map((name) => [...keys.factory(org, factory), name]);
+}
+
+/**
+ * The queries one `factory` event touches (E §10.3): a line stopped or restarted by its andon
+ * changes the factory's work keys (board, andon, …), the organization's attention and inboxes and
+ * the factory overviews' health; no item changed.
+ */
+export function factoryInvalidations(org: string, event: FactoryEvent): QueryKey[] {
+  return [
+    keys.attention(org),
+    keys.inboxes(org),
+    ...factoryWorkInvalidations(org, event.factory_id),
+    keys.overviews(org),
+  ];
 }
 
 /** Overviews are the dearest read; the stream refreshes them at most every few seconds. */

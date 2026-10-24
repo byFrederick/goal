@@ -4,10 +4,10 @@ import { Tabs } from 'radix-ui';
 import { useEffect, useRef, useState } from 'react';
 import { boardQuery } from '../../api/queries';
 import type { Board, ItemCard } from '../../api/types';
+import { AndonButton, LineStatus } from '../../shared/andon';
 import { factoryTitle, itemKey, useFactory } from '../../shared/factory';
 import { humanize } from '../../shared/format';
 import { waitingOnYou } from '../../shared/item-state';
-import { LiveStatus } from '../../shared/live-status';
 import { MoveDialog } from '../../shared/move-menu';
 import { NewItemButton } from '../../shared/new-item';
 import { useOrg } from '../../shared/org';
@@ -267,10 +267,11 @@ export function BoardPage() {
         <h1 className="m-0 text-[34px] leading-[1.05] font-normal tracking-display md:text-5xl">
           {factoryTitle(factory)} board
         </h1>
-        <div className="flex items-center gap-2">
-          <span className="hidden h-10 items-center rounded-control bg-surface px-3.5 shadow-raise md:inline-flex">
-            <LiveStatus className="text-sm text-ink" />
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="hidden h-10 max-w-[360px] items-center rounded-control bg-surface px-3.5 shadow-raise md:inline-flex">
+            <LineStatus andon={board.line.andon} className="text-sm text-ink" />
           </span>
+          <AndonButton factory={factory} andon={board.line.andon} className="hidden md:inline-flex" />
           <span className="md:hidden">
             <NewItemButton factory={factory} compact />
           </span>
@@ -279,8 +280,9 @@ export function BoardPage() {
           </span>
         </div>
       </header>
-      <div className="-mt-3 flex items-center gap-1 text-sm text-muted md:hidden">
-        <LiveStatus className="text-sm" suffix={`, ${wipText(board.line)}`} />
+      <div className="-mt-3 flex items-center justify-between gap-2 text-sm text-muted md:hidden">
+        <LineStatus andon={board.line.andon} className="text-sm" suffix={`, ${wipText(board.line)}`} wrap />
+        <AndonButton factory={factory} andon={board.line.andon} className="min-h-11" />
       </div>
 
       <div className="hidden md:block">

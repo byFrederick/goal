@@ -8,12 +8,15 @@
 // POST /__mock/fail injects faults (faults.ts).
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
+  AndonPull,
+  AndonState,
   AuditPage,
   Board,
   BoardStation,
   ConstraintReport,
   Factory,
   FactoryAttention,
+  FactoryEvent,
   FactoryOverview,
   FactoryOverviewList,
   Inbox,
@@ -350,11 +353,109 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
 
   const inState = (f: Factory, st: string) => state.items.filter((it) => it.factory === f.name && it.state === st);
 
+  /** The factory's open andon pull, or null while its line runs. */
+  const openAndon = (f: Factory): AndonPull | null => {
+    const last = state.andon[f.name]?.at(-1);
+    return last && last.cleared_at === null ? last : null;
+  };
+
+  /** A pull or a clear: its audit entry and the organization's `event: factory`, as goald's trigger sends it. */
+  const andonChanged = (f: Factory, pull: AndonPull) => {
+    const cleared = pull.cleared_at !== null;
+    state.audit.push({
+      org: f.org_id,
+      entry: {
+        id: state.nextAuditId++,
+        at: pull.cleared_at ?? pull.pulled_at,
+        actor: { kind: 'user', id: 'local', name: localUser },
+        action: cleared ? 'andon.cleared' : 'andon.pulled',
+        target: { kind: 'factory', id: f.id },
+        factory_id: f.id,
+        data: {
+          pull: String(pull.id),
+          kind: pull.kind,
+          reason: pull.reason,
+          ...(cleared ? { note: pull.note ?? '' } : {}),
+        },
+      },
+    });
+    const event: FactoryEvent = {
+      org_id: f.org_id,
+      factory_id: f.id,
+      kind: cleared ? 'andon_cleared' : 'andon_pulled',
+      andon_id: pull.id,
+      at: pull.cleared_at ?? pull.pulled_at,
+    };
+    for (const sub of subscribers) {
+      if (sub.org === f.org_id && (sub.factory === '' || sub.factory === f.id || sub.factory === f.name)) {
+        sub.res.write(`event: factory\ndata: ${JSON.stringify(event)}\n\n`);
+      }
+    }
+  };
+
+  /** GET, POST …/andon and POST …/andon/clear, with goald's limits and refusals. */
+  const andon = async (
+    f: Factory,
+    clear: boolean,
+    method: string,
+    url: URL,
+    req: IncomingMessage,
+    res: ServerResponse,
+  ) => {
+    const pulls = state.andon[f.name] ?? [];
+    if (!clear && method === 'GET') {
+      const limit = Number(url.searchParams.get('limit') ?? 10);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 50)
+        return problem(res, 400, 'Bad Request', 'limit is 1 to 50');
+      const gates = state.gates[f.name];
+      const body: AndonState = {
+        open: openAndon(f),
+        recent: pulls.slice(-limit).reverse(),
+        policy: gates?.policy ?? null,
+        gates: gates?.tallies ?? [],
+      };
+      return json(res, 200, body);
+    }
+    if (method !== 'POST') return problem(res, 405, 'Method not allowed');
+
+    const body = await readBody(req);
+    const now = new Date().toISOString();
+    const open = openAndon(f);
+    if (clear) {
+      const note = typeof body.note === 'string' ? body.note.trim() : '';
+      if ([...note].length > 2000) return problem(res, 400, 'Bad Request', 'a note is at most 2000 characters');
+      if (!open) return problem(res, 409, 'Conflict', 'the andon cord is not pulled', 'andon-not-pulled');
+      Object.assign(open, { cleared_by: 'user:local', cleared_at: now, note: note || null });
+      andonChanged(f, open);
+      return json(res, 200, open);
+    }
+
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+    if (!reason || [...reason].length > 500)
+      return problem(res, 400, 'Bad Request', 'the reason is 1 to 500 characters');
+    if (open) return problem(res, 409, 'Conflict', 'the andon cord is already pulled', 'andon-pulled');
+    const pull: AndonPull = {
+      id: state.nextAndonId++,
+      kind: 'manual',
+      station: null,
+      reason,
+      pulled_by: 'user:local',
+      pulled_at: now,
+      cleared_by: null,
+      cleared_at: null,
+      note: null,
+      data: {},
+    };
+    state.andon[f.name] = [...pulls, pull];
+    andonChanged(f, pull);
+    return json(res, 201, pull);
+  };
+
   const attentionOf = (f: Factory): FactoryAttention => ({
     factory_id: f.id,
     waiting_on_you: inState(f, 'waiting_human').length,
     blocked_items: inState(f, 'blocked').length,
-    andon: state.andon[f.name] ?? null,
+    andon: openAndon(f),
     connections_blocked: 0,
   });
 
@@ -373,7 +474,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const metrics = metricsOf(flowInput(f), { from: today - (days - 1) * dayMs, to: today }, true);
     const waiting = inState(f, 'waiting_human');
     const types = [...new Set(waiting.map((it) => it.type))].sort();
-    const andon = state.andon[f.name] ?? null;
+    const andon = openAndon(f);
     const constraint = state.constraint[f.name] ?? null;
     const weekly = state.weeklyBudget[f.name] ?? null;
     return {
@@ -511,7 +612,10 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const spent = metricsOf(flowInput(factory), { from: today - 6 * dayMs, to: today }, false).spend_usd;
     const queues = new Set(stations.filter((s) => s.kind === 'queue').map((s) => s.id));
     const lane = flow?.expedite_wip !== undefined;
+    const andon = openAndon(factory);
     return {
+      status: andon ? 'stopped' : 'running',
+      andon,
       wip: {
         in_progress: limited.reduce(
           (n, s) => n + s.in_progress + s.items.filter((it) => it.state === 'waiting_human').length,
@@ -707,11 +811,15 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return;
     }
 
-    let m = rest.match(/^\/factories\/([^/]+)\/(board|items|constraint|metrics|metrics\/weekly|metrics\/lead-time)$/);
+    let m = rest.match(
+      /^\/factories\/([^/]+)\/(board|items|constraint|metrics|metrics\/weekly|metrics\/lead-time|andon|andon\/clear)$/,
+    );
     if (m) {
       const key = decodeURIComponent(m[1] ?? '');
       const factory = findFactory(key, org.id);
       if (!factory) return problem(res, 404, 'Factory not found', key);
+
+      if (m[2] === 'andon' || m[2] === 'andon/clear') return andon(factory, m[2] !== 'andon', method, url, req, res);
 
       if (m[2] === 'board' && method === 'GET') return json(res, 200, board(factory.id));
       if (m[2] === 'constraint' && method === 'GET') {

@@ -913,6 +913,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/andon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /** The factory's andon cord, its recent pulls and the tallies of its gates */
+        get: operations["getAndon"];
+        put?: never;
+        /**
+         * Pull the andon cord, stopping the factory's line
+         * @description While the pull is open goald releases nothing from the line's queue stations and claims nothing at its agent stations; runs in progress finish and move on, items can still be submitted and every human decision still acts. The request's actor pulls it (the local user in phase 2.2). A line that is already stopped is 409 andon-pulled; a reason that is blank or over 500 characters is 400.
+         */
+        post: operations["pullAndon"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/andon/clear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clear the andon cord, restarting the factory's line
+         * @description Clears the open pull with an optional note (at most 2000 characters). A line that is also paused, or over its weekly budget, stays stopped by that. A line that is not stopped is 409 andon-not-pulled.
+         */
+        post: operations["clearAndon"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/stream": {
         parameters: {
             query?: never;
@@ -925,7 +976,7 @@ export interface paths {
         };
         /**
          * The organization's events as they happen (Server-Sent Events)
-         * @description A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+         * @description A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent, no id) follows a change of a factory's line that is not an item's: its andon cord pulled or cleared. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
          */
         get: operations["streamEvents"];
         put?: never;
@@ -1624,6 +1675,13 @@ export interface components {
         ConstraintSource: "configured" | "detected" | "snapshot";
         /** @description The line as a whole: its work in progress against its limits, how work is released into it, its expedite lane and its weekly budget. The release policy and the expedite limit are shown as configured; goald does not enforce them yet (it releases as push). */
         BoardLine: {
+            /**
+             * @description stopped while an andon pull is open: the line releases and claims nothing. A running line may still be paused (the factory's paused) or claim nothing over its budget (budget.exhausted).
+             * @enum {string}
+             */
+            status: "running" | "stopped";
+            /** @description The open andon pull, or null while the line runs */
+            andon: components["schemas"]["AndonPull"] | null;
             wip: components["schemas"]["LineWip"];
             release: components["schemas"]["LineRelease"];
             /** @description The expedite lane; null when the line has no expedite work types and no limit */
@@ -2008,13 +2066,85 @@ export interface components {
             /** @description That version's number ("ran on v9"); null when the run has no version */
             definition_version: number | null;
         };
-        /** @description An open stop of a factory's line */
+        /** @description One stop of a factory's line, open (cleared_at null) until someone clears it. While a pull is open the line releases and claims nothing. */
         AndonPull: {
+            /** Format: int64 */
+            id: number;
+            kind: components["schemas"]["AndonKind"];
+            /** @description The gate whose rework rate pulled a rework pull; null for a manual one */
+            station: string | null;
             reason: string;
             /** @description Who pulled the cord, as an actor ref: "system:engine" or "user:local" */
             pulled_by: string;
             /** Format: date-time */
             pulled_at: string;
+            /** @description Who cleared it */
+            cleared_by: string | null;
+            /**
+             * Format: date-time
+             * @description Null while the pull is open
+             */
+            cleared_at: string | null;
+            /** @description What the clearer wrote */
+            note: string | null;
+            /** @description The pull's details (a rework pull's rejected, window and top_reason); empty for a manual one */
+            data: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * @description manual, a person's pull; rework, the engine's pull on a gate's rework rate (later; never in phase 2.2)
+         * @enum {string}
+         */
+        AndonKind: "manual" | "rework";
+        NewAndonPull: {
+            /** @description Why the line must stop, 1 to 500 characters (surrounding space is trimmed) */
+            reason: string;
+        };
+        AndonClear: {
+            /** @description What was done about it, at most 2000 characters */
+            note?: string;
+        };
+        AndonState: {
+            /** @description The open pull, or null while the line runs */
+            open: components["schemas"]["AndonPull"] | null;
+            /** @description The latest pulls, open and cleared, the most recent first (up to limit) */
+            recent: components["schemas"]["AndonPull"][];
+            /** @description The line's board.flow.andon, or null without one (an automatic pull is later work) */
+            policy: {
+                /**
+                 * Format: double
+                 * @description Share of verdicts that reject
+                 */
+                rework_rate: number;
+                /** @description How many of a gate's last verdicts count */
+                window: number;
+            } | null;
+            /** @description Each gate station in line order, tallying its last window verdicts (10 without a policy) since the last clear */
+            gates: components["schemas"]["GateTally"][];
+        };
+        GateTally: {
+            station: string;
+            verdicts: number;
+            rejected: number;
+            /** @description The most frequent category, or else normalized reason, of the rejections; null when none */
+            top_reason: string | null;
+            /** @description One more rejection would reach the policy's rework rate (always false without a policy) */
+            warning: boolean;
+        };
+        /** @description The data of one `event: factory` on /v1/orgs/{org}/stream; it carries no content */
+        FactoryEvent: {
+            org_id: string;
+            factory_id: string;
+            /** @description andon_pulled or andon_cleared; later phases add kinds, which clients ignore or treat as a change of the line */
+            kind: string;
+            /**
+             * Format: int64
+             * @description The andon pull concerned
+             */
+            andon_id?: number;
+            /** Format: date-time */
+            at: string;
         };
         OrgAttention: {
             /** @description Every decision waiting on a person across the organization (the sum of factories[].waiting_on_you) */
@@ -4102,6 +4232,95 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    getAndon: {
+        parameters: {
+            query?: {
+                /** @description How many recent pulls to list, the most recent first */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The andon state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AndonState"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    pullAndon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewAndonPull"];
+            };
+        };
+        responses: {
+            /** @description The open pull */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AndonPull"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    clearAndon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AndonClear"];
+            };
+        };
+        responses: {
+            /** @description The pull, cleared */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AndonPull"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     streamEvents: {
         parameters: {
             query?: {
@@ -4123,7 +4342,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/event-stream": components["schemas"]["StreamEvent"] | components["schemas"]["DefinitionEvent"];
+                    "text/event-stream": components["schemas"]["StreamEvent"] | components["schemas"]["DefinitionEvent"] | components["schemas"]["FactoryEvent"];
                 };
             };
             default: components["responses"]["Problem"];

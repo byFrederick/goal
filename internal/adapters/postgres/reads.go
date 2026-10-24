@@ -127,8 +127,16 @@ func (s *Store) Attention(ctx context.Context) ([]domain.Attention, error) {
 				WaitingByType: types[r.FactoryID], Blocked: int(r.Blocked),
 			}
 
-			if r.AndonPulledAt != nil {
-				a.Andon = &domain.AndonPull{Reason: deref(r.AndonReason), PulledBy: deref(r.AndonPulledBy), PulledAt: r.AndonPulledAt.UTC()}
+			if r.AndonID != nil {
+				p, err := andonFrom(db.AndonPull{
+					ID: *r.AndonID, FactoryID: r.FactoryID, Kind: deref(r.AndonKind), Station: r.AndonStation, Reason: deref(r.AndonReason),
+					PulledBy: deref(r.AndonPulledBy), PulledAt: *r.AndonPulledAt, Data: r.AndonData,
+				})
+				if err != nil {
+					return err
+				}
+
+				a.Andon = &p
 			}
 
 			out = append(out, a)

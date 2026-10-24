@@ -32,9 +32,6 @@ type Harness struct {
 	// LeaseSpans returns the lease spans of an item of org in the order they ended; no port reads
 	// them one item at a time.
 	LeaseSpans func(t *testing.T, org domain.OrgID, id domain.ItemID) []domain.LeaseSpan
-	// RecordAndon records an andon pull on a factory of org, already cleared when cleared is
-	// set; the port pulls none itself until phase 2.2-E.
-	RecordAndon func(t *testing.T, org domain.OrgID, factory domain.FactoryID, p domain.AndonPull, cleared bool)
 }
 
 // Run runs the suite. Tests run in parallel and call newHarness once each; every harness must
@@ -95,6 +92,11 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"FlowStats_NeedAnOrgAndSeeOnlyItsItems", testFlowStatsTenancy},
 		{"Transition_TakeLeaseRemovesAnyLease", testTakeLease},
 		{"ItemTimes_LeadTimeAndComponentsOfItemsDone", testItemTimes},
+		{"Andon_OneOpenPullPerFactoryClearedWithANote", testAndonPullAndClear},
+		{"Andon_PullsAreHistoryNewestFirst", testAndonHistory},
+		{"Andon_OnlyTheOrgs", testAndonOnlyTheOrgs},
+		{"Concurrent_AndonPullsOneOpens", testConcurrentAndonPulls},
+		{"GateDecisions_LastVerdictsAfterAClear", testGateDecisions},
 	}
 
 	for _, tc := range tests {

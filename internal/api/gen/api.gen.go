@@ -44,6 +44,24 @@ func (e ActorKind) Valid() bool {
 	}
 }
 
+// Defines values for AndonKind.
+const (
+	AndonKindManual AndonKind = "manual"
+	AndonKindRework AndonKind = "rework"
+)
+
+// Valid indicates whether the value is a known member of the AndonKind enum.
+func (e AndonKind) Valid() bool {
+	switch e {
+	case AndonKindManual:
+		return true
+	case AndonKindRework:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BlankStartKind.
 const (
 	BlankStartKindBlank BlankStartKind = "blank"
@@ -53,6 +71,24 @@ const (
 func (e BlankStartKind) Valid() bool {
 	switch e {
 	case BlankStartKindBlank:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BoardLineStatus.
+const (
+	BoardLineStatusRunning BoardLineStatus = "running"
+	BoardLineStatusStopped BoardLineStatus = "stopped"
+)
+
+// Valid indicates whether the value is a known member of the BoardLineStatus enum.
+func (e BoardLineStatus) Valid() bool {
+	switch e {
+	case BoardLineStatusRunning:
+		return true
+	case BoardLineStatusStopped:
 		return true
 	default:
 		return false
@@ -691,13 +727,61 @@ type Actor struct {
 // ActorKind defines model for Actor.Kind.
 type ActorKind string
 
-// AndonPull An open stop of a factory's line
+// AndonClear defines model for AndonClear.
+type AndonClear struct {
+	// Note What was done about it, at most 2000 characters
+	Note *string `json:"note,omitempty"`
+}
+
+// AndonKind manual, a person's pull; rework, the engine's pull on a gate's rework rate (later; never in phase 2.2)
+type AndonKind string
+
+// AndonPull One stop of a factory's line, open (cleared_at null) until someone clears it. While a pull is open the line releases and claims nothing.
 type AndonPull struct {
+	// ClearedAt Null while the pull is open
+	ClearedAt *time.Time `json:"cleared_at"`
+
+	// ClearedBy Who cleared it
+	ClearedBy *string `json:"cleared_by"`
+
+	// Data The pull's details (a rework pull's rejected, window and top_reason); empty for a manual one
+	Data map[string]interface{} `json:"data"`
+	Id   int64                  `json:"id"`
+
+	// Kind manual, a person's pull; rework, the engine's pull on a gate's rework rate (later; never in phase 2.2)
+	Kind AndonKind `json:"kind"`
+
+	// Note What the clearer wrote
+	Note     *string   `json:"note"`
 	PulledAt time.Time `json:"pulled_at"`
 
 	// PulledBy Who pulled the cord, as an actor ref: "system:engine" or "user:local"
 	PulledBy string `json:"pulled_by"`
 	Reason   string `json:"reason"`
+
+	// Station The gate whose rework rate pulled a rework pull; null for a manual one
+	Station *string `json:"station"`
+}
+
+// AndonState defines model for AndonState.
+type AndonState struct {
+	// Gates Each gate station in line order, tallying its last window verdicts (10 without a policy) since the last clear
+	Gates []GateTally `json:"gates"`
+
+	// Open The open pull, or null while the line runs
+	Open *AndonPull `json:"open"`
+
+	// Policy The line's board.flow.andon, or null without one (an automatic pull is later work)
+	Policy *struct {
+		// ReworkRate Share of verdicts that reject
+		ReworkRate float64 `json:"rework_rate"`
+
+		// Window How many of a gate's last verdicts count
+		Window int `json:"window"`
+	} `json:"policy"`
+
+	// Recent The latest pulls, open and cleared, the most recent first (up to limit)
+	Recent []AndonPull `json:"recent"`
 }
 
 // AuditEntry defines model for AuditEntry.
@@ -767,6 +851,9 @@ type Board struct {
 
 // BoardLine The line as a whole: its work in progress against its limits, how work is released into it, its expedite lane and its weekly budget. The release policy and the expedite limit are shown as configured; goald does not enforce them yet (it releases as push).
 type BoardLine struct {
+	// Andon The open andon pull, or null while the line runs
+	Andon *AndonPull `json:"andon"`
+
 	// Budget The weekly budget over the last 7×24 hours; null when the factory has none
 	Budget *LineBudget `json:"budget"`
 
@@ -774,9 +861,15 @@ type BoardLine struct {
 	Expedite *LineExpedite `json:"expedite"`
 	Release  LineRelease   `json:"release"`
 
+	// Status stopped while an andon pull is open: the line releases and claims nothing. A running line may still be paused (the factory's paused) or claim nothing over its budget (budget.exhausted).
+	Status BoardLineStatus `json:"status"`
+
 	// Wip Items in progress or waiting on a person at the stations with a wip limit, and the sum of those limits (null when no station has one)
 	Wip LineWip `json:"wip"`
 }
+
+// BoardLineStatus stopped while an andon pull is open: the line releases and claims nothing. A running line may still be paused (the factory's paused) or claim nothing over its budget (budget.exhausted).
+type BoardLineStatus string
 
 // BoardStation defines model for BoardStation.
 type BoardStation struct {
@@ -1242,6 +1335,18 @@ type FactoryAttention struct {
 	WaitingOnYou int `json:"waiting_on_you"`
 }
 
+// FactoryEvent The data of one `event: factory` on /v1/orgs/{org}/stream; it carries no content
+type FactoryEvent struct {
+	// AndonId The andon pull concerned
+	AndonId   *int64    `json:"andon_id,omitempty"`
+	At        time.Time `json:"at"`
+	FactoryId string    `json:"factory_id"`
+
+	// Kind andon_pulled or andon_cleared; later phases add kinds, which clients ignore or treat as a change of the line
+	Kind  string `json:"kind"`
+	OrgId string `json:"org_id"`
+}
+
 // FactoryHealth running; stopped while an andon pull is open; draft when the factory has no published version yet
 type FactoryHealth string
 
@@ -1350,6 +1455,19 @@ type FileList struct {
 
 // FileMap Files by slash-separated relative path
 type FileMap map[string]FileContent
+
+// GateTally defines model for GateTally.
+type GateTally struct {
+	Rejected int    `json:"rejected"`
+	Station  string `json:"station"`
+
+	// TopReason The most frequent category, or else normalized reason, of the rejections; null when none
+	TopReason *string `json:"top_reason"`
+	Verdicts  int     `json:"verdicts"`
+
+	// Warning One more rejection would reach the policy's rework rate (always false without a policy)
+	Warning bool `json:"warning"`
+}
 
 // Health defines model for Health.
 type Health struct {
@@ -1715,6 +1833,12 @@ type MoveRequest struct {
 
 	// To The id of the station to move the item to
 	To string `json:"to"`
+}
+
+// NewAndonPull defines model for NewAndonPull.
+type NewAndonPull struct {
+	// Reason Why the line must stop, 1 to 500 characters (surrounding space is trimmed)
+	Reason string `json:"reason"`
 }
 
 // NewFactoryRequest defines model for NewFactoryRequest.
@@ -2415,6 +2539,12 @@ type SearchSkillsParams struct {
 	After *string `form:"after,omitempty" json:"after,omitempty"`
 }
 
+// GetAndonParams defines parameters for GetAndon.
+type GetAndonParams struct {
+	// Limit How many recent pulls to list, the most recent first
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // GetBoardParams defines parameters for GetBoard.
 type GetBoardParams struct {
 	// Window The window of the busy and send-back shares: the last N UTC calendar days, today included, written Nd (1d to 90d).
@@ -2575,6 +2705,12 @@ type ValidateDefinitionJSONRequestBody = DefinitionFiles
 
 // CreateFactoryJSONRequestBody defines body for CreateFactory for application/json ContentType.
 type CreateFactoryJSONRequestBody = NewFactoryRequest
+
+// PullAndonJSONRequestBody defines body for PullAndon for application/json ContentType.
+type PullAndonJSONRequestBody = NewAndonPull
+
+// ClearAndonJSONRequestBody defines body for ClearAndon for application/json ContentType.
+type ClearAndonJSONRequestBody = AndonClear
 
 // OpenDraftJSONRequestBody defines body for OpenDraft for application/json ContentType.
 type OpenDraftJSONRequestBody = OpenDraftRequest
@@ -3075,6 +3211,47 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory} (the `GetFactory` operationId).
 	GetFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetAndon The factory's andon cord, its recent pulls and the tallies of its gates
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/andon (the `GetAndon` operationId).
+	GetAndon(ctx context.Context, org OrgRef, factory FactoryRef, params *GetAndonParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PullAndonWithBody Pull the andon cord, stopping the factory's line
+	//
+	// While the pull is open goald releases nothing from the line's queue stations and claims nothing at its agent stations; runs in progress finish and move on, items can still be submitted and every human decision still acts. The request's actor pulls it (the local user in phase 2.2). A line that is already stopped is 409 andon-pulled; a reason that is blank or over 500 characters is 400.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/andon (the `PullAndon` operationId).
+	PullAndonWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PullAndon Pull the andon cord, stopping the factory's line
+	//
+	// While the pull is open goald releases nothing from the line's queue stations and claims nothing at its agent stations; runs in progress finish and move on, items can still be submitted and every human decision still acts. The request's actor pulls it (the local user in phase 2.2). A line that is already stopped is 409 andon-pulled; a reason that is blank or over 500 characters is 400.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/andon (the `PullAndon` operationId).
+	PullAndon(ctx context.Context, org OrgRef, factory FactoryRef, body PullAndonJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ClearAndonWithBody Clear the andon cord, restarting the factory's line
+	//
+	// Clears the open pull with an optional note (at most 2000 characters). A line that is also paused, or over its weekly budget, stays stopped by that. A line that is not stopped is 409 andon-not-pulled.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/andon/clear (the `ClearAndon` operationId).
+	ClearAndonWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ClearAndon Clear the andon cord, restarting the factory's line
+	//
+	// Clears the open pull with an optional note (at most 2000 characters). A line that is also paused, or over its weekly budget, stays stopped by that. A line that is not stopped is 409 andon-not-pulled.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/andon/clear (the `ClearAndon` operationId).
+	ClearAndon(ctx context.Context, org OrgRef, factory FactoryRef, body ClearAndonJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetBoard The factory's board, station by station in line order
 	//
 	// Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time. Each station carries its statistics: the busy share and send-back share over the window, the queue's trend over the last 24 hours, how long the oldest waiting item has waited and, at the done station, the items done today (UTC).
@@ -3504,7 +3681,7 @@ type ClientInterface interface {
 
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	//
-	// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+	// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent, no id) follows a change of a factory's line that is not an item's: its andon cord pulled or cleared. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
 	//
 	// Corresponds with GET /v1/orgs/{org}/stream (the `StreamEvents` operationId).
 	StreamEvents(ctx context.Context, org OrgRef, params *StreamEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -3860,6 +4037,97 @@ func (c *Client) DeleteFactory(ctx context.Context, org OrgRef, factory FactoryR
 // Corresponds with GET /v1/orgs/{org}/factories/{factory} (the `GetFactory` operationId).
 func (c *Client) GetFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetFactoryRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetAndon The factory's andon cord, its recent pulls and the tallies of its gates
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/andon (the `GetAndon` operationId).
+func (c *Client) GetAndon(ctx context.Context, org OrgRef, factory FactoryRef, params *GetAndonParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAndonRequest(c.Server, org, factory, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PullAndonWithBody Pull the andon cord, stopping the factory's line
+//
+// While the pull is open goald releases nothing from the line's queue stations and claims nothing at its agent stations; runs in progress finish and move on, items can still be submitted and every human decision still acts. The request's actor pulls it (the local user in phase 2.2). A line that is already stopped is 409 andon-pulled; a reason that is blank or over 500 characters is 400.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/andon (the `PullAndon` operationId).
+func (c *Client) PullAndonWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPullAndonRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PullAndon Pull the andon cord, stopping the factory's line
+//
+// While the pull is open goald releases nothing from the line's queue stations and claims nothing at its agent stations; runs in progress finish and move on, items can still be submitted and every human decision still acts. The request's actor pulls it (the local user in phase 2.2). A line that is already stopped is 409 andon-pulled; a reason that is blank or over 500 characters is 400.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/andon (the `PullAndon` operationId).
+func (c *Client) PullAndon(ctx context.Context, org OrgRef, factory FactoryRef, body PullAndonJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPullAndonRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ClearAndonWithBody Clear the andon cord, restarting the factory's line
+//
+// Clears the open pull with an optional note (at most 2000 characters). A line that is also paused, or over its weekly budget, stays stopped by that. A line that is not stopped is 409 andon-not-pulled.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/andon/clear (the `ClearAndon` operationId).
+func (c *Client) ClearAndonWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewClearAndonRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ClearAndon Clear the andon cord, restarting the factory's line
+//
+// Clears the open pull with an optional note (at most 2000 characters). A line that is also paused, or over its weekly budget, stays stopped by that. A line that is not stopped is 409 andon-not-pulled.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/andon/clear (the `ClearAndon` operationId).
+func (c *Client) ClearAndon(ctx context.Context, org OrgRef, factory FactoryRef, body ClearAndonJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewClearAndonRequest(c.Server, org, factory, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4869,7 +5137,7 @@ func (c *Client) UpdateOrgSettings(ctx context.Context, org OrgRef, body UpdateO
 
 // StreamEvents The organization's events as they happen (Server-Sent Events)
 //
-// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent, no id) follows a change of a factory's line that is not an item's: its andon cord pulled or cleared. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
 //
 // Corresponds with GET /v1/orgs/{org}/stream (the `StreamEvents` operationId).
 func (c *Client) StreamEvents(ctx context.Context, org OrgRef, params *StreamEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -5662,6 +5930,182 @@ func NewGetFactoryRequest(server string, org OrgRef, factory FactoryRef) (*http.
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewGetAndonRequest constructs an http.Request for the GetAndon method
+func NewGetAndonRequest(server string, org OrgRef, factory FactoryRef, params *GetAndonParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/andon", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPullAndonRequest calls the generic PullAndon builder with application/json body
+func NewPullAndonRequest(server string, org OrgRef, factory FactoryRef, body PullAndonJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPullAndonRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewPullAndonRequestWithBody constructs an http.Request for the PullAndon method, with any body, and a specified content type
+func NewPullAndonRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/andon", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewClearAndonRequest calls the generic ClearAndon builder with application/json body
+func NewClearAndonRequest(server string, org OrgRef, factory FactoryRef, body ClearAndonJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewClearAndonRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewClearAndonRequestWithBody constructs an http.Request for the ClearAndon method, with any body, and a specified content type
+func NewClearAndonRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/andon/clear", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -8607,6 +9051,49 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory} (the `GetFactory` operationId).
 	GetFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetFactoryResponse, error)
 
+	// GetAndonWithResponse The factory's andon cord, its recent pulls and the tallies of its gates
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/andon (the `GetAndon` operationId).
+	GetAndonWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetAndonParams, reqEditors ...RequestEditorFn) (*GetAndonResponse, error)
+
+	// PullAndonWithBodyWithResponse Pull the andon cord, stopping the factory's line
+	//
+	// While the pull is open goald releases nothing from the line's queue stations and claims nothing at its agent stations; runs in progress finish and move on, items can still be submitted and every human decision still acts. The request's actor pulls it (the local user in phase 2.2). A line that is already stopped is 409 andon-pulled; a reason that is blank or over 500 characters is 400.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/andon (the `PullAndon` operationId).
+	PullAndonWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PullAndonResponse, error)
+
+	// PullAndonWithResponse Pull the andon cord, stopping the factory's line
+	//
+	// While the pull is open goald releases nothing from the line's queue stations and claims nothing at its agent stations; runs in progress finish and move on, items can still be submitted and every human decision still acts. The request's actor pulls it (the local user in phase 2.2). A line that is already stopped is 409 andon-pulled; a reason that is blank or over 500 characters is 400.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/andon (the `PullAndon` operationId).
+	PullAndonWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body PullAndonJSONRequestBody, reqEditors ...RequestEditorFn) (*PullAndonResponse, error)
+
+	// ClearAndonWithBodyWithResponse Clear the andon cord, restarting the factory's line
+	//
+	// Clears the open pull with an optional note (at most 2000 characters). A line that is also paused, or over its weekly budget, stays stopped by that. A line that is not stopped is 409 andon-not-pulled.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/andon/clear (the `ClearAndon` operationId).
+	ClearAndonWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ClearAndonResponse, error)
+
+	// ClearAndonWithResponse Clear the andon cord, restarting the factory's line
+	//
+	// Clears the open pull with an optional note (at most 2000 characters). A line that is also paused, or over its weekly budget, stays stopped by that. A line that is not stopped is 409 andon-not-pulled.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/andon/clear (the `ClearAndon` operationId).
+	ClearAndonWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body ClearAndonJSONRequestBody, reqEditors ...RequestEditorFn) (*ClearAndonResponse, error)
+
 	// GetBoardWithResponse The factory's board, station by station in line order
 	//
 	// Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time. Each station carries its statistics: the busy share and send-back share over the window, the queue's trend over the last 24 hours, how long the oldest waiting item has waited and, at the done station, the items done today (UTC).
@@ -9092,7 +9579,7 @@ type ClientWithResponsesInterface interface {
 
 	// StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
 	//
-	// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+	// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent, no id) follows a change of a factory's line that is not an item's: its andon cord pulled or cleared. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -9871,6 +10358,150 @@ func (r GetFactoryResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetFactoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetAndonResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AndonState
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAndonResponse) GetJSON200() *AndonState {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetAndonResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAndonResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAndonResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAndonResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAndonResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PullAndonResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *AndonPull
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r PullAndonResponse) GetJSON201() *AndonPull {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PullAndonResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PullAndonResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PullAndonResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PullAndonResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PullAndonResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ClearAndonResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AndonPull
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ClearAndonResponse) GetJSON200() *AndonPull {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ClearAndonResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ClearAndonResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ClearAndonResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ClearAndonResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ClearAndonResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -12376,6 +13007,79 @@ func (c *ClientWithResponses) GetFactoryWithResponse(ctx context.Context, org Or
 	return ParseGetFactoryResponse(rsp)
 }
 
+// GetAndonWithResponse The factory's andon cord, its recent pulls and the tallies of its gates
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/andon (the `GetAndon` operationId).
+func (c *ClientWithResponses) GetAndonWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetAndonParams, reqEditors ...RequestEditorFn) (*GetAndonResponse, error) {
+	rsp, err := c.GetAndon(ctx, org, factory, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAndonResponse(rsp)
+}
+
+// PullAndonWithBodyWithResponse Pull the andon cord, stopping the factory's line
+//
+// While the pull is open goald releases nothing from the line's queue stations and claims nothing at its agent stations; runs in progress finish and move on, items can still be submitted and every human decision still acts. The request's actor pulls it (the local user in phase 2.2). A line that is already stopped is 409 andon-pulled; a reason that is blank or over 500 characters is 400.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/andon (the `PullAndon` operationId).
+func (c *ClientWithResponses) PullAndonWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PullAndonResponse, error) {
+	rsp, err := c.PullAndonWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePullAndonResponse(rsp)
+}
+
+// PullAndonWithResponse Pull the andon cord, stopping the factory's line
+//
+// While the pull is open goald releases nothing from the line's queue stations and claims nothing at its agent stations; runs in progress finish and move on, items can still be submitted and every human decision still acts. The request's actor pulls it (the local user in phase 2.2). A line that is already stopped is 409 andon-pulled; a reason that is blank or over 500 characters is 400.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/andon (the `PullAndon` operationId).
+func (c *ClientWithResponses) PullAndonWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body PullAndonJSONRequestBody, reqEditors ...RequestEditorFn) (*PullAndonResponse, error) {
+	rsp, err := c.PullAndon(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePullAndonResponse(rsp)
+}
+
+// ClearAndonWithBodyWithResponse Clear the andon cord, restarting the factory's line
+//
+// Clears the open pull with an optional note (at most 2000 characters). A line that is also paused, or over its weekly budget, stays stopped by that. A line that is not stopped is 409 andon-not-pulled.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/andon/clear (the `ClearAndon` operationId).
+func (c *ClientWithResponses) ClearAndonWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ClearAndonResponse, error) {
+	rsp, err := c.ClearAndonWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseClearAndonResponse(rsp)
+}
+
+// ClearAndonWithResponse Clear the andon cord, restarting the factory's line
+//
+// Clears the open pull with an optional note (at most 2000 characters). A line that is also paused, or over its weekly budget, stays stopped by that. A line that is not stopped is 409 andon-not-pulled.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/andon/clear (the `ClearAndon` operationId).
+func (c *ClientWithResponses) ClearAndonWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body ClearAndonJSONRequestBody, reqEditors ...RequestEditorFn) (*ClearAndonResponse, error) {
+	rsp, err := c.ClearAndon(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseClearAndonResponse(rsp)
+}
+
 // GetBoardWithResponse The factory's board, station by station in line order
 //
 // Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time. Each station carries its statistics: the busy share and send-back share over the window, the queue's trend over the last 24 hours, how long the oldest waiting item has waited and, at the done station, the items done today (UTC).
@@ -13203,7 +13907,7 @@ func (c *ClientWithResponses) UpdateOrgSettingsWithResponse(ctx context.Context,
 
 // StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
 //
-// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent, no id) follows a change of a factory's line that is not an item's: its andon cord pulled or cleared. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -13757,6 +14461,105 @@ func ParseGetFactoryResponse(rsp *http.Response) (*GetFactoryResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Factory
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAndonResponse parses an HTTP response from a GetAndonWithResponse call
+func ParseGetAndonResponse(rsp *http.Response) (*GetAndonResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAndonResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AndonState
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePullAndonResponse parses an HTTP response from a PullAndonWithResponse call
+func ParsePullAndonResponse(rsp *http.Response) (*PullAndonResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PullAndonResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest AndonPull
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseClearAndonResponse parses an HTTP response from a ClearAndonWithResponse call
+func ParseClearAndonResponse(rsp *http.Response) (*ClearAndonResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ClearAndonResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AndonPull
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -15370,6 +16173,15 @@ type ServerInterface interface {
 	// GetFactory One factory, published or not
 	// (GET /v1/orgs/{org}/factories/{factory})
 	GetFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// GetAndon The factory's andon cord, its recent pulls and the tallies of its gates
+	// (GET /v1/orgs/{org}/factories/{factory}/andon)
+	GetAndon(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetAndonParams)
+	// PullAndon Pull the andon cord, stopping the factory's line
+	// (POST /v1/orgs/{org}/factories/{factory}/andon)
+	PullAndon(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ClearAndon Clear the andon cord, restarting the factory's line
+	// (POST /v1/orgs/{org}/factories/{factory}/andon/clear)
+	ClearAndon(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
 	// GetBoard The factory's board, station by station in line order
 	// (GET /v1/orgs/{org}/factories/{factory}/board)
 	GetBoard(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetBoardParams)
@@ -16058,6 +16870,127 @@ func (siw *ServerInterfaceWrapper) GetFactory(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetFactory(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAndon operation middleware
+func (siw *ServerInterfaceWrapper) GetAndon(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAndonParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAndon(w, r, org, factory, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PullAndon operation middleware
+func (siw *ServerInterfaceWrapper) PullAndon(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PullAndon(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ClearAndon operation middleware
+func (siw *ServerInterfaceWrapper) ClearAndon(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ClearAndon(w, r, org, factory)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -18435,6 +19368,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/weekly", wrapper.GetWeeklyThroughput)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/constraint", wrapper.GetConstraintReport)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/lead-time", wrapper.GetLeadTimeBridge)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.GetAndon)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.PullAndon)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon/clear", wrapper.ClearAndon)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/stream", wrapper.StreamEvents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}", wrapper.GetItem)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/events", wrapper.ListItemEvents)
@@ -19069,6 +20005,129 @@ type GetFactorydefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetFactorydefaultApplicationProblemPlusJSONResponse) VisitGetFactoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAndonRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Params  GetAndonParams
+}
+
+type GetAndonResponseObject interface {
+	VisitGetAndonResponse(w http.ResponseWriter) error
+}
+
+type GetAndon200JSONResponse AndonState
+
+func (response GetAndon200JSONResponse) VisitGetAndonResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAndondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetAndondefaultApplicationProblemPlusJSONResponse) VisitGetAndonResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PullAndonRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *PullAndonJSONRequestBody
+}
+
+type PullAndonResponseObject interface {
+	VisitPullAndonResponse(w http.ResponseWriter) error
+}
+
+type PullAndon201JSONResponse AndonPull
+
+func (response PullAndon201JSONResponse) VisitPullAndonResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PullAndondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response PullAndondefaultApplicationProblemPlusJSONResponse) VisitPullAndonResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClearAndonRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *ClearAndonJSONRequestBody
+}
+
+type ClearAndonResponseObject interface {
+	VisitClearAndonResponse(w http.ResponseWriter) error
+}
+
+type ClearAndon200JSONResponse AndonPull
+
+func (response ClearAndon200JSONResponse) VisitClearAndonResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClearAndondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ClearAndondefaultApplicationProblemPlusJSONResponse) VisitClearAndonResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -21078,6 +22137,15 @@ type StrictServerInterface interface {
 	// GetFactory One factory, published or not
 	// (GET /v1/orgs/{org}/factories/{factory})
 	GetFactory(ctx context.Context, request GetFactoryRequestObject) (GetFactoryResponseObject, error)
+	// GetAndon The factory's andon cord, its recent pulls and the tallies of its gates
+	// (GET /v1/orgs/{org}/factories/{factory}/andon)
+	GetAndon(ctx context.Context, request GetAndonRequestObject) (GetAndonResponseObject, error)
+	// PullAndon Pull the andon cord, stopping the factory's line
+	// (POST /v1/orgs/{org}/factories/{factory}/andon)
+	PullAndon(ctx context.Context, request PullAndonRequestObject) (PullAndonResponseObject, error)
+	// ClearAndon Clear the andon cord, restarting the factory's line
+	// (POST /v1/orgs/{org}/factories/{factory}/andon/clear)
+	ClearAndon(ctx context.Context, request ClearAndonRequestObject) (ClearAndonResponseObject, error)
 	// GetBoard The factory's board, station by station in line order
 	// (GET /v1/orgs/{org}/factories/{factory}/board)
 	GetBoard(ctx context.Context, request GetBoardRequestObject) (GetBoardResponseObject, error)
@@ -21697,6 +22765,105 @@ func (sh *strictHandler) GetFactory(w http.ResponseWriter, r *http.Request, org 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetFactoryResponseObject); ok {
 		if err := validResponse.VisitGetFactoryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAndon operation middleware
+func (sh *strictHandler) GetAndon(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetAndonParams) {
+	var request GetAndonRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAndon(ctx, request.(GetAndonRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAndon")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAndonResponseObject); ok {
+		if err := validResponse.VisitGetAndonResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PullAndon operation middleware
+func (sh *strictHandler) PullAndon(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request PullAndonRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body PullAndonJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PullAndon(ctx, request.(PullAndonRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PullAndon")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PullAndonResponseObject); ok {
+		if err := validResponse.VisitPullAndonResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ClearAndon operation middleware
+func (sh *strictHandler) ClearAndon(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request ClearAndonRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body ClearAndonJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ClearAndon(ctx, request.(ClearAndonRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ClearAndon")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ClearAndonResponseObject); ok {
+		if err := validResponse.VisitClearAndonResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

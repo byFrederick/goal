@@ -140,6 +140,26 @@ type Store interface {
 	// factory id. Factories with nothing pending are included with zeros.
 	Attention(ctx context.Context) ([]domain.Attention, error)
 
+	// PullAndon opens an andon pull on p.FactoryID: p's kind, station, reason, data and PulledAt,
+	// pulled by the actor (PulledBy is its Ref()), with the audit entry andon.pulled in the same
+	// transaction. It returns the stored pull with its id. It returns ErrConflict when the factory
+	// already has an open pull and ErrNotFound when the organization has no such factory; nothing
+	// changes in either case. The commit notifies the organization's stream (event factory, kind
+	// andon_pulled).
+	PullAndon(ctx context.Context, p domain.AndonPull, by domain.Actor) (domain.AndonPull, error)
+
+	// ClearAndon closes the factory's open andon pull at `at` on the actor's behalf, with an optional note, with
+	// the audit entry andon.cleared, and returns it. It returns ErrNotFound when none is open.
+	// The commit notifies the stream (kind andon_cleared).
+	ClearAndon(ctx context.Context, factory domain.FactoryID, by domain.Actor, note string, at time.Time) (domain.AndonPull, error)
+
+	// OpenAndon returns the factory's open andon pull, or nil while its line runs.
+	OpenAndon(ctx context.Context, factory domain.FactoryID) (*domain.AndonPull, error)
+
+	// AndonPulls returns up to limit of the factory's andon pulls, open and cleared, the most
+	// recently pulled first.
+	AndonPulls(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.AndonPull, error)
+
 	// WaitingHuman returns up to limit items in state waiting_human in the given factories, most
 	// recently changed first (updated_at descending, then id). Interim: phase 2.2-E (E11)
 	// replaces it with FlowStats.InboxItems.
@@ -185,6 +205,11 @@ type FlowStats interface {
 	// its lead time and its time in each component of the lead-time bridge, from its spans
 	// (domain.ComponentOf).
 	ItemTimes(ctx context.Context, q FlowQuery) ([]domain.ItemTime, error)
+
+	// GateDecisions tallies the last n verdicts (gate_approved and gate_rejected events) at a
+	// gate station of the factory, keeping only those after `after` (the last andon clear; zero
+	// for all of them), newest first (domain.TallyGate).
+	GateDecisions(ctx context.Context, factory domain.FactoryID, station string, after time.Time, n int) (domain.GateTally, error)
 }
 
 // FlowQuery is what a FlowStats read measures: one factory's items over [Since, Until).
@@ -455,7 +480,8 @@ type ItemNotice struct {
 
 // OrgEvent is an organization's stream event that is not an item event, NOTIFYed on the
 // goal_org_events channel ({org_id, event, factory_id?, data}) in the transaction that causes it,
-// such as phase 3's credential and connection events.
+// such as a factory's andon pulled or cleared (event factory) and phase 4's credential and
+// connection events.
 type OrgEvent struct {
 	// Name is the stream's event name: lowercase letters, digits and dashes.
 	Name string

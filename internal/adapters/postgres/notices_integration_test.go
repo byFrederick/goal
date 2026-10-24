@@ -4,6 +4,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -16,6 +17,9 @@ const stWork = "work"
 
 // typeTask is the work type of the items the tests create.
 const typeTask = "task"
+
+// factoryEvent is the stream event of a change of a factory's line (migration 00032).
+const factoryEvent = "factory"
 
 // noticeTimeout bounds waiting for a notification that should arrive at once.
 const noticeTimeout = 10 * time.Second
@@ -193,4 +197,61 @@ func TestNotices_OrgEventsArriveAsOrgNotices(t *testing.T) {
 		n.Org.FactoryID != factory || string(n.Org.Data) != `{"name":"repo"}` {
 		t.Errorf("notice = %+v (org event %+v); want the credential event, the malformed one skipped", n, n.Org)
 	}
+}
+
+// A pull and a clear of the andon cord are the organization's factory events, each with its kind
+// and time (migration 00032), sent on commit.
+func TestNotices_AndonPullAndClearAreFactoryEvents(t *testing.T) {
+	t.Parallel()
+
+	pool := newTestPool(t)
+	s := New(pool)
+	org := newOrgID(t, s)
+	ctx := domain.WithOrg(t.Context(), org)
+	factory := saveFactory(ctx, t, s)
+	notices := listening(t, NewNotices(pool.Config().ConnConfig, nil), factory)
+
+	if n := next(t, notices); !n.Resync {
+		t.Fatalf("first notice = %+v; want Resync", n)
+	}
+
+	pulledAt := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
+	clearedAt := pulledAt.Add(time.Hour)
+
+	pull, err := s.PullAndon(ctx, domain.AndonPull{FactoryID: factory, Kind: domain.AndonManual, Reason: "stop", PulledAt: pulledAt}, domain.LocalUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.ClearAndon(ctx, factory, domain.LocalUser, "", clearedAt); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []factoryPayload{
+		{OrgID: string(org), FactoryID: string(factory), Kind: "andon_pulled", AndonID: pull.ID, At: pulledAt},
+		{OrgID: string(org), FactoryID: string(factory), Kind: "andon_cleared", AndonID: pull.ID, At: clearedAt},
+	} {
+		n := next(t, notices)
+		if n.OrgID != org || n.Org == nil || n.Org.Name != factoryEvent || n.Org.FactoryID != factory {
+			t.Fatalf("notice = %+v (org event %+v); want the factory event %s", n, n.Org, want.Kind)
+		}
+
+		var got factoryPayload
+		if err := json.Unmarshal(n.Org.Data, &got); err != nil {
+			t.Fatal(err)
+		}
+
+		if got.At = got.At.UTC(); got != want {
+			t.Errorf("factory event data = %+v; want %+v", got, want)
+		}
+	}
+}
+
+// factoryPayload is the data of a factory event.
+type factoryPayload struct {
+	OrgID     string    `json:"org_id"`
+	FactoryID string    `json:"factory_id"`
+	Kind      string    `json:"kind"`
+	AndonID   int64     `json:"andon_id"`
+	At        time.Time `json:"at"`
 }

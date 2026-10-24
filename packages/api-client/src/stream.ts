@@ -6,6 +6,9 @@ import type { components } from "./schema";
 
 export type StreamEvent = components["schemas"]["StreamEvent"];
 
+/** A change of a factory's line that is not an item's (`event: factory`): its andon pulled or cleared. */
+export type FactoryEvent = components["schemas"]["FactoryEvent"];
+
 /** The state of the connection: opening, open, or lost and retrying. */
 export type StreamStatus = "connecting" | "live" | "reconnecting";
 
@@ -21,6 +24,11 @@ export interface StreamScope {
 export interface StreamHandlers {
   /** An item event was committed (`event: item`). */
   onItem: (event: StreamEvent) => void;
+  /**
+   * A factory's line changed (`event: factory`): its andon cord was pulled or cleared. Listened for
+   * only when set.
+   */
+  onFactory?: (event: FactoryEvent) => void;
   /**
    * Events of the names in `events`, which later phases add to the stream (definition, factory,
    * ...). EventSource only delivers the named events it listens for; names nobody listens for
@@ -46,6 +54,11 @@ function parse(message: MessageEvent<string>): { ok: true; data: unknown } | { o
   }
 }
 
+function isFactoryEvent(data: unknown): data is FactoryEvent {
+  const e = data as Partial<FactoryEvent> | null;
+  return typeof e?.factory_id === "string" && typeof e.kind === "string";
+}
+
 /**
  * subscribe follows the event stream with an EventSource and returns the function that stops
  * it. A malformed event is skipped: the next one, or the refetch after a resync, catches up.
@@ -66,6 +79,14 @@ export function subscribe(baseUrl: string, scope: StreamScope, handlers: StreamH
     const event = parse(message);
     if (event.ok) handlers.onItem(event.data as StreamEvent);
   });
+
+  const { onFactory } = handlers;
+  if (onFactory) {
+    source.addEventListener("factory", (message: MessageEvent<string>) => {
+      const event = parse(message);
+      if (event.ok && isFactoryEvent(event.data)) onFactory(event.data);
+    });
+  }
 
   for (const name of handlers.events ?? []) {
     source.addEventListener(name, (message: MessageEvent<string>) => {

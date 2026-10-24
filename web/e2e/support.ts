@@ -21,6 +21,15 @@ export async function expectNoHorizontalScroll(page: Page) {
 /** The rail from 768 px, the top row below: the same landmark, one of them shown. */
 export const orgNav = (page: Page) => page.getByRole('navigation', { name: 'Organization and factories' });
 
+/**
+ * Waits until a factory's board follows the live stream: once the stream is connected its line
+ * status says only that the line runs (with its WIP on a phone).
+ */
+export async function expectBoardLive(page: Page) {
+  const status = page.getByRole('status').filter({ hasText: /^Line running(, WIP \d+( of \d+)?)?$/ });
+  await expect(status.filter({ visible: true })).toBeVisible();
+}
+
 /** The organization mark of the shown navigation: it opens the organization menu or sheet. */
 export const orgMarkOf = (page: Page, name = 'Ac, Acme organization, switch organization') =>
   orgNav(page).filter({ visible: true }).getByRole('button', { name });

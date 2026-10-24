@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { type StreamEvent, type StreamHandlers, type StreamStatus, subscribe } from "./stream";
+import { type FactoryEvent, type StreamEvent, type StreamHandlers, type StreamStatus, subscribe } from "./stream";
 
 // A stand-in for the browser's EventSource: the test plays the server's side of the connection.
 class FakeEventSource extends EventTarget {
@@ -115,6 +115,29 @@ describe("subscribe", () => {
     source.send("credential", JSON.stringify({ id: "c1" }));
     expect(log.others).toEqual([["definition", { factory_id: event.factory_id }]]);
     expect(log.items).toEqual([]);
+  });
+
+  test("factory events reach onFactory; malformed ones are skipped", () => {
+    const factory: FactoryEvent = {
+      org_id: event.org_id,
+      factory_id: event.factory_id,
+      kind: "andon_pulled",
+      andon_id: 7,
+      at: "2026-10-23T10:00:00Z",
+    };
+    const got: FactoryEvent[] = [];
+    const { log, source } = follow({ onFactory: (e) => got.push(e) });
+    source.send("factory", "{not json");
+    source.send("factory", JSON.stringify({ kind: "andon_pulled" }));
+    source.send("factory", JSON.stringify(factory));
+    expect(got).toEqual([factory]);
+    expect(log.others).toEqual([]);
+  });
+
+  test("factory events are not listened for without onFactory", () => {
+    const { log, source } = follow();
+    source.send("factory", JSON.stringify({ factory_id: event.factory_id, kind: "andon_cleared" }));
+    expect(log.others).toEqual([]);
   });
 
   test("the returned function closes the stream", () => {

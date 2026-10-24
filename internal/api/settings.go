@@ -224,6 +224,10 @@ func problemCode(err error) string {
 		return "confirmation-mismatch"
 	case errors.Is(err, engine.ErrItemClosed):
 		return "item-closed"
+	case errors.Is(err, engine.ErrAndonPulled):
+		return "andon-pulled"
+	case errors.Is(err, engine.ErrAndonNotPulled):
+		return "andon-not-pulled"
 	default:
 		return ""
 	}

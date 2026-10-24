@@ -2,7 +2,13 @@ import { QueryClient } from '@tanstack/react-query';
 import { describe, expect, test, vi } from 'vitest';
 import { defKeys, keys } from '../api/queries';
 import type { DefinitionEvent, StreamEvent } from '../api/types';
-import { definitionInvalidations, invalidationsFor, isOverviewKey, resyncInvalidations } from './invalidation';
+import {
+  definitionInvalidations,
+  factoryInvalidations,
+  invalidationsFor,
+  isOverviewKey,
+  resyncInvalidations,
+} from './invalidation';
 
 const acme = '019a1c00-0000-7000-8000-0000000000aa';
 const labs = '019a1c00-0000-7000-8000-0000000000bb';
@@ -104,6 +110,29 @@ describe('invalidationsFor an item event', () => {
   test('marks the overview keys, which the stream batches separately', () => {
     const overview = invalidationsFor(acme, event('approved')).filter(isOverviewKey);
     expect(overview).toEqual([['org', acme, 'overview']]);
+  });
+});
+
+describe('factoryInvalidations', () => {
+  test("an andon pull re-reads the factory's work, counts and overviews, but no item and no prefix", async () => {
+    const stale = await staleAfter(
+      cache(),
+      factoryInvalidations(acme, { org_id: acme, factory_id: goal, kind: 'andon_pulled', at: '2026-10-24T10:00:00Z' }),
+    );
+
+    expect(stale).toEqual(
+      expect.arrayContaining([
+        keys.board(acme, goal),
+        keys.metrics(acme, goal, {}),
+        keys.attention(acme),
+        keys.inbox(acme),
+        keys.overview(acme, '7d'),
+      ]),
+    );
+    expect(stale).not.toContainEqual(keys.item(acme, 'goal#12'));
+    expect(stale).not.toContainEqual(keys.board(acme, sre));
+    expect(stale).not.toContainEqual([...keys.factory(acme, goal), 'draft']);
+    expect(stale.filter((k) => k[1] === labs)).toEqual([]);
   });
 });
 

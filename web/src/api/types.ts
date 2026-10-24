@@ -33,6 +33,7 @@ export type {
   EventPage,
   Factory,
   FactoryAttention,
+  FactoryEvent,
   FactoryHealth,
   FactoryList,
   FactoryModel,

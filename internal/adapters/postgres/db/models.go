@@ -38,6 +38,11 @@ type AndonPull struct {
 	PulledAt  time.Time
 	ClearedAt *time.Time
 	OrgID     uuid.UUID
+	Kind      string
+	Station   *string
+	ClearedBy *string
+	Note      *string
+	Data      []byte
 }
 
 type AuditLog struct {

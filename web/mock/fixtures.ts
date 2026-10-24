@@ -6,9 +6,11 @@
 import type {
   Actor,
   AndonPull,
+  AndonState,
   AuditEntry,
   ClassOfService,
   Factory,
+  GateTally,
   ItemEvent,
   ItemSpan,
   ItemState,
@@ -135,8 +137,14 @@ export interface MockState {
   stationStats: Record<string, Record<string, MockStationStats>>;
   /** Each factory's items finished before the mock started (flow.ts), by name. */
   history: Record<string, MockDone[]>;
-  /** The open andon pull of each factory, by name; absent or null while its line runs. */
-  andon: Record<string, AndonPull | null>;
+  /**
+   * Each factory's andon pulls, by name, oldest first; the last is open while its cleared_at is
+   * null. Absent or empty: the line runs and was never stopped.
+   */
+  andon: Record<string, AndonPull[]>;
+  nextAndonId: number;
+  /** Each factory's board.flow.andon policy and its gates' tallies, by name; absent without gates. */
+  gates: Record<string, { policy: AndonState['policy']; tallies: GateTally[] }>;
   /** Each factory's targets and task budget, by name; absent without any. */
   flow: Record<string, MockFlow>;
   /** Each factory's runtime.budget.weeklyUsd, by name; absent or null without one. */
@@ -1239,10 +1247,38 @@ export function seed(now = Date.now()): MockState {
     },
     history: {},
     andon: {
-      support: {
-        reason: 'Answers sent back 4 of the last 10 times',
-        pulled_by: 'user:local',
-        pulled_at: new Date(now - 35 * 60_000).toISOString(),
+      support: [
+        {
+          id: 1,
+          kind: 'manual',
+          station: null,
+          reason: 'Answers cite a retired runbook',
+          pulled_by: 'user:local',
+          pulled_at: new Date(now - 3 * 86_400_000).toISOString(),
+          cleared_by: 'user:local',
+          cleared_at: new Date(now - 3 * 86_400_000 + 40 * 60_000).toISOString(),
+          note: 'Removed the runbook from the knowledge base',
+          data: {},
+        },
+        {
+          id: 2,
+          kind: 'manual',
+          station: null,
+          reason: 'Answers sent back 4 of the last 10 times',
+          pulled_by: 'user:local',
+          pulled_at: new Date(now - 35 * 60_000).toISOString(),
+          cleared_by: null,
+          cleared_at: null,
+          note: null,
+          data: {},
+        },
+      ],
+    },
+    nextAndonId: 3,
+    gates: {
+      goal: {
+        policy: { rework_rate: 0.4, window: 10 },
+        tallies: [{ station: 'review', verdicts: 10, rejected: 3, top_reason: 'missing tests', warning: true }],
       },
     },
     flow: {

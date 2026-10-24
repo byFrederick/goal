@@ -340,6 +340,11 @@ func TestRLS_OtherOrgInvisible(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	pull := domain.AndonPull{FactoryID: factory, Kind: domain.AndonManual, Reason: "a's stop", PulledAt: time.Now()}
+	if _, err := s.PullAndon(ctxA, pull, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
 	for _, table := range orgTables {
 		var n int
 		if err := asOrg(t, pool, b, "SELECT count(*) FROM "+table+" WHERE org_id <> '"+string(b)+"'", &n); err != nil || n != 0 {

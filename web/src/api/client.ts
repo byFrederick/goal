@@ -13,6 +13,7 @@ import {
   unwrap,
 } from '@goal/api-client';
 import type {
+  AndonPull,
   AuditFilter,
   AuditPage,
   Board,
@@ -197,6 +198,23 @@ export function getWeekly(
   );
 }
 
+/** Pulls the andon cord: the line releases and claims nothing until it is cleared. */
+export function pullAndon(org: string, factory: string, reason: string): Promise<AndonPull> {
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/andon'), { params: { path: { org, factory } }, body: { reason } }),
+  );
+}
+
+/** Clears the andon cord with an optional note: the line runs again. */
+export function clearAndon(org: string, factory: string, note?: string): Promise<AndonPull> {
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/andon/clear'), {
+      params: { path: { org, factory } },
+      body: note ? { note } : {},
+    }),
+  );
+}
+
 export interface ItemFilter {
   state?: ItemState | undefined;
   station?: string | undefined;
@@ -297,7 +315,8 @@ export function pauseItem(org: string, item: string, reason?: string): Promise<I
  * Subscribes to an organization's events (every factory's). goald does not replay: after a
  * reconnect (not the first open), and on `event: resync`, events may have been missed, so
  * `onResync` asks the caller to re-read what it shows. `onStatus` reports the connection so the
- * shell can say when it is reconnecting; `events` names further event kinds to pass to `onEvent`.
+ * shell can say when it is reconnecting; `onFactory` hears a factory's line change (its andon);
+ * `events` names further event kinds to pass to `onEvent`.
  * Returns the unsubscribe function.
  */
 export function subscribeToOrg(org: string, handlers: StreamHandlers): () => void {

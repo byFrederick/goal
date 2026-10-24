@@ -17,7 +17,8 @@ func drumOf(l domain.Line, loads map[string]domain.StationLoad, cands []domain.C
 	return c
 }
 
-// boardLine describes line l, paced by drum, as a whole for the board: its work in progress at
+// boardLine describes line l, paced by drum, as a whole for the board: whether it runs or an
+// open andon pull stops it, its work in progress at
 // the stations with a wip limit, its release policy with the drum's buffer, its expedite lane and
 // its weekly budget. Release policies and the expedite limit are shown, not enforced (2.2-E,
 // deferred).
@@ -25,9 +26,19 @@ func (s *server) boardLine(
 	ctx context.Context, l domain.Line, drum string, loads map[string]domain.StationLoad, cards map[string][]gen.ItemCard, now time.Time,
 ) (gen.BoardLine, error) {
 	line := gen.BoardLine{
+		Status:   gen.BoardLineStatusRunning,
 		Wip:      lineWIP(l, loads, cards),
 		Release:  gen.LineRelease{Policy: gen.Push, InBuffer: loads[drum].Waiting},
 		Expedite: lineExpedite(l, cards),
+	}
+
+	open, err := s.items.OpenAndon(ctx, l.FactoryID)
+	if err != nil {
+		return gen.BoardLine{}, err
+	}
+
+	if open != nil {
+		line.Status, line.Andon = gen.BoardLineStatusStopped, andonOf(open)
 	}
 
 	if l.Flow.Release == domain.ReleaseDBR {

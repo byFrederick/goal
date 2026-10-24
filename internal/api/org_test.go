@@ -264,6 +264,9 @@ var probes = map[string]probe{
 	"mergeItem":           {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/merge", org: testOrg, factory: acmeID},
 	"noteItem":            {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/notes", body: `{"text":"hi"}`, org: testOrg, factory: acmeID},
 	"listItemRuns":        {method: http.MethodGet, path: "/v1/orgs/acme/items/acme%231/runs", org: testOrg, factory: acmeID},
+	"getAndon":            {method: http.MethodGet, path: acmeAndon, org: testOrg, factory: acmeID},
+	"pullAndon":           {method: http.MethodPost, path: acmeAndon, body: `{"reason":"probe"}`, org: testOrg, factory: acmeID},
+	"clearAndon":          {method: http.MethodPost, path: acmeAndon + "/clear", org: testOrg, factory: acmeID},
 	// No run exists here; TestAPI_RunsOfAnItem checks that the run resolver passes the seam with its factory.
 	"getRun":         {method: http.MethodGet, path: "/v1/orgs/acme/runs/00000000-0000-7000-8000-ffffffffffff", org: testOrg},
 	"getBuilderMeta": {method: http.MethodGet, path: "/v1/orgs/acme/builder/meta", org: testOrg},

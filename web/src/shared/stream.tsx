@@ -5,7 +5,13 @@
 import { type QueryClient, type QueryKey, useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, use, useEffect, useState } from 'react';
 import { type StreamStatus, subscribeToOrg } from '../api/client';
-import { definitionInvalidations, invalidationsFor, isOverviewKey, resyncInvalidations } from './invalidation';
+import {
+  definitionInvalidations,
+  factoryInvalidations,
+  invalidationsFor,
+  isOverviewKey,
+  resyncInvalidations,
+} from './invalidation';
 
 const StatusContext = createContext<StreamStatus>('connecting');
 
@@ -15,8 +21,9 @@ export function useStreamStatus(): StreamStatus {
 
 /**
  * The queries other event names invalidate, by name. Later phases register theirs here (B
- * `definition`, E `factory`, phase 3 `credential`, `approval`, `connection`); names nobody
- * registered are ignored, so new events never break an older client.
+ * `definition`, phase 4 `credential`, `approval`, `connection`); names nobody registered are
+ * ignored, so new events never break an older client. E's `factory` events arrive typed through
+ * the client's `onFactory` (factoryInvalidations).
  */
 export const streamHandlers: Readonly<Record<string, (org: string, data: unknown) => QueryKey[]>> = {
   definition: definitionInvalidations,
@@ -58,6 +65,7 @@ export function OrgStream({ org, children }: { org: string; children: ReactNode 
 
     const unsubscribe = subscribeToOrg(org, {
       onItem: (event) => invalidate(invalidationsFor(org, event)),
+      onFactory: (event) => invalidate(factoryInvalidations(org, event)),
       events: Object.keys(streamHandlers),
       onEvent: (name, data) => invalidate(streamHandlers[name]?.(org, data) ?? []),
       onResync: () => {

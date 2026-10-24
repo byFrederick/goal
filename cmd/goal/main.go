@@ -45,6 +45,11 @@ const usage = `usage:
                                                   progress is stopped
   goal pause <item> [--reason "..."]              stop the item where it is (goal retry resumes it);
                                                   a run in progress is stopped
+  goal andon <factory>                            whether the line runs, its gates' rework tallies and
+                                                  the recent andon pulls
+  goal andon pull <factory> --reason "..."        pull the andon cord: the line releases and claims
+                                                  nothing until it is cleared
+  goal andon clear <factory> [--note "..."]       clear it: the line runs again
   goal factory pull <factory> <dir> [--version N|current|draft]
                                                   write a version's files (default: the current one)
                                                   into a new folder, with .goal/pulled.json
@@ -93,7 +98,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, move, pause, the decisions, factory) acts in one
+Every command that talks to goald (run, follow, item, note, move, pause, the decisions, andon, factory) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's)`
@@ -149,6 +154,8 @@ func run(ctx context.Context, args []string, out *printer, getenv func(string) s
 		return decide(ctx, out, getenv, cmd, rest)
 	case "org":
 		return orgCommand(ctx, out, getenv, rest)
+	case "andon":
+		return andon(ctx, out, getenv, rest)
 	case "db", "storage":
 		return setUp(ctx, out, getenv, cmd, rest)
 	case "catalog":

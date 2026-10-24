@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll, isPhone, orgMarkOf, orgNav } from './support';
+import { expectAccessible, expectBoardLive, expectNoHorizontalScroll, isPhone, orgMarkOf, orgNav } from './support';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
@@ -200,7 +200,7 @@ test('the top row opens a factory on a phone', async ({ page }) => {
 
 test('a decision made elsewhere updates the badges without a reload', async ({ page, request }) => {
   await page.goto('/o/acme/f/goal/board');
-  await expect(page.getByText(/^Live/).filter({ visible: true }).first()).toBeVisible();
+  await expectBoardLive(page);
   const goal = orgNav(page).getByRole('link', { name: /^G, goal factory/ });
   await expect(goal).toHaveAccessibleName('G, goal factory, 2 waiting on you, 1 item blocked');
   await expect(orgNav(page).getByRole('link', { name: 'Su, support factory, blocked: andon pulled' })).toBeVisible();
@@ -374,7 +374,7 @@ test('the board updates live when an item moves elsewhere', async ({ page, reque
   await page.goto('/o/acme/f/goal/board');
   const approveSpec = page.getByRole('region', { name: 'Approve spec', exact: true });
   await expect(approveSpec.getByRole('link', { name: 'goald: serve the embedded web UI' })).toBeVisible();
-  await expect(page.getByText('Live', { exact: true }).first()).toBeVisible();
+  await expectBoardLive(page);
 
   // Someone else approves (the CLI, another tab): the stream brings the change.
   await request.post('/v1/orgs/acme/items/goal%2312/approve');
@@ -417,7 +417,7 @@ test('the line shows its rope, not enforced yet, its work in progress and the ex
 }) => {
   await page.goto('/o/acme/f/sre/board');
   if (isPhone(page)) {
-    await expect(page.getByText('Live, WIP 7 of 12')).toBeVisible();
+    await expect(page.getByText('Line running, WIP 7 of 12')).toBeVisible();
     return;
   }
 
@@ -456,6 +456,40 @@ test('on a phone the board picks a station, the constraint first', async ({ page
   await expect(page.getByRole('article').filter({ hasText: 'Redis evictions' })).toContainText('Postmortem filed');
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
+});
+
+test('pull the andon cord, then clear it: the line stops and runs again', async ({ page }) => {
+  await page.goto('/o/acme/f/goal/board');
+  const status = page.getByRole('status').filter({ hasText: /^Line / });
+  const goalSquare = orgNav(page)
+    .filter({ visible: true })
+    .getByRole('link', { name: /goal factory/ });
+  await expect(status).toHaveText(/^Line running/);
+  await expect(goalSquare).not.toHaveAccessibleName(/andon pulled/);
+
+  await page.getByRole('button', { name: 'Pull the andon cord' }).click();
+  const pull = page.getByRole('dialog', { name: 'Pull the andon cord' });
+  await pull.getByRole('button', { name: 'Stop the line' }).click();
+  await expect(pull.getByText('Write why, so whoever clears it knows what to fix.')).toBeVisible();
+  await pull.getByLabel('Why the line must stop').fill('Builds pass but deploys fail');
+  await expectAccessible(page);
+  await pull.getByRole('button', { name: 'Stop the line' }).click();
+
+  await expect(pull).toBeHidden();
+  await expect(status).toHaveText(/^Line stopped: Builds pass but deploys fail/);
+  await expect(goalSquare).toHaveAccessibleName(/blocked: andon pulled/);
+  await expectNoHorizontalScroll(page);
+
+  await page.getByRole('button', { name: 'Clear the andon' }).click();
+  const clear = page.getByRole('dialog', { name: 'Clear the andon' });
+  await expect(clear.getByText(/It was stopped because: Builds pass but deploys fail/)).toBeVisible();
+  await clear.getByLabel('What was done about it (optional)').fill('Rotated the deploy key');
+  await clear.getByRole('button', { name: 'Restart the line' }).click();
+
+  await expect(clear).toBeHidden();
+  await expect(status).toHaveText(/^Line running/);
+  await expect(goalSquare).not.toHaveAccessibleName(/andon pulled/);
+  await expect(page.getByRole('button', { name: 'Pull the andon cord' })).toBeVisible();
 });
 
 test('on a phone: floor to board to item and back', async ({ page }) => {

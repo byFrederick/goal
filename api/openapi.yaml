@@ -1043,6 +1043,71 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/LeadTimeBridge" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/andon:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: getAndon
+      tags: [work]
+      summary: The factory's andon cord, its recent pulls and the tallies of its gates
+      parameters:
+        - name: limit
+          in: query
+          description: How many recent pulls to list, the most recent first
+          schema: { type: integer, minimum: 1, maximum: 50, default: 10 }
+      responses:
+        "200":
+          description: The andon state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AndonState" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: pullAndon
+      tags: [work]
+      summary: Pull the andon cord, stopping the factory's line
+      description: >-
+        While the pull is open goald releases nothing from the line's queue stations and claims
+        nothing at its agent stations; runs in progress finish and move on, items can still be
+        submitted and every human decision still acts. The request's actor pulls it (the local
+        user in phase 2.2). A line that is already stopped is 409 andon-pulled; a reason that is
+        blank or over 500 characters is 400.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewAndonPull" }
+      responses:
+        "201":
+          description: The open pull
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AndonPull" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/andon/clear:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    post:
+      operationId: clearAndon
+      tags: [work]
+      summary: Clear the andon cord, restarting the factory's line
+      description: >-
+        Clears the open pull with an optional note (at most 2000 characters). A line that is also
+        paused, or over its weekly budget, stays stopped by that. A line that is not stopped is
+        409 andon-not-pulled.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AndonClear" }
+      responses:
+        "200":
+          description: The pull, cleared
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AndonPull" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/stream:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -1056,7 +1121,9 @@ paths:
         object; clients ignore the names they do not know. `event: definition` (data a
         DefinitionEvent, no id) follows every committed change of a factory's definition: a
         factory created or deleted, its current version moved (publish, restore, pause, resume),
-        its draft opened, saved, discarded or published. `event: resync` (data `{}`) means
+        its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent,
+        no id) follows a change of a factory's line that is not an item's: its andon cord pulled
+        or cleared. `event: resync` (data `{}`) means
         goald may have missed events (it reconnected to the database): re-read what you show. A
         comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID
         is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of
@@ -1072,10 +1139,11 @@ paths:
           content:
             text/event-stream:
               schema:
-                description: The data of each event, by its name (item, definition)
+                description: The data of each event, by its name (item, definition, factory)
                 oneOf:
                   - $ref: "#/components/schemas/StreamEvent"
                   - $ref: "#/components/schemas/DefinitionEvent"
+                  - $ref: "#/components/schemas/FactoryEvent"
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}:
     parameters:
@@ -1899,8 +1967,18 @@ components:
         The line as a whole: its work in progress against its limits, how work is released into
         it, its expedite lane and its weekly budget. The release policy and the expedite limit are
         shown as configured; goald does not enforce them yet (it releases as push).
-      required: [wip, release, expedite, budget]
+      required: [status, andon, wip, release, expedite, budget]
       properties:
+        status:
+          type: string
+          enum: [running, stopped]
+          description: >-
+            stopped while an andon pull is open: the line releases and claims nothing. A running line
+            may still be paused (the factory's paused) or claim nothing over its budget (budget.exhausted).
+        andon:
+          nullable: true
+          description: The open andon pull, or null while the line runs
+          allOf: [{ $ref: "#/components/schemas/AndonPull" }]
         wip: { $ref: "#/components/schemas/LineWip" }
         release: { $ref: "#/components/schemas/LineRelease" }
         expedite:
@@ -2307,12 +2385,100 @@ components:
           description: That version's number ("ran on v9"); null when the run has no version
     AndonPull:
       type: object
-      description: An open stop of a factory's line
-      required: [reason, pulled_by, pulled_at]
+      description: >-
+        One stop of a factory's line, open (cleared_at null) until someone clears it. While a pull
+        is open the line releases and claims nothing.
+      required: [id, kind, station, reason, pulled_by, pulled_at, cleared_by, cleared_at, note, data]
       properties:
+        id: { type: integer, format: int64 }
+        kind: { $ref: "#/components/schemas/AndonKind" }
+        station:
+          type: string
+          nullable: true
+          description: The gate whose rework rate pulled a rework pull; null for a manual one
         reason: { type: string }
         pulled_by: { type: string, description: 'Who pulled the cord, as an actor ref: "system:engine" or "user:local"' }
         pulled_at: { type: string, format: date-time }
+        cleared_by: { type: string, nullable: true, description: Who cleared it, as an actor ref; null while open }
+        cleared_at: { type: string, format: date-time, nullable: true, description: Null while the pull is open }
+        note: { type: string, nullable: true, description: What the clearer wrote, if anything }
+        data:
+          type: object
+          description: The pull's details (a rework pull's rejected, window and top_reason); empty for a manual one
+          additionalProperties: {}
+    AndonKind:
+      type: string
+      description: manual, a person's pull; rework, the engine's pull on a gate's rework rate (later; never in phase 2.2)
+      enum: [manual, rework]
+    NewAndonPull:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Why the line must stop, 1 to 500 characters (surrounding space is trimmed)
+    AndonClear:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 2000
+          description: What was done about it, at most 2000 characters
+    AndonState:
+      type: object
+      required: [open, recent, policy, gates]
+      properties:
+        open:
+          description: The open pull, or null while the line runs
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/AndonPull"
+        recent:
+          type: array
+          description: The latest pulls, open and cleared, the most recent first (up to limit)
+          items: { $ref: "#/components/schemas/AndonPull" }
+        policy:
+          type: object
+          nullable: true
+          description: The line's board.flow.andon, or null without one (an automatic pull is later work)
+          required: [rework_rate, window]
+          properties:
+            rework_rate: { type: number, format: double, description: Share of verdicts that reject, 0 to 1 }
+            window: { type: integer, description: How many of a gate's last verdicts count }
+        gates:
+          type: array
+          description: >-
+            Each gate station in line order, tallying its last window verdicts (10 without a
+            policy) since the last clear
+          items: { $ref: "#/components/schemas/GateTally" }
+    GateTally:
+      type: object
+      required: [station, verdicts, rejected, top_reason, warning]
+      properties:
+        station: { type: string }
+        verdicts: { type: integer }
+        rejected: { type: integer }
+        top_reason:
+          type: string
+          nullable: true
+          description: The most frequent category, or else normalized reason, of the rejections; null when none
+        warning:
+          type: boolean
+          description: One more rejection would reach the policy's rework rate (always false without a policy)
+    FactoryEvent:
+      type: object
+      description: "The data of one `event: factory` on /v1/orgs/{org}/stream; it carries no content"
+      required: [org_id, factory_id, kind, at]
+      properties:
+        org_id: { type: string }
+        factory_id: { type: string }
+        kind:
+          type: string
+          description: andon_pulled or andon_cleared; later phases add kinds, which clients ignore or treat as a change of the line
+        andon_id: { type: integer, format: int64, description: The andon pull concerned }
+        at: { type: string, format: date-time }
     OrgAttention:
       type: object
       required: [waiting_on_you, factories]

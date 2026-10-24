@@ -257,17 +257,20 @@ func testAttention(f *fixture) {
 	f.create(t, domain.NewItem{})
 	f.finish(t, f.create(t, domain.NewItem{State: domain.StateWaitingHuman}), t1, false)
 
-	pull := domain.AndonPull{Reason: "rework rate over 40%", PulledBy: "user:local", PulledAt: t1}
-	f.RecordAndon(t, f.org, f.factory, pull, false)
+	pull := f.pullAndon(t, f.factory, "rework rate over 40%", t1)
 
 	// busy: one blocked item and only a cleared pull; idle: nothing at all.
 	f.create(t, domain.NewItem{FactoryID: busy, State: domain.StateBlocked})
-	f.RecordAndon(t, f.org, busy, domain.AndonPull{Reason: "cleared", PulledBy: "system:engine", PulledAt: t0}, true)
+	f.pullAndon(t, busy, "cleared", t0)
+
+	if _, err := f.Store.ClearAndon(f.ctx(t), busy, domain.LocalUser, "", t1); err != nil {
+		t.Fatal(err)
+	}
 
 	// Another organization's factory with work and an open pull is never counted.
 	other := f.otherOrg(t)
 	other.create(t, domain.NewItem{State: domain.StateWaitingHuman})
-	f.RecordAndon(t, other.org, other.factory, pull, false)
+	other.pullAndon(t, other.factory, "theirs", t1)
 
 	got, err := f.Store.Attention(f.ctx(t))
 	if err != nil {

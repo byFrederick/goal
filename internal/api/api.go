@@ -60,6 +60,8 @@ type Engine interface {
 	Pause(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Merge(ctx context.Context, id domain.ItemID, by domain.Actor, method string) (domain.Item, error)
 	Note(ctx context.Context, id domain.ItemID, by domain.Actor, text string) (domain.Event, error)
+	PullAndon(ctx context.Context, f domain.FactoryID, by domain.Actor, reason string) (domain.AndonPull, error)
+	ClearAndon(ctx context.Context, f domain.FactoryID, by domain.Actor, note string) (domain.AndonPull, error)
 }
 
 // Items reads items, their history and runs, the leases on them, a factory's flow and its
@@ -85,6 +87,9 @@ type Items interface {
 	CurrentRun(ctx context.Context, id domain.ItemID) (*domain.CurrentRun, error)
 	LiveTurns(ctx context.Context, factory domain.FactoryID) (map[domain.ItemID]int, error)
 	StationTimes(ctx context.Context, factory domain.FactoryID, since, until time.Time) ([]domain.StationTimes, time.Time, error)
+	OpenAndon(ctx context.Context, factory domain.FactoryID) (*domain.AndonPull, error)
+	AndonPulls(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.AndonPull, error)
+	GateDecisions(ctx context.Context, factory domain.FactoryID, station string, after time.Time, n int) (domain.GateTally, error)
 }
 
 // Factories are the definitions goald runs; *definitions.Cache satisfies it.
@@ -465,7 +470,8 @@ func problemOf(err error) gen.Problem {
 
 		return p
 	case errors.Is(err, domain.ErrInvalid), errors.Is(err, engine.ErrNotWaitingHuman), errors.Is(err, engine.ErrNotBlocked),
-		errors.Is(err, engine.ErrNotMergeStep), errors.Is(err, ports.ErrNotMergeable), errors.Is(err, engine.ErrItemClosed):
+		errors.Is(err, engine.ErrNotMergeStep), errors.Is(err, ports.ErrNotMergeable), errors.Is(err, engine.ErrItemClosed),
+		errors.Is(err, engine.ErrAndonPulled), errors.Is(err, engine.ErrAndonNotPulled):
 		p := detailed(http.StatusConflict, err)
 		p.Code = optional(problemCode(err))
 

@@ -7,9 +7,13 @@
 SELECT f.id AS factory_id,
        count(w.id) FILTER (WHERE w.state = 'waiting_human')::bigint AS waiting_human,
        count(w.id) FILTER (WHERE w.state = 'blocked')::bigint       AS blocked,
+       a.id        AS andon_id,
+       a.kind      AS andon_kind,
+       a.station   AS andon_station,
        a.reason    AS andon_reason,
        a.pulled_by AS andon_pulled_by,
-       a.pulled_at AS andon_pulled_at
+       a.pulled_at AS andon_pulled_at,
+       a.data      AS andon_data
 FROM factories f
 LEFT JOIN work_items w ON w.factory_id = f.id AND w.state IN ('waiting_human', 'blocked')
 LEFT JOIN andon_pulls a ON a.factory_id = f.id AND a.cleared_at IS NULL

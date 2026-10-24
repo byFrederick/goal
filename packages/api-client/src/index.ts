@@ -16,7 +16,14 @@ import type { components, paths } from "./schema";
 export { ApiError, type Problem, type Result, unwrap } from "./problem";
 export { type OrgPath, orgPath } from "./routes";
 export type { components, operations, paths } from "./schema";
-export { type StreamEvent, type StreamHandlers, type StreamScope, type StreamStatus, subscribe } from "./stream";
+export {
+  type FactoryEvent,
+  type StreamEvent,
+  type StreamHandlers,
+  type StreamScope,
+  type StreamStatus,
+  subscribe,
+} from "./stream";
 
 type Schemas = components["schemas"];
 
@@ -127,6 +134,8 @@ export type RunStatus = Schemas["RunStatus"];
 export type NewNote = Schemas["NewNote"];
 export type NoteReceipt = Schemas["NoteReceipt"];
 export type AndonPull = Schemas["AndonPull"];
+export type AndonState = Schemas["AndonState"];
+export type GateTally = Schemas["GateTally"];
 export type OrgAttention = Schemas["OrgAttention"];
 export type FactoryAttention = Schemas["FactoryAttention"];
 export type FactoryOverviewList = Schemas["FactoryOverviewList"];

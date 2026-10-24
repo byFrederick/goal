@@ -197,12 +197,7 @@ func (s *Store) attention(org domain.OrgID, factory domain.FactoryID) domain.Att
 		a.WaitingByType = append(a.WaitingByType, domain.TypeCount{Type: typ, Count: byType[typ]})
 	}
 
-	for _, r := range s.andon {
-		if r.org == org && r.factory == factory && !r.cleared {
-			p := r.pull
-			a.Andon = &p
-		}
-	}
+	a.Andon = s.openAndon(org, factory)
 
 	return a
 }

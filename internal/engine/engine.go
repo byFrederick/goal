@@ -19,6 +19,19 @@
 // and human decisions carry on. The per-run cancel and the transition log are local to the
 // instance; every instance enforces the budget on its own runs.
 //
+// The andon cord (andon.go). A person pulls it to stop a factory's line and clears it to restart
+// the line. While a pull is open the line releases nothing from its queue stations and claims
+// nothing; its runs in progress finish and move on, submissions still enter the first station
+// and every human decision still acts. Nothing pulls or clears the cord automatically in 2.2.
+//
+// Three things stop work on a line, and they combine without precedence, none lifting another:
+// a pause (Line.Paused) and an open andon pull each stop releases and claims; a used-up weekly
+// budget stops claims only (queue stations still release), and under BudgetStop it cancels the
+// line's runs in progress whether or not the line is also paused or stopped. A line releases when
+// it is neither paused nor stopped, and claims when it is also within its budget: resuming a
+// paused line leaves an open pull in force, clearing the pull of a paused line leaves it paused,
+// and clearing the pull of a line over budget releases work but claims none.
+//
 // Phase 1 scope. The engine pulls into every agent station with free capacity, releases
 // items waiting at queue stations straight to the next station, prepares a fresh workspace
 // (a clone of the factory's repository on the item's branch) for every run, validates outputs
@@ -28,8 +41,8 @@
 // merge the item's pull request through the CodeHost port before approving it (Merge).
 // These arrive in later phases and are deliberately absent here: drum-buffer-rope
 // release (the rope that limits release from queue stations), constraint detection,
-// station buffers, andon pulls, the expedite WIP limit, and Knowledge and
-// ModelAuth ports. Singleton jobs that need them will run under a PostgreSQL advisory lock.
+// station buffers, the automatic andon pull on a gate's rework rate, the expedite WIP limit,
+// and Knowledge and ModelAuth ports. Singleton jobs that need them will run under a PostgreSQL advisory lock.
 package engine
 
 import (
@@ -320,10 +333,11 @@ func (e *Engine) Submit(ctx context.Context, n domain.NewItem) (domain.Item, err
 // Tick does one round of pulling: items waiting at queue stations move to the next station,
 // line by line, the weekly budgets are enforced (budgets), then agent stations of the lines
 // within budget claim work into their free slots and start runs, fairly across organizations
-// (claim). A paused line neither releases nor claims, whatever its budget, while its runs in
-// progress finish; its budget is still enforced, so the stop policy still cancels its runs.
-// Each line's store calls are bound to its organization, whatever ctx carries. Runs continue in
-// the background under ctx; Wait waits for them.
+// (claim). A paused line, and a line stopped by an open andon pull (read once per tick; an
+// unreadable one counts as open), neither releases nor claims, whatever its budget, while its
+// runs in progress finish; its budget is still enforced, so the stop policy still cancels its
+// runs. Each line's store calls are bound to its organization, whatever ctx carries. Runs
+// continue in the background under ctx; Wait waits for them.
 func (e *Engine) Tick(ctx context.Context) error {
 	var errs []error
 
@@ -331,14 +345,16 @@ func (e *Engine) Tick(ctx context.Context) error {
 	lines := maps.Clone(e.lines)
 	e.mu.RUnlock()
 
-	paused := func(_ domain.FactoryID, l domain.Line) bool { return l.Paused }
+	running := maps.Clone(lines)
+	maps.DeleteFunc(running, func(_ domain.FactoryID, l domain.Line) bool { return l.Paused })
 
-	for _, id := range slices.Sorted(maps.Keys(lines)) {
-		l := lines[id]
-		if l.Paused {
-			continue
-		}
+	stopped, err := e.stopped(ctx, running)
+	errs = append(errs, err)
 
+	maps.DeleteFunc(running, func(id domain.FactoryID, _ domain.Line) bool { return stopped[id] })
+
+	for _, id := range slices.Sorted(maps.Keys(running)) {
+		l := running[id]
 		lctx := domain.WithOrg(ctx, l.OrgID)
 
 		for _, st := range l.Stations {
@@ -348,8 +364,9 @@ func (e *Engine) Tick(ctx context.Context) error {
 		}
 	}
 
+	// Every line's budget is enforced, a paused or stopped one's too: the stop policy cancels runs.
 	claimable, err := e.budgets(ctx, lines)
-	maps.DeleteFunc(claimable, paused)
+	maps.DeleteFunc(claimable, func(id domain.FactoryID, _ domain.Line) bool { _, ok := running[id]; return !ok })
 	errs = append(errs, err, e.claim(ctx, claimable))
 
 	return errors.Join(errs...)

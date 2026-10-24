@@ -304,11 +304,3 @@ func (d decisions) Inbox(ctx context.Context, q InboxQuery) ([]gen.InboxEntry, e
 
 	return out, nil
 }
-
-func andonOf(p *domain.AndonPull) *gen.AndonPull {
-	if p == nil {
-		return nil
-	}
-
-	return &gen.AndonPull{Reason: p.Reason, PulledBy: p.PulledBy, PulledAt: p.PulledAt}
-}

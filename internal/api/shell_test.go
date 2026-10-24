@@ -15,11 +15,13 @@ import (
 // andonReason is the reason of the andon pull the shell tests open on acme.
 const andonReason = "rework rate over 40%"
 
-// pullAndon opens an andon pull on acme, as the engine will once it pulls the cord (phase 2.2-E).
+// pullAndon pulls the andon cord on acme, as the local user, at t0.
 func (h *harness) pullAndon(t *testing.T) {
 	t.Helper()
 
-	h.store.RecordAndon(testOrg, acmeID, domain.AndonPull{Reason: andonReason, PulledBy: "user:local", PulledAt: t0}, false)
+	if code := h.call(t, http.MethodPost, acmeAndon, `{"reason":"`+andonReason+`"}`, nil); code != http.StatusCreated {
+		t.Fatalf("pull the andon = %d; want 201", code)
+	}
 }
 
 // waitingAtApprove submits an acme item and moves it to its human station: one decision. The

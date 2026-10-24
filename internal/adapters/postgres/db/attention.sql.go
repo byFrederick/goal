@@ -17,9 +17,13 @@ const factoryAttention = `-- name: FactoryAttention :many
 SELECT f.id AS factory_id,
        count(w.id) FILTER (WHERE w.state = 'waiting_human')::bigint AS waiting_human,
        count(w.id) FILTER (WHERE w.state = 'blocked')::bigint       AS blocked,
+       a.id        AS andon_id,
+       a.kind      AS andon_kind,
+       a.station   AS andon_station,
        a.reason    AS andon_reason,
        a.pulled_by AS andon_pulled_by,
-       a.pulled_at AS andon_pulled_at
+       a.pulled_at AS andon_pulled_at,
+       a.data      AS andon_data
 FROM factories f
 LEFT JOIN work_items w ON w.factory_id = f.id AND w.state IN ('waiting_human', 'blocked')
 LEFT JOIN andon_pulls a ON a.factory_id = f.id AND a.cleared_at IS NULL
@@ -31,9 +35,13 @@ type FactoryAttentionRow struct {
 	FactoryID     uuid.UUID
 	WaitingHuman  int64
 	Blocked       int64
+	AndonID       *int64
+	AndonKind     *string
+	AndonStation  *string
 	AndonReason   *string
 	AndonPulledBy *string
 	AndonPulledAt *time.Time
+	AndonData     []byte
 }
 
 // What the app's chrome reads about an organization (2.2-C). Row-level security limits every
@@ -53,9 +61,13 @@ func (q *Queries) FactoryAttention(ctx context.Context) ([]FactoryAttentionRow, 
 			&i.FactoryID,
 			&i.WaitingHuman,
 			&i.Blocked,
+			&i.AndonID,
+			&i.AndonKind,
+			&i.AndonStation,
 			&i.AndonReason,
 			&i.AndonPulledBy,
 			&i.AndonPulledAt,
+			&i.AndonData,
 		); err != nil {
 			return nil, err
 		}

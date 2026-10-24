@@ -106,6 +106,8 @@ describe('stationMeter', () => {
 });
 
 const line = (over: Partial<BoardLine> = {}): BoardLine => ({
+  status: 'running',
+  andon: null,
   wip: { in_progress: 9, limit: 15 },
   release: { policy: 'push', enforced: false, drum: 'investigate', buffer: 2, in_buffer: 2 },
   expedite: null,
