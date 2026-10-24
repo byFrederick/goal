@@ -13,6 +13,12 @@
 // once per active organization, and Submit and the human decisions act only on factories of the
 // organization in their context.
 //
+// Weekly budgets. Each tick reads the spend of every line with a weekly budget once
+// (budget.go). A line whose budget is used up claims no agent work; under BudgetStop the runs
+// this instance has in progress there are cancelled and their items requeued. Queue releases
+// and human decisions carry on. The per-run cancel and the transition log are local to the
+// instance; every instance enforces the budget on its own runs.
+//
 // Phase 1 scope. The engine pulls into every agent station with free capacity, releases
 // items waiting at queue stations straight to the next station, prepares a fresh workspace
 // (a clone of the factory's repository on the item's branch) for every run, validates outputs
@@ -22,8 +28,7 @@
 // merge the item's pull request through the CodeHost port before approving it (Merge).
 // These arrive in later phases and are deliberately absent here: drum-buffer-rope
 // release (the rope that limits release from queue stations), constraint detection,
-// station buffers, andon pulls, the expedite WIP limit, budget enforcement in the engine
-// (the worker enforces per-task limits), and Knowledge and
+// station buffers, andon pulls, the expedite WIP limit, and Knowledge and
 // ModelAuth ports. Singleton jobs that need them will run under a PostgreSQL advisory lock.
 package engine
 
@@ -137,6 +142,15 @@ type Engine struct {
 	// ticks rotates the order in which organizations and factories claim, tick after tick.
 	// Like running, it is a local scheduling hint, not state.
 	ticks atomic.Uint64
+
+	// active holds this instance's runs by item, so the engine can cancel them (BudgetStop).
+	activeMu sync.Mutex
+	active   map[domain.ItemID]activeRun
+	// exhausted holds the factories whose weekly budget was used up at the last tick, so each
+	// transition is logged once. It is a local hint, not state: an instance that starts reads
+	// the spend afresh and logs what it finds.
+	budgetMu  sync.Mutex
+	exhausted map[domain.FactoryID]bool
 }
 
 // New returns an engine for the given lines.
@@ -171,6 +185,7 @@ func New(d Deps, cfg Config) (*Engine, error) {
 	return &Engine{
 		store: d.Store, orgs: d.Orgs, runner: d.Runner, workspaces: d.Workspaces, checker: d.Checker, contracts: d.Contracts,
 		secrets: d.Secrets, codehost: d.CodeHost, clock: d.Clock, log: log, runEnded: d.RunEnded, cfg: cfg, lines: lines,
+		active: map[domain.ItemID]activeRun{}, exhausted: map[domain.FactoryID]bool{},
 	}, nil
 }
 
@@ -296,9 +311,10 @@ func (e *Engine) Submit(ctx context.Context, n domain.NewItem) (domain.Item, err
 }
 
 // Tick does one round of pulling: items waiting at queue stations move to the next station,
-// line by line, then agent stations claim work into their free slots and start runs, fairly
-// across organizations (claim). Each line's store calls are bound to its organization, whatever
-// ctx carries. Runs continue in the background under ctx; Wait waits for them.
+// line by line, the weekly budgets are enforced (budgets), then agent stations of the lines
+// within budget claim work into their free slots and start runs, fairly across organizations
+// (claim). Each line's store calls are bound to its organization, whatever ctx carries. Runs
+// continue in the background under ctx; Wait waits for them.
 func (e *Engine) Tick(ctx context.Context) error {
 	var errs []error
 
@@ -317,7 +333,8 @@ func (e *Engine) Tick(ctx context.Context) error {
 		}
 	}
 
-	errs = append(errs, e.claim(ctx, lines))
+	claimable, err := e.budgets(ctx, lines)
+	errs = append(errs, err, e.claim(ctx, claimable))
 
 	return errors.Join(errs...)
 }

@@ -192,8 +192,8 @@ func (s *server) overview(
 		Count      int    `json:"count"`
 	}{}
 
-	if b := f.Spec.Runtime.Budget; b != nil && b.WeeklyUSD > 0 {
-		o.BudgetUsd = new(math.Round(b.WeeklyUSD*float64(w.days)/7*100) / 100)
+	if l.Runtime.HasWeeklyBudget() {
+		o.BudgetUsd = new(math.Round(l.Runtime.BudgetFor(time.Duration(w.days)*day)*100) / 100)
 	}
 
 	return o, nil

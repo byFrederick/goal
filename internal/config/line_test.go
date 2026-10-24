@@ -69,6 +69,39 @@ func TestLine_PurposeFallsBackToDescription(t *testing.T) {
 	}
 }
 
+// runtime.budget's weekly cap and policy reach the line the engine enforces; drain is the
+// default and dailyUsd stays display-only.
+func TestLine_WeeklyBudgetMapsToTheRuntime(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		budget     string
+		wantWeekly float64
+		wantPolicy domain.BudgetPolicy
+	}{
+		{name: "stop", budget: "{ weeklyUsd: 60, onExhausted: stop }", wantWeekly: 60, wantPolicy: domain.BudgetStop},
+		{name: "drain by default", budget: "{ weeklyUsd: 25.5, dailyUsd: 3 }", wantWeekly: 25.5, wantPolicy: domain.BudgetDrain},
+		{name: "no weekly cap", budget: "{ dailyUsd: 10, perItemUsd: 1 }", wantPolicy: domain.BudgetDrain},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			f, err := Load(checkTree(edited(runtimeAuth, runtimeAuth+"    budget: "+tc.budget+"\n"), nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			b := f.Line().Runtime.WeeklyBudget(0, time.Time{})
+			if b.WeeklyUSD != tc.wantWeekly || b.Policy != tc.wantPolicy {
+				t.Errorf("weekly budget = $%v %s, want $%v %s", b.WeeklyUSD, b.Policy, tc.wantWeekly, tc.wantPolicy)
+			}
+		})
+	}
+}
+
 // A target is a positive number; zero or less is no target and is refused.
 func TestLoad_RefusesTargetsThatAreNotPositive(t *testing.T) {
 	t.Parallel()

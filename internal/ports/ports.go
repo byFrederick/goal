@@ -115,6 +115,11 @@ type Store interface {
 	// work in the line now.
 	FlowMetrics(ctx context.Context, factory domain.FactoryID, since, until time.Time) (domain.FlowMetrics, error)
 
+	// SpendSince is the summed cost_usd of the factory's agent runs started at or after since;
+	// 0 when there are none. The engine reads it once per tick for each factory with a weekly
+	// budget (domain.Runtime.WeeklyBudget).
+	SpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
+
 	// Attention returns, for every factory of the organization, the items waiting for a person
 	// (with their split by work type), the blocked items and the open andon pull, ordered by
 	// factory id. Factories with nothing pending are included with zeros.

@@ -12,6 +12,26 @@ import (
 	"github.com/google/uuid"
 )
 
+const factorySpendSince = `-- name: FactorySpendSince :one
+SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd
+FROM agent_runs
+WHERE factory_id = $1 AND started_at >= $2
+`
+
+type FactorySpendSinceParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+}
+
+// The cost of the runs a factory started at or after since, for its weekly budget. Row-level
+// security scopes it to the organization; agent_runs_factory_started_idx serves the range.
+func (q *Queries) FactorySpendSince(ctx context.Context, arg FactorySpendSinceParams) (float64, error) {
+	row := q.db.QueryRow(ctx, factorySpendSince, arg.FactoryID, arg.Since)
+	var spend_usd float64
+	err := row.Scan(&spend_usd)
+	return spend_usd, err
+}
+
 const failRunningRuns = `-- name: FailRunningRuns :exec
 UPDATE agent_runs SET status = 'failed', error = $1, ended_at = $2
 WHERE item_id = ANY ($3::uuid[]) AND status = 'running'

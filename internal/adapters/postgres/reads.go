@@ -130,6 +130,23 @@ func (s *Store) FlowMetrics(ctx context.Context, factory domain.FactoryID, since
 
 func seconds(s float64) time.Duration { return time.Duration(math.Round(s * float64(time.Second))) }
 
+// SpendSince implements ports.Store.
+func (s *Store) SpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return 0, err
+	}
+
+	usd, err := fetch(ctx, s.read, func(q *db.Queries) (float64, error) {
+		return q.FactorySpendSince(ctx, db.FactorySpendSinceParams{FactoryID: fid, Since: since})
+	})
+	if err != nil {
+		return 0, fmt.Errorf("spend of factory %s since %s: %w", factory, since.Format(time.RFC3339), err)
+	}
+
+	return usd, nil
+}
+
 // Attention implements ports.Store. Its reads share one snapshot.
 func (s *Store) Attention(ctx context.Context) ([]domain.Attention, error) {
 	var out []domain.Attention

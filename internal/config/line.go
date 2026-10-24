@@ -27,6 +27,7 @@ func (f *Factory) Line() domain.Line {
 
 	if b := s.Runtime.Budget; b != nil {
 		l.Runtime.MaxTurnsPerTask, l.Runtime.PerItemUSD = b.MaxTurnsPerTask, b.PerItemUSD
+		l.Runtime.WeeklyUSD, l.Runtime.OnExhausted = b.WeeklyUSD, domain.BudgetPolicy(b.OnExhausted)
 	}
 
 	for _, st := range s.Board.Stations {

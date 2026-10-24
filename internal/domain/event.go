@@ -23,6 +23,9 @@ const (
 	EventBlocked        EventKind = "blocked"
 	EventLeaseExpired   EventKind = "lease_expired"
 	EventReleased       EventKind = "released"
+	// EventAgentCancelled is an agent run the engine stopped; its item went back to its queue.
+	// Data reason says why ("budget": the factory's weekly budget is used up, policy stop).
+	EventAgentCancelled EventKind = "agent_cancelled"
 	EventDone           EventKind = "done"
 	EventRetried        EventKind = "retried"
 	EventMerged         EventKind = "merged"

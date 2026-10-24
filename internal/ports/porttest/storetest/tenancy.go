@@ -86,6 +86,9 @@ func testNoOrg(f *fixture) {
 	_, err = f.Store.FlowMetrics(ctx, f.factory, t0, t1)
 	expect(t, "FlowMetrics", err, domain.ErrNoOrg)
 
+	_, err = f.Store.SpendSince(ctx, f.factory, t0)
+	expect(t, "SpendSince", err, domain.ErrNoOrg)
+
 	_, err = f.Store.Attention(ctx)
 	expect(t, "Attention", err, domain.ErrNoOrg)
 
@@ -233,5 +236,19 @@ func testRequeueOneOrg(f *fixture) {
 
 	if ls := other.leases(t, stWork); len(ls) != 1 || ls[0] != theirs {
 		t.Errorf("the other org's leases = %+v; want its lease still held", ls)
+	}
+}
+
+// Another organization's runs are invisible to SpendSince, even when it names their factory.
+func testSpendSinceOneOrg(f *fixture) {
+	t := f.t
+	other := f.otherOrg(t)
+
+	f.spent(t, f.create(t, domain.NewItem{}), t1, 2)
+	other.spent(t, other.create(t, domain.NewItem{}), t1, 3)
+
+	mine, theirs, peek := f.spendSince(t, f.factory, t0), other.spendSince(t, other.factory, t0), other.spendSince(t, f.factory, t0)
+	if mine != 2 || theirs != 3 || peek != 0 {
+		t.Errorf("SpendSince = %v, %v and %v from the other org; want 2, 3 and 0", mine, theirs, peek)
 	}
 }

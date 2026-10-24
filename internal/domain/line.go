@@ -53,6 +53,10 @@ type Runtime struct {
 	// MaxTurnsPerTask and PerItemUSD are passed to the runner as limits; zero means unset.
 	MaxTurnsPerTask int
 	PerItemUSD      float64
+	// WeeklyUSD caps the factory's agent spend over BudgetWindow; zero means unlimited. The
+	// engine enforces it (WeeklyBudget) by OnExhausted, whose zero value is BudgetDrain.
+	WeeklyUSD   float64
+	OnExhausted BudgetPolicy
 	// Repository is what every task's workspace is cloned from; the zero value means tasks
 	// get an empty workspace.
 	Repository Repository

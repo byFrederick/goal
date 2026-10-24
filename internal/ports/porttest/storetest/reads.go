@@ -353,3 +353,64 @@ func testWaitingHuman(f *fixture) {
 		}
 	}
 }
+
+// spent records a finished run of the item's factory, started at at, that cost usd.
+func (f *fixture) spent(t *testing.T, it domain.Item, at time.Time, usd float64) {
+	t.Helper()
+
+	run, err := f.Store.StartRun(f.ctx(t), ports.NewRun{
+		FactoryID: it.FactoryID, ItemID: it.ID, Station: stWork, Agent: agWorker, Model: model, StartedAt: at,
+	})
+	if err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	res := domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd}
+	if err := f.Store.FinishRun(f.ctx(t), run, res, at.Add(time.Minute)); err != nil {
+		t.Fatalf("FinishRun: %v", err)
+	}
+}
+
+// spendSince is SpendSince in the fixture's organization; an error fails the test.
+func (f *fixture) spendSince(t *testing.T, factory domain.FactoryID, since time.Time) float64 {
+	t.Helper()
+
+	usd, err := f.Store.SpendSince(f.ctx(t), factory, since)
+	if err != nil {
+		t.Fatalf("SpendSince: %v", err)
+	}
+
+	return usd
+}
+
+// SpendSince sums the cost of the factory's runs started at or after since, the bound included;
+// a run still running costs nothing yet, and other factories' runs do not count.
+func testSpendSince(f *fixture) {
+	t := f.t
+	since := t1
+	it := f.create(t, domain.NewItem{})
+
+	f.spent(t, it, since.Add(-time.Second), 7)
+	f.spent(t, it, since, 0.25)
+	f.spent(t, it, since.Add(48*time.Hour), 1.5)
+	f.startRun(t, it.ID, since.Add(time.Hour))
+	f.spent(t, f.create(t, domain.NewItem{FactoryID: f.newFactory(t)}), since, 9)
+
+	tests := []struct {
+		name    string
+		factory domain.FactoryID
+		since   time.Time
+		want    float64
+	}{
+		{"from the bound on", f.factory, since, 1.75},
+		{"every run", f.factory, since.Add(-time.Hour), 8.75},
+		{"after every run", f.factory, since.Add(72 * time.Hour), 0},
+		{"a factory with no runs", f.newFactory(t), t0, 0},
+	}
+
+	for _, tt := range tests {
+		if got := f.spendSince(t, tt.factory, tt.since); math.Abs(got-tt.want) > 1e-9 {
+			t.Errorf("%s: SpendSince = %v; want %v", tt.name, got, tt.want)
+		}
+	}
+}

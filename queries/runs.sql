@@ -23,3 +23,10 @@ WHERE item_id = ANY (sqlc.arg(item_ids)::uuid[]) AND status = 'running';
 SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd
 FROM agent_runs
 WHERE factory_id = sqlc.arg(factory_id) AND started_at >= sqlc.arg(since) AND started_at < sqlc.arg(until);
+
+-- name: FactorySpendSince :one
+-- The cost of the runs a factory started at or after since, for its weekly budget. Row-level
+-- security scopes it to the organization; agent_runs_factory_started_idx serves the range.
+SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd
+FROM agent_runs
+WHERE factory_id = sqlc.arg(factory_id) AND started_at >= sqlc.arg(since);

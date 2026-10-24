@@ -3,6 +3,7 @@ package engine_test
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"slices"
 	"sync"
 	"testing"
@@ -60,6 +61,7 @@ type harness struct {
 	contracts  *porttest.Contracts
 	codehost   *porttest.CodeHost
 	line       domain.Line
+	logs       *logBuffer // what every engine of the harness logs
 
 	mu    sync.Mutex
 	ended []domain.RunID // runs reported to RunEnded
@@ -93,6 +95,7 @@ func newHarness(t *testing.T, line domain.Line, run porttest.RunFunc) *harness {
 		contracts:  porttest.NewContracts(),
 		codehost:   porttest.NewCodeHost(),
 		line:       line,
+		logs:       &logBuffer{},
 	}
 
 	if org := h.newOrg(t, "acme"); org != testOrg {
@@ -130,6 +133,7 @@ func (h *harness) engineWith(t *testing.T, store ports.Store, maxRuns int, lines
 	e, err := engine.New(engine.Deps{
 		Store: store, Orgs: h.tenancy, Runner: h.runner, Workspaces: h.workspaces, Checker: h.checker, Contracts: h.contracts, Clock: h.clock,
 		Secrets: porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y", "MODEL_ACCESS": "tok"}, CodeHost: h.codehost, RunEnded: h.runEnded,
+		Logger: slog.New(slog.NewJSONHandler(h.logs, nil)),
 	}, engine.Config{
 		Lines:          lines,
 		MaxRuns:        maxRuns,

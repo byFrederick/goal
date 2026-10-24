@@ -148,13 +148,30 @@ func (s *Store) FlowMetrics(ctx context.Context, factory domain.FactoryID, since
 	return m, nil
 }
 
-// spend adds the cost of an organization's factory's runs started in [since, until). Callers
-// hold s.mu.
+// SpendSince implements ports.Store.
+func (s *Store) SpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.spend(org, factory, since, time.Time{}), nil
+}
+
+// spend adds the cost of an organization's factory's runs started in [since, until), or at or
+// after since when until is zero. Callers hold s.mu.
 func (s *Store) spend(org domain.OrgID, factory domain.FactoryID, since, until time.Time) float64 {
 	var usd float64
 
 	for _, r := range s.runs {
-		if _, ok := s.visible(r.ItemID, org); ok && r.FactoryID == factory && inWindow(r.StartedAt, since, until) {
+		if _, ok := s.visible(r.ItemID, org); !ok || r.FactoryID != factory {
+			continue
+		}
+
+		if (until.IsZero() && !r.StartedAt.Before(since)) || inWindow(r.StartedAt, since, until) {
 			usd += r.Result.CostUSD
 		}
 	}

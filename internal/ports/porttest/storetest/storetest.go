@@ -64,6 +64,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"ListItems_NewestFirstFilteredAndPaged", testListItems},
 		{"StationLoads_CountWaitingAndInProgress", testStationLoads},
 		{"FlowMetrics_DoneLeadTimeReworkWIPAndSpend", testFlowMetrics},
+		{"SpendSince_WindowBoundsAndFactoryIsolation", testSpendSince},
 		{"Attention_CountsWaitingBlockedAndTheOpenAndon", testAttention},
 		{"WaitingHuman_NewestChangeFirstInTheGivenFactories", testWaitingHuman},
 		{"Concurrent_CreateItemNumbersAreUnique", testConcurrentCreate},
@@ -73,6 +74,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Tenancy_OtherOrgSeesNothing", testOtherOrg},
 		{"CreateItem_FactoryOfAnotherOrgNotFound", testFactoryOfAnotherOrg},
 		{"RequeueExpiredLeases_OnlyTheCurrentOrg", testRequeueOneOrg},
+		{"SpendSince_OnlyTheCurrentOrg", testSpendSinceOneOrg},
 		{"ClaimNext_OrgAndFactorySlotCaps", testSlotCaps},
 		{"Concurrent_ClaimsNeverExceedTheOrgCap", testConcurrentClaimsCapped},
 	}

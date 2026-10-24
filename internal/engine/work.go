@@ -36,8 +36,8 @@ type claimed struct {
 	agent   domain.AgentSpec
 }
 
-// work runs the agent on a claimed item until the item moves on, is blocked, is released at
-// shutdown or the lease is lost to another instance.
+// work runs the agent on a claimed item until the item moves on, is blocked, is released (at
+// shutdown, or cancelled by the weekly budget) or the lease is lost to another instance.
 func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it domain.Item, lease domain.Lease) {
 	c := claimed{line: l, station: st, item: it, lease: lease}
 	log := e.log.With(slog.String("factory", string(it.FactoryID)), slog.String("item", string(it.ID)), slog.String("station", st.ID))
@@ -492,14 +492,15 @@ func (e *Engine) block(ctx context.Context, log *slog.Logger, c claimed, reason 
 	})
 }
 
-// release returns a claimed item to the queue at its station, for shutdown.
+// release returns a claimed item to the queue at its station once ctx has ended: at shutdown,
+// or with agent_cancelled when the weekly budget cancelled its run (releaseEvent).
 func (e *Engine) release(ctx context.Context, log *slog.Logger, c claimed) {
 	now := e.clock.Now()
 
 	e.transition(ctx, log, ports.Transition{
 		ItemID: c.item.ID, From: domain.Position{Station: c.station.ID, State: domain.StateInProgress},
 		To: domain.Position{Station: c.station.ID, State: domain.StateQueued}, Lease: &c.lease, At: now,
-		Events: []domain.Event{event(c.item, domain.EventReleased, now, domain.ActorEngine, map[string]any{keyReason: "shutdown"})},
+		Events: []domain.Event{releaseEvent(c.item, context.Cause(ctx), now)},
 	})
 }
 
