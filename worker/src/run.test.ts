@@ -195,6 +195,28 @@ describe('runTask', () => {
     });
   });
 
+  it('reports the tool calls its policy denied, by tool and call id, never their input', async () => {
+    const { events } = await run([
+      {
+        ...success,
+        permission_denials: [
+          { tool_name: 'Bash', tool_use_id: 'tu_7', tool_input: { command: 'aws ssm put-parameter --value s3cret' } },
+          { tool_name: 'mcp__goal__github__merge_pr', tool_use_id: 'tu_9', tool_input: {} },
+        ],
+      },
+    ]);
+
+    expect(events.at(-1)).toMatchObject({
+      type: 'finished',
+      status: 'succeeded',
+      permission_denials: [
+        { tool: 'Bash', id: 'tu_7' },
+        { tool: 'mcp__goal__github__merge_pr', id: 'tu_9' },
+      ],
+    });
+    expect(JSON.stringify(events)).not.toContain('s3cret');
+  });
+
   it('reports a budget or turn limit as a failed result', async () => {
     const { code, events } = await run([
       { ...success, subtype: 'error_max_turns', errors: ['reached 40 turns'], structured_output: undefined },

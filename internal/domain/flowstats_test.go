@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -69,5 +71,67 @@ func TestQueueTrend(t *testing.T) {
 		if got := QueueTrend(tt.now, tt.dayAgo); got != tt.want {
 			t.Errorf("QueueTrend(%d, %d) = %q, want %q", tt.now, tt.dayAgo, got, tt.want)
 		}
+	}
+}
+
+// Labels the send-back tests group by.
+const (
+	catEvidence  = "Claims without evidence"
+	testsMissing = "tests missing"
+)
+
+// A send-back is labelled by the reviewer's category when it gave one, else by its reason,
+// trimmed, lower-cased and cut to 120 characters, so the same complaint groups together.
+func TestVerdictLabel(t *testing.T) {
+	t.Parallel()
+
+	long := strings.Repeat("é", 130)
+
+	for _, tt := range []struct {
+		category, reason, want string
+	}{
+		{catEvidence, "No links to dashboards", catEvidence},
+		{"  ", "  Tests Missing  ", testsMissing},
+		{"", long, strings.Repeat("é", 120)},
+		{"", "", ""},
+	} {
+		if got := VerdictLabel(tt.category, tt.reason); got != tt.want {
+			t.Errorf("VerdictLabel(%q, %q) = %q, want %q", tt.category, tt.reason, got, tt.want)
+		}
+	}
+}
+
+// Tallies count labels, most frequent first and alphabetically among equals; blanks are not
+// counted.
+func TestTallies(t *testing.T) {
+	t.Parallel()
+
+	got := Tallies([]string{testsMissing, catEvidence, testsMissing, "", "Bash"})
+	want := []Tally{{testsMissing, 2}, {"Bash", 1}, {catEvidence, 1}}
+
+	if !slices.Equal(got, want) {
+		t.Errorf("Tallies = %v, want %v", got, want)
+	}
+}
+
+func TestAgentStats_Ratios(t *testing.T) {
+	t.Parallel()
+
+	a := AgentStats{TasksFinished: 4, Advanced: 3, SentBack: 2, SpendUSD: 2}
+
+	if r, ok := a.SentBackRatio(); !ok || r != 2.0/3 {
+		t.Errorf("SentBackRatio = %v, %v; want 2/3", r, ok)
+	}
+
+	if p, ok := a.SpendPerTask(); !ok || p != 0.5 {
+		t.Errorf("SpendPerTask = %v, %v; want 0.5", p, ok)
+	}
+
+	if _, ok := (AgentStats{SpendUSD: 1}).SpendPerTask(); ok {
+		t.Error("SpendPerTask with no task finished; want none")
+	}
+
+	if _, ok := (AgentStats{}).SentBackRatio(); ok {
+		t.Error("SentBackRatio with nothing advanced; want none")
 	}
 }

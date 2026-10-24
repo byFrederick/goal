@@ -5,6 +5,7 @@
 // read like a live floor.
 import type {
   Actor,
+  AgentStats,
   AndonPull,
   AndonState,
   AuditEntry,
@@ -52,6 +53,9 @@ export interface MockItem {
   /** Its spans at stations, kept as goald's trigger keeps item_spans (trackSpan). */
   spans: ItemSpan[];
 }
+
+/** An agent's measures (AgentStats without what the request and the line give). */
+export type MockAgentStats = Omit<AgentStats, 'agent' | 'from' | 'to' | 'stations'>;
 
 export interface MockStationConfig {
   agents: string[];
@@ -149,6 +153,8 @@ export interface MockState {
   flow: Record<string, MockFlow>;
   /** Each factory's runtime.budget.weeklyUsd, by name; absent or null without one. */
   weeklyBudget: Record<string, number | null>;
+  /** What goald measures of each agent over the last 7 days, by factory and agent; zeros when absent. */
+  agentStats: Record<string, Record<string, MockAgentStats>>;
   items: MockItem[];
   events: ItemEvent[];
   nextEventId: number;
@@ -1301,6 +1307,41 @@ export function seed(now = Date.now()): MockState {
       },
     },
     weeklyBudget: { goal: 60, sre: 20 },
+    agentStats: {
+      sre: {
+        investigator: {
+          model,
+          tasks_finished: 31,
+          sent_back: { count: 7, ratio: 0.22 },
+          median_turns: 18,
+          spend_per_task_usd: 0.94,
+          task_time_p85_minutes: 24,
+          spend_usd: 29.14,
+          reasons: [
+            { label: 'No CloudWatch evidence for a latency claim', count: 4 },
+            { label: 'Did not rule out a recent deploy', count: 2 },
+            { label: 'Risk marked low on a production database change', count: 1 },
+          ],
+          denied_tool_calls: { count: 2, tools: [{ tool: 'aws ssm put-parameter', count: 2 }] },
+        },
+      },
+      goal: {
+        builder: {
+          model,
+          tasks_finished: 12,
+          sent_back: { count: 2, ratio: 0.17 },
+          median_turns: 26,
+          spend_per_task_usd: 1.42,
+          task_time_p85_minutes: 95,
+          spend_usd: 17.04,
+          reasons: [
+            { label: 'Bars rely on colour alone for today; add a text label.', count: 1 },
+            { label: 'no test for the reconnect', count: 1 },
+          ],
+          denied_tool_calls: { count: 0, tools: [] },
+        },
+      },
+    },
     items: [],
     events: [],
     nextEventId: 1,

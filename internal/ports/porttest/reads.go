@@ -140,6 +140,12 @@ func inWindow(t, since, until time.Time) bool {
 // percentile interpolates linearly between the closest ranks of sorted seconds, as
 // PostgreSQL's percentile_cont does. No values give zero.
 func percentile(sorted []float64, p float64) time.Duration {
+	return time.Duration(math.Round(percentileOf(sorted, p) * float64(time.Second)))
+}
+
+// percentileOf interpolates linearly between the closest ranks of sorted values, as
+// PostgreSQL's percentile_cont does. No values give zero.
+func percentileOf(sorted []float64, p float64) float64 {
 	if len(sorted) == 0 {
 		return 0
 	}
@@ -147,9 +153,8 @@ func percentile(sorted []float64, p float64) time.Duration {
 	pos := p * float64(len(sorted)-1)
 	lo := int(math.Floor(pos))
 	hi := min(lo+1, len(sorted)-1)
-	v := sorted[lo] + (pos-float64(lo))*(sorted[hi]-sorted[lo])
 
-	return time.Duration(math.Round(v * float64(time.Second)))
+	return sorted[lo] + (pos-float64(lo))*(sorted[hi]-sorted[lo])
 }
 
 // Attention implements ports.Store.

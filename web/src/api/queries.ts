@@ -7,6 +7,7 @@ import { getBuilderMeta, getSkillFiles, type SkillKey, searchSkills } from './bu
 import {
   ApiError,
   type FlowRange,
+  getAgentStats,
   getAttention,
   getBoard,
   getConstraint,
@@ -69,6 +70,9 @@ export const keys = {
     ['org', org, 'factory', factory, 'constraint', from ?? 'week', to ?? 'today'] as const,
   leadTime: (org: string, factory: string, range: FlowRange) =>
     ['org', org, 'factory', factory, 'lead-time', range] as const,
+  /** One agent's statistics over a range (E12); the stream refreshes the factory's 'agent' keys. */
+  agentStats: (org: string, factory: string, agent: string, from: string | undefined, to: string | undefined) =>
+    ['org', org, 'factory', factory, 'agent', agent, from ?? 'default', to ?? 'today'] as const,
   items: (org: string, factory: string, filter: ItemFilter) =>
     ['org', org, 'factory', factory, 'items', filter] as const,
   item: (org: string, item: string) => ['org', org, 'item', item] as const,
@@ -128,6 +132,19 @@ export const boardQuery = (org: string, factory: string) =>
  * A factory's flow over a range, with the range before it. Flow statistics refetch at most every
  * 30 s however many events arrive (E §10.3).
  */
+export const agentStatsQuery = (
+  org: string,
+  factory: string,
+  agent: string,
+  range: Pick<FlowRange, 'from' | 'to'> = {},
+) =>
+  queryOptions({
+    queryKey: keys.agentStats(org, factory, agent, range.from, range.to),
+    queryFn: ({ signal }) => getAgentStats(org, factory, agent, range, signal),
+    staleTime: 30_000,
+    retry: retryUnlessRefused,
+  });
+
 export const metricsQuery = (org: string, factory: string, range: FlowRange = {}) =>
   queryOptions({
     queryKey: keys.metrics(org, factory, range),

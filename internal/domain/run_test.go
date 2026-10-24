@@ -41,3 +41,13 @@ func TestParseVerdict_RejectionNeedsAReason(t *testing.T) {
 		})
 	}
 }
+
+// A reviewer's contract may give a category; the verdict keeps it for the agent statistics.
+func TestParseVerdict_KeepsTheCategory(t *testing.T) {
+	t.Parallel()
+
+	v, err := ParseVerdict(json.RawMessage(`{"decision":"reject","reason":"no links","category":"Claims without evidence"}`))
+	if err != nil || v.Category != catEvidence {
+		t.Fatalf("ParseVerdict = %+v, %v; want the category kept", v, err)
+	}
+}

@@ -121,6 +121,9 @@ type Config struct {
 // keyReason is the event data key that explains a block, rejection or escalation.
 const keyReason = "reason"
 
+// keyCategory is the event data key of a gate rejection's category (domain.Verdict.Category).
+const keyCategory = "category"
+
 // keyFrom and keyTo are the data keys of a move: the station the item left and the one it reached.
 const (
 	keyFrom = "from"

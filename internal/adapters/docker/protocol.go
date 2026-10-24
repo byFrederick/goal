@@ -52,6 +52,29 @@ type finished struct {
 	InputTokens  int64           `json:"input_tokens"`
 	OutputTokens int64           `json:"output_tokens"`
 	SessionID    string          `json:"session_id"`
+	// At is when the worker wrote the line.
+	At string `json:"at"`
+	// PermissionDenials are the tool calls the agent's policy refused, by tool and call id.
+	PermissionDenials []struct {
+		Tool string `json:"tool"`
+		ID   string `json:"id"`
+	} `json:"permission_denials"`
+}
+
+// denials are the run's refused tool calls as tool_denied events, at the finished line's time
+// (now when it has none).
+func (f *finished) denials(now time.Time) []ports.RunEvent {
+	at, err := time.Parse(time.RFC3339Nano, f.At)
+	if err != nil {
+		at = now
+	}
+
+	out := make([]ports.RunEvent, 0, len(f.PermissionDenials))
+	for _, d := range f.PermissionDenials {
+		out = append(out, ports.RunEvent{Kind: domain.EventToolDenied, At: at, Data: map[string]any{"tool": d.Tool, "id": d.ID}})
+	}
+
+	return out
 }
 
 var errUnknownLine = errors.New("not a worker protocol line")

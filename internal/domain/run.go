@@ -83,6 +83,9 @@ const (
 type Verdict struct {
 	Decision Decision `json:"decision"`
 	Reason   string   `json:"reason,omitempty"`
+	// Category groups rejections for the agent statistics ("Why review sent work back"); a
+	// reviewer's contract may declare it, best as an enum. Nothing in Goal names a category.
+	Category string `json:"category,omitempty"`
 }
 
 // ErrBadVerdict means a gate station's output is not a usable verdict.

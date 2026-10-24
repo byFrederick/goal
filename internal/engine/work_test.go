@@ -169,7 +169,7 @@ func TestGate_ApproveAdvancesRejectSendsBack(t *testing.T) {
 			review: domain.LeaseAdvanced,
 		},
 		{
-			name: "reject", verdict: `{"decision":"reject","reason":"no test for the sweep"}`,
+			name: "reject", verdict: `{"decision":"reject","reason":"no test for the sweep","category":"Missing tests"}`,
 			want: domain.Position{Station: "build", State: domain.StateQueued}, rework: 1, event: domain.EventGateRejected,
 			review: domain.LeaseRejected,
 		},
@@ -198,8 +198,9 @@ func TestGate_ApproveAdvancesRejectSendsBack(t *testing.T) {
 			h.expectOutcomes(t, it.ID, domain.LeaseAdvanced, tt.review)
 
 			if tt.rework > 0 {
-				if reason := h.eventsOf(it.ID, domain.EventGateRejected)[0].Data["reason"]; reason != "no test for the sweep" {
-					t.Errorf("gate_rejected reason = %v, want the reviewer's reason", reason)
+				data := h.eventsOf(it.ID, domain.EventGateRejected)[0].Data
+				if data["reason"] != "no test for the sweep" || data["category"] != "Missing tests" {
+					t.Errorf("gate_rejected data = %v, want the reviewer's reason and category", data)
 				}
 			}
 		})

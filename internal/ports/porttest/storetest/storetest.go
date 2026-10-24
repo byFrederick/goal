@@ -89,6 +89,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"LiveTurns_UsageOfEachRunningRun", testLiveTurns},
 		{"FlowMetrics_ByTypeWithLongWaits", testFlowMetricsByTypeWithLongWaits},
 		{"DoneByBucket_EqualBucketsEndingAtUntil", testDoneByBucket},
+		{"AgentStats_TasksSendBacksRunsAndDenials", testAgentStats},
 		{"FlowStats_NeedAnOrgAndSeeOnlyItsItems", testFlowStatsTenancy},
 		{"Transition_TakeLeaseRemovesAnyLease", testTakeLease},
 		{"ItemTimes_LeadTimeAndComponentsOfItemsDone", testItemTimes},

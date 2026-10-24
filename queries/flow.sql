@@ -141,3 +141,66 @@ WHERE factory_id = sqlc.arg(factory_id) AND done_at >= sqlc.arg(start)::timestam
   AND (sqlc.arg(type)::text = '' OR type = sqlc.arg(type)::text)
 GROUP BY 1
 ORDER BY 1;
+
+-- name: AgentLeases :one
+-- The agent's lease spans that ended in [since, until) with a finished outcome: how many, how many
+-- advanced, and the 85th percentile of their durations in seconds (lease_spans_agent_idx).
+SELECT count(*) AS finished,
+       count(*) FILTER (WHERE outcome = 'advanced') AS advanced,
+       coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM ended_at - acquired_at)), 0)::float8 AS p85_seconds
+FROM lease_spans
+WHERE factory_id = sqlc.arg(factory_id) AND agent = sqlc.arg(agent)::text
+  AND ended_at >= sqlc.arg(since)::timestamptz AND ended_at < sqlc.arg(until)::timestamptz
+  AND outcome IN ('advanced', 'rejected', 'escalated');
+
+-- name: AgentRuns :one
+-- The agent's runs started in [since, until): their cost, how many succeeded and the median turns
+-- of those (agent_runs_factory_started_idx).
+SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd,
+       count(*) FILTER (WHERE status = 'succeeded') AS succeeded,
+       coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY turns) FILTER (WHERE status = 'succeeded'), 0)::float8 AS median_turns
+FROM agent_runs
+WHERE factory_id = sqlc.arg(factory_id) AND agent = sqlc.arg(agent)::text
+  AND started_at >= sqlc.arg(since)::timestamptz AND started_at < sqlc.arg(until)::timestamptz;
+
+-- name: AgentSentBack :many
+-- The agent's advanced lease spans that ended in [since, until) whose item then entered its next
+-- rework round from another station, one row each with what that station said: the category and
+-- reason of its rejection, else the reason of a person's move back (lease_spans_agent_idx,
+-- item_spans_item_idx, item_events_rejections_idx).
+SELECT coalesce(rej.category, '')::text AS category, coalesce(rej.reason, mv.reason, '')::text AS reason
+FROM lease_spans l
+JOIN LATERAL (
+  SELECT s.entered_at, s.rework_by FROM item_spans s
+  WHERE s.item_id = l.item_id AND s.rework_round = l.rework_round + 1 AND s.rework_by <> l.station
+  ORDER BY s.entered_at, s.id
+  LIMIT 1
+) back ON true
+LEFT JOIN LATERAL (
+  SELECT e.data->>'category' AS category, e.data->>'reason' AS reason FROM item_events e
+  WHERE e.item_id = l.item_id AND e.kind IN ('gate_rejected', 'rejected') AND e.station = back.rework_by
+    AND e.at <= back.entered_at
+  ORDER BY e.at DESC, e.id DESC
+  LIMIT 1
+) rej ON true
+LEFT JOIN LATERAL (
+  SELECT e.data->>'reason' AS reason FROM item_events e
+  WHERE coalesce(rej.reason, rej.category) IS NULL AND e.item_id = l.item_id AND e.kind = 'moved'
+    AND e.data->>'manual' = 'true' AND e.station = back.rework_by AND e.at <= back.entered_at
+  ORDER BY e.at DESC, e.id DESC
+  LIMIT 1
+) mv ON true
+WHERE l.factory_id = sqlc.arg(factory_id) AND l.agent = sqlc.arg(agent)::text AND l.outcome = 'advanced'
+  AND l.ended_at >= sqlc.arg(since)::timestamptz AND l.ended_at < sqlc.arg(until)::timestamptz;
+
+-- name: AgentDeniedTools :many
+-- The tool of every call the agent's runs started in [since, until) were denied: tool_denied
+-- events by their tool, gateway calls with outcome denied as <connection>__<tool>
+-- (agent_runs_factory_started_idx, item_events_run_id_idx).
+SELECT (CASE WHEN e.kind = 'tool_denied' THEN coalesce(e.data->>'tool', '')
+             ELSE coalesce(e.data->>'connection', '') || '__' || coalesce(e.data->>'tool', '') END)::text AS tool
+FROM agent_runs r
+JOIN item_events e ON e.run_id = r.id
+WHERE r.factory_id = sqlc.arg(factory_id) AND r.agent = sqlc.arg(agent)::text
+  AND r.started_at >= sqlc.arg(since)::timestamptz AND r.started_at < sqlc.arg(until)::timestamptz
+  AND (e.kind = 'tool_denied' OR (e.kind = 'gateway_tool_call' AND e.data->>'outcome' = 'denied'));

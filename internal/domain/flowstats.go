@@ -1,6 +1,10 @@
 package domain
 
-import "time"
+import (
+	"slices"
+	"strings"
+	"time"
+)
 
 // Span is one stretch of an item's life at one station in one state (item_spans): it opens when
 // the item arrives there or changes state, and closes at the next change of station, state or
@@ -128,4 +132,100 @@ func QueueTrend(now, dayAgo int) Trend {
 	default:
 		return TrendSteady
 	}
+}
+
+// AgentStats measures one agent of a factory over a window [since, until): its tasks from the
+// lease spans that ended in the window, its runs from those that started in it.
+type AgentStats struct {
+	// TasksFinished counts its lease spans with a finished outcome (LeaseOutcome.Finished).
+	TasksFinished int
+	// Advanced counts those that moved the item on, SentBack those of them another station later
+	// sent back for rework (the item's next rework round, by a station other than the agent's).
+	Advanced, SentBack int
+	// Reasons label those send-backs (VerdictLabel), most frequent first (Tallies).
+	Reasons []Tally
+	// TaskTimeP85 is the 85th percentile of the finished lease spans' durations (linear
+	// interpolation); zero when none finished.
+	TaskTimeP85 time.Duration
+	// SucceededRuns counts its runs that succeeded, MedianTurns their median turns.
+	SucceededRuns int
+	MedianTurns   float64
+	// SpendUSD is the cost of all its runs, failed and retried ones included.
+	SpendUSD float64
+	// Denied are the tool calls its runs were refused (tool_denied events and gateway calls with
+	// outcome denied), by tool, most frequent first.
+	Denied []Tally
+}
+
+// SentBackRatio is the share of the advanced tasks later sent back; none when nothing advanced.
+func (a AgentStats) SentBackRatio() (float64, bool) {
+	if a.Advanced == 0 {
+		return 0, false
+	}
+
+	return float64(a.SentBack) / float64(a.Advanced), true
+}
+
+// SpendPerTask is the spend over the tasks finished; none when no task finished.
+func (a AgentStats) SpendPerTask() (float64, bool) {
+	if a.TasksFinished == 0 {
+		return 0, false
+	}
+
+	return a.SpendUSD / float64(a.TasksFinished), true
+}
+
+// Tally is how many times one label occurred.
+type Tally struct {
+	Label string
+	Count int
+}
+
+// maxLabelRunes cuts a reason used as a label, so long reasons that start alike group together.
+const maxLabelRunes = 120
+
+// VerdictLabel is what a send-back is grouped by: the verdict's category when it has one, else
+// its reason trimmed, lower-cased and cut to 120 characters.
+func VerdictLabel(category, reason string) string {
+	if c := strings.TrimSpace(category); c != "" {
+		return c
+	}
+
+	r := []rune(strings.ToLower(strings.TrimSpace(reason)))
+	if len(r) > maxLabelRunes {
+		r = r[:maxLabelRunes]
+	}
+
+	return string(r)
+}
+
+// Tallies counts labels, most frequent first and alphabetically among equals; blank labels are
+// not counted, and none gives nil.
+func Tallies(labels []string) []Tally {
+	counts := map[string]int{}
+
+	for _, l := range labels {
+		if l != "" {
+			counts[l]++
+		}
+	}
+
+	if len(counts) == 0 {
+		return nil
+	}
+
+	out := make([]Tally, 0, len(counts))
+	for l, n := range counts {
+		out = append(out, Tally{Label: l, Count: n})
+	}
+
+	slices.SortFunc(out, func(a, b Tally) int {
+		if a.Count != b.Count {
+			return b.Count - a.Count
+		}
+
+		return strings.Compare(a.Label, b.Label)
+	})
+
+	return out
 }

@@ -8,6 +8,7 @@
 // POST /__mock/fail injects faults (faults.ts).
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
+  AgentStats,
   AndonPull,
   AndonState,
   AuditPage,
@@ -35,7 +36,7 @@ import type {
 } from '@goal/api-client';
 import { createDefinitions } from './definitions.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
-import { type MockItem, type MockSlots, type MockState, seed, trackSpan } from './fixtures.ts';
+import { type MockAgentStats, type MockItem, type MockSlots, type MockState, seed, trackSpan } from './fixtures.ts';
 import { constraintOf, type DayRange, type FlowInput, leadTimeOf, metricsOf, rangeOf, weeklyOf } from './flow.ts';
 
 type Next = (err?: unknown) => void;
@@ -567,6 +568,39 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       now: Date.now(),
     });
 
+  /**
+   * One agent's statistics: the fixture's measures (zeros for an agent without any) over the
+   * request's range, with the stations whose agents are its copies (builder-1 → builder). Null
+   * for an agent the factory does not have; a string for a bad range.
+   */
+  const agentStatsOf = (factory: Factory, agent: string, params: URLSearchParams): AgentStats | string | null => {
+    const config = state.stations[factory.name] ?? {};
+    const base = (name: string) => name.replace(/-\d+$/, '');
+    const stations = factory.stations
+      .filter((s) => (config[s.id]?.agents ?? []).some((a) => base(a) === agent))
+      .map((s) => ({
+        id: s.id,
+        slots: config[s.id]?.copies ?? 1,
+        constraint: state.constraint[factory.name] === s.id,
+      }));
+    if (stations.length === 0) return null;
+    const range = rangeOf(params, Date.now());
+    if (typeof range === 'string') return range;
+    const measured: MockAgentStats = state.agentStats[factory.name]?.[agent] ?? {
+      model: null,
+      tasks_finished: 0,
+      sent_back: { count: 0, ratio: null },
+      median_turns: null,
+      spend_per_task_usd: null,
+      task_time_p85_minutes: null,
+      spend_usd: 0,
+      reasons: [],
+      denied_tool_calls: { count: 0, tools: [] },
+    };
+    const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+    return { ...measured, agent, from: day(range.from), to: day(range.to), stations };
+  };
+
   const board = (name: string): Board | undefined => {
     const factory = findFactory(name);
     if (!factory) return undefined;
@@ -811,7 +845,18 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return;
     }
 
-    let m = rest.match(
+    let m = rest.match(/^\/factories\/([^/]+)\/agents\/([^/]+)\/stats$/);
+    if (m && method === 'GET') {
+      const key = decodeURIComponent(m[1] ?? '');
+      const factory = findFactory(key, org.id);
+      if (!factory) return problem(res, 404, 'Factory not found', key);
+      const stats = agentStatsOf(factory, decodeURIComponent(m[2] ?? ''), url.searchParams);
+      if (stats === null)
+        return problem(res, 404, 'Not Found', `factory ${factory.name} has no such agent`, 'agent-not-found');
+      return typeof stats === 'string' ? problem(res, 400, 'Bad Request', stats) : json(res, 200, stats);
+    }
+
+    m = rest.match(
       /^\/factories\/([^/]+)\/(board|items|constraint|metrics|metrics\/weekly|metrics\/lead-time|andon|andon\/clear)$/,
     );
     if (m) {

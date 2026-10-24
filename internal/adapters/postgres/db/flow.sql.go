@@ -12,6 +12,192 @@ import (
 	"github.com/google/uuid"
 )
 
+const agentDeniedTools = `-- name: AgentDeniedTools :many
+SELECT (CASE WHEN e.kind = 'tool_denied' THEN coalesce(e.data->>'tool', '')
+             ELSE coalesce(e.data->>'connection', '') || '__' || coalesce(e.data->>'tool', '') END)::text AS tool
+FROM agent_runs r
+JOIN item_events e ON e.run_id = r.id
+WHERE r.factory_id = $1 AND r.agent = $2::text
+  AND r.started_at >= $3::timestamptz AND r.started_at < $4::timestamptz
+  AND (e.kind = 'tool_denied' OR (e.kind = 'gateway_tool_call' AND e.data->>'outcome' = 'denied'))
+`
+
+type AgentDeniedToolsParams struct {
+	FactoryID uuid.UUID
+	Agent     string
+	Since     time.Time
+	Until     time.Time
+}
+
+// The tool of every call the agent's runs started in [since, until) were denied: tool_denied
+// events by their tool, gateway calls with outcome denied as <connection>__<tool>
+// (agent_runs_factory_started_idx, item_events_run_id_idx).
+func (q *Queries) AgentDeniedTools(ctx context.Context, arg AgentDeniedToolsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, agentDeniedTools,
+		arg.FactoryID,
+		arg.Agent,
+		arg.Since,
+		arg.Until,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var tool string
+		if err := rows.Scan(&tool); err != nil {
+			return nil, err
+		}
+		items = append(items, tool)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const agentLeases = `-- name: AgentLeases :one
+SELECT count(*) AS finished,
+       count(*) FILTER (WHERE outcome = 'advanced') AS advanced,
+       coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM ended_at - acquired_at)), 0)::float8 AS p85_seconds
+FROM lease_spans
+WHERE factory_id = $1 AND agent = $2::text
+  AND ended_at >= $3::timestamptz AND ended_at < $4::timestamptz
+  AND outcome IN ('advanced', 'rejected', 'escalated')
+`
+
+type AgentLeasesParams struct {
+	FactoryID uuid.UUID
+	Agent     string
+	Since     time.Time
+	Until     time.Time
+}
+
+type AgentLeasesRow struct {
+	Finished   int64
+	Advanced   int64
+	P85Seconds float64
+}
+
+// The agent's lease spans that ended in [since, until) with a finished outcome: how many, how many
+// advanced, and the 85th percentile of their durations in seconds (lease_spans_agent_idx).
+func (q *Queries) AgentLeases(ctx context.Context, arg AgentLeasesParams) (AgentLeasesRow, error) {
+	row := q.db.QueryRow(ctx, agentLeases,
+		arg.FactoryID,
+		arg.Agent,
+		arg.Since,
+		arg.Until,
+	)
+	var i AgentLeasesRow
+	err := row.Scan(&i.Finished, &i.Advanced, &i.P85Seconds)
+	return i, err
+}
+
+const agentRuns = `-- name: AgentRuns :one
+SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd,
+       count(*) FILTER (WHERE status = 'succeeded') AS succeeded,
+       coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY turns) FILTER (WHERE status = 'succeeded'), 0)::float8 AS median_turns
+FROM agent_runs
+WHERE factory_id = $1 AND agent = $2::text
+  AND started_at >= $3::timestamptz AND started_at < $4::timestamptz
+`
+
+type AgentRunsParams struct {
+	FactoryID uuid.UUID
+	Agent     string
+	Since     time.Time
+	Until     time.Time
+}
+
+type AgentRunsRow struct {
+	SpendUsd    float64
+	Succeeded   int64
+	MedianTurns float64
+}
+
+// The agent's runs started in [since, until): their cost, how many succeeded and the median turns
+// of those (agent_runs_factory_started_idx).
+func (q *Queries) AgentRuns(ctx context.Context, arg AgentRunsParams) (AgentRunsRow, error) {
+	row := q.db.QueryRow(ctx, agentRuns,
+		arg.FactoryID,
+		arg.Agent,
+		arg.Since,
+		arg.Until,
+	)
+	var i AgentRunsRow
+	err := row.Scan(&i.SpendUsd, &i.Succeeded, &i.MedianTurns)
+	return i, err
+}
+
+const agentSentBack = `-- name: AgentSentBack :many
+SELECT coalesce(rej.category, '')::text AS category, coalesce(rej.reason, mv.reason, '')::text AS reason
+FROM lease_spans l
+JOIN LATERAL (
+  SELECT s.entered_at, s.rework_by FROM item_spans s
+  WHERE s.item_id = l.item_id AND s.rework_round = l.rework_round + 1 AND s.rework_by <> l.station
+  ORDER BY s.entered_at, s.id
+  LIMIT 1
+) back ON true
+LEFT JOIN LATERAL (
+  SELECT e.data->>'category' AS category, e.data->>'reason' AS reason FROM item_events e
+  WHERE e.item_id = l.item_id AND e.kind IN ('gate_rejected', 'rejected') AND e.station = back.rework_by
+    AND e.at <= back.entered_at
+  ORDER BY e.at DESC, e.id DESC
+  LIMIT 1
+) rej ON true
+LEFT JOIN LATERAL (
+  SELECT e.data->>'reason' AS reason FROM item_events e
+  WHERE coalesce(rej.reason, rej.category) IS NULL AND e.item_id = l.item_id AND e.kind = 'moved'
+    AND e.data->>'manual' = 'true' AND e.station = back.rework_by AND e.at <= back.entered_at
+  ORDER BY e.at DESC, e.id DESC
+  LIMIT 1
+) mv ON true
+WHERE l.factory_id = $1 AND l.agent = $2::text AND l.outcome = 'advanced'
+  AND l.ended_at >= $3::timestamptz AND l.ended_at < $4::timestamptz
+`
+
+type AgentSentBackParams struct {
+	FactoryID uuid.UUID
+	Agent     string
+	Since     time.Time
+	Until     time.Time
+}
+
+type AgentSentBackRow struct {
+	Category string
+	Reason   string
+}
+
+// The agent's advanced lease spans that ended in [since, until) whose item then entered its next
+// rework round from another station, one row each with what that station said: the category and
+// reason of its rejection, else the reason of a person's move back (lease_spans_agent_idx,
+// item_spans_item_idx, item_events_rejections_idx).
+func (q *Queries) AgentSentBack(ctx context.Context, arg AgentSentBackParams) ([]AgentSentBackRow, error) {
+	rows, err := q.db.Query(ctx, agentSentBack,
+		arg.FactoryID,
+		arg.Agent,
+		arg.Since,
+		arg.Until,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AgentSentBackRow
+	for rows.Next() {
+		var i AgentSentBackRow
+		if err := rows.Scan(&i.Category, &i.Reason); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const currentRun = `-- name: CurrentRun :one
 SELECT r.id, r.factory_id, r.item_id, r.station, r.agent, r.model, r.session_id, r.status, r.turns, r.input_tokens, r.output_tokens, r.cost_usd, r.error, r.started_at, r.ended_at, r.org_id, r.definition_version_id, l.slot AS lease_slot,
        (SELECT count(*) FROM item_events e WHERE e.run_id = r.id AND e.kind = $1::text) AS usage_turns

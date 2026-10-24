@@ -913,6 +913,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/agents/{agent}/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The agent's name, as the factory's definition declares it */
+                agent: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One agent's work over a range of UTC days
+         * @description Tasks are the agent's leases that ended in the range with a finished outcome (advanced, rejected, escalated); sent back is the share of the advanced ones whose item another station later sent back for rework, grouped by the rejection's category or else its reason; runs (spend, median turns, denied tool calls) are those started in the range. The range is from to to, both included, at most 90 days, to not after today; without one it is the last 7 days. 400 for a bad range, 404 agent-not-found for an agent the factory does not declare.
+         */
+        get: operations["getAgentStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/andon": {
         parameters: {
             query?: never;
@@ -1848,6 +1875,65 @@ export interface components {
             lead_time_hours: number | null;
             /** @description Lead time of each expedite item */
             expedite_lead_time_minutes: number | null;
+        };
+        AgentStats: {
+            agent: string;
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            /** @description The agent's model, else the runtime's */
+            model: string | null;
+            /** @description The stations the agent works at, in line order */
+            stations: components["schemas"]["AgentStation"][];
+            tasks_finished: number;
+            sent_back: components["schemas"]["SentBack"];
+            /**
+             * Format: double
+             * @description Of the runs that succeeded
+             */
+            median_turns: number | null;
+            /**
+             * Format: double
+             * @description All runs' spend over the tasks finished
+             */
+            spend_per_task_usd: number | null;
+            /** Format: double */
+            task_time_p85_minutes: number | null;
+            /** Format: double */
+            spend_usd: number;
+            /** @description Why work was sent back, most frequent first */
+            reasons: components["schemas"]["SendBackReason"][];
+            denied_tool_calls: components["schemas"]["DeniedToolCalls"];
+        };
+        AgentStation: {
+            id: string;
+            /** @description How many copies of agents run there at once */
+            slots: number;
+            /** @description The station the line's flow is paced by now */
+            constraint: boolean;
+        };
+        SentBack: {
+            count: number;
+            /**
+             * Format: double
+             * @description Of the advanced tasks; null when none advanced
+             */
+            ratio: number | null;
+        };
+        SendBackReason: {
+            /** @description The rejection's category, else its reason (trimmed, lower-cased, 120 characters) */
+            label: string;
+            count: number;
+        };
+        DeniedToolCalls: {
+            count: number;
+            /** @description The most denied tools, as <connection>__<tool> for gateway tools */
+            tools: components["schemas"]["DeniedTool"][];
+        };
+        DeniedTool: {
+            tool: string;
+            count: number;
         };
         WeeklyThroughput: {
             /**
@@ -4227,6 +4313,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LeadTimeBridge"];
+                };
+            };
+        };
+    };
+    getAgentStats: {
+        parameters: {
+            query?: {
+                /** @description The first UTC day of the range; 6 days before `to` when absent */
+                from?: components["parameters"]["RangeFrom"];
+                /** @description The last UTC day of the range, included; today when absent */
+                to?: components["parameters"]["RangeTo"];
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The agent's name, as the factory's definition declares it */
+                agent: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The agent's statistics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentStats"];
                 };
             };
             default: components["responses"]["Problem"];

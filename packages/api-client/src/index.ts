@@ -126,6 +126,7 @@ export type BridgeStep = Schemas["BridgeStep"];
 export type ConstraintReport = Schemas["ConstraintReport"];
 export type ConstraintCandidate = Schemas["ConstraintCandidate"];
 export type ConstraintSource = Schemas["ConstraintSource"];
+export type AgentStats = Schemas["AgentStats"];
 export type ItemEvent = Schemas["Event"];
 export type EventPage = Schemas["EventPage"];
 export type Run = Schemas["Run"];

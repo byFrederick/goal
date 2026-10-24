@@ -442,7 +442,7 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output
 
 	switch {
 	case v != nil && v.Decision == domain.Reject:
-		err = e.gateReject(c, next, v.Reason, &t)
+		err = e.gateReject(c, next, *v, &t)
 	case v != nil:
 		t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
 		err = e.advance(next, c.item, c.agent.Name, &t)
@@ -473,11 +473,17 @@ func (e *Engine) advance(l domain.Line, it domain.Item, actor string, t *ports.T
 }
 
 // gateReject points t back at the gate's onReject station on line l, or at a human once the
-// item has used up the rework allowance of the gate it ran at.
-func (e *Engine) gateReject(c claimed, l domain.Line, reason string, t *ports.Transition) error {
+// item has used up the rework allowance of the gate it ran at. The rejection's event keeps the
+// verdict's reason and, when the reviewer gave one, its category (the agent statistics group by it).
+func (e *Engine) gateReject(c claimed, l domain.Line, v domain.Verdict, t *ports.Transition) error {
 	it, gate := c.item, *c.station.Gate
-	t.Events = append(t.Events, event(it, domain.EventGateRejected, t.At, c.agent.Name,
-		map[string]any{keyReason: reason, "rework_count": it.ReworkCount}))
+	data := map[string]any{keyReason: v.Reason, "rework_count": it.ReworkCount}
+
+	if v.Category != "" {
+		data[keyCategory] = v.Category
+	}
+
+	t.Events = append(t.Events, event(it, domain.EventGateRejected, t.At, c.agent.Name, data))
 
 	if !gate.CanRework(it.ReworkCount) {
 		t.To, t.Outcome = domain.Position{Station: it.Station, State: domain.StateWaitingHuman}, domain.LeaseEscalated

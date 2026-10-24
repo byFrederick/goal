@@ -180,7 +180,8 @@ func (t *task) remove(ctx context.Context) {
 	t.r.removeDir(ctx, t.runDir)
 }
 
-// relay turns stdout lines into events until the stream ends and returns the finished record.
+// relay turns stdout lines into events until the stream ends and returns the finished record;
+// the tool calls it lists as denied become tool_denied events.
 func (t *task) relay(ctx context.Context, r io.Reader) *finished {
 	var fin *finished
 
@@ -192,6 +193,12 @@ func (t *task) relay(ctx context.Context, r io.Reader) *finished {
 			t.log.DebugContext(ctx, "ignored worker stdout line", slog.Any("error", err))
 		case f != nil:
 			fin = f
+
+			for _, ev := range f.denials(time.Now()) {
+				t.redact.value(ev.Data)
+
+				t.events <- ev
+			}
 		default:
 			t.redact.value(ev.Data)
 

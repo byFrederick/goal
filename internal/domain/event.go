@@ -41,6 +41,9 @@ const (
 	// EventLeaseTaken is a person's action on an item in progress (move, pause, send back) that
 	// took its lease: the instance running it stops the run. Data actor (ref) and action.
 	EventLeaseTaken EventKind = "lease_taken"
+	// EventToolDenied is a tool call the agent's policy (tools.deny, permissions) refused
+	// before it ran, as the worker reports it at the end of a run. Data tool and id.
+	EventToolDenied EventKind = "tool_denied"
 )
 
 // Audit of items.

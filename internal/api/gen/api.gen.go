@@ -727,6 +727,43 @@ type Actor struct {
 // ActorKind defines model for Actor.Kind.
 type ActorKind string
 
+// AgentStation defines model for AgentStation.
+type AgentStation struct {
+	// Constraint The station the line's flow is paced by now
+	Constraint bool   `json:"constraint"`
+	Id         string `json:"id"`
+
+	// Slots How many copies of agents run there at once
+	Slots int `json:"slots"`
+}
+
+// AgentStats defines model for AgentStats.
+type AgentStats struct {
+	Agent           string             `json:"agent"`
+	DeniedToolCalls DeniedToolCalls    `json:"denied_tool_calls"`
+	From            openapi_types.Date `json:"from"`
+
+	// MedianTurns Of the runs that succeeded
+	MedianTurns *float64 `json:"median_turns"`
+
+	// Model The agent's model, else the runtime's
+	Model *string `json:"model"`
+
+	// Reasons Why work was sent back, most frequent first
+	Reasons  []SendBackReason `json:"reasons"`
+	SentBack SentBack         `json:"sent_back"`
+
+	// SpendPerTaskUsd All runs' spend over the tasks finished
+	SpendPerTaskUsd *float64 `json:"spend_per_task_usd"`
+	SpendUsd        float64  `json:"spend_usd"`
+
+	// Stations The stations the agent works at, in line order
+	Stations           []AgentStation     `json:"stations"`
+	TaskTimeP85Minutes *float64           `json:"task_time_p85_minutes"`
+	TasksFinished      int                `json:"tasks_finished"`
+	To                 openapi_types.Date `json:"to"`
+}
+
 // AndonClear defines model for AndonClear.
 type AndonClear struct {
 	// Note What was done about it, at most 2000 characters
@@ -1204,6 +1241,20 @@ type DefinitionProblem struct {
 
 // DefinitionProblemSeverity errors block publishing
 type DefinitionProblemSeverity string
+
+// DeniedTool defines model for DeniedTool.
+type DeniedTool struct {
+	Count int    `json:"count"`
+	Tool  string `json:"tool"`
+}
+
+// DeniedToolCalls defines model for DeniedToolCalls.
+type DeniedToolCalls struct {
+	Count int `json:"count"`
+
+	// Tools The most denied tools, as <connection>__<tool> for gateway tools
+	Tools []DeniedTool `json:"tools"`
+}
 
 // Draft defines model for Draft.
 type Draft struct {
@@ -2177,6 +2228,22 @@ type SectionSummary struct {
 	Section  Section   `json:"section"`
 }
 
+// SendBackReason defines model for SendBackReason.
+type SendBackReason struct {
+	Count int `json:"count"`
+
+	// Label The rejection's category, else its reason (trimmed, lower-cased, 120 characters)
+	Label string `json:"label"`
+}
+
+// SentBack defines model for SentBack.
+type SentBack struct {
+	Count int `json:"count"`
+
+	// Ratio Of the advanced tasks; null when none advanced
+	Ratio *float64 `json:"ratio"`
+}
+
 // SkillFiles defines model for SkillFiles.
 type SkillFiles struct {
 	// Files Files by slash-separated relative path
@@ -2537,6 +2604,15 @@ type SearchSkillsParams struct {
 
 	// After The next_after of the previous page
 	After *string `form:"after,omitempty" json:"after,omitempty"`
+}
+
+// GetAgentStatsParams defines parameters for GetAgentStats.
+type GetAgentStatsParams struct {
+	// From The first UTC day of the range; 6 days before `to` when absent
+	From *RangeFrom `form:"from,omitempty" json:"from,omitempty"`
+
+	// To The last UTC day of the range, included; today when absent
+	To *RangeTo `form:"to,omitempty" json:"to,omitempty"`
 }
 
 // GetAndonParams defines parameters for GetAndon.
@@ -3210,6 +3286,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory} (the `GetFactory` operationId).
 	GetFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAgentStats One agent's work over a range of UTC days
+	//
+	// Tasks are the agent's leases that ended in the range with a finished outcome (advanced, rejected, escalated); sent back is the share of the advanced ones whose item another station later sent back for rework, grouped by the rejection's category or else its reason; runs (spend, median turns, denied tool calls) are those started in the range. The range is from to to, both included, at most 90 days, to not after today; without one it is the last 7 days. 400 for a bad range, 404 agent-not-found for an agent the factory does not declare.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/agents/{agent}/stats (the `GetAgentStats` operationId).
+	GetAgentStats(ctx context.Context, org OrgRef, factory FactoryRef, agent string, params *GetAgentStatsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetAndon The factory's andon cord, its recent pulls and the tallies of its gates
 	//
@@ -4037,6 +4120,23 @@ func (c *Client) DeleteFactory(ctx context.Context, org OrgRef, factory FactoryR
 // Corresponds with GET /v1/orgs/{org}/factories/{factory} (the `GetFactory` operationId).
 func (c *Client) GetFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetFactoryRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetAgentStats One agent's work over a range of UTC days
+//
+// Tasks are the agent's leases that ended in the range with a finished outcome (advanced, rejected, escalated); sent back is the share of the advanced ones whose item another station later sent back for rework, grouped by the rejection's category or else its reason; runs (spend, median turns, denied tool calls) are those started in the range. The range is from to to, both included, at most 90 days, to not after today; without one it is the last 7 days. 400 for a bad range, 404 agent-not-found for an agent the factory does not declare.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/agents/{agent}/stats (the `GetAgentStats` operationId).
+func (c *Client) GetAgentStats(ctx context.Context, org OrgRef, factory FactoryRef, agent string, params *GetAgentStatsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAgentStatsRequest(c.Server, org, factory, agent, params)
 	if err != nil {
 		return nil, err
 	}
@@ -5924,6 +6024,93 @@ func NewGetFactoryRequest(server string, org OrgRef, factory FactoryRef) (*http.
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetAgentStatsRequest constructs an http.Request for the GetAgentStats method
+func NewGetAgentStatsRequest(server string, org OrgRef, factory FactoryRef, agent string, params *GetAgentStatsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "agent", agent, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/agents/%s/stats", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.From != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "from", *params.From, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.To != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "to", *params.To, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
@@ -9051,6 +9238,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory} (the `GetFactory` operationId).
 	GetFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetFactoryResponse, error)
 
+	// GetAgentStatsWithResponse One agent's work over a range of UTC days
+	//
+	// Tasks are the agent's leases that ended in the range with a finished outcome (advanced, rejected, escalated); sent back is the share of the advanced ones whose item another station later sent back for rework, grouped by the rejection's category or else its reason; runs (spend, median turns, denied tool calls) are those started in the range. The range is from to to, both included, at most 90 days, to not after today; without one it is the last 7 days. 400 for a bad range, 404 agent-not-found for an agent the factory does not declare.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/agents/{agent}/stats (the `GetAgentStats` operationId).
+	GetAgentStatsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, agent string, params *GetAgentStatsParams, reqEditors ...RequestEditorFn) (*GetAgentStatsResponse, error)
+
 	// GetAndonWithResponse The factory's andon cord, its recent pulls and the tallies of its gates
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -10364,6 +10560,54 @@ func (r GetFactoryResponse) ContentType() string {
 	return ""
 }
 
+type GetAgentStatsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AgentStats
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAgentStatsResponse) GetJSON200() *AgentStats {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetAgentStatsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAgentStatsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAgentStatsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAgentStatsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAgentStatsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetAndonResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -11432,18 +11676,11 @@ type GetLeadTimeBridgeResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *LeadTimeBridge
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r GetLeadTimeBridgeResponse) GetJSON200() *LeadTimeBridge {
 	return r.JSON200
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r GetLeadTimeBridgeResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
 }
 
 // GetBody returns the raw response body bytes
@@ -13007,6 +13244,21 @@ func (c *ClientWithResponses) GetFactoryWithResponse(ctx context.Context, org Or
 	return ParseGetFactoryResponse(rsp)
 }
 
+// GetAgentStatsWithResponse One agent's work over a range of UTC days
+//
+// Tasks are the agent's leases that ended in the range with a finished outcome (advanced, rejected, escalated); sent back is the share of the advanced ones whose item another station later sent back for rework, grouped by the rejection's category or else its reason; runs (spend, median turns, denied tool calls) are those started in the range. The range is from to to, both included, at most 90 days, to not after today; without one it is the last 7 days. 400 for a bad range, 404 agent-not-found for an agent the factory does not declare.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/agents/{agent}/stats (the `GetAgentStats` operationId).
+func (c *ClientWithResponses) GetAgentStatsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, agent string, params *GetAgentStatsParams, reqEditors ...RequestEditorFn) (*GetAgentStatsResponse, error) {
+	rsp, err := c.GetAgentStats(ctx, org, factory, agent, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAgentStatsResponse(rsp)
+}
+
 // GetAndonWithResponse The factory's andon cord, its recent pulls and the tallies of its gates
 //
 // Returns a wrapper object for the known response body format(s).
@@ -14478,6 +14730,39 @@ func ParseGetFactoryResponse(rsp *http.Response) (*GetFactoryResponse, error) {
 	return response, nil
 }
 
+// ParseGetAgentStatsResponse parses an HTTP response from a GetAgentStatsWithResponse call
+func ParseGetAgentStatsResponse(rsp *http.Response) (*GetAgentStatsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAgentStatsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AgentStats
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetAndonResponse parses an HTTP response from a GetAndonWithResponse call
 func ParseGetAndonResponse(rsp *http.Response) (*GetAndonResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -15246,13 +15531,6 @@ func ParseGetLeadTimeBridgeResponse(rsp *http.Response) (*GetLeadTimeBridgeRespo
 			return nil, err
 		}
 		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
 
 	}
 
@@ -16173,6 +16451,9 @@ type ServerInterface interface {
 	// GetFactory One factory, published or not
 	// (GET /v1/orgs/{org}/factories/{factory})
 	GetFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// GetAgentStats One agent's work over a range of UTC days
+	// (GET /v1/orgs/{org}/factories/{factory}/agents/{agent}/stats)
+	GetAgentStats(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, agent string, params GetAgentStatsParams)
 	// GetAndon The factory's andon cord, its recent pulls and the tallies of its gates
 	// (GET /v1/orgs/{org}/factories/{factory}/andon)
 	GetAndon(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetAndonParams)
@@ -16870,6 +17151,79 @@ func (siw *ServerInterfaceWrapper) GetFactory(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetFactory(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAgentStats operation middleware
+func (siw *ServerInterfaceWrapper) GetAgentStats(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "agent" -------------
+	var agent string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "agent", r.PathValue("agent"), &agent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "agent", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAgentStatsParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAgentStats(w, r, org, factory, agent, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -19368,6 +19722,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/weekly", wrapper.GetWeeklyThroughput)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/constraint", wrapper.GetConstraintReport)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/lead-time", wrapper.GetLeadTimeBridge)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/agents/{agent}/stats", wrapper.GetAgentStats)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.GetAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.PullAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon/clear", wrapper.ClearAndon)
@@ -20005,6 +20360,48 @@ type GetFactorydefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetFactorydefaultApplicationProblemPlusJSONResponse) VisitGetFactoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAgentStatsRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Agent   string     `json:"agent"`
+	Params  GetAgentStatsParams
+}
+
+type GetAgentStatsResponseObject interface {
+	VisitGetAgentStatsResponse(w http.ResponseWriter) error
+}
+
+type GetAgentStats200JSONResponse AgentStats
+
+func (response GetAgentStats200JSONResponse) VisitGetAgentStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAgentStatsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetAgentStatsdefaultApplicationProblemPlusJSONResponse) VisitGetAgentStatsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -20970,23 +21367,6 @@ func (response GetLeadTimeBridge200JSONResponse) VisitGetLeadTimeBridgeResponse(
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetLeadTimeBridgedefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response GetLeadTimeBridgedefaultApplicationProblemPlusJSONResponse) VisitGetLeadTimeBridgeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -22137,6 +22517,9 @@ type StrictServerInterface interface {
 	// GetFactory One factory, published or not
 	// (GET /v1/orgs/{org}/factories/{factory})
 	GetFactory(ctx context.Context, request GetFactoryRequestObject) (GetFactoryResponseObject, error)
+	// GetAgentStats One agent's work over a range of UTC days
+	// (GET /v1/orgs/{org}/factories/{factory}/agents/{agent}/stats)
+	GetAgentStats(ctx context.Context, request GetAgentStatsRequestObject) (GetAgentStatsResponseObject, error)
 	// GetAndon The factory's andon cord, its recent pulls and the tallies of its gates
 	// (GET /v1/orgs/{org}/factories/{factory}/andon)
 	GetAndon(ctx context.Context, request GetAndonRequestObject) (GetAndonResponseObject, error)
@@ -22765,6 +23148,35 @@ func (sh *strictHandler) GetFactory(w http.ResponseWriter, r *http.Request, org 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetFactoryResponseObject); ok {
 		if err := validResponse.VisitGetFactoryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAgentStats operation middleware
+func (sh *strictHandler) GetAgentStats(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, agent string, params GetAgentStatsParams) {
+	var request GetAgentStatsRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Agent = agent
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAgentStats(ctx, request.(GetAgentStatsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAgentStats")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAgentStatsResponseObject); ok {
+		if err := validResponse.VisitGetAgentStatsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -41,6 +41,8 @@ export interface Finished {
   input_tokens: number;
   output_tokens: number;
   session_id: string;
+  /** The tool calls the agent's policy refused, by tool and call id (never their input); absent when none. */
+  permission_denials?: { tool: string; id: string }[];
 }
 
 /** Progress text is cut to these lengths; events are for watching, not for replaying. */
@@ -159,6 +161,7 @@ export function finished(msg: SDKResultMessage, at: string): Finished {
     input_tokens: msg.usage.input_tokens,
     output_tokens: msg.usage.output_tokens,
     session_id: msg.session_id,
+    ...denials(msg.permission_denials),
   };
   if (msg.subtype !== 'success') {
     return { ...base, status: 'failed', error: msg.errors.join('; ') || msg.subtype };
@@ -167,6 +170,12 @@ export function finished(msg: SDKResultMessage, at: string): Finished {
     return { ...base, status: 'failed', error: msg.result || 'the agent ended with an error' };
   }
   return { ...base, status: 'succeeded', output: msg.structured_output ?? parseOutput(msg.result) };
+}
+
+/** The denied calls by tool and call id; their input may hold anything, so it stays in the container. */
+function denials(list: SDKResultMessage['permission_denials'] | undefined): Pick<Finished, 'permission_denials'> {
+  if (!list || list.length === 0) return {};
+  return { permission_denials: list.map((d) => ({ tool: d.tool_name, id: d.tool_use_id })) };
 }
 
 /**

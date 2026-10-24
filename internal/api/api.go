@@ -90,6 +90,7 @@ type Items interface {
 	OpenAndon(ctx context.Context, factory domain.FactoryID) (*domain.AndonPull, error)
 	AndonPulls(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.AndonPull, error)
 	GateDecisions(ctx context.Context, factory domain.FactoryID, station string, after time.Time, n int) (domain.GateTally, error)
+	AgentStats(ctx context.Context, factory domain.FactoryID, agent string, since, until time.Time) (domain.AgentStats, error)
 }
 
 // Factories are the definitions goald runs; *definitions.Cache satisfies it.
@@ -439,6 +440,10 @@ func problemOf(err error) gen.Problem {
 	}
 
 	if p, ok := controlProblem(err); ok {
+		return p
+	}
+
+	if p, ok := agentProblem(err); ok {
 		return p
 	}
 

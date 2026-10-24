@@ -261,6 +261,7 @@ var probes = map[string]probe{
 	"retryItem":           {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/retry", org: testOrg, factory: acmeID},
 	"moveItem":            {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/move", body: `{"to":"approve"}`, org: testOrg, factory: acmeID},
 	"pauseItem":           {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/pause", org: testOrg, factory: acmeID},
+	"getAgentStats":       {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/agents/writer/stats", org: testOrg, factory: acmeID},
 	"mergeItem":           {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/merge", org: testOrg, factory: acmeID},
 	"noteItem":            {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/notes", body: `{"text":"hi"}`, org: testOrg, factory: acmeID},
 	"listItemRuns":        {method: http.MethodGet, path: "/v1/orgs/acme/items/acme%231/runs", org: testOrg, factory: acmeID},

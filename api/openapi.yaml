@@ -1042,6 +1042,36 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/LeadTimeBridge" }
+  /v1/orgs/{org}/factories/{factory}/agents/{agent}/stats:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - name: agent
+        in: path
+        required: true
+        description: The agent's name, as the factory's definition declares it
+        schema: { type: string }
+    get:
+      operationId: getAgentStats
+      tags: [work]
+      summary: One agent's work over a range of UTC days
+      description: >-
+        Tasks are the agent's leases that ended in the range with a finished outcome (advanced,
+        rejected, escalated); sent back is the share of the advanced ones whose item another
+        station later sent back for rework, grouped by the rejection's category or else its
+        reason; runs (spend, median turns, denied tool calls) are those started in the range. The
+        range is from to to, both included, at most 90 days, to not after today; without one it is
+        the last 7 days. 400 for a bad range, 404 agent-not-found for an agent the factory does not
+        declare.
+      parameters:
+        - $ref: "#/components/parameters/RangeFrom"
+        - $ref: "#/components/parameters/RangeTo"
+      responses:
+        "200":
+          description: The agent's statistics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentStats" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/andon:
     parameters:
@@ -2170,6 +2200,65 @@ components:
         throughput_per_day: { type: number, format: double, nullable: true }
         lead_time_hours: { type: number, format: double, nullable: true, description: The p85 lead time to stay under }
         expedite_lead_time_minutes: { type: integer, nullable: true, description: Lead time of each expedite item }
+    AgentStats:
+      type: object
+      required: [agent, from, to, model, stations, tasks_finished, sent_back, median_turns, spend_per_task_usd, task_time_p85_minutes, spend_usd, reasons, denied_tool_calls]
+      properties:
+        agent: { type: string }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        model: { type: string, nullable: true, description: "The agent's model, else the runtime's" }
+        stations:
+          type: array
+          description: The stations the agent works at, in line order
+          items: { $ref: "#/components/schemas/AgentStation" }
+        tasks_finished: { type: integer }
+        sent_back: { $ref: "#/components/schemas/SentBack" }
+        median_turns: { type: number, format: double, nullable: true, description: Of the runs that succeeded }
+        spend_per_task_usd: { type: number, format: double, nullable: true, description: All runs' spend over the tasks finished }
+        task_time_p85_minutes: { type: number, format: double, nullable: true }
+        spend_usd: { type: number, format: double }
+        reasons:
+          type: array
+          maxItems: 5
+          description: Why work was sent back, most frequent first
+          items: { $ref: "#/components/schemas/SendBackReason" }
+        denied_tool_calls: { $ref: "#/components/schemas/DeniedToolCalls" }
+    AgentStation:
+      type: object
+      required: [id, slots, constraint]
+      properties:
+        id: { type: string }
+        slots: { type: integer, description: How many copies of agents run there at once }
+        constraint: { type: boolean, description: The station the line's flow is paced by now }
+    SentBack:
+      type: object
+      required: [count, ratio]
+      properties:
+        count: { type: integer }
+        ratio: { type: number, format: double, nullable: true, description: Of the advanced tasks; null when none advanced }
+    SendBackReason:
+      type: object
+      required: [label, count]
+      properties:
+        label: { type: string, description: "The rejection's category, else its reason (trimmed, lower-cased, 120 characters)" }
+        count: { type: integer }
+    DeniedToolCalls:
+      type: object
+      required: [count, tools]
+      properties:
+        count: { type: integer }
+        tools:
+          type: array
+          maxItems: 3
+          description: The most denied tools, as <connection>__<tool> for gateway tools
+          items: { $ref: "#/components/schemas/DeniedTool" }
+    DeniedTool:
+      type: object
+      required: [tool, count]
+      properties:
+        tool: { type: string }
+        count: { type: integer }
     WeeklyThroughput:
       type: object
       required: [to, type, targets, weeks]

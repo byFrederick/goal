@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"time"
 
@@ -206,4 +207,58 @@ func (t stationTally) sorted() []domain.StationTimes {
 	}
 
 	return out
+}
+
+// AgentStats implements ports.FlowStats: four reads of one snapshot (lease spans, runs,
+// send-backs, denied calls), labelled and tallied here as the domain does.
+func (s *Store) AgentStats(ctx context.Context, factory domain.FactoryID, agent string, since, until time.Time) (domain.AgentStats, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return domain.AgentStats{}, err
+	}
+
+	var out domain.AgentStats
+
+	err = s.orgTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(q *db.Queries) error {
+		leases, err := q.AgentLeases(ctx, db.AgentLeasesParams{FactoryID: fid, Agent: agent, Since: since, Until: until})
+		if err != nil {
+			return fmt.Errorf("leases: %w", err)
+		}
+
+		out.TasksFinished, out.Advanced = int(leases.Finished), int(leases.Advanced)
+		out.TaskTimeP85 = time.Duration(math.Round(leases.P85Seconds * float64(time.Second)))
+
+		runs, err := q.AgentRuns(ctx, db.AgentRunsParams{FactoryID: fid, Agent: agent, Since: since, Until: until})
+		if err != nil {
+			return fmt.Errorf("runs: %w", err)
+		}
+
+		out.SpendUSD, out.SucceededRuns, out.MedianTurns = runs.SpendUsd, int(runs.Succeeded), runs.MedianTurns
+
+		back, err := q.AgentSentBack(ctx, db.AgentSentBackParams{FactoryID: fid, Agent: agent, Since: since, Until: until})
+		if err != nil {
+			return fmt.Errorf("send-backs: %w", err)
+		}
+
+		labels := make([]string, 0, len(back))
+		for _, b := range back {
+			labels = append(labels, domain.VerdictLabel(b.Category, b.Reason))
+		}
+
+		out.SentBack, out.Reasons = len(back), domain.Tallies(labels)
+
+		tools, err := q.AgentDeniedTools(ctx, db.AgentDeniedToolsParams{FactoryID: fid, Agent: agent, Since: since, Until: until})
+		if err != nil {
+			return fmt.Errorf("denied tools: %w", err)
+		}
+
+		out.Denied = domain.Tallies(tools)
+
+		return nil
+	})
+	if err != nil {
+		return domain.AgentStats{}, fmt.Errorf("stats of agent %s of factory %s: %w", agent, factory, err)
+	}
+
+	return out, nil
 }

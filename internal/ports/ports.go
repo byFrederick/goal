@@ -210,6 +210,12 @@ type FlowStats interface {
 	// gate station of the factory, keeping only those after `after` (the last andon clear; zero
 	// for all of them), newest first (domain.TallyGate).
 	GateDecisions(ctx context.Context, factory domain.FactoryID, station string, after time.Time, n int) (domain.GateTally, error)
+	// AgentStats measures one agent of a factory over [since, until) (see domain.AgentStats):
+	// its tasks from the lease spans that ended in the window, its runs and their denied tool
+	// calls from the runs that started in it. A send-back is the advanced task's item entering its
+	// next rework round from another station; its label comes from the rejection (gate_rejected
+	// or rejected) that station gave then, or from a person's manual move back.
+	AgentStats(ctx context.Context, factory domain.FactoryID, agent string, since, until time.Time) (domain.AgentStats, error)
 }
 
 // FlowQuery is what a FlowStats read measures: one factory's items over [Since, Until).

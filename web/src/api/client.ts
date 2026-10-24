@@ -13,6 +13,7 @@ import {
   unwrap,
 } from '@goal/api-client';
 import type {
+  AgentStats,
   AndonPull,
   AuditFilter,
   AuditPage,
@@ -211,6 +212,22 @@ export function clearAndon(org: string, factory: string, note?: string): Promise
     goal.POST(orgPath('/factories/{factory}/andon/clear'), {
       params: { path: { org, factory } },
       body: note ? { note } : {},
+    }),
+  );
+}
+
+/** One agent's work over a range (the last 7 days when it sets none): E12's agent statistics. */
+export function getAgentStats(
+  org: string,
+  factory: string,
+  agent: string,
+  { from, to }: Pick<FlowRange, 'from' | 'to'> = {},
+  signal?: AbortSignal,
+): Promise<AgentStats> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/agents/{agent}/stats'), {
+      params: { path: { org, factory, agent }, query: rangeQuery({ from, to }) },
+      ...cancel(signal),
     }),
   );
 }

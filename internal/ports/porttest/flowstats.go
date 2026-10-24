@@ -355,3 +355,158 @@ func closeSpan(spans []domain.Span, at time.Time) (time.Time, string) {
 
 	return at, open.ReworkBy
 }
+
+// AgentStats implements ports.FlowStats.
+func (s *Store) AgentStats(ctx context.Context, factory domain.FactoryID, agent string, since, until time.Time) (domain.AgentStats, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.AgentStats{}, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var out domain.AgentStats
+
+	in := func(t time.Time) bool { return !t.Before(since) && t.Before(until) }
+
+	s.agentTasks(&out, org, factory, agent, in)
+	runs := s.agentRuns(&out, org, factory, agent, in)
+	out.Denied = domain.Tallies(s.deniedTools(runs))
+
+	return out, nil
+}
+
+// agentTasks measures the agent's finished lease spans that ended in the window and the advanced
+// ones sent back. Callers hold s.mu.
+func (s *Store) agentTasks(out *domain.AgentStats, org domain.OrgID, factory domain.FactoryID, agent string, in func(time.Time) bool) {
+	var times []float64
+
+	var reasons []string
+
+	for id, leases := range s.leaseLog {
+		if !s.ofFactory(id, org, factory) {
+			continue
+		}
+
+		for _, l := range leases {
+			if l.Agent != agent || !l.Outcome.Finished() || !in(l.EndedAt) {
+				continue
+			}
+
+			out.TasksFinished++
+
+			times = append(times, l.EndedAt.Sub(l.AcquiredAt).Seconds())
+			if l.Outcome != domain.LeaseAdvanced {
+				continue
+			}
+
+			out.Advanced++
+
+			if label, back := s.sentBack(l); back {
+				out.SentBack++
+
+				reasons = append(reasons, label)
+			}
+		}
+	}
+
+	slices.Sort(times)
+	out.TaskTimeP85 = percentile(times, 0.85)
+	out.Reasons = domain.Tallies(reasons)
+}
+
+// agentRuns measures the agent's runs started in the window and returns them. Callers hold s.mu.
+func (s *Store) agentRuns(out *domain.AgentStats, org domain.OrgID, factory domain.FactoryID, agent string, in func(time.Time) bool) map[domain.RunID]bool {
+	runs := map[domain.RunID]bool{}
+
+	var turns []float64
+
+	for id, r := range s.runs {
+		if !s.ofFactory(r.ItemID, org, factory) || r.Agent != agent || !in(r.StartedAt) {
+			continue
+		}
+
+		runs[id] = true
+		out.SpendUSD += r.Result.CostUSD
+
+		if r.Result.Status == domain.RunSucceeded {
+			out.SucceededRuns++
+
+			turns = append(turns, float64(r.Result.Turns))
+		}
+	}
+
+	slices.Sort(turns)
+	out.MedianTurns = percentileOf(turns, 0.5)
+
+	return runs
+}
+
+// sentBack reports whether the item of an advanced lease later entered its next rework round from
+// another station, and the label of what that station said. Callers hold s.mu.
+func (s *Store) sentBack(l domain.LeaseSpan) (string, bool) {
+	i := slices.IndexFunc(s.spans[l.ItemID], func(sp domain.Span) bool {
+		return sp.ReworkRound == l.ReworkRound+1 && sp.ReworkBy != "" && sp.ReworkBy != l.Station
+	})
+	if i < 0 {
+		return "", false
+	}
+
+	return s.sendBackLabel(l.ItemID, s.spans[l.ItemID][i]), true
+}
+
+// sendBackLabel labels what sent an item into the rework round of span back: the latest
+// rejection the sending station gave by then, else a person's latest move back from it. Callers
+// hold s.mu.
+func (s *Store) sendBackLabel(item domain.ItemID, back domain.Span) string {
+	var label, moved string
+
+	for _, e := range s.events {
+		if e.ItemID != item || e.Station != back.ReworkBy || e.At.After(back.EnteredAt) {
+			continue
+		}
+
+		category, _ := e.Data["category"].(string)
+		reason, _ := e.Data["reason"].(string)
+
+		switch {
+		case e.Kind == domain.EventGateRejected || e.Kind == domain.EventRejected:
+			label = domain.VerdictLabel(category, reason)
+		case e.Kind == domain.EventMoved && e.Data["manual"] == true:
+			moved = domain.VerdictLabel("", reason)
+		}
+	}
+
+	if label == "" {
+		return moved
+	}
+
+	return label
+}
+
+// deniedTools names the tool of every tool call the runs were denied. Callers hold s.mu.
+func (s *Store) deniedTools(runs map[domain.RunID]bool) []string {
+	var tools []string
+
+	for _, e := range s.events {
+		if !runs[e.RunID] {
+			continue
+		}
+
+		tool, _ := e.Data["tool"].(string)
+
+		switch {
+		case e.Kind == domain.EventToolDenied:
+			tools = append(tools, tool)
+		case e.Kind == gatewayToolCall && e.Data["outcome"] == "denied":
+			connection, _ := e.Data["connection"].(string)
+			tools = append(tools, connection+"__"+tool)
+		}
+	}
+
+	return tools
+}
+
+// gatewayToolCall is the kind of the gateway's tool call events (gateway.EventToolCall).
+const gatewayToolCall domain.EventKind = "gateway_tool_call"
