@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { createRootRouteWithContext, HeadContent, Outlet } from '@tanstack/react-router';
 import { Toaster } from 'sonner';
 import { pageTitle, useRouteFocus } from '../app/route-focus';
+import { ReauthHost } from '../shared/reauth';
 import { TooltipProvider } from '../ui/tooltip';
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
@@ -16,6 +17,7 @@ function Root() {
       {/* The current route's <title>; React hoists it into <head>. */}
       <HeadContent />
       <Outlet />
+      <ReauthHost />
       <Toaster
         position="top-center"
         toastOptions={{

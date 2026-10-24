@@ -60,6 +60,11 @@ export function Field({ label, aside, help, error, className, children }: FieldP
   );
 }
 
+/** The id, description and invalid state of the Field around a custom control (CodeField). */
+export function useFieldControl(): FieldControl | null {
+  return use(FieldContext);
+}
+
 /** A text input: 44 px tall on phones (16 px text, so iOS does not zoom), 40 px from 768 px. */
 export function Input({ className, ...props }: ComponentProps<'input'>) {
   const field = use(FieldContext);

@@ -1,5 +1,15 @@
 import { cn } from './cn';
 
+/** The mark and the name, atop the sign-in pages. */
+export function Wordmark() {
+  return (
+    <span className="flex items-center gap-2.5 text-xl font-medium tracking-[-0.02em] text-ink">
+      <LogoMark className="size-8" />
+      Goal
+    </span>
+  );
+}
+
 /** The mark: three stations, the middle one the constraint. */
 export function LogoMark({ className }: { className?: string }) {
   return (

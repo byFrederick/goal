@@ -18,5 +18,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["src", "mock", "e2e", "vite.config.ts", "playwright.config.ts"]
+  "include": ["src", "mock", "e2e", "e2e-auth", "vite.config.ts", "playwright.config.ts", "playwright.auth.config.ts"]
 }

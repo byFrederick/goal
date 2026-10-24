@@ -233,10 +233,12 @@ type probe struct {
 const submitFix = `{"title":"t","type":"fix"}`
 
 var probes = map[string]probe{
-	"getHealth": {method: http.MethodGet, path: "/v1/health"},
-	"listOrgs":  {method: http.MethodGet, path: "/v1/orgs"},
-	"createOrg": {method: http.MethodPost, path: "/v1/orgs", body: `{"name":"Acme Two","slug":"acme-two"}`},
-	"getOrg":    {method: http.MethodGet, path: "/v1/orgs/acme", org: testOrg},
+	"getHealth":     {method: http.MethodGet, path: "/v1/health"},
+	"getAuthConfig": {method: http.MethodGet, path: "/v1/auth/config"},
+	"getMe":         {method: http.MethodGet, path: "/v1/me"},
+	"listOrgs":      {method: http.MethodGet, path: "/v1/orgs"},
+	"createOrg":     {method: http.MethodPost, path: "/v1/orgs", body: `{"name":"Acme Two","slug":"acme-two"}`},
+	"getOrg":        {method: http.MethodGet, path: "/v1/orgs/acme", org: testOrg},
 	// A wrong confirmation, so the probe deletes nothing the later probes need.
 	"deleteOrg":           {method: http.MethodDelete, path: "/v1/orgs/acme", body: `{"confirm":"nope"}`, org: testOrg},
 	"getOrgSettings":      {method: http.MethodGet, path: "/v1/orgs/acme/settings", org: testOrg},

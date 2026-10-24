@@ -7,6 +7,7 @@ task web:dev                 # http://localhost:5173, /v1 proxied to goald on 12
 GOAL_API=mock task web:dev   # against the in-memory mock API instead (no goald needed)
 task web:check               # typecheck, Biome, Vitest
 task web:e2e                 # Playwright at 375, 768 and 1440 px with axe, against vite preview + the mock
+task web:e2e-auth            # sign-in against a running goald under GOAL_AUTH=session, its identity service and Mailpit
 task build                   # this app, then goald with it embedded (go build -tags webui)
 ```
 

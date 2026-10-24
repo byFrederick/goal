@@ -62,6 +62,24 @@ func (e AndonKind) Valid() bool {
 	}
 }
 
+// Defines values for AuthMode.
+const (
+	None    AuthMode = "none"
+	Session AuthMode = "session"
+)
+
+// Valid indicates whether the value is a known member of the AuthMode enum.
+func (e AuthMode) Valid() bool {
+	switch e {
+	case None:
+		return true
+	case Session:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BlankStartKind.
 const (
 	BlankStartKindBlank BlankStartKind = "blank"
@@ -479,6 +497,24 @@ func (e LineReleasePolicy) Valid() bool {
 	}
 }
 
+// Defines values for MeKind.
+const (
+	MeKindService MeKind = "service"
+	MeKindUser    MeKind = "user"
+)
+
+// Valid indicates whether the value is a known member of the MeKind enum.
+func (e MeKind) Valid() bool {
+	switch e {
+	case MeKindService:
+		return true
+	case MeKindUser:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for MergeRequestMethod.
 const (
 	Squash MergeRequestMethod = "squash"
@@ -506,6 +542,27 @@ func (e NoteReceiptDelivery) Valid() bool {
 	case Live:
 		return true
 	case NextRun:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OrgRole.
+const (
+	Admin  OrgRole = "admin"
+	Member OrgRole = "member"
+	Owner  OrgRole = "owner"
+)
+
+// Valid indicates whether the value is a known member of the OrgRole enum.
+func (e OrgRole) Valid() bool {
+	switch e {
+	case Admin:
+		return true
+	case Member:
+		return true
+	case Owner:
 		return true
 	default:
 		return false
@@ -599,6 +656,24 @@ func (e Section) Valid() bool {
 	case Line:
 		return true
 	case Review:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SignInMethod.
+const (
+	EmailCode SignInMethod = "email_code"
+	Google    SignInMethod = "google"
+)
+
+// Valid indicates whether the value is a known member of the SignInMethod enum.
+func (e SignInMethod) Valid() bool {
+	switch e {
+	case EmailCode:
+		return true
+	case Google:
 		return true
 	default:
 		return false
@@ -880,6 +955,18 @@ type AuditTarget struct {
 	// Kind What the entry is about
 	Kind string `json:"kind"`
 }
+
+// AuthConfig defines model for AuthConfig.
+type AuthConfig struct {
+	// Methods How people sign in; email_code always under session, google when GOAL_AUTH_GOOGLE=on; empty under none
+	Methods []SignInMethod `json:"methods"`
+
+	// Mode session: people sign in and every request carries a session or an API key. none: sign-in is off (GOAL_AUTH=none, a loopback install), every request acts as the local user.
+	Mode AuthMode `json:"mode"`
+}
+
+// AuthMode session: people sign in and every request carries a session or an API key. none: sign-in is off (GOAL_AUTH=none, a loopback install), every request acts as the local user.
+type AuthMode string
 
 // Base64File defines model for Base64File.
 type Base64File struct {
@@ -1848,6 +1935,44 @@ type LineWip struct {
 	Limit      *int `json:"limit"`
 }
 
+// Me defines model for Me.
+type Me struct {
+	// Key kind service only
+	Key *MeKey `json:"key,omitempty"`
+
+	// Kind user: a person; service: an API key
+	Kind MeKind `json:"kind"`
+
+	// Mode session: people sign in and every request carries a session or an API key. none: sign-in is off (GOAL_AUTH=none, a loopback install), every request acts as the local user.
+	Mode          AuthMode `json:"mode"`
+	PlatformAdmin bool     `json:"platform_admin"`
+
+	// Session A signed-in person's session; absent for a key and under mode none
+	Session *MeSession `json:"session,omitempty"`
+
+	// User The signed-in person; absent for a key and under mode none (the local user)
+	User *User `json:"user,omitempty"`
+}
+
+// MeKind user: a person; service: an API key
+type MeKind string
+
+// MeKey The API key a request acts as
+type MeKey struct {
+	Id    string `json:"id"`
+	Name  string `json:"name"`
+	OrgId string `json:"org_id"`
+}
+
+// MeSession The browser or CLI session the request carries
+type MeSession struct {
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+
+	// FreshUntil Until when changes that need a recent sign-in pass (10 minutes after created_at)
+	FreshUntil time.Time `json:"fresh_until"`
+}
+
 // MergeRequest defines model for MergeRequest.
 type MergeRequest struct {
 	Method *MergeRequestMethod `json:"method,omitempty"`
@@ -2030,6 +2155,9 @@ type OrgList struct {
 	Orgs []OrgSummary `json:"orgs"`
 }
 
+// OrgRole defines model for OrgRole.
+type OrgRole string
+
 // OrgSettings defines model for OrgSettings.
 type OrgSettings struct {
 	Mark string `json:"mark"`
@@ -2072,6 +2200,9 @@ type OrgSummary struct {
 	Mark string `json:"mark"`
 	Name string `json:"name"`
 
+	// Role The caller's role in the organization; absent under GOAL_AUTH=none, null for an API key
+	Role *OrgRole `json:"role,omitempty"`
+
 	// Slug The organization's address in URLs, as in /v1/orgs/acme
 	Slug string `json:"slug"`
 }
@@ -2105,7 +2236,7 @@ type PauseRequest struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found.
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found.
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
@@ -2312,6 +2443,9 @@ type SentBack struct {
 	Ratio *float64 `json:"ratio"`
 }
 
+// SignInMethod defines model for SignInMethod.
+type SignInMethod string
+
 // SkillFiles defines model for SkillFiles.
 type SkillFiles struct {
 	// Files Files by slash-separated relative path
@@ -2465,6 +2599,13 @@ type Throughput struct {
 
 	// PreviousPerDay The same over the previous window
 	PreviousPerDay float64 `json:"previous_per_day"`
+}
+
+// User defines model for User.
+type User struct {
+	Email string `json:"email"`
+	Id    string `json:"id"`
+	Name  string `json:"name"`
 }
 
 // ValidateDraftRequest defines model for ValidateDraftRequest.
@@ -3207,10 +3348,24 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 // The interface specification for the client above.
 type ClientInterface interface {
 
+	// GetAuthConfig How this install signs people in
+	//
+	// Read by the sign-in page before anyone is signed in, so it reads no credential. Under GOAL_AUTH=none sign-in is off: the UI shows no sign-in page and every request acts as the local user.
+	//
+	// Corresponds with GET /v1/auth/config (the `GetAuthConfig` operationId).
+	GetAuthConfig(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetHealth Liveness of goald
 	//
 	// Corresponds with GET /v1/health (the `GetHealth` operationId).
 	GetHealth(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetMe Who the request acts for
+	//
+	// The signed-in person (name, email, platform admin, the session's times) or the API key. Under GOAL_AUTH=none, the local user. Without a valid credential, 401 unauthenticated.
+	//
+	// Corresponds with GET /v1/me (the `GetMe` operationId).
+	GetMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListOrgs Every organization on the install, by name
 	//
@@ -3850,11 +4005,45 @@ type ClientInterface interface {
 	GetTemplate(ctx context.Context, org OrgRef, name string, params *GetTemplateParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
+// GetAuthConfig How this install signs people in
+//
+// Read by the sign-in page before anyone is signed in, so it reads no credential. Under GOAL_AUTH=none sign-in is off: the UI shows no sign-in page and every request acts as the local user.
+//
+// Corresponds with GET /v1/auth/config (the `GetAuthConfig` operationId).
+func (c *Client) GetAuthConfig(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAuthConfigRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetHealth Liveness of goald
 //
 // Corresponds with GET /v1/health (the `GetHealth` operationId).
 func (c *Client) GetHealth(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetHealthRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetMe Who the request acts for
+//
+// The signed-in person (name, email, platform admin, the session's times) or the API key. Under GOAL_AUTH=none, the local user. Without a valid credential, 401 unauthenticated.
+//
+// Corresponds with GET /v1/me (the `GetMe` operationId).
+func (c *Client) GetMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetMeRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -5352,6 +5541,33 @@ func (c *Client) GetTemplate(ctx context.Context, org OrgRef, name string, param
 	return c.Client.Do(req)
 }
 
+// NewGetAuthConfigRequest constructs an http.Request for the GetAuthConfig method
+func NewGetAuthConfigRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/auth/config")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetHealthRequest constructs an http.Request for the GetHealth method
 func NewGetHealthRequest(server string) (*http.Request, error) {
 	var err error
@@ -5362,6 +5578,33 @@ func NewGetHealthRequest(server string) (*http.Request, error) {
 	}
 
 	operationPath := fmt.Sprintf("/v1/health")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetMeRequest constructs an http.Request for the GetMe method
+func NewGetMeRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/me")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -9136,12 +9379,30 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 
+	// GetAuthConfigWithResponse How this install signs people in
+	//
+	// Read by the sign-in page before anyone is signed in, so it reads no credential. Under GOAL_AUTH=none sign-in is off: the UI shows no sign-in page and every request acts as the local user.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/auth/config (the `GetAuthConfig` operationId).
+	GetAuthConfigWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAuthConfigResponse, error)
+
 	// GetHealthWithResponse Liveness of goald
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/health (the `GetHealth` operationId).
 	GetHealthWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetHealthResponse, error)
+
+	// GetMeWithResponse Who the request acts for
+	//
+	// The signed-in person (name, email, platform admin, the session's times) or the API key. Under GOAL_AUTH=none, the local user. Without a valid credential, 401 unauthenticated.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/me (the `GetMe` operationId).
+	GetMeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMeResponse, error)
 
 	// ListOrgsWithResponse Every organization on the install, by name
 	//
@@ -9867,6 +10128,47 @@ type ClientWithResponsesInterface interface {
 	GetTemplateWithResponse(ctx context.Context, org OrgRef, name string, params *GetTemplateParams, reqEditors ...RequestEditorFn) (*GetTemplateResponse, error)
 }
 
+type GetAuthConfigResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AuthConfig
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAuthConfigResponse) GetJSON200() *AuthConfig {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAuthConfigResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAuthConfigResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAuthConfigResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAuthConfigResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetHealthResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -9902,6 +10204,54 @@ func (r GetHealthResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetHealthResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetMeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Me
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetMeResponse) GetJSON200() *Me {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetMeResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetMeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetMeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetMeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetMeResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -13022,6 +13372,21 @@ func (r GetTemplateResponse) ContentType() string {
 	return ""
 }
 
+// GetAuthConfigWithResponse How this install signs people in
+//
+// Read by the sign-in page before anyone is signed in, so it reads no credential. Under GOAL_AUTH=none sign-in is off: the UI shows no sign-in page and every request acts as the local user.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/auth/config (the `GetAuthConfig` operationId).
+func (c *ClientWithResponses) GetAuthConfigWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAuthConfigResponse, error) {
+	rsp, err := c.GetAuthConfig(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAuthConfigResponse(rsp)
+}
+
 // GetHealthWithResponse Liveness of goald
 //
 // Returns a wrapper object for the known response body format(s).
@@ -13033,6 +13398,21 @@ func (c *ClientWithResponses) GetHealthWithResponse(ctx context.Context, reqEdit
 		return nil, err
 	}
 	return ParseGetHealthResponse(rsp)
+}
+
+// GetMeWithResponse Who the request acts for
+//
+// The signed-in person (name, email, platform admin, the session's times) or the API key. Under GOAL_AUTH=none, the local user. Without a valid credential, 401 unauthenticated.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/me (the `GetMe` operationId).
+func (c *ClientWithResponses) GetMeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMeResponse, error) {
+	rsp, err := c.GetMe(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetMeResponse(rsp)
 }
 
 // ListOrgsWithResponse Every organization on the install, by name
@@ -14268,6 +14648,32 @@ func (c *ClientWithResponses) GetTemplateWithResponse(ctx context.Context, org O
 	return ParseGetTemplateResponse(rsp)
 }
 
+// ParseGetAuthConfigResponse parses an HTTP response from a GetAuthConfigWithResponse call
+func ParseGetAuthConfigResponse(rsp *http.Response) (*GetAuthConfigResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAuthConfigResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AuthConfig
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetHealthResponse parses an HTTP response from a GetHealthWithResponse call
 func ParseGetHealthResponse(rsp *http.Response) (*GetHealthResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -14288,6 +14694,39 @@ func ParseGetHealthResponse(rsp *http.Response) (*GetHealthResponse, error) {
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetMeResponse parses an HTTP response from a GetMeWithResponse call
+func ParseGetMeResponse(rsp *http.Response) (*GetMeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetMeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Me
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
 
 	}
 
@@ -16471,9 +16910,15 @@ func ParseGetTemplateResponse(rsp *http.Response) (*GetTemplateResponse, error) 
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// GetAuthConfig How this install signs people in
+	// (GET /v1/auth/config)
+	GetAuthConfig(w http.ResponseWriter, r *http.Request)
 	// GetHealth Liveness of goald
 	// (GET /v1/health)
 	GetHealth(w http.ResponseWriter, r *http.Request)
+	// GetMe Who the request acts for
+	// (GET /v1/me)
+	GetMe(w http.ResponseWriter, r *http.Request)
 	// ListOrgs Every organization on the install, by name
 	// (GET /v1/orgs)
 	ListOrgs(w http.ResponseWriter, r *http.Request)
@@ -16680,11 +17125,39 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
+// GetAuthConfig operation middleware
+func (siw *ServerInterfaceWrapper) GetAuthConfig(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAuthConfig(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetHealth operation middleware
 func (siw *ServerInterfaceWrapper) GetHealth(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetHealth(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMe operation middleware
+func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMe(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -19744,6 +20217,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/health", wrapper.GetHealth)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/auth/config", wrapper.GetAuthConfig)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/me", wrapper.GetMe)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs", wrapper.ListOrgs)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs", wrapper.CreateOrg)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}", wrapper.DeleteOrg)
@@ -19815,6 +20290,27 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 
 type ProblemApplicationProblemPlusJSONResponse Problem
 
+type GetAuthConfigRequestObject struct {
+}
+
+type GetAuthConfigResponseObject interface {
+	VisitGetAuthConfigResponse(w http.ResponseWriter) error
+}
+
+type GetAuthConfig200JSONResponse AuthConfig
+
+func (response GetAuthConfig200JSONResponse) VisitGetAuthConfigResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetHealthRequestObject struct {
 }
 
@@ -19832,6 +20328,44 @@ func (response GetHealth200JSONResponse) VisitGetHealthResponse(w http.ResponseW
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeRequestObject struct {
+}
+
+type GetMeResponseObject interface {
+	VisitGetMeResponse(w http.ResponseWriter) error
+}
+
+type GetMe200JSONResponse Me
+
+func (response GetMe200JSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetMedefaultApplicationProblemPlusJSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -22537,9 +23071,15 @@ func (response GetTemplatedefaultApplicationProblemPlusJSONResponse) VisitGetTem
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// GetAuthConfig How this install signs people in
+	// (GET /v1/auth/config)
+	GetAuthConfig(ctx context.Context, request GetAuthConfigRequestObject) (GetAuthConfigResponseObject, error)
 	// GetHealth Liveness of goald
 	// (GET /v1/health)
 	GetHealth(ctx context.Context, request GetHealthRequestObject) (GetHealthResponseObject, error)
+	// GetMe Who the request acts for
+	// (GET /v1/me)
+	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
 	// ListOrgs Every organization on the install, by name
 	// (GET /v1/orgs)
 	ListOrgs(ctx context.Context, request ListOrgsRequestObject) (ListOrgsResponseObject, error)
@@ -22776,6 +23316,30 @@ type strictHandler struct {
 	options     StrictHTTPServerOptions
 }
 
+// GetAuthConfig operation middleware
+func (sh *strictHandler) GetAuthConfig(w http.ResponseWriter, r *http.Request) {
+	var request GetAuthConfigRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAuthConfig(ctx, request.(GetAuthConfigRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAuthConfig")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAuthConfigResponseObject); ok {
+		if err := validResponse.VisitGetAuthConfigResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetHealth operation middleware
 func (sh *strictHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 	var request GetHealthRequestObject
@@ -22793,6 +23357,30 @@ func (sh *strictHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetHealthResponseObject); ok {
 		if err := validResponse.VisitGetHealthResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMe operation middleware
+func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
+	var request GetMeRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMe(ctx, request.(GetMeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMe")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMeResponseObject); ok {
+		if err := validResponse.VisitGetMeResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

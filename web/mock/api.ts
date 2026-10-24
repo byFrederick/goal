@@ -6,7 +6,8 @@
 // /v1/orgs/{org}/stream. Decisions are the local user's: every decision waits on you. The
 // definitions and builder routes are definitions.ts's. POST /__mock/reset restores the seed;
 // POST /__mock/fail injects faults (faults.ts); an X-Mock-Latency-Ms header delays the answer; a
-// reset's {now} fixes the mock's clock until the next reset.
+// reset's {now} fixes the mock's clock until the next reset, and its {auth} turns sign-in on
+// (auth.ts: /v1/auth/config, /v1/me and the identity service's /api/auth/*).
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
   AgentStats,
@@ -36,6 +37,7 @@ import type {
   RunList,
   StreamEvent,
 } from '@goal/api-client';
+import { authSettings, createMockAuth } from './auth.ts';
 import { createDefinitions } from './definitions.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
 import { type MockAgentStats, type MockItem, type MockSlots, type MockState, seed, trackSpan } from './fixtures.ts';
@@ -103,6 +105,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   let fixed: number | undefined;
   const clock = () => fixed ?? Date.now();
   let state: MockState = seed(clock());
+  // Sign-in: off until a reset turns it on (auth.ts).
+  const auth = createMockAuth(clock);
   const subscribers = new Set<Subscriber>();
   const definitions = createDefinitions({
     state: () => state,
@@ -777,9 +781,13 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const method = req.method ?? 'GET';
 
     if (path === '/__mock/reset' && method === 'POST') {
-      const at = (await readBody(req)).now;
+      const body = await readBody(req);
+      const at = body.now;
       fixed = typeof at === 'string' && !Number.isNaN(Date.parse(at)) ? Date.parse(at) : undefined;
       state = seed(clock());
+      // A reset that signs someone in sets their session cookie on whoever asked (page.request).
+      const cookie = auth.reset(authSettings(body.auth));
+      if (cookie) res.setHeader('Set-Cookie', cookie);
       return json(res, 200, { ok: true });
     }
     if (path === '/__mock/fail' && method === 'POST') {
@@ -792,7 +800,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       state.faults = [];
       return json(res, 200, { ok: true });
     }
-    if (!path.startsWith('/v1/')) return next();
+    const identity = path.startsWith('/api/auth/');
+    if (!path.startsWith('/v1/') && !identity) return next();
 
     // A latency every answer but the stream waits (X-Mock-Latency-Ms; one e2e project sets it), so
     // pending screens show and loads overlap as they do against a real goald.
@@ -801,13 +810,23 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
 
     const fault = takeFault(state.faults, method, path);
     if (fault?.delay_ms) await sleep(fault.delay_ms);
+    if (fault?.status && identity) {
+      // The identity service answers as Better Auth does: {code, message}; a 429 says how long to wait.
+      if (fault.status === 429) res.setHeader('X-Retry-After', '120');
+      res.statusCode = fault.status;
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({ code: fault.code ?? 'INJECTED', message: 'Injected failure' }));
+    }
     if (fault?.status) return json(res, fault.status, definitions.faultBody(path, fault));
+
+    if (await auth.handle(req, res, path, method)) return;
+    if (auth.refuse(req, res, path, method)) return;
 
     if (path === '/v1/health') return json(res, 200, { status: 'ok' });
 
     if (path === '/v1/orgs' && method === 'GET') {
       const orgs = [...state.orgs].sort((a, b) => a.name.localeCompare(b.name)).map(withCount);
-      return json(res, 200, { orgs: orgs.map(({ created_at: _created, ...summary }) => summary) });
+      return json(res, 200, { orgs: auth.visible(req, orgs).map(({ created_at: _created, ...summary }) => summary) });
     }
     if (path === '/v1/orgs' && method === 'POST') {
       const body = await readBody(req);

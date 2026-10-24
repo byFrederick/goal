@@ -4,9 +4,10 @@
 // (C §10.3, canvas "Main" and "Factories").
 import { Plus } from 'lucide-react';
 import type { OrgSummary } from '../api/types';
+import { AccountMenu } from './account-menu';
 import { useFactorySquares } from './factory-squares';
 import { OrgMark } from './org-mark';
-import { AccountMenu, FactorySquareLink, LaterRailItem, NewFactoryLink, useRailKeys } from './rail-items';
+import { FactorySquareLink, LaterRailItem, NewFactoryLink, useRailKeys } from './rail-items';
 import { catalogScreen, credentialsScreen } from './screens';
 
 const iconProps = { size: 20, strokeWidth: 1.5, 'aria-hidden': true } as const;
@@ -45,7 +46,7 @@ export function Rail({ org }: { org: OrgSummary }) {
         <LaterRailItem label={credentialsScreen.label} kind="icon" size="rail">
           <Credentials {...iconProps} />
         </LaterRailItem>
-        <AccountMenu size="rail" />
+        <AccountMenu org={org} size="rail" />
       </div>
     </nav>
   );

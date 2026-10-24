@@ -10,8 +10,11 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as FSplatRouteImport } from './routes/f.$'
+import { Route as InviteInvitationRouteImport } from './routes/invite.$invitation'
 import { Route as OOrgRouteImport } from './routes/o.$org'
+import { Route as SignInCodeRouteImport } from './routes/sign-in_.code'
 import { Route as OOrgOrgRouteImport } from './routes/o.$org._org'
 import { Route as OOrgOrgIndexRouteImport } from './routes/o.$org._org.index'
 import { Route as OOrgOrgSettingsRouteImport } from './routes/o.$org._org.settings'
@@ -31,14 +34,29 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SignInRoute = SignInRouteImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FSplatRoute = FSplatRouteImport.update({
   id: '/f/$',
   path: '/f/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InviteInvitationRoute = InviteInvitationRouteImport.update({
+  id: '/invite/$invitation',
+  path: '/invite/$invitation',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OOrgRoute = OOrgRouteImport.update({
   id: '/o/$org',
   path: '/o/$org',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignInCodeRoute = SignInCodeRouteImport.update({
+  id: '/sign-in_/code',
+  path: '/sign-in/code',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OOrgOrgRoute = OOrgOrgRouteImport.update({
@@ -110,8 +128,11 @@ const OOrgFFactoryItemsRefRoute = OOrgFFactoryItemsRefRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/sign-in': typeof SignInRoute
   '/f/$': typeof FSplatRoute
+  '/invite/$invitation': typeof InviteInvitationRoute
   '/o/$org': typeof OOrgRouteWithChildren
+  '/sign-in/code': typeof SignInCodeRoute
   '/o/$org/settings': typeof OOrgOrgSettingsRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
   '/o/$org/new/$step': typeof OOrgNewStepRoute
@@ -127,8 +148,11 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/sign-in': typeof SignInRoute
   '/f/$': typeof FSplatRoute
+  '/invite/$invitation': typeof InviteInvitationRoute
   '/o/$org': typeof OOrgOrgIndexRoute
+  '/sign-in/code': typeof SignInCodeRoute
   '/o/$org/settings': typeof OOrgOrgSettingsRoute
   '/o/$org/new/$step': typeof OOrgNewStepRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
@@ -142,8 +166,11 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/sign-in': typeof SignInRoute
   '/f/$': typeof FSplatRoute
+  '/invite/$invitation': typeof InviteInvitationRoute
   '/o/$org': typeof OOrgRouteWithChildren
+  '/sign-in_/code': typeof SignInCodeRoute
   '/o/$org/_org': typeof OOrgOrgRouteWithChildren
   '/o/$org/_org/settings': typeof OOrgOrgSettingsRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
@@ -162,8 +189,11 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/sign-in'
     | '/f/$'
+    | '/invite/$invitation'
     | '/o/$org'
+    | '/sign-in/code'
     | '/o/$org/settings'
     | '/o/$org/f/$factory'
     | '/o/$org/new/$step'
@@ -179,8 +209,11 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/sign-in'
     | '/f/$'
+    | '/invite/$invitation'
     | '/o/$org'
+    | '/sign-in/code'
     | '/o/$org/settings'
     | '/o/$org/new/$step'
     | '/o/$org/f/$factory/board'
@@ -193,8 +226,11 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/sign-in'
     | '/f/$'
+    | '/invite/$invitation'
     | '/o/$org'
+    | '/sign-in_/code'
     | '/o/$org/_org'
     | '/o/$org/_org/settings'
     | '/o/$org/f/$factory'
@@ -212,8 +248,11 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  SignInRoute: typeof SignInRoute
   FSplatRoute: typeof FSplatRoute
+  InviteInvitationRoute: typeof InviteInvitationRoute
   OOrgRoute: typeof OOrgRouteWithChildren
+  SignInCodeRoute: typeof SignInCodeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -225,6 +264,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sign-in': {
+      id: '/sign-in'
+      path: '/sign-in'
+      fullPath: '/sign-in'
+      preLoaderRoute: typeof SignInRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/f/$': {
       id: '/f/$'
       path: '/f/$'
@@ -232,11 +278,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/invite/$invitation': {
+      id: '/invite/$invitation'
+      path: '/invite/$invitation'
+      fullPath: '/invite/$invitation'
+      preLoaderRoute: typeof InviteInvitationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/o/$org': {
       id: '/o/$org'
       path: '/o/$org'
       fullPath: '/o/$org'
       preLoaderRoute: typeof OOrgRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-in_/code': {
+      id: '/sign-in_/code'
+      path: '/sign-in/code'
+      fullPath: '/sign-in/code'
+      preLoaderRoute: typeof SignInCodeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/o/$org/_org': {
@@ -400,8 +460,11 @@ const OOrgRouteWithChildren = OOrgRoute._addFileChildren(OOrgRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  SignInRoute: SignInRoute,
   FSplatRoute: FSplatRoute,
+  InviteInvitationRoute: InviteInvitationRoute,
   OOrgRoute: OOrgRouteWithChildren,
+  SignInCodeRoute: SignInCodeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

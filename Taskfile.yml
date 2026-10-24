@@ -241,6 +241,17 @@ tasks:
       - pnpm exec playwright install chromium
       - pnpm run --silent e2e
 
+  web:e2e-auth:
+    desc: >-
+      Playwright sign-in against a real goald under GOAL_AUTH=session, its identity service and
+      Mailpit (start them first; GOAL_E2E_AUTH_URL, GOAL_MAILPIT_URL, GOAL_BOOTSTRAP_OWNER_EMAIL).
+      Not part of task check: it needs the running stack
+    deps: [web:install]
+    dir: web
+    cmds:
+      - pnpm exec playwright install chromium
+      - pnpm exec playwright test --config playwright.auth.config.ts
+
   worker:check:
     desc: Worker typecheck, Biome lint and Vitest unit tests (no image build)
     deps: [worker:install]

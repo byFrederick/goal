@@ -12,9 +12,11 @@ import {
   subscribe,
   unwrap,
 } from '@goal/api-client';
+import { sessionHandlers, withSession } from './session';
 import type {
   AgentStats,
   AndonPull,
+  AuthConfig,
   Board,
   ConstraintReport,
   EventPage,
@@ -25,6 +27,7 @@ import type {
   ItemList,
   ItemState,
   LeadTimeBridge,
+  Me,
   MergeMethod,
   Metrics,
   NewItem,
@@ -49,10 +52,25 @@ const apiBase: string = import.meta.env.VITE_API_URL ?? '';
  * The one client of goald. The other request modules of api/ (definitions.ts) use it; nothing
  * outside api/ does.
  */
-export const goal = createGoalClient(apiBase, { headers: { Accept: 'application/json' } });
+export const goal = createGoalClient(apiBase, {
+  headers: { Accept: 'application/json' },
+  // 401 opens the sign-in page; 403 reauth-required asks the person to confirm it's them, then
+  // sends the request once more (session.ts).
+  fetch: withSession((request) => fetch(request), sessionHandlers),
+});
 
 /** Request options openapi-fetch takes beside the parameters; `signal` cancels a query. */
 export const cancel = (signal: AbortSignal | undefined) => (signal ? { signal } : {});
+
+/** How this install signs people in (session, with its methods) or that sign-in is off (none). */
+export function getAuthConfig(signal?: AbortSignal): Promise<AuthConfig> {
+  return unwrap(goal.GET('/v1/auth/config', cancel(signal)));
+}
+
+/** Who the requests act for: the signed-in person, or the local user when sign-in is off. */
+export function getMe(signal?: AbortSignal): Promise<Me> {
+  return unwrap(goal.GET('/v1/me', cancel(signal)));
+}
 
 export async function listOrgs(signal?: AbortSignal): Promise<OrgSummary[]> {
   const body = await unwrap(goal.GET('/v1/orgs', cancel(signal)));

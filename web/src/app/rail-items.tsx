@@ -1,11 +1,10 @@
 // The pieces the rail and the phone's top row share: one stop of the arrow-key movement, a
-// factory's square, a screen a later phase builds, and the account menu.
+// factory's square and a screen a later phase builds (the account is account-menu.tsx).
 import { Link, useRouterState } from '@tanstack/react-router';
 import { type KeyboardEvent, type ReactNode, useCallback } from 'react';
 import type { OrgSummary } from '../api/types';
 import { cn } from '../ui/cn';
-import { Avatar, Mark } from '../ui/mark';
-import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '../ui/menu';
+import { Mark } from '../ui/mark';
 import { Tooltip } from '../ui/tooltip';
 import type { FactorySquare } from './factory-squares';
 import { type RailAxis, railFocusTarget } from './rail-focus';
@@ -138,46 +137,4 @@ export function LaterRailItem({
  */
 export function keepArrowsOnRail(e: KeyboardEvent<HTMLElement>) {
   if (e.key === 'ArrowDown') e.preventDefault();
-}
-
-/**
- * The person using the install and its menu. Phase 2.2 has one local user and no sign-in
- * (no-auth): the menu names them and the install; their role and Sign out arrive with phase 4.
- */
-export function AccountMenu({ size }: { size: Size }) {
-  const trigger = (
-    <MenuTrigger
-      aria-label="LU, Local user, account"
-      className={railItemClass}
-      onKeyDown={size === 'rail' ? keepArrowsOnRail : undefined}
-      {...railItem}
-    >
-      <Avatar initials="LU" size={size} />
-    </MenuTrigger>
-  );
-  return (
-    <Menu>
-      {size === 'rail' ? (
-        <Tooltip label="Local user" detail="This install">
-          {trigger}
-        </Tooltip>
-      ) : (
-        trigger
-      )}
-      <MenuContent side={size === 'rail' ? 'right' : 'bottom'} align="end" className="w-64">
-        <MenuLabel className="mt-1 flex items-center gap-3 text-ink">
-          <Avatar initials="LU" size="phone" />
-          <span className="min-w-0">
-            <span className="block text-[15px] font-medium">Local user</span>
-            <span className="block font-normal text-muted">This install</span>
-          </span>
-        </MenuLabel>
-        <MenuSeparator />
-        <MenuItem disabled>
-          Sign-in and accounts
-          <span className="ml-auto text-xs">{laterText}</span>
-        </MenuItem>
-      </MenuContent>
-    </Menu>
-  );
 }

@@ -6,13 +6,16 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { mockApi } from './mock/plugin.ts';
 
-// GOAL_API=mock serves the in-memory mock API (mock/); otherwise /v1 is proxied to goald
-// (GOAL_API_URL, default the local goald). GOAL_MOCK_LIVE=1 makes the mock's agents keep working.
+// GOAL_API=mock serves the in-memory mock API (mock/); otherwise /v1 and the identity service's
+// /api/auth are proxied to goald (GOAL_API_URL, default the local goald), so the session cookie is
+// the page's own. GOAL_MOCK_LIVE=1 makes the mock's agents keep working.
 const useMock = process.env.GOAL_API === 'mock';
 const target = process.env.GOAL_API_URL ?? 'http://127.0.0.1:8080';
 // The proxy keeps the browser's Host, so goald's cross-origin protection sees the page's own
 // origin (Origin = Host) as well as Sec-Fetch-Site: same-origin.
-const proxy = useMock ? undefined : { '/v1': { target, changeOrigin: false } };
+const proxy = useMock
+  ? undefined
+  : { '/v1': { target, changeOrigin: false }, '/api/auth': { target, changeOrigin: false } };
 // The Content-Security-Policy and the other headers goald serves the build with (webui.go; HSTS
 // only over https): preview sends them too, so the e2e tests run the build under them. Not in
 // dev, whose HMR client needs inline scripts and a socket.

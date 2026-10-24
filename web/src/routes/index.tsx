@@ -1,18 +1,24 @@
 import { createFileRoute, redirect } from '@tanstack/react-router';
-import { ensureLoaded, orgsQuery } from '../api/queries';
+import { ensureLoaded, meQuery, orgsQuery } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
+import { NotInAnOrganization } from '../features/sign-in/not-in-an-organization';
 import { defaultOrg } from '../shared/org';
 import { LogoMark } from '../ui/logo';
 
-// The organization used last (or the first goald lists); a page saying how to make one when the
-// install has none.
+// The organization used last (or the first goald lists). Without any: with sign-in on, the person
+// is in no organization yet (Sign-In board, "Signed in, no organization"); without it, a page
+// saying how to make one.
 export const Route = createFileRoute('/')({
   loader: async ({ context }) => {
     const org = defaultOrg(await ensureLoaded(context.queryClient, orgsQuery));
     if (org) throw redirect({ to: '/o/$org', params: { org: org.slug }, replace: true });
+    return { me: await ensureLoaded(context.queryClient, meQuery).catch(() => undefined) };
   },
   head: () => pageTitle('No organization'),
-  component: NoOrganization,
+  component: function Start() {
+    const { me } = Route.useLoaderData();
+    return me?.mode === 'session' && me.user ? <NotInAnOrganization email={me.user.email} /> : <NoOrganization />;
+  },
 });
 
 function NoOrganization() {

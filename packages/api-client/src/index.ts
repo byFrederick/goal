@@ -57,6 +57,14 @@ export type OrgDeleted = Schemas["OrgDeleted"];
 export type AuditEntry = Schemas["AuditEntry"];
 export type AuditPage = Schemas["AuditPage"];
 
+// Identity (spec 3): how the install signs people in and who a request acts for.
+export type AuthConfig = Schemas["AuthConfig"];
+export type AuthMode = Schemas["AuthMode"];
+export type SignInMethod = Schemas["SignInMethod"];
+export type Me = Schemas["Me"];
+export type User = Schemas["User"];
+export type OrgRole = Schemas["OrgRole"];
+
 // Definitions (B §8): factories' drafts, versions, validation and templates.
 export type VersionRef = Schemas["VersionRef"];
 export type DraftRef = Schemas["DraftRef"];

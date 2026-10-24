@@ -10,23 +10,26 @@ import type { ReactNode } from 'react';
 import type { OrgSummary } from '../api/types';
 import { useStreamStatus } from '../shared/stream';
 import { cn } from '../ui/cn';
+import { AccountProvider } from './account-menu';
 import { PhoneTopRow } from './phone-chrome';
 import { Rail } from './rail';
 
 export function AppShell({ org, children }: { org: OrgSummary; children: ReactNode }) {
   return (
-    <div className="flex min-h-dvh flex-col bg-shell md:flex-row">
-      <a
-        href="#main"
-        className="sr-only z-50 rounded-control bg-ink px-4 py-2 text-white focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
-      >
-        Skip to content
-      </a>
-      <Rail org={org} />
-      <PhoneTopRow org={org} />
-      {children}
-      <ReconnectingBanner />
-    </div>
+    <AccountProvider org={org}>
+      <div className="flex min-h-dvh flex-col bg-shell md:flex-row">
+        <a
+          href="#main"
+          className="sr-only z-50 rounded-control bg-ink px-4 py-2 text-white focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+        >
+          Skip to content
+        </a>
+        <Rail org={org} />
+        <PhoneTopRow org={org} />
+        {children}
+        <ReconnectingBanner />
+      </div>
+    </AccountProvider>
   );
 }
 

@@ -21,6 +21,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How this install signs people in
+         * @description Read by the sign-in page before anyone is signed in, so it reads no credential. Under GOAL_AUTH=none sign-in is off: the UI shows no sign-in page and every request acts as the local user.
+         */
+        get: operations["getAuthConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Who the request acts for
+         * @description The signed-in person (name, email, platform admin, the session's times) or the API key. Under GOAL_AUTH=none, the local user. Without a valid credential, 401 unauthenticated.
+         */
+        get: operations["getMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs": {
         parameters: {
             query?: never;
@@ -1355,7 +1395,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found. */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found. */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -1372,6 +1412,58 @@ export interface components {
             sha256?: string;
             items?: components["schemas"]["ItemsAtRemovedStations"];
         };
+        /**
+         * @description session: people sign in and every request carries a session or an API key. none: sign-in is off (GOAL_AUTH=none, a loopback install), every request acts as the local user.
+         * @enum {string}
+         */
+        AuthMode: "session" | "none";
+        /** @enum {string} */
+        SignInMethod: "email_code" | "google";
+        AuthConfig: {
+            mode: components["schemas"]["AuthMode"];
+            /** @description How people sign in; email_code always under session, google when GOAL_AUTH_GOOGLE=on; empty under none */
+            methods: components["schemas"]["SignInMethod"][];
+        };
+        User: {
+            id: string;
+            name: string;
+            email: string;
+        };
+        /** @description The API key a request acts as */
+        MeKey: {
+            id: string;
+            name: string;
+            org_id: string;
+        };
+        /** @description The browser or CLI session the request carries */
+        MeSession: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at: string;
+            /**
+             * Format: date-time
+             * @description Until when changes that need a recent sign-in pass (10 minutes after created_at)
+             */
+            fresh_until: string;
+        };
+        Me: {
+            /**
+             * @description user: a person; service: an API key
+             * @enum {string}
+             */
+            kind: "user" | "service";
+            mode: components["schemas"]["AuthMode"];
+            /** @description The signed-in person; absent for a key and under mode none (the local user) */
+            user?: components["schemas"]["User"];
+            /** @description kind service only */
+            key?: components["schemas"]["MeKey"];
+            platform_admin: boolean;
+            /** @description A signed-in person's session; absent for a key and under mode none */
+            session?: components["schemas"]["MeSession"];
+        };
+        /** @enum {string} */
+        OrgRole: "owner" | "admin" | "member";
         OrgList: {
             orgs: components["schemas"]["OrgSummary"][];
         };
@@ -1384,6 +1476,8 @@ export interface components {
             /** @description The one or two characters the organization rail shows */
             mark: string;
             factory_count: number;
+            /** @description The caller's role in the organization; absent under GOAL_AUTH=none, null for an API key */
+            role?: components["schemas"]["OrgRole"] | null;
         };
         Org: {
             id: string;
@@ -3022,6 +3116,47 @@ export interface operations {
                     "application/json": components["schemas"]["Health"];
                 };
             };
+        };
+    };
+    getAuthConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sign-in mode and methods */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthConfig"];
+                };
+            };
+        };
+    };
+    getMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            default: components["responses"]["Problem"];
         };
     };
     listOrgs: {

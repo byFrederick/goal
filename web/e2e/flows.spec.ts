@@ -748,17 +748,20 @@ test('a malformed address is caught before sending, and Escape returns to the ma
   await expect(page).toHaveURL(/\/o\/acme$/);
 });
 
-test('the account menu names the local user', async ({ page }) => {
+test('with sign-in off the account names the local user and offers nothing to sign out of', async ({ page }) => {
   await page.goto('/o/acme');
   const account = orgNav(page).getByRole('button', { name: 'LU, Local user, account' });
   await account.click();
-  const menu = page.getByRole('menu', { name: 'LU, Local user, account' });
-  await expect(menu.getByText('Local user', { exact: true })).toBeVisible();
-  await expect(menu.getByText('This install')).toBeVisible();
-  await expect(menu.getByRole('menuitem', { name: /Sign out/ })).toHaveCount(0);
+  const panel = page.getByRole('dialog', { name: 'Account' });
+  await expect(panel.getByText('Local user', { exact: true })).toBeVisible();
+  await expect(panel.getByText('This install')).toBeVisible();
+  await expect(
+    panel.getByText('Sign-in is off. Anyone who can reach this address acts as the local user.'),
+  ).toBeVisible();
+  await expect(panel.getByRole('button')).toHaveCount(0);
   await expectAccessible(page);
   await page.keyboard.press('Escape');
-  await expect(menu).toBeHidden();
+  await expect(panel).toBeHidden();
   await expect(account).toBeFocused();
 });
 

@@ -5,6 +5,7 @@
 import { type QueryClient, type QueryKey, useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, use, useEffect, useState } from 'react';
 import { type StreamStatus, subscribeToOrg } from '../api/client';
+import { meQuery } from '../api/queries';
 import {
   definitionInvalidations,
   factoryInvalidations,
@@ -66,6 +67,7 @@ export function OrgStream({ org, children }: { org: string; children: ReactNode 
       for (const key of queryKeys) (isOverviewKey(key) ? overviews : work).add(key);
     };
 
+    let errors = 0;
     const unsubscribe = subscribeToOrg(org, {
       onItem: (event) => invalidate(invalidationsFor(org, event)),
       onFactory: (event) => invalidate(factoryInvalidations(org, event)),
@@ -74,7 +76,13 @@ export function OrgStream({ org, children }: { org: string; children: ReactNode 
       onResync: () => {
         for (const queryKey of resyncInvalidations(org)) client.invalidateQueries({ queryKey });
       },
-      onStatus: setStatus,
+      onStatus: (next) => {
+        setStatus(next);
+        // A stream that keeps failing may have lost its session (an EventSource cannot see a 401):
+        // after two errors in a row, ask who this is; a 401 there opens the sign-in page.
+        errors = next === 'live' ? 0 : next === 'reconnecting' ? errors + 1 : errors;
+        if (errors === 2) void client.fetchQuery({ ...meQuery, staleTime: 0 }).catch(() => undefined);
+      },
     });
 
     return () => {

@@ -73,13 +73,15 @@ export function Mark({ kind, size = 'rail', current = false, badge = 0, dot = fa
 }
 
 /** The person's initials in a circle (the account, bottom of the rail). */
-export function Avatar({ initials, size = 'rail' }: { initials: string; size?: 'rail' | 'phone' }) {
+export function Avatar({ initials, size = 'rail' }: { initials: string; size?: 'rail' | 'phone' | 'card' }) {
   return (
     <span
       aria-hidden="true"
       className={cn(
         'flex shrink-0 items-center justify-center rounded-full bg-muted font-semibold text-white',
-        size === 'rail' ? 'size-9 text-[13px]' : 'size-[34px] text-xs',
+        size === 'rail' && 'size-9 text-[13px]',
+        size === 'phone' && 'size-[34px] text-xs',
+        size === 'card' && 'size-10 text-sm',
       )}
     >
       {initials}

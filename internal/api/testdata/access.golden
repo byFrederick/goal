@@ -180,6 +180,21 @@ getAndon             key-restricted   404 factory-not-found    404 org-not-found
 getAndon             key-other-org    404 org-not-found        200
 getAndon             key-expired      401 unauthenticated      401 unauthenticated
 getAndon             key-revoked      401 unauthenticated      401 unauthenticated
+getAuthConfig        anonymous        install: 200
+getAuthConfig        owner            install: 200
+getAuthConfig        admin            install: 200
+getAuthConfig        viewer           install: 200
+getAuthConfig        approver         install: 200
+getAuthConfig        editor           install: 200
+getAuthConfig        member-no-roles  install: 200
+getAuthConfig        other-org-owner  install: 200
+getAuthConfig        platform-admin   install: 200
+getAuthConfig        stale-owner      install: 200
+getAuthConfig        key-scoped       install: 200
+getAuthConfig        key-restricted   install: 200
+getAuthConfig        key-other-org    install: 200
+getAuthConfig        key-expired      install: 200
+getAuthConfig        key-revoked      install: 200
 getBoard             anonymous        401 unauthenticated      401 unauthenticated
 getBoard             owner            200                      404 org-not-found
 getBoard             admin            200                      404 org-not-found
@@ -360,6 +375,21 @@ getLeadTimeBridge    key-restricted   404 factory-not-found    404 org-not-found
 getLeadTimeBridge    key-other-org    404 org-not-found        200
 getLeadTimeBridge    key-expired      401 unauthenticated      401 unauthenticated
 getLeadTimeBridge    key-revoked      401 unauthenticated      401 unauthenticated
+getMe                anonymous        install: 401 unauthenticated
+getMe                owner            install: 200
+getMe                admin            install: 200
+getMe                viewer           install: 200
+getMe                approver         install: 200
+getMe                editor           install: 200
+getMe                member-no-roles  install: 200
+getMe                other-org-owner  install: 200
+getMe                platform-admin   install: 200
+getMe                stale-owner      install: 200
+getMe                key-scoped       install: 200
+getMe                key-restricted   install: 200
+getMe                key-other-org    install: 200
+getMe                key-expired      install: 401 unauthenticated
+getMe                key-revoked      install: 401 unauthenticated
 getMetrics           anonymous        401 unauthenticated      401 unauthenticated
 getMetrics           owner            200                      404 org-not-found
 getMetrics           admin            200                      404 org-not-found

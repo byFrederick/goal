@@ -16,12 +16,14 @@ import {
   type FlowRange,
   getAgentStats,
   getAttention,
+  getAuthConfig,
   getBoard,
   getConstraint,
   getFactoryOverview,
   getInbox,
   getItem,
   getLeadTime,
+  getMe,
   getMetrics,
   getOrgSettings,
   getWeekly,
@@ -89,6 +91,10 @@ export async function ensureFound<T, K extends QueryKey, R>(
 }
 
 export const keys = {
+  /** How the install signs people in (spec 3 §10.1). */
+  authConfig: ['auth', 'config'] as const,
+  /** Who the requests act for. */
+  me: ['me'] as const,
   orgs: ['orgs'] as const,
   /** The prefix of everything of one organization. */
   org: (org: string) => ['org', org] as const,
@@ -123,6 +129,19 @@ export const keys = {
   events: (org: string, item: string) => ['org', org, 'item', item, 'events'] as const,
   runs: (org: string, item: string) => ['org', org, 'item', item, 'runs'] as const,
 };
+
+/** Fixed while the app runs: goald's GOAL_AUTH changes only with a restart. */
+export const authConfigQuery = queryOptions({
+  queryKey: keys.authConfig,
+  queryFn: ({ signal }) => getAuthConfig(signal),
+  staleTime: Number.POSITIVE_INFINITY,
+});
+
+export const meQuery = queryOptions({
+  queryKey: keys.me,
+  queryFn: ({ signal }) => getMe(signal),
+  staleTime: 60_000,
+});
 
 export const orgsQuery = queryOptions({
   queryKey: keys.orgs,

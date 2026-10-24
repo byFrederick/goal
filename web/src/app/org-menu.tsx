@@ -1,8 +1,9 @@
 // The organization menu (C §10.4, canvas "Org-Switcher" and "Mobile-Org-Switcher"): every
 // organization on the install (switch by choosing one), the current organization's own pages,
 // and Create organization. A Radix DropdownMenu on the rail; a bottom sheet on phones. Both are
-// opened by the organization mark (org-mark.tsx) and fed by useOrgMenuModel. (no-auth) No role
-// per organization and no Members and roles link: both arrive with phase 4.
+// opened by the organization mark (org-mark.tsx) and fed by useOrgMenuModel. The sheet ends with
+// the account (account-menu.tsx). No role per organization and no Members and roles link yet:
+// both arrive with Members (spec 3, PR 3-11).
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from '@tanstack/react-router';
 import { Check, Plus } from 'lucide-react';
@@ -23,6 +24,7 @@ import {
   menuRow,
 } from '../ui/menu';
 import { SheetContent, SheetLabel } from '../ui/sheet';
+import { AccountBlock } from './account-menu';
 import { catalogScreen, credentialsScreen, laterText, type OrgScreen, settingsScreen } from './screens';
 
 interface OrgChoice {
@@ -250,6 +252,8 @@ export function OrgSheetContent({ org, onCreate, onClose, navigating }: OrgSheet
         <Plus {...iconProps} />
         Create organization
       </button>
+      <div aria-hidden="true" className="my-2 h-px bg-line" />
+      <AccountBlock org={org} onAction={onClose} />
     </SheetContent>
   );
 }

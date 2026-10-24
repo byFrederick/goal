@@ -7,9 +7,10 @@ import { useState } from 'react';
 import type { Factory, OrgSummary } from '../api/types';
 import { cn } from '../ui/cn';
 import { Sheet, SheetContent, SheetLabel, SheetTrigger } from '../ui/sheet';
+import { AccountMenu } from './account-menu';
 import { useFactorySquares } from './factory-squares';
 import { OrgMark } from './org-mark';
-import { AccountMenu, FactorySquareLink, NewFactoryLink, useRailKeys } from './rail-items';
+import { FactorySquareLink, NewFactoryLink, useRailKeys } from './rail-items';
 import { factoriesScreen, factoryScreens, laterText } from './screens';
 
 export function PhoneTopRow({ org }: { org: OrgSummary }) {
@@ -37,7 +38,7 @@ export function PhoneTopRow({ org }: { org: OrgSummary }) {
           </NewFactoryLink>
         </li>
       </ul>
-      <AccountMenu size="phone" />
+      <AccountMenu org={org} size="phone" />
     </nav>
   );
 }
