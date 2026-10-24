@@ -68,6 +68,23 @@ func (s *ObjectStore) Put(_ context.Context, key string, body []byte) (ports.Obj
 	return object(key, v).ObjectInfo, nil
 }
 
+// PutIfAbsent stores body at key unless a current object exists there; created reports which,
+// and info is the object now at key. Definitions writes blobs with it, so a blob is never
+// rewritten.
+func (s *ObjectStore) PutIfAbsent(_ context.Context, key string, body []byte) (ports.ObjectInfo, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if vs := s.versions[key]; len(vs) > 0 && !vs[len(vs)-1].deleted {
+		return object(key, vs[len(vs)-1]).ObjectInfo, false, nil
+	}
+
+	v := objectVersion{id: s.newVersion(), body: slices.Clone(body)}
+	s.versions[key] = append(s.versions[key], v)
+
+	return object(key, v).ObjectInfo, true, nil
+}
+
 // List implements ports.ObjectStore.
 func (s *ObjectStore) List(_ context.Context, prefix string) ([]ports.ObjectInfo, error) {
 	s.mu.Lock()

@@ -25,8 +25,9 @@ var (
 	ErrNoWork = errors.New("no work waiting")
 	// ErrSlotTaken means another claim holds the station slot.
 	ErrSlotTaken = errors.New("slot taken")
-	// ErrConflict means the item is no longer where a transition expected it.
-	ErrConflict = errors.New("item moved concurrently")
+	// ErrConflict means a compare-and-set guard failed: the item is no longer where a
+	// transition expected it, or a draft is no longer at the revision a save expected.
+	ErrConflict = errors.New("changed concurrently")
 	// ErrLeaseLost means the lease expired or was released; the holder must stop working.
 	ErrLeaseLost = errors.New("lease lost")
 	// ErrContractViolation means an output does not satisfy its contract (as opposed to the
