@@ -51,8 +51,8 @@ function isDefinitionEvent(data: unknown): data is DefinitionEvent {
 /**
  * The queries one `definition` event touches (B §10):
  * - `draft`, a draft opened, saved, discarded or published: the draft, its model and files, the
- *   factory (its draft chip) and the factory list; nothing when this tab saved that revision
- *   itself (the event is its echo), and the versions too once the version is published;
+ *   factory (its draft chip) and the factory list; nothing when this tab saved that revision of
+ *   that draft itself (the event is its echo), and the versions too once the version is published;
  * - `current`, the version that runs moved or the factory was paused or resumed: the factory and
  *   the list, its versions, draft (based on, running), comparisons, board and overviews;
  * - `factory`, a factory created or deleted: the factory and the list, attention and overviews.
@@ -65,7 +65,7 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
 
   switch (data.kind) {
     case 'draft':
-      if (data.revision !== undefined && savedHere(f, data.revision)) return [];
+      if (data.revision !== undefined && savedHere(f, data.version_id, data.revision)) return [];
       return [
         ...factory,
         defKeys.draft(org, f),

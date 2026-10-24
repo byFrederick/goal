@@ -339,6 +339,25 @@ describe('remote saves', () => {
     session.adopt(draftModel(model(), 44));
     expect(session.getSnapshot().updatedElsewhereAt).not.toBeNull();
   });
+
+  it('says so for a save elsewhere in a new draft, whose revisions start again at 1', async () => {
+    session.edit(setStationField(line(session), 'build', 'wip', 3));
+    void session.flush();
+    await flushPromises();
+    await fake.ok();
+    session.adoptMissing();
+    session.restart();
+    fake.setRevision(1);
+    session.edit(setBasics(session.getSnapshot().sections.basics.local, 'title', 'Goal 2'));
+    void session.flush();
+    await flushPromises();
+    await fake.ok();
+    expect(session.getSnapshot()).toMatchObject({ hasDraft: true, revision: 2, updatedElsewhereAt: null });
+
+    session.adopt(draftModel(model(), 3));
+
+    expect(session.getSnapshot().updatedElsewhereAt).not.toBeNull();
+  });
 });
 
 describe('without a draft', () => {

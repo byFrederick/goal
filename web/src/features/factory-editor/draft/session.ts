@@ -95,7 +95,7 @@ export interface SessionState {
   /** A draft is open; without one the sections show the running version. */
   hasDraft: boolean;
   revision: number;
-  /** The highest revision this session saved (its stream echoes). */
+  /** The highest revision this session saved of the open draft (its stream echoes). */
   lastSaved: number;
   sections: SectionStates;
   files: ReadonlyMap<string, FileState>;
@@ -284,6 +284,7 @@ export class DraftSession {
       ranges: version.ranges,
       edited: {},
       revision: 0,
+      lastSaved: 0,
     });
   }
 
@@ -472,7 +473,8 @@ export class DraftSession {
       await this.api.openDraft(this.opts.org, this.opts.factory);
       const fresh = await this.api.getDraftModel(this.opts.org, this.opts.factory);
       const m = modelOf(fresh.model);
-      this.set({ hasDraft: true, revision: fresh.revision, edited: fresh.edited, ranges: fresh.ranges });
+      // A draft this session opens is not the one it saved before (a discard restarts revisions at 1).
+      this.set({ hasDraft: true, revision: fresh.revision, lastSaved: 0, edited: fresh.edited, ranges: fresh.ranges });
       for (const s of sections) {
         const cur = this.state.sections[s];
         if (cur.dirty && !equal(cur.server, m[s])) this.rebase(s, m[s], fresh.etags[s]);

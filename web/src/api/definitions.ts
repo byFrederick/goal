@@ -8,8 +8,9 @@
 //
 // Writes are conditional: a section save sends the section's etag, a file write the sha256 it
 // read (or `create` for a new file), a discard the draft's revision; goald refuses a write without
-// one (428 `precondition-required`). Every successful draft write is remembered (savedHere), so
-// the stream's echo of this tab's own save refetches nothing.
+// one (428 `precondition-required`). Every successful draft write is remembered by the draft's id
+// and the revision it made (savedHere), so the stream's echo of this tab's own save refetches
+// nothing.
 import { orgPath, unwrap } from '@goal/api-client';
 import { cancel, goal } from './client';
 import type {
@@ -36,24 +37,42 @@ import type {
   VersionPage,
 } from './types';
 
-/** The highest draft revision this tab saved, by factory. */
-const savedRevisions = new Map<string, number>();
+/**
+ * The drafts this tab knows and saved, by factory: the open draft's id (from the last draft read
+ * or opened) and, by draft id, the revisions this tab's writes made. A new draft's revisions start
+ * again at 1, so a revision alone does not name a save.
+ */
+const openDrafts = new Map<string, string>();
+const savedRevisions = new Map<string, Set<number>>();
 
-/** Remembers a draft revision this tab saved. */
-function remember(factory: string, revision: number): void {
-  if (revision > (savedRevisions.get(factory) ?? 0)) savedRevisions.set(factory, revision);
+const draftKey = (factory: string, draft: string) => `${factory}/${draft}`;
+
+/** Remembers the factory's open draft as goald answered it. */
+function known(factory: string, draft: Draft): Draft {
+  openDrafts.set(factory, draft.id);
+  return draft;
 }
 
+/** Remembers a revision this tab's write made of a draft. */
+function remember(factory: string, draft: string | undefined, revision: number): void {
+  if (draft === undefined) return;
+  const key = draftKey(factory, draft);
+  const revisions = savedRevisions.get(key) ?? new Set<number>();
+  revisions.add(revision);
+  savedRevisions.set(key, revisions);
+}
+
+/** A write's result, remembered as a save of the factory's open draft. */
 function saved(factory: string): (r: SaveResult) => SaveResult {
   return (r) => {
-    remember(factory, r.revision);
+    remember(factory, openDrafts.get(factory), r.revision);
     return r;
   };
 }
 
-/** Whether this tab saved the factory's draft at revision (or later): the stream's event is its echo. */
-export function savedHere(factory: string, revision: number): boolean {
-  return revision <= (savedRevisions.get(factory) ?? 0);
+/** Whether this tab's write made revision of the factory's draft: the stream's event is its echo. */
+export function savedHere(factory: string, draft: string | undefined, revision: number): boolean {
+  return draft !== undefined && (savedRevisions.get(draftKey(factory, draft))?.has(revision) ?? false);
 }
 
 /** An entity tag: the If-Match of a conditional write. */
@@ -123,9 +142,12 @@ export function formatDefinition(org: string, yaml: string): Promise<string> {
 // The draft (§8.2).
 
 /** The open draft with its changes and problems; 404 `no-draft` when none is open. */
-export function getDraft(org: string, factory: string, signal?: AbortSignal): Promise<Draft> {
-  return unwrap(
-    goal.GET(orgPath('/factories/{factory}/draft'), { params: { path: { org, factory } }, ...cancel(signal) }),
+export async function getDraft(org: string, factory: string, signal?: AbortSignal): Promise<Draft> {
+  return known(
+    factory,
+    await unwrap(
+      goal.GET(orgPath('/factories/{factory}/draft'), { params: { path: { org, factory } }, ...cancel(signal) }),
+    ),
   );
 }
 
@@ -148,7 +170,7 @@ export async function openDraft(
       body: { ...(base ? { base } : {}), ...(replace ? { replace } : {}) },
     }),
   );
-  remember(factory, draft.revision);
+  remember(factory, known(factory, draft).id, draft.revision);
   return draft;
 }
 
@@ -159,7 +181,8 @@ export async function discardDraft(org: string, factory: string, revision: numbe
       params: { path: { org, factory }, header: { 'If-Match': tag(revision) } },
     }),
   );
-  remember(factory, revision);
+  remember(factory, openDrafts.get(factory), revision);
+  openDrafts.delete(factory);
 }
 
 /** The draft's model, section etags, edited fields and YAML ranges; 409 `yaml-invalid` while it does not parse. */

@@ -8,11 +8,12 @@ const acme = '019a1c00-0000-7000-8000-0000000000aa';
 const labs = '019a1c00-0000-7000-8000-0000000000bb';
 const goal = '6f0c2a7e-3d1b-4c55-9a7e-1f2b3c4d5e60';
 
-// This tab saved the goal factory's draft up to revision 4: the stream's events of those are echoes.
-const saved = vi.hoisted(() => ({ factory: '6f0c2a7e-3d1b-4c55-9a7e-1f2b3c4d5e60', revision: 4 }));
+// This tab saved revision 4 of the goal factory's draft: the stream's event of it is its echo.
+const saved = vi.hoisted(() => ({ factory: '6f0c2a7e-3d1b-4c55-9a7e-1f2b3c4d5e60', draft: 'draft-9', revision: 4 }));
 vi.mock(import('../api/definitions'), async (original) => ({
   ...(await original()),
-  savedHere: (factory: string, revision: number) => factory === saved.factory && revision <= saved.revision,
+  savedHere: (factory: string, draft: string | undefined, revision: number) =>
+    factory === saved.factory && draft === saved.draft && revision === saved.revision,
 }));
 const sre = '0b7d9e21-58a4-4f0e-b6c3-2a9d8e7f6a51';
 const item12 = '00000000-0000-4000-8000-00000000040c';
@@ -141,6 +142,7 @@ const definition = (e: Partial<DefinitionEvent>): DefinitionEvent => ({
   org_id: acme,
   factory_id: goal,
   kind: 'draft',
+  version_id: saved.draft,
   ...e,
 });
 
