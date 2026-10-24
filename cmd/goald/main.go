@@ -209,10 +209,11 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", apiHandler)
-	mux.Handle("/mcp", gw)
+	mux.Handle(api.GatewayPath, gw)
 	mux.Handle("/", web.Handler())
 
-	srv := &http.Server{Addr: s.Listen, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	// Every request but the health check and the agents' gateway must name goald (DNS rebinding).
+	srv := &http.Server{Addr: s.Listen, Handler: api.CheckHost(s.hosts(), mux), ReadHeaderTimeout: 10 * time.Second}
 
 	// Deleted organizations go, rows and bucket objects, once their retention has passed.
 	purger := retention.New(store, objects, clock, s.OrgRetention, log)

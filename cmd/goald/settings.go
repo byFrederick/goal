@@ -35,6 +35,11 @@ type settings struct {
 	// Listen is the API and gateway address (GOAL_LISTEN, default 127.0.0.1:8080). Phase 1 has no
 	// API authentication, so it must be a loopback address.
 	Listen string
+	// PublicURL is the origin people open goald at when it is not the listen address, such as a
+	// reverse proxy's name (GOAL_PUBLIC_URL, optional; https unless its host is loopback). Its
+	// host is the one name besides the loopback names and the listen host that the Host check
+	// accepts (api.CheckHost).
+	PublicURL string
 	// GatewayURL is the MCP gateway as agent containers reach it (GOAL_GATEWAY_URL, default
 	// http://<listen>/mcp; the Docker runner rewrites loopback to host.docker.internal).
 	GatewayURL string
@@ -85,6 +90,8 @@ const (
 	// modelsEnv lists the editor's models; defaultModels are the current Claude models, the most
 	// capable first.
 	modelsEnv      = "GOAL_MODELS"
+	publicURLEnv   = "GOAL_PUBLIC_URL"
+	taskEnvEnv     = "GOAL_TASK_ENV"
 	defaultModels  = "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5"
 	defaultListen  = "127.0.0.1:8080"
 	defaultTaskEnv = "CLAUDE_CODE_OAUTH_TOKEN=env:CLAUDE_CODE_OAUTH_TOKEN"
@@ -103,7 +110,7 @@ var forbiddenTaskEnv = []string{"ANTHROPIC_API_KEY", "GOAL_GATEWAY_KEY", "GOAL_G
 // connection.
 var ownVariables = []string{
 	"GOAL_MIGRATE_DATABASE_URL", "GOAL_DATABASE_URL", "GOAL_PG_PASSWORD", "GOAL_PG_OWNER_PASSWORD", "GOAL_PG_APP_PASSWORD",
-	"GOAL_LISTEN", "GOAL_GATEWAY_URL", "GOAL_GATEWAY_KEY_REF", "GOAL_GATEWAY_KEY", "GOAL_TASK_ENV",
+	"GOAL_LISTEN", publicURLEnv, "GOAL_GATEWAY_URL", "GOAL_GATEWAY_KEY_REF", "GOAL_GATEWAY_KEY", taskEnvEnv,
 	"GOAL_WORKSPACE_ROOT", "GOAL_RUN_DIR", "GOAL_TICK_EVERY", "GOAL_REFRESH_EVERY", "GOAL_MAX_RUNS",
 	"GOAL_GITHUB_API_URL", "GOAL_LOG_LEVEL", "GOAL_LOG_FORMAT", "GOAL_DEFAULT_AGENT_IMAGE", "GOAL_ORG_RETENTION", "GOAL_MODELS",
 	"GOAL_DEFINITION_CACHE_BYTES", "GOAL_LEGACY_IMPORT",
@@ -152,16 +159,13 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 		DefaultAgentImage: or("GOAL_DEFAULT_AGENT_IMAGE", defaultImage),
 	}
 
-	var errs []error
-
-	if err := loopback(s.Listen); err != nil {
-		errs = append(errs, err)
-	}
+	s.PublicURL = strings.TrimSpace(getenv(publicURLEnv))
+	errs := listenErrors(s)
 
 	s.GatewayURL = or("GOAL_GATEWAY_URL", "http://"+s.Listen+"/mcp")
 
 	var err error
-	if s.TaskEnv, err = taskEnv(or("GOAL_TASK_ENV", defaultTaskEnv)); err != nil {
+	if s.TaskEnv, err = taskEnv(or(taskEnvEnv, defaultTaskEnv)); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -237,11 +241,79 @@ func loopback(listen string) error {
 		return fmt.Errorf("GOAL_LISTEN %q: %w", listen, err)
 	}
 
-	if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+	if !isLoopback(host) {
 		return fmt.Errorf("GOAL_LISTEN %q: the API has no authentication yet, so goald listens on a loopback address only", listen)
 	}
 
 	return nil
+}
+
+// listenErrors refuses a listen address off loopback and a public URL that is not a safe origin.
+func listenErrors(s settings) []error {
+	var errs []error
+
+	for _, err := range []error{loopback(s.Listen), publicURL(s.PublicURL)} {
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return errs
+}
+
+// isLoopback reports whether host (no port) names this machine.
+func isLoopback(host string) bool {
+	ip := net.ParseIP(host)
+
+	return host == "localhost" || (ip != nil && ip.IsLoopback())
+}
+
+// publicURL refuses a GOAL_PUBLIC_URL that is not an origin (scheme and host, no path), or one
+// in clear text off this machine. Empty is no public URL.
+func publicURL(raw string) error {
+	if raw == "" {
+		return nil
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || strings.TrimSuffix(u.Path, "/") != "" ||
+		u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+		return fmt.Errorf("GOAL_PUBLIC_URL %q is not an origin such as https://goal.example.com", raw)
+	}
+
+	if u.Scheme == "http" && !isLoopback(u.Hostname()) {
+		return fmt.Errorf("GOAL_PUBLIC_URL %q must be https off this machine", raw)
+	}
+
+	return nil
+}
+
+// hosts are the names goald answers to (api.CheckHost), each once: the loopback names when it
+// listens on loopback (always, until phase 3), the listen host and the public URL's host.
+func (s settings) hosts() []string {
+	var out []string
+
+	add := func(h string) {
+		if h = strings.ToLower(h); h != "" && !slices.Contains(out, h) {
+			out = append(out, h)
+		}
+	}
+
+	if h, _, err := net.SplitHostPort(s.Listen); err == nil {
+		if isLoopback(h) {
+			add("localhost")
+			add("127.0.0.1")
+			add("::1")
+		}
+
+		add(h)
+	}
+
+	if u, err := url.Parse(s.PublicURL); err == nil {
+		add(u.Hostname())
+	}
+
+	return out
 }
 
 // apiURL refuses a GitHub API that a repository token would reach in clear text, except on
@@ -256,7 +328,7 @@ func apiURL(raw string) error {
 		return nil
 	}
 
-	if ip := net.ParseIP(u.Hostname()); u.Scheme != "http" || (u.Hostname() != "localhost" && (ip == nil || !ip.IsLoopback())) {
+	if u.Scheme != "http" || !isLoopback(u.Hostname()) {
 		return fmt.Errorf("GOAL_GITHUB_API_URL %q must be https (http only on a loopback address)", raw)
 	}
 

@@ -198,7 +198,7 @@ The auth service refuses a non-loopback `GOAL_AUTH_LISTEN`. There is no internal
 
 **Listeners.** Without `GOAL_GATEWAY_LISTEN`, the one loopback listener serves everything. With it (required, and different from `GOAL_LISTEN`, when `GOAL_LISTEN` is not loopback; goald refuses to start otherwise), it serves only `/mcp` (everything else 404), the main listener answers `/mcp` with 404, and `GOAL_GATEWAY_URL` defaults to it.
 
-**Host check** (against DNS rebinding): every request but `/mcp` and `/v1/health` whose `Host` is not `GOAL_PUBLIC_URL`'s host is refused with 421, except `localhost`, `127.0.0.1` and `[::1]` on the listen port when `GOAL_LISTEN` is loopback.
+**Host check** (against DNS rebinding): every request but `/mcp` and `/v1/health` whose `Host` is not `GOAL_PUBLIC_URL`'s host is refused with 421, except `localhost`, `127.0.0.1` and `[::1]` (on any port: the web dev server's proxy keeps the browser's `Host`, `localhost:5173`, and the name is what a rebinding page controls) when `GOAL_LISTEN` is loopback, and the `GOAL_LISTEN` host. 2.2 built it (`api.CheckHost`, `settings.hosts`, `GOAL_PUBLIC_URL` optional and https unless loopback); phase 3 adds the `GOAL_PUBLIC_URL` default and the non-loopback listeners.
 
 **Proxy** (`internal/api/authproxy.go`, `httputil.ReverseProxy` with `Rewrite`):
 
