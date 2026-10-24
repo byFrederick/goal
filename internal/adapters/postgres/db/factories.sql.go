@@ -13,7 +13,7 @@ import (
 
 const saveFactory = `-- name: SaveFactory :exec
 INSERT INTO factories (id, name, title, definition, definition_sha256)
-VALUES ($1, $2, $3, $4, $5)
+VALUES ($1, $2, $3, $4::jsonb, $5::text)
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name, title = EXCLUDED.title, definition = EXCLUDED.definition,
   definition_sha256 = EXCLUDED.definition_sha256, updated_at = now()

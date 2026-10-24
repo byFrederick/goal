@@ -11,22 +11,23 @@ import (
 )
 
 type AgentRun struct {
-	ID           uuid.UUID
-	FactoryID    uuid.UUID
-	ItemID       uuid.UUID
-	Station      string
-	Agent        string
-	Model        string
-	SessionID    *string
-	Status       string
-	Turns        int32
-	InputTokens  int64
-	OutputTokens int64
-	CostUsd      float64
-	Error        *string
-	StartedAt    time.Time
-	EndedAt      *time.Time
-	OrgID        uuid.UUID
+	ID                  uuid.UUID
+	FactoryID           uuid.UUID
+	ItemID              uuid.UUID
+	Station             string
+	Agent               string
+	Model               string
+	SessionID           *string
+	Status              string
+	Turns               int32
+	InputTokens         int64
+	OutputTokens        int64
+	CostUsd             float64
+	Error               *string
+	StartedAt           time.Time
+	EndedAt             *time.Time
+	OrgID               uuid.UUID
+	DefinitionVersionID *uuid.UUID
 }
 
 type AndonPull struct {
@@ -54,17 +55,70 @@ type AuditLog struct {
 	RequestID  *string
 }
 
+type DefinitionBlob struct {
+	OrgID     uuid.UUID
+	Sha256    string
+	Size      int32
+	CreatedAt time.Time
+}
+
+type DefinitionVersion struct {
+	ID            uuid.UUID
+	OrgID         uuid.UUID
+	FactoryID     uuid.UUID
+	State         string
+	Number        *int32
+	BaseVersionID *uuid.UUID
+	Revision      int64
+	Manifest      []byte
+	Message       string
+	Source        []byte
+	Resolved      []byte
+	CreatedBy     string
+	UpdatedBy     string
+	PublishedBy   *string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	PublishedAt   *time.Time
+}
+
 type Factory struct {
-	ID               uuid.UUID
-	Name             string
-	Title            *string
-	Definition       []byte
-	DefinitionSha256 string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	LastItemNumber   int64
-	OrgID            uuid.UUID
-	MaxSlots         *int32
+	ID                uuid.UUID
+	Name              string
+	Title             *string
+	Definition        []byte
+	DefinitionSha256  *string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	LastItemNumber    int64
+	OrgID             uuid.UUID
+	MaxSlots          *int32
+	CurrentVersionID  *uuid.UUID
+	LastVersionNumber int32
+	PausedAt          *time.Time
+	PausedBy          *string
+	CreatedBy         *string
+}
+
+type FactoryRecord struct {
+	ID                uuid.UUID
+	OrgID             uuid.UUID
+	Name              string
+	Title             *string
+	LastVersionNumber int32
+	PausedAt          *time.Time
+	PausedBy          *string
+	CreatedAt         time.Time
+	CreatedBy         *string
+	CurrentID         *uuid.UUID
+	CurrentNumber     *int32
+	CurrentRevision   *int64
+	CurrentAt         *time.Time
+	CurrentBy         *string
+	DraftID           *uuid.UUID
+	DraftRevision     *int64
+	DraftAt           *time.Time
+	DraftBy           *string
 }
 
 type ItemEvent struct {

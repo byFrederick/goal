@@ -13,11 +13,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"path"
 	"slices"
 	"strings"
+	"sync/atomic"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -68,6 +71,8 @@ type Store struct {
 	client *s3.Client
 	bucket string
 	region string
+	// unconditional is set once the server answered a conditional write with 501.
+	unconditional atomic.Bool
 }
 
 // New builds a client for cfg. It makes no network calls.
@@ -181,18 +186,83 @@ func (s *Store) Get(ctx context.Context, key, version string) (ports.Object, err
 
 // Put implements ports.ObjectStore.
 func (s *Store) Put(ctx context.Context, key string, body []byte) (ports.ObjectInfo, error) {
+	info, err := s.put(ctx, key, body, nil)
+	if err != nil {
+		return ports.ObjectInfo{}, fmt.Errorf("put s3://%s/%s: %w", s.bucket, key, err)
+	}
+
+	return info, nil
+}
+
+// PutIfAbsent implements ports.ObjectStore with a conditional PutObject (If-None-Match: *),
+// which S3 and RustFS refuse with 412 when a current object is at key; HeadObject then reports
+// that object. A server without conditional writes (501 Not Implemented) is remembered and gets
+// HeadObject, then PutObject: two writers of one key can then both write it, which is harmless
+// for the content-addressed keys this is for (both write the same bytes).
+func (s *Store) PutIfAbsent(ctx context.Context, key string, body []byte) (ports.ObjectInfo, bool, error) {
+	if !s.unconditional.Load() {
+		info, err := s.put(ctx, key, body, aws.String("*"))
+
+		switch status := httpStatus(err); {
+		case err == nil:
+			return info, true, nil
+		case status == http.StatusPreconditionFailed || status == http.StatusConflict:
+			// 409: S3's answer to a conditional write racing another one on the same key.
+			return s.existing(ctx, key)
+		case status == http.StatusNotImplemented:
+			s.unconditional.Store(true)
+		default:
+			return ports.ObjectInfo{}, false, fmt.Errorf("put s3://%s/%s if absent: %w", s.bucket, key, err)
+		}
+	}
+
+	info, created, err := s.existing(ctx, key)
+	if err == nil || !errors.Is(err, ports.ErrNotFound) {
+		return info, created, err
+	}
+
+	info, err = s.Put(ctx, key, body)
+
+	return info, err == nil, err
+}
+
+// existing reports the current object at key, which PutIfAbsent did not write.
+func (s *Store) existing(ctx context.Context, key string) (ports.ObjectInfo, bool, error) {
+	out, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
+	if err != nil {
+		if isNotFound(err) {
+			return ports.ObjectInfo{}, false, fmt.Errorf("head s3://%s/%s: %w", s.bucket, key, ports.ErrNotFound)
+		}
+
+		return ports.ObjectInfo{}, false, fmt.Errorf("head s3://%s/%s: %w", s.bucket, key, err)
+	}
+
+	return ports.ObjectInfo{Key: key, Version: aws.ToString(out.VersionId), Size: aws.ToInt64(out.ContentLength)}, false, nil
+}
+
+func (s *Store) put(ctx context.Context, key string, body []byte, ifNoneMatch *string) (ports.ObjectInfo, error) {
 	out, err := s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:        aws.String(s.bucket),
 		Key:           aws.String(key),
 		Body:          bytes.NewReader(body),
 		ContentLength: aws.Int64(int64(len(body))),
 		ContentType:   aws.String(contentType(key)),
+		IfNoneMatch:   ifNoneMatch,
 	})
 	if err != nil {
-		return ports.ObjectInfo{}, fmt.Errorf("put s3://%s/%s: %w", s.bucket, key, err)
+		return ports.ObjectInfo{}, err
 	}
 
 	return ports.ObjectInfo{Key: key, Version: aws.ToString(out.VersionId), Size: int64(len(body))}, nil
+}
+
+// httpStatus is the HTTP status of a failed S3 call, or 0.
+func httpStatus(err error) int {
+	if resp, ok := errors.AsType[*awshttp.ResponseError](err); ok {
+		return resp.HTTPStatusCode()
+	}
+
+	return 0
 }
 
 // List implements ports.ObjectStore. It lists versions so each result carries the id of the

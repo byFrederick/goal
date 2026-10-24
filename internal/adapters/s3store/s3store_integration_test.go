@@ -4,11 +4,11 @@ package s3store
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
-	"fmt"
 	"os"
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -28,7 +28,8 @@ func newTestStore(t *testing.T) *Store {
 	}
 
 	s, err := New(t.Context(), Config{
-		Bucket:    fmt.Sprintf("goal-it-%d", time.Now().UnixNano()),
+		// Random, not the time: parallel tests started in the same clock tick shared a bucket.
+		Bucket:    "goal-it-" + strings.ToLower(rand.Text()),
 		Endpoint:  endpoint,
 		AccessKey: os.Getenv("GOAL_S3_ACCESS_KEY"),
 		SecretKey: os.Getenv("GOAL_S3_SECRET_KEY"),
@@ -188,5 +189,73 @@ func TestGet_MissingKeyOrVersionIsNotFound(t *testing.T) {
 
 	if _, err := s.Get(ctx, "k", "00000000-0000-0000-0000-000000000000"); !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("missing version: %v, want ErrNotFound", err)
+	}
+}
+
+// Definition blobs are written once: a second write of a key keeps the first object, on the
+// server's conditional write and on the fallback for servers without one. A key whose current
+// version is a delete marker is absent.
+func TestPutIfAbsent_WritesOnce(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name          string
+		unconditional bool
+	}{
+		{"conditional write", false},
+		{"head then put", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := newTestStore(t)
+			s.unconditional.Store(tc.unconditional)
+			checkWritesOnce(t, s)
+
+			if s.unconditional.Load() != tc.unconditional {
+				t.Errorf("unconditional = %v; want %v (RustFS supports If-None-Match)", s.unconditional.Load(), tc.unconditional)
+			}
+		})
+	}
+}
+
+func checkWritesOnce(t *testing.T, s *Store) {
+	t.Helper()
+
+	ctx := t.Context()
+
+	const key = "orgs/acme/blobs/0123"
+
+	first, created, err := s.PutIfAbsent(ctx, key, []byte("first"))
+	if err != nil || !created || first.Version == "" || first.Size != int64(len("first")) {
+		t.Fatalf("first PutIfAbsent = %+v, %v, %v; want it created", first, created, err)
+	}
+
+	again, created, err := s.PutIfAbsent(ctx, key, []byte("second, longer"))
+	if err != nil || created || again != first {
+		t.Errorf("second PutIfAbsent = %+v, %v, %v; want %+v, not created", again, created, err, first)
+	}
+
+	if got, err := s.Get(ctx, key, ""); err != nil || string(got.Body) != "first" || got.Version != first.Version {
+		t.Errorf("Get = %q %s, %v; want the first content, version %s", got.Body, got.Version, err, first.Version)
+	}
+
+	checkAbsentAfterDelete(t, s, first)
+}
+
+// checkAbsentAfterDelete deletes first's key: a key whose current version is a delete marker
+// is written again.
+func checkAbsentAfterDelete(t *testing.T, s *Store, first ports.ObjectInfo) {
+	t.Helper()
+
+	ctx, key := t.Context(), first.Key
+
+	if err := s.Delete(ctx, key); err != nil {
+		t.Fatal(err)
+	}
+
+	after, created, err := s.PutIfAbsent(ctx, key, []byte("after delete"))
+	if err != nil || !created || after.Version == first.Version {
+		t.Errorf("PutIfAbsent after Delete = %+v, %v, %v; want a new version", after, created, err)
 	}
 }

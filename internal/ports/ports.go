@@ -601,6 +601,12 @@ type ObjectStore interface {
 	// Put stores body at key as a new current version and returns it.
 	Put(ctx context.Context, key string, body []byte) (ObjectInfo, error)
 
+	// PutIfAbsent stores body at key unless a current object is there (a key whose current
+	// version is a delete marker counts as absent); created reports which, and info is the
+	// object now at key. Content-addressed writes (definition blobs, domain.BlobKey) use it, so
+	// an object is written once and never rewritten.
+	PutIfAbsent(ctx context.Context, key string, body []byte) (info ObjectInfo, created bool, err error)
+
 	// List returns every current object whose key starts with prefix, ordered by key.
 	List(ctx context.Context, prefix string) ([]ObjectInfo, error)
 
