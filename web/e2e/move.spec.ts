@@ -149,3 +149,39 @@ test('send a running item back to its rework station', async ({ page, request })
     expect.arrayContaining(['lease_taken', 'rejected']),
   );
 });
+
+test('a station a publish adds is a Move choice on the open Item page, without navigating', async ({
+  page,
+  request,
+}) => {
+  await page.goto('/o/acme/f/goal/items/12');
+  const move = page.getByRole('button', { name: 'Move', exact: true });
+  await move.click();
+  const dialog = page.getByRole('dialog', { name: 'Move goal#12' });
+  await expect(dialog.getByRole('radio', { name: /Build/ })).toBeVisible();
+  await expect(dialog.getByRole('radio', { name: /QA check/i })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  // Elsewhere (the CLI, another tab): a draft adds QA check before Done and is published.
+  const factory = '/v1/orgs/acme/factories/goal';
+  const running = await (await request.get(factory)).json();
+  const draft = await (await request.get(`${factory}/draft/model`)).json();
+  const stations = draft.model.line.stations as { id: string }[];
+  const saved = await request.put(`${factory}/draft/model/line`, {
+    data: {
+      value: {
+        ...draft.model.line,
+        stations: [...stations.slice(0, -1), { id: 'qa-check', name: 'QA check', kind: 'human' }, stations.at(-1)],
+      },
+    },
+    headers: { 'If-Match': `"${draft.etags.line}"` },
+  });
+  expect(saved.ok()).toBe(true);
+  const published = await request.post(`${factory}/draft/publish`, {
+    data: { revision: (await saved.json()).revision, expected_current_version_id: running.current.id },
+  });
+  expect(published.status()).toBe(201);
+
+  await move.click();
+  await expect(dialog.getByRole('radio', { name: /QA check/i })).toBeVisible();
+});

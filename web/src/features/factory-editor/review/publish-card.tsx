@@ -106,18 +106,20 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
       setRows([]);
       setMessage(null);
       toast(`${detail?.name ?? 'The factory'} v${version.number} published`);
-      for (const key of [
-        defKeys.draft(org, factory),
-        defKeys.versions(org, factory),
-        defKeys.versionsOf(org, factory),
-        defKeys.factory(org, factory),
-        defKeys.factories(org),
-        defKeys.compares(org, factory),
-        keys.board(org, factory),
-      ]) {
-        void client.invalidateQueries({ queryKey: key });
-      }
+      const refetched = Promise.all(
+        [
+          defKeys.draft(org, factory),
+          defKeys.versions(org, factory),
+          defKeys.versionsOf(org, factory),
+          defKeys.factory(org, factory),
+          defKeys.factories(org),
+          defKeys.compares(org, factory),
+          keys.board(org, factory),
+        ].map((queryKey) => client.invalidateQueries({ queryKey })),
+      );
       if (place === 'wizard') {
+        // The Floor reads the factory's stations from the list: it opens once the list has them.
+        await refetched.catch(() => undefined);
         void navigate({ to: '/o/$org/f/$factory', params: { org: orgCtx.slug, factory }, ignoreBlocker: true });
       }
     } catch (err) {

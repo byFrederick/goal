@@ -4,7 +4,7 @@ import { ShellFrame } from '../app/app-shell';
 import { FactorySidebar } from '../app/factory-sidebar';
 import { PhoneCrumb, TabBar } from '../app/phone-chrome';
 import { NotFoundScreen } from '../app/states';
-import { findFactory } from '../shared/factory';
+import { findFactory, useFactory } from '../shared/factory';
 
 // Every page of one factory: the factory sidebar, and on phones the crumb and the tab bar.
 export const Route = createFileRoute('/o/$org/f/$factory')({
@@ -21,7 +21,8 @@ export const Route = createFileRoute('/o/$org/f/$factory')({
 });
 
 function FactoryLayout() {
-  const { org, factory } = Route.useRouteContext();
+  const { org } = Route.useRouteContext();
+  const factory = useFactory();
   return (
     <ShellFrame
       sidebar={<FactorySidebar org={org} factory={factory} />}

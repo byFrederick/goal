@@ -145,6 +145,13 @@ test('a factory from a template, step by step (flow 1)', async ({ page }) => {
   await page.getByRole('button', { name: 'Publish v1' }).click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/[^/]+$/);
   await expect(page.getByRole('heading', { level: 1 })).toContainText(/Cost review|cloud-costs/);
+  // The Floor has the published line at once, not the factory as it was before its first version
+  // (New item is in the Floor's header from 768 px).
+  if (isPhone(page)) return;
+  await page.getByRole('button', { name: 'New item' }).click();
+  const newItem = page.getByRole('dialog', { name: 'New item' });
+  await expect(newItem).toContainText(/It enters \w+ and waits to be pulled\./);
+  await expect(newItem).not.toContainText('It enters The line');
 });
 
 test('Import YAML is checked against the schema first, then created with its problems (flow 7)', async ({ page }) => {
