@@ -1,4 +1,4 @@
-import type { Options } from '@anthropic-ai/claude-agent-sdk';
+import type { Options, Settings } from '@anthropic-ai/claude-agent-sdk';
 import { type AgentFiles, paths, type TaskSpec } from './spec.js';
 
 /** The only MCP server an agent sees: goald's gateway. Its tools are mcp__goal__<tool>. */
@@ -12,6 +12,14 @@ const hiddenEnv = [
   'ANTHROPIC_API_KEY', // model auth is the subscription token; an API key must never take over
   'GOAL_GATEWAY_TOKEN', // reaches the gateway as a header, not the agent's shell
 ];
+
+/** Settings that keep everything Claude Code brings or syncs on its own out of the agent's session. */
+const isolation = {
+  disableBundledSkills: true,
+  syncClaudeAiSkills: false,
+  syncClaudeAiPlugins: false,
+  disableClaudeAiConnectors: true,
+} as const satisfies Settings;
 
 export interface AgentQuery {
   prompt: string;
@@ -32,9 +40,13 @@ export function agentQuery(
     ...toolPolicy(spec, spec.gateway_url !== undefined),
     // Pre-approved rules run; anything else is denied, since nobody is there to ask.
     permissionMode: 'dontAsk',
+    // Only the definition's skills are listed to the model and accepted by the Skill tool. Claude
+    // Code would otherwise also offer the skills bundled with it, skills and plugins synced from
+    // the claude.ai account behind the token, and the checkout's .claude/skills.
     skills: spec.skills,
-    // user: the agent's skills, copied to ~/.claude/skills; project: the checkout's CLAUDE.md
-    // and .claude/ settings.
+    settings: isolation,
+    // user: the agent's skills, copied to paths.claudeConfig/skills; project: the checkout's
+    // CLAUDE.md and .claude/ settings.
     settingSources: ['user', 'project'],
     mcpServers: spec.gateway_url
       ? {
@@ -93,7 +105,11 @@ function isGatewayRule(rule: string): boolean {
 }
 
 export function agentEnv(env: NodeJS.ProcessEnv): Record<string, string | undefined> {
-  const out: Record<string, string | undefined> = { ...env, CLAUDE_AGENT_SDK_CLIENT_APP: 'goal-worker/0.1.0' };
+  const out: Record<string, string | undefined> = {
+    ...env,
+    CLAUDE_AGENT_SDK_CLIENT_APP: 'goal-worker/0.1.0',
+    CLAUDE_CONFIG_DIR: paths.claudeConfig,
+  };
   for (const name of hiddenEnv) delete out[name];
   return out;
 }

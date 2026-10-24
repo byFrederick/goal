@@ -16,7 +16,7 @@ export interface RunDeps {
  * process exit code: 0 when the agent produced a result (succeeded or not), 1 when it crashed.
  */
 export async function runTask(spec: TaskSpec, files: AgentFiles, deps: RunDeps): Promise<number> {
-  const mapper = new EventMapper(deps.now);
+  const mapper = new EventMapper(deps.now, spec.skills);
   const { prompt, options } = agentQuery(spec, files, deps.env, deps.abortController);
   let result: Finished | undefined;
 

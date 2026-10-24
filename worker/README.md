@@ -28,7 +28,7 @@ The image is built locally and never pushed from this repository.
 
 The runner writes `spec.json` into a per-run host folder (`$TMPDIR/goal-runs/<run id>/` by default) and has goald's `AgentFiles` write `agent/` next to it, then mounts the folder at `/goal`. The container runs as uid 1000 with every capability dropped, `no-new-privileges`, an init process, and CPU, memory and PID limits; it carries the labels `goal.org`, `goal.factory`, `goal.item`, `goal.run`, `goal.station` and `goal.agent`, and goald's reaper removes the containers and folders of runs that are over (neither running nor holding their lease, whichever goald on the host started them).
 
-Environment: only the task's `Env` from goald (which carries `CLAUDE_CODE_OAUTH_TOKEN`), `GOAL_GATEWAY_TOKEN` and `HOME`. `ANTHROPIC_API_KEY` is removed by the runner and again by the worker before the SDK starts; the gateway token is removed from the agent's environment too and reaches the gateway only as a header.
+Environment: only the task's `Env` from goald (which carries `CLAUDE_CODE_OAUTH_TOKEN`), `GOAL_GATEWAY_TOKEN`, `HOME` and `CLAUDE_CONFIG_DIR=/home/node/.claude` (set by the runner over anything in `Env`, and again by the worker, so Claude Code's config always lives in the container's throwaway home; no host `~/.claude` is ever mounted). `ANTHROPIC_API_KEY` is removed by the runner and again by the worker before the SDK starts; the gateway token is removed from the agent's environment too and reaches the gateway only as a header.
 
 ### spec.json
 
@@ -51,7 +51,7 @@ Environment: only the task's `Env` from goald (which carries `CLAUDE_CODE_OAUTH_
 
 - Working directory `/workspace`; Claude Code's system prompt with, appended, `## This factory` and the `purpose` (when set), then `prompt.md`; the brief, earlier outputs and the finishing instruction as the user prompt.
 - Tools: the built-in tools named by `tools_allow` (Claude Code permission rules such as `Bash(npm test*)`) are the only ones available, and those rules are pre-approved. `tools_deny` rules are disallowed. Permission mode `dontAsk`: anything not pre-approved is denied, since nobody is there to ask. An agent that allows no tools gets `Read`, `Grep` and `Glob`.
-- Skills: copied from `/goal/agent/skills` to `~/.claude/skills`; only the listed names are enabled. Settings sources are `user` (those skills) and `project` (the checkout's `CLAUDE.md` and `.claude/`).
+- Skills: copied from `/goal/agent/skills` to `$CLAUDE_CONFIG_DIR/skills`; only the listed names are enabled (the SDK's `skills` option): they are the only skills listed to the model and the only ones the Skill tool accepts, and the only ones the `started` event reports. Claude Code would otherwise also discover the skills bundled with it (loop, schedule, claude-api, …), skills and plugins synced from the claude.ai account behind the token, and the checkout's `.claude/skills`; the worker turns the first two off (`settings`: `disableBundledSkills`, `syncClaudeAiSkills: false`, `syncClaudeAiPlugins: false`, `disableClaudeAiConnectors`) and the filter hides the rest. No plugins are loaded. Settings sources are `user` (those skills) and `project` (the checkout's `CLAUDE.md` and `.claude/`).
 - MCP: exactly one server, `goal`, at `gateway_url` over streamable HTTP with `Authorization: Bearer $GOAL_GATEWAY_TOKEN` (`strictMcpConfig`, so `.mcp.json` and other configs are ignored). Its tools are pre-approved and always loaded (`alwaysLoad`): Claude Code would otherwise defer them behind tool search, and agents called them by name and failed. The gateway serves only the agent's allowed tools, which keeps the list short.
 - Limits: `max_turns` and `max_usd` become the SDK's `maxTurns` and `maxBudgetUsd`; goald also kills the container when the task's timeout passes.
 - Output: with `output.schema.json` the SDK's `json_schema` output format; without it the final reply is read as JSON (whole reply, a fenced block or the outermost object), or passed on as a JSON string. goald validates it against the contract either way.
@@ -63,7 +63,7 @@ One JSON object per line, each with `type` and `at` (RFC 3339). Logs go to stder
 
 | `type` | Fields | goald event kind |
 | --- | --- | --- |
-| `started` | `session_id`, `model`, `tools`, `skills`, `mcp_servers` (`name`, `status`) | `agent_started` |
+| `started` | `session_id`, `model`, `tools`, `skills` (the enabled ones Claude Code found), `mcp_servers` (`name`, `status`) | `agent_started` |
 | `tool_use` | `id`, `tool`, `input` (JSON, cut to 500 chars) | `tool_call` |
 | `tool_result` | `id`, `is_error`, `summary` (cut to 500 chars) | `tool_result` |
 | `message` | `text` (assistant text, cut to 2000 chars) | `agent_message` |

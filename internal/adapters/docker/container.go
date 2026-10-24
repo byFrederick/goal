@@ -26,8 +26,10 @@ const (
 	containerUID       = "1000"
 	containerUser      = containerUID + ":" + containerUID
 	containerHome      = "/home/node"
-	specFile           = "spec.json"
-	agentDir           = "agent"
+	// containerClaudeConfig is Claude Code's config dir: in the throwaway home, never the host's.
+	containerClaudeConfig = containerHome + "/.claude"
+	specFile              = "spec.json"
+	agentDir              = "agent"
 )
 
 // Labels on every task container, so orphans can be found and reaped. Check and sidecar
@@ -46,6 +48,7 @@ const (
 const (
 	envGatewayToken = "GOAL_GATEWAY_TOKEN"
 	envHome         = "HOME"
+	envClaudeConfig = "CLAUDE_CONFIG_DIR"
 	// envAPIKey never reaches a task: model auth on a laptop is the subscription token.
 	envAPIKey = "ANTHROPIC_API_KEY" //nolint:gosec // a variable name, not a credential
 )
@@ -134,7 +137,8 @@ func containerURL(raw string) (string, error) {
 }
 
 // taskEnv is the container's whole environment: the spec's Env (which carries
-// CLAUDE_CODE_OAUTH_TOKEN), the gateway token and HOME. ANTHROPIC_API_KEY is always removed.
+// CLAUDE_CODE_OAUTH_TOKEN), the gateway token, HOME and CLAUDE_CONFIG_DIR (always the
+// container's, so no host config reaches the agent). ANTHROPIC_API_KEY is always removed.
 func taskEnv(t ports.TaskSpec) []string {
 	env := maps.Clone(t.Env)
 	if env == nil {
@@ -144,6 +148,8 @@ func taskEnv(t ports.TaskSpec) []string {
 	delete(env, envAPIKey)
 
 	env[envHome] = containerHome
+	env[envClaudeConfig] = containerClaudeConfig
+
 	if t.GatewayToken != "" {
 		env[envGatewayToken] = t.GatewayToken
 	} else {

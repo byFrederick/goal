@@ -1,5 +1,4 @@
 import { cp, readFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { WorkerEvent } from './events.js';
@@ -19,9 +18,9 @@ async function readAgentFiles(): Promise<AgentFiles> {
   return schema === undefined ? { prompt } : { prompt, outputSchema: JSON.parse(schema) };
 }
 
-/** Claude Code finds personal skills in ~/.claude/skills; home is a writable tmpfs. */
+/** Claude Code finds personal skills in its config dir's skills/; home is a throwaway volume. */
 async function installSkills(): Promise<void> {
-  await cp(join(paths.agent, 'skills'), join(homedir(), '.claude', 'skills'), { recursive: true }).catch(
+  await cp(join(paths.agent, 'skills'), join(paths.claudeConfig, 'skills'), { recursive: true }).catch(
     (err: NodeJS.ErrnoException) => {
       if (err.code !== 'ENOENT') throw err;
     },

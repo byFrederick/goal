@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/mount"
 
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
@@ -49,7 +50,7 @@ func TestContainerOf_IsHardened(t *testing.T) {
 		User: "1000:1000", CapDrop: "[ALL]", SecurityOpt: "[no-new-privileges:true]",
 		Mounts:     "[bind /runs/r1:/goal:ro=true bind /work/r1:/workspace:ro=false volume :/home/node:ro=false]",
 		Labels:     "map[goal.agent:engineer goal.factory:f1 goal.item:i1 goal.org:o1 goal.run:r1 goal.station:build]",
-		Env:        "[CLAUDE_CODE_OAUTH_TOKEN=oauth-token-123 GOAL_GATEWAY_TOKEN=gateway-token-123 HOME=/home/node]",
+		Env:        "[CLAUDE_CODE_OAUTH_TOKEN=oauth-token-123 CLAUDE_CONFIG_DIR=/home/node/.claude GOAL_GATEWAY_TOKEN=gateway-token-123 HOME=/home/node]",
 		Tmpfs:      "map[/tmp:rw,nosuid,nodev,size=1g,mode=1777]",
 		Privileged: false, ReadOnlyRoot: true, Init: true,
 		CPUs: 2e9, Memory: 4 << 30, Swap: 4 << 30, PIDs: 1024,
@@ -57,6 +58,34 @@ func TestContainerOf_IsHardened(t *testing.T) {
 
 	if got != want {
 		t.Errorf("container hardening:\n got %+v\nwant %+v", got, want)
+	}
+}
+
+// An agent gets only its definition's skills: no host Claude Code config (settings, skills,
+// plugins, credentials) is mounted, and a task environment that names a config dir cannot point
+// Claude Code away from the container's throwaway home.
+func TestContainerOf_KeepsHostClaudeConfigOut(t *testing.T) {
+	t.Parallel()
+
+	spec := ports.TaskSpec{
+		RunID: "r1", Image: "img:1", WorkspaceDir: "/work/r1",
+		Env: map[string]string{"CLAUDE_CONFIG_DIR": "/Users/acme/.claude", "CLAUDE_CODE_OAUTH_TOKEN": "oauth-token-123"}, //nolint:gosec // fake values
+	}
+
+	cc, hc := containerOf(Config{}.withDefaults(), spec, "/runs/r1")
+
+	for _, m := range hc.Mounts {
+		if m.Type == mount.TypeBind && m.Target != containerGoal && m.Target != containerWorkspace {
+			t.Errorf("unexpected bind mount %s:%s", m.Source, m.Target)
+		}
+
+		if strings.Contains(m.Source, ".claude") || strings.Contains(m.Target, ".claude") {
+			t.Errorf("mount %s:%s carries Claude Code config", m.Source, m.Target)
+		}
+	}
+
+	if !slices.Contains(cc.Env, "CLAUDE_CONFIG_DIR=/home/node/.claude") || slices.Contains(cc.Env, "CLAUDE_CONFIG_DIR=/Users/acme/.claude") {
+		t.Errorf("env %v: want CLAUDE_CONFIG_DIR in the container's home only", cc.Env)
 	}
 }
 

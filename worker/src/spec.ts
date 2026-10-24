@@ -5,6 +5,8 @@ export const paths = {
   spec: '/goal/spec.json',
   agent: '/goal/agent',
   workspace: '/workspace',
+  /** Claude Code's config dir for this run, in the container's throwaway home; never the host's. */
+  claudeConfig: '/home/node/.claude',
 } as const;
 
 /** The task as goald writes it to /goal/spec.json. It holds no secrets. */

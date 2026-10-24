@@ -58,9 +58,12 @@ export function clip(s: string, max: number): string {
 export class EventMapper {
   readonly #now: () => Date;
   readonly #counted = new Set<string>();
+  readonly #skills: ReadonlySet<string>;
 
-  constructor(now: () => Date) {
+  /** skills are the ones the agent may use; Claude Code's init lists every skill it found. */
+  constructor(now: () => Date, skills: readonly string[]) {
     this.#now = now;
+    this.#skills = new Set(skills);
   }
 
   map(msg: SDKMessage): WorkerEvent[] {
@@ -75,7 +78,7 @@ export class EventMapper {
             session_id: msg.session_id,
             model: msg.model,
             tools: msg.tools,
-            skills: msg.skills,
+            skills: msg.skills.filter((name) => this.#skills.has(name)),
             mcp_servers: msg.mcp_servers.map(({ name, status }) => ({ name, status })),
           },
         ];

@@ -58,14 +58,17 @@ function scripted(messages: unknown[], opts: { throws?: Error } = {}) {
   return { fake, calls };
 }
 
-async function run(messages: unknown[], opts: { throws?: Error; spec?: TaskSpec; files?: AgentFiles } = {}) {
+async function run(
+  messages: unknown[],
+  opts: { throws?: Error; spec?: TaskSpec; files?: AgentFiles; env?: NodeJS.ProcessEnv } = {},
+) {
   const { fake, calls } = scripted(messages, opts);
   const events: WorkerEvent[] = [];
   const code = await runTask(opts.spec ?? spec, opts.files ?? files, {
     query: fake,
     emit: (e) => events.push(e),
     now: () => at,
-    env,
+    env: opts.env ?? env,
     abortController: new AbortController(),
   });
   return { code, events, calls };
@@ -105,6 +108,47 @@ describe('runTask', () => {
     expect(calls[0]?.prompt).toContain('Add a health endpoint');
     expect(calls[0]?.prompt).toContain('"lane": "backend"');
     expect(calls[0]?.prompt).toContain('output contract "change"');
+  });
+
+  it("gives the agent only its definition's skills: no bundled, synced or plugin skills, its own config dir", async () => {
+    for (const skills of [['acme-conventions'], []]) {
+      const { calls } = await run([success], { spec: { ...spec, skills } as TaskSpec });
+      const options = calls[0]?.options;
+
+      expect(options?.skills).toEqual(skills);
+      expect(options?.plugins ?? []).toEqual([]);
+      expect(options?.settingSources).toEqual(['user', 'project']);
+      expect(options?.settings).toEqual({
+        disableBundledSkills: true,
+        syncClaudeAiSkills: false,
+        syncClaudeAiPlugins: false,
+        disableClaudeAiConnectors: true,
+      });
+      expect(options?.env).toMatchObject({ CLAUDE_CONFIG_DIR: '/home/node/.claude' });
+    }
+  });
+
+  it('keeps a config dir from the environment from replacing its own', async () => {
+    const { calls } = await run([success], { env: { ...env, CLAUDE_CONFIG_DIR: '/host/.claude' } });
+
+    expect(calls[0]?.options.env).toMatchObject({ CLAUDE_CONFIG_DIR: '/home/node/.claude' });
+  });
+
+  it('reports only the skills the agent may use as started, not every skill Claude Code found', async () => {
+    const { events } = await run([
+      {
+        type: 'system',
+        subtype: 'init',
+        session_id: 's1',
+        model: 'claude-sonnet-5-5',
+        tools: ['Read'],
+        skills: ['acme-conventions', 'loop', 'checkout-skill', 'plugin-authoring'],
+        mcp_servers: [],
+      },
+      success,
+    ]);
+
+    expect(events[0]).toMatchObject({ type: 'started', skills: ['acme-conventions'] });
   });
 
   it('leaves gateway tool rules to the gateway', async () => {
