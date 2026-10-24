@@ -37,7 +37,7 @@ func (q *Queries) ActiveOrgs(ctx context.Context) ([]uuid.UUID, error) {
 }
 
 const currentOrg = `-- name: CurrentOrg :one
-SELECT id, slug, name, mark, created_at, updated_at, deleted_at FROM organizations WHERE id = goal_org() AND deleted_at IS NULL FOR NO KEY UPDATE
+SELECT id, slug, name, mark, created_at, updated_at, deleted_at, max_slots FROM organizations WHERE id = goal_org() AND deleted_at IS NULL FOR NO KEY UPDATE
 `
 
 // The live organization of the transaction, locked for an update.
@@ -52,6 +52,7 @@ func (q *Queries) CurrentOrg(ctx context.Context) (Organization, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.MaxSlots,
 	)
 	return i, err
 }
@@ -86,7 +87,7 @@ func (q *Queries) DeletedOrgs(ctx context.Context, arg DeletedOrgsParams) ([]uui
 }
 
 const insertOrg = `-- name: InsertOrg :one
-INSERT INTO organizations (id, slug, name, mark) VALUES ($1, $2, $3, $4) RETURNING id, slug, name, mark, created_at, updated_at, deleted_at
+INSERT INTO organizations (id, slug, name, mark) VALUES ($1, $2, $3, $4) RETURNING id, slug, name, mark, created_at, updated_at, deleted_at, max_slots
 `
 
 type InsertOrgParams struct {
@@ -112,12 +113,13 @@ func (q *Queries) InsertOrg(ctx context.Context, arg InsertOrgParams) (Organizat
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.MaxSlots,
 	)
 	return i, err
 }
 
 const orgByRef = `-- name: OrgByRef :one
-SELECT id, slug, name, mark, created_at FROM goal_org_by_ref($1::text)
+SELECT id, slug, name, mark, max_slots, created_at FROM goal_org_by_ref($1::text)
 `
 
 type OrgByRefRow struct {
@@ -125,6 +127,7 @@ type OrgByRefRow struct {
 	Slug      string
 	Name      string
 	Mark      string
+	MaxSlots  *int32
 	CreatedAt time.Time
 }
 
@@ -136,13 +139,14 @@ func (q *Queries) OrgByRef(ctx context.Context, ref string) (OrgByRefRow, error)
 		&i.Slug,
 		&i.Name,
 		&i.Mark,
+		&i.MaxSlots,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const orgs = `-- name: Orgs :many
-SELECT id, slug, name, mark, created_at, goal_org_factory_count(id)::bigint AS factory_count FROM goal_orgs()
+SELECT id, slug, name, mark, max_slots, created_at, goal_org_factory_count(id)::bigint AS factory_count FROM goal_orgs()
 ORDER BY name, id
 `
 
@@ -151,6 +155,7 @@ type OrgsRow struct {
 	Slug         string
 	Name         string
 	Mark         string
+	MaxSlots     *int32
 	CreatedAt    time.Time
 	FactoryCount int64
 }
@@ -169,6 +174,7 @@ func (q *Queries) Orgs(ctx context.Context) ([]OrgsRow, error) {
 			&i.Slug,
 			&i.Name,
 			&i.Mark,
+			&i.MaxSlots,
 			&i.CreatedAt,
 			&i.FactoryCount,
 		); err != nil {
@@ -211,18 +217,25 @@ func (q *Queries) SoftDeleteOrg(ctx context.Context, deletedAt *time.Time) error
 }
 
 const updateOrg = `-- name: UpdateOrg :one
-UPDATE organizations SET slug = $1, name = $2, mark = $3, updated_at = now()
-WHERE id = goal_org() RETURNING id, slug, name, mark, created_at, updated_at, deleted_at
+UPDATE organizations SET slug = $1, name = $2, mark = $3,
+  max_slots = $4, updated_at = now()
+WHERE id = goal_org() RETURNING id, slug, name, mark, created_at, updated_at, deleted_at, max_slots
 `
 
 type UpdateOrgParams struct {
-	Slug string
-	Name string
-	Mark string
+	Slug     string
+	Name     string
+	Mark     string
+	MaxSlots *int32
 }
 
 func (q *Queries) UpdateOrg(ctx context.Context, arg UpdateOrgParams) (Organization, error) {
-	row := q.db.QueryRow(ctx, updateOrg, arg.Slug, arg.Name, arg.Mark)
+	row := q.db.QueryRow(ctx, updateOrg,
+		arg.Slug,
+		arg.Name,
+		arg.Mark,
+		arg.MaxSlots,
+	)
 	var i Organization
 	err := row.Scan(
 		&i.ID,
@@ -232,6 +245,7 @@ func (q *Queries) UpdateOrg(ctx context.Context, arg UpdateOrgParams) (Organizat
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.MaxSlots,
 	)
 	return i, err
 }

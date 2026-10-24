@@ -3,11 +3,11 @@
 SELECT set_config('goal.org_id', sqlc.arg(org_id)::text, true);
 
 -- name: Orgs :many
-SELECT id, slug, name, mark, created_at, goal_org_factory_count(id)::bigint AS factory_count FROM goal_orgs()
+SELECT id, slug, name, mark, max_slots, created_at, goal_org_factory_count(id)::bigint AS factory_count FROM goal_orgs()
 ORDER BY name, id;
 
 -- name: OrgByRef :one
-SELECT id, slug, name, mark, created_at FROM goal_org_by_ref(sqlc.arg(ref)::text);
+SELECT id, slug, name, mark, max_slots, created_at FROM goal_org_by_ref(sqlc.arg(ref)::text);
 
 -- name: ActiveOrgs :many
 SELECT id::uuid FROM goal_active_orgs() AS id;
@@ -26,7 +26,8 @@ INSERT INTO organizations (id, slug, name, mark) VALUES ($1, $2, $3, $4) RETURNI
 SELECT * FROM organizations WHERE id = goal_org() AND deleted_at IS NULL FOR NO KEY UPDATE;
 
 -- name: UpdateOrg :one
-UPDATE organizations SET slug = $1, name = $2, mark = $3, updated_at = now()
+UPDATE organizations SET slug = sqlc.arg(slug), name = sqlc.arg(name), mark = sqlc.arg(mark),
+  max_slots = sqlc.narg(max_slots), updated_at = now()
 WHERE id = goal_org() RETURNING *;
 
 -- name: SoftDeleteOrg :exec

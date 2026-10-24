@@ -48,6 +48,14 @@ func TestStore_Conformance(t *testing.T) {
 
 				return s.runs(domain.WithOrg(t.Context(), org), t, id)
 			},
+			SetSlotCaps: func(t *testing.T, org domain.OrgID, maxSlots int, factories map[domain.FactoryID]int) {
+				t.Helper()
+
+				u := ports.OrgUpdate{MaxSlots: &maxSlots, FactorySlots: factories}
+				if _, err := s.UpdateOrg(domain.WithOrg(t.Context(), org), domain.LocalUser, u); err != nil {
+					t.Fatalf("UpdateOrg slot caps: %v", err)
+				}
+			},
 		}
 	})
 }

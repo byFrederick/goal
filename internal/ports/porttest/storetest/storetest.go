@@ -27,6 +27,8 @@ type Harness struct {
 	NewFactory func(t *testing.T, org domain.OrgID) domain.FactoryID
 	// Runs returns an item's runs in org, oldest first.
 	Runs func(t *testing.T, org domain.OrgID, id domain.ItemID) []domain.Run
+	// SetSlotCaps sets org's slot cap and those of the named factories of org; 0 clears a cap.
+	SetSlotCaps func(t *testing.T, org domain.OrgID, maxSlots int, factories map[domain.FactoryID]int)
 }
 
 // Run runs the suite. Tests run in parallel and call newHarness once each; every harness must
@@ -66,6 +68,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Tenancy_OtherOrgSeesNothing", testOtherOrg},
 		{"CreateItem_FactoryOfAnotherOrgNotFound", testFactoryOfAnotherOrg},
 		{"RequeueExpiredLeases_OnlyTheCurrentOrg", testRequeueOneOrg},
+		{"ClaimNext_OrgAndFactorySlotCaps", testSlotCaps},
+		{"Concurrent_ClaimsNeverExceedTheOrgCap", testConcurrentClaimsCapped},
 	}
 
 	for _, tc := range tests {

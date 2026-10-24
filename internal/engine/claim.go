@@ -36,13 +36,22 @@ type stationTurn struct {
 	done  bool
 }
 
+// tickState is what one tick has learned so far: each agent station's turn, and the factories
+// whose slot cap is reached.
+type tickState struct {
+	stations map[stationKey]*stationTurn
+	full     map[domain.FactoryID]bool
+}
+
 // claim starts runs with two-level round-robin, so no organization starves another: in each
 // pass every organization that still has work claims at most one item, trying its factories
 // in turn and each factory's agent stations in line order. Passes repeat until nothing more
-// can be claimed or this instance runs MaxRuns runs. The orders rotate from tick to tick.
+// can be claimed or this instance runs MaxRuns runs. The orders rotate from tick to tick. A
+// factory at its slot cap is skipped for the rest of the tick, and an organization at its cap
+// claims nothing more in it.
 func (e *Engine) claim(ctx context.Context, lines map[domain.FactoryID]domain.Line) error {
 	turns := schedule(lines, e.ticks.Add(1)-1)
-	stations := map[stationKey]*stationTurn{}
+	tick := &tickState{stations: map[stationKey]*stationTurn{}, full: map[domain.FactoryID]bool{}}
 
 	var errs []error
 
@@ -58,7 +67,7 @@ func (e *Engine) claim(ctx context.Context, lines map[domain.FactoryID]domain.Li
 				return errors.Join(errs...)
 			}
 
-			claimed, err := e.claimFor(ctx, o, stations)
+			claimed, err := e.claimFor(ctx, o, tick)
 			if err != nil {
 				errs = append(errs, err)
 			}
@@ -110,8 +119,9 @@ func rotate[T any](s []T, n uint64) []T {
 }
 
 // claimFor claims one item for the organization: from its next factory in turn on, the first
-// agent station with work and a free slot. It reports whether it started a run.
-func (e *Engine) claimFor(ctx context.Context, o *orgTurn, stations map[stationKey]*stationTurn) (bool, error) {
+// agent station with work and a free slot, skipping factories at their slot cap. It reports
+// whether it started a run; an organization at its slot cap starts none.
+func (e *Engine) claimFor(ctx context.Context, o *orgTurn, tick *tickState) (bool, error) {
 	ctx = domain.WithOrg(ctx, o.org)
 
 	var errs []error
@@ -121,16 +131,16 @@ func (e *Engine) claimFor(ctx context.Context, o *orgTurn, stations map[stationK
 		l := o.lines[k]
 
 		for _, st := range l.Stations {
-			if st.Kind != domain.KindAgent {
+			if st.Kind != domain.KindAgent || tick.full[l.FactoryID] {
 				continue
 			}
 
 			key := stationKey{factory: l.FactoryID, station: st.ID}
 
-			s, seen := stations[key]
+			s, seen := tick.stations[key]
 			if !seen {
 				s = &stationTurn{}
-				stations[key] = s
+				tick.stations[key] = s
 			}
 
 			if s.done {
@@ -138,7 +148,18 @@ func (e *Engine) claimFor(ctx context.Context, o *orgTurn, stations map[stationK
 			}
 
 			claimed, err := e.claimAt(ctx, l, st, s)
-			if err != nil {
+
+			switch {
+			case errors.Is(err, ports.ErrOrgFull):
+				e.log.DebugContext(ctx, "claim blocked", slog.String("scope", "org"), slog.String("org_id", string(o.org)))
+
+				return false, errors.Join(errs...)
+			case errors.Is(err, ports.ErrFactoryFull):
+				e.log.DebugContext(ctx, "claim blocked", slog.String("scope", "factory"), slog.String("org_id", string(o.org)),
+					slog.String("factory", string(l.FactoryID)))
+
+				tick.full[l.FactoryID] = true
+			case err != nil:
 				errs = append(errs, err)
 			}
 
@@ -154,7 +175,8 @@ func (e *Engine) claimFor(ctx context.Context, o *orgTurn, stations map[stationK
 
 // claimAt claims the next item waiting at one agent station into a free slot and starts its
 // run. When nothing waits, every slot is held or the store fails, the station is done for the
-// tick.
+// tick. A slot cap is returned as ports.ErrOrgFull or ports.ErrFactoryFull, leaving the station
+// as it was: the factory or the organization is what is done.
 func (e *Engine) claimAt(ctx context.Context, l domain.Line, st domain.Station, s *stationTurn) (bool, error) {
 	if s.taken == nil {
 		leases, err := e.store.Leases(ctx, l.FactoryID, st.ID)
@@ -187,6 +209,8 @@ func (e *Engine) claimAt(ctx context.Context, l domain.Line, st domain.Station, 
 		case errors.Is(err, ports.ErrSlotTaken):
 			s.taken[slot] = true
 			continue
+		case errors.Is(err, ports.ErrOrgFull), errors.Is(err, ports.ErrFactoryFull):
+			return false, err
 		case err != nil:
 			s.done = true
 			return false, fmt.Errorf("station %s: claim slot %d: %w", st.ID, slot, err)

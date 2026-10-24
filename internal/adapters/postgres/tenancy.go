@@ -37,7 +37,7 @@ func (s *Store) Orgs(ctx context.Context) ([]domain.OrgSummary, error) {
 	out := make([]domain.OrgSummary, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, domain.OrgSummary{
-			Org:          orgOf(r.ID, r.Slug, r.Name, r.Mark, r.CreatedAt),
+			Org:          orgOf(r.ID, r.Slug, r.Name, r.Mark, r.MaxSlots, r.CreatedAt),
 			FactoryCount: int(r.FactoryCount),
 		})
 	}
@@ -56,7 +56,7 @@ func (s *Store) Org(ctx context.Context, ref string) (domain.Org, error) {
 		return domain.Org{}, fmt.Errorf("org %q: %w", ref, err)
 	}
 
-	return orgOf(r.ID, r.Slug, r.Name, r.Mark, r.CreatedAt), nil
+	return orgOf(r.ID, r.Slug, r.Name, r.Mark, r.MaxSlots, r.CreatedAt), nil
 }
 
 // ActiveOrgs implements ports.Tenancy.
@@ -109,7 +109,8 @@ func (s *Store) CreateOrg(ctx context.Context, by domain.Actor, n ports.NewOrg) 
 	return o, nil
 }
 
-// UpdateOrg implements ports.Tenancy.
+// UpdateOrg implements ports.Tenancy. The organization's row is locked first, then its
+// factories' caps are read and changed in the same transaction.
 func (s *Store) UpdateOrg(ctx context.Context, by domain.Actor, u ports.OrgUpdate) (domain.Org, error) {
 	var o domain.Org
 
@@ -125,25 +126,76 @@ func (s *Store) UpdateOrg(ctx context.Context, by domain.Actor, u ports.OrgUpdat
 
 		o = orgFrom(row)
 
-		next, changed, err := u.Apply(o)
-		if err != nil || len(changed) == 0 {
+		slots, err := factorySlots(ctx, q)
+		if err != nil {
 			return err
 		}
 
-		row, err = q.UpdateOrg(ctx, db.UpdateOrgParams{Slug: next.Slug, Name: next.Name, Mark: next.Mark})
+		c, err := u.Apply(o, slots)
+		if err != nil || len(c.Audit) == 0 {
+			return err
+		}
+
+		row, err = q.UpdateOrg(ctx, db.UpdateOrgParams{
+			Slug: c.Org.Slug, Name: c.Org.Name, Mark: c.Org.Mark, MaxSlots: optionalCap(c.Org.MaxSlots),
+		})
 		if err != nil {
-			return ruleError(err, next.Slug)
+			return ruleError(err, c.Org.Slug)
+		}
+
+		for id, n := range c.FactorySlots {
+			fid, err := parseID("factory", string(id))
+			if err != nil {
+				return err
+			}
+
+			if err := q.SetFactorySlots(ctx, db.SetFactorySlotsParams{ID: fid, MaxSlots: optionalCap(n)}); err != nil {
+				return fmt.Errorf("factory %s: %w", id, ruleError(err, ""))
+			}
 		}
 
 		o = orgFrom(row)
 
-		return appendAudit(ctx, q, orgEntry(by, domain.AuditOrgUpdated, o, changed))
+		return appendAudit(ctx, q, orgEntry(by, domain.AuditOrgUpdated, o, c.Audit))
 	})
 	if err != nil {
 		return domain.Org{}, fmt.Errorf("update org: %w", err)
 	}
 
 	return o, nil
+}
+
+// FactorySlots implements ports.Tenancy.
+func (s *Store) FactorySlots(ctx context.Context) (map[domain.FactoryID]int, error) {
+	var out map[domain.FactoryID]int
+
+	err := s.read(ctx, func(q *db.Queries) error {
+		var err error
+
+		out, err = factorySlots(ctx, q)
+
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("factory slots: %w", err)
+	}
+
+	return out, nil
+}
+
+// factorySlots reads every factory of the transaction's organization with its cap (0: none).
+func factorySlots(ctx context.Context, q *db.Queries) (map[domain.FactoryID]int, error) {
+	rows, err := q.FactorySlots(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make(map[domain.FactoryID]int, len(rows))
+	for _, r := range rows {
+		out[domain.FactoryID(r.ID.String())] = capOf(r.MaxSlots)
+	}
+
+	return out, nil
 }
 
 // DeleteOrg implements ports.Tenancy.
@@ -325,11 +377,36 @@ func ruleError(err error, slug string) error {
 	}
 }
 
-func orgOf(id uuid.UUID, slug, name, mark string, created time.Time) domain.Org {
-	return domain.Org{ID: domain.OrgID(id.String()), Slug: slug, Name: name, Mark: mark, CreatedAt: created.UTC()}
+func orgOf(id uuid.UUID, slug, name, mark string, maxSlots *int32, created time.Time) domain.Org {
+	return domain.Org{
+		ID: domain.OrgID(id.String()), Slug: slug, Name: name, Mark: mark, MaxSlots: capOf(maxSlots), CreatedAt: created.UTC(),
+	}
 }
 
-func orgFrom(r db.Organization) domain.Org { return orgOf(r.ID, r.Slug, r.Name, r.Mark, r.CreatedAt) }
+func orgFrom(r db.Organization) domain.Org {
+	return orgOf(r.ID, r.Slug, r.Name, r.Mark, r.MaxSlots, r.CreatedAt)
+}
+
+// capOf reads a max_slots column: NULL is no cap, 0.
+func capOf(n *int32) int {
+	if n == nil {
+		return 0
+	}
+
+	return int(*n)
+}
+
+// optionalCap writes a max_slots column: no cap (0) is NULL. Caps are checked to be at most
+// domain.MaxSlotCap before they get here.
+func optionalCap(n int) *int32 {
+	if n == 0 {
+		return nil
+	}
+
+	v := int32(min(n, domain.MaxSlotCap)) //nolint:gosec // capped
+
+	return &v
+}
 
 func auditFrom(r db.AuditLog) (domain.AuditEntry, error) {
 	data := map[string]any{}

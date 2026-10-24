@@ -29,7 +29,9 @@ type Org struct {
 	ID         OrgID
 	Slug, Name string
 	// Mark is the one or two characters the org rail shows.
-	Mark      string
+	Mark string
+	// MaxSlots caps the agents running at once across the organization's factories; 0 is no cap.
+	MaxSlots  int
 	CreatedAt time.Time
 }
 
@@ -147,6 +149,18 @@ func CheckOrgName(name string) error {
 func CheckMark(mark string) error {
 	if n := utf8.RuneCountInString(mark); n < 1 || n > 2 || strings.TrimSpace(mark) == "" {
 		return fmt.Errorf("an organization mark has 1 or 2 characters: %w", ErrInvalid)
+	}
+
+	return nil
+}
+
+// MaxSlotCap is the highest slot cap an organization or a factory may have.
+const MaxSlotCap = 1000
+
+// CheckSlots enforces a slot cap of 1 to MaxSlotCap agents. The error wraps ErrInvalid.
+func CheckSlots(n int) error {
+	if n < 1 || n > MaxSlotCap {
+		return fmt.Errorf("a slot cap is 1 to %d agents, not %d: %w", MaxSlotCap, n, ErrInvalid)
 	}
 
 	return nil

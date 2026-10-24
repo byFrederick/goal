@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"time"
 
@@ -25,6 +26,10 @@ var (
 	ErrNoWork = errors.New("no work waiting")
 	// ErrSlotTaken means another claim holds the station slot.
 	ErrSlotTaken = errors.New("slot taken")
+	// ErrOrgFull means the organization runs as many agents as its slot cap allows.
+	ErrOrgFull = errors.New("organization slots full")
+	// ErrFactoryFull means the factory runs as many agents as its slot cap allows.
+	ErrFactoryFull = errors.New("factory slots full")
 	// ErrConflict means a compare-and-set guard failed: the item is no longer where a
 	// transition expected it, or a draft is no longer at the revision a save expected.
 	ErrConflict = errors.New("changed concurrently")
@@ -60,9 +65,11 @@ type Store interface {
 
 	// ClaimNext takes the next waiting item at c.Station in pull order (FOR UPDATE SKIP
 	// LOCKED), sets it in_progress, inserts a lease on c.Slot and appends a claimed event.
-	// It returns ErrNoWork when nothing waits and ErrSlotTaken when the slot already holds a
-	// lease; in both cases nothing changes. The unique (factory, station, slot) lease is what
-	// keeps WIP at or under capacity across instances.
+	// It returns ErrOrgFull or ErrFactoryFull when the organization's or the factory's leases
+	// already reach its slot cap (Tenancy.UpdateOrg sets them; checked first, under a lock that
+	// serializes the organization's claims while a cap is set), ErrNoWork when nothing waits and
+	// ErrSlotTaken when the slot already holds a lease; in each case nothing changes. The unique
+	// (factory, station, slot) lease is what keeps WIP at or under capacity across instances.
 	ClaimNext(ctx context.Context, c Claim) (domain.Item, domain.Lease, error)
 
 	// HeartbeatLease extends a held lease to expiresAt. It returns ErrLeaseLost when no lease
@@ -129,6 +136,8 @@ type Tenancy interface {
 	// UpdateOrg changes the fields u sets and appends one org.updated entry with each changed
 	// field's from and to; nothing changed appends nothing. (org)
 	UpdateOrg(ctx context.Context, by domain.Actor, u OrgUpdate) (domain.Org, error)
+	// FactorySlots returns every factory of the organization with its slot cap (0: none). (org)
+	FactorySlots(ctx context.Context) (map[domain.FactoryID]int, error)
 	// DeleteOrg soft-deletes the organization: from now on Org, Orgs and ActiveOrgs no longer
 	// see it. It appends org.deleted. (org)
 	DeleteOrg(ctx context.Context, by domain.Actor, now time.Time) error
@@ -145,13 +154,29 @@ type NewOrg struct {
 // OrgUpdate names the fields to change; nil leaves a field as it is.
 type OrgUpdate struct {
 	Name, Slug, Mark *string
+	// MaxSlots sets the organization's slot cap (domain.Org.MaxSlots); 0 clears it.
+	MaxSlots *int
+	// FactorySlots sets the slot caps of factories of the organization; 0 clears a cap.
+	// Per-factory caps may add up to more than the organization's.
+	FactorySlots map[domain.FactoryID]int
 }
 
-// Apply returns o with u's fields, checked by the domain rules (errors wrap domain.ErrInvalid),
-// and the org.updated audit data: each changed field's {from, to}. Whether a new slug is free
-// is the store's to decide.
-func (u OrgUpdate) Apply(o domain.Org) (domain.Org, map[string]any, error) {
-	changed := map[string]any{}
+// OrgChange is an OrgUpdate checked against the organization as it is.
+type OrgChange struct {
+	// Org is the organization after the update.
+	Org domain.Org
+	// FactorySlots holds the factory caps that change: the new cap, or 0 when it is cleared.
+	FactorySlots map[domain.FactoryID]int
+	// Audit is the org.updated data: each changed field's {from, to}, a cleared cap as nil, and
+	// the changed factory caps under "factory_slots" by factory id. Empty when nothing changes.
+	Audit map[string]any
+}
+
+// Apply checks u by the domain rules against o and its factories' caps (every factory of the
+// organization, 0 for no cap) and returns the change. Errors wrap domain.ErrInvalid, also for a
+// factory that is not the organization's. Whether a new slug is free is the store's to decide.
+func (u OrgUpdate) Apply(o domain.Org, factorySlots map[domain.FactoryID]int) (OrgChange, error) {
+	c := OrgChange{Org: o, FactorySlots: map[domain.FactoryID]int{}, Audit: map[string]any{}}
 
 	for _, f := range []struct {
 		name  string
@@ -159,23 +184,72 @@ func (u OrgUpdate) Apply(o domain.Org) (domain.Org, map[string]any, error) {
 		field *string
 		check func(string) error
 	}{
-		{"name", u.Name, &o.Name, domain.CheckOrgName},
-		{"slug", u.Slug, &o.Slug, domain.CheckSlug},
-		{"mark", u.Mark, &o.Mark, domain.CheckMark},
+		{"name", u.Name, &c.Org.Name, domain.CheckOrgName},
+		{"slug", u.Slug, &c.Org.Slug, domain.CheckSlug},
+		{"mark", u.Mark, &c.Org.Mark, domain.CheckMark},
 	} {
 		if f.to == nil || *f.to == *f.field {
 			continue
 		}
 
 		if err := f.check(*f.to); err != nil {
-			return domain.Org{}, nil, err
+			return OrgChange{}, err
 		}
 
-		changed[f.name] = map[string]any{"from": *f.field, "to": *f.to}
+		c.Audit[f.name] = map[string]any{"from": *f.field, "to": *f.to}
 		*f.field = *f.to
 	}
 
-	return o, changed, nil
+	if u.MaxSlots != nil && *u.MaxSlots != o.MaxSlots {
+		if err := checkCap(*u.MaxSlots); err != nil {
+			return OrgChange{}, err
+		}
+
+		c.Audit["max_slots"] = map[string]any{"from": capValue(o.MaxSlots), "to": capValue(*u.MaxSlots)}
+		c.Org.MaxSlots = *u.MaxSlots
+	}
+
+	factories := map[string]any{}
+
+	for id, to := range u.FactorySlots {
+		from, ok := factorySlots[id]
+		if !ok {
+			return OrgChange{}, fmt.Errorf("factory %s is not in this organization: %w", id, domain.ErrInvalid)
+		}
+
+		if err := checkCap(to); err != nil {
+			return OrgChange{}, fmt.Errorf("factory %s: %w", id, err)
+		}
+
+		if to != from {
+			c.FactorySlots[id] = to
+			factories[string(id)] = map[string]any{"from": capValue(from), "to": capValue(to)}
+		}
+	}
+
+	if len(factories) > 0 {
+		c.Audit["factory_slots"] = factories
+	}
+
+	return c, nil
+}
+
+// checkCap accepts 0 (no cap) and the caps domain.CheckSlots allows.
+func checkCap(n int) error {
+	if n == 0 {
+		return nil
+	}
+
+	return domain.CheckSlots(n)
+}
+
+// capValue is a cap as audit data records it: nil when there is none.
+func capValue(n int) any {
+	if n == 0 {
+		return nil
+	}
+
+	return n
 }
 
 // Audit reads an organization's audit log and appends entries that come with no other change;

@@ -21,10 +21,12 @@ var (
 
 // Tenancy keeps organizations and their audit logs in memory behind one mutex, with the
 // database's rules: unique slugs until purge, reserved slugs, soft delete, row-level isolation
-// of the audit log by the org in ctx.
+// of the audit log by the org in ctx. Linked to a Store (WithStore), it knows the
+// organizations' factories and sets their slot caps there; unlinked, an organization has none.
 type Tenancy struct {
 	mu    sync.Mutex
 	now   func() time.Time
+	store *Store
 	orgs  map[domain.OrgID]*orgRow
 	audit []auditRow
 	ids   int
@@ -45,6 +47,17 @@ type auditRow struct {
 // NewTenancy returns a tenancy with no organizations; now stamps creations and appends.
 func NewTenancy(now func() time.Time) *Tenancy {
 	return &Tenancy{now: now, orgs: map[domain.OrgID]*orgRow{}}
+}
+
+// WithStore links t to the store whose factories and slot caps UpdateOrg and FactorySlots
+// reach, as one PostgreSQL database holds both, and returns t.
+func (t *Tenancy) WithStore(s *Store) *Tenancy {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.store = s
+
+	return t
 }
 
 // Orgs implements ports.Tenancy.
@@ -137,23 +150,49 @@ func (t *Tenancy) UpdateOrg(ctx context.Context, by domain.Actor, u ports.OrgUpd
 		return domain.Org{}, err
 	}
 
-	next, changed, err := u.Apply(r.org)
+	c, err := u.Apply(r.org, t.factorySlotsLocked(r.org.ID))
 	if err != nil {
 		return domain.Org{}, err
 	}
 
-	if len(changed) == 0 {
+	if len(c.Audit) == 0 {
 		return r.org, nil
 	}
 
-	if next.Slug != r.org.Slug && t.slugTaken(next.Slug, r.org.ID) {
-		return domain.Org{}, fmt.Errorf("slug %q is taken: %w", next.Slug, domain.ErrInvalid)
+	if c.Org.Slug != r.org.Slug && t.slugTaken(c.Org.Slug, r.org.ID) {
+		return domain.Org{}, fmt.Errorf("slug %q is taken: %w", c.Org.Slug, domain.ErrInvalid)
 	}
 
-	r.org = next
-	t.appendLocked(next.ID, orgEntry(by, domain.AuditOrgUpdated, next, changed))
+	if t.store != nil {
+		t.store.SetSlotCaps(r.org.ID, c.Org.MaxSlots, c.FactorySlots)
+	}
 
-	return next, nil
+	r.org = c.Org
+	t.appendLocked(c.Org.ID, orgEntry(by, domain.AuditOrgUpdated, c.Org, c.Audit))
+
+	return c.Org, nil
+}
+
+// FactorySlots implements ports.Tenancy.
+func (t *Tenancy) FactorySlots(ctx context.Context) (map[domain.FactoryID]int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	r, err := t.liveLocked(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return t.factorySlotsLocked(r.org.ID), nil
+}
+
+// factorySlotsLocked returns the linked store's factories of org with their caps; none unlinked.
+func (t *Tenancy) factorySlotsLocked(org domain.OrgID) map[domain.FactoryID]int {
+	if t.store == nil {
+		return map[domain.FactoryID]int{}
+	}
+
+	return t.store.factorySlots(org)
 }
 
 // DeleteOrg implements ports.Tenancy.

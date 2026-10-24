@@ -140,9 +140,10 @@ func (s *Store) Leases(ctx context.Context, factory domain.FactoryID, station st
 	return out, nil
 }
 
-// ClaimNext implements ports.Store. The slot is checked before the item is locked, so a taken
-// slot reports ErrSlotTaken without touching the queue; a claim that races another onto the
-// same slot gets ErrSlotTaken from the unique lease index and rolls back.
+// ClaimNext implements ports.Store. The slot caps are checked first and the slot next, both
+// before the item is locked, so a full organization or factory and a taken slot report their
+// error without touching the queue; a claim that races another onto the same slot gets
+// ErrSlotTaken from the unique lease index and rolls back.
 func (s *Store) ClaimNext(ctx context.Context, c ports.Claim) (domain.Item, domain.Lease, error) {
 	factory, err := parseID("factory", string(c.FactoryID))
 	if err != nil {
@@ -157,6 +158,10 @@ func (s *Store) ClaimNext(ctx context.Context, c ports.Claim) (domain.Item, doma
 	)
 
 	err = s.inTx(ctx, func(q *db.Queries) error {
+		if err := checkSlotCaps(ctx, q, factory); err != nil {
+			return err
+		}
+
 		taken, err := q.SlotTaken(ctx, db.SlotTakenParams{FactoryID: factory, Station: c.Station.ID, Slot: int64(c.Slot)})
 		if err != nil {
 			return fmt.Errorf("check slot: %w", err)
@@ -211,6 +216,39 @@ func (s *Store) ClaimNext(ctx context.Context, c ports.Claim) (domain.Item, doma
 	}
 
 	return it, lease, nil
+}
+
+// checkSlotCaps returns ErrOrgFull or ErrFactoryFull when the organization's or the factory's
+// leases reach its cap. While either cap is set it first takes the organization's slot lock, held
+// until the claim commits, and counts the leases under it: claims of the organization then run
+// one after another, each seeing the leases of those before it, so no cap is ever exceeded.
+// Without caps claims take no lock.
+func checkSlotCaps(ctx context.Context, q *db.Queries, factory uuid.UUID) error {
+	caps, err := q.SlotCaps(ctx, factory)
+	if err != nil {
+		return fmt.Errorf("slot caps: %w", err)
+	}
+
+	if caps.OrgMax == 0 && caps.FactoryMax == 0 {
+		return nil
+	}
+
+	if err := q.LockOrgSlots(ctx); err != nil {
+		return fmt.Errorf("lock org slots: %w", err)
+	}
+
+	if caps, err = q.SlotCaps(ctx, factory); err != nil {
+		return fmt.Errorf("slot caps: %w", err)
+	}
+
+	switch {
+	case caps.OrgMax > 0 && caps.OrgLeases >= int64(caps.OrgMax):
+		return fmt.Errorf("%d of %d slots: %w", caps.OrgLeases, caps.OrgMax, ports.ErrOrgFull)
+	case caps.FactoryMax > 0 && caps.FactoryLeases >= int64(caps.FactoryMax):
+		return fmt.Errorf("factory %s, %d of %d slots: %w", factory, caps.FactoryLeases, caps.FactoryMax, ports.ErrFactoryFull)
+	default:
+		return nil
+	}
 }
 
 // HeartbeatLease implements ports.Store.

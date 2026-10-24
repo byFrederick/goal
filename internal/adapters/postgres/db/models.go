@@ -64,6 +64,7 @@ type Factory struct {
 	UpdatedAt        time.Time
 	LastItemNumber   int64
 	OrgID            uuid.UUID
+	MaxSlots         *int32
 }
 
 type ItemEvent struct {
@@ -100,6 +101,7 @@ type Organization struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt *time.Time
+	MaxSlots  *int32
 }
 
 type StationWip struct {

@@ -22,6 +22,8 @@ import (
 type Harness struct {
 	Tenancy ports.Tenancy
 	Audit   ports.Audit
+	// NewFactory returns a new factory of org, for the slot caps.
+	NewFactory func(t *testing.T, org domain.OrgID) domain.FactoryID
 }
 
 // Run runs the suite. Tests run in parallel and call newHarness once each; harnesses must be
@@ -43,6 +45,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"AuditLog_NewestFirstFilteredAndPaged", testAuditLog},
 		{"Audit_OtherOrgSeesNothing", testAuditIsolation},
 		{"OrgMethods_NoOrgIsAnError", testNoOrg},
+		{"UpdateOrg_SlotCaps", testSlotCaps},
+		{"UpdateOrg_SlotCapRulesRefused", testSlotCapRules},
 	}
 
 	for _, tc := range tests {

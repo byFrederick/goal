@@ -22,7 +22,14 @@ func TestTenancy_Conformance(t *testing.T) {
 
 		s := New(newTestPool(t))
 
-		return tenancytest.Harness{Tenancy: s, Audit: s}
+		return tenancytest.Harness{
+			Tenancy: s, Audit: s,
+			NewFactory: func(t *testing.T, org domain.OrgID) domain.FactoryID {
+				t.Helper()
+
+				return saveFactory(domain.WithOrg(t.Context(), org), t, s)
+			},
+		}
 	})
 }
 

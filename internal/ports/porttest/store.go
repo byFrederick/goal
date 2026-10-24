@@ -20,10 +20,12 @@ var _ ports.Store = (*Store)(nil)
 // atomic like a PostgreSQL transaction. Like row-level security, every method needs an
 // organization in ctx (domain.ErrNoOrg otherwise) and sees only that organization's rows. A
 // factory belongs to the organization AddFactory names, or to the one its first item is created
-// in.
+// in. Slot caps are set with SetSlotCaps (Tenancy.UpdateOrg does it for a linked store).
 type Store struct {
 	mu        sync.Mutex
 	factories map[domain.FactoryID]domain.OrgID
+	orgCaps   map[domain.OrgID]int
+	factCaps  map[domain.FactoryID]int
 	items     map[domain.ItemID]*domain.Item
 	numbers   map[domain.FactoryID]int64
 	leases    map[domain.ItemID]domain.Lease
@@ -37,6 +39,8 @@ type Store struct {
 func NewStore() *Store {
 	return &Store{
 		factories: map[domain.FactoryID]domain.OrgID{},
+		orgCaps:   map[domain.OrgID]int{},
+		factCaps:  map[domain.FactoryID]int{},
 		items:     map[domain.ItemID]*domain.Item{},
 		numbers:   map[domain.FactoryID]int64{},
 		leases:    map[domain.ItemID]domain.Lease{},
@@ -50,6 +54,32 @@ func (s *Store) AddFactory(org domain.OrgID, id domain.FactoryID) {
 	defer s.mu.Unlock()
 
 	s.factories[id] = org
+}
+
+// SetSlotCaps sets an organization's slot cap and those of the named factories, as
+// Tenancy.UpdateOrg does in PostgreSQL; 0 clears a cap.
+func (s *Store) SetSlotCaps(org domain.OrgID, maxSlots int, factories map[domain.FactoryID]int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.orgCaps[org] = maxSlots
+	maps.Copy(s.factCaps, factories)
+}
+
+// factorySlots returns every factory of org with its cap (0: none).
+func (s *Store) factorySlots(org domain.OrgID) map[domain.FactoryID]int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := map[domain.FactoryID]int{}
+
+	for id, owner := range s.factories {
+		if owner == org {
+			out[id] = s.factCaps[id]
+		}
+	}
+
+	return out
 }
 
 // orgOf returns the organization in ctx, as row-level security requires.
@@ -228,6 +258,10 @@ func (s *Store) ClaimNext(ctx context.Context, c ports.Claim) (domain.Item, doma
 	defer s.changes.signal()
 	defer s.mu.Unlock()
 
+	if err := s.slotCapsLocked(org, c.FactoryID); err != nil {
+		return domain.Item{}, domain.Lease{}, err
+	}
+
 	for _, l := range s.leases {
 		if l.FactoryID == c.FactoryID && l.Station == c.Station.ID && l.Slot == c.Slot {
 			return domain.Item{}, domain.Lease{}, fmt.Errorf("slot %d at %s: %w", c.Slot, c.Station.ID, ports.ErrSlotTaken)
@@ -256,6 +290,37 @@ func (s *Store) ClaimNext(ctx context.Context, c ports.Claim) (domain.Item, doma
 	})
 
 	return clone(it), l, nil
+}
+
+// slotCapsLocked returns ErrOrgFull or ErrFactoryFull when org's or the factory's leases reach
+// its cap. A factory of another organization has no cap here, as row-level security hides it.
+// Callers hold s.mu.
+func (s *Store) slotCapsLocked(org domain.OrgID, factory domain.FactoryID) error {
+	orgMax, factoryMax := s.orgCaps[org], 0
+	if s.factories[factory] == org {
+		factoryMax = s.factCaps[factory]
+	}
+
+	var inOrg, inFactory int
+
+	for _, l := range s.leases {
+		if _, ok := s.visible(l.ItemID, org); ok {
+			inOrg++
+
+			if l.FactoryID == factory {
+				inFactory++
+			}
+		}
+	}
+
+	switch {
+	case orgMax > 0 && inOrg >= orgMax:
+		return fmt.Errorf("%d of %d slots: %w", inOrg, orgMax, ports.ErrOrgFull)
+	case factoryMax > 0 && inFactory >= factoryMax:
+		return fmt.Errorf("factory %s, %d of %d slots: %w", factory, inFactory, factoryMax, ports.ErrFactoryFull)
+	default:
+		return nil
+	}
 }
 
 // HeartbeatLease implements ports.Store.
