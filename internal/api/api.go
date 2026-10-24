@@ -75,6 +75,7 @@ type Items interface {
 	StationLoads(ctx context.Context, factory domain.FactoryID) ([]domain.StationLoad, error)
 	FlowMetrics(ctx context.Context, q ports.FlowQuery, longWaitsAt string) (domain.FlowMetrics, error)
 	DoneByBucket(ctx context.Context, q ports.FlowQuery, d time.Duration, n int) ([]int, error)
+	SpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
 	Attention(ctx context.Context) ([]domain.Attention, error)
 	WaitingHuman(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.Item, error)
 	ItemSpans(ctx context.Context, id domain.ItemID) ([]domain.Span, error)

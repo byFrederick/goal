@@ -338,6 +338,24 @@ func (e ItemState) Valid() bool {
 	}
 }
 
+// Defines values for LineReleasePolicy.
+const (
+	DrumBufferRope LineReleasePolicy = "drum-buffer-rope"
+	Push           LineReleasePolicy = "push"
+)
+
+// Valid indicates whether the value is a known member of the LineReleasePolicy enum.
+func (e LineReleasePolicy) Valid() bool {
+	switch e {
+	case DrumBufferRope:
+		return true
+	case Push:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for MergeRequestMethod.
 const (
 	Squash MergeRequestMethod = "squash"
@@ -663,7 +681,23 @@ type Board struct {
 		Name  string  `json:"name"`
 		Title *string `json:"title,omitempty"`
 	} `json:"factory"`
+
+	// Line The line as a whole: its work in progress against its limits, how work is released into it, its expedite lane and its weekly budget. The release policy and the expedite limit are shown as configured; goald does not enforce them yet (it releases as push).
+	Line     BoardLine      `json:"line"`
 	Stations []BoardStation `json:"stations"`
+}
+
+// BoardLine The line as a whole: its work in progress against its limits, how work is released into it, its expedite lane and its weekly budget. The release policy and the expedite limit are shown as configured; goald does not enforce them yet (it releases as push).
+type BoardLine struct {
+	// Budget The weekly budget over the last 7×24 hours; null when the factory has none
+	Budget *LineBudget `json:"budget"`
+
+	// Expedite The expedite lane; null when the line has no expedite work types and no limit
+	Expedite *LineExpedite `json:"expedite"`
+	Release  LineRelease   `json:"release"`
+
+	// Wip Items in progress or waiting on a person at the stations with a wip limit, and the sum of those limits (null when no station has one)
+	Wip LineWip `json:"wip"`
 }
 
 // BoardStation defines model for BoardStation.
@@ -1287,8 +1321,11 @@ type ItemCard struct {
 	CostUsd        float64        `json:"cost_usd"`
 	CreatedAt      time.Time      `json:"created_at"`
 	Id             string         `json:"id"`
-	Lane           *string        `json:"lane,omitempty"`
-	Number         int64          `json:"number"`
+
+	// InBuffer Queued or ready at the drum (the line's configured constraint, else the constraint now)
+	InBuffer bool    `json:"in_buffer"`
+	Lane     *string `json:"lane,omitempty"`
+	Number   int64   `json:"number"`
 
 	// PrUrl The pull request the item's latest station output names, else null
 	PrUrl *string `json:"pr_url"`
@@ -1296,6 +1333,9 @@ type ItemCard struct {
 	// Ref <factory name>#<number>, as in goal#2
 	Ref         string `json:"ref"`
 	ReworkCount int    `json:"rework_count"`
+
+	// RopeHeld Held at a queue station by the drum-buffer-rope release; always false until it is enforced
+	RopeHeld bool `json:"rope_held"`
 
 	// Slot While in progress at a station that runs several copies of its agent, the copy working it, 1-based (investigator-2); else null
 	Slot    *int      `json:"slot"`
@@ -1366,8 +1406,52 @@ type ItemsAtRemovedStations struct {
 	Unmapped []ItemAt `json:"unmapped"`
 }
 
+// LineBudget defines model for LineBudget.
+type LineBudget struct {
+	// Exhausted No new agent work starts until the window moves or the cap rises
+	Exhausted bool `json:"exhausted"`
+
+	// SpentUsd The cost of the runs started in the window
+	SpentUsd  float64 `json:"spent_usd"`
+	WeeklyUsd float64 `json:"weekly_usd"`
+}
+
+// LineExpedite defines model for LineExpedite.
+type LineExpedite struct {
+	// InUse Open expedite items past the line's queue stations
+	InUse int `json:"in_use"`
+
+	// Limit flow.expedite.wip, shown and not enforced yet; null for no limit
+	Limit *int `json:"limit"`
+}
+
 // LineRange The first and last line of factory.yaml, 1-based; [0, 0] when it is not in the file
 type LineRange = []int
+
+// LineRelease defines model for LineRelease.
+type LineRelease struct {
+	// Buffer How many items the drum keeps ready in front of it (its buffer), or null
+	Buffer *int `json:"buffer"`
+
+	// Drum The station the line is paced by, its configured constraint or else the constraint now; null without one
+	Drum *string `json:"drum"`
+
+	// Enforced Whether goald releases by this policy; false until drum-buffer-rope is enforced (later)
+	Enforced bool `json:"enforced"`
+
+	// InBuffer Items queued or ready at the drum
+	InBuffer int               `json:"in_buffer"`
+	Policy   LineReleasePolicy `json:"policy"`
+}
+
+// LineReleasePolicy defines model for LineRelease.Policy.
+type LineReleasePolicy string
+
+// LineWip Items in progress or waiting on a person at the stations with a wip limit, and the sum of those limits (null when no station has one)
+type LineWip struct {
+	InProgress int  `json:"in_progress"`
+	Limit      *int `json:"limit"`
+}
 
 // MergeRequest defines model for MergeRequest.
 type MergeRequest struct {

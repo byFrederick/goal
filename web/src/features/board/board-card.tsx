@@ -13,18 +13,9 @@ import { agentCopy, cardState } from './stats';
  * link sits above it so both stay separately focusable. `compact` is the phone's list row: the
  * reference, type and age on one line, no chips.
  */
-export function BoardCard({
-  item,
-  atConstraint,
-  compact = false,
-}: {
-  item: ItemCard;
-  atConstraint: boolean;
-  compact?: boolean;
-}) {
+export function BoardCard({ item, compact = false }: { item: ItemCard; compact?: boolean }) {
   const params = useFactoryParams();
-  const state = cardState(item, { atConstraint });
-  const buffered = atConstraint && (item.state === 'ready' || item.state === 'queued');
+  const state = cardState(item);
   const age = formatAge(item.age_seconds);
 
   return (
@@ -33,7 +24,7 @@ export function BoardCard({
         'relative flex flex-col rounded-control border bg-surface transition-[border-color,box-shadow] duration-200',
         'hover:border-faint hover:shadow-lift has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-run',
         compact ? 'gap-1 p-3' : 'gap-2 p-3',
-        buffered
+        item.in_buffer
           ? 'border-amber-line bg-amber-tint'
           : item.state === 'waiting_human'
             ? 'border-you-line'

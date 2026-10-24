@@ -1689,7 +1689,7 @@ components:
     ItemCard:
       type: object
       description: An item as boards and lists show it
-      required: [id, ref, number, title, type, station, state, class_of_service, rework_count, cost_usd, created_at, updated_at, age_seconds, agent, pr_url, slot, turn, summary]
+      required: [id, ref, number, title, type, station, state, class_of_service, rework_count, cost_usd, created_at, updated_at, age_seconds, agent, pr_url, slot, turn, summary, in_buffer, rope_held]
       properties:
         id: { type: string }
         ref: { type: string, description: "<factory name>#<number>, as in goal#2" }
@@ -1730,6 +1730,12 @@ components:
           type: string
           nullable: true
           description: The summary field of the item's latest station output that has one, else null
+        in_buffer:
+          type: boolean
+          description: Queued or ready at the drum (the line's configured constraint, else the constraint now)
+        rope_held:
+          type: boolean
+          description: Held at a queue station by the drum-buffer-rope release; always false until it is enforced
     ItemPage:
       type: object
       required: [items, next_after]
@@ -1744,7 +1750,7 @@ components:
           description: Pass as `after` for the next page; null on the last page
     Board:
       type: object
-      required: [factory, stations, constraint]
+      required: [factory, stations, constraint, line]
       properties:
         factory:
           type: object
@@ -1760,6 +1766,67 @@ components:
           type: string
           nullable: true
           description: The id of the agent station with the most work per slot now, or null
+        line: { $ref: "#/components/schemas/BoardLine" }
+    BoardLine:
+      type: object
+      description: >-
+        The line as a whole: its work in progress against its limits, how work is released into
+        it, its expedite lane and its weekly budget. The release policy and the expedite limit are
+        shown as configured; goald does not enforce them yet (it releases as push).
+      required: [wip, release, expedite, budget]
+      properties:
+        wip: { $ref: "#/components/schemas/LineWip" }
+        release: { $ref: "#/components/schemas/LineRelease" }
+        expedite:
+          nullable: true
+          description: The expedite lane; null when the line has no expedite work types and no limit
+          allOf: [{ $ref: "#/components/schemas/LineExpedite" }]
+        budget:
+          nullable: true
+          description: The weekly budget over the last 7×24 hours; null when the factory has none
+          allOf: [{ $ref: "#/components/schemas/LineBudget" }]
+    LineWip:
+      type: object
+      description: >-
+        Items in progress or waiting on a person at the stations with a wip limit, and the sum of
+        those limits (null when no station has one)
+      required: [in_progress, limit]
+      properties:
+        in_progress: { type: integer }
+        limit: { type: integer, nullable: true }
+    LineRelease:
+      type: object
+      required: [policy, enforced, drum, buffer, in_buffer]
+      properties:
+        policy: { type: string, enum: [push, drum-buffer-rope] }
+        enforced:
+          type: boolean
+          description: Whether goald releases by this policy; false until drum-buffer-rope is enforced (later)
+        drum:
+          type: string
+          nullable: true
+          description: The station the line is paced by, its configured constraint or else the constraint now; null without one
+        buffer:
+          type: integer
+          nullable: true
+          description: How many items the drum keeps ready in front of it (its buffer), or null
+        in_buffer: { type: integer, description: Items queued or ready at the drum }
+    LineExpedite:
+      type: object
+      required: [limit, in_use]
+      properties:
+        limit:
+          type: integer
+          nullable: true
+          description: flow.expedite.wip, shown and not enforced yet; null for no limit
+        in_use: { type: integer, description: Open expedite items past the line's queue stations }
+    LineBudget:
+      type: object
+      required: [weekly_usd, spent_usd, exhausted]
+      properties:
+        weekly_usd: { type: number, format: double }
+        spent_usd: { type: number, format: double, description: The cost of the runs started in the window }
+        exhausted: { type: boolean, description: No new agent work starts until the window moves or the cap rises }
     QueueTrend:
       type: string
       description: How many items wait at a station now against 24 hours earlier

@@ -39,29 +39,29 @@ func (s *server) GetBoard(ctx context.Context, req gen.GetBoardRequestObject) (g
 		return nil, err
 	}
 
-	l := f.Line()
+	l, now := f.Line(), s.clock.Now().UTC()
 
 	stats, err := s.boardStats(ctx, l.FactoryID, w, now)
 	if err != nil {
 		return nil, err
 	}
 
-	loadList, err := s.items.StationLoads(ctx, l.FactoryID)
+	loads, err := s.stationLoads(ctx, l.FactoryID)
 	if err != nil {
 		return nil, err
 	}
 
-	loads := make(map[string]domain.StationLoad, len(loadList))
-	for _, ld := range loadList {
-		loads[ld.Station] = ld
-	}
-
-	byStation, err := s.boardCards(ctx, f, l)
+	byStation, err := s.boardCards(ctx, f, l, drumOf(l, loads))
 	if err != nil {
 		return nil, err
 	}
 
-	board := gen.GetBoard200JSONResponse{Stations: make([]gen.BoardStation, 0, len(l.Stations))}
+	line, err := s.boardLine(ctx, l, loads, byStation, now)
+	if err != nil {
+		return nil, err
+	}
+
+	board := gen.GetBoard200JSONResponse{Stations: make([]gen.BoardStation, 0, len(l.Stations)), Line: line}
 	board.Factory.Id, board.Factory.Name, board.Factory.Title = f.Metadata.ID, f.Metadata.Name, optional(f.Metadata.Title)
 
 	for _, st := range l.Stations {
@@ -89,9 +89,24 @@ func (s *server) GetBoard(ctx context.Context, req gen.GetBoardRequestObject) (g
 	return board, nil
 }
 
+// stationLoads reads the load of the factory's stations, by station.
+func (s *server) stationLoads(ctx context.Context, f domain.FactoryID) (map[string]domain.StationLoad, error) {
+	list, err := s.items.StationLoads(ctx, f)
+	if err != nil {
+		return nil, err
+	}
+
+	loads := make(map[string]domain.StationLoad, len(list))
+	for _, ld := range list {
+		loads[ld.Station] = ld
+	}
+
+	return loads, nil
+}
+
 // boardCards renders the board's cards by station: every open item (up to boardOpenItems) and the
-// boardDoneItems newest done ones.
-func (s *server) boardCards(ctx context.Context, f *config.Factory, l domain.Line) (map[string][]gen.ItemCard, error) {
+// boardDoneItems newest done ones, those waiting at drum in its buffer.
+func (s *server) boardCards(ctx context.Context, f *config.Factory, l domain.Line, drum string) (map[string][]gen.ItemCard, error) {
 	open, err := s.items.ListItems(ctx, ports.ItemQuery{FactoryID: l.FactoryID, States: openStates, Limit: boardOpenItems})
 	if err != nil {
 		return nil, err
@@ -104,7 +119,7 @@ func (s *server) boardCards(ctx context.Context, f *config.Factory, l domain.Lin
 		return nil, err
 	}
 
-	cards, err := s.cards(ctx, f, l, append(open, done...))
+	cards, err := s.cards(ctx, f, l, drum, append(open, done...))
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +244,7 @@ func (s *server) ListItems(ctx context.Context, req gen.ListItemsRequestObject) 
 		return nil, err
 	}
 
-	cards, err := s.cards(ctx, f, f.Line(), items)
+	cards, err := s.listCards(ctx, f, items)
 	if err != nil {
 		return nil, err
 	}
@@ -244,10 +259,23 @@ func (s *server) ListItems(ctx context.Context, req gen.ListItemsRequestObject) 
 	return page, nil
 }
 
+// listCards renders a list of factory f's items as cards, with the line's drum now.
+func (s *server) listCards(ctx context.Context, f *config.Factory, items []domain.Item) ([]gen.ItemCard, error) {
+	l := f.Line()
+
+	loads, err := s.stationLoads(ctx, l.FactoryID)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.cards(ctx, f, l, drumOf(l, loads), items)
+}
+
 // cards renders items of factory f as cards: for every item in progress the agent working it, the
 // copy (1-based) when its station runs several, and the turns of its running run; for every item
-// the pull request and the summary its outputs name.
-func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, items []domain.Item) ([]gen.ItemCard, error) {
+// the pull request and the summary its outputs name, and whether it waits in the buffer of drum
+// (none when drum is ""). Nothing is held by the rope until drum-buffer-rope is enforced.
+func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, drum string, items []domain.Item) ([]gen.ItemCard, error) {
 	leases, turns, err := s.inProgress(ctx, l, items)
 	if err != nil {
 		return nil, err
@@ -268,6 +296,7 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, it
 			ClassOfService: gen.ClassOfService(it.Class), ReworkCount: it.ReworkCount, CostUsd: it.CostUSD,
 			CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt, AgeSeconds: int64(max(age, 0) / time.Second),
 			PrUrl: optional(it.PullRequest(l)), Summary: optional(it.Summary(l)),
+			InBuffer: drum != "" && it.Station == drum && it.State.Waiting(),
 		}
 
 		if ls, ok := leases[it.ID]; ok {

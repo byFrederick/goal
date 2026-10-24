@@ -157,6 +157,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       slot: run && copies > 1 ? run.slot + 1 : null,
       turn: run ? run.turn : null,
       summary: summaryOf(it),
+      in_buffer: (it.state === 'queued' || it.state === 'ready') && it.station === state.constraint[it.factory],
+      rope_held: false,
     };
   };
 
@@ -456,6 +458,51 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       factory: { id: factory.id, name: factory.name, ...(factory.title ? { title: factory.title } : {}) },
       stations,
       constraint: state.constraint[factory.name] ?? null,
+      line: lineOf(factory, stations, items),
+    };
+  };
+
+  /**
+   * The line as goald describes it: work in progress at the stations with a limit, the release
+   * policy with the drum's buffer (shown, not enforced), the expedite lane and the weekly budget.
+   */
+  const lineOf = (factory: Factory, stations: BoardStation[], items: MockItem[]): Board['line'] => {
+    const flow = state.flow[factory.name];
+    const drum = state.constraint[factory.name] ?? null;
+    const limited = stations.filter((s) => s.wip_limit !== null);
+    const weekly = state.weeklyBudget[factory.name] ?? null;
+    const today = Date.parse(`${utcDay(0)}T00:00:00Z`);
+    const spent = metricsOf(flowInput(factory), { from: today - 6 * dayMs, to: today }, false).spend_usd;
+    const queues = new Set(stations.filter((s) => s.kind === 'queue').map((s) => s.id));
+    const lane = flow?.expedite_wip !== undefined;
+    return {
+      wip: {
+        in_progress: limited.reduce(
+          (n, s) => n + s.in_progress + s.items.filter((it) => it.state === 'waiting_human').length,
+          0,
+        ),
+        limit: limited.length > 0 ? limited.reduce((n, s) => n + (s.wip_limit ?? 0), 0) : null,
+      },
+      release: {
+        policy: flow?.release ?? 'push',
+        enforced: false,
+        drum,
+        buffer: drum ? (state.stations[factory.name]?.[drum]?.buffer ?? null) : null,
+        in_buffer: stations.find((s) => s.id === drum)?.waiting ?? 0,
+      },
+      expedite: lane
+        ? {
+            limit: flow?.expedite_wip ?? null,
+            in_use: items.filter(
+              (it) =>
+                it.class_of_service === 'expedite' &&
+                it.state !== 'done' &&
+                it.state !== 'cancelled' &&
+                !queues.has(it.station),
+            ).length,
+          }
+        : null,
+      budget: weekly === null ? null : { weekly_usd: weekly, spent_usd: spent, exhausted: spent >= weekly },
     };
   };
 

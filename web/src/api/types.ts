@@ -7,6 +7,7 @@ export type {
   AuditEntry,
   AuditPage,
   Board,
+  BoardLine,
   BoardStation,
   BuilderCapabilities,
   BuilderLimits,

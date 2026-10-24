@@ -5,7 +5,7 @@ import { useEffect, useRef } from 'react';
 import { boardQuery } from '../../api/queries';
 import type { Board, ItemCard } from '../../api/types';
 import { factoryTitle, useFactory } from '../../shared/factory';
-import { humanize, plural } from '../../shared/format';
+import { humanize } from '../../shared/format';
 import { waitingOnYou } from '../../shared/item-state';
 import { LiveStatus } from '../../shared/live-status';
 import { NewItemButton } from '../../shared/new-item';
@@ -15,7 +15,17 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { Meter } from '../../ui/hatch';
 import { BoardCard, ExpediteCard, ExpediteRow } from './board-card';
-import { columnCount, constraintNote, stationMeter, stationNote, stationStat } from './stats';
+import {
+  budgetNote,
+  columnCount,
+  constraintNote,
+  expediteUse,
+  lineSentence,
+  stationMeter,
+  stationNote,
+  stationStat,
+  wipText,
+} from './stats';
 
 const live = (it: ItemCard) => it.state !== 'done' && it.state !== 'cancelled';
 const isExpedite = (it: ItemCard) => it.class_of_service === 'expedite' && live(it);
@@ -23,25 +33,28 @@ const isExpedite = (it: ItemCard) => it.class_of_service === 'expedite' && live(
 const constraintRing = 'border-amber shadow-[inset_0_3px_0_var(--color-amber)]';
 
 function LineCard({ board }: { board: Board }) {
-  const wip = board.stations.reduce((n, s) => n + s.in_progress, 0);
-  const limit = board.stations.reduce((n, s) => n + (s.wip_limit ?? 0), 0);
-  const constraint = board.stations.find((s) => s.id === board.constraint);
+  const sentence = lineSentence(board.line);
+  const budget = budgetNote(board.line);
 
   return (
     <SectionCard
       title="The line"
       description={
-        constraint
-          ? `${humanize(constraint.id)} is the constraint; the line moves at its pace.`
-          : 'No station holds the line back right now.'
+        <>
+          {sentence.text}
+          {sentence.notEnforced ? (
+            <>
+              {' '}
+              <Chip tone="quiet" className="align-[1px] text-muted">
+                Not enforced yet
+              </Chip>
+            </>
+          ) : null}
+        </>
       }
-      aside={
-        <span className="text-sm whitespace-nowrap text-muted">
-          WIP {wip}
-          {limit > 0 ? ` of ${limit}` : ''}
-        </span>
-      }
+      aside={<span className="text-sm whitespace-nowrap text-muted">{wipText(board.line)}</span>}
     >
+      {budget ? <p className="m-0 -mt-1 text-sm text-rework-ink">{budget}</p> : null}
       {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a scroll container must take focus so keyboards can scroll it (axe scrollable-region-focusable) */}
       <section tabIndex={0} aria-label="Stations in line order" className="-mx-1 overflow-x-auto px-1 pb-1">
         <ol
@@ -74,7 +87,7 @@ function LineCard({ board }: { board: Board }) {
   );
 }
 
-function ExpediteLane({ items }: { items: ItemCard[] }) {
+function ExpediteLane({ line, items }: { line: Board['line']; items: ItemCard[] }) {
   if (items.length === 0) return null;
   return (
     <section
@@ -85,7 +98,7 @@ function ExpediteLane({ items }: { items: ItemCard[] }) {
         <h2 id="expedite-h" className="m-0 text-[15px] font-medium text-rework-ink">
           Expedite lane
         </h2>
-        <p className="m-0 mt-0.5 text-[13px] text-rework-ink">{plural(items.length, 'item')} skipping the queue</p>
+        <p className="m-0 mt-0.5 text-[13px] text-rework-ink">{expediteUse(line, items.length)}</p>
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-2 md:max-w-[680px]">
         {items.map((it) => (
@@ -123,7 +136,7 @@ function Columns({ board }: { board: Board }) {
               </div>
               {items.length === 0 ? <p className="m-0 px-1 pb-1 text-[13px] text-muted">Empty</p> : null}
               {items.map((it) => (
-                <BoardCard key={it.id} item={it} atConstraint={drum} />
+                <BoardCard key={it.id} item={it} />
               ))}
             </section>
           );
@@ -195,7 +208,7 @@ function StationTabs({ board, selected, expedite }: { board: Board; selected: st
               {drum ? <p className="m-0 mb-1 text-[13px] text-ink-soft">{constraintNote(s)}</p> : null}
               {items.length === 0 ? <p className="m-0 text-sm text-muted">Nothing here right now.</p> : null}
               {items.map((it) => (
-                <BoardCard key={it.id} item={it} atConstraint={drum} compact />
+                <BoardCard key={it.id} item={it} compact />
               ))}
             </section>
           </Tabs.Content>
@@ -211,7 +224,6 @@ export function BoardPage() {
   const { data: board } = useSuspenseQuery(boardQuery(org.id, factory.id));
   const search = useSearch({ from: '/o/$org/f/$factory/board' });
   const expedite = board.stations.flatMap((s) => s.items.filter(isExpedite));
-  const wip = board.stations.reduce((n, s) => n + s.in_progress, 0);
   const selected =
     board.stations.find((s) => s.id === search.station)?.id ??
     board.constraint ??
@@ -238,13 +250,13 @@ export function BoardPage() {
         </div>
       </header>
       <div className="-mt-3 flex items-center gap-1 text-sm text-muted md:hidden">
-        <LiveStatus className="text-sm" suffix={`, WIP ${wip}`} />
+        <LiveStatus className="text-sm" suffix={`, ${wipText(board.line)}`} />
       </div>
 
       <div className="hidden md:block">
         <LineCard board={board} />
       </div>
-      <ExpediteLane items={expedite} />
+      <ExpediteLane line={board.line} items={expedite} />
       <Columns board={board} />
       <StationTabs board={board} selected={selected} expedite={expedite} />
       <p className="m-0 text-[13px] text-muted">Agents pull work when they have room; nobody assigns it.</p>

@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import type { BoardStation, ItemCard } from '../../api/types';
-import { cardState, columnCount, constraintNote, stationMeter, stationNote, stationStat } from './stats';
+import type { BoardLine, BoardStation, ItemCard } from '../../api/types';
+import {
+  budgetNote,
+  cardState,
+  columnCount,
+  constraintNote,
+  expediteUse,
+  lineSentence,
+  stationMeter,
+  stationNote,
+  stationStat,
+  wipText,
+} from './stats';
 
 const station = (over: Partial<BoardStation>): BoardStation => ({
   id: 'work',
@@ -94,6 +105,67 @@ describe('stationMeter', () => {
   });
 });
 
+const line = (over: Partial<BoardLine> = {}): BoardLine => ({
+  wip: { in_progress: 9, limit: 15 },
+  release: { policy: 'push', enforced: false, drum: 'investigate', buffer: 2, in_buffer: 2 },
+  expedite: null,
+  budget: null,
+  ...over,
+});
+
+describe('lineSentence', () => {
+  it('states the rope of drum-buffer-rope, not enforced yet', () => {
+    expect(
+      lineSentence(
+        line({
+          release: { policy: 'drum-buffer-rope', enforced: false, drum: 'investigate', buffer: 2, in_buffer: 1 },
+        }),
+      ),
+    ).toEqual({ text: 'New work enters only when Investigate’s buffer drops below 2', notEnforced: true });
+  });
+
+  it('names the drum of a push line, or says nothing holds it back', () => {
+    expect(lineSentence(line())).toEqual({
+      text: 'Investigate is the constraint; the line moves at its pace.',
+      notEnforced: false,
+    });
+    expect(
+      lineSentence(line({ release: { policy: 'push', enforced: false, drum: null, buffer: null, in_buffer: 0 } })).text,
+    ).toBe('No station holds the line back right now.');
+  });
+
+  it('falls back to the drum when drum-buffer-rope has no buffer to keep', () => {
+    expect(
+      lineSentence(
+        line({ release: { policy: 'drum-buffer-rope', enforced: false, drum: 'build', buffer: null, in_buffer: 0 } }),
+      ),
+    ).toEqual({ text: 'Build is the constraint; the line moves at its pace.', notEnforced: false });
+  });
+});
+
+describe('wipText and expediteUse', () => {
+  it('counts work in progress against the stations’ limits', () => {
+    expect(wipText(line())).toBe('WIP 9 of 15');
+    expect(wipText(line({ wip: { in_progress: 3, limit: null } }))).toBe('WIP 3');
+  });
+
+  it('counts the expedite lane’s use against its limit', () => {
+    expect(expediteUse(line({ expedite: { limit: 1, in_use: 1 } }), 1)).toBe('1 of 1 in use');
+    expect(expediteUse(line({ expedite: { limit: null, in_use: 2 } }), 2)).toBe('2 in use');
+    expect(expediteUse(line(), 3)).toBe('3 items skipping the queue');
+  });
+});
+
+describe('budgetNote', () => {
+  it('speaks only when the weekly budget is used up', () => {
+    expect(budgetNote(line({ budget: { weekly_usd: 60, spent_usd: 61.2, exhausted: true } }))).toBe(
+      'Weekly budget used up: $61.20 of $60. No new agent work starts until the week’s spend falls below it.',
+    );
+    expect(budgetNote(line({ budget: { weekly_usd: 60, spent_usd: 12, exhausted: false } }))).toBeNull();
+    expect(budgetNote(line())).toBeNull();
+  });
+});
+
 describe('constraintNote', () => {
   it('describes the constraint by its busy share and queue, else by what waits in front of it', () => {
     expect(constraintNote(station({ busy_ratio: 0.94, queue_trend: 'growing' }))).toBe(
@@ -122,6 +194,8 @@ const card = (over: Partial<ItemCard>): ItemCard => ({
   slot: null,
   turn: null,
   summary: null,
+  in_buffer: false,
+  rope_held: false,
   ...over,
 });
 
@@ -147,9 +221,10 @@ describe('cardState', () => {
     expect(cardState(card({ state: 'done' })).text).toBe('Done');
   });
 
-  it('marks work ready in front of the constraint as its buffer', () => {
-    expect(cardState(card({ state: 'ready' }), { atConstraint: true }).text).toBe('Ready in buffer');
-    expect(cardState(card({ rework_count: 1 }), { atConstraint: true }).text).toBe('Ready in buffer');
-    expect(cardState(card({}), { atConstraint: false }).text).toBe('Waiting');
+  it('marks work in the drum’s buffer, and work the rope holds back', () => {
+    expect(cardState(card({ state: 'ready', in_buffer: true })).text).toBe('Ready in buffer');
+    expect(cardState(card({ rework_count: 1, in_buffer: true })).text).toBe('Ready in buffer');
+    expect(cardState(card({ rope_held: true }))).toEqual({ text: 'Waiting for buffer room', tone: 'muted' });
+    expect(cardState(card({})).text).toBe('Waiting');
   });
 });

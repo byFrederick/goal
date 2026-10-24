@@ -412,6 +412,28 @@ test('the board shows how each station is doing and who works each card', async 
   await expectAccessible(page);
 });
 
+test('the line shows its rope, not enforced yet, its work in progress and the expedite lane in use', async ({
+  page,
+}) => {
+  await page.goto('/o/acme/f/sre/board');
+  if (isPhone(page)) {
+    await expect(page.getByText('Live, WIP 7 of 12')).toBeVisible();
+    return;
+  }
+
+  const line = page.getByRole('region', { name: 'The line' });
+  await expect(line).toContainText('New work enters only when Investigate’s buffer drops below 2 Not enforced yet');
+  await expect(line).toContainText('WIP 7 of 12');
+  await expect(page.getByRole('region', { name: 'Expedite lane' })).toContainText('Expedite lane1 of 1 in use');
+
+  // A push line names its constraint and has no rope.
+  await page.goto('/o/acme/f/goal/board');
+  await expect(page.getByRole('region', { name: 'The line' })).toContainText(
+    'Build is the constraint; the line moves at its pace.',
+  );
+  await expect(page.getByText('Not enforced yet')).toHaveCount(0);
+});
+
 test('on a phone the board picks a station, the constraint first', async ({ page }) => {
   test.skip(!isPhone(page), 'the station picker is the phone board');
   await page.goto('/o/acme/f/sre/board');

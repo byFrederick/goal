@@ -357,6 +357,89 @@ func TestAPI_BoardStationStatistics(t *testing.T) {
 	}
 }
 
+// expedite creates an expedite fix of the line factory at station in state.
+func (h *harness) expedite(t *testing.T, station string, state domain.ItemState) {
+	t.Helper()
+
+	if _, err := h.store.CreateItem(inOrg(t), domain.NewItem{
+		FactoryID: lineID, Type: "fix", Title: "expedite at " + station, Station: station, State: state,
+		Class: domain.ClassExpedite, CreatedAt: t0,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// spend records an agent run of item started at `at` that cost usd.
+func (h *harness) spend(t *testing.T, item domain.ItemID, at time.Time, usd float64) {
+	t.Helper()
+
+	run, err := h.store.StartRun(inOrg(t), ports.NewRun{FactoryID: lineID, ItemID: item, Station: stBuild, Agent: agBackend, StartedAt: at})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.store.FinishRun(inOrg(t), run, domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd}, at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The line shows its work in progress against the stations' limits, its drum-buffer-rope release
+// as configured (not enforced: nothing is held by the rope) with the items in the drum's buffer,
+// the expedite lane's use against its limit and the weekly budget over the last 7 days.
+func TestAPI_BoardLine(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	queued := h.seed(t, stInbox, domain.StateQueued, t0)
+
+	for range 3 {
+		h.seed(t, stBuild, domain.StateQueued, t0)
+	}
+
+	h.claim(t, 0)
+
+	h.expedite(t, stInbox, domain.StateQueued) // not released yet
+	h.expedite(t, stMerge, domain.StateWaitingHuman)
+
+	h.spend(t, queued.ID, t0.Add(-2*24*time.Hour), 30)
+	h.spend(t, queued.ID, t0.Add(-8*24*time.Hour), 50) // before the week
+
+	board := func() gen.Board {
+		var b gen.Board
+		if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/board", "", &b); code != http.StatusOK {
+			t.Fatalf("board = %d", code)
+		}
+
+		return b
+	}
+
+	drum, buffer, limit, wipLimit := stBuild, 2, 1, 2
+	want := gen.BoardLine{
+		Wip:      gen.LineWip{InProgress: 1, Limit: &wipLimit},
+		Release:  gen.LineRelease{Policy: gen.DrumBufferRope, Enforced: false, Drum: &drum, Buffer: &buffer, InBuffer: 2},
+		Expedite: &gen.LineExpedite{Limit: &limit, InUse: 1},
+		Budget:   &gen.LineBudget{WeeklyUsd: 70, SpentUsd: 30, Exhausted: false},
+	}
+
+	b := board()
+	if got := normalize(t, b.Line); got != normalize(t, want) {
+		t.Errorf("line = %s\nwant   %s", got, normalize(t, want))
+	}
+
+	for _, c := range cardsOf(b) {
+		inBuffer := c.Station == stBuild && c.State == gen.ItemState(domain.StateQueued)
+		if c.InBuffer != inBuffer || c.RopeHeld {
+			t.Errorf("card #%d at %s %s: in_buffer %v, rope_held %v; want in_buffer %v and never held", c.Number, c.Station, c.State, c.InBuffer, c.RopeHeld, inBuffer)
+		}
+	}
+
+	h.spend(t, queued.ID, t0.Add(-time.Hour), 45)
+
+	if got := board().Line.Budget; got == nil || got.SpentUsd != 75 || !got.Exhausted {
+		t.Errorf("budget after $45 more = %+v, want $75 spent, exhausted", got)
+	}
+}
+
 // The board's statistics window is 1 to 90 days, written Nd.
 func TestAPI_BoardRefusesBadWindows(t *testing.T) {
 	t.Parallel()

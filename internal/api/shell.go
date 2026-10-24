@@ -279,7 +279,7 @@ func (d decisions) Inbox(ctx context.Context, q InboxQuery) ([]gen.InboxEntry, e
 		f := byID[it.FactoryID]
 		l := f.Line()
 
-		cards, err := d.s.cards(ctx, f, l, []domain.Item{it})
+		cards, err := d.s.cards(ctx, f, l, "", []domain.Item{it}) // decisions wait on a person, never in a buffer
 		if err != nil {
 			return nil, err
 		}

@@ -46,8 +46,9 @@ spec:
       - { id: done, kind: done }
 `
 
-// line is inbox → build (agents, routed by lane, with a contract and checks) → merge (human,
-// action merge) → done, on a repository with budgets and a lead-time target: enough for boards,
+// line is inbox → build (agents, routed by lane, with a contract, checks and a buffer: the drum of
+// its drum-buffer-rope release, with an expedite lane for fixes) → merge (human, action merge) →
+// done, on a repository with budgets and a lead-time target: enough for boards,
 // metrics, overviews, item flow, retries and merges. Tests seed its items straight into the store.
 const line = `apiVersion: goal/v1
 kind: Factory
@@ -73,11 +74,15 @@ spec:
         route: { api: backend, web: frontend }
         agents: 2
         wip: 2
+        buffer: 2
         output: change
         checks: [schema, { kind: evidence-links, min: 2 }, task check]
       - { id: merge, kind: human, action: merge }
       - { id: done, kind: done }
     flow:
+      release: drum-buffer-rope
+      constraint: build
+      expedite: { types: [fix], wip: 1 }
       targets: { leadTimeHours: 6, expediteLeadTimeMinutes: 60 }
 `
 

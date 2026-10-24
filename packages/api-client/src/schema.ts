@@ -1479,6 +1479,10 @@ export interface components {
             turn: number | null;
             /** @description The summary field of the item's latest station output that has one, else null */
             summary: string | null;
+            /** @description Queued or ready at the drum (the line's configured constraint, else the constraint now) */
+            in_buffer: boolean;
+            /** @description Held at a queue station by the drum-buffer-rope release; always false until it is enforced */
+            rope_held: boolean;
         };
         ItemPage: {
             items: components["schemas"]["ItemCard"][];
@@ -1497,6 +1501,50 @@ export interface components {
             stations: components["schemas"]["BoardStation"][];
             /** @description The id of the agent station with the most work per slot now, or null */
             constraint: string | null;
+            line: components["schemas"]["BoardLine"];
+        };
+        /** @description The line as a whole: its work in progress against its limits, how work is released into it, its expedite lane and its weekly budget. The release policy and the expedite limit are shown as configured; goald does not enforce them yet (it releases as push). */
+        BoardLine: {
+            wip: components["schemas"]["LineWip"];
+            release: components["schemas"]["LineRelease"];
+            /** @description The expedite lane; null when the line has no expedite work types and no limit */
+            expedite: components["schemas"]["LineExpedite"] | null;
+            /** @description The weekly budget over the last 7×24 hours; null when the factory has none */
+            budget: components["schemas"]["LineBudget"] | null;
+        };
+        /** @description Items in progress or waiting on a person at the stations with a wip limit, and the sum of those limits (null when no station has one) */
+        LineWip: {
+            in_progress: number;
+            limit: number | null;
+        };
+        LineRelease: {
+            /** @enum {string} */
+            policy: "push" | "drum-buffer-rope";
+            /** @description Whether goald releases by this policy; false until drum-buffer-rope is enforced (later) */
+            enforced: boolean;
+            /** @description The station the line is paced by, its configured constraint or else the constraint now; null without one */
+            drum: string | null;
+            /** @description How many items the drum keeps ready in front of it (its buffer), or null */
+            buffer: number | null;
+            /** @description Items queued or ready at the drum */
+            in_buffer: number;
+        };
+        LineExpedite: {
+            /** @description flow.expedite.wip, shown and not enforced yet; null for no limit */
+            limit: number | null;
+            /** @description Open expedite items past the line's queue stations */
+            in_use: number;
+        };
+        LineBudget: {
+            /** Format: double */
+            weekly_usd: number;
+            /**
+             * Format: double
+             * @description The cost of the runs started in the window
+             */
+            spent_usd: number;
+            /** @description No new agent work starts until the window moves or the cap rises */
+            exhausted: boolean;
         };
         /**
          * @description How many items wait at a station now against 24 hours earlier

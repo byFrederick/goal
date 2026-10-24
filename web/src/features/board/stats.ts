@@ -1,7 +1,7 @@
 // What the board says about stations and cards, in words, from the board's statistics. Derived
 // only from station kinds and the API's numbers, never from station or factory names.
-import type { BoardStation, ItemCard } from '../../api/types';
-import { formatDuration, formatPercent, plural } from '../../shared/format';
+import type { BoardLine, BoardStation, ItemCard } from '../../api/types';
+import { formatDuration, formatPercent, formatUsd, formatUsdCompact, humanize, plural } from '../../shared/format';
 import { describeState, type StateLabel, waitingOnYou } from '../../shared/item-state';
 import type { HatchTone } from '../../ui/hatch';
 
@@ -85,6 +85,43 @@ export function constraintNote(s: BoardStation): string {
     : `The constraint: ${plural(s.waiting, 'item')} waiting in front of it`;
 }
 
+/**
+ * The line's sentence: under drum-buffer-rope with a buffer, the rope ("New work enters only when
+ * Investigate's buffer drops below 2"), which goald does not enforce yet; otherwise which station
+ * paces the line.
+ */
+export function lineSentence(line: BoardLine): { text: string; notEnforced: boolean } {
+  const { policy, drum, buffer } = line.release;
+  if (policy === 'drum-buffer-rope' && drum && buffer) {
+    return { text: `New work enters only when ${humanize(drum)}’s buffer drops below ${buffer}`, notEnforced: true };
+  }
+  return {
+    text: drum
+      ? `${humanize(drum)} is the constraint; the line moves at its pace.`
+      : 'No station holds the line back right now.',
+    notEnforced: false,
+  };
+}
+
+/** "WIP 9 of 15": work in progress at the stations with a limit, against their limits. */
+export function wipText(line: BoardLine): string {
+  return `WIP ${line.wip.in_progress}${line.wip.limit !== null ? ` of ${line.wip.limit}` : ''}`;
+}
+
+/** "1 of 1 in use": the expedite lane against its limit; `shown` items when the line has no lane. */
+export function expediteUse(line: BoardLine, shown: number): string {
+  const lane = line.expedite;
+  if (!lane) return `${plural(shown, 'item')} skipping the queue`;
+  return lane.limit !== null ? `${lane.in_use} of ${lane.limit} in use` : `${lane.in_use} in use`;
+}
+
+/** What the line says once its weekly budget is used up; null while there is room. */
+export function budgetNote(line: BoardLine): string | null {
+  const b = line.budget;
+  if (!b?.exhausted) return null;
+  return `Weekly budget used up: ${formatUsd(b.spent_usd)} of ${formatUsdCompact(b.weekly_usd)}. No new agent work starts until the week’s spend falls below it.`;
+}
+
 /** "investigator-2": the agent copy working an item (no number when its station runs one). */
 export function agentCopy(item: Pick<ItemCard, 'agent' | 'slot'>): string {
   return `${item.agent ?? ''}${item.slot !== null ? `-${item.slot}` : ''}`;
@@ -93,12 +130,12 @@ export function agentCopy(item: Pick<ItemCard, 'agent' | 'slot'>): string {
 const times = ['once', 'twice'];
 
 /**
- * A card's state line: the agent copy and its turn while worked, "Needs your OK", how often work
- * was sent back, what a done item became (its summary); otherwise the item's state.
+ * A card's state line: the agent copy and its turn while worked, "Needs your OK", work waiting in
+ * the drum's buffer or held back by the rope, how often work was sent back, what a done item
+ * became (its summary); otherwise the item's state.
  */
 export function cardState(
-  item: Pick<ItemCard, 'state' | 'agent' | 'slot' | 'turn' | 'rework_count' | 'summary'>,
-  opts: { atConstraint?: boolean } = {},
+  item: Pick<ItemCard, 'state' | 'agent' | 'slot' | 'turn' | 'rework_count' | 'summary' | 'in_buffer' | 'rope_held'>,
 ): StateLabel {
   switch (item.state) {
     case 'in_progress':
@@ -110,11 +147,12 @@ export function cardState(
       return { text: item.summary ?? 'Done', tone: 'ok' };
     case 'queued':
     case 'ready':
-      if (opts.atConstraint) return { text: 'Ready in buffer', tone: 'muted' };
+      if (item.in_buffer) return { text: 'Ready in buffer', tone: 'muted' };
+      if (item.rope_held) return { text: 'Waiting for buffer room', tone: 'muted' };
       if (item.rework_count > 0) {
         return { text: `Sent back ${times[item.rework_count - 1] ?? `${item.rework_count} times`}`, tone: 'rework' };
       }
       break;
   }
-  return describeState(item, opts);
+  return describeState(item);
 }

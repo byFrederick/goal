@@ -56,6 +56,8 @@ export interface MockStationConfig {
   wip_limit: number | null;
   /** How many copies of its agent the station runs (agents in the definition); 1 when absent. */
   copies?: number;
+  /** Items kept ready in front of the station (its buffer, at the drum). */
+  buffer?: number;
   /** The contract the station's output must satisfy, and what it checks on submit. */
   output?: string;
   checks?: string[];
@@ -68,6 +70,10 @@ export interface MockFlow {
   expedite_lead_time: number | null;
   per_item_usd: number | null;
   max_turns_per_task: number | null;
+  /** flow.release; push when absent. */
+  release?: 'push' | 'drum-buffer-rope';
+  /** flow.expedite.wip (null: no limit); absent when the factory has no expedite lane. */
+  expedite_wip?: number | null;
 }
 
 /** Where an item stands, as a span records it. */
@@ -1199,6 +1205,7 @@ export function seed(now = Date.now()): MockState {
           agents: ['investigator'],
           wip_limit: 3,
           copies: 3,
+          buffer: 2,
           output: 'diagnosis',
           checks: ['schema', '2+ evidence links'],
         },
@@ -1245,6 +1252,7 @@ export function seed(now = Date.now()): MockState {
         expedite_lead_time: 3600,
         per_item_usd: 4,
         max_turns_per_task: 80,
+        expedite_wip: null,
       },
       sre: {
         throughput_per_day: 8,
@@ -1252,6 +1260,8 @@ export function seed(now = Date.now()): MockState {
         expedite_lead_time: 3600,
         per_item_usd: 2,
         max_turns_per_task: 40,
+        release: 'drum-buffer-rope',
+        expedite_wip: 1,
       },
     },
     weeklyBudget: { goal: 60, sre: 20 },
