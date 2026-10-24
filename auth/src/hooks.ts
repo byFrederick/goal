@@ -231,7 +231,8 @@ export function goalHooks({ db, signIn, mailer, log, clock, publicURL }: HookDep
         invitationMail(data.email, {
           publicURL,
           invitationId: data.id,
-          inviterName: data.inviter.user.name,
+          // A person who signed up by code has no name until they choose one: their email then.
+          inviterName: data.inviter.user.name.trim() || data.inviter.user.email,
           orgName: data.organization.name,
           expiresAt: new Date(data.invitation.expiresAt),
         }),

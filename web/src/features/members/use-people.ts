@@ -10,6 +10,7 @@ import type { AuthFailure, InviteRequest, OrgRoleName } from '../../api/auth';
 import { ApiError, setFactoryRole } from '../../api/client';
 import { keys } from '../../api/queries';
 import type { FactoryRole, Invitation, Member, OrgSummary } from '../../api/types';
+import { displayName } from '../../shared/names';
 
 const identityService = () => import('../../api/auth');
 
@@ -65,7 +66,9 @@ export function usePeopleChanges(org: OrgSummary) {
       (await identityService()).updateMemberRole(org.id, member.member_id, to),
     onSuccess: async (_, { member, to }) => {
       await (member.you ? refreshMine() : refresh());
-      toast.success(member.you ? `You’re now ${role[to]} of ${org.name}` : `${member.user.name} is now ${role[to]}`);
+      toast.success(
+        member.you ? `You’re now ${role[to]} of ${org.name}` : `${displayName(member.user)} is now ${role[to]}`,
+      );
     },
     onError: failed,
   });
@@ -74,7 +77,7 @@ export function usePeopleChanges(org: OrgSummary) {
     mutationFn: async (member: Member) => (await identityService()).removeMember(org.id, member.member_id),
     onSuccess: async (_, member) => {
       await refresh();
-      toast.success(`Removed ${member.user.name} from ${org.name}`);
+      toast.success(`Removed ${displayName(member.user)} from ${org.name}`);
     },
   });
 

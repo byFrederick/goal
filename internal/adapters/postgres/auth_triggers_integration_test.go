@@ -468,6 +468,28 @@ func TestPlatformAdmins_KeepOne(t *testing.T) {
 }
 
 // API keys are audited as actor kind service (00043 widens the check).
+// A person who signed up by code has no name until they choose one: the audit entries the
+// database writes for them, and the invitations they sent, name them by their email.
+func TestAudit_NamesAPersonWithoutANameByEmail(t *testing.T) {
+	t.Parallel()
+
+	d := newIdentityDB(t)
+	owner := d.user(nameCruz)
+	d.exec(d.auth, `UPDATE auth."user" SET name = '' WHERE id = $1`, owner)
+	email := d.email(owner)
+	acme := d.provision("acme", owner)
+	d.invite(acme, owner, "x@example.com", "pending")
+
+	if got := d.logOf(acme); len(got) == 0 || got[0].name != email {
+		t.Errorf("audit log = %+v; want entries by %s", got, email)
+	}
+
+	invitations, err := NewAccess(d.s).Invitations(domain.WithOrg(t.Context(), acme))
+	if err != nil || len(invitations) != 1 || invitations[0].Inviter.Name != email {
+		t.Errorf("invitations = %+v, %v; want one from %s", invitations, err, email)
+	}
+}
+
 func TestAudit_RecordsServiceActors(t *testing.T) {
 	t.Parallel()
 

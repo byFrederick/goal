@@ -12,6 +12,7 @@ import { AuthFailure, authMutations, claimDeviceCode } from '../../api/auth';
 import { ApiError, getDeviceRequest } from '../../api/client';
 import { meQuery } from '../../api/queries';
 import type { DeviceRequest, Me } from '../../api/types';
+import { displayName, hasName } from '../../shared/names';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
@@ -83,7 +84,7 @@ export function DevicePage() {
     case 'approved':
       return (
         <AuthPage>
-          <Callout tone="ok">Approved for {me.user?.name ?? 'you'}</Callout>
+          <Callout tone="ok">Approved for {me.user ? displayName(me.user) : 'you'}</Callout>
           <AuthHeading ref={heading}>The CLI is signed in</AuthHeading>
           <p className="m-0 text-[15px] leading-normal text-ink-soft">You can close this tab.</p>
         </AuthPage>
@@ -212,8 +213,9 @@ function ReviewStep({ heading, me, code, request, onApproved, onDenied, onInvali
     <AuthPage wide>
       <AuthHeading ref={heading}>Sign in to the Goal CLI</AuthHeading>
       <p className="m-0 text-base leading-normal text-ink sm:text-[17px]">
-        {request.client_name} wants to sign in as <strong className="font-medium">{me.user?.name}</strong>
-        {me.user ? ` (${me.user.email})` : null}
+        {request.client_name} wants to sign in as{' '}
+        <strong className="font-medium">{me.user ? displayName(me.user) : 'you'}</strong>
+        {me.user && hasName(me.user) ? ` (${me.user.email})` : null}
       </p>
       <p className="m-0 flex flex-wrap items-center gap-2.5 text-sm text-ink-soft">
         Code you entered

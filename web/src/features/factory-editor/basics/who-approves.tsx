@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { membersQuery } from '../../../api/queries';
 import type { Member } from '../../../api/types';
+import { displayName } from '../../../shared/names';
 import { useOrg, useOrgHolds } from '../../../shared/org';
 
 /** Who approves in factory `factory`: owners and admins, and its approvers and editors, by name. */
@@ -18,7 +19,7 @@ export function approvers(members: readonly Member[], factory: string | undefine
         m.role === 'admin' ||
         m.factory_roles.some((g) => g.factory_id === factory && (g.role === 'approver' || g.role === 'editor')),
     )
-    .map((m) => m.user.name)
+    .map((m) => displayName(m.user))
     .sort((a, b) => a.localeCompare(b));
 }
 

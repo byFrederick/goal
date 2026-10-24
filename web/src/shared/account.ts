@@ -47,14 +47,6 @@ export async function keepSessionAlive(): Promise<void> {
   await (await identityService()).keepSessionAlive();
 }
 
-/** "FC" for F. Cruz, "AO" for a.ortiz: the first letters of the first and last words. */
-export function initialsOf(name: string): string {
-  const words = name.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-  const first = words[0]?.[0] ?? '?';
-  const last = words.length > 1 ? (words.at(-1)?.[0] ?? '') : '';
-  return `${first}${last}`.toUpperCase();
-}
-
 const roleNames: Record<OrgRole, string> = { owner: 'Owner', admin: 'Admin', member: 'Member' };
 
 /** "Owner of Acme"; undefined without a role (sign-in off, an API key). */

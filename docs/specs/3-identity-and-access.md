@@ -305,7 +305,7 @@ All migrations run as `goal_owner`. New roles and grants follow A §6.0.
 | `00046_api_keys.sql` | 3-12 | `api_keys`, `api_key_factories`, `goal_api_key`; the retire trigger also revokes keys |
 | `00047_personal_tokens.sql` | 3-12b | `personal_tokens`, `goal_personal_token`; the retire trigger also revokes personal tokens; `goal_access` kind `personal_token` (§6.7) |
 | `00048_session_sign_in_method.sql` | review M1 | `auth.session."signInMethod"` (how the session was signed in, written by the auth service); `goal_principal` returns it |
-| `00049_invitation_integrity.sql` | review L1, L2 | `goal_org_live`, `goal_is_invitee` (the auth service's definers); the `invitation_live_org` trigger refusing an invitation to an organization that is not live; `goal_retire_inviter` on `auth.member` (removal cancels the inviter's pending invitations, `system:inviter-removed`; demotion to member all of them, owner to admin the `owner` ones, `system:inviter-demoted`); pending invitations of deleted organizations and of inviters already gone or demoted canceled |
+| `00049_phase3_review_fixes.sql` | review L1, L2; naming | `goal_org_live`, `goal_is_invitee` (the auth service's definers); the `invitation_live_org` trigger refusing an invitation to an organization that is not live; `goal_retire_inviter` on `auth.member` (removal cancels the inviter's pending invitations, `system:inviter-removed`; demotion to member all of them, owner to admin the `owner` ones, `system:inviter-demoted`); pending invitations of deleted organizations and of inviters already gone or demoted canceled; `goal_append_audit` and `goal_invitations` name a person without a name by their email |
 
 Phase 4 uses `00050–00059`, phase 5 `00060` up.
 
@@ -939,6 +939,7 @@ Every board follows `design-system/goal/MASTER.md`, desktop 1440 and phone 375. 
 
 **Account-Menu** (`Account-Menu.dc.html`, popover from the rail avatar; bottom of the org sheet on phones)
 - Initials avatar; "F. Cruz"; `f.cruz@example.com`; "Owner of Acme" (role in the current org); tag "Platform admin" when true.
+- A person without a name (Better Auth signs a person up by code with an empty one, until they choose one) is named by their email, once, with its local part's initials ("DR" for `d.ross@example.com`), here and wherever a person is shown: Members, Transfer, Who approves, Device-Approve, personal tokens, the audit log and invitations (`web/src/shared/names.ts`; goald's `Principal.Actor`; `00049`'s audit writer and `goal_invitations`; the auth service's invitation mail and Invite-Accept). Never "?".
 - Items: "Edit name…" (dialog with one field), "Personal tokens" (3-12b; to `/o/:org/api-keys#personal-tokens` of the current org), "Sign out", "Sign out everywhere…" (confirm: "Sign out of every browser and the CLI?"; personal tokens stay valid until revoked, and the dialog says so).
 - `mode: none` variant: "Local user · This install · Sign-in is off", no items.
 

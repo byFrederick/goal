@@ -1,18 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { initialsOf, roleLine } from './account';
-
-describe('initialsOf', () => {
-  test.each([
-    ['F. Cruz', 'FC'],
-    ['a.ortiz', 'AO'],
-    ['Jonas Lindqvist-Berg', 'JB'],
-    ['Okafor', 'O'],
-    ['Ünal Şahin', 'ÜŞ'],
-    ['', '?'],
-  ])('%s → %s', (name, initials) => {
-    expect(initialsOf(name)).toBe(initials);
-  });
-});
+import { roleLine } from './account';
 
 describe('roleLine', () => {
   test('names the role in the organization', () => {

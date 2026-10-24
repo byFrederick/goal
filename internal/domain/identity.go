@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -133,8 +134,9 @@ type Session struct {
 // LocalPrincipal is the one person of GOAL_AUTH=none: its Actor is LocalUser.
 var LocalPrincipal = Principal{Kind: PrincipalUser, User: UserID(LocalUser.ID), Name: LocalUser.Name}
 
-// Actor is how the principal is recorded: user:<id> with the user's name (through a personal
-// token too, which Via records), service:<key id> as "<key name> (API key)".
+// Actor is how the principal is recorded: user:<id> with the user's name, or their email while
+// they have none (Better Auth signs a person up by code without one), through a personal token
+// too, which Via records; service:<key id> as "<key name> (API key)".
 func (p Principal) Actor() Actor {
 	switch p.Kind {
 	case PrincipalUser:
@@ -142,7 +144,12 @@ func (p Principal) Actor() Actor {
 			return LocalUser
 		}
 
-		return Actor{Kind: ActorUser, ID: string(p.User), Name: p.Name}
+		name := strings.TrimSpace(p.Name)
+		if name == "" {
+			name = p.Email
+		}
+
+		return Actor{Kind: ActorUser, ID: string(p.User), Name: name}
 	case PrincipalService:
 		return Actor{Kind: ActorService, ID: string(p.Key), Name: p.Name + " (API key)"}
 	case PrincipalAgent:

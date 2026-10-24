@@ -184,7 +184,8 @@ export function createMockAuth(clock: () => number, dir: MockDirectory): MockAut
     const people = dir.people().people;
     let user = people.find((p) => p.email === email);
     if (!user) {
-      user = { id: crypto.randomUUID(), email, name: email.split('@')[0] ?? email, platformAdmin: false };
+      // As Better Auth signs a new person up by code: no name until they choose one.
+      user = { id: crypto.randomUUID(), email, name: '', platformAdmin: false };
       people.push(user);
     }
     return user;

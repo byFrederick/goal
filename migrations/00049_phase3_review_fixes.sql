@@ -1,6 +1,7 @@
 -- +goose Up
--- Phase 3 fixes (review L1, L2): an invitation belongs to a live organization and lives no longer
--- than its inviter's right to send it.
+-- Phase 3 fixes (review L1, L2, and naming people): an invitation belongs to a live organization
+-- and lives no longer than its inviter's right to send it; a person without a name is named by
+-- their email.
 --
 -- L1: an invitation belongs to a live organization. Deleting an
 -- organization cancels its pending invitations (goal_retire_org), but Better Auth's rows stay
@@ -98,6 +99,53 @@ UPDATE auth.invitation i SET status = 'canceled', "changedBy" = 'system:inviter-
 FROM auth.member m
 WHERE i.status = 'pending' AND m."organizationId" = i."organizationId" AND m."userId" = i."inviterId"
   AND (m.role NOT IN ('owner', 'admin') OR (m.role <> 'owner' AND i.role = 'owner'));
+
+-- A person who signs up by code has no name until they choose one (Better Auth stores ''), so the
+-- audit log and the invitations list named them with nothing. 00046's audit writer and 00045's
+-- goal_invitations now name such a person by their email. CREATE OR REPLACE keeps the grants.
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION goal_append_audit(p_org uuid, p_by text, p_action text, p_target_kind text, p_target_id text,
+                                             p_data jsonb, p_request_id text) RETURNS void
+LANGUAGE plpgsql VOLATILE SET search_path FROM CURRENT
+AS $$
+DECLARE
+  v_kind text := split_part(p_by, ':', 1);
+  v_id   text := substr(p_by, length(split_part(p_by, ':', 1)) + 2);
+  v_name text;
+BEGIN
+  IF v_id IS NULL OR v_id = '' THEN
+    RAISE EXCEPTION 'actor ref % is not <kind>:<id>', p_by USING ERRCODE = 'check_violation';
+  END IF;
+  IF p_by = 'user:local' THEN
+    v_name := 'Local user';
+  ELSIF v_kind IN ('user', 'service') AND v_id !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_name := NULL;
+  ELSIF v_kind = 'user' THEN
+    SELECT coalesce(nullif(btrim(u.name), ''), u.email) INTO v_name FROM auth."user" u WHERE u.id = v_id::uuid;
+  ELSIF v_kind = 'service' THEN
+    SELECT k.name || ' (API key)' INTO v_name FROM api_keys k WHERE k.id = v_id::uuid;
+  END IF;
+  INSERT INTO audit_log (org_id, actor_kind, actor_id, actor_name, action, target_kind, target_id, data, request_id)
+  VALUES (p_org, v_kind, v_id, coalesce(v_name, v_id), p_action, p_target_kind, p_target_id,
+          coalesce(p_data, '{}'::jsonb), p_request_id);
+END
+$$;
+-- +goose StatementEnd
+
+CREATE OR REPLACE FUNCTION goal_invitations() RETURNS jsonb
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path FROM CURRENT
+AS $$
+  SELECT coalesce(jsonb_agg(jsonb_build_object(
+      'id', i.id, 'email', i.email, 'role', i.role,
+      'factory_roles', CASE WHEN i."factoryRoles" IS JSON ARRAY THEN i."factoryRoles"::jsonb ELSE '[]'::jsonb END,
+      'inviter', jsonb_build_object('id', u.id, 'name', coalesce(nullif(btrim(u.name), ''), u.email)),
+      'created_at', i."createdAt", 'expires_at', i."expiresAt")
+    ORDER BY i."createdAt", i.id), '[]'::jsonb)
+  FROM auth.invitation i
+  JOIN auth."user" u ON u.id = i."inviterId"
+  JOIN organizations o ON o.id = i."organizationId" AND o.deleted_at IS NULL
+  WHERE i."organizationId" = goal_org() AND i.status = 'pending' AND i."expiresAt" > now()
+$$;
 
 REVOKE ALL ON FUNCTION goal_org_live(uuid), goal_is_invitee(text, timestamptz), goal_invite_live_org() FROM PUBLIC;
 REVOKE ALL ON FUNCTION goal_retire_inviter() FROM PUBLIC;

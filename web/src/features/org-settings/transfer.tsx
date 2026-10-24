@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { ApiError, transferOwnership } from '../../api/client';
 import { keys, membersQuery } from '../../api/queries';
 import type { OrgSummary } from '../../api/types';
+import { displayName } from '../../shared/names';
 import { Button } from '../../ui/button';
 import { Dialog, DialogClose, DialogContent } from '../../ui/dialog';
 import { Field, Input, NativeSelect } from '../../ui/field';
@@ -105,7 +106,7 @@ function TransferDialog({ org, name, onClose }: { org: OrgSummary; name: string;
                 >
                   {admins.map((m) => (
                     <option key={m.user.id} value={m.user.id}>
-                      {m.user.name}, admin
+                      {displayName(m.user)}, admin
                     </option>
                   ))}
                 </NativeSelect>

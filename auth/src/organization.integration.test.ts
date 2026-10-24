@@ -342,6 +342,21 @@ describe('an invitation', () => {
     expect(res.status).toBe(400);
   });
 
+  it('names an inviter without a name by their email, in the mail and to its recipient', async () => {
+    // Signed up by code, a person has no name until they choose one.
+    await admin.query(`UPDATE auth."user" SET name = '' WHERE id = $1`, [o.owner.id]);
+    const email = `unnamed-${o.id}@example.com`;
+    const created = await invite({ email });
+    const { id: invitation } = (await created.json()) as { id: string };
+    await vi.waitFor(() => expect(o.mailer.to(email)).toHaveLength(1));
+    expect(o.mailer.to(email)[0]?.subject).toBe(`${o.owner.email} invited you to Acme on Goal`);
+
+    const invitee = await harness(pool, { mailer: o.mailer }).signIn(email);
+    const res = await o.h.get(`/organization/get-invitation?id=${invitation}`, { cookie: invitee.cookie });
+
+    expect(await res.json()).toMatchObject({ id: invitation, inviterName: o.owner.email });
+  });
+
   it('shows its recipient who sent it and the factories it gives, by name, and nobody else', async () => {
     const email = `shown-${o.id}@example.com`;
     const created = await invite({ email, factoryRoles: JSON.stringify([{ factoryId: o.factory, role: 'viewer' }]) });

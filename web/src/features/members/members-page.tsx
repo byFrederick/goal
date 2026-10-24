@@ -9,7 +9,7 @@ import { ChevronRight, Ellipsis, Plus, Search, X } from 'lucide-react';
 import { type ReactNode, type RefObject, useId, useRef, useState } from 'react';
 import { authConfigQuery, factoriesQuery, invitationsQuery, membersQuery, orgQuery } from '../../api/queries';
 import type { Factory, FactoryRole, Invitation, Member, Org, OrgRole, OrgSummary } from '../../api/types';
-import { initialsOf } from '../../shared/account';
+import { displayName, hasName, initialsOf } from '../../shared/names';
 import { useOrg } from '../../shared/org';
 import { reasons } from '../../shared/permissions';
 import { Button } from '../../ui/button';
@@ -210,10 +210,10 @@ function Members({ org, detail, members, invitations, factories, powers, signIn 
                 onClick={() => setSheetFor(m.user.id)}
                 className="grid min-h-16 w-full cursor-pointer grid-cols-[40px_minmax(0,1fr)_20px] items-center gap-3 rounded-control border border-line bg-surface px-3 py-2.5 text-left text-ink transition-colors duration-200 hover:border-rule-strong"
               >
-                <Avatar initials={initialsOf(m.user.name)} size="card" />
+                <Avatar initials={initialsOf(m.user)} size="card" />
                 <span className="min-w-0">
                   <span className="flex items-center gap-2 text-[15px] font-medium">
-                    <span className="truncate">{m.user.name}</span>
+                    <span className="truncate">{displayName(m.user)}</span>
                     {m.you ? <Chip>You</Chip> : null}
                   </span>
                   <span className="block text-[13px] text-muted">
@@ -282,7 +282,7 @@ function Members({ org, detail, members, invitations, factories, powers, signIn 
       <ConfirmDialog
         open={asking?.kind === 'remove'}
         onOpenChange={(open) => (open ? null : setAsking(null))}
-        title={`Remove ${asking?.member.user.name ?? ''} from ${org.name}?`}
+        title={`Remove ${asking ? displayName(asking.member.user) : ''} from ${org.name}?`}
         description={`They lose access to ${org.name} and its factories at once, and their factory roles go too.`}
         confirmLabel="Remove"
         pendingLabel="Removing…"
@@ -357,13 +357,15 @@ interface RowActions {
 function Person({ member }: { member: Member }) {
   return (
     <span className="flex min-w-0 items-center gap-3">
-      <Avatar initials={initialsOf(member.user.name)} size="card" />
+      <Avatar initials={initialsOf(member.user)} size="card" />
       <span className="min-w-0">
         <span className="flex items-center gap-2 text-[15px] font-medium">
-          <span className="truncate">{member.user.name}</span>
+          <span className="truncate">{displayName(member.user)}</span>
           {member.you ? <Chip>You</Chip> : null}
         </span>
-        <span className="block truncate text-[13px] text-muted">{member.user.email}</span>
+        {hasName(member.user) ? (
+          <span className="block truncate text-[13px] text-muted">{member.user.email}</span>
+        ) : null}
       </span>
     </span>
   );
@@ -386,7 +388,7 @@ function RoleControl({
   className?: string;
 }) {
   const reasonId = useId();
-  const label = `Role of ${member.user.name} in ${org.name}`;
+  const label = `Role of ${displayName(member.user)} in ${org.name}`;
   if (!powers.manages) return <span className="text-[15px]">{orgRoleNames[member.role]}</span>;
   // Only an owner makes an owner.
   const choices: OrgRole[] =
@@ -475,7 +477,7 @@ function RowMenu({
   return (
     <Menu>
       <MenuTrigger asChild>
-        <Button variant="white" size="icon" aria-label={`Actions for ${member.user.name}`} className="ml-auto">
+        <Button variant="white" size="icon" aria-label={`Actions for ${displayName(member.user)}`} className="ml-auto">
           <Ellipsis size={18} strokeWidth={1.75} aria-hidden="true" />
         </Button>
       </MenuTrigger>
@@ -651,7 +653,7 @@ function FactoryRoles({
             >
               <span className="text-[15px]">{f.name}</span>
               <SegmentedControl
-                label={`${f.name}: role of ${member.user.name}`}
+                label={`${f.name}: role of ${displayName(member.user)}`}
                 options={options}
                 value={value}
                 onChange={(to) => onChange(f.id, to === 'none' ? null : to)}
@@ -686,10 +688,10 @@ function FactoryPanel({
   const everywhere = editorEverywhere(member.role);
   return (
     <SectionCard
-      title={`${member.user.name} in each factory`}
+      title={`${displayName(member.user)} in each factory`}
       description={
         everywhere
-          ? `Editor in every factory (from their organization role). ${member.user.name} is ${member.role === 'owner' ? 'an owner' : 'an admin'} of ${org.name}, so factory roles don’t apply.`
+          ? `Editor in every factory (from their organization role). ${displayName(member.user)} is ${member.role === 'owner' ? 'an owner' : 'an admin'} of ${org.name}, so factory roles don’t apply.`
           : powers.grants
             ? 'Factory roles add to the organization role. Changes apply at once and go into the audit log.'
             : 'Factory roles add to the organization role.'
@@ -699,7 +701,7 @@ function FactoryPanel({
         <NativeSelect ref={selectRef} value={member.user.id} onChange={(e) => onChoose(e.target.value)}>
           {members.map((m) => (
             <option key={m.user.id} value={m.user.id}>
-              {m.user.name}
+              {displayName(m.user)}
             </option>
           ))}
         </NativeSelect>
@@ -753,10 +755,10 @@ function MemberSheet({
   onFactoryRole: (factory: string, to: FactoryRole | null) => void;
 }) {
   return (
-    <SheetContent title={member.user.name}>
+    <SheetContent title={displayName(member.user)}>
       <div className="flex flex-col gap-4 px-2.5 pb-2">
         <p className="m-0 flex items-center gap-3 text-sm text-muted">
-          <Avatar initials={initialsOf(member.user.name)} size="card" />
+          <Avatar initials={initialsOf(member.user)} size="card" />
           <span className="min-w-0 break-words">
             {member.user.email},{' '}
             {member.last_active_at ? `active ${lastActive(member.last_active_at).toLowerCase()}` : 'never active'}

@@ -36,6 +36,8 @@ func TestPrincipal_ActorRecordsWhoActed(t *testing.T) {
 	}{
 		{name: "local user", p: LocalPrincipal, want: LocalUser},
 		{name: "user", p: Principal{Kind: PrincipalUser, User: "u1", Name: "Ada"}, want: Actor{Kind: ActorUser, ID: "u1", Name: "Ada"}},
+		// Signed up by code, a person has no name until they choose one: named by their email.
+		{name: "user without a name", p: Principal{Kind: PrincipalUser, User: "u2", Name: " ", Email: "ada@example.com"}, want: Actor{Kind: ActorUser, ID: "u2", Name: "ada@example.com"}},
 		{name: "api key", p: Principal{Kind: PrincipalService, Key: "k1", Name: "ci"}, want: Actor{Kind: ActorService, ID: "k1", Name: "ci (API key)"}},
 	}
 

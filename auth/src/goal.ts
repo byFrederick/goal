@@ -109,9 +109,15 @@ export class GoalDatabase {
     return rows[0]?.ok === true;
   }
 
-  /** userName is the name of the user with this id; null for none. */
+  /**
+   * userName is the name of the user with this id, or their email while they have none (signed up
+   * by code); null for no such user.
+   */
   async userName(id: string): Promise<string | null> {
-    const { rows } = await this.pool.query<{ name: string }>('SELECT name FROM auth."user" WHERE id = $1', [id]);
+    const { rows } = await this.pool.query<{ name: string }>(
+      `SELECT coalesce(nullif(btrim(name), ''), email) AS name FROM auth."user" WHERE id = $1`,
+      [id],
+    );
     return rows[0]?.name ?? null;
   }
 

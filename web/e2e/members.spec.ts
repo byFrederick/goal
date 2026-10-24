@@ -3,7 +3,15 @@
 // roles applied at once, inviting, resending and cancelling, removing; a member's read-only page and
 // leaving; joining through an invitation and its other states; handing the organization to an admin.
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll, expectToast, isPhone, orgMarkOf, recordToasts } from './support';
+import {
+  expectAccessible,
+  expectNoHorizontalScroll,
+  expectToast,
+  isPhone,
+  orgMarkOf,
+  orgNav,
+  recordToasts,
+} from './support';
 
 /** The mock's invitations (mock/people.ts). */
 const invitation = {
@@ -206,9 +214,19 @@ test('an invitee signs in from the link, sees the invitation and joins', async (
   await expect(page).toHaveURL(/\/o\/acme$/);
   await expectToast(page, 'You joined Acme');
 
+  // Signed up by code, they have no name yet (Better Auth leaves it empty): Goal names them by
+  // their email, with its initials, until they choose one.
+  await orgNav(page).filter({ visible: true }).getByRole('button', { name: 'DR, d.ross@example.com, account' }).click();
+  const account = page.getByRole('dialog', { name: 'Account' });
+  await expect(account.getByText('d.ross@example.com', { exact: true })).toBeVisible();
+  await expect(account.getByText('DR', { exact: true })).toBeVisible();
+  await expect(account.getByText('?', { exact: true })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
   // Joined as a member with the invitation's factory role.
   await page.goto('/o/acme/members');
   await expect(personOf(page, 'd.ross')).toContainText('sre viewer');
+  await expect(personOf(page, 'd.ross')).toContainText('DR');
 });
 
 test('an invitation for someone else, one that cannot be used, and one to a member', async ({ page }) => {

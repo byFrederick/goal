@@ -3,6 +3,7 @@
 // changed, the invite dialog's addresses. Pure: the page renders what these return.
 import type { FactoryRole, Invitation, Member, OrgRole } from '../../api/types';
 import { formatDay } from '../../shared/format';
+import { displayName } from '../../shared/names';
 
 export const orgRoleNames: Record<OrgRole, string> = { owner: 'Owner', admin: 'Admin', member: 'Member' };
 export const factoryRoleNames: Record<FactoryRole, string> = {
@@ -92,9 +93,11 @@ export function invitationLine(i: Pick<Invitation, 'created_at' | 'expires_at' |
 
 const rank: Record<OrgRole, number> = { owner: 0, admin: 1, member: 2 };
 
-/** Owners first, then admins, then members, each by name. */
+/** Owners first, then admins, then members, each by name (by email while they have none). */
 export function byRole(members: readonly Member[]): Member[] {
-  return [...members].sort((a, b) => rank[a.role] - rank[b.role] || a.user.name.localeCompare(b.user.name));
+  return [...members].sort(
+    (a, b) => rank[a.role] - rank[b.role] || displayName(a.user).localeCompare(displayName(b.user)),
+  );
 }
 
 /** A person matches the search when their name or email contains it, case aside. */

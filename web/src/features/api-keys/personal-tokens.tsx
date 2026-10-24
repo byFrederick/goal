@@ -14,6 +14,7 @@ import { revokeMemberToken, revokePersonalToken } from '../../api/keys';
 import { factoriesQuery, keys, memberTokensQuery, meQuery, personalTokensQuery } from '../../api/queries';
 import type { CreatedPersonalToken, OrgSummary, PersonalToken } from '../../api/types';
 import { formatDay } from '../../shared/format';
+import { displayName } from '../../shared/names';
 import { useOrgGrants, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
@@ -142,7 +143,7 @@ export function MemberTokensSection({ org }: { org: OrgSummary }) {
     mutationFn: (t: PersonalToken) => revokeMemberToken(org.id, t.id),
     onSuccess: async (_, t) => {
       setRevoking(null);
-      toast.success(`Revoked ${t.owner.name}’s token ${t.name}`, {
+      toast.success(`Revoked ${displayName(t.owner)}’s token ${t.name}`, {
         description: 'Anything using it stops working at once.',
       });
       await Promise.all([
@@ -176,7 +177,7 @@ export function MemberTokensSection({ org }: { org: OrgSummary }) {
       />
       <RevokeDialog
         token={revoking}
-        title={revoking ? `Revoke ${revoking.owner.name}’s token ${revoking.name}?` : 'Revoke token?'}
+        title={revoking ? `Revoke ${displayName(revoking.owner)}’s token ${revoking.name}?` : 'Revoke token?'}
         pending={revoke.isPending}
         error={revoke.error}
         onCancel={() => {
@@ -242,7 +243,8 @@ function TokenList({ list, what, caption, empty, owner = false, onRevoke }: Toke
     );
   }
   const now = Date.now();
-  const label = (t: PersonalToken) => (owner ? `Revoke ${t.owner.name}’s token ${t.name}…` : `Revoke ${t.name}…`);
+  const label = (t: PersonalToken) =>
+    owner ? `Revoke ${displayName(t.owner)}’s token ${t.name}…` : `Revoke ${t.name}…`;
 
   return (
     <>
@@ -275,7 +277,7 @@ function TokenList({ list, what, caption, empty, owner = false, onRevoke }: Toke
                 <td>
                   <TokenName token={t} />
                 </td>
-                {owner ? <td className="max-w-40 truncate">{t.owner.name}</td> : null}
+                {owner ? <td className="max-w-40 truncate">{displayName(t.owner)}</td> : null}
                 <td>
                   <Scopes scopes={t.scopes} />
                 </td>
@@ -319,7 +321,7 @@ function TokenList({ list, what, caption, empty, owner = false, onRevoke }: Toke
                   </Button>
                 ) : null}
               </div>
-              {owner ? <p className="m-0 text-sm">{t.owner.name}</p> : null}
+              {owner ? <p className="m-0 text-sm">{displayName(t.owner)}</p> : null}
               <Scopes scopes={t.scopes} />
               <p className="m-0 text-sm">
                 Expires {expiry.day}

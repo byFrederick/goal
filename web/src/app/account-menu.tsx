@@ -14,7 +14,8 @@ import { createContext, type FormEvent, type ReactNode, use, useEffect, useRef, 
 import { toast } from 'sonner';
 import { meQuery, orgQuery } from '../api/queries';
 import type { Me, OrgSummary } from '../api/types';
-import { initialsOf, keepSessionAlive, roleLine, useSignOut, useUpdateName } from '../shared/account';
+import { keepSessionAlive, roleLine, useSignOut, useUpdateName } from '../shared/account';
+import { displayName, hasName, initialsOf } from '../shared/names';
 import { holds } from '../shared/permissions';
 import { Button } from '../ui/button';
 import { Callout } from '../ui/callout';
@@ -112,8 +113,8 @@ export function AccountProvider({ org, children }: { org: OrgSummary; children: 
 export function AccountMenu({ org, size }: { org: OrgSummary; size: 'rail' | 'phone' }) {
   const { person } = useAccount();
   const [open, setOpen] = useState(false);
-  const name = person?.name ?? 'Local user';
-  const initials = person ? initialsOf(person.name) : 'LU';
+  const name = person ? displayName(person) : 'Local user';
+  const initials = person ? initialsOf(person) : 'LU';
 
   const trigger = (
     <PopoverTrigger aria-label={`${initials}, ${name}, account`} className={railItemClass} {...railItem}>
@@ -123,7 +124,7 @@ export function AccountMenu({ org, size }: { org: OrgSummary; size: 'rail' | 'ph
   return (
     <Popover open={open} onOpenChange={setOpen}>
       {size === 'rail' ? (
-        <Tooltip label={name} detail={person?.email ?? 'This install'}>
+        <Tooltip label={name} detail={person ? (hasName(person) ? person.email : undefined) : 'This install'}>
           {trigger}
         </Tooltip>
       ) : (
@@ -158,10 +159,10 @@ function AccountPanel({ org, onAction }: { org: OrgSummary; onAction: () => void
   return (
     <>
       <div className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-3 p-2">
-        <Avatar initials={initialsOf(person.name)} size="card" />
+        <Avatar initials={initialsOf(person)} size="card" />
         <span className="min-w-0">
-          <span className="block truncate text-[15px] font-medium">{person.name}</span>
-          <span className="block truncate text-[13px] text-muted">{person.email}</span>
+          <span className="block truncate text-[15px] font-medium">{displayName(person)}</span>
+          {hasName(person) ? <span className="block truncate text-[13px] text-muted">{person.email}</span> : null}
         </span>
       </div>
       {role || account.platformAdmin ? (
@@ -209,6 +210,12 @@ function AccountPanel({ org, onAction }: { org: OrgSummary; onAction: () => void
   );
 }
 
+/** The line under the phone's account: "f.cruz@example.com, owner of Acme"; the role alone while the email is the name. */
+function accountLine(person: NonNullable<Account['person']>, role: string | undefined): string {
+  if (!hasName(person)) return role ?? '';
+  return role ? `${person.email}, ${role.charAt(0).toLowerCase()}${role.slice(1)}` : person.email;
+}
+
 const iconProps = { size: 18, strokeWidth: 1.5, 'aria-hidden': true, className: 'text-muted' } as const;
 const actionRow = cn(menuRow, 'cursor-pointer border-0 bg-transparent hover:bg-shell focus-visible:-outline-offset-2');
 
@@ -247,16 +254,13 @@ export function AccountBlock({ org, onAction }: { org: OrgSummary; onAction: () 
   return (
     <section aria-label="Account" className="flex flex-col gap-3 px-1 pt-1">
       <div className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-3">
-        <Avatar initials={initialsOf(person.name)} size="card" />
+        <Avatar initials={initialsOf(person)} size="card" />
         <span className="min-w-0">
           <span className="flex flex-wrap items-center gap-2 text-[15px] font-medium">
-            {person.name}
+            <span className="min-w-0 break-words">{displayName(person)}</span>
             {account.platformAdmin ? <Chip tone="you">Platform admin</Chip> : null}
           </span>
-          <span className="block text-[13px] text-muted">
-            {person.email}
-            {role ? `, ${role.charAt(0).toLowerCase()}${role.slice(1)}` : ''}
-          </span>
+          <span className="block text-[13px] text-muted">{accountLine(person, role)}</span>
         </span>
       </div>
       <div className="grid grid-cols-2 gap-2">
