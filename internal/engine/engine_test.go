@@ -17,6 +17,12 @@ import (
 
 const factoryID domain.FactoryID = "31efd04e-b231-4939-9f13-8986bf7e462a"
 
+// contractResult is the contract the tests' agent stations declare.
+const contractResult = "result"
+
+// v1 is the definition version the tests' lines come from.
+const v1 domain.DefinitionVersionID = "019a1c00-0000-7000-8000-0000000000a1"
+
 // testOrg is the organization the tests' factories and items belong to (the first one the
 // harness creates): every store call carries one.
 const testOrg domain.OrgID = "00000000-0000-7000-8000-000000000001"
@@ -287,6 +293,8 @@ func lineOf(stations ...domain.Station) domain.Line {
 	return domain.Line{
 		OrgID:         testOrg,
 		FactoryID:     factoryID,
+		VersionID:     v1,
+		Number:        1,
 		Runtime:       domain.Runtime{Image: "ghcr.io/acme/agent:1", Model: "claude-sonnet-5-5", MaxTurnsPerTask: 40, PerItemUSD: 3},
 		Stations:      all,
 		Agents:        agents,
@@ -562,5 +570,34 @@ func TestSetLines_LoadsAndUnloadsFactories(t *testing.T) {
 
 	if _, err := h.e.Submit(inOrg(t), domain.NewItem{FactoryID: factoryID, Title: "x", Type: typeFeature}); err == nil {
 		t.Error("submit to an unloaded factory succeeded")
+	}
+}
+
+// A paused line takes no work: nothing is released from its queue or claimed, and it picks up
+// where it was once resumed.
+func TestTick_PausedLineTakesNoWork(t *testing.T) {
+	t.Parallel()
+
+	line := lineOf(agentStation(stWork, agWorker, 1, 1))
+	line.Paused = true
+	h := newHarness(t, line, porttest.Succeed(`{}`))
+	it := h.submit(t, domain.NewItem{})
+
+	h.step(t)
+	h.step(t)
+
+	if got := h.item(t, it.ID); got.Station != "inbox" || len(h.runner.Started()) != 0 {
+		t.Fatalf("paused line: item at %s, %d tasks started; want inbox and none", got.Station, len(h.runner.Started()))
+	}
+
+	line.Paused = false
+	if err := h.e.SetLines([]domain.Line{line}); err != nil {
+		t.Fatal(err)
+	}
+
+	h.step(t)
+
+	if got := h.item(t, it.ID); got.State != domain.StateDone {
+		t.Errorf("item after resuming is %s/%s, want done", got.Station, got.State)
 	}
 }

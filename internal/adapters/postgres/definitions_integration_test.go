@@ -3,7 +3,6 @@
 package postgres
 
 import (
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -38,10 +37,7 @@ func TestDefinitions_Conformance(t *testing.T) {
 			LegacyFactory: func(t *testing.T, org domain.OrgID, id domain.FactoryID, name string) {
 				t.Helper()
 
-				err := s.SaveFactory(domain.WithOrg(t.Context(), org), Factory{ID: id, Name: name, Definition: json.RawMessage(`{}`)})
-				if err != nil {
-					t.Fatal(err)
-				}
+				legacyFactory(t, pool, org, id, name)
 			},
 		}
 	})
@@ -222,5 +218,46 @@ func TestPurge_RemovesDefinitions(t *testing.T) {
 		if err := asOrg(t, f.pool, f.org, "SELECT count(*) FROM "+table, &n); err != nil || n != 0 {
 			t.Errorf("%d rows of %s left after the purge, %v; want none", n, table, err)
 		}
+	}
+}
+
+// A run records the definition version it starts on, and only a version of its own factory.
+func TestStartRun_RecordsTheDefinitionVersion(t *testing.T) {
+	t.Parallel()
+
+	f := newDefinitionsFixture(t)
+	ctx := domain.WithOrg(t.Context(), f.org)
+
+	newItem := func(factory domain.FactoryID) domain.Item {
+		t.Helper()
+
+		it, err := f.s.CreateItem(ctx, domain.NewItem{
+			FactoryID: factory, Type: "task", Title: "x", Station: "work", State: domain.StateQueued, Class: domain.ClassStandard, CreatedAt: time.Now(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return it
+	}
+
+	it := newItem(f.factory.ID)
+	run := ports.NewRun{
+		FactoryID: f.factory.ID, DefinitionVersionID: f.v1.ID, ItemID: it.ID, Station: "work", Agent: "worker", StartedAt: time.Now(),
+	}
+
+	if _, err := f.s.StartRun(ctx, run); err != nil {
+		t.Fatal(err)
+	}
+
+	if runs := f.s.runs(ctx, t, it.ID); len(runs) != 1 || runs[0].DefinitionVersionID != f.v1.ID {
+		t.Fatalf("runs = %+v, want one on %s", runs, f.v1.ID)
+	}
+
+	other := saveFactory(ctx, t, f.s)
+	run.FactoryID, run.ItemID = other, newItem(other).ID
+
+	if _, err := f.s.StartRun(ctx, run); err == nil {
+		t.Error("StartRun of another factory on this factory's version succeeded")
 	}
 }

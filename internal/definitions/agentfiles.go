@@ -22,18 +22,22 @@ const (
 )
 
 // WriteAgentFiles writes one task's prompt, skills and output schema into dir, from the
-// factory's current definition. It implements docker.AgentFiles.
+// definition version the task's run started on. It implements docker.AgentFiles.
 //
 // Only skills that ship inside the factory folder (source "./…") are written. A skills.sh
 // skill is not staged in phase 1: the agent loads it by name from the checkout's own
 // .claude/skills when the repository vendors it, and does without it otherwise.
 func (c *Cache) WriteAgentFiles(ctx context.Context, t ports.TaskSpec, dir string) error {
-	l, err := c.get(ctx, t.FactoryID)
+	v, err := c.version(ctx, t.DefinitionVersionID)
 	if err != nil {
 		return err
 	}
 
-	files := l.snapshot.FS()
+	if v.factory.Metadata.ID != string(t.FactoryID) {
+		return fmt.Errorf("definition version %s is not a version of factory %s: %w", v.id, t.FactoryID, ports.ErrNotFound)
+	}
+
+	files := v.files
 
 	if err := copyFile(files, path.Clean(t.PromptPath), filepath.Join(dir, "prompt.md")); err != nil {
 		return fmt.Errorf("agent %s prompt: %w", t.Agent, err)
@@ -59,7 +63,7 @@ func (c *Cache) WriteAgentFiles(ctx context.Context, t ports.TaskSpec, dir strin
 		return nil
 	}
 
-	file, err := contractFile(l, t.Output)
+	file, err := contractFile(v, t.Output)
 	if err != nil {
 		return err
 	}

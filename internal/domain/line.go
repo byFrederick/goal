@@ -44,6 +44,13 @@ type Line struct {
 	Flow FlowPolicy
 	// Purpose is what the factory is for; every agent task carries it.
 	Purpose string
+	// VersionID and Number name the published definition version the line comes from; every
+	// run the engine starts records it and runs on it to the end.
+	VersionID DefinitionVersionID
+	Number    int
+	// Paused lines take no work: the engine claims and releases nothing at the factory, and
+	// runs in progress finish.
+	Paused bool
 }
 
 // Runtime is what every agent task of the factory shares.

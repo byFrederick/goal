@@ -39,6 +39,10 @@ func TestSettings_Defaults(t *testing.T) {
 		t.Errorf("org retention = %s, want 7 days", s.OrgRetention)
 	}
 
+	if s.DefinitionCacheBytes != 64<<20 || !s.LegacyImport {
+		t.Errorf("definition cache %d bytes, legacy import %v; want 64 MiB and on", s.DefinitionCacheBytes, s.LegacyImport)
+	}
+
 	want := map[string]string{"CLAUDE_CODE_OAUTH_TOKEN": "env:CLAUDE_CODE_OAUTH_TOKEN"} //nolint:gosec // a reference, not a secret
 	if !maps.Equal(s.TaskEnv, want) {
 		t.Errorf("task env = %v, want %v", s.TaskEnv, want)
@@ -90,6 +94,8 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 		{name: "bad duration", env: map[string]string{"GOAL_TICK_EVERY": "-1s"}, want: "GOAL_TICK_EVERY"},
 		{name: "negative run cap", env: map[string]string{"GOAL_MAX_RUNS": "-2"}, want: "GOAL_MAX_RUNS"},
 		{name: "no retention", env: map[string]string{"GOAL_ORG_RETENTION": "0d"}, want: "GOAL_ORG_RETENTION"},
+		{name: "empty definition cache", env: map[string]string{"GOAL_DEFINITION_CACHE_BYTES": "0"}, want: "GOAL_DEFINITION_CACHE_BYTES"},
+		{name: "unclear legacy import", env: map[string]string{"GOAL_LEGACY_IMPORT": "maybe"}, want: "GOAL_LEGACY_IMPORT"},
 		{name: "GitHub API in clear text", env: map[string]string{"GOAL_GITHUB_API_URL": "http://api.example.com"}, want: "must be https"},
 		{name: "not a model id", env: map[string]string{modelsEnv: "claude-opus-5-5,gpt-5"}, want: "not a model id"},
 		{name: "a model twice", env: map[string]string{modelsEnv: "claude-opus-5-5,claude-opus-5-5"}, want: "twice"},

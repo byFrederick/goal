@@ -15,16 +15,20 @@ import (
 var ErrBadTaskToken = errors.New("bad task token")
 
 // TaskClaims scope one agent task's access to the MCP gateway: which organization, factory,
-// item, station, agent and run it acts for, which connections it may use and until when.
+// definition version, item, station, agent and run it acts for, which connections it may use
+// and until when.
 type TaskClaims struct {
-	OrgID       OrgID     `json:"o"`
-	FactoryID   FactoryID `json:"f"`
-	ItemID      ItemID    `json:"i"`
-	Station     string    `json:"s"`
-	Agent       string    `json:"a"`
-	RunID       RunID     `json:"r"`
-	Connections []string  `json:"c,omitempty"`
-	ExpiresAt   int64     `json:"e"` // unix seconds
+	OrgID     OrgID     `json:"o"`
+	FactoryID FactoryID `json:"f"`
+	// VersionID is the definition version the run started on: the gateway serves that
+	// version's agents and connections.
+	VersionID   DefinitionVersionID `json:"v"`
+	ItemID      ItemID              `json:"i"`
+	Station     string              `json:"s"`
+	Agent       string              `json:"a"`
+	RunID       RunID               `json:"r"`
+	Connections []string            `json:"c,omitempty"`
+	ExpiresAt   int64               `json:"e"` // unix seconds
 }
 
 // SignTaskToken issues a per-task gateway token. Any goald instance holding key can verify it,
@@ -75,6 +79,11 @@ func VerifyTaskToken(key []byte, token string, now time.Time) (TaskClaims, error
 	// Tokens issued before organizations name none; their runs ended when goald was upgraded.
 	if c.OrgID == "" {
 		return TaskClaims{}, fmt.Errorf("%w: no organization", ErrBadTaskToken)
+	}
+
+	// Nor do tokens issued before definition versions name a version.
+	if c.VersionID == "" {
+		return TaskClaims{}, fmt.Errorf("%w: no definition version", ErrBadTaskToken)
 	}
 
 	return c, nil

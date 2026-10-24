@@ -318,11 +318,13 @@ type Claim struct {
 // NewRun describes an agent run that is starting.
 type NewRun struct {
 	FactoryID domain.FactoryID
-	ItemID    domain.ItemID
-	Station   string
-	Agent     string
-	Model     string
-	StartedAt time.Time
+	// DefinitionVersionID is the published version of the factory the run starts on.
+	DefinitionVersionID domain.DefinitionVersionID
+	ItemID              domain.ItemID
+	Station             string
+	Agent               string
+	Model               string
+	StartedAt           time.Time
 }
 
 // Transition is one atomic change to an item.
@@ -458,12 +460,15 @@ type RunEvent struct {
 // TaskSpec is everything a runner needs to run one agent on one item.
 type TaskSpec struct {
 	FactoryID domain.FactoryID
-	ItemID    domain.ItemID
-	RunID     domain.RunID
-	Station   string
-	Agent     string
-	Image     string
-	Model     string
+	// DefinitionVersionID is the version the run started on; its prompt, skills and contract
+	// are the ones the runner stages.
+	DefinitionVersionID domain.DefinitionVersionID
+	ItemID              domain.ItemID
+	RunID               domain.RunID
+	Station             string
+	Agent               string
+	Image               string
+	Model               string
 	// PromptPath and skill sources are relative to the factory's root; the runner fetches them.
 	PromptPath string
 	Skills     []domain.SkillRef
@@ -601,12 +606,13 @@ type Secrets interface {
 	Resolve(ctx context.Context, ref string) (string, error)
 }
 
-// Contracts validates station outputs against a factory's named JSON Schema contracts.
+// Contracts validates station outputs against the named JSON Schema contracts of a definition
+// version: the one the run started on, whatever was published meanwhile.
 type Contracts interface {
-	// Validate returns nil when output satisfies the factory's contract, an error wrapping
+	// Validate returns nil when output satisfies the version's contract, an error wrapping
 	// ErrContractViolation (with the schema's explanation) when it does not, and any other
-	// error when validation itself failed (unknown contract, unreadable schema).
-	Validate(ctx context.Context, factory domain.FactoryID, contract string, output json.RawMessage) error
+	// error when validation itself failed (unknown version or contract, unreadable schema).
+	Validate(ctx context.Context, version domain.DefinitionVersionID, contract string, output json.RawMessage) error
 }
 
 // ObjectStore keeps objects in one versioned bucket: S3 on AWS, an S3-compatible server

@@ -308,3 +308,39 @@ func TestWeeklyBudget_UnsetMeansUnlimited(t *testing.T) {
 		t.Errorf("budget logs = %v; want none", logs)
 	}
 }
+
+// Pausing takes a line out of releases and claims, not out of its budget: a used-up budget
+// with the stop policy still cancels the paused line's runs.
+func TestWeeklyBudget_StopStillCancelsTheRunsOfAPausedLine(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+
+	t.Cleanup(func() { close(release) })
+
+	line := budgeted(10, domain.BudgetStop, 1)
+	h := newHarness(t, line, porttest.Block(release, `{}`))
+	running := h.submit(t, domain.NewItem{Title: "running"})
+	h.tick(t)
+
+	if err := h.runner.WaitStarted(bounded(t), 1); err != nil {
+		t.Fatal(err)
+	}
+
+	line.Paused = true
+	if err := h.e.SetLines([]domain.Line{line}); err != nil {
+		t.Fatal(err)
+	}
+
+	h.spent(t, t0, 12)
+	h.tick(t)
+	h.wait(t, h.e)
+
+	if got := h.item(t, running.ID); got.Station != stWork || got.State != domain.StateQueued {
+		t.Errorf("item of the paused line = %s/%s; want its run cancelled and the item back in the queue", got.Station, got.State)
+	}
+
+	if n := len(h.runner.Started()); n != 1 {
+		t.Errorf("%d tasks started; want nothing claimed while paused", n)
+	}
+}

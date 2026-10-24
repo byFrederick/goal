@@ -1,18 +1,18 @@
-// Command goald is Goal's daemon: it runs every factory in the bucket on one flow engine, serves
-// the HTTP API (/v1/) and the MCP gateway agents use (/mcp), and starts agent tasks in Docker.
+// Command goald is Goal's daemon: it runs the current definition version of every factory on one
+// flow engine, serves the HTTP API (/v1/) and the MCP gateway agents use (/mcp), and starts agent
+// tasks in Docker.
 //
-// All wiring happens here, by hand: PostgreSQL (store and item notices), the bucket (factory
-// definitions), environment secrets, git workspaces, GitHub (merges), the Docker runner, checker
-// and MCP sidecars, the system clock, the engine, the gateway, the API and its stream feed.
-// Configuration comes from the environment; settings.go lists every variable. goald keeps nothing
-// another instance would need: work state is in PostgreSQL, definitions are in the bucket, and its
-// workspaces and run folders are scratch. The exception is the gateway's running MCP sidecars,
+// All wiring happens here, by hand: PostgreSQL (store, definition versions, item and definition
+// notices), the bucket (definition file content), environment secrets, git workspaces, GitHub
+// (merges), the Docker runner, checker and MCP sidecars, the system clock, the engine, the gateway,
+// the API and its stream feed. Configuration comes from the environment; settings.go lists every
+// variable. goald keeps nothing another instance would need: work state and definition versions
+// are in PostgreSQL, file content is in the bucket, and its workspaces and run folders are scratch. The exception is the gateway's running MCP sidecars,
 // which serve only the runs this instance started (see internal/gateway).
 package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -40,6 +40,7 @@ import (
 	"github.com/byFrederick/goal/internal/engine"
 	"github.com/byFrederick/goal/internal/factorystore"
 	"github.com/byFrederick/goal/internal/gateway"
+	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/retention"
 	"github.com/byFrederick/goal/web"
 )
@@ -120,15 +121,11 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	// Factories stored before organizations move into the default one, which holds the rows
-	// from before organizations too.
-	moved, err := factorystore.MigrateLegacy(ctx, objects, postgres.DefaultOrgID)
-	if err != nil {
-		return fmt.Errorf("move legacy factory definitions into the default organization: %w", err)
-	}
+	definitionStore := postgres.NewDefinitions(pool, objects, log)
 
-	log.InfoContext(ctx, "legacy bucket layout migrated", slog.Int("copied", moved.Copied), slog.Int("present", moved.Present),
-		slog.Int("gone", moved.Gone), slog.Int("deleted", moved.Deleted))
+	if err := importLegacy(ctx, s, objects, definitionStore, store, log); err != nil {
+		return err
+	}
 
 	dockerClient, err := client.New(client.FromEnv)
 	if err != nil {
@@ -143,9 +140,9 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// The engine is built after the definitions it reads; the load hook reaches it through eng.
 	var eng *engine.Engine
 
-	defs := definitions.New(factorystore.New(objects), store, func(ctx context.Context, fs []definitions.Loaded) error {
-		return load(ctx, store, eng, fs)
-	}, log)
+	defs := definitions.New(definitionStore, store, func(_ context.Context, lines []domain.Line) error {
+		return eng.SetLines(lines)
+	}, definitions.Config{CacheBytes: s.DefinitionCacheBytes}, log)
 
 	runnerCfg := docker.Config{RunDir: s.RunDir}
 	workspaces := gitworkspace.New(secrets, gitworkspace.Config{Root: s.WorkspaceRoot}, log)
@@ -180,6 +177,8 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	log.InfoContext(ctx, "factories loaded", slog.Int("count", len(loaded)), slog.String("bucket", objects.Bucket()))
 
+	definitionNotices := postgres.NewDefinitionNotices(pool.Config().ConnConfig, log)
+
 	reap(ctx, log, runner, workspaces)
 
 	feed := api.NewFeed(postgres.NewNotices(pool.Config().ConnConfig, log), log)
@@ -205,14 +204,14 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// Deleted organizations go, rows and bucket objects, once their retention has passed.
 	purger := retention.New(store, objects, clock, s.OrgRetention, log)
 
-	return serve(ctx, log, s, srv, eng, defs, feed, purger)
+	return serve(ctx, log, s, srv, eng, defs, definitionNotices, feed, purger)
 }
 
-// serve runs the HTTP server, the engine, the stream feed, the definitions refresh and the purge
-// of deleted organizations until ctx ends, then shuts them down: the feed ends every stream,
-// HTTP drains, then the engine releases the items its runs held.
+// serve runs the HTTP server, the engine, the stream feed, the definitions reloads and the
+// purge of deleted organizations until ctx ends, then shuts them down: the feed ends every
+// stream, HTTP drains, then the engine releases the items its runs held.
 func serve(ctx context.Context, log *slog.Logger, s settings, srv *http.Server, eng *engine.Engine, defs *definitions.Cache,
-	feed *api.Feed, purger *retention.Purger,
+	notices ports.DefinitionNotices, feed *api.Feed, purger *retention.Purger,
 ) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -239,6 +238,12 @@ func serve(ctx context.Context, log *slog.Logger, s settings, srv *http.Server, 
 	wg.Go(func() {
 		if err := eng.Run(ctx); err != nil {
 			fail(fmt.Errorf("engine: %w", err))
+		}
+	})
+
+	wg.Go(func() {
+		if err := defs.Listen(ctx, notices); err != nil {
+			fail(fmt.Errorf("definition notices: %w", err))
 		}
 	})
 
@@ -298,7 +303,39 @@ func openDatabase(ctx context.Context, s settings, log *slog.Logger) (*pgxpool.P
 	return pool, nil
 }
 
-// refresh re-reads factory definitions from the bucket until ctx ends.
+// importLegacy brings the bucket's older layouts up to date before anything reads definitions:
+// factories stored before organizations move into the default one (which holds the rows from
+// before organizations too), then every factory with no version yet becomes version 1 of
+// itself (GOAL_LEGACY_IMPORT). Both are idempotent: a goald that already did them finds nothing
+// to do.
+func importLegacy(ctx context.Context, s settings, objects ports.ObjectStore, defs ports.DefinitionStore, orgs definitions.Orgs,
+	log *slog.Logger,
+) error {
+	moved, err := factorystore.MigrateLegacy(ctx, objects, postgres.DefaultOrgID)
+	if err != nil {
+		return fmt.Errorf("move legacy factory definitions into the default organization: %w", err)
+	}
+
+	log.InfoContext(ctx, "legacy bucket layout migrated", slog.Int("copied", moved.Copied), slog.Int("present", moved.Present),
+		slog.Int("gone", moved.Gone), slog.Int("deleted", moved.Deleted))
+
+	if !s.LegacyImport {
+		return nil
+	}
+
+	res, err := definitions.ImportLegacy(ctx, factorystore.New(objects), defs, orgs, log)
+	if err != nil {
+		return fmt.Errorf("import legacy factory definitions: %w", err)
+	}
+
+	log.InfoContext(ctx, "legacy definitions imported", slog.Int("factories", res.Factories), slog.Int("versions", res.Published),
+		slog.Int("drafts", res.Drafts), slog.Int("present", res.Present), slog.Int("problems", res.Problems))
+
+	return nil
+}
+
+// refresh reconciles the current definition versions with PostgreSQL until ctx ends, behind the
+// notices that reload them at once.
 func refresh(ctx context.Context, log *slog.Logger, defs *definitions.Cache, every time.Duration) {
 	t := time.NewTicker(every)
 	defer t.Stop()
@@ -314,32 +351,6 @@ func refresh(ctx context.Context, log *slog.Logger, defs *definitions.Cache, eve
 			log.WarnContext(ctx, "refresh factory definitions", slog.Any("error", err))
 		}
 	}
-}
-
-// load registers every loaded factory in the store, in its organization (items reference their
-// factory row), and hands their lines to the engine.
-func load(ctx context.Context, store *postgres.Store, eng *engine.Engine, fs []definitions.Loaded) error {
-	lines := make([]domain.Line, 0, len(fs))
-
-	for _, l := range fs {
-		f := l.Factory
-
-		def, err := json.Marshal(f)
-		if err != nil {
-			return fmt.Errorf("factory %s: %w", f.Metadata.ID, err)
-		}
-
-		err = store.SaveFactory(domain.WithOrg(ctx, l.Org), postgres.Factory{
-			ID: domain.FactoryID(f.Metadata.ID), Name: f.Metadata.Name, Title: f.Metadata.Title, Definition: def,
-		})
-		if err != nil {
-			return err
-		}
-
-		lines = append(lines, l.Line())
-	}
-
-	return eng.SetLines(lines)
 }
 
 // reap removes containers, run folders and workspaces left by an earlier goald that died

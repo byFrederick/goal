@@ -328,6 +328,17 @@ func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, err
 		return "", err
 	}
 
+	var version *uuid.UUID
+
+	if r.DefinitionVersionID != "" {
+		v, err := parseID("definition version", string(r.DefinitionVersionID))
+		if err != nil {
+			return "", err
+		}
+
+		version = &v
+	}
+
 	id, err := newID()
 	if err != nil {
 		return "", err
@@ -337,7 +348,8 @@ func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, err
 
 	err = s.inTx(ctx, func(q *db.Queries) error {
 		err := q.InsertRun(ctx, db.InsertRunParams{
-			ID: id, FactoryID: factory, ItemID: item, Station: r.Station, Agent: r.Agent, Model: r.Model, StartedAt: r.StartedAt,
+			ID: id, FactoryID: factory, DefinitionVersionID: version, ItemID: item, Station: r.Station, Agent: r.Agent,
+			Model: r.Model, StartedAt: r.StartedAt,
 		})
 		if err != nil {
 			return fmt.Errorf("insert run: %w", err)

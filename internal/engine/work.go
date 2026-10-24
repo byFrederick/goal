@@ -118,7 +118,7 @@ func (e *Engine) outputFailed(ctx context.Context, log *slog.Logger, c claimed, 
 // check validates an output against the station's contract and, at a gate, reads its verdict.
 func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (*domain.Verdict, error) {
 	if c.station.Output != "" {
-		if err := e.contracts.Validate(ctx, c.line.FactoryID, c.station.Output, output); err != nil {
+		if err := e.contracts.Validate(ctx, c.line.VersionID, c.station.Output, output); err != nil {
 			return nil, fmt.Errorf("contract %s: %w", c.station.Output, err)
 		}
 	}
@@ -141,8 +141,8 @@ func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (
 // could not be carried out.
 func (e *Engine) runOnce(ctx context.Context, c claimed, brief string) (domain.RunResult, *domain.Verdict, error) {
 	runID, err := e.store.StartRun(ctx, ports.NewRun{
-		FactoryID: c.line.FactoryID, ItemID: c.item.ID, Station: c.station.ID, Agent: c.agent.Name,
-		Model: modelOf(c), StartedAt: e.clock.Now(),
+		FactoryID: c.line.FactoryID, DefinitionVersionID: c.line.VersionID, ItemID: c.item.ID, Station: c.station.ID,
+		Agent: c.agent.Name, Model: modelOf(c), StartedAt: e.clock.Now(),
 	})
 	if err != nil {
 		return domain.RunResult{}, nil, fmt.Errorf("record run: %w", err)
@@ -319,8 +319,8 @@ func (e *Engine) start(ctx context.Context, c claimed, runID domain.RunID, brief
 	maxTurns, maxUSD := a.Limits(rt)
 
 	task, err := e.runner.Start(ctx, ports.TaskSpec{
-		FactoryID: c.line.FactoryID, ItemID: c.item.ID, RunID: runID, Station: c.station.ID, Agent: a.Name,
-		Image: rt.Image, Model: modelOf(c), PromptPath: a.PromptPath, Skills: a.Skills,
+		FactoryID: c.line.FactoryID, DefinitionVersionID: c.line.VersionID, ItemID: c.item.ID, RunID: runID,
+		Station: c.station.ID, Agent: a.Name, Image: rt.Image, Model: modelOf(c), PromptPath: a.PromptPath, Skills: a.Skills,
 		ToolsAllow: a.ToolsAllow, ToolsDeny: a.ToolsDeny, GatewayURL: e.cfg.GatewayURL, GatewayToken: token,
 		Purpose: c.line.Purpose, Brief: brief, Inputs: c.item.Outputs, Output: c.station.Output, WorkspaceDir: workspace, Env: env,
 		Timeout: e.cfg.TaskTimeout,
@@ -344,7 +344,7 @@ func (e *Engine) gatewayToken(ctx context.Context, c claimed, runID domain.RunID
 	}
 
 	token, err := domain.SignTaskToken([]byte(key), domain.TaskClaims{
-		OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, ItemID: c.item.ID, Station: c.station.ID, Agent: c.agent.Name, RunID: runID,
+		OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, VersionID: c.line.VersionID, ItemID: c.item.ID, Station: c.station.ID, Agent: c.agent.Name, RunID: runID,
 		Connections: c.agent.Connections, ExpiresAt: e.clock.Now().Add(e.cfg.TaskTimeout + e.cfg.LeaseTTL).Unix(),
 	})
 	if err != nil {
@@ -413,8 +413,12 @@ func (e *Engine) finishRun(ctx context.Context, id domain.RunID, res domain.RunR
 }
 
 // finish moves an item whose output passed its checks: through the gate's verdict when the
-// station has one, otherwise to the next station.
+// station has one, otherwise to the next station. The run was checked against the version it
+// started on; where the item goes next is the current line's say, so an item finishing on v1
+// after v2 was published moves along v2.
 func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output json.RawMessage, v *domain.Verdict) {
+	next := e.lineNow(c.line, c.station.ID)
+
 	t := ports.Transition{
 		ItemID: c.item.ID, From: domain.Position{Station: c.station.ID, State: domain.StateInProgress},
 		Lease: &c.lease, Lane: domain.LaneFrom(output), OutputStation: c.station.ID, Output: output, At: e.clock.Now(),
@@ -424,12 +428,12 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output
 
 	switch {
 	case v != nil && v.Decision == domain.Reject:
-		err = e.gateReject(c, v.Reason, &t)
+		err = e.gateReject(c, next, v.Reason, &t)
 	case v != nil:
 		t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
-		err = e.advance(c.line, c.item, c.agent.Name, &t)
+		err = e.advance(next, c.item, c.agent.Name, &t)
 	default:
-		err = e.advance(c.line, c.item, c.agent.Name, &t)
+		err = e.advance(next, c.item, c.agent.Name, &t)
 	}
 
 	if err != nil {
@@ -454,9 +458,9 @@ func (e *Engine) advance(l domain.Line, it domain.Item, actor string, t *ports.T
 	return nil
 }
 
-// gateReject points t back at the gate's onReject station, or at a human once the item has
-// used up its rework allowance.
-func (e *Engine) gateReject(c claimed, reason string, t *ports.Transition) error {
+// gateReject points t back at the gate's onReject station on line l, or at a human once the
+// item has used up the rework allowance of the gate it ran at.
+func (e *Engine) gateReject(c claimed, l domain.Line, reason string, t *ports.Transition) error {
 	it, gate := c.item, *c.station.Gate
 	t.Events = append(t.Events, event(it, domain.EventGateRejected, t.At, c.agent.Name,
 		map[string]any{keyReason: reason, "rework_count": it.ReworkCount}))
@@ -469,7 +473,7 @@ func (e *Engine) gateReject(c claimed, reason string, t *ports.Transition) error
 		return nil
 	}
 
-	target, err := c.line.ReworkTarget(it.Station)
+	target, err := l.ReworkTarget(it.Station)
 	if err != nil {
 		return err
 	}

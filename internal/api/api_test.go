@@ -7,8 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -17,10 +15,10 @@ import (
 	"github.com/byFrederick/goal/internal/api"
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/builder"
+	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/engine"
-	"github.com/byFrederick/goal/internal/factorystore"
 	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/ports/porttest"
 )
@@ -222,34 +220,34 @@ func newTenancy(t *testing.T) *porttest.Tenancy {
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 
-	catalog := factorystore.New(porttest.NewObjectStore())
 	tenancy := newTenancy(t)
-
-	for _, files := range []map[string]string{
-		{"factory.yaml": acme, "agents/writer.md": "# writer\n"},
-		{"factory.yaml": line, "agents/backend.md": "# backend\n", "agents/frontend.md": "# frontend\n"},
-	} {
-		dir := t.TempDir()
-		for name, body := range files {
-			if err := os.MkdirAll(filepath.Join(dir, filepath.Dir(name)), 0o750); err != nil {
-				t.Fatal(err)
-			}
-
-			if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		if _, _, err := catalog.Push(t.Context(), testOrg, dir); err != nil {
-			t.Fatal(err)
-		}
-	}
-
 	h := &harness{
 		store: porttest.NewStore(), clock: porttest.NewClock(t0), codehost: porttest.NewCodeHost(),
 		notices: porttest.NewItemNotices(),
 	}
 	tenancy.WithStore(h.store) // one database holds the organizations and their factories' rows
+
+	// Factories published here are registered in the item store, as in one database.
+	definitionStore := porttest.NewDefinitions(porttest.DefinitionsDeps{Objects: porttest.NewObjectStore(), Items: h.store})
+
+	for _, files := range []map[string]string{
+		{"factory.yaml": acme, "agents/writer.md": "# writer\n"},
+		{"factory.yaml": line, "agents/backend.md": "# backend\n", "agents/frontend.md": "# frontend\n"},
+	} {
+		tree := config.Files{}
+		for name, body := range files {
+			tree[name] = []byte(body)
+		}
+
+		f, err := config.Load(tree)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := porttest.Publish(inOrg(t), definitionStore, domain.FactoryID(f.Metadata.ID), f.Metadata.Name, tree); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	e, err := engine.New(engine.Deps{
 		Store: h.store, Orgs: tenancy, Runner: porttest.NewRunner(porttest.Succeed(`{}`)), Workspaces: porttest.NewWorkspaces(),
@@ -262,17 +260,10 @@ func newHarness(t *testing.T) *harness {
 
 	h.engine = e
 
-	// As goald does: the definitions cache registers every loaded factory in its organization and
-	// hands its line to the engine.
-	defs := definitions.New(catalog, tenancy, func(_ context.Context, fs []definitions.Loaded) error {
-		lines := make([]domain.Line, 0, len(fs))
-		for _, f := range fs {
-			h.store.AddFactory(f.Org, domain.FactoryID(f.Factory.Metadata.ID))
-			lines = append(lines, f.Line())
-		}
-
+	// As goald does: the definitions cache hands every current version's line to the engine.
+	defs := definitions.New(definitionStore, tenancy, func(_ context.Context, lines []domain.Line) error {
 		return e.SetLines(lines)
-	}, nil)
+	}, definitions.Config{}, nil)
 
 	// As goald does at startup: load every organization's factories once.
 	if _, err := defs.Refresh(t.Context()); err != nil {

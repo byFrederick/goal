@@ -12,7 +12,7 @@ func TestTaskToken_OnlyTheSigningKeyVerifiesUnexpiredClaims(t *testing.T) {
 	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
 	key := []byte("gateway-key")
 	claims := TaskClaims{
-		OrgID: "o1", FactoryID: "f1", ItemID: "i1", Station: "build", Agent: "backend", RunID: "r1",
+		OrgID: "o1", FactoryID: "f1", VersionID: "v1", ItemID: "i1", Station: "build", Agent: "backend", RunID: "r1",
 		Connections: []string{"github"}, ExpiresAt: now.Add(time.Hour).Unix(),
 	}
 
@@ -25,6 +25,14 @@ func TestTaskToken_OnlyTheSigningKeyVerifiesUnexpiredClaims(t *testing.T) {
 	noOrg.OrgID = ""
 
 	unscoped, err := SignTaskToken(key, noOrg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	noVersion := claims
+	noVersion.VersionID = ""
+
+	unversioned, err := SignTaskToken(key, noVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,6 +50,7 @@ func TestTaskToken_OnlyTheSigningKeyVerifiesUnexpiredClaims(t *testing.T) {
 		{name: "tampered payload", key: key, token: "x" + token, now: now},
 		{name: "no signature", key: key, token: "abc", now: now},
 		{name: "no organization", key: key, token: unscoped, now: now},
+		{name: "no definition version", key: key, token: unversioned, now: now},
 	}
 
 	for _, tt := range tests {
@@ -61,7 +70,7 @@ func TestTaskToken_OnlyTheSigningKeyVerifiesUnexpiredClaims(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if got.OrgID != claims.OrgID || got.ItemID != claims.ItemID || got.Agent != claims.Agent || len(got.Connections) != 1 {
+			if got.OrgID != claims.OrgID || got.VersionID != claims.VersionID || got.ItemID != claims.ItemID || got.Agent != claims.Agent || len(got.Connections) != 1 {
 				t.Errorf("claims = %+v, want %+v", got, claims)
 			}
 		})

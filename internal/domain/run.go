@@ -44,13 +44,16 @@ const (
 type Run struct {
 	ID        RunID
 	FactoryID FactoryID
-	ItemID    ItemID
-	Station   string
-	Agent     string
-	Model     string
-	Result    RunResult
-	StartedAt time.Time
-	EndedAt   time.Time
+	// DefinitionVersionID is the definition version the run started and finished on; empty
+	// for runs from before versions ("version unknown").
+	DefinitionVersionID DefinitionVersionID
+	ItemID              ItemID
+	Station             string
+	Agent               string
+	Model               string
+	Result              RunResult
+	StartedAt           time.Time
+	EndedAt             time.Time
 }
 
 // RunResult is what a runner returns when an agent task ends.

@@ -1,35 +1,43 @@
-// Package definitions is goald's view of the factory definitions in the bucket: a cache of the
-// current, valid definition of every factory of every live organization, refreshed from
-// internal/factorystore. It serves the readers that need a whole definition rather than the
-// engine's domain.Line: the API (api.Factories), the MCP gateway (gateway.Definitions),
-// contract validation (ports.Contracts) and the Docker runner's agent files (docker.AgentFiles).
+// Package definitions is goald's read side of factory definitions: a cache of the published
+// version every factory of every live organization runs (its current version) and of the
+// older versions runs started on, read from ports.DefinitionStore. It serves the readers that
+// need a definition: the engine's lines (LoadFunc), the API (api.Factories), the MCP gateway
+// (gateway.Definitions), contract validation (ports.Contracts) and the Docker runner's agent
+// files (docker.AgentFiles). A run reads the version it started on (TaskSpec.
+// DefinitionVersionID, the gateway token's v claim), whatever was published meanwhile.
 //
-// Every read is scoped to the organization in its context (domain.WithOrg): a factory of
-// another organization is not found, and a read without an organization fails with
-// domain.ErrNoOrg. A factory's organization is where its definition is stored in the bucket.
+// Published versions never change, so a loaded version is kept by id: current versions while
+// they are current, older ones in a least-recently-used set bounded by Config.CacheBytes. A
+// version is read once from the store, every file verified against its hash; files a factory's
+// next version shares with the one it replaces are not read again. Listen reloads an
+// organization's current versions on every notice of a publish, restore, pause or resume, and
+// everything on a resync; Refresh does the same for every organization, as a safety net behind
+// the notices.
 //
-// The cache is a convenience, not state: every goald instance rebuilds it from the bucket, and
-// a definition that fails to load keeps the last valid one in use until it is fixed.
+// Every read is scoped to the organization in its context (domain.WithOrg): a factory or a
+// version of another organization is not found, and a read without an organization fails with
+// domain.ErrNoOrg.
+//
+// The cache is a convenience, not state: every goald instance rebuilds it from the store, and
+// a current version that fails to load in this goald keeps the previous one in use. ImportLegacy
+// turns the factories of the bucket layout before versions into versions, once.
 package definitions
 
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/factorystore"
 	"github.com/byFrederick/goal/internal/ports"
 )
-
-// Catalog lists an organization's factories in the bucket; *factorystore.Catalog satisfies it.
-type Catalog interface {
-	List(ctx context.Context, org domain.OrgID) ([]factorystore.Entry, error)
-}
 
 // Orgs lists the organizations whose factories the cache loads; ports.Tenancy satisfies it.
 // Factories of an organization that does not exist or was deleted are not loaded.
@@ -37,154 +45,310 @@ type Orgs interface {
 	ActiveOrgs(ctx context.Context) ([]domain.OrgID, error)
 }
 
-// Loaded is a factory that is loaded, with the organization that owns it.
-type Loaded struct {
-	Org     domain.OrgID
-	Factory *config.Factory
+// LoadFunc is told the lines of every current version after each reload, before anyone can
+// look them up, so goald can hand them to the engine (engine.SetLines). When it fails the
+// reload is dropped and the cache keeps what it had.
+type LoadFunc func(ctx context.Context, lines []domain.Line) error
+
+// DefaultCacheBytes bounds the files of the versions kept besides the current ones.
+const DefaultCacheBytes = 64 << 20
+
+// Config tunes the cache; the zero value takes the defaults.
+type Config struct {
+	// CacheBytes bounds the file content of the versions kept for runs that started on a
+	// version that is no longer current (default DefaultCacheBytes). Current versions are
+	// always kept.
+	CacheBytes int64
 }
 
-// Line is the factory's line for the engine, in its organization.
-func (l Loaded) Line() domain.Line {
-	line := l.Factory.Line()
-	line.OrgID = l.Org
-
-	return line
-}
-
-// LoadFunc is told the factories that are loaded after every refresh, before anyone can look
-// them up, so goald can register them in the store and hand their lines to the engine.
-type LoadFunc func(ctx context.Context, factories []Loaded) error
-
-// loaded is one factory's definition with its organization and the files it was read from.
-type loaded struct {
+// version is one published definition version, loaded and valid.
+type version struct {
+	id       domain.DefinitionVersionID
 	org      domain.OrgID
+	number   int
+	manifest domain.Manifest
 	factory  *config.Factory
-	snapshot *factorystore.Snapshot
+	files    config.Files
+	size     int64
 }
 
-// Cache holds the current definition of every valid factory in the bucket. It is safe for
-// concurrent use.
+// current is the version a factory runs and whether the factory is paused.
+type current struct {
+	*version
+
+	paused bool
+}
+
+// line is the engine's line of the version, in its organization.
+func (c current) line() domain.Line {
+	l := c.factory.Line()
+	l.OrgID, l.VersionID, l.Number, l.Paused = c.org, c.id, c.number, c.paused
+
+	return l
+}
+
+// Cache holds the current version of every published factory and the versions runs pinned. It
+// is safe for concurrent use.
 type Cache struct {
-	catalog Catalog
-	orgs    Orgs
-	onLoad  LoadFunc
-	log     *slog.Logger
+	store  ports.DefinitionStore
+	orgs   Orgs
+	onLoad LoadFunc
+	log    *slog.Logger
 
-	refresh sync.Mutex // one refresh at a time, so onLoad sees refreshes in order
+	reload sync.Mutex // one reload at a time, so onLoad sees them in order
 
-	mu        sync.RWMutex
-	factories map[domain.FactoryID]loaded
+	mu      sync.RWMutex
+	current map[domain.FactoryID]current
+	byID    map[domain.DefinitionVersionID]*version // the current versions, by id
+
+	pinned *lru // versions no longer current
 }
 
-// New returns an empty cache over catalog for the organizations orgs lists; call Refresh to
-// fill it. onLoad may be nil.
-func New(catalog Catalog, orgs Orgs, onLoad LoadFunc, log *slog.Logger) *Cache {
+// New returns an empty cache over store for the organizations orgs lists; call Refresh to fill
+// it. onLoad and log may be nil.
+func New(store ports.DefinitionStore, orgs Orgs, onLoad LoadFunc, cfg Config, log *slog.Logger) *Cache {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Cache{catalog: catalog, orgs: orgs, onLoad: onLoad, log: log, factories: map[domain.FactoryID]loaded{}}
+	if cfg.CacheBytes <= 0 {
+		cfg.CacheBytes = DefaultCacheBytes
+	}
+
+	return &Cache{
+		store: store, orgs: orgs, onLoad: onLoad, log: log,
+		current: map[domain.FactoryID]current{}, byID: map[domain.DefinitionVersionID]*version{},
+		pinned: newLRU(cfg.CacheBytes),
+	}
 }
 
-// Refresh reads every factory of every live organization and makes the valid ones current. A
-// factory whose definition does not load is logged and keeps its last valid definition, if it
-// had one; a factory removed from the bucket, or whose organization is gone, is dropped. A
-// factory id stored in two organizations stays with the first by id (or the one it was loaded
-// in) and is refused in the other. It returns the factories now loaded.
-func (c *Cache) Refresh(ctx context.Context) ([]Loaded, error) {
-	c.refresh.Lock()
-	defer c.refresh.Unlock()
+// Refresh reloads the current versions of every live organization's factories and returns
+// the lines now loaded. An organization whose factories cannot be listed keeps what it had and
+// its error is returned with the lines; the factories of an organization that is gone are
+// dropped.
+func (c *Cache) Refresh(ctx context.Context) ([]domain.Line, error) {
+	return c.reloadOrgs(ctx, nil)
+}
 
-	orgs, err := c.orgs.ActiveOrgs(ctx)
+// reloadOrgs reloads the organizations in only, or every live one when only is nil.
+func (c *Cache) reloadOrgs(ctx context.Context, only []domain.OrgID) ([]domain.Line, error) {
+	c.reload.Lock()
+	defer c.reload.Unlock()
+
+	active, err := c.orgs.ActiveOrgs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list organizations: %w", err)
 	}
 
-	var entries []entry
+	live := make(map[domain.OrgID]bool, len(active))
+	for _, o := range active {
+		live[o] = true
+	}
 
-	for _, org := range slices.Sorted(slices.Values(orgs)) {
-		es, err := c.catalog.List(ctx, org)
-		if err != nil {
-			return nil, fmt.Errorf("list factories of organization %s: %w", org, err)
-		}
+	c.mu.RLock()
+	prev := maps.Clone(c.current)
+	c.mu.RUnlock()
 
-		for _, e := range es {
-			entries = append(entries, entry{org: org, Entry: e})
+	next := maps.Clone(prev)
+	maps.DeleteFunc(next, func(_ domain.FactoryID, cur current) bool { return !live[cur.org] })
+
+	targets := active
+	if only != nil {
+		targets = slices.DeleteFunc(slices.Clone(only), func(o domain.OrgID) bool { return !live[o] })
+	}
+
+	var errs []error
+
+	for _, org := range slices.Compact(slices.Sorted(slices.Values(targets))) {
+		if err := c.reloadOrg(ctx, org, next); err != nil {
+			errs = append(errs, err)
 		}
 	}
 
-	next := c.merge(ctx, entries)
-	factories := sorted(next)
+	lines := linesOf(next)
 
 	if c.onLoad != nil {
-		if err := c.onLoad(ctx, factories); err != nil {
-			return nil, fmt.Errorf("load factories: %w", err)
+		if err := c.onLoad(ctx, lines); err != nil {
+			return nil, fmt.Errorf("load lines: %w", err)
 		}
+	}
+
+	byID := make(map[domain.DefinitionVersionID]*version, len(next))
+	for _, cur := range next {
+		byID[cur.id] = cur.version
 	}
 
 	c.mu.Lock()
-	c.factories = next
+	c.current, c.byID = next, byID
 	c.mu.Unlock()
 
-	return factories, nil
+	// A version that stopped being current may still have runs on it.
+	for id, cur := range prev {
+		if now, ok := next[id]; !ok || now.version != cur.version {
+			c.pinned.add(cur.version)
+		}
+	}
+
+	return lines, errors.Join(errs...)
 }
 
-// entry is a factory found in an organization's prefix.
-type entry struct {
-	factorystore.Entry
+// reloadOrg sets the current versions of org's factories in next: a version already loaded is
+// kept, a new one is loaded, and a factory that has no current version any more (deleted, or
+// never published) is dropped. A version that fails to load leaves the factory on the one it
+// had, if any.
+func (c *Cache) reloadOrg(ctx context.Context, org domain.OrgID, next map[domain.FactoryID]current) error {
+	octx := domain.WithOrg(ctx, org)
 
-	org domain.OrgID
+	recs, err := c.store.FactoryRecords(octx)
+	if err != nil {
+		return fmt.Errorf("list factories of organization %s: %w", org, err)
+	}
+
+	running := map[domain.FactoryID]bool{}
+
+	for _, r := range recs {
+		if r.Current == nil {
+			continue
+		}
+
+		running[r.ID] = true
+		prev, had := next[r.ID]
+
+		if had && prev.id == r.Current.ID {
+			next[r.ID] = current{version: prev.version, paused: r.Paused()}
+			continue
+		}
+
+		log := c.log.With(slog.String("org_id", string(org)), slog.String("factory", string(r.ID)), slog.Int("number", r.Current.Number))
+		start := time.Now()
+
+		v, err := c.load(octx, r.Current.ID, prev.version)
+		if err != nil {
+			log.WarnContext(ctx, "current definition version does not load in this goald", slog.Bool("keeps_previous", had),
+				slog.Any("error", err))
+
+			if had {
+				next[r.ID] = current{version: prev.version, paused: r.Paused()}
+			} else {
+				delete(next, r.ID)
+			}
+
+			continue
+		}
+
+		log.InfoContext(ctx, "definitions reloaded", slog.Int("files", len(v.files)), slog.Int64("ms", time.Since(start).Milliseconds()))
+
+		next[r.ID] = current{version: v, paused: r.Paused()}
+	}
+
+	maps.DeleteFunc(next, func(id domain.FactoryID, cur current) bool { return cur.org == org && !running[id] })
+
+	return nil
 }
 
-// merge is the next set of loaded factories: every valid entry, and the current definition of
-// every entry that does not load.
-func (c *Cache) merge(ctx context.Context, entries []entry) map[domain.FactoryID]loaded {
+// load reads a published version of the organization in ctx and validates it. Files with the
+// hash of one of reuse's files are taken from reuse (which may be nil) instead of the store.
+func (c *Cache) load(ctx context.Context, id domain.DefinitionVersionID, reuse *version) (*version, error) {
+	dv, err := c.store.Version(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("definition version %s: %w", id, err)
+	}
+
+	if dv.State != domain.VersionPublished {
+		return nil, fmt.Errorf("definition version %s is %s, not published: %w", id, dv.State, ports.ErrNotFound)
+	}
+
+	known := map[domain.BlobHash][]byte{}
+
+	if reuse != nil {
+		for p, h := range reuse.manifest {
+			known[h] = reuse.files[p]
+		}
+	}
+
+	v := &version{id: dv.ID, org: dv.OrgID, number: dv.Number, manifest: dv.Manifest, files: make(config.Files, len(dv.Manifest))}
+
+	for p, h := range dv.Manifest {
+		b, ok := known[h]
+		if !ok {
+			if b, err = c.store.Blob(ctx, h); err != nil {
+				return nil, fmt.Errorf("definition version %s: file %s: %w", id, p, err)
+			}
+
+			// The store verifies too; a cache must never serve content under the wrong hash.
+			if domain.HashBlob(b) != h {
+				return nil, fmt.Errorf("definition version %s: file %s: %w", id, p, ports.ErrBlobCorrupt)
+			}
+
+			known[h] = b
+		}
+
+		v.files[p] = b
+		v.size += int64(len(b))
+	}
+
+	if v.factory, err = config.Load(v.files); err != nil {
+		return nil, fmt.Errorf("definition version %s: %w", id, err)
+	}
+
+	if v.factory.Metadata.ID != string(dv.FactoryID) {
+		return nil, fmt.Errorf("definition version %s: metadata.id %s is not its factory %s", id, v.factory.Metadata.ID, dv.FactoryID)
+	}
+
+	return v, nil
+}
+
+// version returns a published version of the organization in ctx: a current one, one kept for
+// runs, or else one read from the store.
+func (c *Cache) version(ctx context.Context, id domain.DefinitionVersionID) (*version, error) {
+	org, ok := domain.OrgFrom(ctx)
+	if !ok {
+		return nil, fmt.Errorf("definition version %s: %w", id, domain.ErrNoOrg)
+	}
+
+	if id == "" {
+		return nil, fmt.Errorf("no definition version: %w", ports.ErrNotFound)
+	}
+
 	c.mu.RLock()
-	defer c.mu.RUnlock()
+	v, ok := c.byID[id]
+	c.mu.RUnlock()
 
-	// The owner of an id is the organization it is loaded in when that one still stores it, and
-	// otherwise the first that stores it (entries come by organization).
-	owner := map[domain.FactoryID]domain.OrgID{}
-
-	for _, e := range entries {
-		id := domain.FactoryID(e.ID)
-		if _, claimed := owner[id]; !claimed {
-			owner[id] = e.org
-		}
-
-		if prev, ok := c.factories[id]; ok && prev.org == e.org {
-			owner[id] = e.org
-		}
+	if !ok {
+		v, ok = c.pinned.get(id)
 	}
 
-	next := make(map[domain.FactoryID]loaded, len(entries))
-
-	for _, e := range entries {
-		id := domain.FactoryID(e.ID)
-		log := c.log.With(slog.String("org_id", string(e.org)), slog.String("factory", e.ID))
-
-		if owner[id] != e.org {
-			log.ErrorContext(ctx, "factory id is stored in two organizations; ignored here", slog.String("loaded_in", string(owner[id])))
-			continue
+	if ok {
+		if v.org != org {
+			return nil, fmt.Errorf("definition version %s: %w", id, ports.ErrNotFound)
 		}
 
-		if e.Err == nil {
-			next[id] = loaded{org: e.org, factory: e.Factory, snapshot: e.Snapshot}
-			continue
-		}
-
-		prev, ok := c.factories[id]
-		log.WarnContext(ctx, "factory definition does not load", slog.Bool("keeps_previous", ok), slog.Any("error", e.Err))
-
-		if ok {
-			next[id] = prev
-		}
+		return v, nil
 	}
 
-	return next
+	v, err := c.load(ctx, id, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	c.pinned.add(v)
+
+	return v, nil
 }
 
-// Factories returns the loaded factories of the organization in ctx, ordered by name; none
+// Version returns a published definition version of the organization in ctx, for the run
+// that started on it, or an error wrapping ports.ErrNotFound. It implements
+// gateway.Definitions.
+func (c *Cache) Version(ctx context.Context, id domain.DefinitionVersionID) (*config.Factory, error) {
+	v, err := c.version(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return v.factory, nil
+}
+
+// Factories returns the current definitions of the organization in ctx, ordered by name; none
 // without one.
 func (c *Cache) Factories(ctx context.Context) []*config.Factory {
 	org, ok := domain.OrgFrom(ctx)
@@ -197,29 +361,18 @@ func (c *Cache) Factories(ctx context.Context) []*config.Factory {
 
 	var out []*config.Factory
 
-	for _, l := range sorted(c.factories) {
-		if l.Org == org {
-			out = append(out, l.Factory)
+	for _, cur := range sorted(c.current) {
+		if cur.org == org {
+			out = append(out, cur.factory)
 		}
 	}
 
 	return out
 }
 
-// Factory returns the current definition of a factory of the organization in ctx, or an error
-// wrapping ports.ErrNotFound. It implements gateway.Definitions.
-func (c *Cache) Factory(ctx context.Context, id domain.FactoryID) (*config.Factory, error) {
-	l, err := c.get(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	return l.factory, nil
-}
-
-// Lookup finds a loaded factory of the organization in ctx by id or metadata.name. When nothing
-// matches it refreshes once, so a factory pushed a moment ago is found, then returns an error
-// wrapping ports.ErrNotFound.
+// Lookup finds the current definition of a factory of the organization in ctx by id or
+// metadata.name. When nothing matches it reloads the organization once, so a factory published
+// a moment ago is found, then returns an error wrapping ports.ErrNotFound.
 func (c *Cache) Lookup(ctx context.Context, ref string) (*config.Factory, error) {
 	org, ok := domain.OrgFrom(ctx)
 	if !ok {
@@ -230,7 +383,7 @@ func (c *Cache) Lookup(ctx context.Context, ref string) (*config.Factory, error)
 		return f, nil
 	}
 
-	if _, err := c.Refresh(ctx); err != nil {
+	if _, err := c.reloadOrgs(ctx, []domain.OrgID{org}); err != nil {
 		return nil, err
 	}
 
@@ -245,47 +398,37 @@ func (c *Cache) find(org domain.OrgID, ref string) *config.Factory {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	if l, ok := c.factories[domain.FactoryID(ref)]; ok && l.org == org {
-		return l.factory
+	if cur, ok := c.current[domain.FactoryID(ref)]; ok && cur.org == org {
+		return cur.factory
 	}
 
-	for _, l := range c.factories {
-		if l.org == org && l.factory.Metadata.Name == ref {
-			return l.factory
+	for _, cur := range c.current {
+		if cur.org == org && cur.factory.Metadata.Name == ref {
+			return cur.factory
 		}
 	}
 
 	return nil
 }
 
-// get returns a loaded factory of the organization in ctx.
-func (c *Cache) get(ctx context.Context, id domain.FactoryID) (loaded, error) {
-	org, ok := domain.OrgFrom(ctx)
-	if !ok {
-		return loaded{}, fmt.Errorf("factory %s: %w", id, domain.ErrNoOrg)
-	}
+func sorted(m map[domain.FactoryID]current) []current {
+	out := slices.Collect(maps.Values(m))
 
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	l, ok := c.factories[id]
-	if !ok || l.org != org {
-		return loaded{}, fmt.Errorf("factory %s is not loaded: %w", id, ports.ErrNotFound)
-	}
-
-	return l, nil
-}
-
-func sorted(m map[domain.FactoryID]loaded) []Loaded {
-	out := make([]Loaded, 0, len(m))
-	for _, l := range m {
-		out = append(out, Loaded{Org: l.org, Factory: l.factory})
-	}
-
-	slices.SortFunc(out, func(a, b Loaded) int {
-		return cmp.Or(cmp.Compare(a.Factory.Metadata.Name, b.Factory.Metadata.Name), cmp.Compare(a.Org, b.Org),
-			cmp.Compare(a.Factory.Metadata.ID, b.Factory.Metadata.ID))
+	slices.SortFunc(out, func(a, b current) int {
+		return cmp.Or(cmp.Compare(a.factory.Metadata.Name, b.factory.Metadata.Name), cmp.Compare(a.org, b.org),
+			cmp.Compare(a.factory.Metadata.ID, b.factory.Metadata.ID))
 	})
 
 	return out
+}
+
+func linesOf(m map[domain.FactoryID]current) []domain.Line {
+	cur := sorted(m)
+	lines := make([]domain.Line, 0, len(cur))
+
+	for _, c := range cur {
+		lines = append(lines, c.line())
+	}
+
+	return lines
 }

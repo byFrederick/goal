@@ -45,9 +45,9 @@ func TestRun_SuccessMovesItemToTheNextStation(t *testing.T) {
 			t.Parallel()
 
 			work := agentStation(stWork, agWorker, 1, 1)
-			work.Output = "result"
+			work.Output = contractResult
 			h := newHarness(t, lineOf(append([]domain.Station{work}, tt.next...)...), porttest.Succeed(`{"answer":42}`))
-			h.contracts.Require(factoryID, "result", "answer")
+			h.contracts.Require(v1, contractResult, "answer")
 			it := h.submit(t, domain.NewItem{})
 
 			h.step(t)
@@ -102,9 +102,9 @@ func TestContract_FailureRetriesOnceThenBlocks(t *testing.T) {
 			t.Parallel()
 
 			work := agentStation(stWork, agWorker, 1, 1)
-			work.Output = "result"
+			work.Output = contractResult
 			h := newHarness(t, lineOf(work), porttest.Sequence(tt.results...))
-			h.contracts.Require(factoryID, "result", "answer")
+			h.contracts.Require(v1, contractResult, "answer")
 			it := h.submit(t, domain.NewItem{Title: "count"})
 
 			h.step(t)
@@ -321,7 +321,7 @@ func TestRun_TaskSpecCarriesAgentPolicy(t *testing.T) {
 
 	spec := h.runner.Started()[0]
 	want := ports.TaskSpec{
-		FactoryID: factoryID, ItemID: spec.ItemID, RunID: spec.RunID, Station: stWork, Agent: agWorker,
+		FactoryID: factoryID, DefinitionVersionID: v1, ItemID: spec.ItemID, RunID: spec.RunID, Station: stWork, Agent: agWorker,
 		Image: "ghcr.io/acme/agent:1", Model: "claude-opus-5-5", PromptPath: "./agents/worker.md",
 		Skills:     []domain.SkillRef{{Name: "conventions", Source: "./skills/conventions"}},
 		ToolsAllow: []string{"Read"}, ToolsDeny: []string{"Bash(git push*)"},
@@ -387,7 +387,7 @@ func TestRun_GatewayTokenIsScopedToTheTask(t *testing.T) {
 	}
 
 	want := domain.TaskClaims{
-		OrgID: testOrg, FactoryID: factoryID, ItemID: it.ID, Station: stWork, Agent: agWorker, RunID: h.store.Runs(testOrg, it.ID)[0].ID,
+		OrgID: testOrg, FactoryID: factoryID, VersionID: v1, ItemID: it.ID, Station: stWork, Agent: agWorker, RunID: h.store.Runs(testOrg, it.ID)[0].ID,
 		Connections: []string{"github"}, ExpiresAt: claims.ExpiresAt,
 	}
 	if !reflect.DeepEqual(claims, want) {
@@ -525,5 +525,60 @@ func TestRun_ShutdownReleasesItemsToTheQueue(t *testing.T) {
 		if got.State != domain.StateQueued || held || len(h.eventsOf(id, domain.EventReleased)) != 1 {
 			t.Errorf("item %s, lease held %v, events %v; want queued, released", got.State, held, h.kinds(id))
 		}
+	}
+}
+
+// v2 is the version published while a run on v1 is in progress.
+const v2 domain.DefinitionVersionID = "019a1c00-0000-7000-8000-0000000000a2"
+
+// A run keeps the version it started on: it records it, the task and its gateway token name
+// it, and its output is checked against that version's contract even after v2 is published.
+// The item's next move follows v2, matched by station id.
+func TestRun_KeepsItsVersionAndTheNextMoveUsesTheCurrentLine(t *testing.T) {
+	t.Parallel()
+
+	work := agentStation(stWork, agWorker, 1, 1)
+	work.Output = contractResult
+	release := make(chan struct{})
+	h := newHarness(t, lineOf(work), porttest.Block(release, `{"answer":42}`))
+	h.contracts.Require(v1, contractResult, "answer")
+	h.contracts.Require(v2, contractResult, "verdict") // v1's output would break v2's contract
+	it := h.submit(t, domain.NewItem{})
+
+	if err := h.e.Tick(inOrg(t)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.runner.WaitStarted(bounded(t), 1); err != nil {
+		t.Fatal(err)
+	}
+
+	next := lineOf(work, domain.Station{ID: stApprove, Kind: domain.KindHuman})
+	next.VersionID, next.Number = v2, 2
+
+	if err := h.e.SetLines([]domain.Line{next}); err != nil {
+		t.Fatal(err)
+	}
+
+	close(release)
+	h.wait(t, h.e)
+
+	if got := h.item(t, it.ID).Position(); got != (domain.Position{Station: stApprove, State: domain.StateWaitingHuman}) {
+		t.Fatalf("item at %+v, want approve/waiting_human: v1's output passes v1's contract and moves on v2's line (events %v)",
+			got, h.kinds(it.ID))
+	}
+
+	spec := h.runner.Started()[0]
+	if spec.DefinitionVersionID != v1 {
+		t.Errorf("task version = %q, want %q", spec.DefinitionVersionID, v1)
+	}
+
+	if runs := h.store.Runs(testOrg, it.ID); len(runs) != 1 || runs[0].DefinitionVersionID != v1 {
+		t.Errorf("runs = %+v, want one recorded on %s", runs, v1)
+	}
+
+	claims, err := domain.VerifyTaskToken([]byte("k3y"), spec.GatewayToken, h.clock.Now())
+	if err != nil || claims.VersionID != v1 {
+		t.Errorf("token version = %q (%v), want %q", claims.VersionID, err, v1)
 	}
 }

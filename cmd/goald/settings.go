@@ -17,6 +17,7 @@ import (
 
 	"github.com/byFrederick/goal/internal/adapters/postgres"
 	"github.com/byFrederick/goal/internal/builder"
+	"github.com/byFrederick/goal/internal/definitions"
 )
 
 // settings is goald's configuration, read from the environment (12-factor). Secrets appear here
@@ -47,9 +48,16 @@ type settings struct {
 	WorkspaceRoot string
 	RunDir        string
 	// TickEvery is how often the engine pulls work (GOAL_TICK_EVERY, default 5s); RefreshEvery how
-	// often factory definitions are re-read from the bucket (GOAL_REFRESH_EVERY, default 30s).
+	// often the current definition versions are reconciled with PostgreSQL (GOAL_REFRESH_EVERY,
+	// default 30s), a safety net behind the goal_definitions notices that reload them at once.
 	TickEvery    time.Duration
 	RefreshEvery time.Duration
+	// DefinitionCacheBytes bounds the files of the definition versions kept for runs that started
+	// on a version no longer current (GOAL_DEFINITION_CACHE_BYTES, default 64 MiB).
+	DefinitionCacheBytes int64
+	// LegacyImport imports, at startup, the factories of the bucket layout before versions that
+	// have no version yet (GOAL_LEGACY_IMPORT, default true).
+	LegacyImport bool
 	// MaxRuns caps the agent runs this goald has in flight at once (GOAL_MAX_RUNS, default 0:
 	// no cap). With a cap, claims are shared out fairly across organizations.
 	MaxRuns int
@@ -129,6 +137,8 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 		errs = append(errs, fmt.Errorf("GOAL_ORG_RETENTION: %w", err))
 	}
 
+	errs = append(errs, definitionSettings(&s, or)...)
+
 	if s.MaxRuns, err = strconv.Atoi(or("GOAL_MAX_RUNS", "0")); err != nil || s.MaxRuns < 0 {
 		errs = append(errs, fmt.Errorf("GOAL_MAX_RUNS %q is not a count of runs (0 for no cap)", getenv("GOAL_MAX_RUNS")))
 	}
@@ -149,6 +159,26 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 	s.Models, err = models(or(modelsEnv, defaultModels))
 
 	return s, errors.Join(append(errs, err)...)
+}
+
+// definitionSettings reads the settings of the definitions cache and the legacy import.
+func definitionSettings(s *settings, or func(name, def string) string) []error {
+	var (
+		errs []error
+		err  error
+	)
+
+	cacheBytes := or("GOAL_DEFINITION_CACHE_BYTES", strconv.Itoa(definitions.DefaultCacheBytes))
+	if s.DefinitionCacheBytes, err = strconv.ParseInt(cacheBytes, 10, 64); err != nil || s.DefinitionCacheBytes <= 0 {
+		errs = append(errs, fmt.Errorf("GOAL_DEFINITION_CACHE_BYTES %q is not a positive number of bytes", cacheBytes))
+	}
+
+	legacy := or("GOAL_LEGACY_IMPORT", "true")
+	if s.LegacyImport, err = strconv.ParseBool(legacy); err != nil {
+		errs = append(errs, fmt.Errorf("GOAL_LEGACY_IMPORT %q is not true or false", legacy))
+	}
+
+	return errs
 }
 
 // localDatabase is compose.yaml's database as role.

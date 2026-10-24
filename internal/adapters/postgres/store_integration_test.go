@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"net/url"
@@ -122,33 +121,6 @@ func TestCreateItem_UnsavedFactoryNotFound(t *testing.T) {
 	})
 	if !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("CreateItem = %v; want ErrNotFound", err)
-	}
-}
-
-func TestSaveFactory_UpdatesTheDefinition(t *testing.T) {
-	t.Parallel()
-
-	s := New(newTestPool(t))
-	ctx := domain.WithOrg(t.Context(), DefaultOrgID)
-	f := Factory{ID: domain.FactoryID(uuid.NewString()), Name: "acme-support", Definition: json.RawMessage(`{"v": 1}`)}
-
-	if err := s.SaveFactory(ctx, f); err != nil {
-		t.Fatal(err)
-	}
-
-	f.Name, f.Title, f.Definition = "acme-help", "Help desk", json.RawMessage(`{"v": 2}`)
-	if err := s.SaveFactory(ctx, f); err != nil {
-		t.Fatal(err)
-	}
-
-	var name, title, def string
-	if err := asOrg(t, s.pool, DefaultOrgID, "SELECT name, title, definition::text FROM factories WHERE id = '"+string(f.ID)+"'",
-		&name, &title, &def); err != nil {
-		t.Fatal(err)
-	}
-
-	if name != "acme-help" || title != "Help desk" || def != `{"v": 2}` {
-		t.Errorf("factory = %q, %q, %s; want the second save", name, title, def)
 	}
 }
 
@@ -282,20 +254,31 @@ func newOrgID(t *testing.T, s *Store) domain.OrgID {
 	return o.ID
 }
 
-// saveFactory saves a new factory in the organization of ctx.
+// saveFactory registers a new factory in the organization of ctx.
 func saveFactory(ctx context.Context, t *testing.T, s *Store) domain.FactoryID {
 	t.Helper()
 
-	id := uuid.NewString()
+	org, _ := domain.OrgFrom(ctx)
+	id := domain.FactoryID(newUUID(t))
+	legacyFactory(t, s.pool, org, id, "acme-"+string(id[len(id)-12:]))
 
-	err := s.SaveFactory(ctx, Factory{
-		ID: domain.FactoryID(id), Name: "acme-" + id[:8], Definition: json.RawMessage(`{"metadata": {"id": "` + id + `"}}`),
+	return id
+}
+
+// legacyFactory registers a factory row with no definition version in org, as goald did before
+// versions: the row items and runs reference.
+func legacyFactory(t *testing.T, pool *pgxpool.Pool, org domain.OrgID, id domain.FactoryID, name string) {
+	t.Helper()
+
+	err := inOrgTx(t, pool, org, func(tx pgx.Tx) error {
+		_, err := tx.Exec(t.Context(), `INSERT INTO factories (id, name, definition, definition_sha256) VALUES ($1, $2, '{}', $3)`,
+			string(id), name, strings.Repeat("0", 64))
+
+		return err
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	return domain.FactoryID(id)
 }
 
 // recordAndon inserts an andon pull straight into andon_pulls in the organization of ctx, as
@@ -343,7 +326,8 @@ func (s *Store) runs(ctx context.Context, t *testing.T, id domain.ItemID) []doma
 	}
 
 	rows, err := tx.Query(ctx, `
-		SELECT id::text, factory_id::text, item_id::text, station, agent, model, status, coalesce(session_id, ''),
+		SELECT id::text, factory_id::text, coalesce(definition_version_id::text, ''), item_id::text, station, agent, model,
+		       status, coalesce(session_id, ''),
 		       turns, input_tokens, output_tokens, cost_usd, coalesce(error, ''), started_at, ended_at
 		FROM agent_runs WHERE item_id = $1 ORDER BY id`, string(id))
 	if err != nil {
@@ -356,7 +340,7 @@ func (s *Store) runs(ctx context.Context, t *testing.T, id domain.ItemID) []doma
 			ended *time.Time
 		)
 
-		err := row.Scan(&r.ID, &r.FactoryID, &r.ItemID, &r.Station, &r.Agent, &r.Model, &r.Result.Status,
+		err := row.Scan(&r.ID, &r.FactoryID, &r.DefinitionVersionID, &r.ItemID, &r.Station, &r.Agent, &r.Model, &r.Result.Status,
 			&r.Result.SessionID, &r.Result.Turns, &r.Result.InputTokens, &r.Result.OutputTokens, &r.Result.CostUSD,
 			&r.Result.Error, &r.StartedAt, &ended)
 

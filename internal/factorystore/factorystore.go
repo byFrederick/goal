@@ -182,7 +182,7 @@ type Snapshot struct {
 	ID  string
 	// Files are the objects read, with keys relative to the factory's root, ordered by key.
 	Files []ports.ObjectInfo
-	files memFS
+	files config.Files
 }
 
 // FS returns the snapshot as a read-only file tree rooted at the factory's folder.
@@ -201,7 +201,7 @@ func (c *Catalog) Open(ctx context.Context, org domain.OrgID, id string) (*Snaps
 
 func (c *Catalog) open(ctx context.Context, org domain.OrgID, id string, objects []ports.ObjectInfo) (*Snapshot, error) {
 	prefix := Prefix(org, id)
-	s := &Snapshot{Org: org, ID: id, files: memFS{}}
+	s := &Snapshot{Org: org, ID: id, files: config.Files{}}
 
 	for _, o := range objects {
 		rel := strings.TrimPrefix(o.Key, prefix)

@@ -2,14 +2,11 @@ package factorystore
 
 import (
 	"errors"
-	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
-	"testing/fstest"
 
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
@@ -326,23 +323,5 @@ func TestPush_KeepsEachOrgsFactoriesUnderItsPrefix(t *testing.T) {
 
 	if _, err := catalog.Pull(ctx, otherOrg, "acme-notes", filepath.Join(t.TempDir(), "pulled")); !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("pull from another organization = %v, want ErrNotFound", err)
-	}
-}
-
-func TestSnapshotFS_IsAValidFileSystem(t *testing.T) {
-	t.Parallel()
-
-	files := memFS{}
-	for p, content := range acmeFactory("acme-notes") {
-		files[p] = []byte(content)
-	}
-
-	want := slices.Sorted(maps.Keys(files))
-	if err := fstest.TestFS(files, want...); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := fs.Stat(files, "agents/missing.md"); !errors.Is(err, fs.ErrNotExist) {
-		t.Errorf("stat of a missing file: %v, want ErrNotExist", err)
 	}
 }

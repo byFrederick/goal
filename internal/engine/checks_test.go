@@ -133,9 +133,9 @@ func TestChecks_RunOnlyOnOutputThatSatisfiesTheContract(t *testing.T) {
 	t.Parallel()
 
 	work := agentStation(stWork, agWorker, 1, 1)
-	work.Output, work.Checks = "result", []string{"make test"}
+	work.Output, work.Checks = contractResult, []string{"make test"}
 	h := newHarness(t, lineOf(work), porttest.Sequence(ok(`{}`), ok(`{}`)))
-	h.contracts.Require(factoryID, "result", "answer")
+	h.contracts.Require(v1, contractResult, "answer")
 	it := h.submit(t, domain.NewItem{})
 
 	h.step(t)

@@ -1,4 +1,4 @@
-package factorystore
+package config
 
 import (
 	"bytes"
@@ -10,11 +10,13 @@ import (
 	"time"
 )
 
-// memFS is a read-only file tree in memory: slash paths relative to its root → content.
-// Directories are implied by the paths of the files under them.
-type memFS map[string][]byte
+// Files is a read-only file tree in memory: slash paths relative to its root → content, such
+// as a definition read from the bucket for Load. Directories are implied by the paths of the
+// files under them.
+type Files map[string][]byte
 
-func (m memFS) Open(name string) (fs.File, error) {
+// Open implements fs.FS.
+func (m Files) Open(name string) (fs.File, error) {
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
 	}
@@ -32,7 +34,7 @@ func (m memFS) Open(name string) (fs.File, error) {
 }
 
 // readDir returns the direct children of dir, sorted by name.
-func (m memFS) readDir(dir string) []fs.DirEntry {
+func (m Files) readDir(dir string) []fs.DirEntry {
 	prefix := dir + "/"
 	if dir == "." {
 		prefix = ""

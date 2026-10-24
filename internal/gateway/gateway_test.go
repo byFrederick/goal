@@ -28,9 +28,17 @@ import (
 
 const (
 	factoryID   domain.FactoryID = "8d4f2b1a-3c5e-4f60-9a7b-1c2d3e4f5a6b"
+	otherID     domain.FactoryID = "5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a01"
 	itemID      domain.ItemID    = "item-1"
 	tracker                      = "tracker"
 	trackerCred                  = "acme-tracker-s3cr3t-0123456789"
+)
+
+// version is the definition version the tasks' runs started on; otherVersion is a version of
+// another factory.
+const (
+	version      domain.DefinitionVersionID = "019a1c00-0000-7000-8000-0000000000a1"
+	otherVersion domain.DefinitionVersionID = "019a1c00-0000-7000-8000-0000000000b1"
 )
 
 // factoryYAML declares one served remote connection (tracker), one the token does not grant
@@ -76,12 +84,12 @@ spec:
       - { id: done, kind: done }
 `
 
-type definitions map[domain.FactoryID]*config.Factory
+type definitions map[domain.DefinitionVersionID]*config.Factory
 
-func (d definitions) Factory(_ context.Context, id domain.FactoryID) (*config.Factory, error) {
+func (d definitions) Version(_ context.Context, id domain.DefinitionVersionID) (*config.Factory, error) {
 	f, ok := d[id]
 	if !ok {
-		return nil, fmt.Errorf("factory %s: %w", id, ports.ErrNotFound)
+		return nil, fmt.Errorf("definition version %s: %w", id, ports.ErrNotFound)
 	}
 
 	return f, nil
@@ -185,12 +193,18 @@ func newHarness(t *testing.T, cfg Config) *harness {
 
 	up, upURL := startUpstream(t)
 
-	f, err := config.Load(fstest.MapFS{
-		"factory.yaml":       {Data: []byte(strings.ReplaceAll(factoryYAML, "UPSTREAM", upURL))},
-		"agents/engineer.md": {Data: []byte("# engineer\n")},
-	})
-	if err != nil {
-		t.Fatal(err)
+	load := func(id domain.FactoryID) *config.Factory {
+		yaml := strings.ReplaceAll(strings.ReplaceAll(factoryYAML, "UPSTREAM", upURL), string(factoryID), string(id))
+
+		f, err := config.Load(fstest.MapFS{
+			"factory.yaml":       {Data: []byte(yaml)},
+			"agents/engineer.md": {Data: []byte("# engineer\n")},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return f
 	}
 
 	h := &harness{
@@ -200,8 +214,10 @@ func newHarness(t *testing.T, cfg Config) *harness {
 
 	cfg.Key = h.key
 
+	var err error
+
 	h.gw, err = New(Deps{
-		Definitions: definitions{factoryID: f},
+		Definitions: definitions{version: load(factoryID), otherVersion: load(otherID)},
 		Secrets:     porttest.Secrets{"ACME_TRACKER_TOKEN": trackerCred, "ACME_DB_URL": dbURL},
 		Events:      h.store,
 		Clock:       h.clock,
@@ -223,7 +239,7 @@ func newHarness(t *testing.T, cfg Config) *harness {
 
 func (h *harness) claims() domain.TaskClaims {
 	return domain.TaskClaims{
-		OrgID: "org-1", FactoryID: factoryID, ItemID: itemID, Station: "build", Agent: "engineer", RunID: "run-1",
+		OrgID: "org-1", FactoryID: factoryID, VersionID: version, ItemID: itemID, Station: "build", Agent: "engineer", RunID: "run-1",
 		Connections: []string{"knowledge", tracker, "postgres", "crm", shopDB},
 		ExpiresAt:   h.clock.Now().Add(time.Hour).Unix(),
 	}
@@ -474,6 +490,10 @@ func TestGateway_RejectsRequestsWithoutAValidToken(t *testing.T) {
 	expired.ExpiresAt = h.clock.Now().Add(-time.Second).Unix()
 	stranger := valid
 	stranger.Agent = "stranger"
+	unknownVersion := valid
+	unknownVersion.VersionID = "019a1c00-0000-7000-8000-0000000000c1"
+	otherFactorys := valid
+	otherFactorys.VersionID = otherVersion
 
 	other, err := domain.SignTaskToken([]byte("other-key"), valid)
 	if err != nil {
@@ -491,6 +511,8 @@ func TestGateway_RejectsRequestsWithoutAValidToken(t *testing.T) {
 		{name: "other key", header: "Bearer " + other, status: http.StatusUnauthorized},
 		{name: "expired", header: "Bearer " + h.token(t, expired), status: http.StatusUnauthorized},
 		{name: "agent not in the definition", header: "Bearer " + h.token(t, stranger), status: http.StatusForbidden},
+		{name: "unknown definition version", header: "Bearer " + h.token(t, unknownVersion), status: http.StatusForbidden},
+		{name: "another factory's version", header: "Bearer " + h.token(t, otherFactorys), status: http.StatusForbidden},
 	}
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`

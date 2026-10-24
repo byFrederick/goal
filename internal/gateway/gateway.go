@@ -75,11 +75,13 @@ import (
 // EventToolCall is the kind of the audit event every gateway tool call appends.
 const EventToolCall domain.EventKind = "gateway_tool_call"
 
-// Definitions returns the current definition of a factory. The gateway calls it on every
-// request, so it should be cheap (goald backs it with a cache over the bucket). A factory that
-// does not exist is an error wrapping ports.ErrNotFound.
+// Definitions returns a published definition version. The gateway reads the version a task's
+// run started on (its token's v claim), so the run sees that version's agents and connections
+// to the end. It is called on every request, so it should be cheap (goald backs it with a
+// cache). A version that does not exist in the organization of ctx is an error wrapping
+// ports.ErrNotFound.
 type Definitions interface {
-	Factory(ctx context.Context, id domain.FactoryID) (*config.Factory, error)
+	Version(ctx context.Context, id domain.DefinitionVersionID) (*config.Factory, error)
 }
 
 // Events records audit events; ports.Store satisfies it.
@@ -263,11 +265,15 @@ func (g *Gateway) authenticate(r *http.Request) (domain.TaskClaims, error) {
 	return domain.VerifyTaskToken(g.cfg.Key, strings.TrimSpace(token), g.clock.Now())
 }
 
-// session resolves what the task may reach under the factory's current definition.
+// session resolves what the task may reach under the definition version its run started on.
 func (g *Gateway) session(ctx context.Context, c domain.TaskClaims) (*session, error) {
-	f, err := g.defs.Factory(ctx, c.FactoryID)
+	f, err := g.defs.Version(ctx, c.VersionID)
 	if err != nil {
-		return nil, fmt.Errorf("load factory %s: %w", c.FactoryID, err)
+		return nil, fmt.Errorf("load factory %s version %s: %w", c.FactoryID, c.VersionID, err)
+	}
+
+	if f.Metadata.ID != string(c.FactoryID) {
+		return nil, fmt.Errorf("%w: version %s is not a version of factory %s", errForbidden, c.VersionID, c.FactoryID)
 	}
 
 	var agent *config.Agent

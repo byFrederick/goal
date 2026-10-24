@@ -14,9 +14,6 @@ package postgres
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -89,39 +86,6 @@ type Store struct {
 // New returns a store on pool; the caller closes the pool.
 func New(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool, q: db.New(pool)}
-}
-
-// Factory is a loaded factory definition as the factories table records it.
-type Factory struct {
-	ID    domain.FactoryID
-	Name  string
-	Title string
-	// Definition is the parsed factory.yaml as JSON; the row keeps its SHA-256.
-	Definition json.RawMessage
-}
-
-// SaveFactory registers a factory in the organization in ctx, or updates its row when the
-// definition changed. Items reference their factory, so goald saves every factory it runs
-// before work enters it; CreateItem returns ports.ErrNotFound for a factory that was never
-// saved in the item's organization.
-func (s *Store) SaveFactory(ctx context.Context, f Factory) error {
-	id, err := parseID("factory", string(f.ID))
-	if err != nil {
-		return err
-	}
-
-	sum := sha256.Sum256(f.Definition)
-
-	err = s.inTx(ctx, func(q *db.Queries) error {
-		return q.SaveFactory(ctx, db.SaveFactoryParams{
-			ID: id, Name: f.Name, Title: optional(f.Title), Definition: f.Definition, DefinitionSha256: hex.EncodeToString(sum[:]),
-		})
-	})
-	if err != nil {
-		return fmt.Errorf("save factory %s: %w", f.ID, err)
-	}
-
-	return nil
 }
 
 // inTx runs fn in a transaction bound to the organization in ctx, committing when it returns

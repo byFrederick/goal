@@ -17,16 +17,16 @@ import (
 
 var _ ports.Contracts = (*Cache)(nil)
 
-// Validate implements ports.Contracts: output must satisfy the JSON Schema the factory's
-// current definition declares for contract. A schema can reference only itself; nothing is
-// fetched from the network or the host's files.
-func (c *Cache) Validate(ctx context.Context, factory domain.FactoryID, contract string, output json.RawMessage) error {
-	l, err := c.get(ctx, factory)
+// Validate implements ports.Contracts: output must satisfy the JSON Schema the definition
+// version declares for contract. A schema can reference only itself; nothing is fetched from
+// the network or the host's files.
+func (c *Cache) Validate(ctx context.Context, id domain.DefinitionVersionID, contract string, output json.RawMessage) error {
+	v, err := c.version(ctx, id)
 	if err != nil {
 		return err
 	}
 
-	schema, err := compileContract(l, contract)
+	schema, err := compileContract(v, contract)
 	if err != nil {
 		return err
 	}
@@ -47,23 +47,23 @@ func (c *Cache) Validate(ctx context.Context, factory domain.FactoryID, contract
 	return nil
 }
 
-// contractFile returns the path of a contract's schema inside the factory's tree.
-func contractFile(l loaded, contract string) (string, error) {
-	p, ok := l.factory.Spec.Contracts[contract]
+// contractFile returns the path of a contract's schema inside the version's tree.
+func contractFile(v *version, contract string) (string, error) {
+	p, ok := v.factory.Spec.Contracts[contract]
 	if !ok {
-		return "", fmt.Errorf("factory %s: unknown contract %q", l.factory.Metadata.ID, contract)
+		return "", fmt.Errorf("factory %s v%d: unknown contract %q", v.factory.Metadata.ID, v.number, contract)
 	}
 
 	return path.Clean(p), nil
 }
 
-func compileContract(l loaded, contract string) (*jsonschema.Schema, error) {
-	file, err := contractFile(l, contract)
+func compileContract(v *version, contract string) (*jsonschema.Schema, error) {
+	file, err := contractFile(v, contract)
 	if err != nil {
 		return nil, err
 	}
 
-	body, err := fs.ReadFile(l.snapshot.FS(), file)
+	body, err := fs.ReadFile(v.files, file)
 	if err != nil {
 		return nil, fmt.Errorf("contract %s: %w", contract, err)
 	}
@@ -76,7 +76,7 @@ func compileContract(l loaded, contract string) (*jsonschema.Schema, error) {
 	comp := jsonschema.NewCompiler()
 	comp.UseLoader(jsonschema.SchemeURLLoader{}) // no loader for any scheme: no remote or file refs
 
-	url := "goal:///" + l.factory.Metadata.ID + "/" + file
+	url := "goal:///" + v.factory.Metadata.ID + "/" + string(v.id) + "/" + file
 	if err := comp.AddResource(url, doc); err != nil {
 		return nil, fmt.Errorf("contract %s: %w", contract, err)
 	}

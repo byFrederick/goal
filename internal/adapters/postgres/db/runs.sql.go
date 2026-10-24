@@ -100,24 +100,28 @@ func (q *Queries) FinishRun(ctx context.Context, arg FinishRunParams) (FinishRun
 }
 
 const insertRun = `-- name: InsertRun :exec
-INSERT INTO agent_runs (id, factory_id, item_id, station, agent, model, status, started_at)
-VALUES ($1, $2, $3, $4, $5, $6, 'running', $7)
+INSERT INTO agent_runs (id, factory_id, definition_version_id, item_id, station, agent, model, status, started_at)
+VALUES ($1, $2, $3, $4, $5,
+        $6, $7, 'running', $8)
 `
 
 type InsertRunParams struct {
-	ID        uuid.UUID
-	FactoryID uuid.UUID
-	ItemID    uuid.UUID
-	Station   string
-	Agent     string
-	Model     string
-	StartedAt time.Time
+	ID                  uuid.UUID
+	FactoryID           uuid.UUID
+	DefinitionVersionID *uuid.UUID
+	ItemID              uuid.UUID
+	Station             string
+	Agent               string
+	Model               string
+	StartedAt           time.Time
 }
 
+// A run records the definition version it starts on; NULL only for runs from before versions.
 func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) error {
 	_, err := q.db.Exec(ctx, insertRun,
 		arg.ID,
 		arg.FactoryID,
+		arg.DefinitionVersionID,
 		arg.ItemID,
 		arg.Station,
 		arg.Agent,

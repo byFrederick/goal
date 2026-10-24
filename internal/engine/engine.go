@@ -189,8 +189,9 @@ func New(d Deps, cfg Config) (*Engine, error) {
 	}, nil
 }
 
-// SetLines replaces the lines the engine runs, for example after a factory definition was
-// pushed. Runs already started keep the line they started with. Items of a factory that is no
+// SetLines replaces the lines the engine runs, for example after a definition version was
+// published. Runs already started keep the line (and version) they started with; the next move
+// of their item follows the new line, matched by station id. Items of a factory that is no
 // longer loaded stay where they are until it is loaded again.
 func (e *Engine) SetLines(ls []domain.Line) error {
 	lines, err := index(ls)
@@ -313,8 +314,10 @@ func (e *Engine) Submit(ctx context.Context, n domain.NewItem) (domain.Item, err
 // Tick does one round of pulling: items waiting at queue stations move to the next station,
 // line by line, the weekly budgets are enforced (budgets), then agent stations of the lines
 // within budget claim work into their free slots and start runs, fairly across organizations
-// (claim). Each line's store calls are bound to its organization, whatever ctx carries. Runs
-// continue in the background under ctx; Wait waits for them.
+// (claim). A paused line neither releases nor claims, whatever its budget, while its runs in
+// progress finish; its budget is still enforced, so the stop policy still cancels its runs.
+// Each line's store calls are bound to its organization, whatever ctx carries. Runs continue in
+// the background under ctx; Wait waits for them.
 func (e *Engine) Tick(ctx context.Context) error {
 	var errs []error
 
@@ -322,8 +325,14 @@ func (e *Engine) Tick(ctx context.Context) error {
 	lines := maps.Clone(e.lines)
 	e.mu.RUnlock()
 
+	paused := func(_ domain.FactoryID, l domain.Line) bool { return l.Paused }
+
 	for _, id := range slices.Sorted(maps.Keys(lines)) {
 		l := lines[id]
+		if l.Paused {
+			continue
+		}
+
 		lctx := domain.WithOrg(ctx, l.OrgID)
 
 		for _, st := range l.Stations {
@@ -334,6 +343,7 @@ func (e *Engine) Tick(ctx context.Context) error {
 	}
 
 	claimable, err := e.budgets(ctx, lines)
+	maps.DeleteFunc(claimable, paused)
 	errs = append(errs, err, e.claim(ctx, claimable))
 
 	return errors.Join(errs...)
@@ -442,6 +452,20 @@ func (e *Engine) lineIn(ctx context.Context, id domain.FactoryID) (domain.Line, 
 	}
 
 	return l, nil
+}
+
+// lineNow is the line an item at station of l moves on now: the factory's current line when it
+// still has that station, and l otherwise (the factory was unloaded meanwhile).
+func (e *Engine) lineNow(l domain.Line, station string) domain.Line {
+	e.mu.RLock()
+	cur, ok := e.lines[l.FactoryID]
+	e.mu.RUnlock()
+
+	if _, has := cur.Station(station); ok && has && cur.OrgID == l.OrgID {
+		return cur
+	}
+
+	return l
 }
 
 // event builds an item event at the item's current station.
