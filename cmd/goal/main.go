@@ -28,8 +28,9 @@ import (
 )
 
 const usage = `usage:
-  goal up                                         start PostgreSQL and RustFS, prepare the database roles
-                                                  and the bucket, run goald
+  goal up                                         start PostgreSQL and RustFS, prepare the database roles,
+                                                  migrate the database, prepare the bucket, run goald
+                                                  (and, with sign-in, Mailpit and the auth service)
   goal run <factory> "<brief>" [--type T] [--body B] [--priority N] [--detach]
                                                   submit a work item and follow it until a human or done
                                                   (--type: one of the factory's work types; default its
@@ -102,6 +103,8 @@ const usage = `usage:
   goal catalog templates list                     the catalog's templates, latest version of each
   goal db init                                    create the database roles goald runs as (goal_owner,
                                                   goal_app) and hand the schema to goal_owner
+  goal db migrate                                 apply the pending migrations as goal_owner
+                                                  (GOAL_MIGRATE_DATABASE_URL), as goald does at its start
   goal db recover-admin <email>                   make the person a platform admin with database access
                                                   alone (GOAL_DATABASE_ADMIN_URL), creating them if no
                                                   one has the email; goald may be stopped

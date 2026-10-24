@@ -13,11 +13,15 @@ import (
 	"github.com/byFrederick/goal/internal/ports"
 )
 
-// dbSettings is what goal db init needs: an admin connection and the roles' passwords.
+// dbSettings is what goal db init and goal db migrate need: an admin connection, the roles'
+// passwords and goal_owner's connection.
 type dbSettings struct {
 	// AdminURL connects as the user that owns the database's objects today
 	// (GOAL_DATABASE_ADMIN_URL, default compose.yaml's goal superuser with GOAL_PG_PASSWORD).
 	AdminURL string
+	// MigrateURL connects as goal_owner, which applies the migrations: goald's
+	// GOAL_MIGRATE_DATABASE_URL, with goald's default.
+	MigrateURL string
 	// Roles are the passwords of goal_owner, goal_app and goal_auth (GOAL_PG_OWNER_PASSWORD,
 	// GOAL_PG_APP_PASSWORD and GOAL_PG_AUTH_PASSWORD, dev-only defaults); goald's and the auth
 	// service's default URLs use the same.
@@ -31,6 +35,7 @@ const (
 	ownerPasswordEnv     = "GOAL_PG_OWNER_PASSWORD" //nolint:gosec // a variable name, not a credential
 	appPasswordEnv       = "GOAL_PG_APP_PASSWORD"   //nolint:gosec // a variable name, not a credential
 	authPasswordEnv      = "GOAL_PG_AUTH_PASSWORD"  //nolint:gosec // a variable name, not a credential
+	migrateURLEnv        = "GOAL_MIGRATE_DATABASE_URL"
 )
 
 func dbSettingsFrom(getenv func(string) string) dbSettings {
@@ -42,39 +47,55 @@ func dbSettingsFrom(getenv func(string) string) dbSettings {
 		return def
 	}
 
-	admin := (&url.URL{
-		Scheme: "postgres", User: url.UserPassword("goal", or(superuserPasswordEnv, "goal-dev-only")),
-		Host: "127.0.0.1:5432", Path: "goal", RawQuery: "sslmode=disable",
-	}).String()
+	roles := postgres.Roles{
+		OwnerPassword: or(ownerPasswordEnv, postgres.DevOwnerPassword),
+		AppPassword:   or(appPasswordEnv, postgres.DevAppPassword),
+		AuthPassword:  or(authPasswordEnv, postgres.DevAuthPassword),
+	}
 
 	return dbSettings{
-		AdminURL: or(adminURLEnv, admin),
-		Roles: postgres.Roles{
-			OwnerPassword: or(ownerPasswordEnv, postgres.DevOwnerPassword),
-			AppPassword:   or(appPasswordEnv, postgres.DevAppPassword),
-			AuthPassword:  or(authPasswordEnv, postgres.DevAuthPassword),
-		},
+		AdminURL:   or(adminURLEnv, localDatabase("goal", or(superuserPasswordEnv, "goal-dev-only"))),
+		MigrateURL: or(migrateURLEnv, localDatabase(postgres.OwnerRole, roles.OwnerPassword)),
+		Roles:      roles,
 	}
 }
 
-// setUp runs `goal db init` and `goal storage init`, the steps goal up takes before goald, and
-// the recoveries `goal db recover-admin <email>` and `goal db recover-owner <org> <email>`.
+// localDatabase is compose.yaml's database as role with password, as goald's defaults connect.
+func localDatabase(role, password string) string {
+	return (&url.URL{
+		Scheme: "postgres", User: url.UserPassword(role, password),
+		Host: "127.0.0.1:5432", Path: "goal", RawQuery: "sslmode=disable",
+	}).String()
+}
+
+// setUp runs `goal db init`, `goal db migrate` and `goal storage init`, the steps goal up takes
+// before the auth service and goald, and the recoveries `goal db recover-admin <email>` and
+// `goal db recover-owner <org> <email>`.
 func setUp(ctx context.Context, out *printer, getenv func(string) string, what string, args []string) error {
 	if len(args) == 0 {
 		return errUsage
 	}
 
-	switch cmd, rest := args[0], args[1:]; {
-	case what == "db" && cmd == "recover-admin" && len(rest) == 1:
-		return recoverAdmin(ctx, out, getenv, rest[0])
-	case what == "db" && cmd == "recover-owner" && len(rest) == 2:
-		return recoverOwner(ctx, out, getenv, rest[0], rest[1])
-	case cmd != "init" || len(rest) != 0:
-		return errUsage
-	case what == "db":
-		return dbInit(ctx, out, getenv)
-	default:
+	cmd, rest := args[0], args[1:]
+	if what != "db" {
+		if cmd != "init" || len(rest) != 0 {
+			return errUsage
+		}
+
 		return storageInit(ctx, out, getenv)
+	}
+
+	switch {
+	case cmd == "recover-admin" && len(rest) == 1:
+		return recoverAdmin(ctx, out, getenv, rest[0])
+	case cmd == "recover-owner" && len(rest) == 2:
+		return recoverOwner(ctx, out, getenv, rest[0], rest[1])
+	case cmd == "init" && len(rest) == 0:
+		return dbInit(ctx, out, getenv)
+	case cmd == "migrate" && len(rest) == 0:
+		return dbMigrate(ctx, out, getenv)
+	default:
+		return errUsage
 	}
 }
 
@@ -102,6 +123,28 @@ func dbInit(ctx context.Context, out *printer, getenv func(string) string) error
 	}
 
 	out.printf("\n")
+
+	return nil
+}
+
+// dbMigrate applies the pending migrations as goal_owner (GOAL_MIGRATE_DATABASE_URL, goald's
+// default) with postgres.Migrate, as goald applies them at its start, which then finds nothing to
+// do; like goald it applies nothing while a role the migrations grant to is missing (goal db init
+// creates them). goal up runs it after goal db init and before the auth service, whose schema the
+// migrations hold (00040 on): on an upgrade the auth service would otherwise start before its
+// tables exist, and stop.
+func dbMigrate(ctx context.Context, out *printer, getenv func(string) string) error {
+	pool, err := postgres.Open(ctx, dbSettingsFrom(getenv).MigrateURL)
+	if err != nil {
+		return fmt.Errorf("%s: %w (goal db init creates the roles)", migrateURLEnv, err)
+	}
+	defer pool.Close()
+
+	if err := postgres.Migrate(ctx, pool); err != nil {
+		return err
+	}
+
+	out.printf("✓ database migrated (as %s)\n", postgres.OwnerRole)
 
 	return nil
 }

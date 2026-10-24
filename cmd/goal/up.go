@@ -27,6 +27,16 @@ const (
 	authStopGrace  = 5 * time.Second
 )
 
+// The auth service's restarts: goal up starts one that stopped by itself again after
+// authBackoff, doubled after each stop up to authBackoffMax, at most authRestarts times in a row;
+// a run that lasted authSteady starts the count again.
+const (
+	authRestarts   = 5
+	authBackoff    = time.Second
+	authBackoffMax = 30 * time.Second
+	authSteady     = time.Minute
+)
+
 // Sign-in under goal up (spec 3 §5.6, §9).
 const (
 	// defaultAuthMode is goald's GOAL_AUTH default (cmd/goald/settings.go defaultAuth); goal up
@@ -67,9 +77,10 @@ var authOnly = []string{
 
 // up starts the local platform: PostgreSQL and RustFS from compose.yaml (waiting until they are
 // healthy), the database roles (goal db init, so an existing database is handed to goal_owner
-// before goald migrates it), the bucket, then goald in the foreground until Ctrl-C. Under
-// GOAL_AUTH=session, the default, it also starts Mailpit (compose) and the auth service (node
-// auth/dist/server.js) beside goald, each process with only its own variables, and refuses to
+// before it is migrated), the migrations (goal db migrate), the bucket, then goald in the
+// foreground until Ctrl-C. Under GOAL_AUTH=session, the default, it also starts Mailpit (compose)
+// and the auth service (node auth/dist/server.js) beside goald, once its tables exist, restarting
+// it with a backoff should it stop by itself, each process with only its own variables, and refuses to
 // start (before anything when it can tell, before the roles otherwise) without a usable
 // BETTER_AUTH_SECRET, the auth service's build, or GOAL_BOOTSTRAP_OWNER_EMAIL while nobody has
 // signed in, or with a database password this repository publishes, each refusal naming
@@ -86,26 +97,60 @@ func up(ctx context.Context, out *printer, getenv func(string) string, args []st
 		return err
 	}
 
-	if err := compose(ctx, out, "PostgreSQL and RustFS", "postgres", "rustfs"); err != nil {
+	return localPlatform().start(ctx, out, getenv, signIn)
+}
+
+// platform is goal up's steps, which start takes in order: localPlatform's run compose, the
+// database, node and goald for real; tests give fakes of them.
+type platform struct {
+	compose     func(ctx context.Context, out *printer, what string, services ...string) error
+	bootstrap   func(ctx context.Context, getenv func(string) string) error
+	dbInit      func(ctx context.Context, out *printer, getenv func(string) string) error
+	dbMigrate   func(ctx context.Context, out *printer, getenv func(string) string) error
+	storageInit func(ctx context.Context, out *printer, getenv func(string) string) error
+	goaldPath   func() (string, error)
+	// startAuth starts the auth service with env; wait returns once it has exited, which ending
+	// ctx makes it do.
+	startAuth func(ctx context.Context, env []string) (wait func() error, err error)
+	runGoald  func(ctx context.Context, out *printer, bin string, env []string) error
+}
+
+// localPlatform is goal up on this machine: compose.yaml's services, node and goald.
+func localPlatform() platform {
+	return platform{
+		compose: compose, bootstrap: bootstrapReady, dbInit: dbInit, dbMigrate: dbMigrate, storageInit: storageInit,
+		goaldPath: goaldPath, startAuth: startNode, runGoald: runGoald,
+	}
+}
+
+// start takes goal up's steps once signInMode has said whether people sign in.
+func (p platform) start(ctx context.Context, out *printer, getenv func(string) string, signIn bool) error {
+	if err := p.compose(ctx, out, "PostgreSQL and RustFS", "postgres", "rustfs"); err != nil {
 		return err
 	}
 
 	// Before the roles, the bucket, the auth service or goald: sign-in nobody could use.
 	if signIn {
-		if err := bootstrapReady(ctx, getenv); err != nil {
+		if err := p.bootstrap(ctx, getenv); err != nil {
 			return err
 		}
 	}
 
-	if err := dbInit(ctx, out, getenv); err != nil {
+	if err := p.dbInit(ctx, out, getenv); err != nil {
 		return err
 	}
 
-	if err := storageInit(ctx, out, getenv); err != nil {
+	// Before the auth service, whose tables the migrations create: on an upgrade it would start
+	// on a schema it refuses. goald's own pass at its start then has nothing left to apply.
+	if err := p.dbMigrate(ctx, out, getenv); err != nil {
 		return err
 	}
 
-	bin, err := goaldPath()
+	if err := p.storageInit(ctx, out, getenv); err != nil {
+		return err
+	}
+
+	bin, err := p.goaldPath()
 	if err != nil {
 		return err
 	}
@@ -121,7 +166,11 @@ func up(ctx context.Context, out *printer, getenv func(string) string, args []st
 			return err
 		}
 
-		stop, err := startSignIn(ctx, out, authEnv(environ, publicURL))
+		if err := p.compose(ctx, out, "Mailpit", "mailpit"); err != nil {
+			return err
+		}
+
+		stop, err := p.runAuth(ctx, out, authEnv(environ, publicURL))
 		if err != nil {
 			return err
 		}
@@ -130,7 +179,7 @@ func up(ctx context.Context, out *printer, getenv func(string) string, args []st
 		out.printf("sign in at %s (codes arrive in Mailpit, %s: user %s, password in %s)\n", publicURL, mailpitInbox, mailpitUser, inbox)
 	}
 
-	return runGoald(ctx, out, bin, goaldEnv(environ, getenv, signIn, publicURL))
+	return p.runGoald(ctx, out, bin, goaldEnv(environ, getenv, signIn, publicURL))
 }
 
 // signInMode resolves GOAL_AUTH as goald does and reports whether it is session, refusing
@@ -288,16 +337,6 @@ func mailpitAuth(getenv func(string) string) (string, error) {
 	return path, nil
 }
 
-// startSignIn starts what sign-in needs beside goald: Mailpit and the auth service with env. It
-// returns what stops the auth service.
-func startSignIn(ctx context.Context, out *printer, env []string) (func(), error) {
-	if err := compose(ctx, out, "Mailpit", "mailpit"); err != nil {
-		return nil, err
-	}
-
-	return startAuth(ctx, out, env)
-}
-
 // compose starts compose.yaml's services and waits until they are healthy.
 func compose(ctx context.Context, out *printer, what string, services ...string) error {
 	out.printf("starting %s (docker compose)\n", what)
@@ -329,24 +368,19 @@ func runGoald(ctx context.Context, out *printer, bin string, env []string) error
 	return nil
 }
 
-// startAuth starts the auth service in the background with env and returns what stops it
-// (SIGTERM, then a kill after authStopGrace). It logs to this terminal; should it stop, goald goes
-// on (signed-in people keep working) and goal up says so.
-func startAuth(ctx context.Context, out *printer, env []string) (func(), error) {
+// runAuth starts the auth service in the background with env and returns what stops it. It logs
+// to this terminal; should it stop by itself, goald goes on (signed-in people keep working) and
+// goal up starts it again (superviseAuth).
+func (p platform) runAuth(ctx context.Context, out *printer, env []string) (func(), error) {
 	out.printf("starting the auth service (node %s)\n", authServer)
 
 	ctx, cancel := context.WithCancel(ctx)
 
-	node := exec.CommandContext(ctx, "node", authServer)
-	node.Stdout, node.Stderr = os.Stderr, os.Stderr
-	node.Env = env
-	node.Cancel = func() error { return node.Process.Signal(syscall.SIGTERM) }
-	node.WaitDelay = authStopGrace
-
-	if err := node.Start(); err != nil {
+	wait, err := p.startAuth(ctx, env)
+	if err != nil {
 		cancel()
 
-		return nil, fmt.Errorf("auth service: %w (is node on PATH? mise installs it)", err)
+		return nil, err
 	}
 
 	done := make(chan struct{})
@@ -354,15 +388,68 @@ func startAuth(ctx context.Context, out *printer, env []string) (func(), error) 
 	go func() {
 		defer close(done)
 
-		if err := node.Wait(); err != nil && ctx.Err() == nil {
-			fmt.Fprintf(os.Stderr, "goal up: the auth service stopped (%v); signing in waits for it, goald goes on\n", err)
-		}
+		p.superviseAuth(ctx, out, env, wait)
 	}()
 
 	return func() {
 		cancel()
 		<-done
 	}, nil
+}
+
+// superviseAuth waits for the auth service until ctx ends, starting it again each time it stops
+// by itself, after a backoff, at most authRestarts times in a row, and says so on stderr each
+// time; then it gives up, saying that goald goes on without it.
+func (p platform) superviseAuth(ctx context.Context, out *printer, env []string, wait func() error) {
+	for stops := 0; ; {
+		began := time.Now()
+		err := wait()
+
+		if ctx.Err() != nil {
+			return
+		}
+
+		if time.Since(began) >= authSteady {
+			stops = 0
+		}
+
+		stops++
+		if stops > authRestarts {
+			out.noticef("goal up: the auth service stopped (%v), %d times in a row; signing in waits for it, goald goes on "+
+				"(fix what it logged, then restart goal up)\n", err, stops)
+
+			return
+		}
+
+		delay := min(authBackoff<<(stops-1), authBackoffMax)
+		out.noticef("goal up: the auth service stopped (%v); restarting it in %s (%d of %d)\n", err, delay, stops, authRestarts)
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+
+		if wait, err = p.startAuth(ctx, env); err != nil {
+			wait = func() error { return err }
+		}
+	}
+}
+
+// startNode starts node auth/dist/server.js with env; ending ctx stops it (SIGTERM, then a kill
+// after authStopGrace). It logs to this terminal.
+func startNode(ctx context.Context, env []string) (func() error, error) {
+	node := exec.CommandContext(ctx, "node", authServer)
+	node.Stdout, node.Stderr = os.Stderr, os.Stderr
+	node.Env = env
+	node.Cancel = func() error { return node.Process.Signal(syscall.SIGTERM) }
+	node.WaitDelay = authStopGrace
+
+	if err := node.Start(); err != nil {
+		return nil, fmt.Errorf("auth service: %w (is node on PATH? mise installs it)", err)
+	}
+
+	return node.Wait, nil
 }
 
 // publicURLOf is GOAL_PUBLIC_URL as goald resolves it: http://<GOAL_LISTEN> by default.

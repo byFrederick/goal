@@ -13,10 +13,13 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
 
 	"github.com/byFrederick/goal/internal/adapters/postgres"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/migrations"
 )
 
 // recoveryDB is a throwaway database migrated as goald would (never the install's own): adminURL
@@ -28,6 +31,26 @@ type recoveryDB struct {
 }
 
 func newRecoveryDB(t *testing.T) recoveryDB {
+	t.Helper()
+
+	d := newTestDatabase(t)
+
+	if err := postgres.Migrate(t.Context(), openTestPool(t, d.ownerURL)); err != nil {
+		t.Fatal(err)
+	}
+
+	return recoveryDB{adminURL: d.adminURL, admin: d.admin, app: openTestPool(t, d.appURL)}
+}
+
+// testDatabase is a throwaway database with goal db init's roles and grants and no migration
+// applied: adminURL, ownerURL and appURL connect as the bootstrap superuser, goal_owner and
+// goal_app.
+type testDatabase struct {
+	adminURL, ownerURL, appURL string
+	admin                      *pgxpool.Pool
+}
+
+func newTestDatabase(t *testing.T) testDatabase {
 	t.Helper()
 
 	base := os.Getenv("GOAL_TEST_DATABASE_URL")
@@ -65,11 +88,10 @@ func newRecoveryDB(t *testing.T) recoveryDB {
 		"GRANT CONNECT, CREATE ON DATABASE "+name+" TO goal_owner; GRANT CONNECT ON DATABASE "+name+" TO goal_app, goal_auth; "+
 		"GRANT USAGE, CREATE ON SCHEMA public TO goal_owner; GRANT USAGE ON SCHEMA public TO goal_app, goal_auth")
 
-	if err := postgres.Migrate(t.Context(), openTestPool(t, databaseURL(t, base, name, postgres.OwnerRole))); err != nil {
-		t.Fatal(err)
+	return testDatabase{
+		adminURL: adminURL, admin: admin,
+		ownerURL: databaseURL(t, base, name, postgres.OwnerRole), appURL: databaseURL(t, base, name, postgres.AppRole),
 	}
-
-	return recoveryDB{adminURL: adminURL, admin: admin, app: openTestPool(t, databaseURL(t, base, name, postgres.AppRole))}
 }
 
 // databaseURL is base on database, switching to role unless it is "".
@@ -154,6 +176,50 @@ func (d recoveryDB) goalCLI(t *testing.T) func(args ...string) (string, error) {
 		err := run(t.Context(), args, &printer{w: &buf}, env, nil)
 
 		return buf.String(), err
+	}
+}
+
+// The upgrade that stopped the auth service: a database at migration 39, from before sign-in's
+// tables (00040 on). goal db migrate, which goal up runs before it starts the auth service,
+// applies the rest as goal_owner, as goald would at its start, so the auth service finds its
+// schema; a second run has nothing to apply.
+func TestDB_MigrateUpgradesTheSchemaBeforeTheAuthService(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDatabase(t)
+	owner := openTestPool(t, d.ownerURL)
+
+	sources, err := goose.NewProvider(goose.DialectPostgres, stdlib.OpenDBFromPool(owner), migrations.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sources.UpTo(t.Context(), 39); err != nil {
+		t.Fatal(err)
+	}
+
+	var before bool
+	if err := d.admin.QueryRow(t.Context(), `SELECT to_regclass('auth."user"') IS NULL`).Scan(&before); err != nil || !before {
+		t.Fatalf("at migration 39 the auth schema exists (%v, %v); the test needs the upgrade's database", before, err)
+	}
+
+	env := testEnv(t, "http://127.0.0.1:1", map[string]string{"GOAL_MIGRATE_DATABASE_URL": d.ownerURL})
+
+	for range 2 {
+		var buf bytes.Buffer
+
+		if err := run(t.Context(), []string{"db", "migrate"}, &printer{w: &buf}, env, nil); err != nil || !strings.Contains(buf.String(), "✓ database migrated (as goal_owner)") {
+			t.Fatalf("goal db migrate = %q, %v", buf.String(), err)
+		}
+	}
+
+	if pending, err := sources.HasPending(t.Context()); err != nil || pending {
+		t.Errorf("migrations pending after goal db migrate: %v, %v", pending, err)
+	}
+
+	var ready bool
+	if err := d.admin.QueryRow(t.Context(), `SELECT goal_identity_ready()`).Scan(&ready); err != nil || !ready {
+		t.Errorf("goal_identity_ready() = %v, %v; want the auth service's schema in place", ready, err)
 	}
 }
 

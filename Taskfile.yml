@@ -323,7 +323,7 @@ tasks:
       - pnpm run --silent build
 
   auth:dev:
-    desc: Run the auth service from auth/src, rebuilt and restarted on change, with only its own variables from .env, mailing to Mailpit (needs goal db init and BETTER_AUTH_SECRET)
+    desc: Run the auth service from auth/src, rebuilt and restarted on change, with only its own variables from .env, mailing to Mailpit (needs goal db init, goal db migrate and BETTER_AUTH_SECRET)
     deps: [auth:build, mailpit:auth]
     dir: auth
     cmds:

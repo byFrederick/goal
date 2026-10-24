@@ -21,7 +21,7 @@ import (
 const recoveryActor = "system:recovery"
 
 // ErrNotMigrated is a recovery's refusal on a database without sign-in's tables and functions.
-var ErrNotMigrated = errors.New("the database has no sign-in tables yet: start goald once (goal up does) to migrate it")
+var ErrNotMigrated = errors.New("the database has no sign-in tables yet: migrate it with goal db migrate (goal up does)")
 
 // Recovery is what a recovery did: the person, whether it created them, and for an owner's
 // recovery the organization and the role they had there before ("" for none).

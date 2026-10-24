@@ -218,7 +218,8 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// Deleted organizations go, rows and bucket objects, once their retention has passed.
 	purger := retention.New(store, objects, clock, s.OrgRetention, log)
 
-	return serve(ctx, log, s, servers, eng, defs, definitionNotices, feed, jobs{purger: purger, platform: platform, clock: clock})
+	return serve(ctx, log, s, servers, eng, defs, definitionNotices, feed,
+		jobs{purger: purger, platform: platform, clock: clock, identity: newIdentityWatch(s, store)})
 }
 
 // containers connects to Docker and prepares the egress proxy that agents, networked sidecars and
@@ -290,11 +291,13 @@ func routes(separate bool, apiHandler, gw, spa http.Handler) (primary, gatewayOn
 	return mux, only
 }
 
-// jobs are goald's scheduled jobs: the purge of deleted organizations and the sign-in clean-up.
+// jobs are goald's scheduled jobs: the purge of deleted organizations and the sign-in clean-up,
+// and under GOAL_AUTH=session the startup watch of the identity service.
 type jobs struct {
 	purger   *retention.Purger
 	platform ports.Platform
 	clock    ports.Clock
+	identity *identityWatch
 }
 
 // serve runs the HTTP servers, the engine, the stream feed, the definitions reloads and the
@@ -343,6 +346,10 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 	wg.Go(func() { refresh(ctx, log, defs, s.RefreshEvery) })
 	wg.Go(func() { j.purger.Run(ctx, purgeEvery) })
 	wg.Go(func() { cleanUpAuth(ctx, log, j.platform, j.clock, authCleanUpEvery) })
+
+	if j.identity != nil {
+		wg.Go(func() { j.identity.run(ctx, log) })
+	}
 
 	wg.Go(func() {
 		if err := feed.Run(ctx); err != nil {
@@ -530,14 +537,20 @@ func newFeed(s settings, store *postgres.Store, eng *engine.Engine, log *slog.Lo
 	return feed
 }
 
-// authUnreachableAfter bounds goald's startup look at the identity service.
-const authUnreachableAfter = 2 * time.Second
+// The startup look at the identity service: each health check has authUnreachableAfter, goald
+// asks every authCheckEvery and, while it does not answer, waits authStartGrace (goal up starts it
+// beside goald) before it warns.
+const (
+	authUnreachableAfter = 2 * time.Second
+	authCheckEvery       = 500 * time.Millisecond
+	authStartGrace       = 30 * time.Second
+)
 
 // authentication starts the auth mode (spec 3 §8.3). Under GOAL_AUTH=none it warns that every
 // request is the local user. Under session it refuses to start unless the database passes the
-// identity self-check (postgres.CheckIdentity), returns the per-request identity lookups, and
-// warns, without stopping, when the identity service does not answer (signed-in people keep
-// working) or no one has signed in yet.
+// identity self-check (postgres.CheckIdentity) and returns the per-request identity lookups;
+// whether the identity service answers, and whether anyone has signed in, watchIdentity says
+// while goald serves.
 func authentication(ctx context.Context, s settings, store *postgres.Store, secrets ports.Secrets, log *slog.Logger) (api.Identity, string, error) {
 	log.InfoContext(ctx, "authentication", slog.String("mode", string(s.Auth)), slog.String("public_url", s.PublicURL))
 
@@ -561,19 +574,74 @@ func authentication(ctx context.Context, s settings, store *postgres.Store, secr
 
 	log.InfoContext(ctx, "identity self-check passed")
 
-	if signedIn, err := postgres.AnyoneSignedIn(ctx, store); err != nil {
-		return nil, "", err
-	} else if !signedIn {
-		log.WarnContext(ctx, "no one can sign in yet: set GOAL_BOOTSTRAP_OWNER_EMAIL and BETTER_AUTH_SECRET and start the "+
-			"auth service (goal up does), or set GOAL_AUTH=none")
-	}
-
-	if err := authReachable(ctx, s.AuthUpstream.String()); err != nil {
-		log.WarnContext(ctx, "the identity service does not answer: signing in and out waits for it; signed-in people keep working",
-			slog.String("upstream", s.AuthUpstream.String()), slog.Any("error", err))
-	}
-
 	return postgres.NewIdentity(store), proxySecret, nil
+}
+
+// identityWatch is what watchIdentity asks: the identity service's health check at upstream, and
+// whether anyone has signed in to goald at publicURL.
+type identityWatch struct {
+	upstream, publicURL string
+	answers             func(context.Context) error
+	signedIn            func(context.Context) (bool, error)
+}
+
+// newIdentityWatch watches the identity service of s, under GOAL_AUTH=session only (nil else).
+func newIdentityWatch(s settings, store *postgres.Store) *identityWatch {
+	if s.Auth != authSession {
+		return nil
+	}
+
+	upstream := s.AuthUpstream.String()
+
+	return &identityWatch{
+		upstream: upstream, publicURL: s.PublicURL,
+		answers:  func(ctx context.Context) error { return authReachable(ctx, upstream) },
+		signedIn: func(ctx context.Context) (bool, error) { return postgres.AnyoneSignedIn(ctx, store) },
+	}
+}
+
+// run follows the identity service from goald's start until it answers or ctx ends, without
+// stopping goald (signed-in people keep working through an auth outage): while it does not answer
+// it says goald waits for it, and warns once authStartGrace has passed; once it answers it says
+// so and, while nobody has signed in yet, who signs in first.
+func (w identityWatch) run(ctx context.Context, log *slog.Logger) {
+	began := time.Now()
+	upstream := slog.String("upstream", w.upstream)
+	waiting, warned := false, false
+
+	for err := w.answers(ctx); err != nil; err = w.answers(ctx) {
+		switch waited := time.Since(began); {
+		case !waiting:
+			waiting = true
+
+			log.InfoContext(ctx, "waiting for the identity service to answer: signing in and out waits for it", upstream)
+		case waited >= authStartGrace && !warned:
+			warned = true
+
+			log.WarnContext(ctx, "the identity service does not answer: signing in and out waits for it; signed-in people keep working",
+				upstream, slog.Duration("waited", waited.Round(time.Second)), slog.Any("error", err))
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(authCheckEvery):
+		}
+	}
+
+	log.InfoContext(ctx, "identity service answers", upstream)
+
+	signedIn, err := w.signedIn(ctx)
+	if err != nil {
+		log.WarnContext(ctx, "could not tell whether anyone has signed in", slog.Any("error", err))
+
+		return
+	}
+
+	if !signedIn {
+		log.InfoContext(ctx, "nobody has signed in yet: the first owner signs in at "+w.publicURL+" with the identity service's "+
+			"GOAL_BOOTSTRAP_OWNER_EMAIL, which goal up requires (without it nobody can sign in; or set GOAL_AUTH=none)")
+	}
 }
 
 // authReachable asks the identity service's health check (GET /api/auth/ok).

@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"io"
 	"maps"
 	"os"
@@ -8,7 +11,10 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"go.yaml.in/yaml/v3"
 
@@ -279,4 +285,239 @@ func TestUp_MailpitAuthIsGeneratedOnceAndPrivate(t *testing.T) {
 	if again, _ := os.ReadFile(path); string(again) != string(first) { //nolint:gosec // the test's file
 		t.Error("a second goal up replaced Mailpit's password")
 	}
+}
+
+// errSchemaMismatch is how the auth service exits on a database without its tables: Better
+// Auth's schema check refuses to serve.
+var errSchemaMismatch = errors.New("exit status 1 (Database schema mismatch: missing tables user, session)")
+
+// fakeInstall is goal up's world in a test: a database whose sign-in migrations are pending
+// until something applies them, and fakes of the auth service and goald.
+type fakeInstall struct {
+	mu       sync.Mutex
+	migrated bool
+	steps    []string
+	// authStarts counts the auth services started; serving is closed once one serves.
+	authStarts int
+	serving    chan struct{}
+	// failFirst is how many auth services stop by themselves after starting, whatever the schema;
+	// with runFor, every one stops by itself after serving that long.
+	failFirst int
+	runFor    time.Duration
+	// goaldRuns is how long goald runs once an auth service serves (default: it stops then).
+	goaldRuns time.Duration
+}
+
+func newFakeInstall() *fakeInstall { return &fakeInstall{serving: make(chan struct{})} }
+
+func (f *fakeInstall) step(name string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.steps = append(f.steps, name)
+}
+
+// migrate applies the pending migrations, as goald does at its start.
+func (f *fakeInstall) migrate() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.migrated = true
+}
+
+// startAuth is the auth service: it exits at once on a database without its schema (and the
+// first failFirst times), else serves until ctx ends.
+func (f *fakeInstall) startAuth(ctx context.Context, _ []string) (func() error, error) {
+	f.step("auth service")
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.authStarts++
+
+	if !f.migrated {
+		return func() error { return errSchemaMismatch }, nil
+	}
+
+	if f.authStarts <= f.failFirst {
+		return func() error { return errors.New("exit status 1") }, nil
+	}
+
+	select {
+	case <-f.serving:
+	default:
+		close(f.serving)
+	}
+
+	return func() error {
+		if f.runFor > 0 {
+			select {
+			case <-ctx.Done():
+			case <-time.After(f.runFor):
+				return errors.New("exit status 1")
+			}
+		}
+
+		<-ctx.Done()
+
+		return errors.New("signal: terminated")
+	}, nil
+}
+
+// platform is goal up with every step a fake. goald migrates at its start, as the real one does,
+// then runs until an auth service serves (and goaldRuns more) or ten minutes have passed.
+func (f *fakeInstall) platform() platform {
+	return platform{
+		compose: func(_ context.Context, _ *printer, what string, _ ...string) error {
+			f.step("compose " + what)
+
+			return nil
+		},
+		bootstrap: func(context.Context, func(string) string) error {
+			f.step("bootstrap check")
+
+			return nil
+		},
+		dbInit: func(context.Context, *printer, func(string) string) error {
+			f.step("db init")
+
+			return nil
+		},
+		dbMigrate: func(context.Context, *printer, func(string) string) error {
+			f.step("db migrate")
+			f.migrate()
+
+			return nil
+		},
+		storageInit: func(context.Context, *printer, func(string) string) error {
+			f.step("storage init")
+
+			return nil
+		},
+		goaldPath: func() (string, error) { return "goald", nil },
+		startAuth: f.startAuth,
+		runGoald: func(ctx context.Context, _ *printer, _ string, _ []string) error {
+			f.step("goald")
+			f.migrate()
+
+			select {
+			case <-f.serving:
+				time.Sleep(f.goaldRuns)
+			case <-time.After(10 * time.Minute):
+			case <-ctx.Done():
+			}
+
+			return nil
+		},
+	}
+}
+
+// startUp runs goal up with sign-in on f's platform and returns what it told the terminal.
+func startUp(t *testing.T, f *fakeInstall) string {
+	t.Helper()
+
+	var notices bytes.Buffer
+
+	dir := t.TempDir()
+	out := &printer{w: io.Discard, e: &notices}
+
+	if err := f.platform().start(t.Context(), out, func(n string) string { return map[string]string{"XDG_CONFIG_HOME": dir}[n] }, true); err != nil {
+		t.Fatal(err)
+	}
+
+	return notices.String()
+}
+
+// The upgrade from migration 39 to 49 under GOAL_AUTH=session: the auth service's schema
+// (00040 on) does not exist until the migrations are applied. goal up applies them before it
+// starts the auth service, so its first start serves and goal up never reports it stopped.
+func TestUp_MigratesBeforeTheAuthServiceStarts(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		f := newFakeInstall()
+		notices := startUp(t, f)
+
+		want := []string{
+			"compose PostgreSQL and RustFS", "bootstrap check", "db init", "db migrate", "storage init", "compose Mailpit", "auth service", "goald",
+		}
+		if !slices.Equal(f.steps, want) {
+			t.Errorf("goal up took %v; want %v", f.steps, want)
+		}
+
+		if notices != "" {
+			t.Errorf("goal up said %q; want the auth service never to stop", notices)
+		}
+	})
+}
+
+// An auth service that stops by itself while goald runs is started again after a backoff that
+// doubles, and goal up says so each time; signing in comes back without a second goal up.
+func TestUp_RestartsAnAuthServiceThatStops(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		f := newFakeInstall()
+		f.failFirst = 2
+
+		began := time.Now()
+		notices := startUp(t, f)
+
+		if f.authStarts != 3 {
+			t.Errorf("auth service started %d times; want 3 (two stops, then it serves)", f.authStarts)
+		}
+
+		for _, w := range []string{"restarting it in 1s (1 of 5)", "restarting it in 2s (2 of 5)"} {
+			if !strings.Contains(notices, w) {
+				t.Errorf("goal up said %q; want %q", notices, w)
+			}
+		}
+
+		if waited := time.Since(began); waited != 3*time.Second {
+			t.Errorf("signing in came back after %s; want 3s of backoff", waited)
+		}
+	})
+}
+
+// The restarts are bounded: after authRestarts in a row goal up stops trying and says what is
+// left (goald goes on).
+func TestUp_StopsRestartingAnAuthServiceThatKeepsStopping(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		f := newFakeInstall()
+		f.failFirst = 1000
+
+		notices := startUp(t, f)
+
+		if f.authStarts != authRestarts+1 {
+			t.Errorf("auth service started %d times; want %d", f.authStarts, authRestarts+1)
+		}
+
+		if !strings.Contains(notices, "restarting it in 16s (5 of 5)") || !strings.Contains(notices, "6 times in a row") ||
+			!strings.Contains(notices, "goald goes on") {
+			t.Errorf("goal up said %q; want five restarts, then that it gave up and goald goes on", notices)
+		}
+	})
+}
+
+// A run that lasted authSteady starts the count again: an auth service that stops now and then
+// over a long day is always restarted, after the first backoff.
+func TestUp_SteadyRunsResetTheAuthServicesRestarts(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		f := newFakeInstall()
+		f.runFor, f.goaldRuns = 2*time.Minute, 30*time.Minute
+
+		notices := startUp(t, f)
+
+		if f.authStarts <= authRestarts+1 {
+			t.Errorf("auth service started %d times in 30 minutes; want it restarted after every stop", f.authStarts)
+		}
+
+		if strings.Contains(notices, "in a row") || strings.Contains(notices, "in 2s") {
+			t.Errorf("goal up said %q; want every restart after the first backoff", notices)
+		}
+	})
 }

@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +11,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/byFrederick/goal/web"
 )
@@ -148,4 +152,97 @@ func TestAuthentication_NoneWarnsThatEveryRequestIsTheLocalUser(t *testing.T) {
 		!strings.Contains(log, "agent containers included") {
 		t.Errorf("startup log %q; want the local-user warning", log)
 	}
+}
+
+// fakeIdentityService answers goald's health check from answersAt on, and has had someone sign
+// in or not.
+func fakeIdentityService(answersAt time.Duration, signedIn bool) identityWatch {
+	began := time.Now()
+
+	return identityWatch{
+		upstream: "http://127.0.0.1:8081", publicURL: "http://127.0.0.1:8080",
+		answers: func(context.Context) error {
+			if time.Since(began) < answersAt {
+				return errors.New("connection refused")
+			}
+
+			return nil
+		},
+		signedIn: func(context.Context) (bool, error) { return signedIn, nil },
+	}
+}
+
+// watchIdentityLog runs w until it is done and returns what it logged and how long it took.
+func watchIdentityLog(t *testing.T, w identityWatch) (string, time.Duration) {
+	t.Helper()
+
+	var buf bytes.Buffer
+
+	log := slog.New(slog.NewTextHandler(&buf, nil))
+	began := time.Now()
+
+	w.run(t.Context(), log)
+
+	return buf.String(), time.Since(began)
+}
+
+// goal up starts the auth service and goald together, so at goald's start the service is
+// usually still starting: goald says it waits for it, not that it does not answer, and once it
+// answers says who signs in first while nobody has.
+func TestWatchIdentity_WaitsForAnAuthServiceThatIsStarting(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		log, took := watchIdentityLog(t, fakeIdentityService(3*time.Second, false))
+
+		if strings.Contains(log, "level=WARN") {
+			t.Errorf("startup log %q; want no warning while the auth service starts", log)
+		}
+
+		want := []string{
+			"waiting for the identity service", "identity service answers", "nobody has signed in yet", "http://127.0.0.1:8080", "GOAL_BOOTSTRAP_OWNER_EMAIL",
+		}
+
+		for _, w := range want {
+			if !strings.Contains(log, w) {
+				t.Errorf("startup log %q; want %q", log, w)
+			}
+		}
+
+		if took < 3*time.Second || took > 4*time.Second {
+			t.Errorf("the watch ended after %s; want it to end once the service answers, at 3s", took)
+		}
+	})
+}
+
+// A service that still does not answer after authStartGrace is a warning, once (signed-in people
+// keep working); goald keeps asking and says when it answers.
+func TestWatchIdentity_WarnsWhenTheAuthServiceStillDoesNotAnswer(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		log, _ := watchIdentityLog(t, fakeIdentityService(authStartGrace+15*time.Second, true))
+
+		if n := strings.Count(log, "level=WARN"); n != 1 || !strings.Contains(log, "the identity service does not answer") ||
+			!strings.Contains(log, "signed-in people keep working") {
+			t.Errorf("startup log %q; want one warning that the identity service does not answer", log)
+		}
+
+		if !strings.Contains(log, "identity service answers") || strings.Contains(log, "nobody has signed in") {
+			t.Errorf("startup log %q; want it to say the service answers, and nothing of the first sign-in", log)
+		}
+	})
+}
+
+// A service that answers at once, on an install people sign in to, is one line.
+func TestWatchIdentity_AnAnsweringServiceIsOneLine(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		log, _ := watchIdentityLog(t, fakeIdentityService(0, true))
+
+		if strings.Count(log, "\n") != 1 || !strings.Contains(log, "identity service answers") {
+			t.Errorf("startup log %q; want only that the identity service answers", log)
+		}
+	})
 }
