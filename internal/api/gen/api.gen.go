@@ -59,6 +59,36 @@ func (e BlankStartKind) Valid() bool {
 	}
 }
 
+// Defines values for BridgeStepComponent.
+const (
+	BridgeStepComponentBlocked      BridgeStepComponent = "blocked"
+	BridgeStepComponentOther        BridgeStepComponent = "other"
+	BridgeStepComponentRework       BridgeStepComponent = "rework"
+	BridgeStepComponentWaiting      BridgeStepComponent = "waiting"
+	BridgeStepComponentWaitingOnYou BridgeStepComponent = "waiting_on_you"
+	BridgeStepComponentWorking      BridgeStepComponent = "working"
+)
+
+// Valid indicates whether the value is a known member of the BridgeStepComponent enum.
+func (e BridgeStepComponent) Valid() bool {
+	switch e {
+	case BridgeStepComponentBlocked:
+		return true
+	case BridgeStepComponentOther:
+		return true
+	case BridgeStepComponentRework:
+		return true
+	case BridgeStepComponentWaiting:
+		return true
+	case BridgeStepComponentWaitingOnYou:
+		return true
+	case BridgeStepComponentWorking:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ChangeOp.
 const (
 	ChangeOpAdded   ChangeOp = "added"
@@ -332,6 +362,30 @@ func (e ItemState) Valid() bool {
 	case ItemStateReady:
 		return true
 	case ItemStateWaitingHuman:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LeadTimeBridgeStatus.
+const (
+	NoTarget      LeadTimeBridgeStatus = "no_target"
+	NotEnoughData LeadTimeBridgeStatus = "not_enough_data"
+	OnTarget      LeadTimeBridgeStatus = "on_target"
+	OverTarget    LeadTimeBridgeStatus = "over_target"
+)
+
+// Valid indicates whether the value is a known member of the LeadTimeBridgeStatus enum.
+func (e LeadTimeBridgeStatus) Valid() bool {
+	switch e {
+	case NoTarget:
+		return true
+	case NotEnoughData:
+		return true
+	case OnTarget:
+		return true
+	case OverTarget:
 		return true
 	default:
 		return false
@@ -735,6 +789,24 @@ type BoardStation struct {
 	// WipLimit The station's wip setting, or null when it has none
 	WipLimit *int `json:"wip_limit"`
 }
+
+// BridgeStep defines model for BridgeStep.
+type BridgeStep struct {
+	Component BridgeStepComponent `json:"component"`
+	Hours     float64             `json:"hours"`
+
+	// Items Items over the target with time in this component
+	Items int `json:"items"`
+
+	// Share hours over the gap
+	Share float64 `json:"share"`
+
+	// Station Where the time went; for rework, the station that sent items back; null for waiting_on_you and other
+	Station *string `json:"station"`
+}
+
+// BridgeStepComponent defines model for BridgeStep.Component.
+type BridgeStepComponent string
 
 // BuilderCapabilities Which later phases are wired; the editor hides or shows their controls read-only until then
 type BuilderCapabilities struct {
@@ -1405,6 +1477,41 @@ type ItemsAtRemovedStations struct {
 	// Unmapped Open items no station move maps
 	Unmapped []ItemAt `json:"unmapped"`
 }
+
+// LeadTimeBridge defines model for LeadTimeBridge.
+type LeadTimeBridge struct {
+	// ActualP85Hours Null when nothing was done
+	ActualP85Hours *float64 `json:"actual_p85_hours"`
+
+	// Constraint The line's constraint and its busy share over the range, for the insight sentence
+	Constraint *struct {
+		// BusyRatio Null before any lease history
+		BusyRatio *float64 `json:"busy_ratio"`
+		Station   string   `json:"station"`
+	} `json:"constraint"`
+	From openapi_types.Date `json:"from"`
+
+	// GapHours actual minus target when over it
+	GapHours  *float64 `json:"gap_hours"`
+	ItemsDone int      `json:"items_done"`
+
+	// OverTargetItems The items done whose lead time was over the target
+	OverTargetItems int `json:"over_target_items"`
+
+	// Status no_target without a lead-time target in the definition; not_enough_data with fewer than 5 items done; then whether the actual p85 is over the target
+	Status LeadTimeBridgeStatus `json:"status"`
+
+	// Steps Largest first, other last; empty unless over_target. They sum to gap_hours.
+	Steps       []BridgeStep       `json:"steps"`
+	TargetHours *float64           `json:"target_hours"`
+	To          openapi_types.Date `json:"to"`
+
+	// Type The work type asked for; null for every type
+	Type *string `json:"type"`
+}
+
+// LeadTimeBridgeStatus no_target without a lead-time target in the definition; not_enough_data with fewer than 5 items done; then whether the actual p85 is over the target
+type LeadTimeBridgeStatus string
 
 // LineBudget defines model for LineBudget.
 type LineBudget struct {
@@ -2315,6 +2422,18 @@ type GetMetricsParams struct {
 // GetMetricsParamsCompare defines parameters for GetMetrics.
 type GetMetricsParamsCompare string
 
+// GetLeadTimeBridgeParams defines parameters for GetLeadTimeBridge.
+type GetLeadTimeBridgeParams struct {
+	// From The first UTC day of the range; 6 days before `to` when absent
+	From *RangeFrom `form:"from,omitempty" json:"from,omitempty"`
+
+	// To The last UTC day of the range, included; today when absent
+	To *RangeTo `form:"to,omitempty" json:"to,omitempty"`
+
+	// Type Only items of this work type (one the factory declares); every type when absent
+	Type *WorkTypeFilter `form:"type,omitempty" json:"type,omitempty"`
+}
+
 // GetWeeklyThroughputParams defines parameters for GetWeeklyThroughput.
 type GetWeeklyThroughputParams struct {
 	// To The last UTC day of the last week; today when absent
@@ -3071,6 +3190,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics (the `GetMetrics` operationId).
 	GetMetrics(ctx context.Context, org OrgRef, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetLeadTimeBridge Why the p85 lead time is over its target, over a range of UTC days
+	//
+	// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics/lead-time (the `GetLeadTimeBridge` operationId).
+	GetLeadTimeBridge(ctx context.Context, org OrgRef, factory FactoryRef, params *GetLeadTimeBridgeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetWeeklyThroughput Items finished in each of the last weeks
 	//
@@ -4093,6 +4219,23 @@ func (c *Client) SubmitItem(ctx context.Context, org OrgRef, factory FactoryRef,
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics (the `GetMetrics` operationId).
 func (c *Client) GetMetrics(ctx context.Context, org OrgRef, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetMetricsRequest(c.Server, org, factory, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetLeadTimeBridge Why the p85 lead time is over its target, over a range of UTC days
+//
+// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics/lead-time (the `GetLeadTimeBridge` operationId).
+func (c *Client) GetLeadTimeBridge(ctx context.Context, org OrgRef, factory FactoryRef, params *GetLeadTimeBridgeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetLeadTimeBridgeRequest(c.Server, org, factory, params)
 	if err != nil {
 		return nil, err
 	}
@@ -6574,6 +6717,98 @@ func NewGetMetricsRequest(server string, org OrgRef, factory FactoryRef, params 
 	return req, nil
 }
 
+// NewGetLeadTimeBridgeRequest constructs an http.Request for the GetLeadTimeBridge method
+func NewGetLeadTimeBridgeRequest(server string, org OrgRef, factory FactoryRef, params *GetLeadTimeBridgeParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/metrics/lead-time", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.From != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "from", *params.From, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.To != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "to", *params.To, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Type != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "type", *params.Type, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetWeeklyThroughputRequest constructs an http.Request for the GetWeeklyThroughput method
 func NewGetWeeklyThroughputRequest(server string, org OrgRef, factory FactoryRef, params *GetWeeklyThroughputParams) (*http.Request, error) {
 	var err error
@@ -8403,6 +8638,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics (the `GetMetrics` operationId).
 	GetMetricsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*GetMetricsResponse, error)
+
+	// GetLeadTimeBridgeWithResponse Why the p85 lead time is over its target, over a range of UTC days
+	//
+	// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics/lead-time (the `GetLeadTimeBridge` operationId).
+	GetLeadTimeBridgeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetLeadTimeBridgeParams, reqEditors ...RequestEditorFn) (*GetLeadTimeBridgeResponse, error)
 
 	// GetWeeklyThroughputWithResponse Items finished in each of the last weeks
 	//
@@ -10310,6 +10554,54 @@ func (r GetMetricsResponse) ContentType() string {
 	return ""
 }
 
+type GetLeadTimeBridgeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *LeadTimeBridge
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetLeadTimeBridgeResponse) GetJSON200() *LeadTimeBridge {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetLeadTimeBridgeResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetLeadTimeBridgeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetLeadTimeBridgeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetLeadTimeBridgeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetLeadTimeBridgeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetWeeklyThroughputResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -12209,6 +12501,21 @@ func (c *ClientWithResponses) GetMetricsWithResponse(ctx context.Context, org Or
 	return ParseGetMetricsResponse(rsp)
 }
 
+// GetLeadTimeBridgeWithResponse Why the p85 lead time is over its target, over a range of UTC days
+//
+// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics/lead-time (the `GetLeadTimeBridge` operationId).
+func (c *ClientWithResponses) GetLeadTimeBridgeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetLeadTimeBridgeParams, reqEditors ...RequestEditorFn) (*GetLeadTimeBridgeResponse, error) {
+	rsp, err := c.GetLeadTimeBridge(ctx, org, factory, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetLeadTimeBridgeResponse(rsp)
+}
+
 // GetWeeklyThroughputWithResponse Items finished in each of the last weeks
 //
 // Seven-day buckets ending on `to` (included), oldest first. 400 for a `to` after today, weeks outside 1 to 26 or a type the factory does not declare.
@@ -13826,6 +14133,39 @@ func ParseGetMetricsResponse(rsp *http.Response) (*GetMetricsResponse, error) {
 	return response, nil
 }
 
+// ParseGetLeadTimeBridgeResponse parses an HTTP response from a GetLeadTimeBridgeWithResponse call
+func ParseGetLeadTimeBridgeResponse(rsp *http.Response) (*GetLeadTimeBridgeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetLeadTimeBridgeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LeadTimeBridge
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetWeeklyThroughputResponse parses an HTTP response from a GetWeeklyThroughputWithResponse call
 func ParseGetWeeklyThroughputResponse(rsp *http.Response) (*GetWeeklyThroughputResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -14794,6 +15134,9 @@ type ServerInterface interface {
 	// GetMetrics The factory's flow over a range of UTC days
 	// (GET /v1/orgs/{org}/factories/{factory}/metrics)
 	GetMetrics(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetMetricsParams)
+	// GetLeadTimeBridge Why the p85 lead time is over its target, over a range of UTC days
+	// (GET /v1/orgs/{org}/factories/{factory}/metrics/lead-time)
+	GetLeadTimeBridge(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetLeadTimeBridgeParams)
 	// GetWeeklyThroughput Items finished in each of the last weeks
 	// (GET /v1/orgs/{org}/factories/{factory}/metrics/weekly)
 	GetWeeklyThroughput(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetWeeklyThroughputParams)
@@ -16413,6 +16756,83 @@ func (siw *ServerInterfaceWrapper) GetMetrics(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// GetLeadTimeBridge operation middleware
+func (siw *ServerInterfaceWrapper) GetLeadTimeBridge(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetLeadTimeBridgeParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetLeadTimeBridge(w, r, org, factory, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetWeeklyThroughput operation middleware
 func (siw *ServerInterfaceWrapper) GetWeeklyThroughput(w http.ResponseWriter, r *http.Request) {
 
@@ -17656,6 +18076,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/board", wrapper.GetBoard)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics", wrapper.GetMetrics)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/weekly", wrapper.GetWeeklyThroughput)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/lead-time", wrapper.GetLeadTimeBridge)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/stream", wrapper.StreamEvents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}", wrapper.GetItem)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/events", wrapper.ListItemEvents)
@@ -19071,6 +19492,47 @@ func (response GetMetricsdefaultApplicationProblemPlusJSONResponse) VisitGetMetr
 	return err
 }
 
+type GetLeadTimeBridgeRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Params  GetLeadTimeBridgeParams
+}
+
+type GetLeadTimeBridgeResponseObject interface {
+	VisitGetLeadTimeBridgeResponse(w http.ResponseWriter) error
+}
+
+type GetLeadTimeBridge200JSONResponse LeadTimeBridge
+
+func (response GetLeadTimeBridge200JSONResponse) VisitGetLeadTimeBridgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetLeadTimeBridgedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetLeadTimeBridgedefaultApplicationProblemPlusJSONResponse) VisitGetLeadTimeBridgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetWeeklyThroughputRequestObject struct {
 	Org     OrgRef     `json:"org"`
 	Factory FactoryRef `json:"factory"`
@@ -20271,6 +20733,9 @@ type StrictServerInterface interface {
 	// GetMetrics The factory's flow over a range of UTC days
 	// (GET /v1/orgs/{org}/factories/{factory}/metrics)
 	GetMetrics(ctx context.Context, request GetMetricsRequestObject) (GetMetricsResponseObject, error)
+	// GetLeadTimeBridge Why the p85 lead time is over its target, over a range of UTC days
+	// (GET /v1/orgs/{org}/factories/{factory}/metrics/lead-time)
+	GetLeadTimeBridge(ctx context.Context, request GetLeadTimeBridgeRequestObject) (GetLeadTimeBridgeResponseObject, error)
 	// GetWeeklyThroughput Items finished in each of the last weeks
 	// (GET /v1/orgs/{org}/factories/{factory}/metrics/weekly)
 	GetWeeklyThroughput(ctx context.Context, request GetWeeklyThroughputRequestObject) (GetWeeklyThroughputResponseObject, error)
@@ -21387,6 +21852,34 @@ func (sh *strictHandler) GetMetrics(w http.ResponseWriter, r *http.Request, org 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetMetricsResponseObject); ok {
 		if err := validResponse.VisitGetMetricsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetLeadTimeBridge operation middleware
+func (sh *strictHandler) GetLeadTimeBridge(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetLeadTimeBridgeParams) {
+	var request GetLeadTimeBridgeRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetLeadTimeBridge(ctx, request.(GetLeadTimeBridgeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetLeadTimeBridge")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetLeadTimeBridgeResponseObject); ok {
+		if err := validResponse.VisitGetLeadTimeBridgeResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

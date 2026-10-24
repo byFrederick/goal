@@ -32,7 +32,7 @@ import type {
 import { createDefinitions } from './definitions.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
 import { type MockItem, type MockSlots, type MockState, seed, trackSpan } from './fixtures.ts';
-import { type FlowInput, metricsOf, rangeOf, weeklyOf } from './flow.ts';
+import { type FlowInput, leadTimeOf, metricsOf, rangeOf, weeklyOf } from './flow.ts';
 
 type Next = (err?: unknown) => void;
 
@@ -671,7 +671,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return;
     }
 
-    let m = rest.match(/^\/factories\/([^/]+)\/(board|items|metrics|metrics\/weekly)$/);
+    let m = rest.match(/^\/factories\/([^/]+)\/(board|items|metrics|metrics\/weekly|metrics\/lead-time)$/);
     if (m) {
       const key = decodeURIComponent(m[1] ?? '');
       const factory = findFactory(key, org.id);
@@ -689,6 +689,12 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
           return typeof weekly === 'string' ? problem(res, 400, 'Bad Request', weekly) : json(res, 200, weekly);
         }
         const range = rangeOf(url.searchParams, input.now);
+        if (m[2] === 'metrics/lead-time') {
+          const busy = input.drum ? (state.stationStats[factory.name]?.[input.drum]?.busy_ratio ?? null) : null;
+          return typeof range === 'string'
+            ? problem(res, 400, 'Bad Request', range)
+            : json(res, 200, leadTimeOf(input, range, busy));
+        }
         const compare = url.searchParams.get('compare');
         if (typeof range === 'string' || (compare !== null && compare !== 'previous')) {
           const detail = typeof range === 'string' ? range : 'compare is previous or absent';

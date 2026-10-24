@@ -36,8 +36,8 @@ export function ThroughputCard({ metrics, className }: { metrics: Metrics; class
       className={cn('gap-2.5 md:gap-0', className)}
     >
       <p className={cn(numeral, 'text-[52px] md:mt-1 md:mb-2.5 md:text-[64px]')}>
-        {perDay.toFixed(1)}{' '}
-        <span className="ml-1 text-[17px] tracking-normal text-muted md:ml-1.5 md:text-xl">a day</span>
+        {perDay.toFixed(1)}
+        <span className="ml-1 text-[17px] tracking-normal text-muted md:ml-1.5 md:text-xl"> a day</span>
       </p>
       <p className="m-0 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm">
         {prev ? (

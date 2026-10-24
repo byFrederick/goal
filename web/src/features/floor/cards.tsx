@@ -3,11 +3,8 @@ import { ChevronRight } from 'lucide-react';
 import type { Board, BoardStation } from '../../api/types';
 import { useFactoryParams } from '../../shared/factory';
 import { humanize, plural } from '../../shared/format';
-import { waitingOnYou } from '../../shared/item-state';
-import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
-import { Hatch, type HatchTone } from '../../ui/hatch';
 
 // Numbers are tabular (MASTER.md); names around them stay proportional.
 const numeral = 'm-0 font-normal tracking-numeral leading-none tabular-nums';
@@ -96,110 +93,5 @@ function ConstraintLink({ station }: { station?: BoardStation }) {
       {station ? `See ${humanize(station.id)} on the board` : 'Open the board'}
       <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
     </Link>
-  );
-}
-
-interface Load {
-  station: BoardStation;
-  inProgress: number;
-  waiting: number;
-  blocked: number;
-}
-
-const legend: { tone: HatchTone; label: string }[] = [
-  { tone: 'run', label: 'In progress' },
-  { tone: 'target', label: 'Waiting for an agent' },
-  { tone: 'you', label: 'Waiting on you' },
-  { tone: 'rework', label: 'Blocked' },
-];
-
-/** Where items sit along the line, station by station; the constraint is marked. */
-export function FlowCard({ board, className }: { board: Board; className?: string }) {
-  const loads: Load[] = board.stations
-    .filter((s) => s.kind !== 'done')
-    .map((s) => ({
-      station: s,
-      inProgress: s.in_progress,
-      waiting: s.kind === 'human' ? waitingOnYou(s) : s.waiting,
-      blocked: s.items.filter((it) => it.state === 'blocked').length,
-    }));
-  const max = Math.max(1, ...loads.map((l) => l.inProgress + l.waiting + l.blocked));
-  const totalWaiting = loads.reduce((n, l) => n + l.waiting, 0);
-  const onYou = loads.filter((l) => l.station.kind === 'human').reduce((n, l) => n + l.waiting, 0);
-  const atConstraint = loads.find((l) => l.station.id === board.constraint);
-
-  return (
-    <SectionCard
-      title="Where work waits"
-      description={`${plural(totalWaiting, 'item')} waiting, ${loads.reduce((n, l) => n + l.inProgress, 0)} in progress`}
-      className={className}
-    >
-      <ol className="m-0 mt-1 flex list-none flex-col gap-4 p-0">
-        {loads.map((l) => {
-          const segments: { tone: HatchTone; n: number }[] = [
-            { tone: 'run', n: l.inProgress },
-            { tone: l.station.kind === 'human' ? 'you' : 'target', n: l.waiting },
-            { tone: 'rework', n: l.blocked },
-          ];
-          const parts = [
-            l.waiting > 0 ? `${l.waiting} waiting${l.station.kind === 'human' ? ' on you' : ''}` : '',
-            l.station.kind === 'agent'
-              ? `${l.inProgress}${l.station.wip_limit !== null ? ` of ${l.station.wip_limit}` : ''} busy`
-              : '',
-            l.blocked > 0 ? `${l.blocked} blocked` : '',
-          ].filter(Boolean);
-          return (
-            <li key={l.station.id} className="flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-3 text-[15px]">
-                <span className="flex items-center gap-2">
-                  {humanize(l.station.id)}
-                  {l.station.id === board.constraint ? <Chip tone="constraint">Constraint</Chip> : null}
-                </span>
-                <span className={cn('text-sm tabular-nums', parts.length ? 'text-ink' : 'text-muted')}>
-                  {parts.length ? parts.join(', ') : 'Empty'}
-                </span>
-              </div>
-              <div aria-hidden="true" className="flex h-5 gap-0.5">
-                {segments.map((seg) =>
-                  seg.n > 0 ? (
-                    <div
-                      key={seg.tone}
-                      className="h-full overflow-hidden rounded-[3px]"
-                      style={{ width: `${(seg.n / max) * 100}%` }}
-                    >
-                      <Hatch tone={seg.tone} />
-                    </div>
-                  ) : null,
-                )}
-                {l.inProgress + l.waiting + l.blocked === 0 ? (
-                  <div className="h-full w-full rounded-[3px] bg-surface" />
-                ) : null}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-      <ul aria-label="Legend" className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1.5 p-0 text-[13px] text-muted">
-        {legend.map((l) => (
-          <li key={l.tone} className="flex items-center gap-1.5">
-            <span className="block size-3 overflow-hidden rounded-[2px]">
-              <Hatch tone={l.tone} />
-            </span>
-            {l.label}
-          </li>
-        ))}
-      </ul>
-      {atConstraint && totalWaiting > 0 ? (
-        <div className="mt-auto rounded-control border border-line bg-surface px-4 py-3.5">
-          <p className="m-0 text-[15px] leading-snug">
-            {atConstraint.waiting} of {plural(totalWaiting, 'waiting item')} sit in front of{' '}
-            {humanize(atConstraint.station.id)}.
-          </p>
-          <p className="m-0 mt-1.5 text-sm text-muted">
-            It is the constraint{onYou > 0 ? `; ${plural(onYou, 'item')} wait on you.` : '.'}
-          </p>
-        </div>
-      ) : null}
-    </SectionCard>
   );
 }

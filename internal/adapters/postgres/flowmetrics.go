@@ -73,6 +73,39 @@ func (s *Store) FlowMetrics(ctx context.Context, q ports.FlowQuery, longWaitsAt 
 	return m, nil
 }
 
+// ItemTimes implements ports.FlowStats.
+func (s *Store) ItemTimes(ctx context.Context, q ports.FlowQuery) ([]domain.ItemTime, error) {
+	fid, err := parseID("factory", string(q.FactoryID))
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := fetch(ctx, s.read, func(tx *db.Queries) ([]db.FlowItemTimesRow, error) {
+		return tx.FlowItemTimes(ctx, db.FlowItemTimesParams{FactoryID: fid, Since: q.Since, Until: q.Until, Type: q.Type})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("item times of factory %s: %w", q.FactoryID, err)
+	}
+
+	out := []domain.ItemTime{}
+
+	for _, r := range rows {
+		id := domain.ItemID(r.ItemID.String())
+		if len(out) == 0 || out[len(out)-1].Item != id {
+			out = append(out, domain.ItemTime{Item: id, LeadTime: seconds(r.LeadSeconds), Times: map[domain.Component]time.Duration{}})
+		}
+
+		if r.Station == nil || r.State == nil {
+			continue // an item without closed spans
+		}
+
+		c := domain.ComponentOf(domain.Span{Station: *r.Station, State: domain.ItemState(*r.State), ReworkBy: deref(r.ReworkBy)})
+		out[len(out)-1].Times[c] += seconds(r.Seconds)
+	}
+
+	return out, nil
+}
+
 // DoneByBucket implements ports.FlowStats.
 func (s *Store) DoneByBucket(ctx context.Context, q ports.FlowQuery, d time.Duration, n int) ([]int, error) {
 	fid, err := parseID("factory", string(q.FactoryID))

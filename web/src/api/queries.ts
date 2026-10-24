@@ -12,6 +12,7 @@ import {
   getFactoryOverview,
   getInbox,
   getItem,
+  getLeadTime,
   getMetrics,
   getOrg,
   getOrgSettings,
@@ -63,6 +64,8 @@ export const keys = {
     ['org', org, 'factory', factory, 'metrics', range] as const,
   weekly: (org: string, factory: string, to: string | undefined, type: string | undefined) =>
     ['org', org, 'factory', factory, 'weekly', to ?? 'today', type ?? 'all'] as const,
+  leadTime: (org: string, factory: string, range: FlowRange) =>
+    ['org', org, 'factory', factory, 'lead-time', range] as const,
   items: (org: string, factory: string, filter: ItemFilter) =>
     ['org', org, 'factory', factory, 'items', filter] as const,
   item: (org: string, item: string) => ['org', org, 'item', item] as const,
@@ -134,6 +137,14 @@ export const weeklyQuery = (org: string, factory: string, { to, type }: FlowRang
   queryOptions({
     queryKey: keys.weekly(org, factory, to, type),
     queryFn: ({ signal }) => getWeekly(org, factory, { to, type }, signal),
+    staleTime: 30_000,
+  });
+
+/** The lead-time bridge over a range. */
+export const leadTimeQuery = (org: string, factory: string, range: FlowRange = {}) =>
+  queryOptions({
+    queryKey: keys.leadTime(org, factory, range),
+    queryFn: ({ signal }) => getLeadTime(org, factory, range, signal),
     staleTime: 30_000,
   });
 

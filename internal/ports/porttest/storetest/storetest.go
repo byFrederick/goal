@@ -94,6 +94,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"DoneByBucket_EqualBucketsEndingAtUntil", testDoneByBucket},
 		{"FlowStats_NeedAnOrgAndSeeOnlyItsItems", testFlowStatsTenancy},
 		{"Transition_TakeLeaseRemovesAnyLease", testTakeLease},
+		{"ItemTimes_LeadTimeAndComponentsOfItemsDone", testItemTimes},
 	}
 
 	for _, tc := range tests {

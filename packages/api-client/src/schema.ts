@@ -863,6 +863,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/metrics/lead-time": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Why the p85 lead time is over its target, over a range of UTC days
+         * @description The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
+         */
+        get: operations["getLeadTimeBridge"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/stream": {
         parameters: {
             query?: never;
@@ -1760,6 +1785,60 @@ export interface components {
                  */
                 per_day: number;
             }[];
+        };
+        LeadTimeBridge: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            /** @description The work type asked for; null for every type */
+            type: string | null;
+            /**
+             * @description no_target without a lead-time target in the definition; not_enough_data with fewer than 5 items done; then whether the actual p85 is over the target
+             * @enum {string}
+             */
+            status: "over_target" | "on_target" | "no_target" | "not_enough_data";
+            /** Format: double */
+            target_hours: number | null;
+            /**
+             * Format: double
+             * @description Null when nothing was done
+             */
+            actual_p85_hours: number | null;
+            /**
+             * Format: double
+             * @description actual minus target when over it
+             */
+            gap_hours: number | null;
+            items_done: number;
+            /** @description The items done whose lead time was over the target */
+            over_target_items: number;
+            /** @description Largest first, other last; empty unless over_target. They sum to gap_hours. */
+            steps: components["schemas"]["BridgeStep"][];
+            /** @description The line's constraint and its busy share over the range, for the insight sentence */
+            constraint: {
+                station: string;
+                /**
+                 * Format: double
+                 * @description Null before any lease history
+                 */
+                busy_ratio: number | null;
+            } | null;
+        };
+        BridgeStep: {
+            /** @enum {string} */
+            component: "waiting" | "rework" | "waiting_on_you" | "blocked" | "working" | "other";
+            /** @description Where the time went; for rework, the station that sent items back; null for waiting_on_you and other */
+            station: string | null;
+            /** Format: double */
+            hours: number;
+            /**
+             * Format: double
+             * @description hours over the gap
+             */
+            share: number;
+            /** @description Items over the target with time in this component */
+            items: number;
         };
         /** @description The data of one `event: item` on /v1/orgs/{org}/stream */
         StreamEvent: {
@@ -3874,6 +3953,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WeeklyThroughput"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getLeadTimeBridge: {
+        parameters: {
+            query?: {
+                /** @description The first UTC day of the range; 6 days before `to` when absent */
+                from?: components["parameters"]["RangeFrom"];
+                /** @description The last UTC day of the range, included; today when absent */
+                to?: components["parameters"]["RangeTo"];
+                /** @description Only items of this work type (one the factory declares); every type when absent */
+                type?: components["parameters"]["WorkTypeFilter"];
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The lead-time bridge */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadTimeBridge"];
                 };
             };
             default: components["responses"]["Problem"];

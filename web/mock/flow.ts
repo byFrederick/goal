@@ -2,7 +2,16 @@
 // range with the range before it, and throughput by week, computed as goald computes them from
 // work_items. Each factory with a profile gets months of seeded, deterministic history so every
 // range shows something; the items the mock moves to done count too.
-import type { Factory, Metrics, MetricsSummary, Targets, WeeklyThroughput } from '@goal/api-client';
+import type {
+  BridgeStep,
+  Factory,
+  ItemSpan,
+  LeadTimeBridge,
+  Metrics,
+  MetricsSummary,
+  Targets,
+  WeeklyThroughput,
+} from '@goal/api-client';
 import type { MockFlow, MockItem } from './fixtures.ts';
 
 const dayMs = 86_400_000;
@@ -19,22 +28,25 @@ export interface MockDone {
   lead_hours: number;
   reworked: boolean;
   cost_usd: number;
-  /** How long it waited in front of the factory's drum, in hours. */
-  waited_hours: number;
+  /** Its hours in each component of the lead-time bridge, by `<kind>:<station>` (domain.Component). */
+  times: Record<string, number>;
 }
 
-/** How a factory's history looks: items a day, typical lead time, rework share, cost per item. */
+/** How a factory's history looks: items a day, the longest wait at its drum, rework share, cost per item. */
 interface Profile {
   perDay: number;
-  leadHours: number;
+  drumWaitHours: number;
   rework: number;
   costUsd: number;
 }
 
 const profiles: Record<string, Profile> = {
-  goal: { perDay: 2.1, leadHours: 7, rework: 0.22, costUsd: 1.4 },
-  sre: { perDay: 6.6, leadHours: 5.8, rework: 0.18, costUsd: 0.35 },
+  goal: { perDay: 2.1, drumWaitHours: 14, rework: 0.22, costUsd: 1.4 },
+  sre: { perDay: 6.6, drumWaitHours: 11, rework: 0.18, costUsd: 0.35 },
 };
+
+/** The key of a bridge component: `waiting:build`, `waiting_on_you:`. */
+export const componentKey = (kind: string, station = '') => `${kind}:${station}`;
 
 /** A small seeded generator (mulberry32), so the history is the same on every reset. */
 function random(seed: string): () => number {
@@ -48,12 +60,19 @@ function random(seed: string): () => number {
   };
 }
 
-/** The seeded history of a factory up to now; empty for a factory without a profile. */
-export function seedHistory(f: Factory, now: number): MockDone[] {
+/**
+ * The seeded history of a factory up to now; empty for a factory without a profile. Each item
+ * queues at the first station, waits for and works at the drum, may be sent back by the station
+ * after it, and waits on a person at the first human station.
+ */
+export function seedHistory(f: Factory, now: number, drum: string | null): MockDone[] {
   const profile = profiles[f.name];
-  if (!profile || f.work_types.length === 0) return [];
+  if (!profile || f.work_types.length === 0 || !drum) return [];
   const rand = random(f.id);
   const today = Math.floor(now / dayMs) * dayMs;
+  const queue = f.stations.find((s) => s.kind === 'queue')?.id;
+  const human = f.stations.find((s) => s.kind === 'human')?.id;
+  const sender = f.stations[f.stations.findIndex((s) => s.id === drum) + 1]?.id ?? drum;
   const out: MockDone[] = [];
   for (let back = historyDays; back >= 0; back--) {
     // A slow rise over the months and a day-to-day swing.
@@ -64,13 +83,21 @@ export function seedHistory(f: Factory, now: number): MockDone[] {
       if (done >= now) continue;
       const type =
         f.work_types[Math.min(f.work_types.length - 1, Math.floor(rand() ** 1.6 * f.work_types.length))] ?? '';
+      const reworked = rand() < profile.rework;
+      const times: Record<string, number> = {
+        [componentKey('waiting', queue)]: rand() * 0.8,
+        [componentKey('waiting', drum)]: rand() ** 4 * profile.drumWaitHours,
+        [componentKey('working', drum)]: 0.5 + rand() * 2,
+        ...(human ? { [componentKey('waiting_on_you')]: rand() ** 2 * 3 } : {}),
+        ...(reworked ? { [componentKey('rework', sender)]: 1 + rand() * 4 } : {}),
+      };
       out.push({
         type,
         done_at: done,
-        lead_hours: profile.leadHours * (0.25 - Math.log(1 - rand() * 0.98) * 0.7),
-        reworked: rand() < profile.rework,
+        lead_hours: Object.values(times).reduce((a, b) => a + b, 0),
+        reworked,
         cost_usd: Math.round(profile.costUsd * (0.4 + rand() * 1.2) * 100) / 100,
-        waited_hours: rand() ** 3 * 40,
+        times,
       });
     }
   }
@@ -111,6 +138,32 @@ export function rangeOf(params: URLSearchParams, now: number): DayRange | string
   return r;
 }
 
+/** Where a span's time goes, as domain.ComponentOf says. */
+function componentOf(sp: ItemSpan): string {
+  if (sp.rework_by) return componentKey('rework', sp.rework_by);
+  switch (sp.state) {
+    case 'waiting_human':
+      return componentKey('waiting_on_you');
+    case 'blocked':
+      return componentKey('blocked', sp.station);
+    case 'in_progress':
+      return componentKey('working', sp.station);
+    default:
+      return componentKey('waiting', sp.station);
+  }
+}
+
+/** An item's hours in each component, from its closed spans. */
+function timesOf(spans: readonly ItemSpan[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const sp of spans) {
+    if (!sp.left_at) continue;
+    const key = componentOf(sp);
+    out[key] = (out[key] ?? 0) + (Date.parse(sp.left_at) - Date.parse(sp.entered_at)) / 3_600_000;
+  }
+  return out;
+}
+
 /** The done items of a factory: its history and the items the mock finished. */
 function doneOf(history: readonly MockDone[], items: readonly MockItem[], type: string): MockDone[] {
   const finished = items.flatMap((it): MockDone[] =>
@@ -122,7 +175,7 @@ function doneOf(history: readonly MockDone[], items: readonly MockItem[], type: 
             lead_hours: (Date.parse(it.done_at) - Date.parse(it.created_at)) / 3_600_000,
             reworked: it.rework_count > 0,
             cost_usd: it.cost_usd,
-            waited_hours: 0,
+            times: timesOf(it.spans),
           },
         ]
       : [],
@@ -214,7 +267,7 @@ export function metricsOf(input: FlowInput, r: DayRange, compare: boolean): Metr
       ? {
           station: drum,
           items:
-            inRange.filter((d) => d.waited_hours > longWaitHours).length +
+            inRange.filter((d) => (d.times[componentKey('waiting', drum)] ?? 0) > longWaitHours).length +
             waitingNow.filter((it) => end - Date.parse(it.updated_at) > longWaitHours * 3_600_000).length,
           threshold_hours: longWaitHours,
         }
@@ -242,4 +295,71 @@ export function weeklyOf(input: FlowInput, params: URLSearchParams): WeeklyThrou
       return { from: iso(from), to: iso(from + 6 * dayMs), done: n, per_day: n / 7 };
     }),
   };
+}
+
+const kinds = ['waiting', 'rework', 'waiting_on_you', 'blocked', 'working', 'other'] as const;
+
+/** Splits a component key into the bridge step's component and station. */
+function stepOf(key: string): Pick<BridgeStep, 'component' | 'station'> {
+  const [kind = 'other', station = ''] = key.split(':');
+  return { component: kind as BridgeStep['component'], station: station || null };
+}
+
+/**
+ * GET …/metrics/lead-time over r, as domain.BridgeLeadTime computes it: slow items (over the
+ * target) against fast ones, each component's excess its share of the gap, steps under 3% in
+ * other. `busy` is the drum's busy share for the insight.
+ */
+export function leadTimeOf(input: FlowInput, r: DayRange, busy: number | null): LeadTimeBridge {
+  const target = input.flow?.lead_time ? input.flow.lead_time / 3600 : null;
+  const { done } = summary(doneOf(input.history, input.items, input.type), r, input.now);
+  const leads = done.map((d) => d.lead_hours).sort((a, b) => a - b);
+  const actual = leads.length ? percentile(leads, 0.85) : null;
+  const out: LeadTimeBridge = {
+    from: iso(r.from),
+    to: iso(r.to),
+    type: input.type || null,
+    status: 'over_target',
+    target_hours: target,
+    actual_p85_hours: actual,
+    gap_hours: null,
+    items_done: done.length,
+    over_target_items: 0,
+    steps: [],
+    constraint: target !== null && input.drum ? { station: input.drum, busy_ratio: busy } : null,
+  };
+  if (target === null) return { ...out, status: 'no_target' };
+  if (done.length < 5) return { ...out, status: 'not_enough_data' };
+  if (actual === null || actual <= target) return { ...out, status: 'on_target' };
+
+  const gap = actual - target;
+  const slow = done.filter((d) => d.lead_hours > target);
+  const fast = done.filter((d) => d.lead_hours <= target);
+  const mean = (ds: MockDone[], key: string) => ds.reduce((n, d) => n + (d.times[key] ?? 0), 0) / ds.length;
+  const excess = new Map<string, number>();
+  for (const key of new Set(slow.flatMap((d) => Object.keys(d.times)))) {
+    const e = fast.length ? mean(slow, key) - mean(fast, key) : key.startsWith('working:') ? 0 : mean(slow, key);
+    if (e > 0) excess.set(key, e);
+  }
+  const total = [...excess.values()].reduce((a, b) => a + b, 0);
+  const slowWith = (keys: string[]) => slow.filter((d) => keys.some((k) => (d.times[k] ?? 0) > 0)).length;
+  const big = [...excess].filter(([, e]) => e / total >= 0.03);
+  const small = [...excess].filter(([, e]) => e / total < 0.03);
+  const steps: BridgeStep[] = big
+    .sort(
+      ([a, ea], [b, eb]) =>
+        eb - ea || kinds.indexOf(stepOf(a).component) - kinds.indexOf(stepOf(b).component) || a.localeCompare(b),
+    )
+    .map(([key, e]) => ({ ...stepOf(key), hours: (gap * e) / total, share: e / total, items: slowWith([key]) }));
+  if (small.length > 0) {
+    const share = small.reduce((n, [, e]) => n + e, 0) / total;
+    steps.push({
+      component: 'other',
+      station: null,
+      hours: gap * share,
+      share,
+      items: slowWith(small.map(([k]) => k)),
+    });
+  }
+  return { ...out, gap_hours: gap, over_target_items: slow.length, steps };
 }

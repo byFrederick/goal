@@ -208,9 +208,7 @@ func (s *server) drum(ctx context.Context, l domain.Line) (string, error) {
 		return "", err
 	}
 
-	station, _ := l.Constraint(loads)
-
-	return station, nil
+	return drumOf(l, loads), nil
 }
 
 // loads is the load of every station of a factory with open items, by station.

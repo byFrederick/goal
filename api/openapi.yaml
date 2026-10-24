@@ -993,6 +993,32 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/WeeklyThroughput" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/metrics/lead-time:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: getLeadTimeBridge
+      tags: [work]
+      summary: Why the p85 lead time is over its target, over a range of UTC days
+      description: >-
+        The items done in the range (as for getMetrics) split into slow (over the definition's
+        lead-time target) and fast; each kind of time an item spends (waiting at a station, rework
+        sent back by a station, waiting on a person, blocked, working) gets the share of the gap
+        between the actual p85 and the target that its excess over the fast items explains. Steps
+        under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range
+        or a type the factory does not declare.
+      parameters:
+        - $ref: "#/components/parameters/RangeFrom"
+        - $ref: "#/components/parameters/RangeTo"
+        - $ref: "#/components/parameters/WorkTypeFilter"
+      responses:
+        "200":
+          description: The lead-time bridge
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LeadTimeBridge" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/stream:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -2051,6 +2077,59 @@ components:
               to: { type: string, format: date, description: The week's last day, included }
               done: { type: integer }
               per_day: { type: number, format: double, description: done divided by 7 }
+    LeadTimeBridge:
+      type: object
+      required:
+        - from
+        - to
+        - type
+        - status
+        - target_hours
+        - actual_p85_hours
+        - gap_hours
+        - items_done
+        - over_target_items
+        - steps
+        - constraint
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        type: { type: string, nullable: true, description: The work type asked for; null for every type }
+        status:
+          type: string
+          enum: [over_target, on_target, no_target, not_enough_data]
+          description: >-
+            no_target without a lead-time target in the definition; not_enough_data with fewer
+            than 5 items done; then whether the actual p85 is over the target
+        target_hours: { type: number, format: double, nullable: true }
+        actual_p85_hours: { type: number, format: double, nullable: true, description: Null when nothing was done }
+        gap_hours: { type: number, format: double, nullable: true, description: actual minus target when over it }
+        items_done: { type: integer }
+        over_target_items: { type: integer, description: The items done whose lead time was over the target }
+        steps:
+          type: array
+          description: Largest first, other last; empty unless over_target. They sum to gap_hours.
+          items: { $ref: "#/components/schemas/BridgeStep" }
+        constraint:
+          type: object
+          nullable: true
+          description: The line's constraint and its busy share over the range, for the insight sentence
+          required: [station, busy_ratio]
+          properties:
+            station: { type: string }
+            busy_ratio: { type: number, format: double, nullable: true, description: Null before any lease history }
+    BridgeStep:
+      type: object
+      required: [component, station, hours, share, items]
+      properties:
+        component: { type: string, enum: [waiting, rework, waiting_on_you, blocked, working, other] }
+        station:
+          type: string
+          nullable: true
+          description: Where the time went; for rework, the station that sent items back; null for waiting_on_you and other
+        hours: { type: number, format: double }
+        share: { type: number, format: double, description: hours over the gap, 0 to 1 }
+        items: { type: integer, description: Items over the target with time in this component }
     StreamEvent:
       type: object
       description: "The data of one `event: item` on /v1/orgs/{org}/stream"

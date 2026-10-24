@@ -180,6 +180,11 @@ type FlowStats interface {
 	// DoneByBucket counts the items of q.Type done in n consecutive buckets of length d that end
 	// at q.Until, oldest first; q.Since is not used.
 	DoneByBucket(ctx context.Context, q FlowQuery, d time.Duration, n int) ([]int, error)
+
+	// ItemTimes returns every item of q.Type done in [q.Since, q.Until), by when it was done:
+	// its lead time and its time in each component of the lead-time bridge, from its spans
+	// (domain.ComponentOf).
+	ItemTimes(ctx context.Context, q FlowQuery) ([]domain.ItemTime, error)
 }
 
 // FlowQuery is what a FlowStats read measures: one factory's items over [Since, Until).

@@ -1,6 +1,7 @@
 package porttest
 
 import (
+	"cmp"
 	"context"
 	"maps"
 	"slices"
@@ -95,6 +96,43 @@ func (s *Store) DoneByBucket(ctx context.Context, q ports.FlowQuery, d time.Dura
 		if it.OrgID == org && it.FactoryID == q.FactoryID && ofType(it, q.Type) && inWindow(it.DoneAt, start, q.Until) {
 			out[int(it.DoneAt.Sub(start)/d)]++
 		}
+	}
+
+	return out, nil
+}
+
+// ItemTimes implements ports.FlowStats.
+func (s *Store) ItemTimes(ctx context.Context, q ports.FlowQuery) ([]domain.ItemTime, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var done []*domain.Item
+
+	for _, it := range s.items {
+		if it.OrgID == org && it.FactoryID == q.FactoryID && ofType(it, q.Type) && inWindow(it.DoneAt, q.Since, q.Until) {
+			done = append(done, it)
+		}
+	}
+
+	slices.SortFunc(done, func(a, b *domain.Item) int { return cmp.Or(a.DoneAt.Compare(b.DoneAt), cmp.Compare(a.ID, b.ID)) })
+
+	out := make([]domain.ItemTime, 0, len(done))
+
+	for _, it := range done {
+		times := map[domain.Component]time.Duration{}
+
+		for _, sp := range s.spans[it.ID] {
+			if !sp.LeftAt.IsZero() {
+				times[domain.ComponentOf(sp)] += sp.LeftAt.Sub(sp.EnteredAt)
+			}
+		}
+
+		out = append(out, domain.ItemTime{Item: it.ID, LeadTime: it.DoneAt.Sub(it.CreatedAt), Times: times})
 	}
 
 	return out, nil

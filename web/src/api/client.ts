@@ -23,6 +23,7 @@ import type {
   Item,
   ItemList,
   ItemState,
+  LeadTimeBridge,
   MergeMethod,
   Metrics,
   NewItem,
@@ -145,6 +146,21 @@ export function getMetrics(org: string, factory: string, range: FlowRange, signa
   return unwrap(
     goal.GET(orgPath('/factories/{factory}/metrics'), {
       params: { path: { org, factory }, query: { ...rangeQuery(range), compare: 'previous' } },
+      ...cancel(signal),
+    }),
+  );
+}
+
+/** Why the p85 lead time over a range is over its target: the lead-time bridge. */
+export function getLeadTime(
+  org: string,
+  factory: string,
+  range: FlowRange,
+  signal?: AbortSignal,
+): Promise<LeadTimeBridge> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/metrics/lead-time'), {
+      params: { path: { org, factory }, query: rangeQuery(range) },
       ...cancel(signal),
     }),
   );

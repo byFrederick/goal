@@ -1307,7 +1307,7 @@ export function seed(now = Date.now()): MockState {
   build(goalFactory, 0, goalSeeds, now, state);
   build(sreFactory, 1, sreSeeds, now, state);
 
-  for (const f of state.factories) state.history[f.name] = seedHistory(f, now);
+  for (const f of state.factories) state.history[f.name] = seedHistory(f, now, state.constraint[f.name] ?? null);
 
   return state;
 }

@@ -33,6 +33,15 @@ test('the floor shows throughput against last week and its target, and the last 
   await expect(weeks.getByRole('img', { name: /^Throughput by week from .+ Target 8\.$/ })).toBeVisible();
   await expect(weeks.getByRole('table', { name: 'Items finished per day, by week' }).getByRole('row')).toHaveCount(13);
 
+  const bridge = page.getByRole('region', { name: 'Why lead time is over target' });
+  await expect(bridge.getByText(/^\+\d+\.\d h over the 6 h target, p85$/)).toBeVisible();
+  await expect(bridge.getByRole('img', { name: /^Lead time p85 \d+\.\d h against a target of 6 h: / })).toBeVisible();
+  const steps = bridge.getByRole('table', { name: 'Lead time from target to actual, p85' }).getByRole('row');
+  await expect(steps.first()).toContainText('Step');
+  await expect(steps.nth(1)).toContainText('Target6.0 h');
+  await expect(steps.last()).toContainText(/^Actual\d+\.\d h$/);
+  await expect(bridge.getByText(/ explains .+ of the gap\.$/)).toBeVisible();
+
   if (isPhone(page)) {
     await expect(page.getByText(/, vs the week before$/)).toBeVisible();
   } else {
