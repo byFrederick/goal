@@ -8,7 +8,9 @@ a public issue. Include what you found, how to reproduce it and what it lets som
 ## Threat model
 
 [Spec 3 §11.1](docs/specs/3-identity-and-access.md#111-threat-model) lists every threat to the
-install, its control and the test that holds it.
+install, its control and the test that holds it. Phase 4 (planned: connections, runs in their own
+containers with public internet, the knowledge base) adds its threat rows and writes down the risks
+it accepts in [spec 4 §11](docs/specs/4-connections-runs-and-knowledge.md#11-security-and-tenancy).
 
 ## Known limits, by design
 

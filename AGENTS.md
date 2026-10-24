@@ -1,17 +1,17 @@
 # Goal — rules for every agent and human working in this repo
 
-Goal is a config-driven platform for AI agent factories. It runs on a laptop today and must deploy unchanged to AWS (ECS + managed PostgreSQL) or with its UI on Vercel. These rules exist so the codebase stays small, scalable and clean while agents write most of it. They are not optional.
+Goal is a config-driven platform for AI agent factories. It runs on a laptop today and must run unchanged on local Docker Compose and on Cloudflare (Containers, R2, a managed PostgreSQL), the two deployment targets ([ADR 0008](docs/adr/0008-portable-runs-connections-and-knowledge.md)). These rules exist so the codebase stays small, scalable and clean while agents write most of it. They are not optional.
 
 ## Non-negotiables
 
 1. **Config-driven.** Domain behavior lives in factory definitions (content in the bucket, versions in PostgreSQL; ADR 0005), never in this repository. No station, agent, work-type or factory name is hard-coded in Go, SQL or TypeScript, and no factory definition is committed here: the repo keeps only the JSON Schemas and small test fixtures (`internal/config/testdata`, sample org `acme`).
-2. **Factories are keyed by `metadata.id` (UUID).** Rows, S3 prefixes and AWS resources use the id, never the name.
-3. **PostgreSQL is the only database.** No SQLite, Redis, queues or caches. The one versioned object storage bucket (S3; RustFS locally) holds factory definitions and, later, knowledge documents; nothing else. Work claims use `FOR UPDATE SKIP LOCKED`; realtime uses `LISTEN/NOTIFY`; scheduled jobs take a `pg_try_advisory_lock`.
+2. **Factories are keyed by `metadata.id` (UUID).** Rows and bucket prefixes use the id, never the name.
+3. **PostgreSQL is the only database.** No SQLite, Redis, queues or caches. The one object storage bucket (S3 API: RustFS locally, R2 on Cloudflare) holds factory definitions and uploaded knowledge documents (phase 4), both as immutable content-addressed blobs; nothing else, and nothing may depend on object versioning (R2 has none; ADR 0005). Work claims use `FOR UPDATE SKIP LOCKED`; realtime uses `LISTEN/NOTIFY`; scheduled jobs take a `pg_try_advisory_lock`.
 4. **Stateless processes.** `goald` keeps no state in memory or on local disk that another instance would need. Any instance can die at any time; leases and idempotent steps recover the work.
-5. **Hexagonal architecture.** The domain and engine depend only on ports. Postgres, Docker, ECS, secrets providers, AWS, Bedrock and HTTP are adapters. `.golangci.yml` (depguard) enforces this; never silence it.
+5. **Hexagonal architecture.** The domain and engine depend only on ports. Postgres, Docker, Cloudflare, code hosts, secret and key providers, embedding models and HTTP are adapters; nothing provider-specific is hard-coded in the engine (a provider is a connection kind, data). `.golangci.yml` (depguard) enforces this; never silence it.
 6. **Manual constructor injection.** All wiring happens in `cmd/<binary>/main.go`. No DI containers, no globals holding dependencies, no `init()` side effects.
-7. **12-factor config.** Configuration comes from environment variables and factory definitions. Secrets come through the `Secrets` port (environment variables and a git-ignored `.env` now, AWS Secrets Manager in the cloud, 1Password later) and are never logged, committed or put in agent prompts. The identity service (`auth/`) reads its own secrets from its environment the same way; goald never holds them, and user sessions and API keys never reach an agent.
-8. **Infrastructure only in `terraform/`.** Agents may `fmt`, `validate` and `plan`. A human applies.
+7. **12-factor config.** Configuration comes from environment variables and factory definitions. Platform secrets come through the `Secrets` port (environment variables and a git-ignored `.env` locally; on Cloudflare, Secrets Store values the control Worker passes to each container as environment variables). Organization credentials live in connections (phase 4): sealed in PostgreSQL under the platform master key, write-only, and handed only to the runs of factories that name them, as environment variables of the run's own container. Secrets are never logged, committed, returned by the API or put in agent prompts. The identity service (`auth/`) reads its own secrets from its environment the same way; goald never holds them, and user sessions and API keys never reach an agent.
+8. **Infrastructure only in `terraform/`, and only the platform's own** (Cloudflare: bucket, DNS, secrets, routes). Creating an organization, a connection, a knowledge source or a factory never needs Terraform or a deploy. wrangler deploys what Terraform cannot (`deploy/cloudflare/`). Agents may `fmt`, `validate` and `plan`. A human applies.
 9. **No employer or client names** anywhere: code, docs, examples, sample data. Use `acme` and `example.com`.
 10. **UI follows `design-system/goal/MASTER.md` exactly.**
 
@@ -20,34 +20,35 @@ Goal is a config-driven platform for AI agent factories. It runs on a laptop tod
 ```
 cmd/goal/            CLI            (main: parse flags, wire, run)
 cmd/goald/           daemon         (main: wire adapters into the engine)
-cmd/goal-egress/     egress proxy   (the container agents, sidecars and checks go out through; ADR 0009)
+cmd/goal-egress/     egress proxy   (the container agents, sidecars and checks go out through; ADR 0009; phase 4: agents' only policy is public hosts, never private, as a compose service)
 internal/domain/     plain types and rules: factory, item, station, lease. Imports nothing internal.
 internal/engine/     flow engine: pull, WIP, drum-buffer-rope, andon. Imports domain + ports only.
-internal/ports/      interfaces: Store, Runner, Reaper, Workspaces, Checker, Secrets, Contracts, ObjectStore, ItemNotices, CodeHost, Clock, Tenancy, Audit, DefinitionStore, DefinitionNotices, SkillSource (Identity, Access, Platform in phase 3; Knowledge, ModelAuth later)
-internal/adapters/   s3store/ postgres/ docker/ gitworkspace/ github/ envsecrets/ sysclock/ skillssh/ (ecs/ awssecrets/ bedrockkb/ onepassword/ later)
+internal/ports/      interfaces: Store, Runner, Reaper, Workspaces, Checker, Sidecars, Secrets, Contracts, ObjectStore, ItemNotices, CodeHost, Clock, Tenancy, Audit, DefinitionStore, DefinitionNotices, SkillSource, Identity, Access, Platform (phase 4: Sandboxes replaces Runner, Reaper, Workspaces, Checker and Sidecars; new Connections, MasterKey, Minter, Knowledge, Embedder, SourceReader)
+internal/adapters/   s3store/ postgres/ docker/ gitworkspace/ github/ envsecrets/ sysclock/ skillssh/ (phase 4: cloudflare/ masterkey/ awssts/ gitlab/ openaiembed/ gitdocs/ confluence/; gitworkspace/ goes)
 internal/api/        HTTP API handlers for api/openapi.yaml (generated types in internal/api/gen); no adapter imports
 internal/gateway/    MCP gateway inside goald: task-token auth, per-agent tools, credentials added on the host
-internal/egress/     the egress proxy's policy: agents to the model API and the gateway's path, tools to public hosts, nothing private. Standard library only
+internal/egress/     the egress proxy's policy: agents to the model API and the gateway's path, tools to public hosts, nothing private (phase 4: public hosts for every box, and the public-only dialer goald uses for connections). Standard library only
 internal/definitions/ goald's cache of published definition versions (current and pinned by runs): lines, contracts, agent files, gateway lookups, legacy import
 internal/config/     loads and validates one factory definition from an fs.FS (bucket prefix or local folder)
 internal/factorymodel/ the Visual editor's model of factory.yaml: read, apply section edits keeping comments, format
 internal/authoring/  definition authoring: create, the shared draft (sections, files, CAS), validation, publish, restore, templates
 internal/retention/  purges deleted organizations after GOAL_ORG_RETENTION: their rows and bucket objects
 internal/builder/    the factory editor's metadata and the skills.sh skills catalog in the bucket (catalog/skills/)
-internal/factorystore/ legacy per-factory bucket prefixes, read once by the import into versions (2.2-B). Imports config + ports only.
+internal/factorystore/ legacy per-factory bucket prefixes, read once by the import into versions (2.2-B). Imports config + ports only. Deleted in phase 4 with the legacy import
 migrations/          forward-only SQL (goose); never edit an applied file
 queries/             SQL for sqlc
 api/                 openapi.yaml + events.schema.json: the only contract between goald and TypeScript; permissions.yaml (phase 3): every permission, generating goald's table and auth/'s roles
 auth/                identity service (phase 3, pnpm workspace app: Hono + Better Auth): sign-in, sessions, members and invitations; reached only through goald's /api/auth proxy, whose client contract is ADR 0007's one exception
 schema/              JSON Schemas for factory and eval files
-web/                 React SPA (pnpm workspace app), embedded into goald, deployable to Vercel
-worker/              agent container image (pnpm workspace app, Claude Agent SDK)
+web/                 React SPA (pnpm workspace app), embedded into goald
+worker/              agent container image (pnpm workspace app, Claude Agent SDK; phase 4: the one goal-agent base image with git, gh, mise and toolchains)
+deploy/cloudflare/   phase 4: the control Worker (TypeScript) and wrangler config, the only Cloudflare-specific code besides internal/adapters/cloudflare
 packages/            contracts (generated), api-client, ui (design system), config
-terraform/           all AWS infrastructure
+terraform/           the platform's own infrastructure only (phase 4: Cloudflare; the AWS modules there today are deleted), never per organization
 docs/                adr/, engineering/, jonah/
 Taskfile.yml         task check = everything the pre-push hook and CI run
 .githooks/           versioned git hooks (pre-push); `task hooks:install` once per clone
-compose.yaml         local PostgreSQL 18, RustFS (S3-compatible) and, from phase 3, Mailpit (dev inbox); ports on 127.0.0.1 only
+compose.yaml         local PostgreSQL 18, RustFS (S3-compatible) and, from phase 3, Mailpit (dev inbox); phase 4 adds pgvector, goald, the auth service, goal-egress and the agents' network; ports on 127.0.0.1 only
 ```
 
 Factory definitions are not in this tree. A definition is a file tree (`factory.yaml`, `agents/`, `skills/`, `contracts/`, `evals/`) whose files are stored in the bucket as content-addressed blobs (`orgs/<org-id>/blobs/<sha256>`); PostgreSQL holds each draft and published version as a manifest (path → sha256) and points each factory at the version that runs (`definition_versions`, `factories.current_version_id`). Edit them in the builder or in a working copy outside the repo: `goal factory pull` → edit → `goal factory validate` → `goal factory push` (the folder becomes the draft; `--publish` or `goal factory publish` makes it the version that runs). Every one of those goes through goald's API; goald ignores definition files written to the bucket directly (ADR 0005 and its 2.2 amendment).
