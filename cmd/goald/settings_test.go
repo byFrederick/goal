@@ -152,6 +152,9 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 		{name: "empty definition cache", env: map[string]string{"GOAL_DEFINITION_CACHE_BYTES": "0"}, want: "GOAL_DEFINITION_CACHE_BYTES"},
 		{name: "unclear legacy import", env: map[string]string{"GOAL_LEGACY_IMPORT": "maybe"}, want: "GOAL_LEGACY_IMPORT"},
 		{name: "GitHub API in clear text", env: map[string]string{"GOAL_GITHUB_API_URL": "http://api.example.com"}, want: "must be https"},
+		{name: "GitHub web in clear text", env: map[string]string{githubWebEnv: "http://ghe.example.com"}, want: githubWebEnv},
+		{name: "GitHub web with a path", env: map[string]string{githubWebEnv: "https://ghe.example.com/acme"}, want: githubWebEnv},
+		{name: "GitHub web with a user", env: map[string]string{githubWebEnv: "https://u@ghe.example.com"}, want: githubWebEnv},
 		{name: "not a model id", env: map[string]string{modelsEnv: "claude-opus-5-5,gpt-5"}, want: "not a model id"},
 		{name: "a model twice", env: map[string]string{modelsEnv: "claude-opus-5-5,claude-opus-5-5"}, want: "twice"},
 		{name: "an empty model", env: map[string]string{modelsEnv: "claude-opus-5-5,"}, want: "not a model id"},
@@ -334,6 +337,43 @@ func TestSettings_EveryVariableGoaldReadsIsReserved(t *testing.T) {
 
 	if !slices.Contains(custom.reserved(), "ACME_SIGNING_KEY") {
 		t.Errorf("reserved %v, want the variable the gateway key reference names", custom.reserved())
+	}
+}
+
+// The install's repository token goes only to its GitHub: github.com, or the GitHub Enterprise
+// host GOAL_GITHUB_WEB_URL names. Clones, merges and the credentials check read that one host, and
+// a definition cannot read the setting.
+func TestSettings_GitHubWebHost(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{name: "default", want: "github.com"},
+		{name: "GitHub Enterprise", env: map[string]string{githubWebEnv: "https://GHE.example.com/"}, want: "ghe.example.com"},
+		{name: "a port", env: map[string]string{githubWebEnv: "https://ghe.example.com:8443"}, want: "ghe.example.com:8443"},
+		{name: "a stand-in on this machine", env: map[string]string{githubWebEnv: "http://127.0.0.1:3000"}, want: "127.0.0.1:3000"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s, err := settingsFrom(envOf(tt.env))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if s.GitHubWebHost != tt.want {
+				t.Errorf("GitHub web host = %q, want %q", s.GitHubWebHost, tt.want)
+			}
+
+			if !slices.Contains(s.reserved(), githubWebEnv) {
+				t.Errorf("definitions may reference %s", githubWebEnv)
+			}
+		})
 	}
 }
 

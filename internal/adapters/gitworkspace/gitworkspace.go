@@ -2,6 +2,10 @@
 // run gets a fresh clone of the factory's repository in <Root>/<run id>/repo, on the item's
 // branch.
 //
+// The repository's URL comes from a factory definition but its token is the install's, so
+// clones reach only the configured hosts (Config.Hosts, github.com by default): a URL on any
+// other host is refused before the token is resolved.
+//
 // The clone token never touches the disk or another process's command line. It reaches git
 // once, for the clone, as an http.<origin>.extraHeader set through GIT_CONFIG_* environment
 // variables, which git does not write to .git/config; the header is scoped to the repository's
@@ -24,6 +28,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -49,6 +54,11 @@ type Config struct {
 	// Defaults: "Goal agent" and "goal-agent@example.com".
 	AuthorName  string
 	AuthorEmail string
+	// Hosts are the hosts clones may reach, each host[:port] as a clone URL names it (matched
+	// exactly, without case). A definition chooses the URL but the install owns the token, so a
+	// URL on any other host is refused before its token is resolved: git sends the token on its
+	// first request. Default: github.com.
+	Hosts []string
 }
 
 func (c Config) withDefaults() Config {
@@ -71,6 +81,17 @@ func (c Config) withDefaults() Config {
 	if c.AuthorEmail == "" {
 		c.AuthorEmail = "goal-agent@example.com"
 	}
+
+	if len(c.Hosts) == 0 {
+		c.Hosts = []string{"github.com"}
+	}
+
+	hosts := make([]string, 0, len(c.Hosts))
+	for _, h := range c.Hosts {
+		hosts = append(hosts, strings.ToLower(h))
+	}
+
+	c.Hosts = hosts
 
 	return c
 }
@@ -137,7 +158,7 @@ func (w *Workspaces) prepare(ctx context.Context, s ports.WorkspaceSpec, ws *por
 		return os.Mkdir(ws.Dir, 0o700)
 	}
 
-	origin, err := cloneOrigin(s.Repository.URL)
+	origin, err := cloneOrigin(s.Repository.URL, w.cfg.Hosts)
 	if err != nil {
 		return err
 	}
@@ -295,8 +316,9 @@ func authEnv(origin, token string) []string {
 }
 
 // cloneOrigin checks a clone URL and returns its origin (scheme://host/) for scoping the
-// header. URLs are https without credentials; plain http is accepted for loopback only.
-func cloneOrigin(raw string) (string, error) {
+// header. URLs are https without credentials, on one of hosts; plain http is accepted for
+// loopback only.
+func cloneOrigin(raw string, hosts []string) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return "", fmt.Errorf("repository url: %w", err)
@@ -313,6 +335,11 @@ func cloneOrigin(raw string) (string, error) {
 
 	if u.Host == "" {
 		return "", fmt.Errorf("repository url %q has no host", raw)
+	}
+
+	if !slices.Contains(hosts, strings.ToLower(u.Host)) {
+		return "", fmt.Errorf("repository url %q: host %s is not allowed; this install clones only from %s",
+			raw, u.Host, strings.Join(hosts, ", "))
 	}
 
 	return u.Scheme + "://" + u.Host + "/", nil

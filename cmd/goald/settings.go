@@ -94,6 +94,12 @@ type settings struct {
 	// GitHubAPIURL is the GitHub REST API goald merges pull requests through
 	// (GOAL_GITHUB_API_URL, default https://api.github.com; http only on a loopback address).
 	GitHubAPIURL string
+	// GitHubWebHost is the host (host[:port], lower case) of the GitHub that holds the factories'
+	// repositories and pull requests (GOAL_GITHUB_WEB_URL, an origin: default https://github.com,
+	// a GitHub Enterprise Server's own; http only on a loopback address). A definition chooses its
+	// repository's URL but the token is the install's, so clones reach only this host and merges
+	// only its pull requests.
+	GitHubWebHost string
 	// Models are the models the factory editor offers (GOAL_MODELS: comma-separated model ids,
 	// each optionally id=Label; the first is the default; default defaultModels).
 	Models []builder.Model
@@ -116,6 +122,7 @@ const (
 	authEnv        = "GOAL_AUTH"
 	upstreamEnv    = "GOAL_AUTH_UPSTREAM"
 	proxiesEnv     = "GOAL_TRUSTED_PROXIES"
+	githubWebEnv   = "GOAL_GITHUB_WEB_URL"
 	defaultAuthURL = "http://127.0.0.1:8081"
 	schemeHTTP     = "http"
 	schemeHTTPS    = "https"
@@ -150,7 +157,7 @@ var ownVariables = []string{
 	"GOAL_LISTEN", publicURLEnv, gatewayEnv, gatewayURLEnv, "GOAL_GATEWAY_KEY_REF", "GOAL_GATEWAY_KEY", taskEnvEnv,
 	authEnv, upstreamEnv, proxiesEnv, "GOAL_AUTH_GOOGLE",
 	"GOAL_WORKSPACE_ROOT", "GOAL_RUN_DIR", "GOAL_TICK_EVERY", "GOAL_REFRESH_EVERY", "GOAL_MAX_RUNS",
-	"GOAL_GITHUB_API_URL", "GOAL_LOG_LEVEL", "GOAL_LOG_FORMAT", "GOAL_DEFAULT_AGENT_IMAGE", "GOAL_ORG_RETENTION", "GOAL_MODELS",
+	"GOAL_GITHUB_API_URL", githubWebEnv, "GOAL_LOG_LEVEL", "GOAL_LOG_FORMAT", "GOAL_DEFAULT_AGENT_IMAGE", "GOAL_ORG_RETENTION", "GOAL_MODELS",
 	"GOAL_DEFINITION_CACHE_BYTES", "GOAL_LEGACY_IMPORT",
 	"GOAL_S3_BUCKET", "GOAL_S3_ENDPOINT", "GOAL_S3_ACCESS_KEY", "GOAL_S3_SECRET_KEY",
 	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
@@ -258,7 +265,11 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 		errs = append(errs, fmt.Errorf("GOAL_LOG_LEVEL: %w", err))
 	}
 
-	if err := apiURL(s.GitHubAPIURL); err != nil {
+	if _, err := githubURL("GOAL_GITHUB_API_URL", s.GitHubAPIURL); err != nil {
+		errs = append(errs, err)
+	}
+
+	if s.GitHubWebHost, err = webHost(or(githubWebEnv, "https://github.com")); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -574,23 +585,34 @@ func (s settings) hosts() []string {
 	return out
 }
 
-// apiURL refuses a GitHub API that a repository token would reach in clear text, except on
-// this machine (a stand-in API for tests).
-func apiURL(raw string) error {
+// githubURL parses the GitHub URL setting name and refuses one that a repository token would
+// reach in clear text, except on this machine (a stand-in GitHub for tests).
+func githubURL(name, raw string) (*url.URL, error) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
-		return fmt.Errorf("GOAL_GITHUB_API_URL %q is not a URL", raw)
+		return nil, fmt.Errorf("%s %q is not a URL", name, raw)
 	}
 
-	if u.Scheme == schemeHTTPS {
-		return nil
+	if u.Scheme != schemeHTTPS && (u.Scheme != schemeHTTP || !isLoopback(u.Hostname())) {
+		return nil, fmt.Errorf("%s %q must be https (http only on a loopback address)", name, raw)
 	}
 
-	if u.Scheme != schemeHTTP || !isLoopback(u.Hostname()) {
-		return fmt.Errorf("GOAL_GITHUB_API_URL %q must be https (http only on a loopback address)", raw)
+	return u, nil
+}
+
+// webHost reads GOAL_GITHUB_WEB_URL, an origin, as its host[:port] in lower case: the one host
+// the install's repository token may be sent to by clones and merges.
+func webHost(raw string) (string, error) {
+	u, err := githubURL(githubWebEnv, raw)
+	if err != nil {
+		return "", err
 	}
 
-	return nil
+	if u.User != nil || strings.Trim(u.Path, "/") != "" || u.RawQuery != "" || u.Fragment != "" {
+		return "", fmt.Errorf("%s %q must be an origin such as https://github.com, without a user or a path", githubWebEnv, raw)
+	}
+
+	return strings.ToLower(u.Host), nil
 }
 
 // taskEnv parses NAME=ref pairs. Values must be references (env:NAME), never secret literals,

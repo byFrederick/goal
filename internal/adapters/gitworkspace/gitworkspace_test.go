@@ -2,6 +2,7 @@ package gitworkspace
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"errors"
 	"net/http"
@@ -30,6 +31,7 @@ const (
 // test server) and refuses any request without the token, as a private GitHub repository does.
 type remote struct {
 	url    string
+	host   string // host:port, as its clone URL names it
 	authed atomic.Int64
 }
 
@@ -81,6 +83,7 @@ func newRemote(t *testing.T) *remote {
 	t.Cleanup(srv.Close)
 
 	r.url = srv.URL + "/acme.git"
+	r.host = srv.Listener.Addr().String()
 
 	return r
 }
@@ -109,10 +112,11 @@ func write(t *testing.T, path, content string) {
 	}
 }
 
-func newWorkspaces(t *testing.T) *Workspaces {
+// newWorkspaces returns workspaces that may clone from hosts (github.com when none are given).
+func newWorkspaces(t *testing.T, hosts ...string) *Workspaces {
 	t.Helper()
 
-	return New(porttest.Secrets{"ACME_TOKEN": token}, Config{Root: t.TempDir()}, nil)
+	return New(porttest.Secrets{"ACME_TOKEN": token}, Config{Root: t.TempDir(), Hosts: hosts}, nil)
 }
 
 func TestPrepare_ClonesTheItemsBranchWithoutLeavingTheToken(t *testing.T) {
@@ -139,7 +143,7 @@ func TestPrepare_ClonesTheItemsBranchWithoutLeavingTheToken(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			w := newWorkspaces(t)
+			w := newWorkspaces(t, r.host)
 
 			ws, err := w.Prepare(t.Context(), ports.WorkspaceSpec{
 				RunID: "run-1", Repository: domain.Repository{URL: r.url, AuthRef: "env:ACME_TOKEN"}, Branch: tt.branch,
@@ -211,7 +215,7 @@ func TestPrepare_FailsCleanlyWithoutTheToken(t *testing.T) {
 	t.Parallel()
 
 	r := newRemote(t)
-	w := New(porttest.Secrets{"ACME_TOKEN": "wrong-" + token}, Config{Root: t.TempDir()}, nil)
+	w := New(porttest.Secrets{"ACME_TOKEN": "wrong-" + token}, Config{Root: t.TempDir(), Hosts: []string{r.host}}, nil)
 
 	_, err := w.Prepare(t.Context(), ports.WorkspaceSpec{
 		RunID: "run-2", Repository: domain.Repository{URL: r.url, AuthRef: "env:ACME_TOKEN"}, Branch: "goal/9-x",
@@ -247,13 +251,128 @@ func TestPrepare_RejectsUnsafeRepositoriesAndBranches(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			w := newWorkspaces(t)
+			w := newWorkspaces(t, "git.example.com")
 
 			_, err := w.Prepare(t.Context(), ports.WorkspaceSpec{
 				RunID: "run-3", Repository: domain.Repository{URL: tt.url}, Branch: tt.branch,
 			})
 			if err == nil {
 				t.Errorf("Prepare(%s, %s) succeeded", tt.url, tt.branch)
+			}
+		})
+	}
+}
+
+// resolveLog is a Secrets that records every reference it resolves.
+type resolveLog struct {
+	porttest.Secrets
+
+	refs *atomic.Int64
+}
+
+func (s resolveLog) Resolve(ctx context.Context, ref string) (string, error) {
+	s.refs.Add(1)
+
+	return s.Secrets.Resolve(ctx, ref)
+}
+
+// A definition names the repository's URL and the install holds the token, so a clone URL on a
+// host the install does not clone from (an attacker's server, here the same address on another
+// port than the repository's) is refused before the token is resolved: git, which sends the
+// token on its first request, never reaches that host. Without configured hosts only github.com
+// is allowed, so the repository's own server is refused too.
+func TestPrepare_RefusesHostsItDoesNotCloneFrom(t *testing.T) {
+	t.Parallel()
+
+	r := newRemote(t)
+
+	var seen, authorized atomic.Int64
+
+	attacker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		seen.Add(1)
+
+		if req.Header.Get("Authorization") != "" {
+			authorized.Add(1)
+		}
+
+		w.Header().Set("WWW-Authenticate", `Basic realm="x"`)
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	}))
+	t.Cleanup(attacker.Close)
+
+	t.Cleanup(func() { // after the parallel subtests, before the servers close
+		if n, a := seen.Load(), authorized.Load(); n != 0 || a != 0 {
+			t.Errorf("the other host got %d requests, %d with an Authorization header; want none", n, a)
+		}
+
+		if r.authed.Load() != 0 {
+			t.Error("cloned from the repository's server although its host is not allowed")
+		}
+	})
+
+	tests := []struct {
+		name  string
+		url   string
+		hosts []string
+	}{
+		{name: "another host", url: attacker.URL + "/x.git", hosts: []string{r.host}},
+		{name: "another host, default hosts", url: attacker.URL + "/x.git"},
+		{name: "the repository's server, default hosts", url: r.url},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var resolved atomic.Int64
+
+			w := New(resolveLog{Secrets: porttest.Secrets{"ACME_TOKEN": token}, refs: &resolved},
+				Config{Root: t.TempDir(), Hosts: tt.hosts}, nil)
+
+			_, err := w.Prepare(t.Context(), ports.WorkspaceSpec{
+				RunID: "run-5", Repository: domain.Repository{URL: tt.url, AuthRef: "env:ACME_TOKEN"}, Branch: someBranch,
+			})
+			if err == nil || !strings.Contains(err.Error(), "not allowed") {
+				t.Fatalf("Prepare(%s) = %v, want the host refused", tt.url, err)
+			}
+
+			if n := resolved.Load(); n != 0 {
+				t.Errorf("resolved the token %d times before refusing the host", n)
+			}
+
+			if _, serr := os.Stat(filepath.Join(w.cfg.Root, "run-5")); !errors.Is(serr, os.ErrNotExist) {
+				t.Errorf("refused workspace left behind: %v", serr)
+			}
+		})
+	}
+}
+
+// A clone URL's host and port must equal an allowed host's, without case.
+func TestCloneOrigin_MatchesAllowedHostsExactly(t *testing.T) {
+	t.Parallel()
+
+	hosts := []string{"github.com", "ghe.example.com:8443"}
+
+	tests := []struct {
+		url   string
+		allow bool
+	}{
+		{url: "https://github.com/acme/app.git", allow: true},
+		{url: "https://GitHub.com/acme/app.git", allow: true},
+		{url: "https://ghe.example.com:8443/acme/app.git", allow: true},
+		{url: "https://ghe.example.com/acme/app.git"},
+		{url: "https://github.com.attacker.example/acme/app.git"},
+		{url: "https://attacker.example/github.com/acme/app.git"},
+		{url: "https://github.com:444/acme/app.git"},
+		{url: "https://gist.github.com/acme/app.git"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.url, func(t *testing.T) {
+			t.Parallel()
+
+			if _, err := cloneOrigin(tt.url, hosts); (err == nil) != tt.allow {
+				t.Errorf("cloneOrigin(%s) = %v, want allowed %v", tt.url, err, tt.allow)
 			}
 		})
 	}

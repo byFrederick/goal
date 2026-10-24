@@ -158,7 +158,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}, definitions.Config{CacheBytes: s.DefinitionCacheBytes}, log)
 
 	runnerCfg := docker.Config{RunDir: s.RunDir}
-	workspaces := gitworkspace.New(secrets, gitworkspace.Config{Root: s.WorkspaceRoot}, log)
+	workspaces := gitworkspace.New(secrets, gitworkspace.Config{Root: s.WorkspaceRoot, Hosts: []string{s.GitHubWebHost}}, log)
 	runner := docker.New(dockerClient, defs, runnerCfg, log)
 
 	gw, err := gateway.New(gateway.Deps{
@@ -171,7 +171,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// Runs after serve returns: HTTP is drained and the engine's runs have ended.
 	defer gw.Close()
 
-	codehost := github.New(secrets, github.Config{APIURL: s.GitHubAPIURL})
+	codehost := github.New(secrets, github.Config{APIURL: s.GitHubAPIURL, WebHost: s.GitHubWebHost})
 
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Runner: runner, Workspaces: workspaces, Checker: docker.NewChecker(dockerClient, runnerCfg, log),
