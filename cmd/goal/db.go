@@ -24,6 +24,15 @@ type dbSettings struct {
 	Roles postgres.Roles
 }
 
+// The variables of the database's passwords and the administrator's URL.
+const (
+	adminURLEnv          = "GOAL_DATABASE_ADMIN_URL"
+	superuserPasswordEnv = "GOAL_PG_PASSWORD"
+	ownerPasswordEnv     = "GOAL_PG_OWNER_PASSWORD" //nolint:gosec // a variable name, not a credential
+	appPasswordEnv       = "GOAL_PG_APP_PASSWORD"   //nolint:gosec // a variable name, not a credential
+	authPasswordEnv      = "GOAL_PG_AUTH_PASSWORD"  //nolint:gosec // a variable name, not a credential
+)
+
 func dbSettingsFrom(getenv func(string) string) dbSettings {
 	or := func(name, def string) string {
 		if v := strings.TrimSpace(getenv(name)); v != "" {
@@ -34,16 +43,16 @@ func dbSettingsFrom(getenv func(string) string) dbSettings {
 	}
 
 	admin := (&url.URL{
-		Scheme: "postgres", User: url.UserPassword("goal", or("GOAL_PG_PASSWORD", "goal-dev-only")),
+		Scheme: "postgres", User: url.UserPassword("goal", or(superuserPasswordEnv, "goal-dev-only")),
 		Host: "127.0.0.1:5432", Path: "goal", RawQuery: "sslmode=disable",
 	}).String()
 
 	return dbSettings{
-		AdminURL: or("GOAL_DATABASE_ADMIN_URL", admin),
+		AdminURL: or(adminURLEnv, admin),
 		Roles: postgres.Roles{
-			OwnerPassword: or("GOAL_PG_OWNER_PASSWORD", postgres.DevOwnerPassword),
-			AppPassword:   or("GOAL_PG_APP_PASSWORD", postgres.DevAppPassword),
-			AuthPassword:  or("GOAL_PG_AUTH_PASSWORD", postgres.DevAuthPassword),
+			OwnerPassword: or(ownerPasswordEnv, postgres.DevOwnerPassword),
+			AppPassword:   or(appPasswordEnv, postgres.DevAppPassword),
+			AuthPassword:  or(authPasswordEnv, postgres.DevAuthPassword),
 		},
 	}
 }

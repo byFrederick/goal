@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,7 +64,8 @@ var authOnly = []string{
 // auth/dist/server.js) beside goald, each process with only its own variables, and refuses to
 // start (before anything when it can tell, before the roles otherwise) without a usable
 // BETTER_AUTH_SECRET, the auth service's build, or GOAL_BOOTSTRAP_OWNER_EMAIL while nobody has
-// signed in, each refusal naming GOAL_AUTH=none as the way to keep the single local user. It
+// signed in, or with a database password this repository publishes, each refusal naming
+// GOAL_AUTH=none as the way to keep the single local user. It
 // pushes no factory: the bucket's definitions are what goald runs. The compose services keep
 // running afterwards; `docker compose down` stops them.
 func up(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
@@ -140,7 +142,72 @@ func signInMode(getenv func(string) string) (bool, error) {
 		return false, fmt.Errorf("%s needs the auth service's build %s: run task auth:build (task up does); %s", sessionMode(getenv), authServer, keepLocalUser)
 	}
 
+	if err := publishedPasswords(getenv); err != nil {
+		return false, err
+	}
+
 	return true, nil
+}
+
+// devPasswords are the database passwords this repository publishes (compose.yaml, .env.example,
+// the postgres.Dev* defaults): good enough for the single local user, never once people sign in,
+// since any process on the machine could use them.
+var devPasswords = []string{"goal-dev-only", postgres.DevOwnerPassword, postgres.DevAppPassword, postgres.DevAuthPassword}
+
+// publishedPasswords refuses sign-in while a database role goal up, goald or the auth service
+// connect as has one of devPasswords, set or by default, naming the variables to change.
+func publishedPasswords(getenv func(string) string) error {
+	s := dbSettingsFrom(getenv)
+
+	admin := superuserPasswordEnv
+	if strings.TrimSpace(getenv(adminURLEnv)) != "" {
+		admin = adminURLEnv
+	}
+
+	var published []string
+
+	check := func(name, password string) {
+		if slices.Contains(devPasswords, password) {
+			published = append(published, name)
+		}
+	}
+
+	check(admin, passwordOf(s.AdminURL))
+	check(ownerPasswordEnv, s.Roles.OwnerPassword)
+	check(appPasswordEnv, s.Roles.AppPassword)
+	check(authPasswordEnv, s.Roles.AuthPassword)
+
+	for _, name := range []string{"GOAL_MIGRATE_DATABASE_URL", "GOAL_DATABASE_URL", "GOAL_AUTH_DATABASE_URL"} {
+		if raw := strings.TrimSpace(getenv(name)); raw != "" {
+			check(name, passwordOf(raw))
+		}
+	}
+
+	if len(published) == 0 {
+		return nil
+	}
+
+	superuser := ""
+	if slices.Contains(published, superuserPasswordEnv) {
+		superuser = " Compose's superuser keeps the password its database was created with: change it there first " +
+			`(docker compose exec postgres psql -U goal -d goal -c "ALTER ROLE goal PASSWORD '<new>'"), then GOAL_PG_PASSWORD.`
+	}
+
+	return fmt.Errorf("%s refuses the database passwords this repository publishes, which any process on this machine could use: %s. "+
+		"Give each a value of its own in .env (openssl rand -hex 24); goal up gives goal_owner, goal_app and goal_auth their new passwords itself.%s %s",
+		sessionMode(getenv), strings.Join(published, ", "), superuser, keepLocalUser)
+}
+
+// passwordOf is the password in a postgres:// URL, or "" when it has none or does not parse.
+func passwordOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.User == nil {
+		return ""
+	}
+
+	p, _ := u.User.Password()
+
+	return p
 }
 
 // sessionMode names the sign-in mode in a refusal: "GOAL_AUTH=session (the default)" when .env

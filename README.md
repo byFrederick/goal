@@ -68,8 +68,9 @@ bin/goal retry goal#2                              # a blocked item goes back to
 People sign in (`GOAL_AUTH=session`, the default): by a six-digit code mailed to them, or with Google. The identity service (`auth/`, Better Auth) runs beside goald and is reached only through goald's `/api/auth`.
 
 ```bash
-# .env: BETTER_AUTH_SECRET (openssl rand -hex 32, not GOAL_GATEWAY_KEY) and
-#       GOAL_BOOTSTRAP_OWNER_EMAIL (the first owner's address); .env.example lists every sign-in variable
+# .env: BETTER_AUTH_SECRET (openssl rand -hex 32, not GOAL_GATEWAY_KEY),
+#       GOAL_BOOTSTRAP_OWNER_EMAIL (the first owner's address) and database passwords of your own
+#       (GOAL_PG_*_PASSWORD; goal up refuses the published dev ones); .env.example lists every sign-in variable
 task up                    # also builds auth/ and starts it and Mailpit (codes at http://127.0.0.1:8025)
 open http://127.0.0.1:8080 # sign in as the bootstrap owner with the code Mailpit received
 bin/goal login             # the CLI: approve the code it shows in the browser; kept in the OS keychain

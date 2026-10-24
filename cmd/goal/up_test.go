@@ -2,12 +2,15 @@ package main
 
 import (
 	"io"
+	"maps"
 	"os"
 	"slices"
 	"strings"
 	"testing"
 
 	"go.yaml.in/yaml/v3"
+
+	"github.com/byFrederick/goal/internal/adapters/postgres"
 )
 
 // goal up and task auth:dev start the auth service with the same variables.
@@ -140,6 +143,66 @@ func TestUp_RefusesSignInItCannotStart(t *testing.T) {
 
 		if err != nil && strings.Contains(err.Error(), "auth-0123") {
 			t.Errorf("%s: the refusal shows the secret", c.name)
+		}
+	}
+}
+
+// Review 3, H1: once people sign in, no database role keeps a password this repository
+// publishes, set or by default; the refusal names each variable to change and how.
+func TestUp_SignInRefusesPublishedDatabasePasswords(t *testing.T) {
+	t.Parallel()
+
+	own := map[string]string{ //nolint:gosec // fabricated passwords of the install's own
+		superuserPasswordEnv: "superuser-own-pw", ownerPasswordEnv: "owner-own-pw", appPasswordEnv: "app-own-pw", authPasswordEnv: "auth-own-pw",
+	}
+
+	with := func(changes map[string]string) func(string) string {
+		env := maps.Clone(own)
+		maps.Copy(env, changes)
+
+		return func(n string) string { return env[n] }
+	}
+
+	if err := publishedPasswords(with(nil)); err != nil {
+		t.Errorf("own passwords: %v", err)
+	}
+
+	unset := map[string]string{superuserPasswordEnv: "", ownerPasswordEnv: "", appPasswordEnv: "", authPasswordEnv: ""}
+
+	for _, c := range []struct {
+		name    string
+		changes map[string]string
+		want    []string
+	}{
+		{name: "nothing set", changes: unset, want: []string{
+			"GOAL_PG_PASSWORD, GOAL_PG_OWNER_PASSWORD, GOAL_PG_APP_PASSWORD, GOAL_PG_AUTH_PASSWORD", "ALTER ROLE goal", wayBack,
+		}},
+		{name: ".env.example's old app password", changes: map[string]string{appPasswordEnv: postgres.DevAppPassword}, want: []string{appPasswordEnv, wayBack}},
+		{name: "a dev password under another role", changes: map[string]string{authPasswordEnv: "goal-dev-only"}, want: []string{authPasswordEnv}}, //nolint:gosec // the published dev password
+		{
+			name:    "an explicit URL with a dev password",
+			changes: map[string]string{"GOAL_DATABASE_URL": "postgres://goal_app:" + postgres.DevAppPassword + "@127.0.0.1:5432/goal"},
+			want:    []string{"GOAL_DATABASE_URL"},
+		},
+		{
+			name:    "the admin URL",
+			changes: map[string]string{adminURLEnv: "postgres://goal:goal-dev-only@127.0.0.1:5432/goal"}, //nolint:gosec // the published dev password
+			want:    []string{adminURLEnv},
+		},
+	} {
+		err := publishedPasswords(with(c.changes))
+		for _, w := range c.want {
+			if err == nil || !strings.Contains(err.Error(), w) {
+				t.Errorf("%s: %v, want a refusal naming %q", c.name, err, w)
+			}
+		}
+
+		if err != nil && strings.Contains(err.Error(), "own-pw") {
+			t.Errorf("%s: the refusal shows a password", c.name)
+		}
+
+		if c.name != "nothing set" && err != nil && strings.Contains(err.Error(), "ALTER ROLE") {
+			t.Errorf("%s: asks to change the superuser, whose password is its own", c.name)
 		}
 	}
 }
