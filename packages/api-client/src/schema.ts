@@ -802,7 +802,7 @@ export interface paths {
         };
         /**
          * The factory's board, station by station in line order
-         * @description Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time.
+         * @description Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time. Each station carries its statistics: the busy share and send-back share over the window, the queue's trend over the last 24 hours, how long the oldest waiting item has waited and, at the done station, the items done today (UTC).
          */
         get: operations["getBoard"];
         put?: never;
@@ -1445,6 +1445,12 @@ export interface components {
             agent: string | null;
             /** @description The pull request the item's latest station output names, else null */
             pr_url: string | null;
+            /** @description While in progress at a station that runs several copies of its agent, the copy working it, 1-based (investigator-2); else null */
+            slot: number | null;
+            /** @description The turns its running run has reported so far, while one runs; else null */
+            turn: number | null;
+            /** @description The summary field of the item's latest station output that has one, else null */
+            summary: string | null;
         };
         ItemPage: {
             items: components["schemas"]["ItemCard"][];
@@ -1464,6 +1470,11 @@ export interface components {
             /** @description The id of the agent station with the most work per slot now, or null */
             constraint: string | null;
         };
+        /**
+         * @description How many items wait at a station now against 24 hours earlier
+         * @enum {string}
+         */
+        QueueTrend: "growing" | "steady" | "shrinking";
         BoardStation: {
             id: string;
             kind: components["schemas"]["StationKind"];
@@ -1477,6 +1488,25 @@ export interface components {
             /** @description Items being worked here */
             in_progress: number;
             items: components["schemas"]["ItemCard"][];
+            /**
+             * Format: double
+             * @description Agent stations: the share of the slots' time leases held over the window (from when the factory's lease history begins, if later), 0 to 1; null elsewhere or without history
+             */
+            busy_ratio: number | null;
+            /**
+             * Format: double
+             * @description Stations with a gate: the share of the window's verdicts that sent work back; null elsewhere or without verdicts
+             */
+            send_back_ratio: number | null;
+            /** @description Queue and agent stations; null elsewhere */
+            queue_trend: components["schemas"]["QueueTrend"] | null;
+            /**
+             * Format: int64
+             * @description How long the item waiting longest here has waited; null when none waits
+             */
+            oldest_waiting_seconds: number | null;
+            /** @description The done station: items that reached done today (UTC); null elsewhere */
+            done_today: number | null;
         };
         Metrics: {
             /** @description The window asked for, as in 7d */
@@ -3524,7 +3554,10 @@ export interface operations {
     };
     getBoard: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The window of the busy and send-back shares: the last N UTC calendar days, today included, written Nd (1d to 90d). */
+                window?: string;
+            };
             header?: never;
             path: {
                 /** @description The organization's slug or id */

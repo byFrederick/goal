@@ -88,6 +88,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"CurrentRun_RunningRunWithSlotAndTurns", testCurrentRun},
 		{"Transition_RecordsTheLeaseSpanWithItsOutcome", testLeaseSpansOnTransition},
 		{"RequeueExpiredLeases_RecordsExpiredLeaseSpans", testLeaseSpansOnRequeue},
+		{"StationTimes_LeasesWaitingAndVerdictsInTheWindow", testStationTimes},
+		{"LiveTurns_UsageOfEachRunningRun", testLiveTurns},
 	}
 
 	for _, tc := range tests {

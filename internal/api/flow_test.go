@@ -244,6 +244,156 @@ func TestAPI_BoardCardsShowAgentPullRequestAndAge(t *testing.T) {
 	}
 }
 
+// stationStats is what a test checks of one station's statistics on the board.
+type stationStats struct {
+	Busy, SendBack *float64
+	Trend          *gen.QueueTrend
+	Oldest         *int64
+	DoneToday      *int
+}
+
+// boardHistory seeds the line factory with a history for its board's statistics, all before t0:
+// an item waiting at inbox for 2 h 10 min; at build, a lease from 4 h to 3 h ago that sent its
+// item (merging) on to merge with a summary, a lease held from 2 h ago on slot 0 whose run
+// (working) reported three turns, and an item waiting there for an hour; at done, an item done an
+// hour ago and one done yesterday.
+func (h *harness) boardHistory(t *testing.T) (working, merging domain.Item) {
+	t.Helper()
+
+	ago := func(d time.Duration) time.Time { return t0.Add(-d) }
+
+	h.seed(t, stInbox, domain.StateQueued, ago(2*time.Hour+10*time.Minute))
+	merging = h.seed(t, stBuild, domain.StateQueued, ago(5*time.Hour))
+	working = h.seed(t, stBuild, domain.StateQueued, ago(5*time.Hour))
+
+	claim := func(slot int, at time.Time) (domain.Item, domain.Lease) {
+		it, l, err := h.store.ClaimNext(inOrg(t), ports.Claim{
+			FactoryID: lineID, Station: build, Slot: slot, Now: at, ExpiresAt: at.Add(time.Minute),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return it, l
+	}
+
+	first, l := claim(1, ago(4*time.Hour))
+	if first.ID != merging.ID {
+		t.Fatalf("claimed #%d first, want #%d", first.Number, merging.Number)
+	}
+
+	if _, err := h.store.Transition(inOrg(t), ports.Transition{
+		ItemID: first.ID, From: first.Position(), To: domain.Position{Station: stMerge, State: domain.StateWaitingHuman},
+		Lease: &l, Outcome: domain.LeaseAdvanced, OutputStation: stBuild, Output: json.RawMessage(`{"summary":"Built it"}`),
+		At: ago(3 * time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	claim(0, ago(2*time.Hour))
+
+	run, err := h.store.StartRun(inOrg(t), ports.NewRun{
+		FactoryID: lineID, ItemID: working.ID, Station: stBuild, Agent: agBackend, Model: "claude-opus-5-5", StartedAt: ago(2 * time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	usage := domain.Event{FactoryID: lineID, ItemID: working.ID, RunID: run, At: ago(time.Hour), Kind: domain.EventUsage, Station: stBuild}
+	if err := h.store.AppendEvents(inOrg(t), usage, usage, usage); err != nil {
+		t.Fatal(err)
+	}
+
+	h.seed(t, stBuild, domain.StateQueued, ago(time.Hour))
+	h.finished(t, ago(5*time.Hour), ago(time.Hour), false)
+	h.finished(t, ago(30*time.Hour), ago(20*time.Hour), false)
+
+	return working, merging
+}
+
+// Every station carries its statistics: the busy share of an agent station since its lease
+// history began (inside the window), the trend and oldest wait of the queues, the items done
+// today at the done station; an item in progress shows the copy working it and its run's turns, a
+// card its latest summary.
+func TestAPI_BoardStationStatistics(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	working, merging := h.boardHistory(t)
+
+	var board gen.Board
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/board", "", &board); code != http.StatusOK {
+		t.Fatalf("board = %d", code)
+	}
+
+	ratio := func(f float64) *float64 { return &f }
+	secs := func(d time.Duration) *int64 { n := int64(d / time.Second); return &n }
+	growing, today := gen.Growing, 1
+
+	got := map[string]stationStats{}
+	for _, st := range board.Stations {
+		got[st.Id] = stationStats{st.BusyRatio, st.SendBackRatio, st.QueueTrend, st.OldestWaitingSeconds, st.DoneToday}
+	}
+
+	want := map[string]stationStats{
+		stInbox: {Trend: &growing, Oldest: secs(2*time.Hour + 10*time.Minute)},
+		// 1 h of the first lease and 2 h of the live one, over 2 slots × the 4 h since the first.
+		stBuild: {Busy: ratio(3.0 / 8), Trend: &growing, Oldest: secs(time.Hour)},
+		stMerge: {},
+		stDone:  {DoneToday: &today},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("station statistics =\n  %s\nwant\n  %s", statsString(got), statsString(want))
+	}
+
+	cards := cardsOf(board)
+
+	if c := cards[working.Number]; c.Slot == nil || *c.Slot != 1 || c.Turn == nil || *c.Turn != 3 {
+		t.Errorf("in-progress card slot %v, turn %v; want the first copy (1) on turn 3", c.Slot, c.Turn)
+	}
+
+	if c := cards[merging.Number]; c.Summary == nil || *c.Summary != "Built it" || c.Slot != nil || c.Turn != nil {
+		t.Errorf("merge card summary %v, slot %v, turn %v; want its build summary and no copy or turn", c.Summary, c.Slot, c.Turn)
+	}
+}
+
+// The board's statistics window is 1 to 90 days, written Nd.
+func TestAPI_BoardRefusesBadWindows(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	for _, window := range []string{"0d", "91d", "week"} {
+		if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/board?window="+window, "", nil); code != http.StatusBadRequest {
+			t.Errorf("board over window %q = %d, want 400", window, code)
+		}
+	}
+
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/board?window=30d", "", nil); code != http.StatusOK {
+		t.Errorf("board over 30 days = %d, want 200", code)
+	}
+}
+
+func statsString(m map[string]stationStats) string {
+	var b strings.Builder
+
+	for _, id := range []string{stInbox, stBuild, stMerge, stDone} {
+		s := m[id]
+		fmt.Fprintf(&b, "%s{busy %v send-back %v trend %v oldest %v done today %v} ", id,
+			show(s.Busy), show(s.SendBack), show(s.Trend), show(s.Oldest), show(s.DoneToday))
+	}
+
+	return b.String()
+}
+
+func show[T any](p *T) string {
+	if p == nil {
+		return "null"
+	}
+
+	return fmt.Sprint(*p)
+}
+
 // list asks for one page of line items and returns their numbers and the next cursor.
 func (h *harness) list(t *testing.T, query string) ([]int64, *int64) {
 	t.Helper()

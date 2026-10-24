@@ -11,9 +11,35 @@ import (
 // opened. It is a convention of station contracts, not a station or factory name.
 const pullRequestKey = "pull_request"
 
+// summaryKey is the output field in which a station reports what it did in a sentence
+// ("Postmortem filed"). Like pull_request, it is a convention of station contracts.
+const summaryKey = "summary"
+
 // PullRequest returns the pull request URL the item's outputs name: the pull_request field of
 // the output of the latest station on the line that has one, or "" when none does.
 func (it Item) PullRequest(l Line) string {
+	return it.latestOutput(l, func(out map[string]any) string {
+		if url, _ := out[pullRequestKey].(string); strings.HasPrefix(url, "https://") {
+			return url
+		}
+
+		return ""
+	})
+}
+
+// Summary returns what the item's outputs say was done: the summary field, trimmed, of the
+// output of the latest station on the line that has a non-blank one, or "" when none does.
+func (it Item) Summary(l Line) string {
+	return it.latestOutput(l, func(out map[string]any) string {
+		s, _ := out[summaryKey].(string)
+
+		return strings.TrimSpace(s)
+	})
+}
+
+// latestOutput returns the first non-empty value field gives for the item's station outputs
+// that are JSON objects, from the last station of the line to the first.
+func (it Item) latestOutput(l Line, field func(map[string]any) string) string {
 	for _, st := range slices.Backward(l.Stations) {
 		raw, ok := it.Outputs[st.ID]
 		if !ok {
@@ -25,8 +51,8 @@ func (it Item) PullRequest(l Line) string {
 			continue
 		}
 
-		if url, _ := out[pullRequestKey].(string); strings.HasPrefix(url, "https://") {
-			return url
+		if v := field(out); v != "" {
+			return v
 		}
 	}
 

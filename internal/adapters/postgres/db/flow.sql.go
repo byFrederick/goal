@@ -124,3 +124,209 @@ func (q *Queries) ItemSpans(ctx context.Context, itemID uuid.UUID) ([]ItemSpansR
 	}
 	return items, nil
 }
+
+const leaseHistoryStart = `-- name: LeaseHistoryStart :one
+SELECT acquired_at FROM (
+  (SELECT s.acquired_at FROM lease_spans s WHERE s.factory_id = $1::uuid ORDER BY s.acquired_at LIMIT 1)
+  UNION ALL
+  (SELECT l.acquired_at FROM leases l WHERE l.factory_id = $1::uuid ORDER BY l.acquired_at LIMIT 1)
+) earliest
+ORDER BY acquired_at
+LIMIT 1
+`
+
+// The earliest acquisition of the factory's lease spans and live leases: where its busy shares
+// begin to mean anything. No row when the factory never held a lease.
+func (q *Queries) LeaseHistoryStart(ctx context.Context, factoryID uuid.UUID) (time.Time, error) {
+	row := q.db.QueryRow(ctx, leaseHistoryStart, factoryID)
+	var acquired_at time.Time
+	err := row.Scan(&acquired_at)
+	return acquired_at, err
+}
+
+const liveTurns = `-- name: LiveTurns :many
+SELECT DISTINCT ON (r.item_id) r.item_id,
+       (SELECT count(*) FROM item_events e WHERE e.run_id = r.id AND e.kind = $1::text) AS usage_turns
+FROM leases l
+JOIN agent_runs r ON r.item_id = l.item_id
+WHERE l.factory_id = $2 AND r.status = 'running'
+ORDER BY r.item_id, r.started_at DESC, r.id DESC
+`
+
+type LiveTurnsParams struct {
+	UsageKind string
+	FactoryID uuid.UUID
+}
+
+type LiveTurnsRow struct {
+	ItemID     uuid.UUID
+	UsageTurns int64
+}
+
+// The usage events of each item's newest running run under its live lease, for the board's
+// cards (leases_pkey on item_id, item_events_run_id_idx).
+func (q *Queries) LiveTurns(ctx context.Context, arg LiveTurnsParams) ([]LiveTurnsRow, error) {
+	rows, err := q.db.Query(ctx, liveTurns, arg.UsageKind, arg.FactoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LiveTurnsRow
+	for rows.Next() {
+		var i LiveTurnsRow
+		if err := rows.Scan(&i.ItemID, &i.UsageTurns); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const stationLeaseTimes = `-- name: StationLeaseTimes :many
+SELECT station, count(*) AS leases,
+       coalesce(sum(extract(epoch FROM least(ended_at, $1::timestamptz)
+                                - greatest(acquired_at, $2::timestamptz))), 0)::float8 AS busy_seconds
+FROM (
+  SELECT s.station, s.acquired_at, s.ended_at FROM lease_spans s
+  WHERE s.factory_id = $3::uuid AND s.ended_at > $2::timestamptz
+    AND s.acquired_at < $1::timestamptz
+  UNION ALL
+  SELECT l.station, l.acquired_at, $1::timestamptz FROM leases l
+  WHERE l.factory_id = $3::uuid AND l.acquired_at < $1::timestamptz
+) held
+GROUP BY station
+`
+
+type StationLeaseTimesParams struct {
+	Until     time.Time
+	Since     time.Time
+	FactoryID uuid.UUID
+}
+
+type StationLeaseTimesRow struct {
+	Station     string
+	Leases      int64
+	BusySeconds float64
+}
+
+// How long each station's slots held leases in [since, until): the lease spans and live leases
+// that overlap the window, each clipped to it (lease_spans_station_idx).
+func (q *Queries) StationLeaseTimes(ctx context.Context, arg StationLeaseTimesParams) ([]StationLeaseTimesRow, error) {
+	rows, err := q.db.Query(ctx, stationLeaseTimes, arg.Until, arg.Since, arg.FactoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StationLeaseTimesRow
+	for rows.Next() {
+		var i StationLeaseTimesRow
+		if err := rows.Scan(&i.Station, &i.Leases, &i.BusySeconds); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const stationVerdicts = `-- name: StationVerdicts :many
+SELECT station, count(*) AS verdicts, count(*) FILTER (WHERE kind = 'gate_rejected') AS rejected
+FROM item_events
+WHERE factory_id = $1 AND kind IN ('gate_approved', 'gate_rejected')
+  AND at >= $2::timestamptz AND at < $3::timestamptz
+GROUP BY station
+`
+
+type StationVerdictsParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+	Until     time.Time
+}
+
+type StationVerdictsRow struct {
+	Station  *string
+	Verdicts int64
+	Rejected int64
+}
+
+// Gate verdicts given at each station in [since, until) and the rejections among them
+// (item_events_verdicts_idx).
+func (q *Queries) StationVerdicts(ctx context.Context, arg StationVerdictsParams) ([]StationVerdictsRow, error) {
+	rows, err := q.db.Query(ctx, stationVerdicts, arg.FactoryID, arg.Since, arg.Until)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StationVerdictsRow
+	for rows.Next() {
+		var i StationVerdictsRow
+		if err := rows.Scan(&i.Station, &i.Verdicts, &i.Rejected); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const stationWaiting = `-- name: StationWaiting :many
+SELECT station,
+       count(*) FILTER (WHERE entered_at <= $1::timestamptz
+                          AND (left_at IS NULL OR left_at > $1::timestamptz)) AS waiting_now,
+       count(*) FILTER (WHERE entered_at <= $2::timestamptz
+                          AND (left_at IS NULL OR left_at > $2::timestamptz)) AS waiting_day_ago,
+       coalesce(min(entered_at) FILTER (WHERE entered_at <= $1::timestamptz
+                          AND (left_at IS NULL OR left_at > $1::timestamptz)), $1::timestamptz)::timestamptz AS oldest
+FROM item_spans
+WHERE factory_id = $3 AND state IN ('queued', 'ready')
+  AND (left_at IS NULL OR left_at > $2::timestamptz) AND entered_at <= $1::timestamptz
+GROUP BY station
+`
+
+type StationWaitingParams struct {
+	Until     time.Time
+	DayAgo    time.Time
+	FactoryID uuid.UUID
+}
+
+type StationWaitingRow struct {
+	Station       string
+	WaitingNow    int64
+	WaitingDayAgo int64
+	Oldest        time.Time
+}
+
+// Items waiting (queued or ready) at each station at until and 24 h before it (day_ago), and when
+// the oldest of those waiting at until began, from the spans open at those instants
+// (item_spans_window_idx).
+func (q *Queries) StationWaiting(ctx context.Context, arg StationWaitingParams) ([]StationWaitingRow, error) {
+	rows, err := q.db.Query(ctx, stationWaiting, arg.Until, arg.DayAgo, arg.FactoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StationWaitingRow
+	for rows.Next() {
+		var i StationWaitingRow
+		if err := rows.Scan(
+			&i.Station,
+			&i.WaitingNow,
+			&i.WaitingDayAgo,
+			&i.Oldest,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

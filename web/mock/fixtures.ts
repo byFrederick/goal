@@ -54,6 +54,8 @@ export interface MockItem {
 export interface MockStationConfig {
   agents: string[];
   wip_limit: number | null;
+  /** How many copies of its agent the station runs (agents in the definition); 1 when absent. */
+  copies?: number;
   /** The contract the station's output must satisfy, and what it checks on submit. */
   output?: string;
   checks?: string[];
@@ -99,6 +101,13 @@ export function trackSpan(spans: ItemSpan[], pos: Position, at: string) {
   });
 }
 
+/** A station's busy and send-back shares over the board window and its queue's trend. */
+export interface MockStationStats {
+  busy_ratio?: number;
+  send_back_ratio?: number;
+  queue_trend?: 'growing' | 'steady' | 'shrinking';
+}
+
 /** An organization's slot caps (null: no cap), by factory id for the factories. */
 export interface MockSlots {
   max: number | null;
@@ -115,6 +124,8 @@ export interface MockState {
   factories: Factory[];
   stations: Record<string, Record<string, MockStationConfig>>;
   constraint: Record<string, string | null>;
+  /** Board statistics goald derives from history, by factory name and station. */
+  stationStats: Record<string, Record<string, MockStationStats>>;
   metrics: Record<string, Metrics>;
   /** The open andon pull of each factory, by name; absent or null while its line runs. */
   andon: Record<string, AndonPull | null>;
@@ -793,6 +804,161 @@ const goalSeeds: Seed[] = [
 
 const sreSeeds: Seed[] = [
   {
+    number: 5,
+    title: 'Rotate RDS certificates before Nov 30',
+    type: 'change',
+    body: 'The RDS CA certificates expire on Nov 30.',
+    station: 'inbox',
+    state: 'queued',
+    createdMin: 120,
+    updatedMin: 120,
+    steps: [],
+  },
+  {
+    number: 6,
+    title: 'Daily health check, Oct 23',
+    type: 'toil',
+    body: 'The daily health check of the production accounts.',
+    station: 'inbox',
+    state: 'queued',
+    createdMin: 60,
+    updatedMin: 60,
+    steps: [],
+  },
+  {
+    number: 7,
+    title: 'Alert noise on worker-queue-depth',
+    type: 'toil',
+    body: 'The worker-queue-depth alert fired 14 times this week without an incident.',
+    station: 'inbox',
+    state: 'queued',
+    createdMin: 40,
+    updatedMin: 40,
+    steps: [],
+  },
+  {
+    number: 8,
+    title: 'billing-svc deploy rolled back twice',
+    type: 'incident',
+    body: 'The last two billing-svc deploys rolled back on failing health checks.',
+    station: 'investigate',
+    state: 'in_progress',
+    agent: 'investigator',
+    createdMin: 60,
+    updatedMin: 1,
+    steps: [
+      { move: 'triage' },
+      { run: 'triager', cost: 0.04, turns: 2, tools: [] },
+      { move: 'investigate' },
+      {
+        run: 'investigator-1',
+        status: 'running',
+        cost: 0.62,
+        turns: 22,
+        tools: [
+          ['Bash', 'kubectl rollout history deploy/billing-svc', '3 revisions'],
+          ['Read', 'deploy/billing-svc/health.yaml', 'Read 30 lines'],
+          ['Bash', 'kubectl logs deploy/billing-svc --previous', 'readiness probe failed: 503'],
+        ],
+      },
+    ],
+  },
+  {
+    number: 9,
+    title: 'S3 spend up 22% month over month',
+    type: 'toil',
+    body: 'The S3 line of the AWS bill grew 22% this month.',
+    station: 'investigate',
+    state: 'in_progress',
+    agent: 'investigator',
+    createdMin: 180,
+    updatedMin: 2,
+    steps: [
+      { move: 'triage' },
+      { run: 'triager', cost: 0.03, turns: 2, tools: [] },
+      { move: 'investigate' },
+      {
+        run: 'investigator-3',
+        status: 'running',
+        cost: 0.35,
+        turns: 9,
+        tools: [['Bash', 'aws ce get-cost-and-usage --group-by SERVICE', 'S3 $4,210 (+22%)']],
+      },
+    ],
+  },
+  {
+    number: 10,
+    title: 'Upgrade EKS add-ons in staging',
+    type: 'change',
+    body: 'CoreDNS and kube-proxy lag two minor versions behind in staging.',
+    station: 'investigate',
+    state: 'queued',
+    createdMin: 50,
+    updatedMin: 20,
+    steps: [{ move: 'triage' }, { run: 'triager', cost: 0.03, turns: 2, tools: [] }, { move: 'investigate' }],
+  },
+  {
+    number: 11,
+    title: 'Stale IAM access keys report',
+    type: 'toil',
+    body: 'List IAM access keys unused for 90 days.',
+    station: 'investigate',
+    state: 'queued',
+    createdMin: 45,
+    updatedMin: 15,
+    steps: [{ move: 'triage' }, { run: 'triager', cost: 0.02, turns: 1, tools: [] }, { move: 'investigate' }],
+  },
+  {
+    number: 12,
+    title: 'Checkout API p95 above 900 ms since 14:05',
+    type: 'incident',
+    lane: 'sev2',
+    body: 'Checkout API latency p95 crossed 900 ms at 14:05 and stays there.',
+    station: 'investigate',
+    state: 'in_progress',
+    expedite: true,
+    agent: 'investigator',
+    createdMin: 38,
+    updatedMin: 1,
+    steps: [
+      { move: 'triage' },
+      { run: 'triager', cost: 0.05, turns: 2, tools: [] },
+      { move: 'investigate' },
+      {
+        run: 'investigator-2',
+        status: 'running',
+        cost: 1.07,
+        turns: 14,
+        tools: [
+          ['Bash', 'kubectl top pods -l app=checkout', 'checkout-7d9 cpu 940m'],
+          ['Read', 'dashboards/checkout.json', 'Read 120 lines'],
+        ],
+      },
+    ],
+  },
+  {
+    number: 13,
+    title: 'Redis evictions on session-cache',
+    type: 'incident',
+    body: 'session-cache evicted keys for 20 minutes after the 09:00 traffic peak.',
+    station: 'done',
+    state: 'done',
+    createdMin: 300,
+    updatedMin: 5,
+    outputs: { investigate: { summary: 'Postmortem filed' } },
+    steps: [
+      { move: 'triage' },
+      { run: 'triager', cost: 0.04, turns: 2, tools: [] },
+      { move: 'investigate' },
+      { run: 'investigator-1', cost: 0.88, turns: 17, tools: [['Bash', 'redis-cli info stats', 'evicted_keys:48211']] },
+      { move: 'approve' },
+      { waiting: true },
+      { human: 'approved', by: 'fcruz' },
+      { move: 'done' },
+      { done: true },
+    ],
+  },
+  {
     number: 4,
     title: 'Raise ALB idle timeout for websockets',
     type: 'change',
@@ -1026,7 +1192,13 @@ export function seed(now = Date.now()): MockState {
         inbox: { agents: [], wip_limit: null },
         spec: { agents: ['spec-writer'], wip_limit: 2, output: 'spec', checks: ['schema'] },
         'approve-spec': { agents: [], wip_limit: null },
-        build: { agents: ['builder-1', 'builder-2'], wip_limit: 2, output: 'change', checks: ['schema', 'task check'] },
+        build: {
+          agents: ['builder-1', 'builder-2'],
+          wip_limit: 2,
+          copies: 2,
+          output: 'change',
+          checks: ['schema', 'task check'],
+        },
         review: { agents: ['reviewer'], wip_limit: 1 },
         merge: { agents: [], wip_limit: null },
         done: { agents: [], wip_limit: null },
@@ -1037,10 +1209,11 @@ export function seed(now = Date.now()): MockState {
         investigate: {
           agents: ['investigator'],
           wip_limit: 3,
+          copies: 3,
           output: 'diagnosis',
           checks: ['schema', '2+ evidence links'],
         },
-        approve: { agents: [], wip_limit: null },
+        approve: { agents: [], wip_limit: 5 },
         done: { agents: [], wip_limit: null },
       },
       support: {
@@ -1055,7 +1228,19 @@ export function seed(now = Date.now()): MockState {
         done: { agents: [], wip_limit: null },
       },
     },
-    constraint: { goal: 'build', sre: null, support: null, research: null },
+    constraint: { goal: 'build', sre: 'investigate', support: null, research: null },
+    stationStats: {
+      goal: {
+        spec: { busy_ratio: 0.41, queue_trend: 'steady' },
+        build: { busy_ratio: 0.88, queue_trend: 'growing' },
+        review: { busy_ratio: 0.3, send_back_ratio: 0.23 },
+      },
+      sre: {
+        triage: { busy_ratio: 0.38, queue_trend: 'steady' },
+        investigate: { busy_ratio: 0.94, queue_trend: 'growing' },
+        inbox: { queue_trend: 'growing' },
+      },
+    },
     metrics: {},
     andon: {
       support: {

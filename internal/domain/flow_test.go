@@ -78,6 +78,38 @@ func TestItemPullRequest_LatestStationOutputThatNamesOne(t *testing.T) {
 	}
 }
 
+// A card's summary is the summary of the latest station output on the line that has one.
+func TestItemSummary_LatestStationOutputThatHasOne(t *testing.T) {
+	t.Parallel()
+
+	l := Line{Stations: []Station{{ID: stPlan}, {ID: stCode}, {ID: "done"}}}
+	raw := func(s string) json.RawMessage { return json.RawMessage(s) }
+
+	tests := []struct {
+		name    string
+		outputs map[string]json.RawMessage
+		want    string
+	}{
+		{"none", nil, ""},
+		{"one", map[string]json.RawMessage{stPlan: raw(`{"summary":"Postmortem filed"}`)}, "Postmortem filed"},
+		{"the later station wins", map[string]json.RawMessage{
+			stPlan: raw(`{"summary":"Planned"}`), stCode: raw(`{"summary":" Closed "}`),
+		}, "Closed"},
+		{"a later output without one", map[string]json.RawMessage{
+			stPlan: raw(`{"summary":"Planned"}`), stCode: raw(`{"pull_request":"https://github.com/acme/app/pull/7"}`),
+		}, "Planned"},
+		{"not a string", map[string]json.RawMessage{stPlan: raw(`{"summary":{"text":"x"}}`)}, ""},
+		{"blank", map[string]json.RawMessage{stPlan: raw(`{"summary":"  "}`)}, ""},
+		{"a station not on the line", map[string]json.RawMessage{"gone": raw(`{"summary":"x"}`)}, ""},
+	}
+
+	for _, tc := range tests {
+		if got := (Item{Outputs: tc.outputs}).Summary(l); got != tc.want {
+			t.Errorf("%s: Summary = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestLineConstraint_HighestLoadPerSlot(t *testing.T) {
 	t.Parallel()
 

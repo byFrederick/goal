@@ -392,6 +392,27 @@ func (e PatchOpOp) Valid() bool {
 	}
 }
 
+// Defines values for QueueTrend.
+const (
+	Growing   QueueTrend = "growing"
+	Shrinking QueueTrend = "shrinking"
+	Steady    QueueTrend = "steady"
+)
+
+// Valid indicates whether the value is a known member of the QueueTrend enum.
+func (e QueueTrend) Valid() bool {
+	switch e {
+	case Growing:
+		return true
+	case Shrinking:
+		return true
+	case Steady:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RunStatus.
 const (
 	RunStatusCancelled RunStatus = "cancelled"
@@ -637,12 +658,27 @@ type BoardStation struct {
 
 	// Agents The agents that work here (one, or one per routed lane)
 	Agents []string `json:"agents"`
-	Id     string   `json:"id"`
+
+	// BusyRatio Agent stations: the share of the slots' time leases held over the window (from when the factory's lease history begins, if later), 0 to 1; null elsewhere or without history
+	BusyRatio *float64 `json:"busy_ratio"`
+
+	// DoneToday The done station: items that reached done today (UTC); null elsewhere
+	DoneToday *int   `json:"done_today"`
+	Id        string `json:"id"`
 
 	// InProgress Items being worked here
 	InProgress int         `json:"in_progress"`
 	Items      []ItemCard  `json:"items"`
 	Kind       StationKind `json:"kind"`
+
+	// OldestWaitingSeconds How long the item waiting longest here has waited; null when none waits
+	OldestWaitingSeconds *int64 `json:"oldest_waiting_seconds"`
+
+	// QueueTrend Queue and agent stations; null elsewhere
+	QueueTrend *QueueTrend `json:"queue_trend"`
+
+	// SendBackRatio Stations with a gate: the share of the window's verdicts that sent work back; null elsewhere or without verdicts
+	SendBackRatio *float64 `json:"send_back_ratio"`
 
 	// Waiting Items queued or ready here
 	Waiting int `json:"waiting"`
@@ -1243,13 +1279,22 @@ type ItemCard struct {
 	PrUrl *string `json:"pr_url"`
 
 	// Ref <factory name>#<number>, as in goal#2
-	Ref         string    `json:"ref"`
-	ReworkCount int       `json:"rework_count"`
-	State       ItemState `json:"state"`
-	Station     string    `json:"station"`
-	Title       string    `json:"title"`
-	Type        string    `json:"type"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	Ref         string `json:"ref"`
+	ReworkCount int    `json:"rework_count"`
+
+	// Slot While in progress at a station that runs several copies of its agent, the copy working it, 1-based (investigator-2); else null
+	Slot    *int      `json:"slot"`
+	State   ItemState `json:"state"`
+	Station string    `json:"station"`
+
+	// Summary The summary field of the item's latest station output that has one, else null
+	Summary *string `json:"summary"`
+	Title   string  `json:"title"`
+
+	// Turn The turns its running run has reported so far, while one runs; else null
+	Turn      *int      `json:"turn"`
+	Type      string    `json:"type"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // ItemFlow How the item flows, on GET of one item only
@@ -1562,6 +1607,9 @@ type PublishRequest struct {
 	// StationMoves Where the open items of each station the new version removes go, by station id
 	StationMoves *StationMoves `json:"station_moves,omitempty"`
 }
+
+// QueueTrend How many items wait at a station now against 24 hours earlier
+type QueueTrend string
 
 // Ranges Where each model pointer (/line/stations/3) is in factory.yaml
 type Ranges map[string]LineRange
@@ -1990,6 +2038,12 @@ type SearchSkillsParams struct {
 
 	// After The next_after of the previous page
 	After *string `form:"after,omitempty" json:"after,omitempty"`
+}
+
+// GetBoardParams defines parameters for GetBoard.
+type GetBoardParams struct {
+	// Window The window of the busy and send-back shares: the last N UTC calendar days, today included, written Nd (1d to 90d).
+	Window *string `form:"window,omitempty" json:"window,omitempty"`
 }
 
 // CompareVersionsParams defines parameters for CompareVersions.
@@ -2596,10 +2650,10 @@ type ClientInterface interface {
 
 	// GetBoard The factory's board, station by station in line order
 	//
-	// Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time.
+	// Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time. Each station carries its statistics: the busy share and send-back share over the window, the queue's trend over the last 24 hours, how long the oldest waiting item has waited and, at the done station, the items done today (UTC).
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/board (the `GetBoard` operationId).
-	GetBoard(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetBoard(ctx context.Context, org OrgRef, factory FactoryRef, params *GetBoardParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CompareVersions The semantic difference between two versions
 	//
@@ -3328,11 +3382,11 @@ func (c *Client) GetFactory(ctx context.Context, org OrgRef, factory FactoryRef,
 
 // GetBoard The factory's board, station by station in line order
 //
-// Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time.
+// Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time. Each station carries its statistics: the busy share and send-back share over the window, the queue's trend over the last 24 hours, how long the oldest waiting item has waited and, at the done station, the items done today (UTC).
 //
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/board (the `GetBoard` operationId).
-func (c *Client) GetBoard(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetBoardRequest(c.Server, org, factory)
+func (c *Client) GetBoard(ctx context.Context, org OrgRef, factory FactoryRef, params *GetBoardParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetBoardRequest(c.Server, org, factory, params)
 	if err != nil {
 		return nil, err
 	}
@@ -4990,7 +5044,7 @@ func NewGetFactoryRequest(server string, org OrgRef, factory FactoryRef) (*http.
 }
 
 // NewGetBoardRequest constructs an http.Request for the GetBoard method
-func NewGetBoardRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+func NewGetBoardRequest(server string, org OrgRef, factory FactoryRef, params *GetBoardParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -5020,6 +5074,33 @@ func NewGetBoardRequest(server string, org OrgRef, factory FactoryRef) (*http.Re
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Window != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "window", *params.Window, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
@@ -7485,12 +7566,12 @@ type ClientWithResponsesInterface interface {
 
 	// GetBoardWithResponse The factory's board, station by station in line order
 	//
-	// Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time.
+	// Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time. Each station carries its statistics: the busy share and send-back share over the window, the queue's trend over the last 24 hours, how long the oldest waiting item has waited and, at the done station, the items done today (UTC).
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/board (the `GetBoard` operationId).
-	GetBoardWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetBoardResponse, error)
+	GetBoardWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetBoardParams, reqEditors ...RequestEditorFn) (*GetBoardResponse, error)
 
 	// CompareVersionsWithResponse The semantic difference between two versions
 	//
@@ -10945,13 +11026,13 @@ func (c *ClientWithResponses) GetFactoryWithResponse(ctx context.Context, org Or
 
 // GetBoardWithResponse The factory's board, station by station in line order
 //
-// Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time.
+// Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time. Each station carries its statistics: the busy share and send-back share over the window, the queue's trend over the last 24 hours, how long the oldest waiting item has waited and, at the done station, the items done today (UTC).
 //
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/board (the `GetBoard` operationId).
-func (c *ClientWithResponses) GetBoardWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetBoardResponse, error) {
-	rsp, err := c.GetBoard(ctx, org, factory, reqEditors...)
+func (c *ClientWithResponses) GetBoardWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetBoardParams, reqEditors ...RequestEditorFn) (*GetBoardResponse, error) {
+	rsp, err := c.GetBoard(ctx, org, factory, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -13663,7 +13744,7 @@ type ServerInterface interface {
 	GetFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
 	// GetBoard The factory's board, station by station in line order
 	// (GET /v1/orgs/{org}/factories/{factory}/board)
-	GetBoard(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	GetBoard(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetBoardParams)
 	// CompareVersions The semantic difference between two versions
 	// (GET /v1/orgs/{org}/factories/{factory}/compare)
 	CompareVersions(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params CompareVersionsParams)
@@ -14367,8 +14448,24 @@ func (siw *ServerInterfaceWrapper) GetBoard(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetBoardParams
+
+	// ------------- Optional query parameter "window" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "window", r.URL.Query(), &params.Window, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "window"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "window", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetBoard(w, r, org, factory)
+		siw.Handler.GetBoard(w, r, org, factory, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -16998,6 +17095,7 @@ func (response GetFactorydefaultApplicationProblemPlusJSONResponse) VisitGetFact
 type GetBoardRequestObject struct {
 	Org     OrgRef     `json:"org"`
 	Factory FactoryRef `json:"factory"`
+	Params  GetBoardParams
 }
 
 type GetBoardResponseObject interface {
@@ -19399,11 +19497,12 @@ func (sh *strictHandler) GetFactory(w http.ResponseWriter, r *http.Request, org 
 }
 
 // GetBoard operation middleware
-func (sh *strictHandler) GetBoard(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+func (sh *strictHandler) GetBoard(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetBoardParams) {
 	var request GetBoardRequestObject
 
 	request.Org = org
 	request.Factory = factory
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.GetBoard(ctx, request.(GetBoardRequestObject))

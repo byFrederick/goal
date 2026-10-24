@@ -103,24 +103,61 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
 
   const ref = (it: MockItem) => `${it.factory}#${it.number}`;
 
-  const card = (it: MockItem): ItemCard => ({
-    id: it.id,
-    ref: ref(it),
-    number: it.number,
-    title: it.title,
-    type: it.type,
-    ...(it.lane ? { lane: it.lane } : {}),
-    station: it.station,
-    state: it.state,
-    class_of_service: it.class_of_service,
-    rework_count: it.rework_count,
-    cost_usd: it.cost_usd,
-    created_at: it.created_at,
-    updated_at: it.updated_at,
-    age_seconds: Math.round((Date.now() - Date.parse(it.created_at)) / 1000),
-    agent: it.agent,
-    pr_url: it.pr_url,
-  });
+  /**
+   * The item's run in progress: its last run without a run_finished event while it is in
+   * progress, with the slot of its last claim (0-based) and its turns (each tool call stands for
+   * one; the mock's agents report no usage).
+   */
+  const liveRun = (it: MockItem) => {
+    if (it.state !== 'in_progress' || !it.agent) return null;
+    const events = state.events.filter((e) => e.item_id === it.id);
+    const started = events.findLast((e) => e.kind === 'run_started' && e.run_id);
+    const runId = started?.run_id;
+    if (!started || !runId || events.some((e) => e.run_id === runId && e.kind === 'run_finished')) return null;
+    const slot = events.findLast((e) => e.kind === 'claimed')?.data.slot;
+    return {
+      id: runId,
+      started,
+      events,
+      slot: typeof slot === 'number' ? slot : 0,
+      turn: events.filter((e) => e.run_id === runId && e.kind === 'tool_call').length,
+    };
+  };
+
+  /** The summary of the item's latest station output that has one, in line order. */
+  const summaryOf = (it: MockItem): string | null => {
+    for (const s of [...stationsOf(it)].reverse()) {
+      const out = it.outputs[s.id] as { summary?: unknown } | undefined;
+      if (typeof out?.summary === 'string' && out.summary.trim()) return out.summary.trim();
+    }
+    return null;
+  };
+
+  const card = (it: MockItem): ItemCard => {
+    const run = liveRun(it);
+    const copies = state.stations[it.factory]?.[it.station]?.copies ?? 1;
+    return {
+      id: it.id,
+      ref: ref(it),
+      number: it.number,
+      title: it.title,
+      type: it.type,
+      ...(it.lane ? { lane: it.lane } : {}),
+      station: it.station,
+      state: it.state,
+      class_of_service: it.class_of_service,
+      rework_count: it.rework_count,
+      cost_usd: it.cost_usd,
+      created_at: it.created_at,
+      updated_at: it.updated_at,
+      age_seconds: Math.round((Date.now() - Date.parse(it.created_at)) / 1000),
+      agent: it.agent,
+      pr_url: it.pr_url,
+      slot: run && copies > 1 ? run.slot + 1 : null,
+      turn: run ? run.turn : null,
+      summary: summaryOf(it),
+    };
+  };
 
   const full = (it: MockItem): Item => {
     const factory = state.factories.find((f) => f.name === it.factory);
@@ -141,27 +178,21 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       .find((s) => s.kind === 'agent');
     const target = it.class_of_service === 'expedite' ? flow?.expedite_lead_time : flow?.lead_time;
 
-    // The run in progress: the item's last run without a run_finished event, under its agent.
+    // The run in progress, under its agent.
     let current: ItemFlow['current_run'] = null;
-    if (it.state === 'in_progress' && it.agent) {
-      const events = state.events.filter((e) => e.item_id === it.id);
-      const started = events.findLast((e) => e.kind === 'run_started' && e.run_id);
-      const runId = started?.run_id;
-      if (started && runId && !events.some((e) => e.run_id === runId && e.kind === 'run_finished')) {
-        const model = events.find((e) => e.run_id === runId && e.kind === 'agent_started')?.data.model;
-        const slot = events.findLast((e) => e.kind === 'claimed')?.data.slot;
-        current = {
-          id: runId,
-          agent: started.actor,
-          slot: (typeof slot === 'number' ? slot : 0) + 1,
-          model: typeof model === 'string' ? model : 'claude-sonnet-5-5',
-          // The mock's agents report no usage; each tool call stands for a turn.
-          turn: events.filter((e) => e.run_id === runId && e.kind === 'tool_call').length,
-          started_at: started.at,
-          output_contract: config?.output ?? null,
-          checks: config?.checks ?? [],
-        };
-      }
+    const run = liveRun(it);
+    if (run) {
+      const model = run.events.find((e) => e.run_id === run.id && e.kind === 'agent_started')?.data.model;
+      current = {
+        id: run.id,
+        agent: run.started.actor,
+        slot: run.slot + 1,
+        model: typeof model === 'string' ? model : 'claude-sonnet-5-5',
+        turn: run.turn,
+        started_at: run.started.at,
+        output_contract: config?.output ?? null,
+        checks: config?.checks ?? [],
+      };
     }
 
     return {
@@ -365,6 +396,32 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     action: f.stations.find((s) => s.id === it.station)?.action ?? null,
   });
 
+  /**
+   * A board station's statistics: the seeded busy and send-back shares and queue trend, how long
+   * the oldest waiting item has waited (its open span), the items done today (UTC).
+   */
+  const stationStats = (
+    factory: string,
+    s: { id: string; kind: BoardStation['kind'] },
+    here: MockItem[],
+  ): Pick<BoardStation, 'busy_ratio' | 'send_back_ratio' | 'queue_trend' | 'oldest_waiting_seconds' | 'done_today'> => {
+    const seeded = state.stationStats[factory]?.[s.id];
+    const waitingSince = here
+      .filter((it) => it.state === 'queued' || it.state === 'ready')
+      .map((it) => Date.parse(it.spans.findLast((sp) => sp.left_at === null)?.entered_at ?? it.updated_at));
+    const today = new Date().toISOString().slice(0, 10);
+    const queues = s.kind === 'queue' || s.kind === 'agent';
+    return {
+      busy_ratio: s.kind === 'agent' ? (seeded?.busy_ratio ?? null) : null,
+      send_back_ratio: seeded?.send_back_ratio ?? null,
+      queue_trend: queues ? (seeded?.queue_trend ?? 'steady') : null,
+      oldest_waiting_seconds:
+        queues && waitingSince.length > 0 ? Math.round((Date.now() - Math.min(...waitingSince)) / 1000) : null,
+      done_today:
+        s.kind === 'done' ? here.filter((it) => it.state === 'done' && it.done_at?.startsWith(today)).length : null,
+    };
+  };
+
   const board = (name: string): Board | undefined => {
     const factory = findFactory(name);
     if (!factory) return undefined;
@@ -385,6 +442,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         waiting: here.filter((it) => it.state === 'queued' || it.state === 'ready').length,
         in_progress: here.filter((it) => it.state === 'in_progress').length,
         items: here.map(card),
+        ...stationStats(factory.name, s, here),
       };
     });
     return {

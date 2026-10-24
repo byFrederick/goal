@@ -914,7 +914,17 @@ paths:
         the done station. waiting and in_progress count every item, beyond the cards shown. The
         constraint is the agent station with the most work per slot right now,
         (waiting + in_progress) / min(agents, wip), or null when no agent station has any work;
-        later phases replace this heuristic with constraint detection over time.
+        later phases replace this heuristic with constraint detection over time. Each station
+        carries its statistics: the busy share and send-back share over the window, the queue's
+        trend over the last 24 hours, how long the oldest waiting item has waited and, at the done
+        station, the items done today (UTC).
+      parameters:
+        - name: window
+          in: query
+          description: >-
+            The window of the busy and send-back shares: the last N UTC calendar days, today
+            included, written Nd (1d to 90d).
+          schema: { type: string, pattern: "^[1-9][0-9]?d$", default: 7d }
       responses:
         "200":
           description: The board
@@ -1624,7 +1634,7 @@ components:
     ItemCard:
       type: object
       description: An item as boards and lists show it
-      required: [id, ref, number, title, type, station, state, class_of_service, rework_count, cost_usd, created_at, updated_at, age_seconds, agent, pr_url]
+      required: [id, ref, number, title, type, station, state, class_of_service, rework_count, cost_usd, created_at, updated_at, age_seconds, agent, pr_url, slot, turn, summary]
       properties:
         id: { type: string }
         ref: { type: string, description: "<factory name>#<number>, as in goal#2" }
@@ -1651,6 +1661,20 @@ components:
           type: string
           nullable: true
           description: The pull request the item's latest station output names, else null
+        slot:
+          type: integer
+          nullable: true
+          description: >-
+            While in progress at a station that runs several copies of its agent, the copy working
+            it, 1-based (investigator-2); else null
+        turn:
+          type: integer
+          nullable: true
+          description: The turns its running run has reported so far, while one runs; else null
+        summary:
+          type: string
+          nullable: true
+          description: The summary field of the item's latest station output that has one, else null
     ItemPage:
       type: object
       required: [items, next_after]
@@ -1681,9 +1705,13 @@ components:
           type: string
           nullable: true
           description: The id of the agent station with the most work per slot now, or null
+    QueueTrend:
+      type: string
+      description: How many items wait at a station now against 24 hours earlier
+      enum: [growing, steady, shrinking]
     BoardStation:
       type: object
-      required: [id, kind, agents, wip_limit, waiting, in_progress, items]
+      required: [id, kind, agents, wip_limit, waiting, in_progress, items, busy_ratio, send_back_ratio, queue_trend, oldest_waiting_seconds, done_today]
       properties:
         id: { type: string }
         kind: { $ref: "#/components/schemas/StationKind" }
@@ -1701,6 +1729,31 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/ItemCard" }
+        busy_ratio:
+          type: number
+          format: double
+          nullable: true
+          description: >-
+            Agent stations: the share of the slots' time leases held over the window (from when the
+            factory's lease history begins, if later), 0 to 1; null elsewhere or without history
+        send_back_ratio:
+          type: number
+          format: double
+          nullable: true
+          description: "Stations with a gate: the share of the window's verdicts that sent work back; null elsewhere or without verdicts"
+        queue_trend:
+          nullable: true
+          description: Queue and agent stations; null elsewhere
+          allOf: [{ $ref: "#/components/schemas/QueueTrend" }]
+        oldest_waiting_seconds:
+          type: integer
+          format: int64
+          nullable: true
+          description: How long the item waiting longest here has waited; null when none waits
+        done_today:
+          type: integer
+          nullable: true
+          description: "The done station: items that reached done today (UTC); null elsewhere"
     Metrics:
       type: object
       required: [window, throughput, lead_time_hours, wip, rework_rate, spend_usd, items_done]

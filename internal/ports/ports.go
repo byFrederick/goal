@@ -162,6 +162,17 @@ type FlowStats interface {
 	// CurrentRun returns the item's run in progress with its lease's slot and the turns reported
 	// so far, or nil when the item has none (no running run under a live lease).
 	CurrentRun(ctx context.Context, id domain.ItemID) (*domain.CurrentRun, error)
+
+	// LiveTurns counts, for every item of the factory with a running run under a live lease, the
+	// turns its newest running run has reported so far (its usage events), by item.
+	LiveTurns(ctx context.Context, factory domain.FactoryID) (map[domain.ItemID]int, error)
+
+	// StationTimes measures every station of the factory over [since, until) (see
+	// domain.StationTimes); a station appears when it has a lease, a waiting item or a verdict to
+	// count. It also returns when the factory's lease history begins, the earliest acquisition of
+	// a lease span or live lease (zero when there is none): busy shares measured before it would
+	// read as idle time.
+	StationTimes(ctx context.Context, factory domain.FactoryID, since, until time.Time) ([]domain.StationTimes, time.Time, error)
 }
 
 // Tenancy keeps the install's organizations. Methods marked (org) act on the organization in

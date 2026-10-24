@@ -384,6 +384,58 @@ test('the board updates live when an item moves elsewhere', async ({ page, reque
   await expect(build.getByRole('link', { name: 'goald: serve the embedded web UI' })).toBeVisible();
 });
 
+test('the board shows how each station is doing and who works each card', async ({ page }) => {
+  test.skip(isPhone(page), 'the line and the columns are the desktop board');
+  await page.goto('/o/acme/f/sre/board');
+
+  const line = page.getByRole('region', { name: 'Stations in line order' });
+  await expect(line.getByRole('listitem').filter({ hasText: 'Inbox' })).toContainText(/3 waiting\s*Oldest 2 h/);
+  await expect(line.getByRole('listitem').filter({ hasText: 'Triage' })).toContainText('1 of 4Idle 62% of the time');
+  await expect(line.getByRole('listitem').filter({ hasText: 'Investigate' })).toContainText(
+    '3 of 3, 2 readyBusy 94%, queue growing',
+  );
+  await expect(line.getByRole('listitem').filter({ hasText: 'Approve' })).toContainText('3 of 5Waiting on you');
+  await expect(line.getByRole('listitem').filter({ hasText: 'Done' })).toContainText('1 today');
+
+  const investigate = page.getByRole('region', { name: 'Investigate', exact: true });
+  await expect(investigate.getByRole('article').filter({ hasText: 'billing-svc' })).toContainText(
+    'investigator-1, turn 3',
+  );
+  await expect(investigate.getByRole('article').filter({ hasText: 'Upgrade EKS' })).toContainText('Ready in buffer');
+  await expect(page.getByRole('region', { name: 'Triage', exact: true })).toContainText('triager, turn 1');
+  await expect(page.getByRole('region', { name: 'Approve', exact: true }).getByText('Needs your OK')).toHaveCount(3);
+  await expect(page.getByRole('region', { name: 'Done', exact: true })).toContainText('1 today');
+  await expect(page.getByRole('region', { name: 'Done', exact: true })).toContainText('Postmortem filed');
+  await expect(page.getByRole('region', { name: 'Expedite lane' })).toContainText(
+    'sre#12, incident sev2, investigator-2 on turn 2',
+  );
+  await expectAccessible(page);
+});
+
+test('on a phone the board picks a station, the constraint first', async ({ page }) => {
+  test.skip(!isPhone(page), 'the station picker is the phone board');
+  await page.goto('/o/acme/f/sre/board');
+
+  const picker = page.getByRole('tablist', { name: 'Stations' });
+  await expect(picker.getByRole('tab', { name: 'Investigate 3 of 3, 2 ready' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByText('The constraint: busy 94%, queue growing')).toBeVisible();
+  await expect(page.getByRole('article').filter({ hasText: 'billing-svc' })).toContainText(
+    'sre#8, Incident, 1 hbilling-svc deploy rolled back twiceinvestigator-1, turn 3',
+  );
+  await expect(page.getByRole('article').filter({ hasText: 'Expedite lane' })).toContainText(
+    'Expedite laneCheckout API p95 above 900 ms since 14:05sre#12, investigator-2,',
+  );
+
+  await picker.getByRole('tab', { name: 'Done 1 today' }).click();
+  await expect(page).toHaveURL(/station=done/);
+  await expect(page.getByRole('article').filter({ hasText: 'Redis evictions' })).toContainText('Postmortem filed');
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+});
+
 test('on a phone: floor to board to item and back', async ({ page }) => {
   test.skip(!isPhone(page), 'phone navigation');
   await page.goto('/o/acme/f/goal');

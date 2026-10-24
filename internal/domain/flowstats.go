@@ -68,3 +68,58 @@ type CurrentRun struct {
 	// Turns counts the turns the run has reported so far (its usage events).
 	Turns int
 }
+
+// StationTimes measures one station of a factory over a window [since, until), for the board's
+// station statistics and the constraint report.
+type StationTimes struct {
+	Station string
+	// Busy is how long the station's slots held leases in the window, summed over the slots:
+	// every lease span and live lease that overlaps the window, clipped to it.
+	Busy time.Duration
+	// Leases counts those lease spans and live leases.
+	Leases int
+	// WaitingNow and WaitingDayAgo count the items waiting (queued or ready) at the station at
+	// until and 24 hours before it.
+	WaitingNow    int
+	WaitingDayAgo int
+	// OldestWaiting is when the longest-waiting of the items waiting at until began waiting (its
+	// open span entered); zero when none waits.
+	OldestWaiting time.Time
+	// Verdicts counts the gate verdicts given at the station in the window, Rejected the
+	// rejections among them.
+	Verdicts int
+	Rejected int
+}
+
+// BusyRatio is the share of the window's slot time (slots × window, at least one slot) that
+// leases held, at most 1: the station may have had more slots earlier in the window. An empty
+// window has none.
+func (st StationTimes) BusyRatio(slots int, window time.Duration) float64 {
+	if window <= 0 {
+		return 0
+	}
+
+	return min(1, st.Busy.Seconds()/(float64(max(slots, 1))*window.Seconds()))
+}
+
+// Trend is which way a station's queue moves.
+type Trend string
+
+// Queue trends.
+const (
+	TrendGrowing   Trend = "growing"
+	TrendSteady    Trend = "steady"
+	TrendShrinking Trend = "shrinking"
+)
+
+// QueueTrend compares how many items wait now with how many waited 24 hours earlier.
+func QueueTrend(now, dayAgo int) Trend {
+	switch {
+	case now > dayAgo:
+		return TrendGrowing
+	case now < dayAgo:
+		return TrendShrinking
+	default:
+		return TrendSteady
+	}
+}

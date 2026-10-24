@@ -3,9 +3,9 @@ import { useNavigate, useSearch } from '@tanstack/react-router';
 import { Tabs } from 'radix-ui';
 import { useEffect, useRef } from 'react';
 import { boardQuery } from '../../api/queries';
-import type { Board, BoardStation, ItemCard } from '../../api/types';
+import type { Board, ItemCard } from '../../api/types';
 import { factoryTitle, useFactory } from '../../shared/factory';
-import { formatAge, humanize, plural } from '../../shared/format';
+import { humanize, plural } from '../../shared/format';
 import { waitingOnYou } from '../../shared/item-state';
 import { LiveStatus } from '../../shared/live-status';
 import { NewItemButton } from '../../shared/new-item';
@@ -14,39 +14,11 @@ import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { Meter } from '../../ui/hatch';
-import { BoardCard, ExpediteCard } from './board-card';
+import { BoardCard, ExpediteCard, ExpediteRow } from './board-card';
+import { columnCount, constraintNote, stationMeter, stationNote, stationStat } from './stats';
 
 const live = (it: ItemCard) => it.state !== 'done' && it.state !== 'cancelled';
 const isExpedite = (it: ItemCard) => it.class_of_service === 'expedite' && live(it);
-
-/** "2 of 2", "3 waiting", "4 done": a station's load in words. */
-function stationStat(s: BoardStation): string {
-  switch (s.kind) {
-    case 'agent':
-      return `${s.in_progress}${s.wip_limit !== null ? ` of ${s.wip_limit}` : ' busy'}${s.waiting > 0 ? `, ${s.waiting} ready` : ''}`;
-    case 'human':
-      return waitingOnYou(s) > 0 ? `${waitingOnYou(s)} waiting on you` : 'Nothing waiting';
-    case 'queue':
-      return `${s.waiting} waiting`;
-    case 'done':
-      return `${s.items.length} done`;
-  }
-}
-
-function stationNote(s: BoardStation): string {
-  switch (s.kind) {
-    case 'agent':
-      return s.agents.length > 0 ? s.agents.join(', ') : 'No agents';
-    case 'human':
-      return 'You decide here';
-    case 'queue': {
-      const oldest = Math.max(0, ...s.items.map((it) => it.age_seconds));
-      return s.items.length > 0 ? `Oldest ${formatAge(oldest)}` : 'Empty';
-    }
-    case 'done':
-      return 'Finished recently';
-  }
-}
 
 const constraintRing = 'border-amber shadow-[inset_0_3px_0_var(--color-amber)]';
 
@@ -90,18 +62,9 @@ function LineCard({ board }: { board: Board }) {
                   <span className="truncate text-[15px] font-medium">{humanize(s.id)}</span>
                   {drum ? <Chip tone="constraint">Constraint</Chip> : null}
                 </div>
-                <Meter
-                  className="bg-shell"
-                  value={s.kind === 'human' ? waitingOnYou(s) : s.in_progress}
-                  max={
-                    s.kind === 'agent'
-                      ? (s.wip_limit ?? Math.max(1, s.in_progress))
-                      : Math.max(1, waitingOnYou(s), s.waiting)
-                  }
-                  tone={s.kind === 'human' ? 'you' : 'run'}
-                />
+                <Meter className="bg-shell" {...stationMeter(s)} />
                 <span className={cn('text-sm', waitingOnYou(s) > 0 && 'text-you')}>{stationStat(s)}</span>
-                <span className="truncate text-[13px] text-muted">{stationNote(s)}</span>
+                <span className="text-[13px] leading-snug text-muted">{stationNote(s)}</span>
               </li>
             );
           })}
@@ -116,7 +79,7 @@ function ExpediteLane({ items }: { items: ItemCard[] }) {
   return (
     <section
       aria-labelledby="expedite-h"
-      className="flex flex-col gap-3 rounded-card border border-rework-line bg-rework-tint p-3 @[720px]:flex-row @[720px]:flex-wrap @[720px]:items-center @[720px]:gap-4 @[720px]:px-3.5"
+      className="hidden flex-col gap-3 rounded-card border border-rework-line bg-rework-tint p-3 md:flex @[720px]:flex-row @[720px]:flex-wrap @[720px]:items-center @[720px]:gap-4 @[720px]:px-3.5"
     >
       <div className="@[720px]:w-[140px] @[720px]:shrink-0">
         <h2 id="expedite-h" className="m-0 text-[15px] font-medium text-rework-ink">
@@ -154,12 +117,8 @@ function Columns({ board }: { board: Board }) {
             >
               <div className="flex items-baseline justify-between gap-2 px-1 pt-0.5 pb-1">
                 <h2 className="m-0 text-[15px] font-medium">{humanize(s.id)}</h2>
-                <span className={cn('text-[13px] text-muted', waitingOnYou(s) > 0 && 'text-you')}>
-                  {s.kind === 'agent' && s.wip_limit !== null
-                    ? `${s.in_progress} of ${s.wip_limit}`
-                    : waitingOnYou(s) > 0
-                      ? waitingOnYou(s)
-                      : items.length}
+                <span className={cn('text-[13px] whitespace-nowrap text-muted', waitingOnYou(s) > 0 && 'text-you')}>
+                  {columnCount(s)}
                 </span>
               </div>
               {items.length === 0 ? <p className="m-0 px-1 pb-1 text-[13px] text-muted">Empty</p> : null}
@@ -175,7 +134,7 @@ function Columns({ board }: { board: Board }) {
 }
 
 /** Phones: a station picker and the picked station's cards. */
-function StationTabs({ board, selected }: { board: Board; selected: string }) {
+function StationTabs({ board, selected, expedite }: { board: Board; selected: string; expedite: ItemCard[] }) {
   const navigate = useNavigate({ from: '/o/$org/f/$factory/board' });
   const list = useRef<HTMLDivElement>(null);
 
@@ -212,6 +171,9 @@ function StationTabs({ board, selected }: { board: Board; selected: string }) {
           );
         })}
       </Tabs.List>
+      {expedite.map((it) => (
+        <ExpediteRow key={it.id} item={it} />
+      ))}
       {board.stations.map((s) => {
         const drum = s.id === board.constraint;
         const items = s.items.filter((it) => !isExpedite(it));
@@ -230,14 +192,10 @@ function StationTabs({ board, selected }: { board: Board; selected: string }) {
                 </h2>
                 <span className="text-[13px] text-muted">{stationStat(s)}</span>
               </div>
-              {drum ? (
-                <p className="m-0 mb-1 text-[13px] text-amber-ink">
-                  The constraint: {plural(s.waiting, 'item')} waiting in front of it
-                </p>
-              ) : null}
+              {drum ? <p className="m-0 mb-1 text-[13px] text-ink-soft">{constraintNote(s)}</p> : null}
               {items.length === 0 ? <p className="m-0 text-sm text-muted">Nothing here right now.</p> : null}
               {items.map((it) => (
-                <BoardCard key={it.id} item={it} atConstraint={drum} className="p-3.5" />
+                <BoardCard key={it.id} item={it} atConstraint={drum} compact />
               ))}
             </section>
           </Tabs.Content>
@@ -288,7 +246,7 @@ export function BoardPage() {
       </div>
       <ExpediteLane items={expedite} />
       <Columns board={board} />
-      <StationTabs board={board} selected={selected} />
+      <StationTabs board={board} selected={selected} expedite={expedite} />
       <p className="m-0 text-[13px] text-muted">Agents pull work when they have room; nobody assigns it.</p>
     </>
   );

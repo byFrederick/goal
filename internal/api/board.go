@@ -36,12 +36,22 @@ var openStates = []domain.ItemState{
 var window = regexp.MustCompile(`^([1-9][0-9]?)d$`)
 
 func (s *server) GetBoard(ctx context.Context, req gen.GetBoardRequestObject) (gen.GetBoardResponseObject, error) {
+	w, err := windowOf(req.Params.Window)
+	if err != nil {
+		return nil, err
+	}
+
 	f, err := s.factory(ctx, req.Factory)
 	if err != nil {
 		return nil, err
 	}
 
 	l := f.Line()
+
+	stats, err := s.boardStats(ctx, l.FactoryID, w, s.clock.Now().UTC())
+	if err != nil {
+		return nil, err
+	}
 
 	loadList, err := s.items.StationLoads(ctx, l.FactoryID)
 	if err != nil {
@@ -53,6 +63,42 @@ func (s *server) GetBoard(ctx context.Context, req gen.GetBoardRequestObject) (g
 		loads[ld.Station] = ld
 	}
 
+	byStation, err := s.boardCards(ctx, f, l)
+	if err != nil {
+		return nil, err
+	}
+
+	board := gen.GetBoard200JSONResponse{Stations: make([]gen.BoardStation, 0, len(l.Stations))}
+	board.Factory.Id, board.Factory.Name, board.Factory.Title = f.Metadata.ID, f.Metadata.Name, optional(f.Metadata.Title)
+
+	for _, st := range l.Stations {
+		bs := gen.BoardStation{
+			Id: st.ID, Kind: gen.StationKind(st.Kind), Action: actionOf(string(st.Action)), Agents: agentsAt(st),
+			Waiting: loads[st.ID].Waiting, InProgress: loads[st.ID].InProgress, Items: byStation[st.ID],
+		}
+
+		if st.WIP > 0 {
+			bs.WipLimit = &st.WIP
+		}
+
+		if bs.Items == nil {
+			bs.Items = []gen.ItemCard{}
+		}
+
+		stats.fill(st, &bs)
+		board.Stations = append(board.Stations, bs)
+	}
+
+	if c, ok := l.Constraint(loads); ok {
+		board.Constraint = &c
+	}
+
+	return board, nil
+}
+
+// boardCards renders the board's cards by station: every open item (up to boardOpenItems) and the
+// boardDoneItems newest done ones.
+func (s *server) boardCards(ctx context.Context, f *config.Factory, l domain.Line) (map[string][]gen.ItemCard, error) {
 	open, err := s.items.ListItems(ctx, ports.ItemQuery{FactoryID: l.FactoryID, States: openStates, Limit: boardOpenItems})
 	if err != nil {
 		return nil, err
@@ -75,31 +121,83 @@ func (s *server) GetBoard(ctx context.Context, req gen.GetBoardRequestObject) (g
 		byStation[c.Station] = append(byStation[c.Station], c)
 	}
 
-	board := gen.GetBoard200JSONResponse{Stations: make([]gen.BoardStation, 0, len(l.Stations))}
-	board.Factory.Id, board.Factory.Name, board.Factory.Title = f.Metadata.ID, f.Metadata.Name, optional(f.Metadata.Title)
+	return byStation, nil
+}
 
-	for _, st := range l.Stations {
-		bs := gen.BoardStation{
-			Id: st.ID, Kind: gen.StationKind(st.Kind), Action: actionOf(string(st.Action)), Agents: agentsAt(st),
-			Waiting: loads[st.ID].Waiting, InProgress: loads[st.ID].InProgress, Items: byStation[st.ID],
-		}
+// boardStats is what the board's station statistics come from: every station measured over the
+// window, and the items done today.
+type boardStats struct {
+	times map[string]domain.StationTimes
+	now   time.Time
+	// busyOver is the stretch busy shares are measured over: the window, from when the factory's
+	// lease history begins if that is later; 0 without any history.
+	busyOver  time.Duration
+	doneToday int
+}
 
-		if st.WIP > 0 {
-			bs.WipLimit = &st.WIP
-		}
+func (s *server) boardStats(ctx context.Context, f domain.FactoryID, w metricsWindow, now time.Time) (boardStats, error) {
+	since := w.since(now)
 
-		if bs.Items == nil {
-			bs.Items = []gen.ItemCard{}
-		}
-
-		board.Stations = append(board.Stations, bs)
+	list, history, err := s.items.StationTimes(ctx, f, since, now)
+	if err != nil {
+		return boardStats{}, err
 	}
 
-	if c, ok := l.Constraint(loads); ok {
-		board.Constraint = &c
+	today, err := s.items.FlowMetrics(ctx, f, now.Truncate(day), now)
+	if err != nil {
+		return boardStats{}, err
 	}
 
-	return board, nil
+	b := boardStats{times: make(map[string]domain.StationTimes, len(list)), now: now, doneToday: today.ItemsDone}
+	for _, t := range list {
+		b.times[t.Station] = t
+	}
+
+	if !history.IsZero() {
+		b.busyOver = now.Sub(maxTime(since, history))
+	}
+
+	return b, nil
+}
+
+// fill sets the statistics of station st on bs: the busy share of an agent station, the
+// send-back share of a station with a gate, the trend and oldest wait of queue and agent
+// stations, and the items done today at a done station.
+func (b boardStats) fill(st domain.Station, bs *gen.BoardStation) {
+	t := b.times[st.ID]
+
+	if st.Kind == domain.KindAgent && b.busyOver > 0 {
+		busy := t.BusyRatio(st.Capacity(), b.busyOver)
+		bs.BusyRatio = &busy
+	}
+
+	if st.Gate != nil && t.Verdicts > 0 {
+		back := float64(t.Rejected) / float64(t.Verdicts)
+		bs.SendBackRatio = &back
+	}
+
+	if st.Kind == domain.KindQueue || st.Kind == domain.KindAgent {
+		trend := gen.QueueTrend(domain.QueueTrend(t.WaitingNow, t.WaitingDayAgo))
+		bs.QueueTrend = &trend
+
+		if t.WaitingNow > 0 {
+			oldest := int64(max(b.now.Sub(t.OldestWaiting), 0) / time.Second)
+			bs.OldestWaitingSeconds = &oldest
+		}
+	}
+
+	if st.Kind == domain.KindDone {
+		done := b.doneToday
+		bs.DoneToday = &done
+	}
+}
+
+func maxTime(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+
+	return b
 }
 
 // agentsAt names the agents that work at a station: its agent, or every agent its route uses.
@@ -153,26 +251,13 @@ func (s *server) ListItems(ctx context.Context, req gen.ListItemsRequestObject) 
 	return page, nil
 }
 
-// cards renders items of factory f as cards, with the agent of every item in progress.
+// cards renders items of factory f as cards: for every item in progress the agent working it, the
+// copy (1-based) when its station runs several, and the turns of its running run; for every item
+// the pull request and the summary its outputs name.
 func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, items []domain.Item) ([]gen.ItemCard, error) {
-	agents := map[domain.ItemID]string{}
-	seen := map[string]bool{}
-
-	for _, it := range items {
-		if it.State != domain.StateInProgress || seen[it.Station] {
-			continue
-		}
-
-		seen[it.Station] = true
-
-		leases, err := s.items.Leases(ctx, l.FactoryID, it.Station)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, ls := range leases {
-			agents[ls.ItemID] = ls.Agent
-		}
+	leases, turns, err := s.inProgress(ctx, l, items)
+	if err != nil {
+		return nil, err
 	}
 
 	now := s.clock.Now()
@@ -184,16 +269,66 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, it
 			age = it.DoneAt.Sub(it.CreatedAt)
 		}
 
-		out = append(out, gen.ItemCard{
+		c := gen.ItemCard{
 			Id: string(it.ID), Ref: domain.ItemRef{Factory: f.Metadata.Name, Number: it.Number}.String(), Number: it.Number,
 			Title: it.Title, Type: it.Type, Lane: optional(it.Lane), Station: it.Station, State: gen.ItemState(it.State),
 			ClassOfService: gen.ClassOfService(it.Class), ReworkCount: it.ReworkCount, CostUsd: it.CostUSD,
 			CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt, AgeSeconds: int64(max(age, 0) / time.Second),
-			Agent: optional(agents[it.ID]), PrUrl: optional(it.PullRequest(l)),
-		})
+			PrUrl: optional(it.PullRequest(l)), Summary: optional(it.Summary(l)),
+		}
+
+		if ls, ok := leases[it.ID]; ok {
+			c.Agent = optional(ls.Agent)
+
+			if st, ok := l.Station(ls.Station); ok && st.Capacity() > 1 {
+				slot := ls.Slot + 1
+				c.Slot = &slot
+			}
+		}
+
+		if n, ok := turns[it.ID]; ok {
+			c.Turn = &n
+		}
+
+		out = append(out, c)
 	}
 
 	return out, nil
+}
+
+// inProgress reads the leases of the stations where items are in progress, by item, and the
+// turns of the runs under them; nothing when no item is in progress.
+func (s *server) inProgress(ctx context.Context, l domain.Line, items []domain.Item) (map[domain.ItemID]domain.Lease, map[domain.ItemID]int, error) {
+	leases := map[domain.ItemID]domain.Lease{}
+	seen := map[string]bool{}
+
+	for _, it := range items {
+		if it.State != domain.StateInProgress || seen[it.Station] {
+			continue
+		}
+
+		seen[it.Station] = true
+
+		held, err := s.items.Leases(ctx, l.FactoryID, it.Station)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		for _, ls := range held {
+			leases[ls.ItemID] = ls
+		}
+	}
+
+	if len(seen) == 0 {
+		return leases, map[domain.ItemID]int{}, nil
+	}
+
+	turns, err := s.items.LiveTurns(ctx, l.FactoryID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return leases, turns, nil
 }
 
 func (s *server) GetMetrics(ctx context.Context, req gen.GetMetricsRequestObject) (gen.GetMetricsResponseObject, error) {

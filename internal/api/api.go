@@ -60,8 +60,9 @@ type Engine interface {
 	Note(ctx context.Context, id domain.ItemID, by domain.Actor, text string) (domain.Event, error)
 }
 
-// Items reads items, their history and runs, the leases on them, a factory's flow, an item's
-// spans and run in progress, and what the organization's factories need from people; a store
+// Items reads items, their history and runs, the leases on them, a factory's flow and its
+// stations' times, an item's spans and run in progress, the turns of the runs in progress, and
+// what the organization's factories need from people; a store
 // that implements ports.Store and ports.FlowStats satisfies it.
 type Items interface {
 	Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
@@ -77,6 +78,8 @@ type Items interface {
 	WaitingHuman(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.Item, error)
 	ItemSpans(ctx context.Context, id domain.ItemID) ([]domain.Span, error)
 	CurrentRun(ctx context.Context, id domain.ItemID) (*domain.CurrentRun, error)
+	LiveTurns(ctx context.Context, factory domain.FactoryID) (map[domain.ItemID]int, error)
+	StationTimes(ctx context.Context, factory domain.FactoryID, since, until time.Time) ([]domain.StationTimes, time.Time, error)
 }
 
 // Factories are the definitions goald runs; *definitions.Cache satisfies it.

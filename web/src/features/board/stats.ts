@@ -1,0 +1,120 @@
+// What the board says about stations and cards, in words, from the board's statistics. Derived
+// only from station kinds and the API's numbers, never from station or factory names.
+import type { BoardStation, ItemCard } from '../../api/types';
+import { formatDuration, formatPercent, plural } from '../../shared/format';
+import { describeState, type StateLabel, waitingOnYou } from '../../shared/item-state';
+import type { HatchTone } from '../../ui/hatch';
+
+/** "3 of 3, 2 ready", "2 of 5", "7 waiting", "4 today": a station's load. */
+export function stationStat(s: BoardStation): string {
+  switch (s.kind) {
+    case 'agent': {
+      const ready = s.waiting > 0 ? `, ${s.waiting} ready` : '';
+      return `${s.in_progress}${s.wip_limit !== null ? ` of ${s.wip_limit}` : ' busy'}${ready}`;
+    }
+    case 'human': {
+      const n = waitingOnYou(s);
+      return s.wip_limit !== null ? `${n} of ${s.wip_limit}` : `${n} waiting`;
+    }
+    case 'queue':
+      return `${s.waiting} waiting`;
+    case 'done':
+      return s.done_today !== null ? `${s.done_today} today` : `${s.items.length} done`;
+  }
+}
+
+/** A column's count: "3 of 3" slots in use, "2 of 5" waiting on you, "7" waiting, "4 today". */
+export function columnCount(s: BoardStation): string {
+  if (s.kind === 'agent' && s.wip_limit !== null) return `${s.in_progress} of ${s.wip_limit}`;
+  if (s.kind === 'queue') return `${s.waiting}`;
+  return s.kind === 'agent' ? `${s.in_progress}` : stationStat(s);
+}
+
+/**
+ * A station tile's meter: an agent station's slots in use (rust when its gate sends work back),
+ * what waits on you at a human station; queues and done stations have nothing in progress.
+ */
+export function stationMeter(s: BoardStation): { value: number; max: number; tone: HatchTone } {
+  switch (s.kind) {
+    case 'agent':
+      return {
+        value: s.in_progress,
+        max: s.wip_limit ?? Math.max(1, s.in_progress),
+        tone: s.send_back_ratio ? 'rework' : 'run',
+      };
+    case 'human': {
+      const n = waitingOnYou(s);
+      return { value: n, max: s.wip_limit ?? Math.max(1, n), tone: 'run' };
+    }
+    default:
+      return { value: 0, max: 1, tone: 'run' };
+  }
+}
+
+/** ", queue growing" when the queue moves; nothing while it holds steady. */
+function trend(s: BoardStation): string {
+  return s.queue_trend === 'growing' || s.queue_trend === 'shrinking' ? `, queue ${s.queue_trend}` : '';
+}
+
+/**
+ * The line under a station's load: how long the oldest item has waited in a queue, how busy an
+ * agent station has been (its idle share when mostly idle) or how often its gate sends work back,
+ * whether a human station waits on you.
+ */
+export function stationNote(s: BoardStation): string {
+  switch (s.kind) {
+    case 'queue':
+      return s.oldest_waiting_seconds !== null ? `Oldest ${formatDuration(s.oldest_waiting_seconds * 1000)}` : 'Empty';
+    case 'agent':
+      if (s.send_back_ratio !== null) return `Sends back ${formatPercent(s.send_back_ratio)}`;
+      if (s.busy_ratio === null) return s.agents.length > 0 ? s.agents.join(', ') : 'No agents';
+      return s.busy_ratio < 0.5
+        ? `Idle ${formatPercent(1 - s.busy_ratio)} of the time`
+        : `Busy ${formatPercent(s.busy_ratio)}${trend(s)}`;
+    case 'human':
+      return waitingOnYou(s) > 0 ? 'Waiting on you' : 'Nothing waiting';
+    case 'done':
+      return '';
+  }
+}
+
+/** The constraint's line on a phone: "The constraint: busy 94%, queue growing". */
+export function constraintNote(s: BoardStation): string {
+  return s.busy_ratio !== null
+    ? `The constraint: busy ${formatPercent(s.busy_ratio)}${trend(s)}`
+    : `The constraint: ${plural(s.waiting, 'item')} waiting in front of it`;
+}
+
+/** "investigator-2": the agent copy working an item (no number when its station runs one). */
+export function agentCopy(item: Pick<ItemCard, 'agent' | 'slot'>): string {
+  return `${item.agent ?? ''}${item.slot !== null ? `-${item.slot}` : ''}`;
+}
+
+const times = ['once', 'twice'];
+
+/**
+ * A card's state line: the agent copy and its turn while worked, "Needs your OK", how often work
+ * was sent back, what a done item became (its summary); otherwise the item's state.
+ */
+export function cardState(
+  item: Pick<ItemCard, 'state' | 'agent' | 'slot' | 'turn' | 'rework_count' | 'summary'>,
+  opts: { atConstraint?: boolean } = {},
+): StateLabel {
+  switch (item.state) {
+    case 'in_progress':
+      if (!item.agent) break;
+      return { text: `${agentCopy(item)}${item.turn ? `, turn ${item.turn}` : ''}`, tone: 'run' };
+    case 'waiting_human':
+      return { text: 'Needs your OK', tone: 'you' };
+    case 'done':
+      return { text: item.summary ?? 'Done', tone: 'ok' };
+    case 'queued':
+    case 'ready':
+      if (opts.atConstraint) return { text: 'Ready in buffer', tone: 'muted' };
+      if (item.rework_count > 0) {
+        return { text: `Sent back ${times[item.rework_count - 1] ?? `${item.rework_count} times`}`, tone: 'rework' };
+      }
+      break;
+  }
+  return describeState(item, opts);
+}

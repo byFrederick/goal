@@ -2,6 +2,7 @@ package porttest
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"time"
 
@@ -64,6 +65,189 @@ func (s *Store) CurrentRun(ctx context.Context, id domain.ItemID) (*domain.Curre
 	}
 
 	return cur, nil
+}
+
+// LiveTurns implements ports.FlowStats.
+func (s *Store) LiveTurns(ctx context.Context, factory domain.FactoryID) (map[domain.ItemID]int, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	running := s.liveRuns(org, factory)
+	out := make(map[domain.ItemID]int, len(running))
+
+	for id, r := range running {
+		out[id] = 0
+
+		for _, e := range s.events {
+			if e.RunID == r.ID && e.Kind == domain.EventUsage {
+				out[id]++
+			}
+		}
+	}
+
+	return out, nil
+}
+
+// liveRuns returns the newest running run of every leased item of factory, by item. Callers
+// hold s.mu.
+func (s *Store) liveRuns(org domain.OrgID, factory domain.FactoryID) map[domain.ItemID]*domain.Run {
+	newest := map[domain.ItemID]*domain.Run{}
+
+	for _, r := range s.runs {
+		_, leased := s.leases[r.ItemID]
+		if !leased || r.Result.Status != domain.RunRunning || !s.ofFactory(r.ItemID, org, factory) {
+			continue
+		}
+
+		n := newest[r.ItemID]
+		if n == nil || r.StartedAt.After(n.StartedAt) || (r.StartedAt.Equal(n.StartedAt) && r.ID > n.ID) {
+			newest[r.ItemID] = r
+		}
+	}
+
+	return newest
+}
+
+// ofFactory reports whether item id is one of org's at factory. Callers hold s.mu.
+func (s *Store) ofFactory(id domain.ItemID, org domain.OrgID, factory domain.FactoryID) bool {
+	it, ok := s.visible(id, org)
+
+	return ok && it.FactoryID == factory
+}
+
+// StationTimes implements ports.FlowStats.
+func (s *Store) StationTimes(ctx context.Context, factory domain.FactoryID, since, until time.Time) ([]domain.StationTimes, time.Time, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	m := &stationMeter{since: since, until: until, stations: map[string]*domain.StationTimes{}}
+
+	for id, spans := range s.leaseLog {
+		if s.ofFactory(id, org, factory) {
+			for _, l := range spans {
+				m.lease(l.Station, l.AcquiredAt, l.EndedAt)
+			}
+		}
+	}
+
+	for id, l := range s.leases {
+		if s.ofFactory(id, org, factory) {
+			m.lease(l.Station, l.AcquiredAt, until)
+		}
+	}
+
+	for id, spans := range s.spans {
+		if s.ofFactory(id, org, factory) {
+			for _, sp := range spans {
+				m.span(sp)
+			}
+		}
+	}
+
+	for _, e := range s.events {
+		if s.ofFactory(e.ItemID, org, factory) {
+			m.event(e)
+		}
+	}
+
+	return m.sorted(), m.history, nil
+}
+
+// stationMeter measures a factory's stations over [since, until) as StationTimes does, from its
+// leases, spans and events one at a time.
+type stationMeter struct {
+	since, until time.Time
+	stations     map[string]*domain.StationTimes
+	// history is the earliest lease acquisition seen.
+	history time.Time
+}
+
+func (m *stationMeter) at(station string) *domain.StationTimes {
+	st, ok := m.stations[station]
+	if !ok {
+		st = &domain.StationTimes{Station: station}
+		m.stations[station] = st
+	}
+
+	return st
+}
+
+// lease counts a lease held from acquired to ended, clipped to the window.
+func (m *stationMeter) lease(station string, acquired, ended time.Time) {
+	if m.history.IsZero() || acquired.Before(m.history) {
+		m.history = acquired
+	}
+
+	if !ended.After(m.since) || !acquired.Before(m.until) {
+		return
+	}
+
+	from, to := acquired, ended
+	if from.Before(m.since) {
+		from = m.since
+	}
+
+	if to.After(m.until) {
+		to = m.until
+	}
+
+	st := m.at(station)
+	st.Leases++
+	st.Busy += to.Sub(from)
+}
+
+// span counts a waiting span open at the window's end or a day before it.
+func (m *stationMeter) span(sp domain.Span) {
+	openAt := func(t time.Time) bool {
+		return sp.State.Waiting() && !sp.EnteredAt.After(t) && (sp.LeftAt.IsZero() || sp.LeftAt.After(t))
+	}
+
+	if openAt(m.until) {
+		st := m.at(sp.Station)
+		st.WaitingNow++
+
+		if st.OldestWaiting.IsZero() || sp.EnteredAt.Before(st.OldestWaiting) {
+			st.OldestWaiting = sp.EnteredAt
+		}
+	}
+
+	if openAt(m.until.Add(-24 * time.Hour)) {
+		m.at(sp.Station).WaitingDayAgo++
+	}
+}
+
+// event counts a gate verdict given in the window.
+func (m *stationMeter) event(e domain.Event) {
+	verdict := e.Kind == domain.EventGateApproved || e.Kind == domain.EventGateRejected
+	if !verdict || e.At.Before(m.since) || !e.At.Before(m.until) {
+		return
+	}
+
+	st := m.at(e.Station)
+	st.Verdicts++
+
+	if e.Kind == domain.EventGateRejected {
+		st.Rejected++
+	}
+}
+
+func (m *stationMeter) sorted() []domain.StationTimes {
+	out := make([]domain.StationTimes, 0, len(m.stations))
+	for _, name := range slices.Sorted(maps.Keys(m.stations)) {
+		out = append(out, *m.stations[name])
+	}
+
+	return out
 }
 
 // LeaseSpans returns the lease spans of an item of org in the order they ended.
