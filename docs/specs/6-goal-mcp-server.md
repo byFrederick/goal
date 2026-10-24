@@ -1,6 +1,8 @@
-# Phase 5 — Goal MCP server
+# Phase 6 — Goal MCP server
 
-Status: owner-approved design (2026-10-24), not built · follows phase 4 · migrations `00060–00062` · OpenAPI tag `mcp` · PRs `5-1…5-7` · decision records [ADR 0007](../adr/0007-identity-better-auth.md), [ADR 0008](../adr/0008-portable-runs-connections-and-knowledge.md)
+Status: owner-approved design (2026-10-24), not built · follows phase 5 (needs only phase 3 and phase 4) · migrations `00070–00079` (`00070–00072` planned) · OpenAPI tag `mcp` · PRs `6-1…6-7` · decision records [ADR 0007](../adr/0007-identity-better-auth.md), [ADR 0008](../adr/0008-portable-runs-connections-and-knowledge.md)
+
+(roadmap) This was phase 5 (`5-goal-mcp-server.md`, PRs `5-n`, migrations from `00060`) until the owner put continuous learning ([phase 5](5-continuous-learning.md)) before it on 2026-10-24. Earlier specs that say "phase 5" for the MCP server, OAuth or `/v1/mcp` mean this phase.
 
 ## 1. Summary
 
@@ -24,10 +26,10 @@ Goal itself becomes an MCP server at `/v1/mcp` for outside MCP clients such as C
 
 | Board | Element | Delivered by |
 | --- | --- | --- |
-| `OAuth-Consent.dc.html` (new) | "<client> wants to use Goal as you": client name, its metadata URL host and logo (from its metadata document), organization picker, scopes as plain sentences with the write ones unchecked, Allow and Deny | 5-6 |
-| `Connected-Apps.dc.html` (new, account page) | each authorized client: organization, scopes, granted, last used; Revoke | 5-6 |
-| `Mobile-OAuth-Consent.dc.html` (new) | the consent screen on a phone | 5-6 |
-| `Api-Keys.dc.html`, `Personal-Token-New.dc.html`, `Account-Menu.dc.html` | audience (Goal API or MCP clients) on create, shown in the lists; the account menu links Connected apps | 5-5, 5-6 |
+| `OAuth-Consent.dc.html` (new) | "<client> wants to use Goal as you": client name, its metadata URL host and logo (from its metadata document), organization picker, scopes as plain sentences with the write ones unchecked, Allow and Deny | 6-6 |
+| `Connected-Apps.dc.html` (new, account page) | each authorized client: organization, scopes, granted, last used; Revoke | 6-6 |
+| `Mobile-OAuth-Consent.dc.html` (new) | the consent screen on a phone | 6-6 |
+| `Api-Keys.dc.html`, `Personal-Token-New.dc.html`, `Account-Menu.dc.html` | audience (Goal API or MCP clients) on create, shown in the lists; the account menu links Connected apps | 6-5, 6-6 |
 
 ## 4. Domain and engine changes
 
@@ -61,7 +63,7 @@ Each tool is one OpenAPI operation: its input is the operation's path, query and
 
 ## 5. Ports and adapters
 
-- **`auth/`**: the four plugins pinned with Better Auth (same exact version); `oauthProvider` with `requirePKCE: true`, S256 only, exact redirect URIs, `allowDynamicClientRegistration: false`, `refreshTokenReuseInterval: 0`, no `client_credentials`; access tokens as JWTs signed by the `jwt` plugin with EdDSA (Ed25519), `aud` = the canonical resource URI `<GOAL_PUBLIC_URL>/v1/mcp`, 10-minute lifetime, claims `sub` (user), `org` (organization id), `scope`, `azp` (client id); refresh tokens 30 days, rotated on use. The consent step is the SPA's `/oauth/consent` page (5-6), which calls the plugin's consent endpoint with the chosen organization (a member's only) and scopes (a subset of the permissions marked `pat: true` that the person holds). CIMD fetches: https only, public addresses only (the auth service's own fetcher refuses loopback, private, link-local and metadata addresses after resolution), no redirects, 5 s, 64 KiB, cached per its `Cache-Control` for at most 24 hours.
+- **`auth/`**: the four plugins pinned with Better Auth (same exact version); `oauthProvider` with `requirePKCE: true`, S256 only, exact redirect URIs, `allowDynamicClientRegistration: false`, `refreshTokenReuseInterval: 0`, no `client_credentials`; access tokens as JWTs signed by the `jwt` plugin with EdDSA (Ed25519), `aud` = the canonical resource URI `<GOAL_PUBLIC_URL>/v1/mcp`, 10-minute lifetime, claims `sub` (user), `org` (organization id), `scope`, `azp` (client id); refresh tokens 30 days, rotated on use. The consent step is the SPA's `/oauth/consent` page (6-6), which calls the plugin's consent endpoint with the chosen organization (a member's only) and scopes (a subset of the permissions marked `pat: true` that the person holds). CIMD fetches: https only, public addresses only (the auth service's own fetcher refuses loopback, private, link-local and metadata addresses after resolution), no redirects, 5 s, 64 KiB, cached per its `Cache-Control` for at most 24 hours.
 - **goald, `internal/api/mcp.go`**: the MCP Go SDK's streamable HTTP handler in stateless mode, mounted at `/v1/mcp` on the main listener, behind the same Host check, access log and body cap as `/v1`. Each tool call runs the operation's strict-server method with the request's principal in `ctx`, so `scope`, the resolvers and `Authorizer` apply unchanged. No upstream calls, no token passthrough.
 - **JWT verification** (`internal/api/oauth.go`): Ed25519 only; keys from the auth service's JWKS through `GOAL_AUTH_UPSTREAM` (the proxy secret as today); cached at most 10 minutes, refetched on an unknown `kid` at most once a minute; `iss` = Better Auth's issuer, `aud` exact, `exp`/`nbf` with 30 s leeway. Then `ports.Identity.OAuthGrant(ctx, user, client, org)` (new method, definer `goal_oauth_grant`) confirms the consent is live and returns the principal like `Session`, so a revoked consent or a removed member is refused on the next request although the JWT has not expired.
 - **Credentials at `/v1/mcp`** (`credential.go`): `Authorization: Bearer` with an OAuth JWT (three base64url parts), an `mcp` API key (`goal_sk_…`) or an `mcp` personal token (`goal_pat_…`). Anything else, or none, is 401 with `WWW-Authenticate: Bearer resource_metadata="<GOAL_PUBLIC_URL>/.well-known/oauth-protected-resource/v1/mcp"`; a valid credential lacking a tool's scope is a tool error `forbidden` (403 for the HTTP request itself only when it holds no MCP tool at all).
@@ -71,9 +73,9 @@ Each tool is one OpenAPI operation: its input is the operation's path, query and
 
 | Migration | PR | Content |
 | --- | --- | --- |
-| `00060_auth_oauth.sql` | 5-1 | Better Auth's generated tables for the four plugins in schema `auth` (OAuth clients, access and refresh tokens, consents, JWKS), committed like `00041`; `task auth:schema-check` covers them; `goal_auth` grants only |
-| `00061_oauth_grant.sql` | 5-2 | `goal_oauth_grant(user, client, org)` (`SECURITY DEFINER`, pinned `search_path`): the live consent, the membership and roles like `goal_principal`; `auth_events` kinds `oauth_consent_granted`, `oauth_consent_revoked`, `oauth_token_refused` |
-| `00062_credential_audience.sql` | 5-5 | `api_keys.audience` and `personal_tokens.audience` (`text NOT NULL DEFAULT 'api' CHECK (audience IN ('api','mcp'))`); `goal_api_key` and `goal_personal_token` return it |
+| `00070_auth_oauth.sql` | 6-1 | Better Auth's generated tables for the four plugins in schema `auth` (OAuth clients, access and refresh tokens, consents, JWKS), committed like `00041`; `task auth:schema-check` covers them; `goal_auth` grants only |
+| `00071_oauth_grant.sql` | 6-2 | `goal_oauth_grant(user, client, org)` (`SECURITY DEFINER`, pinned `search_path`): the live consent, the membership and roles like `goal_principal`; `auth_events` kinds `oauth_consent_granted`, `oauth_consent_revoked`, `oauth_token_refused` |
+| `00072_credential_audience.sql` | 6-5 | `api_keys.audience` and `personal_tokens.audience` (`text NOT NULL DEFAULT 'api' CHECK (audience IN ('api','mcp'))`); `goal_api_key` and `goal_personal_token` return it |
 
 Consents reference `auth.member`, so removing a member removes their consents, as with personal tokens. Deleting an organization cascades the same way.
 
@@ -83,9 +85,9 @@ None.
 
 ## 8. API
 
-- `POST|GET|DELETE /v1/mcp` (tag `mcp`; `x-goal-scope: authenticated` on the HTTP operation, each tool checked by its own scope): MCP streamable HTTP, protocol revision current when 5-2 lands, stateless (no `Mcp-Session-Id` state kept between requests).
+- `POST|GET|DELETE /v1/mcp` (tag `mcp`; `x-goal-scope: authenticated` on the HTTP operation, each tool checked by its own scope): MCP streamable HTTP, protocol revision current when 6-2 lands, stateless (no `Mcp-Session-Id` state kept between requests).
 - `GET /.well-known/oauth-protected-resource/v1/mcp` and `GET /.well-known/oauth-protected-resource` (public): `{resource: "<GOAL_PUBLIC_URL>/v1/mcp", authorization_servers: [<issuer>], scopes_supported: [the pat: true permissions], bearer_methods_supported: ["header"]}`.
-- The auth proxy allowlist gains the authorization server metadata path RFC 8414 derives from Better Auth's issuer and the plugins' authorize, token, revoke, consent and JWKS endpoints, fixed by 5-1 against the pinned version (the same allowlist rules as spec 3 §5.5; `Set-Auth-Token` still stripped).
+- The auth proxy allowlist gains the authorization server metadata path RFC 8414 derives from Better Auth's issuer and the plugins' authorize, token, revoke, consent and JWKS endpoints, fixed by 6-1 against the pinned version (the same allowlist rules as spec 3 §5.5; `Set-Auth-Token` still stripped).
 - `GET /v1/me/connected-apps` (`authenticated`, sessions only): the caller's consents: client name and metadata URL, organization, scopes, granted, last used. `DELETE /v1/me/connected-apps/{grant}` revokes one (204) and its refresh tokens.
 - `POST /v1/orgs/{org}/api-keys` and `…/personal-tokens` gain `audience` (default `api`); responses and lists show it. Problem codes: `audience-mismatch` (401 detail in the log only; the client sees `unauthenticated`).
 
@@ -127,31 +129,31 @@ The access log's `credential` gains `oauth:<client id>`; each tool call logs `mc
 - goald: JWT verification table (algorithm, `aud`, `iss`, expiry, unknown `kid` refetch limits), grant check, audience rules, every tool against the in-memory fakes through the strict server, `tools/list` per principal, the golden access matrix extended with OAuth and `mcp`-audience principals.
 - auth: Vitest for the plugin configuration (PKCE required, no DCR, no client credentials, consent limited to memberships and `pat: true` scopes), CIMD fetch rules, schema drift.
 - Web: Playwright on the mock for consent (choose org, uncheck a scope, allow, deny), connected apps (revoke), audiences.
-- End to end: Claude Code (or the MCP Inspector) connects to a local install with OAuth, lists tools, submits an item, then the consent is revoked and the next call fails; the same on the Cloudflare staging install (5-7).
+- End to end: Claude Code (or the MCP Inspector) connects to a local install with OAuth, lists tools, submits an item, then the consent is revoked and the next call fails; the same on the Cloudflare staging install (6-7).
 
 ## 14. Rollout and migration
 
-Additive: existing API keys and personal tokens become `audience = api` and keep working on `/v1`; nothing is accepted at `/v1/mcp` until 5-2. An install without HTTPS (a laptop on `http://127.0.0.1`) works with loopback redirect URIs, as OAuth for native clients allows. On Cloudflare the OAuth endpoints are paths of goald's public origin forwarded to the auth container exactly as sign-in is (spec 4 §5.12).
+Additive: existing API keys and personal tokens become `audience = api` and keep working on `/v1`; nothing is accepted at `/v1/mcp` until 6-2. An install without HTTPS (a laptop on `http://127.0.0.1`) works with loopback redirect URIs, as OAuth for native clients allows. On Cloudflare the OAuth endpoints are paths of goald's public origin forwarded to the auth container exactly as sign-in is (spec 4 §5.12).
 
 ## 15. Work breakdown
 
-Skills: the Go skills on Go PRs; Identity skills (better-auth-best-practices, better-auth-security-best-practices, security-and-hardening, golang-security) on 5-1, 5-2, 5-5, 5-6; `mcp-builder` on 5-2 to 5-4; PostgreSQL skills with migrations; UI skills on 5-6; `openapi-spec-generation` and `api-design-principles` with `api/`.
+Skills: the Go skills on Go PRs; Identity skills (better-auth-best-practices, better-auth-security-best-practices, security-and-hardening, golang-security) on 6-1, 6-2, 6-5, 6-6; `mcp-builder` on 6-2 to 6-4; PostgreSQL skills with migrations; UI skills on 6-6; `openapi-spec-generation` and `api-design-principles` with `api/`.
 
 | # | Pull request | Acceptance criteria | Verified by |
 | --- | --- | --- | --- |
-| 5-1 | **Authorization server**: the four plugins, `00060`, JWT signing (EdDSA, `aud`, claims), CIMD fetch rules, proxy allowlist and RFC 8414 metadata path | PKCE S256 only, no DCR, no client credentials; consent bound to memberships and `pat: true` scopes; threat row 5 | Vitest, `auth:schema-check`, proxy tests |
-| 5-2 | **Resource server**: `/v1/mcp` (stateless, no tools yet), protected-resource metadata, JWT verification, `00061` and `Identity.OAuthGrant`, credential rules, `WWW-Authenticate` | threat rows 1–3 | goald tests, golden matrix |
-| 5-3 | **Read tools**: `list_factories`, `get_inbox`, `get_board`, `list_items`, `get_item`, `search_knowledge` | rows 4 and 6; output equals the operation's JSON | tool tests over the strict server |
-| 5-4 | **Write tools**: `submit_item`, `add_note`, `approve_item`, `reject_item` with `via: oauth:<client>` | audit and item events carry `via`; scopes enforced | tool tests, store fakes |
-| 5-5 | **Audiences**: `00062`, `audience` on create and in lists, `/v1/mcp` accepting `mcp` keys and tokens, `/v1` refusing them; `goal key create --audience` | §4.1 rules both ways | API and identity tests, CLI tests |
-| 5-6 | **Web**: consent, connected apps, audience choice, help panel; `GET/DELETE /v1/me/connected-apps` | §10 states; revoke applies at once | Playwright + axe, handler tests |
-| 5-7 | **End to end and docs**: a real MCP client against Compose and the Cloudflare staging install; `goal mcp config`; architecture.md as built | §13's end-to-end flow on both | manual run report, review |
+| 6-1 | **Authorization server**: the four plugins, `00070`, JWT signing (EdDSA, `aud`, claims), CIMD fetch rules, proxy allowlist and RFC 8414 metadata path | PKCE S256 only, no DCR, no client credentials; consent bound to memberships and `pat: true` scopes; threat row 5 | Vitest, `auth:schema-check`, proxy tests |
+| 6-2 | **Resource server**: `/v1/mcp` (stateless, no tools yet), protected-resource metadata, JWT verification, `00071` and `Identity.OAuthGrant`, credential rules, `WWW-Authenticate` | threat rows 1–3 | goald tests, golden matrix |
+| 6-3 | **Read tools**: `list_factories`, `get_inbox`, `get_board`, `list_items`, `get_item`, `search_knowledge` | rows 4 and 6; output equals the operation's JSON | tool tests over the strict server |
+| 6-4 | **Write tools**: `submit_item`, `add_note`, `approve_item`, `reject_item` with `via: oauth:<client>` | audit and item events carry `via`; scopes enforced | tool tests, store fakes |
+| 6-5 | **Audiences**: `00072`, `audience` on create and in lists, `/v1/mcp` accepting `mcp` keys and tokens, `/v1` refusing them; `goal key create --audience` | §4.1 rules both ways | API and identity tests, CLI tests |
+| 6-6 | **Web**: consent, connected apps, audience choice, help panel; `GET/DELETE /v1/me/connected-apps` | §10 states; revoke applies at once | Playwright + axe, handler tests |
+| 6-7 | **End to end and docs**: a real MCP client against Compose and the Cloudflare staging install; `goal mcp config`; architecture.md as built | §13's end-to-end flow on both | manual run report, review |
 
 ## 16. Cross-spec contracts
 
-**Phase 5 needs**: phase 3's permission vocabulary (`pat: true` permissions are the OAuth scopes), `goal_principal`, the fresh-session rule for consent, the auth proxy and its hardening, `auth_events`; phase 4's `knowledge:read` and the search operation (`searchKnowledge`), and its Cloudflare routing.
+**Phase 6 needs**: phase 3's permission vocabulary (`pat: true` permissions are the OAuth scopes), `goal_principal`, the fresh-session rule for consent, the auth proxy and its hardening, `auth_events`; phase 4's `knowledge:read` and the search operation (`searchKnowledge`), and its Cloudflare routing.
 
-**Phase 5 provides**: `domain.Audience`; `Identity.OAuthGrant`; the `mcp` OpenAPI tag; `/v1/mcp`, `/.well-known/oauth-protected-resource…` and the OAuth paths in the proxy allowlist (reserved by phase 3).
+**Phase 6 provides**: `domain.Audience`; `Identity.OAuthGrant`; the `mcp` OpenAPI tag; `/v1/mcp`, `/.well-known/oauth-protected-resource…` and the OAuth paths in the proxy allowlist (reserved by phase 3).
 
 ## 17. Open questions
 

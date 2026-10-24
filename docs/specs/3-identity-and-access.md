@@ -1,8 +1,8 @@
 # Phase 3 — Identity and access
 
-Status: reviewed 2026-10-24, owner decisions applied · follows phase 2.2 (3-1 to 3-3 and 3-7 need only A's seams and can start now; 3-4, the first migration (`00040`), merges after 2.2's last, `00039` (E's `00030–00035`, the 2.2 review's `00036–00039`), since goose refuses a lower number after a higher one; the screens need C–E's boards) · migrations `00040–00049` (`00040–00047` planned, `00048–00049` the phase 3 review's fixes) · OpenAPI tag `identity` · PRs `3-1…3-16` and `3-12b` · decision record [ADR 0007](../adr/0007-identity-better-auth.md)
+Status: reviewed 2026-10-24, owner decisions applied · follows phase 2.2 (3-1 to 3-3 and 3-7 need only A's seams and can start now; 3-4, the first migration (`00040`), merges after 2.2's last, `00039` (E's `00030–00035`, the 2.2 review's `00036–00039`), since goose refuses a lower number after a higher one; the screens need C–E's boards) · migrations `00040–00049` (`00040–00047` planned, `00048–00049` the phase 3 review's fixes) · OpenAPI tag `identity` · PRs `3-1…3-16` and `3-12b` · decision record [ADR 0007](../adr/0007-identity-better-auth.md) · (roadmap 2026-10-24) "phase 6" below is the Goal MCP server, which was phase 5 when this spec was written ([spec 6](6-goal-mcp-server.md)); phase 5 is now continuous learning
 
-Phase 3 takes everything the README listed under "Out of 2.2". It replaces A's two seams (A §5.3), the request actor and the `Authorizer`, without changing handlers. Phase 4 (credentials, connectors and the MCP gateway) and phase 5 (the Goal MCP server) build on it.
+Phase 3 takes everything the README listed under "Out of 2.2". It replaces A's two seams (A §5.3), the request actor and the `Authorizer`, without changing handlers. Phase 4 (credentials, connectors and the MCP gateway) and phase 6 (the Goal MCP server) build on it.
 
 ## 1. Summary
 
@@ -23,7 +23,7 @@ People sign in to Goal without passwords, with a one-time code sent by email or 
 - Moving an existing install to sign-in: the bootstrap owner, existing organizations and `user:local` rows.
 
 **Out** (deferred, unscheduled unless noted)
-- Passwords, 2FA, passkeys, SSO/SAML, SCIM, magic links, teams, dynamic roles, per-station approvers, per-org allowed email domains or Google `hd`, JWTs and the OAuth provider (phase 5), rate limiting of goald's own API, a user erasure workflow (defined in §11.6, not built), a GeoIP location on device approval, a platform-admin screen (CLI only); for personal tokens, the later items of §17 and their use at `/v1/mcp` (phase 5 decides).
+- Passwords, 2FA, passkeys, SSO/SAML, SCIM, magic links, teams, dynamic roles, per-station approvers, per-org allowed email domains or Google `hd`, JWTs and the OAuth provider (phase 6), rate limiting of goald's own API, a user erasure workflow (defined in §11.6, not built), a GeoIP location on device approval, a platform-admin screen (CLI only); for personal tokens, the later items of §17 and their use at `/v1/mcp` (phase 6 decides).
 - Credentials, connectors, tool approvals and the agents' gateway changes beyond `aud` (phase 4).
 - Terraform for the ECS sidecar, SES and Secrets Manager (the AWS deployment, later); this spec fixes the shape they must take.
 
@@ -124,7 +124,7 @@ A personal token lets a person use the CLI or a script on their own machine with
 - **Never fresh.** A token never satisfies `fresh: true`; no `fresh` permission is `pat: true`, so such an operation is 403 `forbidden`, never `reauth-required`.
 - **Creation.** Only in the browser: a session signed in there, by an email code or Google (the session records how, §8.3), that is fresh (≤ 10 minutes). The CLI's device-flow session, however its token is sent, gets 403 `browser-session-required`, and an API key or a personal token 403 `forbidden`, so a phished device approval cannot mint a lasting token. Each scope must be `pat: true` and held by the creator now (an org permission by their org role, a factory permission in at least one factory), else 400 `scope-not-allowed`. Expiry is mandatory: 1–90 days, default 30. The secret (`goal_pat_` + base64url of 32 bytes from `crypto/rand`) is shown once; only its SHA-256 and the hint `goal_pat_XXXX` are stored.
 - **Revocation.** The owner revokes their own tokens without a fresh sign-in (incident response stays fast); owners and admins list and revoke members' tokens with `api_key:read` / `api_key:manage`. Deleting the organization revokes them. Revocation, expiry and removal apply on the next request and end the token's streams.
-- **Where it works.** `/v1` only. The agents' gateway refuses it, the `/api/auth` proxy answers 401 without forwarding it, and `/v1/mcp` is phase 5's decision (spec 5).
+- **Where it works.** `/v1` only. The agents' gateway refuses it, the `/api/auth` proxy answers 401 without forwarding it, and `/v1/mcp` is phase 6's decision (spec 6).
 
 As built (3-12b): `Permissions.Authorize` sends a principal with `Token` to `authorizeToken`, which never reaches the session rules: for an org or factory permission it first hides what the owner may not see (another organization: the unknown org's 404; a factory the owner has no role on: the unknown factory's 404), then refuses a permission that is not `pat`, is `fresh` or a platform admin's, or is not among the token's scopes (403 `forbidden`), then applies the owner's rule with their current roles (`PlatformAdmin` and `Session` cleared whatever the lookup returned). Hiding first keeps a refused scope from telling an existing invisible factory from an unknown one; in the middleware pass a factory permission the token cannot carry is refused before any factory is looked up, the same answer for every name. `authenticated` is held by every token, as by every key (it needs no scope: `goal login --token` and `goal whoami` read `getMe` and `listOrgs`); `visible` treats a token without `factory:read` as seeing no factory. Creating a token: `browser-session-required` answers a session not signed in through the browser (`Session.Browser` false: goal login's device flow, or a session older than migration `00048`), checked before freshness, so a stale CLI session is not told to sign in again (review M1: until `00048` this was the transport, `Session.Bearer`, and goald does not check the cookie's signature, so a CLI token sent as `Cookie: goal.session_token=<token>.anything` passed for the browser's); an API key or a token holds no `personal_token:*` at all and gets 403 `forbidden`. A factory scope is grantable when the creator holds it on one factory they see, or as an owner or admin (editors of every factory, those made later included). Under `GOAL_AUTH=none` the local user has no tokens: the list is empty, creating is 403 `forbidden`, revoking 404.
 
@@ -307,7 +307,7 @@ All migrations run as `goal_owner`. New roles and grants follow A §6.0.
 | `00048_session_sign_in_method.sql` | review M1 | `auth.session."signInMethod"` (how the session was signed in, written by the auth service); `goal_principal` returns it |
 | `00049_phase3_review_fixes.sql` | review L1, L2; naming | `goal_org_live`, `goal_is_invitee` (the auth service's definers); the `invitation_live_org` trigger refusing an invitation to an organization that is not live; `goal_retire_inviter` on `auth.member` (removal cancels the inviter's pending invitations, `system:inviter-removed`; demotion to member all of them, owner to admin the `owner` ones, `system:inviter-demoted`); pending invitations of deleted organizations and of inviters already gone or demoted canceled; `goal_append_audit` and `goal_invitations` name a person without a name by their email |
 
-Phase 4 uses `00050–00059`, phase 5 `00060` up.
+Phase 4 uses `00050–00059`, phase 5 (continuous learning) `00060–00069`, phase 6 (the Goal MCP server, phase 5 until 2026-10-24) `00070` up.
 
 ### 6.2 `00040`/`00041`: Better Auth's schema under goose
 
@@ -647,7 +647,7 @@ permissions:
   - {name: factory:manage,     level: factory, factory_role: editor,   keys: true}
 ```
 
-The owner role's Better Auth statements also include `organization: [update, delete]` (their paths are disabled; §8.6); as built in 3-4 they are `org:delete`'s `better_auth`, so permgen derives every role from the table alone (a role holds the `better_auth` actions of the permissions it holds; `better_auth` is for org permissions only). The same vocabulary names API key scopes and personal token scopes now and OAuth scopes in phase 5. `pat` is its own flag, not `keys`: the two sets differ (`audit:read` and `factory:manage` are `keys` only), and each new permission decides both explicitly. `TestPermissions_RoleGrants` pins the `pat: true` set to §4.5's list, so widening it is a reviewed diff.
+The owner role's Better Auth statements also include `organization: [update, delete]` (their paths are disabled; §8.6); as built in 3-4 they are `org:delete`'s `better_auth`, so permgen derives every role from the table alone (a role holds the `better_auth` actions of the permissions it holds; `better_auth` is for org permissions only). The same vocabulary names API key scopes and personal token scopes now and OAuth scopes in phase 6. `pat` is its own flag, not `keys`: the two sets differ (`audit:read` and `factory:manage` are `keys` only), and each new permission decides both explicitly. `TestPermissions_RoleGrants` pins the `pat: true` set to §4.5's list, so widening it is a reviewed diff.
 
 **Operations by scope** (2.2's and phase 3's; phase 4 adds `credential:*`, `connector:*`, `approval:decide` in its PRs):
 
@@ -1111,15 +1111,15 @@ Migration numbers rise with PR order (3-4 → 00040–00041, 3-5 → 00042, 3-6 
 ## 16. Cross-spec contracts
 
 **Phase 3 provides**
-- `domain.Principal`, `PrincipalFrom`, roles, `ActorService`; `ports.Identity`, `Access`, `Platform`; `api.Permissions` and `api/permissions.yaml` (phase 4 adds its permissions there, phase 5 reuses the vocabulary as OAuth scopes).
+- `domain.Principal`, `PrincipalFrom`, roles, `ActorService`; `ports.Identity`, `Access`, `Platform`; `api.Permissions` and `api/permissions.yaml` (phase 4 adds its permissions there, phase 6 reuses the vocabulary as OAuth scopes).
 - The fresh-session rule (`fresh: true`, 403 `reauth-required`) for phase 4's credential and approval operations.
 - Factory role `approver` (`item:decide`) as "who approves"; phase 4 adds `approval:decide` with `factory_role: approver`.
 - `GOAL_PUBLIC_URL` as the one public origin (`BETTER_AUTH_URL` equals it; phase 4's OAuth callback and client metadata use it).
 - Platform admins as the platform operator (phase 4's `goal catalog push` and any platform role).
 - The signed-in user as `requested_by` for phase 4's OAuth flows; the principal in `ctx` for every handler.
 - `goal_access` notices and stream termination; `auth_events` for install-level security events.
-- Personal tokens (3-12b): a person's credential for one organization, `/v1` only; phase 5 decides whether `/v1/mcp` accepts them (spec 5, open question 6).
-- Reserved for phase 5: the public path `/v1/mcp`, `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource` (added to the proxy allowlist then).
+- Personal tokens (3-12b): a person's credential for one organization, `/v1` only; phase 6 decides whether `/v1/mcp` accepts them (spec 6, open question 6).
+- Reserved for phase 6: the public path `/v1/mcp`, `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource` (added to the proxy allowlist then).
 
 **Phase 3 needs**
 - **A:** the seams of §5.3, `Tenancy`, `appendAudit`, the tenancy kit, `goal_purge_org`, `CheckAppRole`, `roles.sql`/`goal db init`.
