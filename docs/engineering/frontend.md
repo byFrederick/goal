@@ -56,23 +56,32 @@ Rules:
 | Charts | Small SVG components in `packages/ui` (hatched bars, bridge, sparkline) | Exactly the design system's marks; no heavy chart library |
 | Long lists | TanStack Virtual for traces and big boards | Keeps the main thread free |
 
-Folder structure inside `web/src` (phase 2):
+Folder structure inside `web/src` (phase 2.2):
 
 ```
 main.tsx      QueryClient, router, providers
 routes/       file-based route files (TanStack Router plugin; routeTree.gen.ts is generated and committed)
-                /                         → the floor of the factory used last (or the first)
-                /f/$factory               → Floor        (layout route: shell + live stream)
-                /f/$factory/board         → Board        (?station= picks the station on phones)
-                /f/$factory/items         → Items list   (?state= filters)
-                /f/$factory/items/$ref    → Item         ($ref: the number, goal#12 or the id)
+                /                               → the organization used last (localStorage goal.org), else the first
+                /f/*                            → old links: redirect to the factory's page under its organization
+                /o/$org                         → layout: resolves the org (slug or id), its live stream, the rail
+                  (_org)                        → pathless layout of the organization's own pages: org sidebar
+                    /o/$org                     → Factories home
+                    /o/$org/settings …          → Organization settings (C7), catalog and credentials (phase 3)
+                  /o/$org/f/$factory            → layout: resolves the factory (name or id), factory sidebar,
+                                                  phone crumb and tab bar; its index is the Floor
+                  /o/$org/f/$factory/board      → Board        (?station= picks the station on phones)
+                  /o/$org/f/$factory/items      → Items list   (?state= filters)
+                  /o/$org/f/$factory/items/$ref → Item         ($ref: the number, goal#12 or the id)
+                  /o/$org/new/$step             → reserved for D's New factory wizard (rail only, no sidebar)
 api/          the only HTTP code: types.ts (generated contract shapes), client.ts (requests over @goal/api-client), queries.ts (keys, queryOptions)
-app/          shell (sidebar from 768 px, icon rail 768–1023 px, bottom tabs below 768 px), loading/error/not-found screens
+app/          the shell: AppShell and ShellFrame, Rail, PhoneTopRow, PhoneCrumb, TabBar, FactorySidebar,
+              OrgSidebar, OrgMark, screens.ts (the screen registry), attention, route focus and titles,
+              loading/error/not-found screens
 features/
-  floor/  board/  items/        one folder per screen: page, cards, feature-only logic (items/timeline.ts)
+  factories/  floor/  board/  items/        one folder per screen: page, cards, feature-only logic (items/timeline.ts)
 shared/       code more than one feature uses: decisions (approve, send back, merge, retry), new item,
-              live stream provider, factory helpers, formatting (Intl), state labels
-ui/           design-system primitives on Radix: button, dialog, card, chip, hatch (SVG pattern marks), logo
+              the organization's live stream, org and factory helpers, marks, formatting (Intl), state labels
+ui/           design-system primitives on Radix: button, dialog, sheet, tooltip, card, chip, count, mark, hatch, logo
 ```
 
 Route files stay thin (loader + component); screens live in `features/`. Features never import each other; shared code goes to `shared/` or `ui/`. Boundaries are kept in review for now; `dependency-cruiser` arrives with `packages/`, the same way depguard guards the Go engine. `ui/` moves to `packages/ui` when a second app needs it.
@@ -81,13 +90,13 @@ Route files stay thin (loader + component); screens live in `features/`. Feature
 
 `packages/api-client` is the typed layer over the contract: `createGoalClient` (openapi-fetch over the types `openapi-typescript` generates into `src/schema.ts`, with `--default-non-nullable=false` so request fields with a default stay optional), `unwrap` (data on success, else it throws `ApiError`, which carries the RFC 9457 `Problem`, rebuilt from the status line when a proxy answers with something else), `subscribe(baseUrl, scope, handlers)` for the stream, and the schema types. Organization-owned routes are written relative to the organization with `orgPath("/factories/{factory}/board")`; `routes.ts` holds the one prefix (`orgRoutes`, `/v1/orgs/{org}`), and every such call passes `org` (slug or id) as a path parameter, as `StreamScope` does.
 
-In `web`, `src/api/types.ts` re-exports the generated types under the names the screens use, and `client.ts` holds every request (`listOrgs`, `getOrg`, `createOrg`; then, each taking `org` first, `getAttention`, `getFactoryOverview`, `getInbox`, `listFactories`, `getBoard`, `getMetrics`, `listItems`, `getItem`, `listItemEvents`, `submitItem`, `approveItem`, `rejectItem`, `mergeItem`, `retryItem`, `subscribeToFactory`) over `createGoalClient`. Nothing else in `web/src` touches `fetch` or `EventSource`; `web/mock` is typed with the same generated shapes. Query keys (`queries.ts`) are rooted at the organization's id: `['orgs']`, `['org', org, 'detail']`, `['org', org, 'attention']`, `['org', org, 'overview', window]`, `['org', org, 'inbox', factory ?? 'all']`, `['org', org, 'factories']`, `['org', org, 'factory', f, 'board' | 'metrics' | 'items', …]`, `['org', org, 'item', ref]` and `['org', org, 'item', ref, 'events']`.
+In `web`, `src/api/types.ts` re-exports the generated types under the names the screens use, and `client.ts` holds every request (`listOrgs`, `getOrg`, `createOrg`; then, each taking `org` first, `getAttention`, `getFactoryOverview`, `getInbox`, `listFactories`, `getBoard`, `getMetrics`, `listItems`, `getItem`, `listItemEvents`, `submitItem`, `approveItem`, `rejectItem`, `mergeItem`, `retryItem`, `subscribeToOrg`) over `createGoalClient`; factories are named by id. Nothing else in `web/src` touches `fetch` or `EventSource`; `web/mock` is typed with the same generated shapes. Query keys (`queries.ts`) are rooted at the organization's id: `['orgs']`, `['org', org, 'detail']`, `['org', org, 'attention']`, `['org', org, 'overview', window]`, `['org', org, 'inbox', factory ?? 'all']`, `['org', org, 'factories']`, `['org', org, 'factory', f, 'board' | 'metrics' | 'items', …]` (f the factory's id), `['org', org, 'item', ref]` and `['org', org, 'item', ref, 'events']`.
 
-Until phase 2.2 C's `/o/:org` routes name the organization in the URL, the UI works in the first organization goald lists (`shared/org.ts`, the interim first-org shim: `interimOrg` in the `/f/$factory` and `/` loaders, `useOrg()` in components); C3 replaces it.
+The URL names the organization (`/o/$org`, its slug or id) and the factory (`/f/$factory`, its name or id). The `/o/$org` and `/o/$org/f/$factory` layouts resolve both in `beforeLoad`, so every screen reads them from the route context (`useOrg()`, `useFactory()` in `shared/`): queries are keyed and requests made by their ids, and links use the slug and the name (`useFactoryParams()`).
 
 ### Live updates
 
-`shared/stream.tsx` opens one `EventSource` per open factory, on its organization's stream. Each `item` event invalidates the factory's board, metrics and lists and that item's queries within the organization (`shared/invalidation.ts`), batched over 300 ms so a burst of tool calls costs one refetch; the item's history refetch asks only for events after the last one cached. `resync`, and every reconnect after the first open, invalidate everything of the organization (`['org', org]`).
+`shared/stream.tsx` (`OrgStream`, mounted by the `/o/$org` layout) opens one `EventSource` per open organization, on its stream. Each `item` event invalidates what it can change (`invalidationsFor` in `shared/invalidation.ts`): the organization's attention counts and inboxes, the factory's work keys named one by one (board, metrics, items; only the board for tool calls; never the factory's bare prefix) and that item by ref and by id, batched over 300 ms so a burst of tool calls costs one refetch; the factory overviews at most every 5 s. The item's history refetch asks only for events after the last one cached. `resync`, and every reconnect after the first open, invalidate everything of the organization (`['org', org]`). Other event names are handled through the `streamHandlers` registry; names nobody registered are ignored. Switching organization closes the old stream and opens the new one. The shell says "Reconnecting" only while the stream is reconnecting.
 
 ### Decisions
 
@@ -112,7 +121,7 @@ task build                       # web:build, then go build -tags webui: goald s
 
 ## Responsive and mobile
 
-One app, not two: the layout switches to a bottom tab bar (Floor, Board, Items, Jonah, More) under 768 px, cards stack, the board becomes a station picker plus a list, and every action has a 44 px target. Later, the app becomes an installable PWA so approvals can arrive as push notifications.
+One app, not two, filling the viewport with no outer frame. From 768 px: a 72 px rail (organization mark, the organization's factory squares, New factory, then Connector catalog, Credentials and the account) and a 232 px sidebar (a factory's Work / Build / Learn, or the organization's own), both pinned to the left edge at full height, then `main`. Below 768 px: a top row with the organization mark and the factory squares, the crumb "Acme / sre", `main`, and on factory pages a bottom tab bar (Floor, Board, Items, Build, More). Since the sidebar takes room at every width from 768 px (`main` is 464 px wide at 768), screens lay out by the width of `main` with container queries (`@container` on `main`: `@[640px]:`, `@[720px]:`, `@[960px]:`), not viewport breakpoints; viewport breakpoints only switch the phone and desktop chrome. Cards stack, the board becomes a station picker plus a list, and every action has a 44 px target. Screens of later phases are listed in `app/screens.ts` with `available: false` and show as "Later" until the PR that adds their route flips them. Later, the app becomes an installable PWA so approvals can arrive as push notifications.
 
 ## Hosting
 

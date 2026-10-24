@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { ExternalLink, Zap } from 'lucide-react';
 import type { ItemCard } from '../../api/types';
-import { refParam } from '../../shared/factory';
+import { refParam, useFactoryParams } from '../../shared/factory';
 import { formatAge, formatUsd, humanize } from '../../shared/format';
 import { describeState, pullRequestLabel, toneText } from '../../shared/item-state';
 import { Chip } from '../../ui/chip';
@@ -13,15 +13,14 @@ import { cn } from '../../ui/cn';
  */
 export function BoardCard({
   item,
-  factory,
   atConstraint,
   className,
 }: {
   item: ItemCard;
-  factory: string;
   atConstraint: boolean;
   className?: string;
 }) {
+  const params = useFactoryParams();
   const state = describeState(item, { atConstraint });
   const buffered = atConstraint && (item.state === 'ready' || item.state === 'queued');
 
@@ -46,8 +45,8 @@ export function BoardCard({
       </div>
       <h3 className="m-0 text-sm leading-snug font-medium">
         <Link
-          to="/f/$factory/items/$ref"
-          params={{ factory, ref: refParam(item.ref) }}
+          to="/o/$org/f/$factory/items/$ref"
+          params={{ ...params, ref: refParam(item.ref) }}
           className="no-underline outline-none after:absolute after:inset-0 after:rounded-control"
         >
           {item.title}
@@ -78,7 +77,8 @@ export function BoardCard({
 }
 
 /** An expedited item: it skips the queue, so it rides in its own lane above the columns. */
-export function ExpediteCard({ item, factory }: { item: ItemCard; factory: string }) {
+export function ExpediteCard({ item }: { item: ItemCard }) {
+  const params = useFactoryParams();
   return (
     <article className="relative grid grid-cols-[36px_minmax(0,1fr)] items-center gap-3 rounded-control border border-rework-line bg-surface p-3 transition-shadow duration-200 hover:shadow-lift has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-run md:grid-cols-[36px_minmax(0,1fr)_auto]">
       <span
@@ -89,8 +89,8 @@ export function ExpediteCard({ item, factory }: { item: ItemCard; factory: strin
       </span>
       <span className="min-w-0">
         <Link
-          to="/f/$factory/items/$ref"
-          params={{ factory, ref: refParam(item.ref) }}
+          to="/o/$org/f/$factory/items/$ref"
+          params={{ ...params, ref: refParam(item.ref) }}
           className="block text-[15px] leading-snug font-medium no-underline outline-none after:absolute after:inset-0 after:rounded-control"
         >
           {item.title}

@@ -12,6 +12,7 @@ import { Button } from '../ui/button';
 import { cn } from '../ui/cn';
 import { Dialog, DialogClose, DialogContent } from '../ui/dialog';
 import { humanize } from './format';
+import { factoryWorkInvalidations } from './invalidation';
 import { decisionsFor, pullRequestLabel } from './item-state';
 import { useOrg } from './org';
 
@@ -35,17 +36,17 @@ function useDecision(item: DecidableItem, factory: string) {
     mutationFn: (d: Decision): Promise<Item> => {
       switch (d.kind) {
         case 'approve':
-          return approveItem(org, item.key);
+          return approveItem(org.id, item.key);
         case 'reject':
-          return rejectItem(org, item.key, d.reason);
+          return rejectItem(org.id, item.key, d.reason);
         case 'merge':
-          return mergeItem(org, item.key);
+          return mergeItem(org.id, item.key);
         case 'retry':
-          return retryItem(org, item.key);
+          return retryItem(org.id, item.key);
       }
     },
     onSuccess: (updated, d) => {
-      client.setQueryData(keys.item(org, item.key), updated);
+      client.setQueryData(keys.item(org.id, item.key), updated);
       const where = updated.state === 'done' ? 'It is done.' : `It is now at ${humanize(updated.station)}.`;
       const done = {
         approve: `Approved ${item.ref}.`,
@@ -61,14 +62,16 @@ function useDecision(item: DecidableItem, factory: string) {
     },
     onSettled: () =>
       Promise.all([
-        client.invalidateQueries({ queryKey: keys.factory(org, factory) }),
-        client.invalidateQueries({ queryKey: keys.item(org, item.key) }),
+        ...factoryWorkInvalidations(org.id, factory).map((queryKey) => client.invalidateQueries({ queryKey })),
+        client.invalidateQueries({ queryKey: keys.attention(org.id) }),
+        client.invalidateQueries({ queryKey: keys.item(org.id, item.key) }),
       ]),
   });
 }
 
 interface Props {
   item: DecidableItem;
+  /** The factory's id. */
   factory: string;
   /** The item's station: its kind and action decide what can be done. */
   station: Pick<Station, 'kind' | 'action'> | undefined;

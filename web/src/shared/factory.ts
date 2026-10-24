@@ -1,10 +1,21 @@
-import { useLoaderData } from '@tanstack/react-router';
+import { useRouteContext } from '@tanstack/react-router';
 import type { Factory, StationKind } from '../api/types';
 import { humanize } from './format';
 
-/** The factory of the current /f/$factory route. */
+/** The factory of the current /o/$org/f/$factory route; its queries are keyed by its `id`. */
 export function useFactory(): Factory {
-  return useLoaderData({ from: '/f/$factory' }).factory;
+  return useRouteContext({ from: '/o/$org/f/$factory' }).factory;
+}
+
+/** The canonical params of the current factory's pages (organization slug, factory name), for links. */
+export function useFactoryParams(): { org: string; factory: string } {
+  const { org, factory } = useRouteContext({ from: '/o/$org/f/$factory' });
+  return { org: org.slug, factory: factory.name };
+}
+
+/** A factory of the organization by the URL's $factory: its name or its id. */
+export function findFactory(factories: readonly Factory[], key: string): Factory | undefined {
+  return factories.find((f) => f.name === key || f.id === key);
 }
 
 export function factoryTitle(f: { name: string; title?: string | undefined }): string {
@@ -24,25 +35,4 @@ export function itemKey(factory: string, ref: string): string {
 export function refParam(ref: string): string {
   const hash = ref.lastIndexOf('#');
   return hash >= 0 ? ref.slice(hash + 1) : ref;
-}
-
-const lastFactoryKey = 'goal.factory';
-
-export function rememberFactory(name: string): void {
-  try {
-    localStorage.setItem(lastFactoryKey, name);
-  } catch {
-    // Storage can be unavailable (private windows); the floor then opens the first factory.
-  }
-}
-
-/** The factory the floor opens: the one used last, else the first goald lists. */
-export function defaultFactory(factories: Factory[]): Factory | undefined {
-  let last: string | null = null;
-  try {
-    last = localStorage.getItem(lastFactoryKey);
-  } catch {
-    last = null;
-  }
-  return factories.find((f) => f.name === last) ?? factories[0];
 }

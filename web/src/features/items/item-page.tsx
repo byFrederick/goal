@@ -4,7 +4,7 @@ import { ChevronLeft, ExternalLink } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { eventsQuery, itemQuery } from '../../api/queries';
 import type { Factory, Item, Station, StationKind } from '../../api/types';
-import { factoryTitle, itemKey, stationKind, useFactory } from '../../shared/factory';
+import { factoryTitle, itemKey, stationKind, useFactory, useFactoryParams } from '../../shared/factory';
 import { formatClock, formatDuration, formatUsd, humanize } from '../../shared/format';
 import { ItemDecisions } from '../../shared/item-actions';
 import { describeState, pullRequestLabel, pullRequestOf, type Tone } from '../../shared/item-state';
@@ -248,11 +248,12 @@ function LatestSteps({ trace, onShowAll, className }: { trace: Trace; onShowAll:
 export function ItemPage() {
   const factory = useFactory();
   const client = useQueryClient();
-  const { ref } = useParams({ from: '/f/$factory/items/$ref' });
+  const params = useFactoryParams();
+  const { ref } = useParams({ from: '/o/$org/f/$factory/items/$ref' });
   const key = itemKey(factory.name, ref);
   const org = useOrg();
-  const { data: item } = useSuspenseQuery(itemQuery(org, key));
-  const { data: events } = useSuspenseQuery(eventsQuery(client, org, key));
+  const { data: item } = useSuspenseQuery(itemQuery(org.id, key));
+  const { data: events } = useSuspenseQuery(eventsQuery(client, org.id, key));
   const trace = useMemo(() => buildTrace(events), [events]);
   const [fullTrace, setFullTrace] = useState(false);
   const station = factory.stations.find((s) => s.id === item.station);
@@ -280,8 +281,8 @@ export function ItemPage() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex max-w-[820px] min-w-0 flex-col gap-2.5">
           <Link
-            to="/f/$factory/board"
-            params={{ factory: factory.name }}
+            to="/o/$org/f/$factory/board"
+            params={params}
             className="inline-flex min-h-11 items-center gap-1.5 self-start text-[15px] text-muted no-underline md:hidden"
           >
             <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
@@ -290,7 +291,7 @@ export function ItemPage() {
           <nav aria-label="Breadcrumb" className="hidden text-sm text-muted md:block">
             <ol className="m-0 flex list-none gap-1.5 p-0">
               <li>
-                <Link to="/f/$factory/board" params={{ factory: factory.name }} className="text-muted hover:text-run">
+                <Link to="/o/$org/f/$factory/board" params={params} className="text-muted hover:text-run">
                   {board}
                 </Link>
               </li>
@@ -312,37 +313,43 @@ export function ItemPage() {
             {item.title}
           </h1>
         </div>
-        <ItemDecisions item={decidable} factory={factory.name} station={station} size="lg" className="hidden lg:flex" />
+        <ItemDecisions
+          item={decidable}
+          factory={factory.id}
+          station={station}
+          size="lg"
+          className="hidden @[720px]:flex"
+        />
       </header>
 
-      <div className="flex flex-col gap-3 lg:grid lg:grid-cols-3 lg:items-start lg:gap-4">
-        <div className="contents lg:flex lg:flex-col lg:gap-4">
-          <ItemDecisionsCard item={decidable} factory={factory.name} station={station} />
-          <TimeCard item={item} factory={factory} trace={trace} className="order-2 lg:order-none" />
-          <PathCard item={item} factory={factory} trace={trace} className="order-7 lg:order-none" />
+      <div className="flex flex-col gap-3 @[720px]:grid @[720px]:grid-cols-3 @[720px]:items-start @[720px]:gap-4">
+        <div className="contents @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
+          <ItemDecisionsCard item={decidable} factory={factory.id} station={station} />
+          <TimeCard item={item} factory={factory} trace={trace} className="order-2 @[720px]:order-none" />
+          <PathCard item={item} factory={factory} trace={trace} className="order-7 @[720px]:order-none" />
         </div>
-        <div className="contents lg:col-span-2 lg:flex lg:flex-col lg:gap-4">
+        <div className="contents @[720px]:col-span-2 @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
           {fullTrace ? null : (
             <LatestSteps
               trace={trace}
               onShowAll={() => setFullTrace(true)}
-              className={cn(deciding ? 'order-4' : 'order-3', 'lg:hidden')}
+              className={cn(deciding ? 'order-4' : 'order-3', '@[720px]:hidden')}
             />
           )}
           <OutputsCard
             factory={factory}
             outputs={item.outputs}
-            className={cn(deciding ? 'order-3' : 'order-4', 'lg:order-none')}
+            className={cn(deciding ? 'order-3' : 'order-4', '@[720px]:order-none')}
           />
           {item.body ? (
-            <SectionCard title="Request" className="order-5 lg:order-none">
+            <SectionCard title="Request" className="order-5 @[720px]:order-none">
               <p className="m-0 text-[15px] leading-relaxed whitespace-pre-wrap">{item.body}</p>
             </SectionCard>
           ) : null}
           <TraceCard
             item={item}
             trace={trace}
-            className={cn('order-6 lg:order-none', !fullTrace && 'hidden lg:flex')}
+            className={cn('order-6 @[720px]:order-none', !fullTrace && 'hidden @[720px]:flex')}
           />
         </div>
       </div>
@@ -366,7 +373,7 @@ function ItemDecisionsCard({
       factory={factory}
       station={station}
       layout="stack"
-      className="order-1 rounded-card border border-line bg-card p-3.5 lg:hidden"
+      className="order-1 rounded-card border border-line bg-card p-3.5 @[720px]:hidden"
     />
   );
 }

@@ -3,7 +3,7 @@ import { Link, useSearch } from '@tanstack/react-router';
 import { ChevronRight } from 'lucide-react';
 import { itemsQuery } from '../../api/queries';
 import type { ItemState } from '../../api/types';
-import { factoryTitle, refParam, useFactory } from '../../shared/factory';
+import { factoryTitle, refParam, useFactory, useFactoryParams } from '../../shared/factory';
 import { formatAge, formatUsd, humanize } from '../../shared/format';
 import { describeState, toneText } from '../../shared/item-state';
 import { NewItemButton } from '../../shared/new-item';
@@ -21,9 +21,10 @@ export const itemFilters: { state?: ItemState; label: string }[] = [
 
 export function ItemsPage() {
   const factory = useFactory();
-  const { state } = useSearch({ from: '/f/$factory/items/' });
+  const params = useFactoryParams();
+  const { state } = useSearch({ from: '/o/$org/f/$factory/items/' });
   const org = useOrg();
-  const { data } = useSuspenseQuery(itemsQuery(org, factory.name, { state, limit: 200 }));
+  const { data } = useSuspenseQuery(itemsQuery(org.id, factory.id, { state, limit: 200 }));
 
   return (
     <>
@@ -46,8 +47,8 @@ export function ItemsPage() {
             return (
               <li key={f.label}>
                 <Link
-                  to="/f/$factory/items"
-                  params={{ factory: factory.name }}
+                  to="/o/$org/f/$factory/items"
+                  params={params}
                   search={f.state ? { state: f.state } : {}}
                   aria-current={active ? 'page' : undefined}
                   className={cn(
@@ -74,8 +75,8 @@ export function ItemsPage() {
             return (
               <li key={it.id} className="border-t border-line first:border-t-0">
                 <Link
-                  to="/f/$factory/items/$ref"
-                  params={{ factory: factory.name, ref: refParam(it.ref) }}
+                  to="/o/$org/f/$factory/items/$ref"
+                  params={{ ...params, ref: refParam(it.ref) }}
                   className="grid grid-cols-[minmax(0,1fr)_12px] items-center gap-3 px-4 py-3 no-underline transition-colors hover:bg-shell md:grid-cols-[72px_minmax(0,1fr)_150px_170px_90px_12px] md:gap-4"
                 >
                   <span className="hidden text-sm text-muted md:block">{it.ref}</span>

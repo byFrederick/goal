@@ -2,12 +2,12 @@
 // these functions through TanStack Query (queries.ts). Every failure throws ApiError, which
 // carries goald's Problem. Every route but the organization list belongs to an organization:
 // those functions take its slug or id first (`org`), and their paths are written relative to it
-// (orgPath). Decisions carry no actor: goald takes the request's (the local user in phase 2.2).
+// (orgPath); factories are named by id. Decisions carry no actor: goald takes the request's (the local user in phase 2.2).
 import {
   ApiError,
   createGoalClient,
   orgPath,
-  type StreamEvent,
+  type StreamHandlers,
   type StreamStatus,
   subscribe,
   unwrap,
@@ -173,17 +173,12 @@ export function retryItem(org: string, item: string): Promise<Item> {
 }
 
 /**
- * Subscribes to a factory's item events in an organization. goald does not replay: after a
+ * Subscribes to an organization's events (every factory's). goald does not replay: after a
  * reconnect (not the first open), and on `event: resync`, events may have been missed, so
- * `onResync` asks the caller to re-read what it shows. `onStatus` reports the connection so
- * screens can say when they are live. Returns the unsubscribe function.
+ * `onResync` asks the caller to re-read what it shows. `onStatus` reports the connection so the
+ * shell can say when it is reconnecting; `events` names further event kinds to pass to `onEvent`.
+ * Returns the unsubscribe function.
  */
-export function subscribeToFactory(
-  org: string,
-  factory: string,
-  onEvent: (e: StreamEvent) => void,
-  onResync: () => void,
-  onStatus: (s: StreamStatus) => void,
-): () => void {
-  return subscribe(apiBase, { org, factory }, { onItem: onEvent, onResync, onStatus });
+export function subscribeToOrg(org: string, handlers: StreamHandlers): () => void {
+  return subscribe(apiBase, { org }, handlers);
 }

@@ -21,8 +21,10 @@
 
   /* Text and lines */
   --color-ink: #1d2733;
+  --color-ink-soft: #3a4654;
   --color-muted: #556270;
   --color-rule: #cbd2ce;
+  --color-rule-strong: #6f7b77;
   --color-line: #dde2df;
   --color-hairline: #e3e7e5;
   --color-faint: #9aa5a0;
@@ -38,12 +40,15 @@
   --color-you: #5b4bb7;
   --color-you-tint: #ece9f8;
   --color-you-line: #c9c1ee;
+  --color-you-ink: #4a3c9e;
   --color-rework: #b4441c;
   --color-rework-tint: #fbefe9;
   --color-rework-line: #ebc3b2;
   --color-rework-ink: #8a3313;
   --color-rework-hatch: #f1cdbe;
   --color-ok: #2e6b4e;
+  --color-ok-tint: #e3efe8;
+  --color-ok-ink: #24563e;
   --color-ok-dot: #2e8b5e;
   --color-target: #8a958f;
 
@@ -60,6 +65,7 @@
   --shadow-raise: 0 1px 2px rgb(29 39 51 / 0.08);
   --shadow-lift: 0 4px 12px -6px rgb(29 39 51 / 0.25);
   --shadow-dialog: 0 20px 25px -5px rgb(29 39 51 / 0.2);
+  --shadow-tip: 0 8px 20px -8px rgb(29 39 51 / 0.35);
 
   @keyframes fade-in {
     from {
@@ -86,6 +92,13 @@
     min-height: 100dvh;
   }
 
+  /* Below 768 px a factory's tab bar is fixed to the bottom: focus scrolled into view clears it. */
+  @media (width < 48rem) {
+    html {
+      scroll-padding-bottom: 5rem;
+    }
+  }
+
   ::selection {
     background: var(--color-run-hatch);
     color: var(--color-ink);
@@ -106,6 +119,11 @@
   :focus-visible {
     outline: 2px solid var(--color-run);
     outline-offset: 2px;
+  }
+
+  /* Headings and regions that take focus after a navigation (useRouteFocus) are not controls. */
+  [tabindex="-1"]:focus {
+    outline: none;
   }
 
   input,

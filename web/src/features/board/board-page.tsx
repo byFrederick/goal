@@ -4,10 +4,10 @@ import { Tabs } from 'radix-ui';
 import { useEffect, useRef } from 'react';
 import { boardQuery } from '../../api/queries';
 import type { Board, BoardStation, ItemCard } from '../../api/types';
-import { LiveStatus } from '../../shared/chrome';
 import { factoryTitle, useFactory } from '../../shared/factory';
 import { formatAge, humanize, plural } from '../../shared/format';
 import { waitingOnYou } from '../../shared/item-state';
+import { LiveStatus } from '../../shared/live-status';
 import { NewItemButton } from '../../shared/new-item';
 import { useOrg } from '../../shared/org';
 import { SectionCard } from '../../ui/card';
@@ -111,14 +111,14 @@ function LineCard({ board }: { board: Board }) {
   );
 }
 
-function ExpediteLane({ items, factory }: { items: ItemCard[]; factory: string }) {
+function ExpediteLane({ items }: { items: ItemCard[] }) {
   if (items.length === 0) return null;
   return (
     <section
       aria-labelledby="expedite-h"
-      className="flex flex-col gap-3 rounded-card border border-rework-line bg-rework-tint p-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-4 lg:px-3.5"
+      className="flex flex-col gap-3 rounded-card border border-rework-line bg-rework-tint p-3 @[720px]:flex-row @[720px]:flex-wrap @[720px]:items-center @[720px]:gap-4 @[720px]:px-3.5"
     >
-      <div className="lg:w-[140px] lg:shrink-0">
+      <div className="@[720px]:w-[140px] @[720px]:shrink-0">
         <h2 id="expedite-h" className="m-0 text-[15px] font-medium text-rework-ink">
           Expedite lane
         </h2>
@@ -126,14 +126,14 @@ function ExpediteLane({ items, factory }: { items: ItemCard[]; factory: string }
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-2 md:max-w-[680px]">
         {items.map((it) => (
-          <ExpediteCard key={it.id} item={it} factory={factory} />
+          <ExpediteCard key={it.id} item={it} />
         ))}
       </div>
     </section>
   );
 }
 
-function Columns({ board, factory }: { board: Board; factory: string }) {
+function Columns({ board }: { board: Board }) {
   return (
     <section aria-label="Stations" className="-mx-1 hidden overflow-x-auto px-1 pb-2 md:block">
       <div
@@ -164,7 +164,7 @@ function Columns({ board, factory }: { board: Board; factory: string }) {
               </div>
               {items.length === 0 ? <p className="m-0 px-1 pb-1 text-[13px] text-muted">Empty</p> : null}
               {items.map((it) => (
-                <BoardCard key={it.id} item={it} factory={factory} atConstraint={drum} />
+                <BoardCard key={it.id} item={it} atConstraint={drum} />
               ))}
             </section>
           );
@@ -175,8 +175,8 @@ function Columns({ board, factory }: { board: Board; factory: string }) {
 }
 
 /** Phones: a station picker and the picked station's cards. */
-function StationTabs({ board, factory, selected }: { board: Board; factory: string; selected: string }) {
-  const navigate = useNavigate({ from: '/f/$factory/board' });
+function StationTabs({ board, selected }: { board: Board; selected: string }) {
+  const navigate = useNavigate({ from: '/o/$org/f/$factory/board' });
   const list = useRef<HTMLDivElement>(null);
 
   // Keep the picked station visible in the scrolling picker.
@@ -237,7 +237,7 @@ function StationTabs({ board, factory, selected }: { board: Board; factory: stri
               ) : null}
               {items.length === 0 ? <p className="m-0 text-sm text-muted">Nothing here right now.</p> : null}
               {items.map((it) => (
-                <BoardCard key={it.id} item={it} factory={factory} atConstraint={drum} className="p-3.5" />
+                <BoardCard key={it.id} item={it} atConstraint={drum} className="p-3.5" />
               ))}
             </section>
           </Tabs.Content>
@@ -250,8 +250,8 @@ function StationTabs({ board, factory, selected }: { board: Board; factory: stri
 export function BoardPage() {
   const factory = useFactory();
   const org = useOrg();
-  const { data: board } = useSuspenseQuery(boardQuery(org, factory.name));
-  const search = useSearch({ from: '/f/$factory/board' });
+  const { data: board } = useSuspenseQuery(boardQuery(org.id, factory.id));
+  const search = useSearch({ from: '/o/$org/f/$factory/board' });
   const expedite = board.stations.flatMap((s) => s.items.filter(isExpedite));
   const wip = board.stations.reduce((n, s) => n + s.in_progress, 0);
   const selected =
@@ -286,9 +286,9 @@ export function BoardPage() {
       <div className="hidden md:block">
         <LineCard board={board} />
       </div>
-      <ExpediteLane items={expedite} factory={factory.name} />
-      <Columns board={board} factory={factory.name} />
-      <StationTabs board={board} factory={factory.name} selected={selected} />
+      <ExpediteLane items={expedite} />
+      <Columns board={board} />
+      <StationTabs board={board} selected={selected} />
       <p className="m-0 text-[13px] text-muted">Agents pull work when they have room; nobody assigns it.</p>
     </>
   );

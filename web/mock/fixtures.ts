@@ -1,7 +1,8 @@
 // Illustrative data for the mock API: two organizations, as the Org-Switcher board shows them.
-// Acme has three factories (a "goal" factory building itself, a small SRE factory and an empty
-// support factory whose line is stopped by an andon pull); Example Labs has one, empty. Times are relative to when the mock starts, so
-// ages read like a live floor.
+// Acme has three factories (a "goal" factory building itself, a small SRE factory with three
+// decisions waiting, as on the canvas, and an empty support factory whose line is stopped by an
+// andon pull); Example Labs has one, empty. Times are relative to when the mock starts, so ages
+// read like a live floor.
 import type { AndonPull, ClassOfService, Factory, ItemEvent, ItemState, Metrics, Org } from '@goal/api-client';
 
 export interface MockItem {
@@ -658,6 +659,44 @@ const goalSeeds: Seed[] = [
 ];
 
 const sreSeeds: Seed[] = [
+  {
+    number: 4,
+    title: 'Raise ALB idle timeout for websockets',
+    type: 'change',
+    body: 'Websocket clients drop after 60 seconds behind the load balancer.',
+    station: 'approve',
+    state: 'waiting_human',
+    createdMin: 300,
+    updatedMin: 120,
+    outputs: { investigate: { summary: 'Idle timeout 60 s; the clients ping every 90 s. Raise it to 120 s.' } },
+    steps: [
+      { move: 'triage' },
+      { run: 'triager', cost: 0.05, turns: 2, tools: [] },
+      { move: 'investigate' },
+      { run: 'investigator', cost: 0.41, turns: 9, tools: [['Read', 'alb/listeners.tf', 'Read 40 lines']] },
+      { move: 'approve' },
+      { waiting: true },
+    ],
+  },
+  {
+    number: 1,
+    title: 'Rotate the staging TLS certificate',
+    type: 'toil',
+    body: 'The staging certificate expires in nine days.',
+    station: 'approve',
+    state: 'waiting_human',
+    createdMin: 1500,
+    updatedMin: 180,
+    outputs: { investigate: { summary: 'Renewal request drafted for staging.example.com.' } },
+    steps: [
+      { move: 'triage' },
+      { run: 'triager', cost: 0.04, turns: 2, tools: [] },
+      { move: 'investigate' },
+      { run: 'investigator', cost: 0.22, turns: 5, tools: [['Bash', 'openssl x509 -enddate', 'notAfter in 9 days']] },
+      { move: 'approve' },
+      { waiting: true },
+    ],
+  },
   {
     number: 3,
     title: 'Disk at 85% on bastion-prod',

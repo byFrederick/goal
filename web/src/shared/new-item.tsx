@@ -4,12 +4,12 @@ import { Plus } from 'lucide-react';
 import { type FormEvent, useId, useState } from 'react';
 import { toast } from 'sonner';
 import { submitItem } from '../api/client';
-import { keys } from '../api/queries';
 import type { Factory } from '../api/types';
 import { Button } from '../ui/button';
 import { Dialog, DialogClose, DialogContent, DialogTrigger } from '../ui/dialog';
 import { refParam } from './factory';
 import { humanize } from './format';
+import { factoryWorkInvalidations } from './invalidation';
 import { useOrg } from './org';
 
 const field =
@@ -29,15 +29,18 @@ export function NewItemButton({ factory, compact }: { factory: Factory; compact?
 
   const submit = useMutation({
     mutationFn: () =>
-      submitItem(org, factory.name, { title: title.trim(), type, ...(body.trim() ? { body: body.trim() } : {}) }),
+      submitItem(org.id, factory.id, { title: title.trim(), type, ...(body.trim() ? { body: body.trim() } : {}) }),
     onSuccess: (item) => {
       setOpen(false);
       setTitle('');
       setBody('');
       setTouched(false);
       toast.success(`Created ${item.ref}. It waits at ${humanize(item.station)}.`);
-      client.invalidateQueries({ queryKey: keys.factory(org, factory.name) });
-      navigate({ to: '/f/$factory/items/$ref', params: { factory: factory.name, ref: refParam(item.ref) } });
+      for (const queryKey of factoryWorkInvalidations(org.id, factory.id)) client.invalidateQueries({ queryKey });
+      navigate({
+        to: '/o/$org/f/$factory/items/$ref',
+        params: { org: org.slug, factory: factory.name, ref: refParam(item.ref) },
+      });
     },
     onError: (err) => toast.error('Could not create the item', { description: err.message }),
   });

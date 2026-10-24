@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { ChevronRight } from 'lucide-react';
 import type { Board, BoardStation, Metrics } from '../../api/types';
+import { useFactoryParams } from '../../shared/factory';
 import { formatDay, formatHours, formatPercent, formatUsd, formatWeekday, humanize, plural } from '../../shared/format';
 import { waitingOnYou } from '../../shared/item-state';
 import { SectionCard, StatRow } from '../../ui/card';
@@ -55,7 +56,7 @@ export function ThroughputCard({ metrics, className }: { metrics: Metrics; class
 }
 
 /** The dark card: the station holding the line back (the drum), or that there is none. */
-export function ConstraintCard({ board, factory, className }: { board: Board; factory: string; className?: string }) {
+export function ConstraintCard({ board, className }: { board: Board; className?: string }) {
   const station = board.stations.find((s) => s.id === board.constraint);
   const shapes = (
     <>
@@ -109,7 +110,7 @@ export function ConstraintCard({ board, factory, className }: { board: Board; fa
               ? `${plural(station.waiting, 'item')} wait in front of it. The rest of the line moves at its pace.`
               : 'It runs at its limit. The rest of the line moves at its pace.'}
           </p>
-          <ConstraintLink factory={factory} station={station} />
+          <ConstraintLink station={station} />
         </>
       ) : (
         <>
@@ -119,18 +120,19 @@ export function ConstraintCard({ board, factory, className }: { board: Board; fa
           <p className="relative m-0 max-w-[34ch] text-sm leading-normal text-white/85 md:mt-3 md:text-[15px]">
             No station holds the line back. Work moves at the pace it arrives.
           </p>
-          <ConstraintLink factory={factory} />
+          <ConstraintLink />
         </>
       )}
     </section>
   );
 }
 
-function ConstraintLink({ factory, station }: { factory: string; station?: BoardStation }) {
+function ConstraintLink({ station }: { station?: BoardStation }) {
+  const params = useFactoryParams();
   return (
     <Link
-      to="/f/$factory/board"
-      params={{ factory }}
+      to="/o/$org/f/$factory/board"
+      params={params}
       search={station ? { station: station.id } : {}}
       className="relative mt-2 inline-flex h-11 items-center gap-2 self-start rounded-control bg-white px-4 text-[15px] font-medium text-ink no-underline transition-colors hover:bg-shell md:mt-auto"
     >

@@ -1,7 +1,7 @@
 // Query keys and options over client.ts. Keys are hierarchical, rooted at the organization by its
-// id (['org', org, …], C §10.10, so a slug rename does not split the cache), then factory →
-// resource, so the stream can invalidate exactly what an event touches and a resync everything
-// of one organization.
+// id (['org', org, …], C §10.10, so a slug rename does not split the cache), then factory (by id,
+// as stream events name it) → resource, so the stream can invalidate exactly what an event
+// touches and a resync everything of one organization. Requests name the factory by id too.
 import { type QueryClient, queryOptions } from '@tanstack/react-query';
 import {
   getAttention,
@@ -24,11 +24,15 @@ export const keys = {
   /** The prefix of everything of one organization. */
   org: (org: string) => ['org', org] as const,
   orgDetail: (org: string) => ['org', org, 'detail'] as const,
+  /** What each factory needs from people now (the rail's badges). */
   attention: (org: string) => ['org', org, 'attention'] as const,
-  overview: (org: string, window: string) => ['org', org, 'overview', window] as const,
-  /** One factory's inbox (by the id or name the query was made with), or the organization's ('all'). */
-  inbox: (org: string, factory?: string) => ['org', org, 'inbox', factory ?? 'all'] as const,
   factories: (org: string) => ['org', org, 'factories'] as const,
+  /** The prefix of every factory overview window. */
+  overviews: (org: string) => ['org', org, 'overview'] as const,
+  overview: (org: string, window: string) => ['org', org, 'overview', window] as const,
+  /** The prefix of the organization's inbox and every factory's. */
+  inboxes: (org: string) => ['org', org, 'inbox'] as const,
+  inbox: (org: string, factory?: string) => ['org', org, 'inbox', factory ?? 'all'] as const,
   factory: (org: string, factory: string) => ['org', org, 'factory', factory] as const,
   board: (org: string, factory: string) => ['org', org, 'factory', factory, 'board'] as const,
   metrics: (org: string, factory: string, window: string) =>

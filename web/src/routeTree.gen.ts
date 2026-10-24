@@ -10,96 +10,138 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as FFactoryRouteImport } from './routes/f.$factory'
-import { Route as FFactoryIndexRouteImport } from './routes/f.$factory.index'
-import { Route as FFactoryBoardRouteImport } from './routes/f.$factory.board'
-import { Route as FFactoryItemsIndexRouteImport } from './routes/f.$factory.items.index'
-import { Route as FFactoryItemsRefRouteImport } from './routes/f.$factory.items.$ref'
+import { Route as FSplatRouteImport } from './routes/f.$'
+import { Route as OOrgRouteImport } from './routes/o.$org'
+import { Route as OOrgOrgRouteImport } from './routes/o.$org._org'
+import { Route as OOrgOrgIndexRouteImport } from './routes/o.$org._org.index'
+import { Route as OOrgFFactoryRouteImport } from './routes/o.$org.f.$factory'
+import { Route as OOrgFFactoryIndexRouteImport } from './routes/o.$org.f.$factory.index'
+import { Route as OOrgFFactoryBoardRouteImport } from './routes/o.$org.f.$factory.board'
+import { Route as OOrgFFactoryItemsIndexRouteImport } from './routes/o.$org.f.$factory.items.index'
+import { Route as OOrgFFactoryItemsRefRouteImport } from './routes/o.$org.f.$factory.items.$ref'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const FFactoryRoute = FFactoryRouteImport.update({
-  id: '/f/$factory',
-  path: '/f/$factory',
+const FSplatRoute = FSplatRouteImport.update({
+  id: '/f/$',
+  path: '/f/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const FFactoryIndexRoute = FFactoryIndexRouteImport.update({
+const OOrgRoute = OOrgRouteImport.update({
+  id: '/o/$org',
+  path: '/o/$org',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OOrgOrgRoute = OOrgOrgRouteImport.update({
+  id: '/_org',
+  getParentRoute: () => OOrgRoute,
+} as any)
+const OOrgOrgIndexRoute = OOrgOrgIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => FFactoryRoute,
+  getParentRoute: () => OOrgOrgRoute,
 } as any)
-const FFactoryBoardRoute = FFactoryBoardRouteImport.update({
+const OOrgFFactoryRoute = OOrgFFactoryRouteImport.update({
+  id: '/f/$factory',
+  path: '/f/$factory',
+  getParentRoute: () => OOrgRoute,
+} as any)
+const OOrgFFactoryIndexRoute = OOrgFFactoryIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => OOrgFFactoryRoute,
+} as any)
+const OOrgFFactoryBoardRoute = OOrgFFactoryBoardRouteImport.update({
   id: '/board',
   path: '/board',
-  getParentRoute: () => FFactoryRoute,
+  getParentRoute: () => OOrgFFactoryRoute,
 } as any)
-const FFactoryItemsIndexRoute = FFactoryItemsIndexRouteImport.update({
+const OOrgFFactoryItemsIndexRoute = OOrgFFactoryItemsIndexRouteImport.update({
   id: '/items/',
   path: '/items/',
-  getParentRoute: () => FFactoryRoute,
+  getParentRoute: () => OOrgFFactoryRoute,
 } as any)
-const FFactoryItemsRefRoute = FFactoryItemsRefRouteImport.update({
+const OOrgFFactoryItemsRefRoute = OOrgFFactoryItemsRefRouteImport.update({
   id: '/items/$ref',
   path: '/items/$ref',
-  getParentRoute: () => FFactoryRoute,
+  getParentRoute: () => OOrgFFactoryRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/f/$factory': typeof FFactoryRouteWithChildren
-  '/f/$factory/board': typeof FFactoryBoardRoute
-  '/f/$factory/': typeof FFactoryIndexRoute
-  '/f/$factory/items/$ref': typeof FFactoryItemsRefRoute
-  '/f/$factory/items/': typeof FFactoryItemsIndexRoute
+  '/f/$': typeof FSplatRoute
+  '/o/$org': typeof OOrgRouteWithChildren
+  '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
+  '/o/$org/': typeof OOrgOrgIndexRoute
+  '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
+  '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
+  '/o/$org/f/$factory/items/$ref': typeof OOrgFFactoryItemsRefRoute
+  '/o/$org/f/$factory/items/': typeof OOrgFFactoryItemsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/f/$factory/board': typeof FFactoryBoardRoute
-  '/f/$factory': typeof FFactoryIndexRoute
-  '/f/$factory/items/$ref': typeof FFactoryItemsRefRoute
-  '/f/$factory/items': typeof FFactoryItemsIndexRoute
+  '/f/$': typeof FSplatRoute
+  '/o/$org': typeof OOrgOrgIndexRoute
+  '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
+  '/o/$org/f/$factory': typeof OOrgFFactoryIndexRoute
+  '/o/$org/f/$factory/items/$ref': typeof OOrgFFactoryItemsRefRoute
+  '/o/$org/f/$factory/items': typeof OOrgFFactoryItemsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/f/$factory': typeof FFactoryRouteWithChildren
-  '/f/$factory/board': typeof FFactoryBoardRoute
-  '/f/$factory/': typeof FFactoryIndexRoute
-  '/f/$factory/items/$ref': typeof FFactoryItemsRefRoute
-  '/f/$factory/items/': typeof FFactoryItemsIndexRoute
+  '/f/$': typeof FSplatRoute
+  '/o/$org': typeof OOrgRouteWithChildren
+  '/o/$org/_org': typeof OOrgOrgRouteWithChildren
+  '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
+  '/o/$org/_org/': typeof OOrgOrgIndexRoute
+  '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
+  '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
+  '/o/$org/f/$factory/items/$ref': typeof OOrgFFactoryItemsRefRoute
+  '/o/$org/f/$factory/items/': typeof OOrgFFactoryItemsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/f/$factory'
-    | '/f/$factory/board'
-    | '/f/$factory/'
-    | '/f/$factory/items/$ref'
-    | '/f/$factory/items/'
+    | '/f/$'
+    | '/o/$org'
+    | '/o/$org/f/$factory'
+    | '/o/$org/'
+    | '/o/$org/f/$factory/board'
+    | '/o/$org/f/$factory/'
+    | '/o/$org/f/$factory/items/$ref'
+    | '/o/$org/f/$factory/items/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/f/$factory/board'
-    | '/f/$factory'
-    | '/f/$factory/items/$ref'
-    | '/f/$factory/items'
+    | '/f/$'
+    | '/o/$org'
+    | '/o/$org/f/$factory/board'
+    | '/o/$org/f/$factory'
+    | '/o/$org/f/$factory/items/$ref'
+    | '/o/$org/f/$factory/items'
   id:
     | '__root__'
     | '/'
-    | '/f/$factory'
-    | '/f/$factory/board'
-    | '/f/$factory/'
-    | '/f/$factory/items/$ref'
-    | '/f/$factory/items/'
+    | '/f/$'
+    | '/o/$org'
+    | '/o/$org/_org'
+    | '/o/$org/f/$factory'
+    | '/o/$org/_org/'
+    | '/o/$org/f/$factory/board'
+    | '/o/$org/f/$factory/'
+    | '/o/$org/f/$factory/items/$ref'
+    | '/o/$org/f/$factory/items/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  FFactoryRoute: typeof FFactoryRouteWithChildren
+  FSplatRoute: typeof FSplatRoute
+  OOrgRoute: typeof OOrgRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -111,65 +153,117 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/f/$factory': {
-      id: '/f/$factory'
-      path: '/f/$factory'
-      fullPath: '/f/$factory'
-      preLoaderRoute: typeof FFactoryRouteImport
+    '/f/$': {
+      id: '/f/$'
+      path: '/f/$'
+      fullPath: '/f/$'
+      preLoaderRoute: typeof FSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/f/$factory/': {
-      id: '/f/$factory/'
+    '/o/$org': {
+      id: '/o/$org'
+      path: '/o/$org'
+      fullPath: '/o/$org'
+      preLoaderRoute: typeof OOrgRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/o/$org/_org': {
+      id: '/o/$org/_org'
+      path: ''
+      fullPath: '/o/$org'
+      preLoaderRoute: typeof OOrgOrgRouteImport
+      parentRoute: typeof OOrgRoute
+    }
+    '/o/$org/_org/': {
+      id: '/o/$org/_org/'
       path: '/'
-      fullPath: '/f/$factory/'
-      preLoaderRoute: typeof FFactoryIndexRouteImport
-      parentRoute: typeof FFactoryRoute
+      fullPath: '/o/$org/'
+      preLoaderRoute: typeof OOrgOrgIndexRouteImport
+      parentRoute: typeof OOrgOrgRoute
     }
-    '/f/$factory/board': {
-      id: '/f/$factory/board'
+    '/o/$org/f/$factory': {
+      id: '/o/$org/f/$factory'
+      path: '/f/$factory'
+      fullPath: '/o/$org/f/$factory'
+      preLoaderRoute: typeof OOrgFFactoryRouteImport
+      parentRoute: typeof OOrgRoute
+    }
+    '/o/$org/f/$factory/': {
+      id: '/o/$org/f/$factory/'
+      path: '/'
+      fullPath: '/o/$org/f/$factory/'
+      preLoaderRoute: typeof OOrgFFactoryIndexRouteImport
+      parentRoute: typeof OOrgFFactoryRoute
+    }
+    '/o/$org/f/$factory/board': {
+      id: '/o/$org/f/$factory/board'
       path: '/board'
-      fullPath: '/f/$factory/board'
-      preLoaderRoute: typeof FFactoryBoardRouteImport
-      parentRoute: typeof FFactoryRoute
+      fullPath: '/o/$org/f/$factory/board'
+      preLoaderRoute: typeof OOrgFFactoryBoardRouteImport
+      parentRoute: typeof OOrgFFactoryRoute
     }
-    '/f/$factory/items/': {
-      id: '/f/$factory/items/'
+    '/o/$org/f/$factory/items/': {
+      id: '/o/$org/f/$factory/items/'
       path: '/items'
-      fullPath: '/f/$factory/items/'
-      preLoaderRoute: typeof FFactoryItemsIndexRouteImport
-      parentRoute: typeof FFactoryRoute
+      fullPath: '/o/$org/f/$factory/items/'
+      preLoaderRoute: typeof OOrgFFactoryItemsIndexRouteImport
+      parentRoute: typeof OOrgFFactoryRoute
     }
-    '/f/$factory/items/$ref': {
-      id: '/f/$factory/items/$ref'
+    '/o/$org/f/$factory/items/$ref': {
+      id: '/o/$org/f/$factory/items/$ref'
       path: '/items/$ref'
-      fullPath: '/f/$factory/items/$ref'
-      preLoaderRoute: typeof FFactoryItemsRefRouteImport
-      parentRoute: typeof FFactoryRoute
+      fullPath: '/o/$org/f/$factory/items/$ref'
+      preLoaderRoute: typeof OOrgFFactoryItemsRefRouteImport
+      parentRoute: typeof OOrgFFactoryRoute
     }
   }
 }
 
-interface FFactoryRouteChildren {
-  FFactoryBoardRoute: typeof FFactoryBoardRoute
-  FFactoryIndexRoute: typeof FFactoryIndexRoute
-  FFactoryItemsRefRoute: typeof FFactoryItemsRefRoute
-  FFactoryItemsIndexRoute: typeof FFactoryItemsIndexRoute
+interface OOrgOrgRouteChildren {
+  OOrgOrgIndexRoute: typeof OOrgOrgIndexRoute
 }
 
-const FFactoryRouteChildren: FFactoryRouteChildren = {
-  FFactoryBoardRoute: FFactoryBoardRoute,
-  FFactoryIndexRoute: FFactoryIndexRoute,
-  FFactoryItemsRefRoute: FFactoryItemsRefRoute,
-  FFactoryItemsIndexRoute: FFactoryItemsIndexRoute,
+const OOrgOrgRouteChildren: OOrgOrgRouteChildren = {
+  OOrgOrgIndexRoute: OOrgOrgIndexRoute,
 }
 
-const FFactoryRouteWithChildren = FFactoryRoute._addFileChildren(
-  FFactoryRouteChildren,
+const OOrgOrgRouteWithChildren =
+  OOrgOrgRoute._addFileChildren(OOrgOrgRouteChildren)
+
+interface OOrgFFactoryRouteChildren {
+  OOrgFFactoryBoardRoute: typeof OOrgFFactoryBoardRoute
+  OOrgFFactoryIndexRoute: typeof OOrgFFactoryIndexRoute
+  OOrgFFactoryItemsRefRoute: typeof OOrgFFactoryItemsRefRoute
+  OOrgFFactoryItemsIndexRoute: typeof OOrgFFactoryItemsIndexRoute
+}
+
+const OOrgFFactoryRouteChildren: OOrgFFactoryRouteChildren = {
+  OOrgFFactoryBoardRoute: OOrgFFactoryBoardRoute,
+  OOrgFFactoryIndexRoute: OOrgFFactoryIndexRoute,
+  OOrgFFactoryItemsRefRoute: OOrgFFactoryItemsRefRoute,
+  OOrgFFactoryItemsIndexRoute: OOrgFFactoryItemsIndexRoute,
+}
+
+const OOrgFFactoryRouteWithChildren = OOrgFFactoryRoute._addFileChildren(
+  OOrgFFactoryRouteChildren,
 )
+
+interface OOrgRouteChildren {
+  OOrgOrgRoute: typeof OOrgOrgRouteWithChildren
+  OOrgFFactoryRoute: typeof OOrgFFactoryRouteWithChildren
+}
+
+const OOrgRouteChildren: OOrgRouteChildren = {
+  OOrgOrgRoute: OOrgOrgRouteWithChildren,
+  OOrgFFactoryRoute: OOrgFFactoryRouteWithChildren,
+}
+
+const OOrgRouteWithChildren = OOrgRoute._addFileChildren(OOrgRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  FFactoryRoute: FFactoryRouteWithChildren,
+  FSplatRoute: FSplatRoute,
+  OOrgRoute: OOrgRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

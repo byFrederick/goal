@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { CircleCheck, TriangleAlert, Zap } from 'lucide-react';
 import type { Board, BoardStation, Factory, ItemCard } from '../../api/types';
-import { refParam } from '../../shared/factory';
+import { refParam, useFactoryParams } from '../../shared/factory';
 import { formatAge, humanize, plural } from '../../shared/format';
 import { ItemDecisions } from '../../shared/item-actions';
 import { SectionCard } from '../../ui/card';
@@ -48,6 +48,7 @@ function subline(n: Need): string {
 }
 
 export function NeedsYouCard({ board, factory, className }: { board: Board; factory: Factory; className?: string }) {
+  const params = useFactoryParams();
   const needs = needsOf(board);
   const decisions = needs.filter((n) => n.why !== 'expedite').length;
 
@@ -79,8 +80,8 @@ export function NeedsYouCard({ board, factory, className }: { board: Board; fact
                   </span>
                   <span className="min-w-0">
                     <Link
-                      to="/f/$factory/items/$ref"
-                      params={{ factory: factory.name, ref: refParam(n.item.ref) }}
+                      to="/o/$org/f/$factory/items/$ref"
+                      params={{ ...params, ref: refParam(n.item.ref) }}
                       className="block text-[15px] leading-snug font-medium no-underline hover:underline"
                     >
                       <span className="text-muted">{n.item.ref}</span> {n.item.title}
@@ -96,7 +97,7 @@ export function NeedsYouCard({ board, factory, className }: { board: Board; fact
                     state: n.item.state,
                     pr_url: n.item.pr_url,
                   }}
-                  factory={factory.name}
+                  factory={factory.id}
                   station={n.station}
                   className="pl-[52px] @lg:pl-0"
                 />

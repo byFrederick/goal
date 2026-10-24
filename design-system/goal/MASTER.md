@@ -18,6 +18,11 @@
 > | `--you` | `#5B4BB7` | Waiting on a human |
 > | `--rework` | `#B4441C` | Rework, delays, losses, andon (replaces red/pink) |
 > | `--ok` | `#2E6B4E` | Healthy, done |
+> | `--ok-tint` | `#E3EFE8` | Background behind healthy states |
+> | `--ok-ink` | `#24563E` | Healthy text ("Running", positive deltas) |
+> | `--you-ink` | `#4A3C9E` | Text on the violet tint (waiting-on-you banners) |
+> | `--ink-soft` | `#3A4654` | Rail icons; a count's background on the active nav item |
+> | `--rule-strong` | `#6F7B77` | Dashed "new" squares, hover borders, switch borders |
 >
 > - **Navigation (user decision, 2026-10-23):** a 72px rail on the far left with the organization mark at the top (opens the organization menu: switch organization, members and roles, connector catalog, credentials, settings), then one square per factory of that organization only (current one ink-filled; violet count = waiting on you, rust dot = blocked), a dashed + for New factory, and at the bottom Connector catalog, Credentials and the user. Inside a factory a 232px sidebar groups Work (Floor, Board, Items), Build (Line, Agents, Connections, Definition) and Learn (Knowledge, Jonah); organization pages use an organization sidebar instead. On a phone: a top row with the organization mark and factory squares, a bottom tab bar, and the organization menu as a bottom sheet. The UI canvas is the reference.
 > - **Layout:** the app takes the whole viewport like a normal web app: rail and sidebar pinned to the left edge (full height, right borders), content beside it. No framed, floating or rounded outer shell and no outer margin around the app; the framed box in the reference video was only its presentation. (User override, 2026-10-23.)

@@ -1,52 +1,75 @@
-// Live updates: one stream subscription per open factory, within its organization. Each item
-// event invalidates the queries it can change (invalidation.ts); invalidations are batched so a
-// burst of tool calls causes one refetch.
-import { useQueryClient } from '@tanstack/react-query';
-import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
-import { type StreamStatus, subscribeToFactory } from '../api/client';
-import { itemInvalidations, resyncInvalidations } from './invalidation';
+// Live updates: one stream subscription per open organization, mounted by the /o/$org layout
+// (C §10.10). Each item event invalidates the queries it can change (invalidation.ts); they are
+// batched so a burst of tool calls costs one refetch, and the dear factory overviews at most once
+// every few seconds. Switching organization closes the old stream and opens the new one.
+import { type QueryClient, type QueryKey, useQueryClient } from '@tanstack/react-query';
+import { createContext, type ReactNode, use, useEffect, useState } from 'react';
+import { type StreamStatus, subscribeToOrg } from '../api/client';
+import { invalidationsFor, isOverviewKey, resyncInvalidations } from './invalidation';
 
 const StatusContext = createContext<StreamStatus>('connecting');
 
 export function useStreamStatus(): StreamStatus {
-  return useContext(StatusContext);
+  return use(StatusContext);
 }
 
-const batchMs = 300;
+/**
+ * The queries other event names invalidate, by name. Later phases register theirs here (B
+ * `definition`, E `factory`, phase 3 `credential`, `approval`, `connection`); names nobody
+ * registered are ignored, so new events never break an older client.
+ */
+export const streamHandlers: Readonly<Record<string, (org: string, data: unknown) => QueryKey[]>> = {};
 
-export function FactoryStream({ org, factory, children }: { org: string; factory: string; children: ReactNode }) {
+const batchMs = 300;
+const overviewMs = 5_000;
+
+/** Collects keys and invalidates them together once `delay` has passed since the first. */
+function batcher(client: QueryClient, delay: number) {
+  const pending = new Map<string, QueryKey>();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const flush = () => {
+    timer = undefined;
+    for (const queryKey of pending.values()) client.invalidateQueries({ queryKey });
+    pending.clear();
+  };
+  return {
+    add(queryKey: QueryKey) {
+      pending.set(JSON.stringify(queryKey), queryKey);
+      timer ??= setTimeout(flush, delay);
+    },
+    cancel() {
+      if (timer) clearTimeout(timer);
+    },
+  };
+}
+
+export function OrgStream({ org, children }: { org: string; children: ReactNode }) {
   const client = useQueryClient();
   const [status, setStatus] = useState<StreamStatus>('connecting');
 
   useEffect(() => {
-    const items = new Set<string>();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    const flush = () => {
-      timer = undefined;
-      for (const queryKey of itemInvalidations(org, factory, items)) client.invalidateQueries({ queryKey });
-      items.clear();
+    const work = batcher(client, batchMs);
+    const overviews = batcher(client, overviewMs);
+    const invalidate = (queryKeys: QueryKey[]) => {
+      for (const key of queryKeys) (isOverviewKey(key) ? overviews : work).add(key);
     };
 
-    const unsubscribe = subscribeToFactory(
-      org,
-      factory,
-      (e) => {
-        items.add(e.ref);
-        items.add(e.item_id);
-        timer ??= setTimeout(flush, batchMs);
-      },
-      () => {
+    const unsubscribe = subscribeToOrg(org, {
+      onItem: (event) => invalidate(invalidationsFor(org, event)),
+      events: Object.keys(streamHandlers),
+      onEvent: (name, data) => invalidate(streamHandlers[name]?.(org, data) ?? []),
+      onResync: () => {
         for (const queryKey of resyncInvalidations(org)) client.invalidateQueries({ queryKey });
       },
-      setStatus,
-    );
+      onStatus: setStatus,
+    });
 
     return () => {
       unsubscribe();
-      if (timer) clearTimeout(timer);
+      work.cancel();
+      overviews.cancel();
     };
-  }, [client, org, factory]);
+  }, [client, org]);
 
   return <StatusContext value={status}>{children}</StatusContext>;
 }
