@@ -20,7 +20,12 @@ export default defineConfig({
   },
   projects: [
     { name: 'phone-375', use: { viewport: { width: 375, height: 812 }, hasTouch: true } },
-    { name: 'tablet-768', use: { viewport: { width: 768, height: 1024 } } },
+    // The mock answers in no time; this project waits 200 ms per answer (longer than the router's
+    // 150 ms before a pending screen), so loads overlap navigations as they do against goald.
+    {
+      name: 'tablet-768',
+      use: { viewport: { width: 768, height: 1024 }, extraHTTPHeaders: { 'X-Mock-Latency-Ms': '200' } },
+    },
     { name: 'desktop-1440', use: { viewport: { width: 1440, height: 1000 } } },
   ],
   webServer: {

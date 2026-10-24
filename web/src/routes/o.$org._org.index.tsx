@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { inboxQuery, overviewQuery } from '../api/queries';
+import { ensureLoaded, inboxQuery, overviewQuery } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
 import { FactoriesPage, FactoriesPending } from '../features/factories/factories-page';
 
@@ -7,7 +7,7 @@ import { FactoriesPage, FactoriesPending } from '../features/factories/factories
 // loaded in parallel. The organization comes from the /o/$org layout's context.
 export const Route = createFileRoute('/o/$org/_org/')({
   loader: ({ context: { queryClient, org } }) =>
-    Promise.all([queryClient.ensureQueryData(overviewQuery(org.id)), queryClient.ensureQueryData(inboxQuery(org.id))]),
+    Promise.all([ensureLoaded(queryClient, overviewQuery(org.id)), ensureLoaded(queryClient, inboxQuery(org.id))]),
   head: ({ match: { context } }) => pageTitle('Factories', context.org.name),
   pendingComponent: FactoriesPending,
   component: FactoriesPage,

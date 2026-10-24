@@ -1,5 +1,5 @@
 import { createFileRoute, notFound, Outlet } from '@tanstack/react-router';
-import { factoriesQuery } from '../api/queries';
+import { ensureLoaded, factoriesQuery } from '../api/queries';
 import { ShellFrame } from '../app/app-shell';
 import { FactorySidebar } from '../app/factory-sidebar';
 import { PhoneCrumb, TabBar } from '../app/phone-chrome';
@@ -11,7 +11,7 @@ export const Route = createFileRoute('/o/$org/f/$factory')({
   // Resolved before the children load, so they key their queries by the factory's id even when
   // the URL names it by name (or the other way round).
   beforeLoad: async ({ context, params }) => {
-    const factories = await context.queryClient.ensureQueryData(factoriesQuery(context.org.id));
+    const factories = await ensureLoaded(context.queryClient, factoriesQuery(context.org.id));
     const factory = findFactory(factories, params.factory);
     if (!factory) throw notFound();
     return { factory };

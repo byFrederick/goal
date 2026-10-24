@@ -52,10 +52,11 @@ import {
 import type { AuditFilter, ItemEvent } from './types';
 
 /**
- * A route loader's ensureQueryData that survives a fetch it shares being cancelled: when the
- * page being left was the fetch's only observer (the wizard's Review reading the board of the
- * factory it just published), unmounting it cancels the request the next page's loader awaits.
- * Loading again starts a fresh one.
+ * The one way route loaders load (loaders.test.ts keeps it so): an ensureQueryData that survives
+ * a fetch it shares being cancelled. When the page being left was the fetch's only observer (the
+ * Line section reading the settings Organization settings needs, the wizard's Review reading the
+ * board of the factory it just published), unmounting it cancels the request the next page's
+ * loader awaits. Loading again starts a fresh one.
  */
 export async function ensureLoaded<T, K extends QueryKey>(
   client: QueryClient,

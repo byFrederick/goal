@@ -5,7 +5,7 @@
 // inbox, keeps state per process and broadcasts each organization's item events on its
 // /v1/orgs/{org}/stream. Decisions are the local user's: every decision waits on you. The
 // definitions and builder routes are definitions.ts's. POST /__mock/reset restores the seed;
-// POST /__mock/fail injects faults (faults.ts).
+// POST /__mock/fail injects faults (faults.ts); an X-Mock-Latency-Ms header delays the answer.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
   AgentStats,
@@ -788,6 +788,11 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return json(res, 200, { ok: true });
     }
     if (!path.startsWith('/v1/')) return next();
+
+    // A latency every answer but the stream waits (X-Mock-Latency-Ms; one e2e project sets it), so
+    // pending screens show and loads overlap as they do against a real goald.
+    const latency = Number(req.headers['x-mock-latency-ms'] ?? 0);
+    if (latency > 0 && !path.endsWith('/stream')) await sleep(latency);
 
     const fault = takeFault(state.faults, method, path);
     if (fault?.delay_ms) await sleep(fault.delay_ms);

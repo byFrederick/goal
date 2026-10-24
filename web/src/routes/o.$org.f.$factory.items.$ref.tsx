@@ -1,6 +1,6 @@
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import { ApiError } from '../api/client';
-import { eventsQuery, itemQuery, runsQuery } from '../api/queries';
+import { ensureLoaded, eventsQuery, itemQuery, runsQuery } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
 import { NotFoundScreen } from '../app/states';
 import { ItemPage } from '../features/items/item-page';
@@ -14,8 +14,8 @@ export const Route = createFileRoute('/o/$org/f/$factory/items/$ref')({
     void queryClient.prefetchQuery(runsQuery(org.id, key));
     try {
       await Promise.all([
-        queryClient.ensureQueryData(itemQuery(org.id, key)),
-        queryClient.ensureQueryData(eventsQuery(queryClient, org.id, key)),
+        ensureLoaded(queryClient, itemQuery(org.id, key)),
+        ensureLoaded(queryClient, eventsQuery(queryClient, org.id, key)),
       ]);
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) throw notFound();

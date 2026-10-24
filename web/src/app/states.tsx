@@ -1,6 +1,6 @@
-import { useQueryErrorResetBoundary } from '@tanstack/react-query';
+import { isCancelledError, useQueryErrorResetBoundary } from '@tanstack/react-query';
 import { type ErrorComponentProps, Link, useRouter } from '@tanstack/react-router';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { ApiError } from '../api/client';
 import { Button } from '../ui/button';
 
@@ -19,35 +19,59 @@ export function PendingScreen() {
   );
 }
 
-/** A failed load: says what failed and offers to try again. */
+/**
+ * Why a load failed: goald refused it (an ApiError), the request never got an answer, or it was
+ * cancelled (the page that started the fetch was left while it ran): that one is loaded again.
+ */
+export function loadFailure(error: unknown): 'refused' | 'unreachable' | 'interrupted' {
+  if (isCancelledError(error)) return 'interrupted';
+  return error instanceof ApiError ? 'refused' : 'unreachable';
+}
+
+const failureText = {
+  unreachable: {
+    title: 'goald is not answering',
+    body: 'Check that goald is running (goal up) and that this page is served by it or proxied to it.',
+  },
+  interrupted: { title: 'This view stopped loading', body: 'Its data was still loading when the page changed.' },
+};
+
+/** A failed load: says what failed and offers to try again; a cancelled load tries again once by itself. */
 export function ErrorScreen({ error, reset }: ErrorComponentProps) {
   const router = useRouter();
   const queryReset = useQueryErrorResetBoundary();
+  const retried = useRef(false);
+  const kind = loadFailure(error);
 
   useEffect(() => queryReset.reset(), [queryReset]);
 
-  const unreachable = !(error instanceof ApiError);
+  const retry = () => {
+    reset();
+    router.invalidate();
+  };
+
+  useEffect(() => {
+    if (kind !== 'interrupted' || retried.current) return;
+    retried.current = true;
+    reset();
+    router.invalidate();
+  }, [kind, reset, router]);
+
+  const text =
+    kind === 'interrupted'
+      ? failureText.interrupted
+      : error instanceof ApiError
+        ? { title: 'This view could not load', body: error.message }
+        : failureText.unreachable;
   return (
     <div
       role="alert"
       className="flex max-w-xl flex-col gap-3 rounded-card border border-rework-line bg-rework-tint p-5"
     >
-      <h1 className="m-0 text-xl font-medium text-rework-ink">
-        {unreachable ? 'goald is not answering' : 'This view could not load'}
-      </h1>
-      <p className="m-0 text-[15px] leading-relaxed text-ink">
-        {unreachable
-          ? 'Check that goald is running (goal up) and that this page is served by it or proxied to it.'
-          : error.message}
-      </p>
+      <h1 className="m-0 text-xl font-medium text-rework-ink">{text.title}</h1>
+      <p className="m-0 text-[15px] leading-relaxed text-ink">{text.body}</p>
       <div>
-        <Button
-          variant="primary"
-          onClick={() => {
-            reset();
-            router.invalidate();
-          }}
-        >
+        <Button variant="primary" onClick={retry}>
           Try again
         </Button>
       </div>

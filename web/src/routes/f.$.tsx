@@ -1,5 +1,5 @@
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
-import { factoriesQuery, orgsQuery } from '../api/queries';
+import { ensureLoaded, factoriesQuery, orgsQuery } from '../api/queries';
 import { NotFoundScreen } from '../app/states';
 import { findFactory } from '../shared/factory';
 import { legacyPath, legacyTarget } from '../shared/legacy';
@@ -13,11 +13,11 @@ export const Route = createFileRoute('/f/$')({
     if (!target) throw notFound();
 
     const last = lastOrgSlug();
-    const orgs = (await queryClient.ensureQueryData(orgsQuery)).toSorted(
+    const orgs = (await ensureLoaded(queryClient, orgsQuery)).toSorted(
       (a, b) => Number(b.slug === last) - Number(a.slug === last),
     );
     for (const org of orgs) {
-      const factories = await queryClient.ensureQueryData(factoriesQuery(org.id));
+      const factories = await ensureLoaded(queryClient, factoriesQuery(org.id));
       if (findFactory(factories, target.factory)) {
         throw redirect({ href: `${legacyPath(org.slug, target)}${location.searchStr}`, replace: true });
       }

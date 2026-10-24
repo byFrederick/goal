@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router';
-import { orgsQuery } from '../api/queries';
+import { ensureLoaded, orgsQuery } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
 import { defaultOrg } from '../shared/org';
 import { LogoMark } from '../ui/logo';
@@ -8,7 +8,7 @@ import { LogoMark } from '../ui/logo';
 // install has none.
 export const Route = createFileRoute('/')({
   loader: async ({ context }) => {
-    const org = defaultOrg(await context.queryClient.ensureQueryData(orgsQuery));
+    const org = defaultOrg(await ensureLoaded(context.queryClient, orgsQuery));
     if (org) throw redirect({ to: '/o/$org', params: { org: org.slug }, replace: true });
   },
   head: () => pageTitle('No organization'),

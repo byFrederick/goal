@@ -1,6 +1,6 @@
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import { ApiError } from '../api/client';
-import { agentStatsQuery, versionModelQuery } from '../api/queries';
+import { agentStatsQuery, ensureLoaded, versionModelQuery } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
 import { NotFoundScreen } from '../app/states';
 import { AgentScreen } from '../features/agents/agent-screen';
@@ -12,7 +12,7 @@ export const Route = createFileRoute('/o/$org/f/$factory/agents/$agent')({
   loader: async ({ context: { queryClient, org, factory }, params }) => {
     const running = queryClient.prefetchQuery(versionModelQuery(org.id, factory.id, 'current'));
     try {
-      await queryClient.ensureQueryData(agentStatsQuery(org.id, factory.id, params.agent));
+      await ensureLoaded(queryClient, agentStatsQuery(org.id, factory.id, params.agent));
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) throw notFound();
       throw err;
