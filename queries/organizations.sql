@@ -3,8 +3,12 @@
 SELECT set_config('goal.org_id', sqlc.arg(org_id)::text, true);
 
 -- name: Orgs :many
-SELECT id, slug, name, mark, max_slots, created_at, goal_org_factory_count(id)::bigint AS factory_count FROM goal_orgs()
+SELECT id, slug, name, mark, max_slots, created_at FROM goal_orgs()
 ORDER BY name, id;
+
+-- name: CountFactories :one
+-- The factories of the transaction's organization (row-level security).
+SELECT count(*) FROM factories;
 
 -- name: OrgByRef :one
 SELECT id, slug, name, mark, max_slots, created_at FROM goal_org_by_ref(sqlc.arg(ref)::text);
@@ -21,8 +25,9 @@ SELECT id::uuid FROM goal_deleted_orgs(sqlc.arg(before)::timestamptz, sqlc.arg(m
 -- the purge's transaction ends.
 SELECT pg_try_advisory_xact_lock(hashtextextended('goal.orgs.purge.' || current_schema(), 0)) AS locked;
 
--- name: PurgeOrg :exec
-SELECT goal_purge_org(sqlc.arg(org_id)::uuid);
+-- name: PurgeOrg :one
+-- False when the organization is not deleted before the cutoff or another purge holds it.
+SELECT goal_purge_org(sqlc.arg(org_id)::uuid, sqlc.arg(before)::timestamptz)::boolean AS purged;
 
 -- name: InsertOrg :one
 INSERT INTO organizations (id, slug, name, mark) VALUES ($1, $2, $3, $4) RETURNING *;

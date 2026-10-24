@@ -349,7 +349,7 @@ Definer functions (owned by `goal_owner`, `SET search_path FROM CURRENT`, `REVOK
 | `goal_rename_org()` trigger, `AFTER UPDATE OF slug, name ON organizations` | Copies slug and name to `auth.organization` in the same transaction | — |
 | `goal_retire_org()` trigger, `AFTER UPDATE OF deleted_at ON organizations` when it becomes non-null | Cancels the org's pending invitations (`status = 'canceled'`); `00046` adds: revokes its live API keys. Sessions lose the org at once because `goal_principal` ignores deleted orgs. | — |
 | `goal_transfer_ownership(p_from uuid, p_to uuid, p_by text, p_request_id text)` | For `goal_org()`: `p_from` must be an owner and `p_to` an admin; sets `p_to` owner and `p_from` admin (`changedBy = p_by`); appends `org.ownership_transferred {from, to}`. Raises `check_violation` otherwise (→ `ErrInvalid`). | app |
-| `goal_purge_org(p_org uuid)` | As 2.2, then deletes `auth.invitation`, `auth.member` and `auth.organization` of the org (`factory_roles`, `api_keys` cascade from `organizations`) | app (purge job) |
+| `goal_purge_org(p_org uuid, p_before timestamptz)` | As 2.2 (`00037`: retention checked inside, false when not due), then deletes `auth.invitation`, `auth.member` and `auth.organization` of the org (`factory_roles`, `api_keys` cascade from `organizations`) | app (purge job) |
 
 Backfill: `INSERT INTO auth.organization (id, name, slug, "createdAt") SELECT id, name, slug, created_at FROM organizations` (every row, deleted ones included, so the purge stays uniform). Existing organizations have no members until the bootstrap owner signs in (§14).
 

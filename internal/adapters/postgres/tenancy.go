@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/byFrederick/goal/internal/adapters/postgres/db"
@@ -27,19 +28,39 @@ const DefaultOrgID domain.OrgID = "019a1c00-0000-7000-8000-000000000001"
 // SQLSTATEs the tenancy methods map to domain.ErrInvalid.
 const checkViolation = "23514"
 
-// Orgs implements ports.Tenancy.
+// Orgs implements ports.Tenancy. One read-only transaction lists the live organizations
+// (goal_orgs) and then binds itself to each in turn to count its factories, so the count comes
+// from that organization's rows under row-level security and no function answers one
+// organization about another.
 func (s *Store) Orgs(ctx context.Context) ([]domain.OrgSummary, error) {
-	rows, err := s.q.Orgs(ctx)
+	var out []domain.OrgSummary
+
+	err := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+
+		rows, err := q.Orgs(ctx)
+		if err != nil {
+			return err
+		}
+
+		out = make([]domain.OrgSummary, 0, len(rows))
+		for _, r := range rows {
+			if err := q.SetOrg(ctx, r.ID.String()); err != nil {
+				return err
+			}
+
+			n, err := q.CountFactories(ctx)
+			if err != nil {
+				return err
+			}
+
+			out = append(out, domain.OrgSummary{Org: orgOf(r.ID, r.Slug, r.Name, r.Mark, r.MaxSlots, r.CreatedAt), FactoryCount: int(n)})
+		}
+
+		return nil
+	})
 	if err != nil {
 		return nil, fmt.Errorf("orgs: %w", err)
-	}
-
-	out := make([]domain.OrgSummary, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, domain.OrgSummary{
-			Org:          orgOf(r.ID, r.Slug, r.Name, r.Mark, r.MaxSlots, r.CreatedAt),
-			FactoryCount: int(r.FactoryCount),
-		})
 	}
 
 	return out, nil
@@ -248,8 +269,13 @@ func (s *Store) PurgeDeletedOrgs(ctx context.Context, cutoff time.Time, limit in
 		for _, id := range ids {
 			org := domain.OrgID(id.String())
 
-			if err := q.PurgeOrg(ctx, id); err != nil {
+			purged, err := q.PurgeOrg(ctx, db.PurgeOrgParams{OrgID: id, Before: cutoff})
+			if err != nil {
 				return fmt.Errorf("org %s: %w", id, err)
+			}
+
+			if !purged {
+				continue
 			}
 
 			if also != nil {

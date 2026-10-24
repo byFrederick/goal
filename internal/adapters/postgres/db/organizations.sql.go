@@ -36,6 +36,18 @@ func (q *Queries) ActiveOrgs(ctx context.Context) ([]uuid.UUID, error) {
 	return items, nil
 }
 
+const countFactories = `-- name: CountFactories :one
+SELECT count(*) FROM factories
+`
+
+// The factories of the transaction's organization (row-level security).
+func (q *Queries) CountFactories(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countFactories)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const currentOrg = `-- name: CurrentOrg :one
 SELECT id, slug, name, mark, created_at, updated_at, deleted_at, max_slots FROM organizations WHERE id = goal_org() AND deleted_at IS NULL FOR NO KEY UPDATE
 `
@@ -146,18 +158,17 @@ func (q *Queries) OrgByRef(ctx context.Context, ref string) (OrgByRefRow, error)
 }
 
 const orgs = `-- name: Orgs :many
-SELECT id, slug, name, mark, max_slots, created_at, goal_org_factory_count(id)::bigint AS factory_count FROM goal_orgs()
+SELECT id, slug, name, mark, max_slots, created_at FROM goal_orgs()
 ORDER BY name, id
 `
 
 type OrgsRow struct {
-	ID           uuid.UUID
-	Slug         string
-	Name         string
-	Mark         string
-	MaxSlots     *int32
-	CreatedAt    time.Time
-	FactoryCount int64
+	ID        uuid.UUID
+	Slug      string
+	Name      string
+	Mark      string
+	MaxSlots  *int32
+	CreatedAt time.Time
 }
 
 func (q *Queries) Orgs(ctx context.Context) ([]OrgsRow, error) {
@@ -176,7 +187,6 @@ func (q *Queries) Orgs(ctx context.Context) ([]OrgsRow, error) {
 			&i.Mark,
 			&i.MaxSlots,
 			&i.CreatedAt,
-			&i.FactoryCount,
 		); err != nil {
 			return nil, err
 		}
@@ -188,13 +198,21 @@ func (q *Queries) Orgs(ctx context.Context) ([]OrgsRow, error) {
 	return items, nil
 }
 
-const purgeOrg = `-- name: PurgeOrg :exec
-SELECT goal_purge_org($1::uuid)
+const purgeOrg = `-- name: PurgeOrg :one
+SELECT goal_purge_org($1::uuid, $2::timestamptz)::boolean AS purged
 `
 
-func (q *Queries) PurgeOrg(ctx context.Context, orgID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, purgeOrg, orgID)
-	return err
+type PurgeOrgParams struct {
+	OrgID  uuid.UUID
+	Before time.Time
+}
+
+// False when the organization is not deleted before the cutoff or another purge holds it.
+func (q *Queries) PurgeOrg(ctx context.Context, arg PurgeOrgParams) (bool, error) {
+	row := q.db.QueryRow(ctx, purgeOrg, arg.OrgID, arg.Before)
+	var purged bool
+	err := row.Scan(&purged)
+	return purged, err
 }
 
 const setOrg = `-- name: SetOrg :exec
