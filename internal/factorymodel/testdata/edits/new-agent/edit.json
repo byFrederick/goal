@@ -1,0 +1,1 @@
+[{"op": "add", "path": "/agents/-", "value": {"name": "tester", "prompt": {"path": "./agents/tester.md"}, "builtins": {"read": "allowed", "run": {"mode": "allowed", "commands": ["go"]}}}}]

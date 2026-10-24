@@ -1,0 +1,1 @@
+[{"op": "add", "path": "/-", "value": {"name": "wiki", "type": "mcp", "settings": {"transport": "http", "url": "https://wiki.example.com/mcp"}}}]

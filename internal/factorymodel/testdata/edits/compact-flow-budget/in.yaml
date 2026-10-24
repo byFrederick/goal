@@ -1,0 +1,26 @@
+apiVersion: goal/v1
+kind: Factory
+metadata:
+  id: 7a8b9c0d-1e2f-4a3b-9c4d-5e6f7a8b9c0d
+  name: acme-compact
+  title: 'Acme: compact'
+spec:
+  runtime:
+    runner: docker
+    image: "ghcr.io/acme/agent:1.0.0"
+    auth: claude-subscription
+    budget: {weeklyUsd: 50, onExhausted: drain}
+  knowledgeBase:
+    collections: [notes]
+  agents:
+  - name: worker
+    prompt: ./agents/worker.md
+    skills: []
+  board:
+    workTypes:
+    - task
+    - chore
+    stations:
+    - {id: inbox, kind: queue}
+    - {id: work, kind: agent, agent: worker, checks: [make test]}
+    - {id: done, kind: done}

@@ -1,0 +1,53 @@
+# Test fixture for config.Line: a small line exercising every station kind, a route, a gate
+# and an expedite lane. Self-contained: tests never read factory definitions from outside testdata.
+apiVersion: goal/v1
+kind: Factory
+metadata:
+  id: 0b6f1c9e-5d0a-4c39-9a51-6f1f3f0e2a10
+  name: acme-line
+spec:
+  runtime:
+    runner: docker
+    image: ghcr.io/acme/agent:1.0.0
+    auth: anthropic-api-key
+    model: claude-sonnet-5-5
+    repository: { url: "https://git.example.com/acme/line.git", token: env:ACME_GIT_TOKEN }
+    budget: { perItemUsd: 2.5, maxTurnsPerTask: 50 }
+  knowledgeBase: { collections: [notes] }
+  connections:
+    - { name: knowledge, type: builtin }
+  skills:
+    - { name: acme-conventions, source: ./skills/acme-conventions }
+    - { name: golang-testing, source: "skills.sh:samber/cc-skills-golang@golang-testing" }
+  contracts:
+    spec: ./contracts/spec.schema.json
+  agents:
+    - name: architect
+      prompt: ./agents/architect.md
+      model: claude-opus-5-5
+      skills: [acme-conventions]
+      connections: [knowledge]
+      tools: { allow: [Read, Grep] }
+    - name: engineer
+      prompt: ./agents/engineer.md
+      skills: [acme-conventions, golang-testing]
+      tools: { allow: [Read, Edit, Bash], deny: ["Bash(git push*)"] }
+    - name: reviewer
+      prompt: ./agents/reviewer.md
+  board:
+    workTypes: [feature, incident]
+    stations:
+      - { id: inbox, kind: queue }
+      - { id: spec, kind: agent, agent: architect, agents: 1, wip: 2, output: spec }
+      - { id: approve-spec, kind: human, wip: 3 }
+      - id: build
+        kind: agent
+        route: { backend: engineer, frontend: engineer }
+        agents: 2
+        wip: 2
+        checks: [{ kind: schema }, { kind: command, run: make test }]
+      - { id: review, kind: agent, agent: reviewer, gate: { onReject: build, maxRework: 2 } }
+      - { id: merge, kind: human, action: merge }
+      - { id: done, kind: done }
+    flow:
+      expedite: { types: [incident], wip: 1 }

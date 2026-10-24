@@ -1,0 +1,1 @@
+[{"op": "add", "path": "/budget/weekly_usd", "value": 100}, {"op": "remove", "path": "/budget/daily_usd"}]

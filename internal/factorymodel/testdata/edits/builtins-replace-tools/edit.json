@@ -1,0 +1,1 @@
+[{"op": "add", "path": "/agents/0/builtins", "value": {"read": "allowed"}}]

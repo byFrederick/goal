@@ -1,0 +1,116 @@
+# The acme shop's build line: a block-style definition with comments everywhere, aligned
+# line comments, blank lines between sections, the legacy description key, custom tools next
+# to built-in groups, the connector form and an anchor.
+apiVersion: goal/v1
+kind: Factory
+
+metadata:
+  id: 3d1c2b4a-0e5f-4a6b-8c7d-9e0f1a2b3c4d
+  name: acme-shop
+  title: Acme Shop
+  description: Builds and reviews changes to the acme example shop.   # read as the purpose
+  owner: shop@example.com
+
+spec:
+  runtime:
+    runner: docker
+    image: ghcr.io/acme/agent:1.0.0          # pinned agent image
+    auth: anthropic-api-key
+    model: claude-sonnet-5-5
+    repository:
+      url: https://code.example.com/acme/shop.git
+      token: env:ACME_REPO_TOKEN             # clone only
+    budget:
+      dailyUsd: 20
+      perItemUsd: 2.5                         # per task
+
+  knowledgeBase:
+    collections: [notes]
+
+  connections:
+    # Tickets come from the help desk.
+    - name: tickets
+      type: mcp
+      transport: http
+      url: https://tickets.example.com/mcp
+      headers:
+        Authorization: "Bearer env:ACME_TICKETS_TOKEN"
+
+    - connector: playwright@2      # browser checks of the preview
+      name: browser
+      agents: [engineer]
+      origins: [https://preview.example.com]
+      tools:
+        browser__click: { agents: [engineer], scope: preview }
+
+  skills:
+    - { name: acme-conventions, source: ./skills/acme-conventions }
+
+  agents:
+    # The architect writes the spec.
+    - name: architect
+      description: Writes the spec   # role
+      prompt: ./agents/architect.md
+      model: claude-opus-5-5
+      skills: [acme-conventions]
+      tools: &readonly
+        allow: [Read, Grep]
+
+    # The engineer builds it.
+    - name: engineer
+      prompt: ./agents/engineer.md
+      maxTurns: 40
+      connections: [tickets, browser]
+      builtins:
+        read: allowed
+        edit: allowed
+        run: { mode: allowed, commands: [pnpm, go] }
+        web: ask
+
+    - name: reviewer
+      prompt: ./agents/reviewer.md
+      tools: *readonly
+
+  board:
+    workTypes: [feature, bug]
+    stations:
+      # Work enters here.
+      - id: inbox
+        kind: queue
+
+      - id: spec
+        name: Spec
+        kind: agent
+        agent: architect
+        wip: 2                # one being written, one waiting
+
+      - id: build
+        kind: agent
+        agent: engineer
+        agents: 2
+        wip: 2
+        checks:
+          - go test ./...     # shorthand command
+          - { kind: command, run: pnpm lint }
+
+      # The reviewer sends work back to build.
+      - id: review
+        kind: agent
+        agent: reviewer
+        gate: { onReject: build, maxRework: 2 }
+
+      - id: merge
+        kind: human
+        action: merge
+
+      - id: done
+        kind: done
+    flow:
+      expedite: { types: [bug], wip: 1 }
+      andon: { reworkRate: 0.4, window: 10 }
+
+  learning:
+    librarian:
+      agent: reviewer     # the Done station's worker
+      after: [done]
+    kaizen: { schedule: "0 17 * * FRI" }

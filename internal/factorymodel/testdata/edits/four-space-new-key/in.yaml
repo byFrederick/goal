@@ -1,0 +1,31 @@
+apiVersion: goal/v1
+kind: Factory
+metadata:
+    id: 6f0e1d2c-3b4a-4596-8778-695a4b3c2d1e
+    name: acme-four
+    purpose: |
+        Answers acme's support questions.
+
+        Escalates what it cannot answer.
+spec:
+    runtime:
+        runner: docker
+        image: ghcr.io/acme/agent:1.0.0
+        auth: bedrock
+    knowledgeBase:
+        collections: [answers]
+    agents:
+        - name: responder
+          prompt: ./agents/responder.md
+          description: >
+              Answers questions from the
+              runbooks.
+    board:
+        stations:
+            - id: inbox
+              kind: queue
+            - id: respond
+              kind: agent
+              agent: responder
+            - id: done
+              kind: done

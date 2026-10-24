@@ -28,6 +28,7 @@ internal/api/        HTTP API handlers for api/openapi.yaml (generated types in 
 internal/gateway/    MCP gateway inside goald: task-token auth, per-agent tools, credentials added on the host
 internal/definitions/ goald's cache of the bucket's factory definitions: contracts, agent files, gateway lookups
 internal/config/     loads and validates one factory definition from an fs.FS (bucket prefix or local folder)
+internal/factorymodel/ the Visual editor's model of factory.yaml: read, apply section edits keeping comments, format
 internal/factorystore/ legacy per-factory bucket prefixes, read once by the import into versions (2.2-B). Imports config + ports only.
 migrations/          forward-only SQL (goose); never edit an applied file
 queries/             SQL for sqlc
