@@ -98,38 +98,6 @@ func (q *Queries) DeletedOrgs(ctx context.Context, arg DeletedOrgsParams) ([]uui
 	return items, nil
 }
 
-const insertOrg = `-- name: InsertOrg :one
-INSERT INTO organizations (id, slug, name, mark) VALUES ($1, $2, $3, $4) RETURNING id, slug, name, mark, created_at, updated_at, deleted_at, max_slots
-`
-
-type InsertOrgParams struct {
-	ID   uuid.UUID
-	Slug string
-	Name string
-	Mark string
-}
-
-func (q *Queries) InsertOrg(ctx context.Context, arg InsertOrgParams) (Organization, error) {
-	row := q.db.QueryRow(ctx, insertOrg,
-		arg.ID,
-		arg.Slug,
-		arg.Name,
-		arg.Mark,
-	)
-	var i Organization
-	err := row.Scan(
-		&i.ID,
-		&i.Slug,
-		&i.Name,
-		&i.Mark,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.MaxSlots,
-	)
-	return i, err
-}
-
 const notifyOrgDeleted = `-- name: NotifyOrgDeleted :exec
 SELECT pg_notify('goal_definitions', json_build_object('org_id', goal_org(), 'kind', 'org')::text)
 `
@@ -207,6 +175,58 @@ func (q *Queries) Orgs(ctx context.Context) ([]OrgsRow, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const provisionOrg = `-- name: ProvisionOrg :one
+SELECT id, slug, name, mark, max_slots, created_at
+FROM goal_provision_org($1::uuid, $2::text, $3::text, $4::text,
+                        $5::uuid, $6::uuid, $7::text,
+                        $8::text)
+`
+
+type ProvisionOrgParams struct {
+	ID          uuid.UUID
+	Slug        string
+	Name        string
+	Mark        string
+	Owner       *uuid.UUID
+	OwnerMember *uuid.UUID
+	By          string
+	RequestID   *string
+}
+
+type ProvisionOrgRow struct {
+	ID        uuid.UUID
+	Slug      string
+	Name      string
+	Mark      string
+	MaxSlots  *int32
+	CreatedAt time.Time
+}
+
+// The organization, its auth.organization row and (with an owner) the owner's membership, with
+// org.created by the actor ref, in this transaction (00042).
+func (q *Queries) ProvisionOrg(ctx context.Context, arg ProvisionOrgParams) (ProvisionOrgRow, error) {
+	row := q.db.QueryRow(ctx, provisionOrg,
+		arg.ID,
+		arg.Slug,
+		arg.Name,
+		arg.Mark,
+		arg.Owner,
+		arg.OwnerMember,
+		arg.By,
+		arg.RequestID,
+	)
+	var i ProvisionOrgRow
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.Mark,
+		&i.MaxSlots,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const purgeOrg = `-- name: PurgeOrg :one

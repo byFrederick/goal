@@ -23,8 +23,13 @@ SELECT id::uuid FROM goal_deleted_orgs(sqlc.arg(before)::timestamptz, sqlc.arg(m
 -- False when the organization is not deleted before the cutoff or another purge holds it.
 SELECT goal_purge_org(sqlc.arg(org_id)::uuid, sqlc.arg(before)::timestamptz)::boolean AS purged;
 
--- name: InsertOrg :one
-INSERT INTO organizations (id, slug, name, mark) VALUES ($1, $2, $3, $4) RETURNING *;
+-- name: ProvisionOrg :one
+-- The organization, its auth.organization row and (with an owner) the owner's membership, with
+-- org.created by the actor ref, in this transaction (00042).
+SELECT id, slug, name, mark, max_slots, created_at
+FROM goal_provision_org(sqlc.arg(id)::uuid, sqlc.arg(slug)::text, sqlc.arg(name)::text, sqlc.arg(mark)::text,
+                        sqlc.narg(owner)::uuid, sqlc.narg(owner_member)::uuid, sqlc.arg(by)::text,
+                        sqlc.narg(request_id)::text);
 
 -- name: CurrentOrg :one
 -- The live organization of the transaction, locked for an update.

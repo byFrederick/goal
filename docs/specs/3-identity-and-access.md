@@ -312,27 +312,29 @@ The drift check does not report the changed defaults (checked in 3-4), so Better
 -- under concurrency and against bugs.
 ALTER TABLE auth.member     ADD CONSTRAINT member_role_check     CHECK (role IN ('owner', 'admin', 'member'));
 ALTER TABLE auth.invitation ADD CONSTRAINT invitation_role_check CHECK (role IN ('owner', 'admin', 'member'));
+ALTER TABLE auth.invitation ADD CONSTRAINT invitation_status_check CHECK (status IN ('pending', 'accepted', 'rejected', 'canceled'));
 CREATE UNIQUE INDEX member_org_user_key   ON auth.member ("organizationId", "userId");
 CREATE INDEX invitation_email_status_idx  ON auth.invitation (lower(email), status);
--- (3-5 adds here whichever of session(token) unique, session("userId"), member("userId"),
--- invitation("organizationId") the generated SQL lacks.)
+-- (As built in 3-5: the generated SQL already has session(token) unique, session("userId"),
+-- member("userId") and invitation("organizationId").)
 
 -- An organization keeps at least one owner. Owner changes of one organization are serialized
 -- on its auth.organization row, then counted at commit, so two owners demoting each other at
--- once cannot leave none (READ COMMITTED, Better Auth's level).
+-- once cannot leave none (READ COMMITTED, Better Auth's level). FOR NO KEY UPDATE (as built)
+-- conflicts with itself but not with a new member's foreign-key lock.
 -- +goose StatementBegin
 CREATE FUNCTION goal_keep_an_owner() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
 SET search_path FROM CURRENT AS $$
 BEGIN
-  PERFORM 1 FROM auth.organization WHERE id = OLD."organizationId" FOR UPDATE;
-  IF NOT FOUND OR EXISTS (SELECT 1 FROM organizations
-                          WHERE id = OLD."organizationId" AND deleted_at IS NOT NULL) THEN
-    RETURN NULL;                                   -- purged or being purged
+  PERFORM 1 FROM auth.organization WHERE id = OLD."organizationId" FOR NO KEY UPDATE;
+  IF NOT FOUND OR NOT EXISTS (SELECT 1 FROM organizations
+                              WHERE id = OLD."organizationId" AND deleted_at IS NULL) THEN
+    RETURN NULL;                                   -- deleted, purged or being purged
   END IF;
   IF NOT EXISTS (SELECT 1 FROM auth.member
                  WHERE "organizationId" = OLD."organizationId" AND role = 'owner') THEN
     RAISE EXCEPTION 'organization % must keep an owner', OLD."organizationId"
-      USING ERRCODE = 'check_violation';
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'member_keeps_an_owner';
   END IF;
   RETURN NULL;
 END $$;
@@ -348,11 +350,12 @@ Definer functions (owned by `goal_owner`, `SET search_path FROM CURRENT`, `REVOK
 | --- | --- | --- |
 | `goal_provision_org(p_id uuid, p_slug text, p_name text, p_mark text, p_owner uuid, p_owner_member uuid, p_by text, p_request_id text)` → `SETOF organizations` | In the caller's transaction: insert `organizations`, `auth.organization` (same id, name, slug) and, when `p_owner` is set, the owner's `auth.member` (`changedBy = p_by`); append `org.created`. Ids come from Go (UUIDv7). | app |
 | `goal_rename_org()` trigger, `AFTER UPDATE OF slug, name ON organizations` | Copies slug and name to `auth.organization` in the same transaction | — |
-| `goal_retire_org()` trigger, `AFTER UPDATE OF deleted_at ON organizations` when it becomes non-null | Cancels the org's pending invitations (`status = 'canceled'`); `00046` adds: revokes its live API keys. Sessions lose the org at once because `goal_principal` ignores deleted orgs. | — |
-| `goal_transfer_ownership(p_from uuid, p_to uuid, p_by text, p_request_id text)` | For `goal_org()`: `p_from` must be an owner and `p_to` an admin; sets `p_to` owner and `p_from` admin (`changedBy = p_by`); appends `org.ownership_transferred {from, to}`. Raises `check_violation` otherwise (→ `ErrInvalid`). | app |
-| `goal_purge_org(p_org uuid, p_before timestamptz)` | As 2.2 (`00037`: retention checked inside, false when not due), then deletes `auth.invitation`, `auth.member` and `auth.organization` of the org (`factory_roles`, `api_keys` cascade from `organizations`) | app (purge job) |
+| `goal_retire_org()` trigger, `AFTER UPDATE OF deleted_at ON organizations` when it becomes non-null | Cancels the org's pending invitations (`status = 'canceled'`, `changedBy = system:org-deleted`); `00046` adds: revokes its live API keys. Sessions lose the org at once because `goal_principal` ignores deleted orgs. | — |
+| `goal_transfer_ownership(p_from uuid, p_to uuid, p_by text, p_request_id text)` | For `goal_org()`: `p_from` must be an owner and `p_to` an admin; sets `p_to` owner and `p_from` admin (`changedBy = p_by`); appends `org.ownership_transferred {from, to}`. Raises `check_violation` otherwise, naming `goal_transfer_from_owner` or `goal_transfer_to_admin` (→ 409 `not-an-admin`); `no_data_found` for a deleted org (→ `ErrNotFound`). | app |
+| `goal_purge_org(p_org uuid, p_before timestamptz)` | As 2.2 (`00037`: retention checked inside, false when not due), then, after the `organizations` row, deletes `auth.invitation`, `auth.member` and `auth.organization` of the org, so their triggers see no organization (`factory_roles`, `api_keys` cascade from `organizations`) | app (purge job) |
+| `goal_append_audit(p_org, p_by, p_action, p_target_kind, p_target_id, p_data jsonb, p_request_id)` (as built) | The one audit writer of these definers and triggers: the actor from its ref with `ActorFromRef`'s name, a user's name read from `auth."user"`; `00046` replaces it to name keys | — (definers only) |
 
-Backfill: `INSERT INTO auth.organization (id, name, slug, "createdAt") SELECT id, name, slug, created_at FROM organizations` (every row, deleted ones included, so the purge stays uniform). Existing organizations have no members until the bootstrap owner signs in (§14).
+Backfill: `INSERT INTO auth.organization (id, name, slug, "createdAt") SELECT id, name, slug, created_at FROM organizations` (every row, deleted ones included, so the purge stays uniform). Existing organizations have no members until the bootstrap owner signs in (§14). As built, `goal_app` loses `INSERT` on `organizations`: an organization is created only through `goal_provision_org`, with its `auth.organization` row.
 
 ### 6.4 `00043_identity_tables.sql`
 

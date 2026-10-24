@@ -95,8 +95,10 @@ func (s *Store) ActiveOrgs(ctx context.Context) ([]domain.OrgID, error) {
 	return out, nil
 }
 
-// CreateOrg implements ports.Tenancy. The new organization's id binds its own transaction, so
-// the insert and its audit entry pass row-level security like any other write.
+// CreateOrg implements ports.Tenancy. goal_provision_org writes the organization, Better Auth's
+// auth.organization row and org.created (by the actor's ref, with the name its ref gives it) in
+// one transaction, bound to the new organization's id: both rows exist or neither does. The
+// organization has no owner yet; NewOrg.Owner arrives with sign-in (3-9).
 func (s *Store) CreateOrg(ctx context.Context, by domain.Actor, n ports.NewOrg) (domain.Org, error) {
 	if n.Mark == "" {
 		n.Mark = domain.DefaultMark(n.Name)
@@ -114,14 +116,16 @@ func (s *Store) CreateOrg(ctx context.Context, by domain.Actor, n ports.NewOrg) 
 	var o domain.Org
 
 	err = s.inTx(domain.WithOrg(ctx, domain.OrgID(id.String())), func(q *db.Queries) error {
-		row, err := q.InsertOrg(ctx, db.InsertOrgParams{ID: id, Slug: n.Slug, Name: n.Name, Mark: n.Mark})
+		row, err := q.ProvisionOrg(ctx, db.ProvisionOrgParams{
+			ID: id, Slug: n.Slug, Name: n.Name, Mark: n.Mark, By: by.Ref(), RequestID: optional(domain.RequestIDFrom(ctx)),
+		})
 		if err != nil {
 			return ruleError(err, n.Slug)
 		}
 
-		o = orgFrom(row)
+		o = orgOf(row.ID, row.Slug, row.Name, row.Mark, row.MaxSlots, row.CreatedAt)
 
-		return appendAudit(ctx, q, orgEntry(by, domain.AuditOrgCreated, o, map[string]any{"slug": o.Slug, "name": o.Name}))
+		return nil
 	})
 	if err != nil {
 		return domain.Org{}, fmt.Errorf("create org %s: %w", n.Slug, err)
@@ -414,8 +418,9 @@ func orgEntry(by domain.Actor, action string, o domain.Org, data map[string]any)
 	return domain.AuditEntry{Actor: by, Action: action, TargetKind: domain.AuditTargetOrg, TargetID: string(o.ID), Data: data}
 }
 
-// ruleError maps a rejected organization row to domain.ErrInvalid: the slug index (a slug is
-// unique among live and deleted organizations until purge) and the CHECK constraints.
+// ruleError maps a rejected organization row to domain.ErrInvalid: the slug indexes (a slug is
+// unique among live and deleted organizations until purge, in organizations and in Better Auth's
+// auth.organization alike) and the CHECK constraints.
 func ruleError(err error, slug string) error {
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) {
@@ -423,7 +428,8 @@ func ruleError(err error, slug string) error {
 	}
 
 	switch {
-	case pgErr.Code == uniqueViolation && pgErr.ConstraintName == "organizations_slug_key":
+	case pgErr.Code == uniqueViolation &&
+		(pgErr.ConstraintName == "organizations_slug_key" || pgErr.ConstraintName == "organization_slug_key"):
 		return fmt.Errorf("slug %q: %w", slug, domain.ErrSlugTaken)
 	case pgErr.Code == checkViolation:
 		return fmt.Errorf("%s: %w", pgErr.ConstraintName, domain.ErrInvalid)
