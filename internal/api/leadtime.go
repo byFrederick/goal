@@ -10,8 +10,12 @@ import (
 	"github.com/byFrederick/goal/internal/domain"
 )
 
-// bridgeMinItems is how many items done the lead-time bridge needs (domain.BridgeLeadTime).
-const bridgeMinItems = 5
+// The lead-time bridge needs bridgeMinItems items done (domain.BridgeLeadTime) and reads at most
+// bridgeMaxItems, those done last in the range, so one request stays bounded on a busy factory.
+const (
+	bridgeMinItems = 5
+	bridgeMaxItems = 50_000
+)
 
 func (s *server) GetLeadTimeBridge(ctx context.Context, req gen.GetLeadTimeBridgeRequestObject) (gen.GetLeadTimeBridgeResponseObject, error) {
 	p := req.Params
@@ -34,7 +38,7 @@ func (s *server) GetLeadTimeBridge(ctx context.Context, req gen.GetLeadTimeBridg
 
 	l := f.Line()
 
-	items, err := s.items.ItemTimes(ctx, r.query(l.FactoryID, typ, now))
+	items, err := s.items.ItemTimes(ctx, r.query(l.FactoryID, typ, now), bridgeMaxItems)
 	if err != nil {
 		return nil, err
 	}

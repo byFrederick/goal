@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -74,14 +75,16 @@ func (s *Store) FlowMetrics(ctx context.Context, q ports.FlowQuery, longWaitsAt 
 }
 
 // ItemTimes implements ports.FlowStats.
-func (s *Store) ItemTimes(ctx context.Context, q ports.FlowQuery) ([]domain.ItemTime, error) {
+func (s *Store) ItemTimes(ctx context.Context, q ports.FlowQuery, limit int) ([]domain.ItemTime, error) {
 	fid, err := parseID("factory", string(q.FactoryID))
 	if err != nil {
 		return nil, err
 	}
 
 	rows, err := fetch(ctx, s.read, func(tx *db.Queries) ([]db.FlowItemTimesRow, error) {
-		return tx.FlowItemTimes(ctx, db.FlowItemTimesParams{FactoryID: fid, Since: q.Since, Until: q.Until, Type: q.Type})
+		return tx.FlowItemTimes(ctx, db.FlowItemTimesParams{
+			FactoryID: fid, Since: q.Since, Until: q.Until, Type: q.Type, MaxItems: int32(min(max(limit, 0), math.MaxInt32)),
+		})
 	})
 	if err != nil {
 		return nil, fmt.Errorf("item times of factory %s: %w", q.FactoryID, err)

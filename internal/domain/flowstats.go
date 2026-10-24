@@ -152,10 +152,16 @@ type AgentStats struct {
 	MedianTurns   float64
 	// SpendUSD is the cost of all its runs, failed and retried ones included.
 	SpendUSD float64
-	// Denied are the tool calls its runs were refused (tool_denied events and gateway calls with
-	// outcome denied), by tool, most frequent first.
-	Denied []Tally
+	// Denied are the tools its runs' refused calls (tool_denied events and gateway calls with
+	// outcome denied) were for, most frequent first, at most MaxDeniedTools of them; DeniedCalls
+	// counts every refused call.
+	Denied      []Tally
+	DeniedCalls int
 }
+
+// MaxDeniedTools is how many of an agent's most denied tools AgentStats returns (the agent page
+// shows them).
+const MaxDeniedTools = 3
 
 // SentBackRatio is the share of the advanced tasks later sent back; none when nothing advanced.
 func (a AgentStats) SentBackRatio() (float64, bool) {

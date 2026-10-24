@@ -247,12 +247,17 @@ func (s *Store) AgentStats(ctx context.Context, factory domain.FactoryID, agent 
 
 		out.SentBack, out.Reasons = len(back), domain.Tallies(labels)
 
-		tools, err := q.AgentDeniedTools(ctx, db.AgentDeniedToolsParams{FactoryID: fid, Agent: agent, Since: since, Until: until})
+		tools, err := q.AgentDeniedTools(ctx, db.AgentDeniedToolsParams{
+			FactoryID: fid, Agent: agent, Since: since, Until: until, MaxTools: domain.MaxDeniedTools,
+		})
 		if err != nil {
 			return fmt.Errorf("denied tools: %w", err)
 		}
 
-		out.Denied = domain.Tallies(tools)
+		for _, d := range tools {
+			out.Denied = append(out.Denied, domain.Tally{Label: d.Tool, Count: int(d.Calls)})
+			out.DeniedCalls = int(d.AllCalls)
+		}
 
 		return nil
 	})

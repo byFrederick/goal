@@ -40,7 +40,7 @@ func testItemTimes(f *fixture) {
 
 	q := ports.FlowQuery{FactoryID: f.factory, Since: hours(0), Until: hours(24), Type: typeTask}
 
-	got, err := f.Flow.ItemTimes(f.ctx(t), q)
+	got, err := f.Flow.ItemTimes(f.ctx(t), q, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,16 +59,21 @@ func testItemTimes(f *fixture) {
 	}
 
 	q.Type = ""
-	if every, err := f.Flow.ItemTimes(f.ctx(t), q); err != nil || len(every) != 2 {
+	if every, err := f.Flow.ItemTimes(f.ctx(t), q, 10); err != nil || len(every) != 2 {
 		t.Errorf("ItemTimes of every type = %+v, %v; want the two items done in the window", every, err)
 	}
 
-	if _, err := f.Flow.ItemTimes(context.Background(), q); !errors.Is(err, domain.ErrNoOrg) {
+	// The limit keeps the items done last (the read is bounded however long the window).
+	if latest, err := f.Flow.ItemTimes(f.ctx(t), q, 1); err != nil || len(latest) != 1 || latest[0].Item != it.ID {
+		t.Errorf("ItemTimes with limit 1 = %+v, %v; want only %s, done last", latest, err, it.ID)
+	}
+
+	if _, err := f.Flow.ItemTimes(context.Background(), q, 10); !errors.Is(err, domain.ErrNoOrg) {
 		t.Errorf("ItemTimes without an organization = %v; want ErrNoOrg", err)
 	}
 
 	other := f.otherOrg(t)
-	if seen, err := other.Flow.ItemTimes(other.ctx(t), q); err != nil || len(seen) != 0 {
+	if seen, err := other.Flow.ItemTimes(other.ctx(t), q, 10); err != nil || len(seen) != 0 {
 		t.Errorf("ItemTimes from another organization = %+v, %v; want none", seen, err)
 	}
 }

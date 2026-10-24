@@ -48,6 +48,8 @@ func testAgentStats(f *fixture) {
 	aRun := f.run(t, a, agWorker, h(0), domain.RunResult{Status: domain.RunSucceeded, Turns: 10, CostUSD: 0.5})
 	f.deny(t, a, aRun, h(0.5), "Bash")
 	f.deny(t, a, aRun, h(0.6), "Bash")
+	f.deny(t, a, aRun, h(0.7), "Read")
+	f.deny(t, a, aRun, h(0.8), "Edit")
 
 	_, l = f.claim(t, work, 0, h(0))
 	f.move(t, next(a, l, h(1)))
@@ -103,7 +105,9 @@ func testAgentStats(f *fixture) {
 		},
 		TaskTimeP85:   93 * time.Minute, // 1 h, 1 h, 1 h and 2 h
 		SucceededRuns: 2, MedianTurns: 15, SpendUSD: 1.4,
-		Denied: []domain.Tally{{Label: "Bash", Count: 2}, {Label: "github__merge_pr", Count: 1}},
+		// The most denied tools only (domain.MaxDeniedTools), the calls of all of them counted.
+		Denied:      []domain.Tally{{Label: "Bash", Count: 2}, {Label: "Edit", Count: 1}, {Label: "Read", Count: 1}},
+		DeniedCalls: 5,
 	}
 
 	if !reflect.DeepEqual(got, want) {

@@ -194,13 +194,23 @@ WHERE l.factory_id = sqlc.arg(factory_id) AND l.agent = sqlc.arg(agent)::text AN
   AND l.ended_at >= sqlc.arg(since)::timestamptz AND l.ended_at < sqlc.arg(until)::timestamptz;
 
 -- name: AgentDeniedTools :many
--- The tool of every call the agent's runs started in [since, until) were denied: tool_denied
--- events by their tool, gateway calls with outcome denied as <connection>__<tool>
--- (agent_runs_factory_started_idx, item_events_run_id_idx).
-SELECT (CASE WHEN e.kind = 'tool_denied' THEN coalesce(e.data->>'tool', '')
-             ELSE coalesce(e.data->>'connection', '') || '__' || coalesce(e.data->>'tool', '') END)::text AS tool
-FROM agent_runs r
-JOIN item_events e ON e.run_id = r.id
-WHERE r.factory_id = sqlc.arg(factory_id) AND r.agent = sqlc.arg(agent)::text
-  AND r.started_at >= sqlc.arg(since)::timestamptz AND r.started_at < sqlc.arg(until)::timestamptz
-  AND (e.kind = 'tool_denied' OR (e.kind = 'gateway_tool_call' AND e.data->>'outcome' = 'denied'));
+-- The max_tools tools the agent's runs started in [since, until) were most often denied, most
+-- denied first (ties by name, byte order as domain.Tallies), each with its calls and all_calls,
+-- every denied call counted: tool_denied events by their tool, gateway calls with outcome denied
+-- as <connection>__<tool> (agent_runs_factory_started_idx, item_events_run_id_idx). Calls without
+-- a tool name are not counted.
+SELECT tool, calls, (sum(calls) OVER ())::bigint AS all_calls
+FROM (
+  SELECT (CASE WHEN e.kind = 'tool_denied' THEN coalesce(e.data->>'tool', '')
+               ELSE coalesce(e.data->>'connection', '') || '__' || coalesce(e.data->>'tool', '') END)::text AS tool,
+         count(*) AS calls
+  FROM agent_runs r
+  JOIN item_events e ON e.run_id = r.id
+  WHERE r.factory_id = sqlc.arg(factory_id) AND r.agent = sqlc.arg(agent)::text
+    AND r.started_at >= sqlc.arg(since)::timestamptz AND r.started_at < sqlc.arg(until)::timestamptz
+    AND (e.kind = 'tool_denied' OR (e.kind = 'gateway_tool_call' AND e.data->>'outcome' = 'denied'))
+  GROUP BY 1
+) denied
+WHERE tool <> ''
+ORDER BY calls DESC, tool COLLATE "C"
+LIMIT sqlc.arg(max_tools);

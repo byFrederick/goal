@@ -102,7 +102,7 @@ func (s *Store) DoneByBucket(ctx context.Context, q ports.FlowQuery, d time.Dura
 }
 
 // ItemTimes implements ports.FlowStats.
-func (s *Store) ItemTimes(ctx context.Context, q ports.FlowQuery) ([]domain.ItemTime, error) {
+func (s *Store) ItemTimes(ctx context.Context, q ports.FlowQuery, limit int) ([]domain.ItemTime, error) {
 	org, err := orgOf(ctx)
 	if err != nil {
 		return nil, err
@@ -120,6 +120,7 @@ func (s *Store) ItemTimes(ctx context.Context, q ports.FlowQuery) ([]domain.Item
 	}
 
 	slices.SortFunc(done, func(a, b *domain.Item) int { return cmp.Or(a.DoneAt.Compare(b.DoneAt), cmp.Compare(a.ID, b.ID)) })
+	done = done[max(len(done)-max(limit, 0), 0):]
 
 	out := make([]domain.ItemTime, 0, len(done))
 

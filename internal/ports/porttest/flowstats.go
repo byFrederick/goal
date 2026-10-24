@@ -372,7 +372,13 @@ func (s *Store) AgentStats(ctx context.Context, factory domain.FactoryID, agent 
 
 	s.agentTasks(&out, org, factory, agent, in)
 	runs := s.agentRuns(&out, org, factory, agent, in)
-	out.Denied = domain.Tallies(s.deniedTools(runs))
+
+	denied := domain.Tallies(s.deniedTools(runs))
+	for _, d := range denied {
+		out.DeniedCalls += d.Count
+	}
+
+	out.Denied = denied[:min(len(denied), domain.MaxDeniedTools)]
 
 	return out, nil
 }

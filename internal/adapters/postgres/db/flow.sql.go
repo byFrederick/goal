@@ -13,13 +13,21 @@ import (
 )
 
 const agentDeniedTools = `-- name: AgentDeniedTools :many
-SELECT (CASE WHEN e.kind = 'tool_denied' THEN coalesce(e.data->>'tool', '')
-             ELSE coalesce(e.data->>'connection', '') || '__' || coalesce(e.data->>'tool', '') END)::text AS tool
-FROM agent_runs r
-JOIN item_events e ON e.run_id = r.id
-WHERE r.factory_id = $1 AND r.agent = $2::text
-  AND r.started_at >= $3::timestamptz AND r.started_at < $4::timestamptz
-  AND (e.kind = 'tool_denied' OR (e.kind = 'gateway_tool_call' AND e.data->>'outcome' = 'denied'))
+SELECT tool, calls, (sum(calls) OVER ())::bigint AS all_calls
+FROM (
+  SELECT (CASE WHEN e.kind = 'tool_denied' THEN coalesce(e.data->>'tool', '')
+               ELSE coalesce(e.data->>'connection', '') || '__' || coalesce(e.data->>'tool', '') END)::text AS tool,
+         count(*) AS calls
+  FROM agent_runs r
+  JOIN item_events e ON e.run_id = r.id
+  WHERE r.factory_id = $1 AND r.agent = $2::text
+    AND r.started_at >= $3::timestamptz AND r.started_at < $4::timestamptz
+    AND (e.kind = 'tool_denied' OR (e.kind = 'gateway_tool_call' AND e.data->>'outcome' = 'denied'))
+  GROUP BY 1
+) denied
+WHERE tool <> ''
+ORDER BY calls DESC, tool COLLATE "C"
+LIMIT $5
 `
 
 type AgentDeniedToolsParams struct {
@@ -27,29 +35,39 @@ type AgentDeniedToolsParams struct {
 	Agent     string
 	Since     time.Time
 	Until     time.Time
+	MaxTools  int32
 }
 
-// The tool of every call the agent's runs started in [since, until) were denied: tool_denied
-// events by their tool, gateway calls with outcome denied as <connection>__<tool>
-// (agent_runs_factory_started_idx, item_events_run_id_idx).
-func (q *Queries) AgentDeniedTools(ctx context.Context, arg AgentDeniedToolsParams) ([]string, error) {
+type AgentDeniedToolsRow struct {
+	Tool     string
+	Calls    int64
+	AllCalls int64
+}
+
+// The max_tools tools the agent's runs started in [since, until) were most often denied, most
+// denied first (ties by name, byte order as domain.Tallies), each with its calls and all_calls,
+// every denied call counted: tool_denied events by their tool, gateway calls with outcome denied
+// as <connection>__<tool> (agent_runs_factory_started_idx, item_events_run_id_idx). Calls without
+// a tool name are not counted.
+func (q *Queries) AgentDeniedTools(ctx context.Context, arg AgentDeniedToolsParams) ([]AgentDeniedToolsRow, error) {
 	rows, err := q.db.Query(ctx, agentDeniedTools,
 		arg.FactoryID,
 		arg.Agent,
 		arg.Since,
 		arg.Until,
+		arg.MaxTools,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []AgentDeniedToolsRow
 	for rows.Next() {
-		var tool string
-		if err := rows.Scan(&tool); err != nil {
+		var i AgentDeniedToolsRow
+		if err := rows.Scan(&i.Tool, &i.Calls, &i.AllCalls); err != nil {
 			return nil, err
 		}
-		items = append(items, tool)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

@@ -205,10 +205,11 @@ type FlowStats interface {
 	// at q.Until, oldest first; q.Since is not used.
 	DoneByBucket(ctx context.Context, q FlowQuery, d time.Duration, n int) ([]int, error)
 
-	// ItemTimes returns every item of q.Type done in [q.Since, q.Until), by when it was done:
-	// its lead time and its time in each component of the lead-time bridge, from its spans
-	// (domain.ComponentOf).
-	ItemTimes(ctx context.Context, q FlowQuery) ([]domain.ItemTime, error)
+	// ItemTimes returns the items of q.Type done in [q.Since, q.Until), by when they were done:
+	// each one's lead time and its time in each component of the lead-time bridge, from its
+	// spans (domain.ComponentOf). It returns at most limit items, those done last, so the read
+	// stays bounded however busy the window.
+	ItemTimes(ctx context.Context, q FlowQuery, limit int) ([]domain.ItemTime, error)
 
 	// GateDecisions tallies the last n verdicts (gate_approved and gate_rejected events) at a
 	// gate station of the factory, keeping only those after `after` (the last andon clear; zero

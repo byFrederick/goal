@@ -80,7 +80,7 @@ type Items interface {
 	FlowMetrics(ctx context.Context, q ports.FlowQuery, longWaitsAt string) (domain.FlowMetrics, error)
 	DoneByBucket(ctx context.Context, q ports.FlowQuery, d time.Duration, n int) ([]int, error)
 	SpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
-	ItemTimes(ctx context.Context, q ports.FlowQuery) ([]domain.ItemTime, error)
+	ItemTimes(ctx context.Context, q ports.FlowQuery, limit int) ([]domain.ItemTime, error)
 	Attention(ctx context.Context) ([]domain.Attention, error)
 	InboxItems(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.AttentionItem, error)
 	ItemSpans(ctx context.Context, id domain.ItemID) ([]domain.Span, error)
