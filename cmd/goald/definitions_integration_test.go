@@ -84,7 +84,9 @@ func newDatabase(t *testing.T) database {
 	name := "goal_test_" + strings.ToLower(rand.Text()[:12])
 	exec(t, admin, "CREATE DATABASE "+name)
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		// WITH (FORCE) ends the connections still open; under load that and removing the files can
+		// take a while (task test-integration sweeps what a killed run leaves).
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 
 		if _, err := admin.Exec(ctx, "DROP DATABASE "+name+" WITH (FORCE)"); err != nil {

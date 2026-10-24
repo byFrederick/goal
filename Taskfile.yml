@@ -89,6 +89,15 @@ tasks:
     deps: [worker:install]
     cmds:
       - docker compose up -d --wait postgres rustfs mailpit
+      # The test databases a killed run left behind: goal_test_* created over an hour ago, so never
+      # one a run in progress still uses, and never the install's own database.
+      - |
+        docker compose exec -T postgres psql -U goal -d postgres -v ON_ERROR_STOP=1 -qAt <<'SQL'
+        SELECT format('DROP DATABASE %I WITH (FORCE)', datname) FROM pg_database
+        WHERE datname LIKE 'goal\_test\_%' AND datname <> 'goal'
+          AND (pg_stat_file('base/' || oid || '/PG_VERSION')).modification < now() - interval '1 hour'
+        \gexec
+        SQL
       - go test -race -tags integration ./...
       - pnpm --filter @goal/auth run --silent test:integration
     env:

@@ -49,7 +49,9 @@ func newRecoveryDB(t *testing.T) recoveryDB {
 	name := "goal_test_3_15_" + strings.ToLower(rand.Text()[:12])
 	execTest(t, server, "CREATE DATABASE "+name)
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		// WITH (FORCE) ends the connections still open; under load that and removing the files can
+		// take a while (task test-integration sweeps what a killed run leaves).
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 
 		if _, err := server.Exec(ctx, "DROP DATABASE "+name+" WITH (FORCE)"); err != nil {

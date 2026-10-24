@@ -222,11 +222,14 @@ func migrate(t *testing.T, ownerURL string) {
 	}
 }
 
-// execSQL runs one statement on its own connection, which outlives the test's context.
+// execSQL runs one statement on its own connection, which outlives the test's context. Its two
+// minutes are for DROP DATABASE … WITH (FORCE), which ends the connections still open and, with a
+// busy server, takes a while to remove the files (task test-integration sweeps what a killed run
+// leaves).
 func execSQL(t *testing.T, url, sql string) {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	conn, err := pgx.Connect(ctx, url)
