@@ -130,10 +130,6 @@ type Store interface {
 	// many wait (queued or ready) and how many are in progress. Order is unspecified.
 	StationLoads(ctx context.Context, factory domain.FactoryID) ([]domain.StationLoad, error)
 
-	// FlowMetrics measures a factory's flow: items done and spend in [since, until), and the
-	// work in the line now.
-	FlowMetrics(ctx context.Context, factory domain.FactoryID, since, until time.Time) (domain.FlowMetrics, error)
-
 	// SpendSince is the summed cost_usd of the factory's agent runs started at or after since;
 	// 0 when there are none. The engine reads it once per tick for each factory with a weekly
 	// budget (domain.Runtime.WeeklyBudget).
@@ -173,6 +169,25 @@ type FlowStats interface {
 	// a lease span or live lease (zero when there is none): busy shares measured before it would
 	// read as idle time.
 	StationTimes(ctx context.Context, factory domain.FactoryID, since, until time.Time) ([]domain.StationTimes, time.Time, error)
+
+	// FlowMetrics measures a factory's flow over [q.Since, q.Until) for the items of q.Type:
+	// items done per UTC day, done, reworked, lead-time p50 and p85 (linear interpolation), the
+	// open items now, the spend of the runs started in the window, and the long waits at station
+	// longWaitsAt (none when ""): the items with a span waiting there (queued or ready) that
+	// overlaps the window and had lasted over domain.LongWait by q.Until.
+	FlowMetrics(ctx context.Context, q FlowQuery, longWaitsAt string) (domain.FlowMetrics, error)
+
+	// DoneByBucket counts the items of q.Type done in n consecutive buckets of length d that end
+	// at q.Until, oldest first; q.Since is not used.
+	DoneByBucket(ctx context.Context, q FlowQuery, d time.Duration, n int) ([]int, error)
+}
+
+// FlowQuery is what a FlowStats read measures: one factory's items over [Since, Until).
+type FlowQuery struct {
+	FactoryID    domain.FactoryID
+	Since, Until time.Time
+	// Type keeps the items of one work type; "" keeps every type.
+	Type string
 }
 
 // Tenancy keeps the install's organizations. Methods marked (org) act on the organization in

@@ -52,6 +52,7 @@ export type {
   ItemsAtRemovedStations,
   LineRange,
   Metrics,
+  MetricsSummary,
   NewFactoryRequest,
   NewItem,
   NewOrg,
@@ -85,6 +86,7 @@ export type {
   StationKind,
   StationMoves,
   StreamEvent,
+  Targets,
   Template,
   TemplateSummary,
   ValidateDraftRequest,
@@ -96,6 +98,7 @@ export type {
   VersionRef,
   VersionSource,
   VersionState,
+  WeeklyThroughput,
 } from '@goal/api-client';
 
 /** One page of a factory's items (`ItemPage` in the contract). */

@@ -825,8 +825,36 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** The factory's flow over the last days */
+        /**
+         * The factory's flow over a range of UTC days
+         * @description Items count when they reached done in the range; spend counts agent runs started in it; wip is the line now. The range is from to to, both included, at most 90 days, to not after today; without one it is the last 7 days. 400 for a bad range, both a window and a range, or a type the factory does not declare.
+         */
         get: operations["getMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/metrics/weekly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Items finished in each of the last weeks
+         * @description Seven-day buckets ending on `to` (included), oldest first. 400 for a `to` after today, weeks outside 1 to 26 or a type the factory does not declare.
+         */
+        get: operations["getWeeklyThroughput"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1509,8 +1537,35 @@ export interface components {
             done_today: number | null;
         };
         Metrics: {
-            /** @description The window asked for, as in 7d */
+            /** @description The range's length in days, as in 7d */
             window: string;
+            /**
+             * Format: date
+             * @description The range's first UTC day
+             */
+            from: string;
+            /**
+             * Format: date
+             * @description The range's last UTC day
+             */
+            to: string;
+            /** @description The work type asked for; null for every type */
+            type: string | null;
+            /**
+             * Format: double
+             * @description items_done divided by the range's days
+             */
+            throughput_per_day: number;
+            /** @description With compare=previous, the same metrics over the range of the same length just before */
+            previous: components["schemas"]["MetricsSummary"] | null;
+            targets: components["schemas"]["Targets"];
+            /** @description The items that waited (queued or ready) over threshold_hours in front of the constraint and stopped waiting in the range or still wait; null when the line has no constraint */
+            long_waits: {
+                station: string;
+                items: number;
+                /** Format: double */
+                threshold_hours: number;
+            } | null;
             /** @description Items done per UTC day, one entry for every day of the window, oldest first */
             throughput: {
                 /** Format: date */
@@ -1537,6 +1592,63 @@ export interface components {
              */
             spend_usd: number;
             items_done: number;
+        };
+        /** @description The headline metrics of one range, to compare with */
+        MetricsSummary: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            items_done: number;
+            /** Format: double */
+            throughput_per_day: number;
+            /** @description Percentiles of created → done of the items done in the range; null when none were */
+            lead_time_hours: {
+                /** Format: double */
+                p50: number;
+                /** Format: double */
+                p85: number;
+            } | null;
+            /** Format: double */
+            rework_rate: number;
+        };
+        /** @description The flow targets of the factory's definition (spec.board.flow.targets); null when not set */
+        Targets: {
+            /** Format: double */
+            throughput_per_day: number | null;
+            /**
+             * Format: double
+             * @description The p85 lead time to stay under
+             */
+            lead_time_hours: number | null;
+            /** @description Lead time of each expedite item */
+            expedite_lead_time_minutes: number | null;
+        };
+        WeeklyThroughput: {
+            /**
+             * Format: date
+             * @description The last UTC day of the last week
+             */
+            to: string;
+            /** @description The work type asked for; null for every type */
+            type: string | null;
+            targets: components["schemas"]["Targets"];
+            /** @description Seven-day buckets ending on `to`, oldest first */
+            weeks: {
+                /** Format: date */
+                from: string;
+                /**
+                 * Format: date
+                 * @description The week's last day
+                 */
+                to: string;
+                done: number;
+                /**
+                 * Format: double
+                 * @description done divided by 7
+                 */
+                per_day: number;
+            }[];
         };
         /** @description The data of one `event: item` on /v1/orgs/{org}/stream */
         StreamEvent: {
@@ -2337,6 +2449,12 @@ export interface components {
         OrgRef: string;
         /** @description The factory's metadata.id or metadata.name */
         FactoryRef: string;
+        /** @description The first UTC day of the range; 6 days before `to` when absent */
+        RangeFrom: string;
+        /** @description The last UTC day of the range, included; today when absent */
+        RangeTo: string;
+        /** @description Only items of this work type (one the factory declares); every type when absent */
+        WorkTypeFilter: string;
         /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
         ItemRef: string;
         /** @description A section of the factory model, a tab of the Visual editor */
@@ -3584,8 +3702,16 @@ export interface operations {
     getMetrics: {
         parameters: {
             query?: {
-                /** @description The last N UTC calendar days, today included, written Nd (1d to 90d). Items count when they reached done in the window; spend counts agent runs started in it. */
+                /** @description The last N UTC calendar days, today included, written Nd (1d to 90d); kept for the CLI. Not together with from or to. */
                 window?: string;
+                /** @description The first UTC day of the range; 6 days before `to` when absent */
+                from?: components["parameters"]["RangeFrom"];
+                /** @description The last UTC day of the range, included; today when absent */
+                to?: components["parameters"]["RangeTo"];
+                /** @description Only items of this work type (one the factory declares); every type when absent */
+                type?: components["parameters"]["WorkTypeFilter"];
+                /** @description previous adds the same metrics over the range of the same length just before */
+                compare?: "previous";
             };
             header?: never;
             path: {
@@ -3605,6 +3731,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Metrics"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getWeeklyThroughput: {
+        parameters: {
+            query?: {
+                /** @description The last UTC day of the last week; today when absent */
+                to?: string;
+                weeks?: number;
+                /** @description Only items of this work type (one the factory declares); every type when absent */
+                type?: components["parameters"]["WorkTypeFilter"];
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Throughput by week */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WeeklyThroughput"];
                 };
             };
             default: components["responses"]["Problem"];

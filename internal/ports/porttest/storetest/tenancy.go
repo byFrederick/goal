@@ -95,7 +95,7 @@ func testNoOrg(f *fixture) {
 	_, err = f.Store.StationLoads(ctx, f.factory)
 	expect(t, "StationLoads", err, domain.ErrNoOrg)
 
-	_, err = f.Store.FlowMetrics(ctx, f.factory, t0, t1)
+	_, err = f.Flow.FlowMetrics(ctx, ports.FlowQuery{FactoryID: f.factory, Since: t0, Until: t1}, stWork)
 	expect(t, "FlowMetrics", err, domain.ErrNoOrg)
 
 	_, err = f.Store.SpendSince(ctx, f.factory, t0)
@@ -217,7 +217,7 @@ func (f *fixture) seesNoFlowOf(t *testing.T, factory domain.FactoryID, item doma
 		t.Errorf("NotesSinceLastRun = %+v, %v; want nothing", notes, err)
 	}
 
-	m, err := f.Store.FlowMetrics(ctx, factory, t0, t1.Add(time.Hour))
+	m, err := f.Flow.FlowMetrics(ctx, ports.FlowQuery{FactoryID: factory, Since: t0, Until: t1.Add(time.Hour)}, stWork)
 	if err != nil || !reflect.DeepEqual(m, domain.FlowMetrics{}) {
 		t.Errorf("FlowMetrics = %+v, %v; want zero", m, err)
 	}

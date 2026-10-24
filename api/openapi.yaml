@@ -938,20 +938,60 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     get:
       operationId: getMetrics
-      summary: The factory's flow over the last days
+      tags: [work]
+      summary: The factory's flow over a range of UTC days
+      description: >-
+        Items count when they reached done in the range; spend counts agent runs started in it;
+        wip is the line now. The range is from to to, both included, at most 90 days, to not after
+        today; without one it is the last 7 days. 400 for a bad range, both a
+        window and a range, or a type the factory does not declare.
       parameters:
         - name: window
           in: query
           description: >-
-            The last N UTC calendar days, today included, written Nd (1d to 90d). Items count
-            when they reached done in the window; spend counts agent runs started in it.
-          schema: { type: string, pattern: "^[1-9][0-9]?d$", default: 7d }
+            The last N UTC calendar days, today included, written Nd (1d to 90d); kept for the
+            CLI. Not together with from or to.
+          schema: { type: string, pattern: "^[1-9][0-9]?d$" }
+        - $ref: "#/components/parameters/RangeFrom"
+        - $ref: "#/components/parameters/RangeTo"
+        - $ref: "#/components/parameters/WorkTypeFilter"
+        - name: compare
+          in: query
+          description: previous adds the same metrics over the range of the same length just before
+          schema: { type: string, enum: [previous] }
       responses:
         "200":
           description: Flow metrics
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Metrics" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/metrics/weekly:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: getWeeklyThroughput
+      tags: [work]
+      summary: Items finished in each of the last weeks
+      description: >-
+        Seven-day buckets ending on `to` (included), oldest first. 400 for a
+        `to` after today, weeks outside 1 to 26 or a type the factory does not declare.
+      parameters:
+        - name: to
+          in: query
+          description: The last UTC day of the last week; today when absent
+          schema: { type: string, format: date }
+        - name: weeks
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 26, default: 12 }
+        - $ref: "#/components/parameters/WorkTypeFilter"
+      responses:
+        "200":
+          description: Throughput by week
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WeeklyThroughput" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/stream:
     parameters:
@@ -1240,6 +1280,21 @@ components:
       in: path
       required: true
       description: The factory's metadata.id or metadata.name
+      schema: { type: string }
+    RangeFrom:
+      name: from
+      in: query
+      description: The first UTC day of the range; 6 days before `to` when absent
+      schema: { type: string, format: date }
+    RangeTo:
+      name: to
+      in: query
+      description: The last UTC day of the range, included; today when absent
+      schema: { type: string, format: date }
+    WorkTypeFilter:
+      name: type
+      in: query
+      description: Only items of this work type (one the factory declares); every type when absent
       schema: { type: string }
     ItemRef:
       name: item
@@ -1756,9 +1811,44 @@ components:
           description: "The done station: items that reached done today (UTC); null elsewhere"
     Metrics:
       type: object
-      required: [window, throughput, lead_time_hours, wip, rework_rate, spend_usd, items_done]
+      required:
+        - window
+        - from
+        - to
+        - type
+        - throughput
+        - throughput_per_day
+        - lead_time_hours
+        - wip
+        - rework_rate
+        - spend_usd
+        - items_done
+        - previous
+        - targets
+        - long_waits
       properties:
-        window: { type: string, description: "The window asked for, as in 7d" }
+        window: { type: string, description: "The range's length in days, as in 7d" }
+        from: { type: string, format: date, description: The range's first UTC day }
+        to: { type: string, format: date, description: The range's last UTC day, included }
+        type: { type: string, nullable: true, description: The work type asked for; null for every type }
+        throughput_per_day: { type: number, format: double, description: items_done divided by the range's days }
+        previous:
+          nullable: true
+          description: With compare=previous, the same metrics over the range of the same length just before
+          allOf: [{ $ref: "#/components/schemas/MetricsSummary" }]
+        targets: { $ref: "#/components/schemas/Targets" }
+        long_waits:
+          type: object
+          nullable: true
+          description: >-
+            The items that waited (queued or ready) over threshold_hours in front of the
+            constraint and stopped waiting in the range or still wait; null when the line has no
+            constraint
+          required: [station, items, threshold_hours]
+          properties:
+            station: { type: string }
+            items: { type: integer }
+            threshold_hours: { type: number, format: double }
         throughput:
           type: array
           description: Items done per UTC day, one entry for every day of the window, oldest first
@@ -1783,6 +1873,50 @@ components:
           description: Share of the items done in the window that were sent back at least once (0 when none were done)
         spend_usd: { type: number, format: double, description: Cost of the agent runs started in the window }
         items_done: { type: integer }
+    MetricsSummary:
+      type: object
+      description: The headline metrics of one range, to compare with
+      required: [from, to, items_done, throughput_per_day, lead_time_hours, rework_rate]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        items_done: { type: integer }
+        throughput_per_day: { type: number, format: double }
+        lead_time_hours:
+          type: object
+          nullable: true
+          description: Percentiles of created → done of the items done in the range; null when none were
+          required: [p50, p85]
+          properties:
+            p50: { type: number, format: double }
+            p85: { type: number, format: double }
+        rework_rate: { type: number, format: double }
+    Targets:
+      type: object
+      description: The flow targets of the factory's definition (spec.board.flow.targets); null when not set
+      required: [throughput_per_day, lead_time_hours, expedite_lead_time_minutes]
+      properties:
+        throughput_per_day: { type: number, format: double, nullable: true }
+        lead_time_hours: { type: number, format: double, nullable: true, description: The p85 lead time to stay under }
+        expedite_lead_time_minutes: { type: integer, nullable: true, description: Lead time of each expedite item }
+    WeeklyThroughput:
+      type: object
+      required: [to, type, targets, weeks]
+      properties:
+        to: { type: string, format: date, description: The last UTC day of the last week }
+        type: { type: string, nullable: true, description: The work type asked for; null for every type }
+        targets: { $ref: "#/components/schemas/Targets" }
+        weeks:
+          type: array
+          description: Seven-day buckets ending on `to`, oldest first
+          items:
+            type: object
+            required: [from, to, done, per_day]
+            properties:
+              from: { type: string, format: date }
+              to: { type: string, format: date, description: The week's last day, included }
+              done: { type: integer }
+              per_day: { type: number, format: double, description: done divided by 7 }
     StreamEvent:
       type: object
       description: "The data of one `event: item` on /v1/orgs/{org}/stream"

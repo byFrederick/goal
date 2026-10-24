@@ -32,6 +32,7 @@ import type {
 import { createDefinitions } from './definitions.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
 import { type MockItem, type MockSlots, type MockState, seed, trackSpan } from './fixtures.ts';
+import { type FlowInput, metricsOf, rangeOf, weeklyOf } from './flow.ts';
 
 type Next = (err?: unknown) => void;
 
@@ -354,13 +355,19 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     connections_blocked: 0,
   });
 
+  /** What a factory's flow metrics are computed from, for items of `type` ("" for all). */
+  const flowInput = (f: Factory, type = ''): FlowInput => ({
+    history: state.history[f.name] ?? [],
+    items: state.items.filter((it) => it.factory === f.name),
+    flow: state.flow[f.name],
+    drum: state.constraint[f.name] ?? null,
+    type,
+    now: Date.now(),
+  });
+
   const overviewOf = (f: Factory, days: number): FactoryOverview => {
-    const metrics = state.metrics[f.name];
-    const done = new Map((metrics?.throughput ?? []).map((d) => [d.day, d.done]));
-    const throughput = Array.from({ length: days }, (_, i) => {
-      const day = utcDay(days - 1 - i);
-      return { day, done: done.get(day) ?? 0 };
-    });
+    const today = Date.parse(`${utcDay(0)}T00:00:00Z`);
+    const metrics = metricsOf(flowInput(f), { from: today - (days - 1) * dayMs, to: today }, true);
     const waiting = inState(f, 'waiting_human');
     const types = [...new Set(waiting.map((it) => it.type))].sort();
     const andon = state.andon[f.name] ?? null;
@@ -371,9 +378,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       health: andon ? 'stopped' : 'running',
       andon,
       throughput: {
-        per_day: throughput.reduce((n, d) => n + d.done, 0) / days,
-        previous_per_day: state.previousPerDay[f.name] ?? 0,
-        days: throughput,
+        per_day: metrics.throughput_per_day,
+        previous_per_day: metrics.previous?.throughput_per_day ?? 0,
+        days: metrics.throughput,
       },
       constraint: constraint ? { station: constraint, busy: null } : null,
       waiting: {
@@ -381,7 +388,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         items_by_type: types.map((type) => ({ type, count: waiting.filter((it) => it.type === type).length })),
         tool_approvals: [],
       },
-      spend_usd: cents(((metrics?.spend_usd ?? 0) * days) / 7),
+      spend_usd: metrics.spend_usd,
       budget_usd: weekly === null ? null : cents((weekly * days) / 7),
     };
   };
@@ -617,14 +624,31 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return;
     }
 
-    let m = rest.match(/^\/factories\/([^/]+)\/(board|items|metrics)$/);
+    let m = rest.match(/^\/factories\/([^/]+)\/(board|items|metrics|metrics\/weekly)$/);
     if (m) {
       const key = decodeURIComponent(m[1] ?? '');
       const factory = findFactory(key, org.id);
       if (!factory) return problem(res, 404, 'Factory not found', key);
 
       if (m[2] === 'board' && method === 'GET') return json(res, 200, board(factory.id));
-      if (m[2] === 'metrics' && method === 'GET') return json(res, 200, state.metrics[factory.name]);
+      if (m[2]?.startsWith('metrics') && method === 'GET') {
+        const type = url.searchParams.get('type') ?? '';
+        if (type && factory.work_types.length > 0 && !factory.work_types.includes(type)) {
+          return problem(res, 400, 'Bad Request', `factory ${factory.name} has no work type "${type}"`);
+        }
+        const input = flowInput(factory, type);
+        if (m[2] === 'metrics/weekly') {
+          const weekly = weeklyOf(input, url.searchParams);
+          return typeof weekly === 'string' ? problem(res, 400, 'Bad Request', weekly) : json(res, 200, weekly);
+        }
+        const range = rangeOf(url.searchParams, input.now);
+        const compare = url.searchParams.get('compare');
+        if (typeof range === 'string' || (compare !== null && compare !== 'previous')) {
+          const detail = typeof range === 'string' ? range : 'compare is previous or absent';
+          return problem(res, 400, 'Bad Request', detail);
+        }
+        return json(res, 200, metricsOf(input, range, compare === 'previous'));
+      }
       if (m[2] === 'items' && method === 'GET') {
         const st = url.searchParams.get('state');
         const station = url.searchParams.get('station');

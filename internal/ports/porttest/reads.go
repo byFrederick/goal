@@ -100,54 +100,6 @@ func (s *Store) StationLoads(ctx context.Context, factory domain.FactoryID) ([]d
 	return out, nil
 }
 
-// FlowMetrics implements ports.Store.
-func (s *Store) FlowMetrics(ctx context.Context, factory domain.FactoryID, since, until time.Time) (domain.FlowMetrics, error) {
-	org, err := orgOf(ctx)
-	if err != nil {
-		return domain.FlowMetrics{}, err
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var (
-		m        domain.FlowMetrics
-		perDay   = map[time.Time]int{}
-		leadTime []float64
-	)
-
-	for _, it := range s.items {
-		if it.OrgID != org || it.FactoryID != factory {
-			continue
-		}
-
-		if it.State != domain.StateDone && it.State != domain.StateCancelled {
-			m.WIP++
-		}
-
-		if inWindow(it.DoneAt, since, until) {
-			m.ItemsDone++
-			if it.ReworkCount > 0 {
-				m.Reworked++
-			}
-
-			perDay[it.DoneAt.UTC().Truncate(24*time.Hour)]++
-			leadTime = append(leadTime, it.DoneAt.Sub(it.CreatedAt).Seconds())
-		}
-	}
-
-	for _, day := range slices.SortedFunc(maps.Keys(perDay), func(a, b time.Time) int { return a.Compare(b) }) {
-		m.DonePerDay = append(m.DonePerDay, domain.DayCount{Day: day, Count: perDay[day]})
-	}
-
-	slices.Sort(leadTime)
-	m.LeadTimeP50, m.LeadTimeP85 = percentile(leadTime, 0.5), percentile(leadTime, 0.85)
-
-	m.SpendUSD = s.spend(org, factory, since, until)
-
-	return m, nil
-}
-
 // SpendSince implements ports.Store.
 func (s *Store) SpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error) {
 	org, err := orgOf(ctx)
@@ -158,16 +110,17 @@ func (s *Store) SpendSince(ctx context.Context, factory domain.FactoryID, since 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.spend(org, factory, since, time.Time{}), nil
+	return s.spend(org, factory, since, time.Time{}, ""), nil
 }
 
 // spend adds the cost of an organization's factory's runs started in [since, until), or at or
-// after since when until is zero. Callers hold s.mu.
-func (s *Store) spend(org domain.OrgID, factory domain.FactoryID, since, until time.Time) float64 {
+// after since when until is zero, on items of typ ("" for every type). Callers hold s.mu.
+func (s *Store) spend(org domain.OrgID, factory domain.FactoryID, since, until time.Time, typ string) float64 {
 	var usd float64
 
 	for _, r := range s.runs {
-		if _, ok := s.visible(r.ItemID, org); !ok || r.FactoryID != factory {
+		it, ok := s.visible(r.ItemID, org)
+		if !ok || r.FactoryID != factory || !ofType(it, typ) {
 			continue
 		}
 

@@ -29,7 +29,7 @@ function cache() {
     client.setQueryData(keys.inbox(org, goal), {});
     client.setQueryData(keys.overview(org, '7d'), {});
     client.setQueryData(keys.board(org, goal), {});
-    client.setQueryData(keys.metrics(org, goal, '7d'), {});
+    client.setQueryData(keys.metrics(org, goal, {}), {});
     client.setQueryData(keys.items(org, goal, { state: 'waiting_human' }), {});
     client.setQueryData([...keys.factory(org, goal), 'draft'], {});
     client.setQueryData(keys.board(org, sre), {});
@@ -73,7 +73,7 @@ describe('invalidationsFor an item event', () => {
         keys.inbox(acme, goal),
         keys.overview(acme, '7d'),
         keys.board(acme, goal),
-        keys.metrics(acme, goal, '7d'),
+        keys.metrics(acme, goal, {}),
         keys.items(acme, goal, { state: 'waiting_human' }),
         keys.item(acme, 'goal#12'),
         keys.item(acme, item12),
@@ -97,7 +97,7 @@ describe('invalidationsFor an item event', () => {
 
     expect(stale).toContainEqual(keys.board(acme, goal));
     expect(stale).toContainEqual(keys.item(acme, 'goal#12'));
-    expect(stale).not.toContainEqual(keys.metrics(acme, goal, '7d'));
+    expect(stale).not.toContainEqual(keys.metrics(acme, goal, {}));
     expect(stale).not.toContainEqual(keys.items(acme, goal, { state: 'waiting_human' }));
   });
 
@@ -123,7 +123,7 @@ function definitionCache() {
   client.setQueryData(keys.attention(acme), {});
   client.setQueryData(keys.overview(acme, '7d'), {});
   client.setQueryData(keys.board(acme, goal), {});
-  client.setQueryData(keys.metrics(acme, goal, '7d'), {});
+  client.setQueryData(keys.metrics(acme, goal, {}), {});
   client.setQueryData(defKeys.factory(acme, goal), {});
   client.setQueryData(defKeys.draft(acme, goal), {});
   client.setQueryData(defKeys.draftModel(acme, goal), {});
@@ -194,7 +194,7 @@ describe('definitionInvalidations', () => {
         keys.factories(acme),
       ]),
     );
-    expect(stale).not.toContainEqual(keys.metrics(acme, goal, '7d'));
+    expect(stale).not.toContainEqual(keys.metrics(acme, goal, {}));
     expect(stale).not.toContainEqual(defKeys.versionFile(acme, 'a1b2'));
   });
 

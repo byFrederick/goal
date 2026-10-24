@@ -80,3 +80,64 @@ FROM item_events
 WHERE factory_id = sqlc.arg(factory_id) AND kind IN ('gate_approved', 'gate_rejected')
   AND at >= sqlc.arg(since)::timestamptz AND at < sqlc.arg(until)::timestamptz
 GROUP BY station;
+
+-- Windowed metrics (FlowStats.FlowMetrics, DoneByBucket) over [since, until). Each keeps the
+-- items of one work type, every type when type is ''.
+
+-- name: FlowDonePerDay :many
+-- Items done by UTC day, on work_items_done_at_idx.
+SELECT date_trunc('day', done_at, 'UTC')::timestamptz AS day, count(*) AS done
+FROM work_items
+WHERE factory_id = sqlc.arg(factory_id) AND done_at >= sqlc.arg(since)::timestamptz AND done_at < sqlc.arg(until)::timestamptz
+  AND (sqlc.arg(type)::text = '' OR type = sqlc.arg(type)::text)
+GROUP BY 1
+ORDER BY 1;
+
+-- name: FlowDoneStats :one
+-- Items done, those reworked, and lead-time (created to done) percentiles in seconds,
+-- interpolated between ranks.
+SELECT count(*) AS items_done,
+       count(*) FILTER (WHERE rework_count > 0) AS reworked,
+       coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM done_at - created_at)::float8), 0)::float8 AS p50_seconds,
+       coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM done_at - created_at)::float8), 0)::float8 AS p85_seconds
+FROM work_items
+WHERE factory_id = sqlc.arg(factory_id) AND done_at >= sqlc.arg(since)::timestamptz AND done_at < sqlc.arg(until)::timestamptz
+  AND (sqlc.arg(type)::text = '' OR type = sqlc.arg(type)::text);
+
+-- name: FlowOpenItems :one
+-- Items in the line now, on work_items_open_idx.
+SELECT count(*) FROM work_items
+WHERE factory_id = sqlc.arg(factory_id) AND state NOT IN ('done', 'cancelled')
+  AND (sqlc.arg(type)::text = '' OR type = sqlc.arg(type)::text);
+
+-- name: FlowSpend :one
+-- The cost of the runs started in the window, on agent_runs_factory_started_idx; a run has its
+-- item's work type.
+SELECT coalesce(sum(r.cost_usd), 0)::float8 AS spend_usd
+FROM agent_runs r
+JOIN work_items w ON w.id = r.item_id
+WHERE r.factory_id = sqlc.arg(factory_id) AND r.started_at >= sqlc.arg(since)::timestamptz AND r.started_at < sqlc.arg(until)::timestamptz
+  AND (sqlc.arg(type)::text = '' OR w.type = sqlc.arg(type)::text);
+
+-- name: FlowLongWaits :one
+-- Items with a span waiting (queued or ready) at a station that overlaps the window and had
+-- lasted over the threshold by its end, on item_spans_station_idx.
+SELECT count(DISTINCT item_id)
+FROM item_spans
+WHERE factory_id = sqlc.arg(factory_id) AND station = sqlc.arg(station)::text
+  AND entered_at < sqlc.arg(until)::timestamptz AND (left_at IS NULL OR left_at > sqlc.arg(since)::timestamptz)
+  AND state IN ('queued', 'ready')
+  AND least(coalesce(left_at, sqlc.arg(until)::timestamptz), sqlc.arg(until)::timestamptz) - entered_at
+      > make_interval(secs => sqlc.arg(threshold_seconds)::float8)
+  AND (sqlc.arg(type)::text = '' OR type = sqlc.arg(type)::text);
+
+-- name: FlowDoneByBucket :many
+-- Items done in consecutive buckets of bucket_seconds from start to until, by bucket (0 the
+-- oldest; empty buckets left out), on work_items_done_at_idx.
+SELECT floor(extract(epoch FROM done_at - sqlc.arg(start)::timestamptz) / sqlc.arg(bucket_seconds)::float8)::int AS bucket,
+       count(*) AS done
+FROM work_items
+WHERE factory_id = sqlc.arg(factory_id) AND done_at >= sqlc.arg(start)::timestamptz AND done_at < sqlc.arg(until)::timestamptz
+  AND (sqlc.arg(type)::text = '' OR type = sqlc.arg(type)::text)
+GROUP BY 1
+ORDER BY 1;

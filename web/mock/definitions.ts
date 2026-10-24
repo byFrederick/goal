@@ -844,7 +844,7 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
   const rename = (from: string, to: string) => {
     const s = st();
     for (const it of s.items) if (it.factory === from) it.factory = to;
-    for (const rec of [s.stations, s.constraint, s.metrics, s.andon, s.weeklyBudget, s.previousPerDay] as Record<
+    for (const rec of [s.stations, s.constraint, s.history, s.andon, s.weeklyBudget, s.flow] as Record<
       string,
       unknown
     >[]) {

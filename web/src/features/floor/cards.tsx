@@ -1,59 +1,16 @@
 import { Link } from '@tanstack/react-router';
 import { ChevronRight } from 'lucide-react';
-import type { Board, BoardStation, Metrics } from '../../api/types';
+import type { Board, BoardStation } from '../../api/types';
 import { useFactoryParams } from '../../shared/factory';
-import { formatDay, formatHours, formatPercent, formatUsd, formatWeekday, humanize, plural } from '../../shared/format';
+import { humanize, plural } from '../../shared/format';
 import { waitingOnYou } from '../../shared/item-state';
-import { SectionCard, StatRow } from '../../ui/card';
+import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { Hatch, type HatchTone } from '../../ui/hatch';
 
 // Numbers are tabular (MASTER.md); names around them stay proportional.
 const numeral = 'm-0 font-normal tracking-numeral leading-none tabular-nums';
-
-export function ThroughputCard({ metrics, className }: { metrics: Metrics; className?: string }) {
-  const days = metrics.throughput;
-  const perDay = days.length > 0 ? metrics.items_done / days.length : 0;
-  const range = days.length > 0 ? `${formatDay(days[0]?.day ?? '')} to ${formatDay(days.at(-1)?.day ?? '')}` : '';
-  const best = Math.max(0, ...days.map((d) => d.done));
-
-  return (
-    <SectionCard title="Throughput" description={`Items finished per day, ${range}`} className={className}>
-      <p className={cn(numeral, 'text-[52px] md:text-[64px]')}>
-        {perDay.toFixed(1)}
-        <span className="ml-2.5 text-lg tracking-normal text-muted md:text-xl">a day</span>
-      </p>
-      <p className="m-0 text-[15px] leading-normal">
-        {plural(metrics.items_done, 'item')} finished in {plural(days.length, 'day')}
-        {best > 0 ? `, ${best} on the best day.` : '.'}
-      </p>
-      <div className="flex flex-col">
-        <StatRow label="Lead time, p50">
-          <strong className="font-medium">
-            {metrics.lead_time_hours ? formatHours(metrics.lead_time_hours.p50) : 'Not enough data'}
-          </strong>
-        </StatRow>
-        <StatRow label="Lead time, p85">
-          <strong className="font-medium">
-            {metrics.lead_time_hours ? formatHours(metrics.lead_time_hours.p85) : 'Not enough data'}
-          </strong>
-        </StatRow>
-        <StatRow label="Rework rate">
-          <strong className={cn('font-medium', metrics.rework_rate > 0 && 'text-rework')}>
-            {formatPercent(metrics.rework_rate)}
-          </strong>
-        </StatRow>
-        <StatRow label="Work in progress">
-          <strong className="font-medium">{metrics.wip}</strong>
-        </StatRow>
-        <StatRow label="Spend">
-          <strong className="font-medium">{formatUsd(metrics.spend_usd)}</strong>
-        </StatRow>
-      </div>
-    </SectionCard>
-  );
-}
 
 /** The dark card: the station holding the line back (the drum), or that there is none. */
 export function ConstraintCard({ board, className }: { board: Board; className?: string }) {
@@ -243,52 +200,6 @@ export function FlowCard({ board, className }: { board: Board; className?: strin
           </p>
         </div>
       ) : null}
-    </SectionCard>
-  );
-}
-
-/** Items finished per day over the window; today is solid, earlier days hatched. */
-export function DaysCard({ metrics, className }: { metrics: Metrics; className?: string }) {
-  const days = metrics.throughput;
-  const max = Math.max(1, ...days.map((d) => d.done));
-  const summary = days.map((d) => `${formatWeekday(d.day)} ${d.done}`).join(', ');
-
-  return (
-    <SectionCard
-      title="Finished per day"
-      aside={<span className="text-sm text-muted">Last {days.length} days</span>}
-      className={className}
-    >
-      <div
-        role="img"
-        aria-label={`Items finished per day: ${summary}.`}
-        className="flex min-h-[180px] flex-1 items-end gap-2 pt-6 tabular-nums"
-      >
-        {days.map((d, i) => {
-          const today = i === days.length - 1;
-          return (
-            <div key={d.day} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1.5">
-              <span className="text-[13px] text-ink">{d.done}</span>
-              <div
-                className={cn('w-full overflow-hidden rounded-t-[3px] rounded-b-[1px]', today && 'bg-run')}
-                style={{ height: d.done > 0 ? `calc((100% - 28px) * ${d.done / max})` : '2px' }}
-              >
-                {today ? null : d.done > 0 ? <Hatch tone="run" /> : <div className="size-full bg-line" />}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <div aria-hidden="true" className="-mt-2 flex gap-2 text-[13px] text-muted">
-        {days.map((d, i) => (
-          <span
-            key={d.day}
-            className={cn('min-w-0 flex-1 text-center', i === days.length - 1 && 'font-medium text-ink')}
-          >
-            {i === days.length - 1 ? 'Today' : formatWeekday(d.day)}
-          </span>
-        ))}
-      </div>
     </SectionCard>
   );
 }

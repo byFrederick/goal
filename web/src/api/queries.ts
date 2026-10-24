@@ -6,6 +6,7 @@ import { keepPreviousData, type QueryClient, queryOptions } from '@tanstack/reac
 import { getBuilderMeta, getSkillFiles, type SkillKey, searchSkills } from './builder';
 import {
   ApiError,
+  type FlowRange,
   getAttention,
   getBoard,
   getFactoryOverview,
@@ -14,6 +15,7 @@ import {
   getMetrics,
   getOrg,
   getOrgSettings,
+  getWeekly,
   type ItemFilter,
   listAudit,
   listFactories,
@@ -57,8 +59,10 @@ export const keys = {
   inbox: (org: string, factory?: string) => ['org', org, 'inbox', factory ?? 'all'] as const,
   factory: (org: string, factory: string) => ['org', org, 'factory', factory] as const,
   board: (org: string, factory: string) => ['org', org, 'factory', factory, 'board'] as const,
-  metrics: (org: string, factory: string, window: string) =>
-    ['org', org, 'factory', factory, 'metrics', window] as const,
+  metrics: (org: string, factory: string, range: FlowRange) =>
+    ['org', org, 'factory', factory, 'metrics', range] as const,
+  weekly: (org: string, factory: string, to: string | undefined, type: string | undefined) =>
+    ['org', org, 'factory', factory, 'weekly', to ?? 'today', type ?? 'all'] as const,
   items: (org: string, factory: string, filter: ItemFilter) =>
     ['org', org, 'factory', factory, 'items', filter] as const,
   item: (org: string, item: string) => ['org', org, 'item', item] as const,
@@ -114,10 +118,22 @@ export const factoriesQuery = (org: string) =>
 export const boardQuery = (org: string, factory: string) =>
   queryOptions({ queryKey: keys.board(org, factory), queryFn: ({ signal }) => getBoard(org, factory, signal) });
 
-export const metricsQuery = (org: string, factory: string, window = '7d') =>
+/**
+ * A factory's flow over a range, with the range before it. Flow statistics refetch at most every
+ * 30 s however many events arrive (E §10.3).
+ */
+export const metricsQuery = (org: string, factory: string, range: FlowRange = {}) =>
   queryOptions({
-    queryKey: keys.metrics(org, factory, window),
-    queryFn: ({ signal }) => getMetrics(org, factory, window, signal),
+    queryKey: keys.metrics(org, factory, range),
+    queryFn: ({ signal }) => getMetrics(org, factory, range, signal),
+    staleTime: 30_000,
+  });
+
+/** Throughput by week for the 12 weeks ending on the range's last day. */
+export const weeklyQuery = (org: string, factory: string, { to, type }: FlowRange = {}) =>
+  queryOptions({
+    queryKey: keys.weekly(org, factory, to, type),
+    queryFn: ({ signal }) => getWeekly(org, factory, { to, type }, signal),
     staleTime: 30_000,
   });
 

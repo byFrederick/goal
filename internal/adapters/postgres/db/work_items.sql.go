@@ -26,81 +26,6 @@ func (q *Queries) AddItemCost(ctx context.Context, arg AddItemCostParams) error 
 	return err
 }
 
-const donePerDay = `-- name: DonePerDay :many
-SELECT date_trunc('day', done_at, 'UTC')::timestamptz AS day, count(*) AS done
-FROM work_items
-WHERE factory_id = $1 AND done_at >= $2::timestamptz AND done_at < $3::timestamptz
-GROUP BY 1
-ORDER BY 1
-`
-
-type DonePerDayParams struct {
-	FactoryID uuid.UUID
-	Since     time.Time
-	Until     time.Time
-}
-
-type DonePerDayRow struct {
-	Day  time.Time
-	Done int64
-}
-
-// Items done in [since, until) by UTC day.
-func (q *Queries) DonePerDay(ctx context.Context, arg DonePerDayParams) ([]DonePerDayRow, error) {
-	rows, err := q.db.Query(ctx, donePerDay, arg.FactoryID, arg.Since, arg.Until)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []DonePerDayRow
-	for rows.Next() {
-		var i DonePerDayRow
-		if err := rows.Scan(&i.Day, &i.Done); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const doneStats = `-- name: DoneStats :one
-SELECT count(*) AS items_done,
-       count(*) FILTER (WHERE rework_count > 0) AS reworked,
-       coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM done_at - created_at)::float8), 0)::float8 AS p50_seconds,
-       coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM done_at - created_at)::float8), 0)::float8 AS p85_seconds
-FROM work_items
-WHERE factory_id = $1 AND done_at >= $2::timestamptz AND done_at < $3::timestamptz
-`
-
-type DoneStatsParams struct {
-	FactoryID uuid.UUID
-	Since     time.Time
-	Until     time.Time
-}
-
-type DoneStatsRow struct {
-	ItemsDone  int64
-	Reworked   int64
-	P50Seconds float64
-	P85Seconds float64
-}
-
-// Lead time (created to done) percentiles in seconds, interpolated between ranks.
-func (q *Queries) DoneStats(ctx context.Context, arg DoneStatsParams) (DoneStatsRow, error) {
-	row := q.db.QueryRow(ctx, doneStats, arg.FactoryID, arg.Since, arg.Until)
-	var i DoneStatsRow
-	err := row.Scan(
-		&i.ItemsDone,
-		&i.Reworked,
-		&i.P50Seconds,
-		&i.P85Seconds,
-	)
-	return i, err
-}
-
 const getItem = `-- name: GetItem :one
 SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id FROM work_items WHERE id = $1
 `
@@ -466,17 +391,6 @@ func (q *Queries) NextItemNumber(ctx context.Context, id uuid.UUID) (int64, erro
 	var last_item_number int64
 	err := row.Scan(&last_item_number)
 	return last_item_number, err
-}
-
-const openItemCount = `-- name: OpenItemCount :one
-SELECT count(*) FROM work_items WHERE factory_id = $1 AND state NOT IN ('done', 'cancelled')
-`
-
-func (q *Queries) OpenItemCount(ctx context.Context, factoryID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, openItemCount, factoryID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
 }
 
 const startItem = `-- name: StartItem :one

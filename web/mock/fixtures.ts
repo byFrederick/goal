@@ -12,7 +12,6 @@ import type {
   ItemEvent,
   ItemSpan,
   ItemState,
-  Metrics,
   Org,
   Run,
   VersionRef,
@@ -26,6 +25,7 @@ import {
   seedTemplates,
 } from './definition-seed.ts';
 import type { MockFault } from './faults.ts';
+import { type MockDone, seedHistory } from './flow.ts';
 
 export interface MockItem {
   id: string;
@@ -61,8 +61,9 @@ export interface MockStationConfig {
   checks?: string[];
 }
 
-/** A factory's lead-time targets and task budget (flow.targets, runtime.budget), in seconds and dollars. */
+/** A factory's flow targets and task budget (flow.targets, runtime.budget), in seconds and dollars. */
 export interface MockFlow {
+  throughput_per_day?: number | null;
   lead_time: number | null;
   expedite_lead_time: number | null;
   per_item_usd: number | null;
@@ -126,15 +127,14 @@ export interface MockState {
   constraint: Record<string, string | null>;
   /** Board statistics goald derives from history, by factory name and station. */
   stationStats: Record<string, Record<string, MockStationStats>>;
-  metrics: Record<string, Metrics>;
+  /** Each factory's items finished before the mock started (flow.ts), by name. */
+  history: Record<string, MockDone[]>;
   /** The open andon pull of each factory, by name; absent or null while its line runs. */
   andon: Record<string, AndonPull | null>;
   /** Each factory's targets and task budget, by name; absent without any. */
   flow: Record<string, MockFlow>;
   /** Each factory's runtime.budget.weeklyUsd, by name; absent or null without one. */
   weeklyBudget: Record<string, number | null>;
-  /** Items done per day over the 7 days before the metrics window, by name. */
-  previousPerDay: Record<string, number>;
   items: MockItem[];
   events: ItemEvent[];
   nextEventId: number;
@@ -301,17 +301,6 @@ const researchFactory: Factory = {
   paused: false,
   created_at: '2026-10-01T09:00:00Z',
 };
-
-/** The metrics of a factory with nothing done yet. */
-const quiet = (day: (offset: number) => string): Metrics => ({
-  window: '7d',
-  throughput: [0, 0, 0, 0, 0, 0, 0].map((done, i) => ({ day: day(6 - i), done })),
-  lead_time_hours: null,
-  wip: 0,
-  rework_rate: 0,
-  spend_usd: 0,
-  items_done: 0,
-});
 
 const specOutput = (summary: string, criteria: string[], lane: string) => ({
   summary,
@@ -1241,7 +1230,7 @@ export function seed(now = Date.now()): MockState {
         inbox: { queue_trend: 'growing' },
       },
     },
-    metrics: {},
+    history: {},
     andon: {
       support: {
         reason: 'Answers sent back 4 of the last 10 times',
@@ -1250,11 +1239,22 @@ export function seed(now = Date.now()): MockState {
       },
     },
     flow: {
-      goal: { lead_time: 6 * 3600, expedite_lead_time: 3600, per_item_usd: 4, max_turns_per_task: 80 },
-      sre: { lead_time: 4 * 3600, expedite_lead_time: 3600, per_item_usd: 2, max_turns_per_task: 40 },
+      goal: {
+        throughput_per_day: 3,
+        lead_time: 6 * 3600,
+        expedite_lead_time: 3600,
+        per_item_usd: 4,
+        max_turns_per_task: 80,
+      },
+      sre: {
+        throughput_per_day: 8,
+        lead_time: 6 * 3600,
+        expedite_lead_time: 3600,
+        per_item_usd: 2,
+        max_turns_per_task: 40,
+      },
     },
     weeklyBudget: { goal: 60, sre: 20 },
-    previousPerDay: { goal: 1.6, sre: 0.4 },
     items: [],
     events: [],
     nextEventId: 1,
@@ -1297,27 +1297,7 @@ export function seed(now = Date.now()): MockState {
   build(goalFactory, 0, goalSeeds, now, state);
   build(sreFactory, 1, sreSeeds, now, state);
 
-  const day = (offset: number) => new Date(now - offset * 86_400_000).toISOString().slice(0, 10);
-  state.metrics.goal = {
-    window: '7d',
-    throughput: [2, 1, 3, 0, 2, 4, 1].map((done, i) => ({ day: day(6 - i), done })),
-    lead_time_hours: { p50: 6.2, p85: 14.8 },
-    wip: 9,
-    rework_rate: 0.23,
-    spend_usd: 18.42,
-    items_done: 13,
-  };
-  state.metrics.sre = {
-    window: '7d',
-    throughput: [0, 1, 0, 0, 1, 0, 0].map((done, i) => ({ day: day(6 - i), done })),
-    lead_time_hours: null,
-    wip: 2,
-    rework_rate: 0,
-    spend_usd: 1.06,
-    items_done: 2,
-  };
-  state.metrics.support = quiet(day);
-  state.metrics.research = quiet(day);
+  for (const f of state.factories) state.history[f.name] = seedHistory(f, now);
 
   return state;
 }

@@ -4,12 +4,8 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"regexp"
 	"slices"
-	"strconv"
 	"time"
-
-	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/config"
@@ -23,8 +19,6 @@ const (
 	boardDoneItems   = 20
 	defaultItemLimit = 50
 	maxItemLimit     = 200
-	maxWindowDays    = 90
-	day              = 24 * time.Hour
 )
 
 // openStates are the states of items that are on the line.
@@ -32,11 +26,10 @@ var openStates = []domain.ItemState{
 	domain.StateQueued, domain.StateReady, domain.StateInProgress, domain.StateWaitingHuman, domain.StateBlocked,
 }
 
-// window is a metrics window: the last N UTC days, today included.
-var window = regexp.MustCompile(`^([1-9][0-9]?)d$`)
-
 func (s *server) GetBoard(ctx context.Context, req gen.GetBoardRequestObject) (gen.GetBoardResponseObject, error) {
-	w, err := windowOf(req.Params.Window)
+	now := s.clock.Now().UTC()
+
+	w, err := windowOf(req.Params.Window, now)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +41,7 @@ func (s *server) GetBoard(ctx context.Context, req gen.GetBoardRequestObject) (g
 
 	l := f.Line()
 
-	stats, err := s.boardStats(ctx, l.FactoryID, w, s.clock.Now().UTC())
+	stats, err := s.boardStats(ctx, l.FactoryID, w, now)
 	if err != nil {
 		return nil, err
 	}
@@ -135,15 +128,15 @@ type boardStats struct {
 	doneToday int
 }
 
-func (s *server) boardStats(ctx context.Context, f domain.FactoryID, w metricsWindow, now time.Time) (boardStats, error) {
-	since := w.since(now)
+func (s *server) boardStats(ctx context.Context, f domain.FactoryID, w dayRange, now time.Time) (boardStats, error) {
+	since := w.from
 
 	list, history, err := s.items.StationTimes(ctx, f, since, now)
 	if err != nil {
 		return boardStats{}, err
 	}
 
-	today, err := s.items.FlowMetrics(ctx, f, now.Truncate(day), now)
+	today, err := s.items.FlowMetrics(ctx, lastDays(1, now).query(f, "", now), "")
 	if err != nil {
 		return boardStats{}, err
 	}
@@ -329,98 +322,4 @@ func (s *server) inProgress(ctx context.Context, l domain.Line, items []domain.I
 	}
 
 	return leases, turns, nil
-}
-
-func (s *server) GetMetrics(ctx context.Context, req gen.GetMetricsRequestObject) (gen.GetMetricsResponseObject, error) {
-	w, err := windowOf(req.Params.Window)
-	if err != nil {
-		return nil, err
-	}
-
-	f, err := s.factory(ctx, req.Factory)
-	if err != nil {
-		return nil, err
-	}
-
-	now := s.clock.Now().UTC()
-	since := w.since(now)
-
-	fm, err := s.items.FlowMetrics(ctx, domain.FactoryID(f.Metadata.ID), since, now)
-	if err != nil {
-		return nil, err
-	}
-
-	return metricsOf(w, since, fm), nil
-}
-
-// metricsWindow is a valid window parameter: the last days UTC days, today included.
-type metricsWindow struct {
-	name string
-	days int
-}
-
-// windowOf checks a window parameter, 7d when absent.
-func windowOf(param *string) (metricsWindow, error) {
-	w := metricsWindow{name: "7d"}
-	if param != nil {
-		w.name = *param
-	}
-
-	if m := window.FindStringSubmatch(w.name); m != nil {
-		w.days, _ = strconv.Atoi(m[1])
-	}
-
-	if w.days < 1 || w.days > maxWindowDays {
-		return metricsWindow{}, fmt.Errorf("%w: window %q is not 1d to %dd", errInvalid, w.name, maxWindowDays)
-	}
-
-	return w, nil
-}
-
-// since is the window's first instant when it ends at now: midnight UTC, days-1 days before
-// today's.
-func (w metricsWindow) since(now time.Time) time.Time {
-	return now.Truncate(day).Add(-time.Duration(w.days-1) * day)
-}
-
-// donePerDay pads fm's items done per day to one entry for every day of the window from since.
-func donePerDay(w metricsWindow, since time.Time, fm domain.FlowMetrics) []struct {
-	Day  openapi_types.Date `json:"day"`
-	Done int                `json:"done"`
-} {
-	done := make(map[time.Time]int, len(fm.DonePerDay))
-	for _, d := range fm.DonePerDay {
-		done[d.Day.UTC()] = d.Count
-	}
-
-	out := make([]struct {
-		Day  openapi_types.Date `json:"day"`
-		Done int                `json:"done"`
-	}, 0, w.days)
-
-	for i := range w.days {
-		d := since.Add(time.Duration(i) * day)
-		out = append(out, struct {
-			Day  openapi_types.Date `json:"day"`
-			Done int                `json:"done"`
-		}{Day: openapi_types.Date{Time: d}, Done: done[d]})
-	}
-
-	return out
-}
-
-func metricsOf(w metricsWindow, since time.Time, fm domain.FlowMetrics) gen.GetMetrics200JSONResponse {
-	out := gen.GetMetrics200JSONResponse{
-		Window: w.name, Wip: fm.WIP, SpendUsd: fm.SpendUSD, ItemsDone: fm.ItemsDone, Throughput: donePerDay(w, since, fm),
-	}
-
-	if fm.ItemsDone > 0 {
-		out.ReworkRate = float64(fm.Reworked) / float64(fm.ItemsDone)
-		out.LeadTimeHours = &struct {
-			P50 float64 `json:"p50"`
-			P85 float64 `json:"p85"`
-		}{P50: fm.LeadTimeP50.Hours(), P85: fm.LeadTimeP85.Hours()}
-	}
-
-	return out
 }

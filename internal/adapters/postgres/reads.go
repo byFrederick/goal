@@ -81,53 +81,6 @@ func (s *Store) StationLoads(ctx context.Context, factory domain.FactoryID) ([]d
 	return out, nil
 }
 
-// FlowMetrics implements ports.Store. Its reads share one snapshot.
-func (s *Store) FlowMetrics(ctx context.Context, factory domain.FactoryID, since, until time.Time) (domain.FlowMetrics, error) {
-	fid, err := parseID("factory", string(factory))
-	if err != nil {
-		return domain.FlowMetrics{}, err
-	}
-
-	var m domain.FlowMetrics
-
-	err = s.orgTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(q *db.Queries) error {
-		days, err := q.DonePerDay(ctx, db.DonePerDayParams{FactoryID: fid, Since: since, Until: until})
-		if err != nil {
-			return fmt.Errorf("done per day: %w", err)
-		}
-
-		for _, d := range days {
-			m.DonePerDay = append(m.DonePerDay, domain.DayCount{Day: d.Day.UTC(), Count: int(d.Done)})
-		}
-
-		stats, err := q.DoneStats(ctx, db.DoneStatsParams{FactoryID: fid, Since: since, Until: until})
-		if err != nil {
-			return fmt.Errorf("done stats: %w", err)
-		}
-
-		m.ItemsDone, m.Reworked = int(stats.ItemsDone), int(stats.Reworked)
-		m.LeadTimeP50, m.LeadTimeP85 = seconds(stats.P50Seconds), seconds(stats.P85Seconds)
-
-		wip, err := q.OpenItemCount(ctx, fid)
-		if err != nil {
-			return fmt.Errorf("open items: %w", err)
-		}
-
-		m.WIP = int(wip)
-
-		if m.SpendUSD, err = q.Spend(ctx, db.SpendParams{FactoryID: fid, Since: since, Until: until}); err != nil {
-			return fmt.Errorf("spend: %w", err)
-		}
-
-		return nil
-	})
-	if err != nil {
-		return domain.FlowMetrics{}, fmt.Errorf("flow metrics of factory %s: %w", factory, err)
-	}
-
-	return m, nil
-}
-
 func seconds(s float64) time.Duration { return time.Duration(math.Round(s * float64(time.Second))) }
 
 // SpendSince implements ports.Store.

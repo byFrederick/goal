@@ -88,14 +88,13 @@ func (s *server) attention(ctx context.Context) (map[domain.FactoryID]domain.Att
 }
 
 func (s *server) GetFactoryOverview(ctx context.Context, req gen.GetFactoryOverviewRequestObject) (gen.GetFactoryOverviewResponseObject, error) {
-	w, err := windowOf(req.Params.Window)
+	started := time.Now()
+	now := s.clock.Now().UTC()
+
+	w, err := windowOf(req.Params.Window, now)
 	if err != nil {
 		return nil, err
 	}
-
-	started := time.Now()
-	now := s.clock.Now().UTC()
-	since := w.since(now)
 
 	attention, err := s.attention(ctx)
 	if err != nil {
@@ -109,12 +108,12 @@ func (s *server) GetFactoryOverview(ctx context.Context, req gen.GetFactoryOverv
 
 	fs := s.factories.Factories(ctx)
 	out := gen.GetFactoryOverview200JSONResponse{
-		Window: w.name, Since: openapi_types.Date{Time: since}, Until: openapi_types.Date{Time: now.Truncate(day)},
+		Window: w.name(), Since: openapi_types.Date{Time: w.from}, Until: openapi_types.Date{Time: w.to},
 		Factories: make([]gen.FactoryOverview, 0, len(fs)),
 	}
 
 	for _, f := range fs {
-		o, err := s.overview(ctx, recordOf(recs, orgOf(ctx).ID, f), f, attention[domain.FactoryID(f.Metadata.ID)], w, since, now)
+		o, err := s.overview(ctx, recordOf(recs, orgOf(ctx).ID, f), f, attention[domain.FactoryID(f.Metadata.ID)], w, now)
 		if err != nil {
 			return nil, err
 		}
@@ -137,45 +136,40 @@ func (s *server) GetFactoryOverview(ctx context.Context, req gen.GetFactoryOverv
 	return out, nil
 }
 
-// overview summarizes one factory over the window that starts at since and ends now: its health,
-// throughput against the previous window of the same length, the constraint now, the decisions
-// waiting and the spend against its budget.
+// overview summarizes one factory over the window w as of now: its health, throughput against
+// the previous window of the same length, the constraint now, the decisions waiting and the
+// spend against its budget.
 func (s *server) overview(
-	ctx context.Context, rec ports.FactoryRecord, f *config.Factory, a domain.Attention, w metricsWindow, since, now time.Time,
+	ctx context.Context, rec ports.FactoryRecord, f *config.Factory, a domain.Attention, w dayRange, now time.Time,
 ) (gen.FactoryOverview, error) {
 	l := f.Line()
 
-	loadList, err := s.items.StationLoads(ctx, l.FactoryID)
+	loads, err := s.loads(ctx, l.FactoryID)
 	if err != nil {
 		return gen.FactoryOverview{}, err
 	}
 
-	cur, err := s.items.FlowMetrics(ctx, l.FactoryID, since, now)
+	cur, err := s.items.FlowMetrics(ctx, w.query(l.FactoryID, "", now), "")
 	if err != nil {
 		return gen.FactoryOverview{}, err
 	}
 
-	prev, err := s.items.FlowMetrics(ctx, l.FactoryID, since.Add(-time.Duration(w.days)*day), since)
+	prev, err := s.items.FlowMetrics(ctx, w.before().query(l.FactoryID, "", now), "")
 	if err != nil {
 		return gen.FactoryOverview{}, err
 	}
 
+	days := float64(w.days())
 	o := gen.FactoryOverview{
 		Factory: factoryOut(rec, f), Health: gen.FactoryHealthRunning, Andon: andonOf(a.Andon), SpendUsd: cur.SpendUSD,
 		Throughput: gen.Throughput{
-			PerDay: float64(cur.ItemsDone) / float64(w.days), PreviousPerDay: float64(prev.ItemsDone) / float64(w.days),
-			Days: donePerDay(w, since, cur),
+			PerDay: float64(cur.ItemsDone) / days, PreviousPerDay: float64(prev.ItemsDone) / days, Days: donePerDay(w, cur),
 		},
 		Waiting: gen.WaitingSummary{OnYou: a.WaitingHuman},
 	}
 
 	if a.Andon != nil {
 		o.Health = gen.FactoryHealthStopped
-	}
-
-	loads := make(map[string]domain.StationLoad, len(loadList))
-	for _, ld := range loadList {
-		loads[ld.Station] = ld
 	}
 
 	if station, ok := l.Constraint(loads); ok {
@@ -199,7 +193,7 @@ func (s *server) overview(
 	}{}
 
 	if l.Runtime.HasWeeklyBudget() {
-		o.BudgetUsd = new(math.Round(l.Runtime.BudgetFor(time.Duration(w.days)*day)*100) / 100)
+		o.BudgetUsd = new(math.Round(l.Runtime.BudgetFor(time.Duration(w.days())*day)*100) / 100)
 	}
 
 	return o, nil

@@ -35,6 +35,7 @@ import type {
   OrgSettingsPatch,
   OrgSummary,
   RunList,
+  WeeklyThroughput,
 } from './types';
 
 export { ApiError, type StreamStatus };
@@ -124,10 +125,41 @@ export function getBoard(org: string, factory: string, signal?: AbortSignal): Pr
   );
 }
 
-export function getMetrics(org: string, factory: string, window: string, signal?: AbortSignal): Promise<Metrics> {
+/**
+ * A range of UTC days and a work type, as the Floor's URL holds them: absent `to` is today,
+ * absent `from` six days before `to`, absent `type` every type.
+ */
+export interface FlowRange {
+  from?: string | undefined;
+  to?: string | undefined;
+  type?: string | undefined;
+}
+
+/** A range's query parameters: the ones it sets. */
+function rangeQuery({ from, to, type }: FlowRange): { from?: string; to?: string; type?: string } {
+  return { ...(from ? { from } : {}), ...(to ? { to } : {}), ...(type ? { type } : {}) };
+}
+
+/** The flow over a range, with the range of the same length before it. */
+export function getMetrics(org: string, factory: string, range: FlowRange, signal?: AbortSignal): Promise<Metrics> {
   return unwrap(
     goal.GET(orgPath('/factories/{factory}/metrics'), {
-      params: { path: { org, factory }, query: { window } },
+      params: { path: { org, factory }, query: { ...rangeQuery(range), compare: 'previous' } },
+      ...cancel(signal),
+    }),
+  );
+}
+
+/** Items finished in each of the `weeks` weeks ending on `to` (today when absent). */
+export function getWeekly(
+  org: string,
+  factory: string,
+  { to, type }: Pick<FlowRange, 'to' | 'type'>,
+  signal?: AbortSignal,
+): Promise<WeeklyThroughput> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/metrics/weekly'), {
+      params: { path: { org, factory }, query: rangeQuery({ to, type }) },
       ...cancel(signal),
     }),
   );

@@ -186,7 +186,7 @@ func testFlowMetrics(f *fixture) {
 		}
 	}
 
-	m, err := f.Store.FlowMetrics(f.ctx(t), f.factory, since, until)
+	m, err := f.Flow.FlowMetrics(f.ctx(t), ports.FlowQuery{FactoryID: f.factory, Since: since, Until: until}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +211,7 @@ func testFlowMetrics(f *fixture) {
 		t.Errorf("metrics =\n  %+v\nwant\n  %+v", m, want)
 	}
 
-	empty, err := f.Store.FlowMetrics(f.ctx(t), f.factory, until.Add(time.Hour), until.Add(2*time.Hour))
+	empty, err := f.Flow.FlowMetrics(f.ctx(t), ports.FlowQuery{FactoryID: f.factory, Since: until.Add(time.Hour), Until: until.Add(2 * time.Hour)}, "")
 	if err != nil || empty.ItemsDone != 0 || empty.LeadTimeP50 != 0 || len(empty.DonePerDay) != 0 || empty.WIP != 1 {
 		t.Errorf("metrics of an empty window = %+v, %v; want nothing done and the line's WIP", empty, err)
 	}

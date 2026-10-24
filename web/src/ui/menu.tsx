@@ -83,6 +83,25 @@ export function MenuRadioItem({ className, children, ...props }: ComponentProps<
   );
 }
 
+/** A plain choice of one (a filter's values): its label, and a check on the chosen one. */
+export function MenuChoice({ className, children, ...props }: ComponentProps<typeof M.RadioItem>) {
+  return (
+    <M.RadioItem
+      className={cn(
+        menuRow,
+        'cursor-pointer justify-between focus-visible:-outline-offset-2 data-[highlighted]:bg-shell',
+        className,
+      )}
+      {...props}
+    >
+      {children}
+      <M.ItemIndicator className="flex">
+        <Check size={18} strokeWidth={1.75} aria-hidden="true" />
+      </M.ItemIndicator>
+    </M.RadioItem>
+  );
+}
+
 /** A group's heading ("Organizations", "Acme"). Give it an id and label the group with it. */
 export function MenuLabel({ className, ...props }: ComponentProps<typeof M.Label>) {
   return <M.Label className={cn('mx-2.5 mt-2.5 mb-1 text-[13px] font-medium text-muted', className)} {...props} />;

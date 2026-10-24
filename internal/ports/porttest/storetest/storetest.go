@@ -90,6 +90,9 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"RequeueExpiredLeases_RecordsExpiredLeaseSpans", testLeaseSpansOnRequeue},
 		{"StationTimes_LeasesWaitingAndVerdictsInTheWindow", testStationTimes},
 		{"LiveTurns_UsageOfEachRunningRun", testLiveTurns},
+		{"FlowMetrics_ByTypeWithLongWaits", testFlowMetricsByTypeWithLongWaits},
+		{"DoneByBucket_EqualBucketsEndingAtUntil", testDoneByBucket},
+		{"FlowStats_NeedAnOrgAndSeeOnlyItsItems", testFlowStatsTenancy},
 	}
 
 	for _, tc := range tests {

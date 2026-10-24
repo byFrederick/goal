@@ -104,7 +104,12 @@ type FlowMetrics struct {
 	WIP int
 	// SpendUSD is the cost of the agent runs started in the window.
 	SpendUSD float64
+	// LongWaits is how many items waited over LongWait in front of the station asked about.
+	LongWaits int
 }
+
+// LongWait is how long an item may wait in front of a station before the Floor calls it out.
+const LongWait = 24 * time.Hour
 
 // DayCount is a count for one UTC day (midnight).
 type DayCount struct {

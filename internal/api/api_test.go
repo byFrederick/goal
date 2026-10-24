@@ -249,9 +249,9 @@ func (r reads) WaitingHuman(ctx context.Context, fs []domain.FactoryID, limit in
 	return r.Store.WaitingHuman(ctx, fs, limit)
 }
 
-func (r reads) FlowMetrics(ctx context.Context, f domain.FactoryID, since, until time.Time) (domain.FlowMetrics, error) {
+func (r reads) FlowMetrics(ctx context.Context, q ports.FlowQuery, longWaitsAt string) (domain.FlowMetrics, error) {
 	r.seam.record("FlowMetrics")
-	return r.Store.FlowMetrics(ctx, f, since, until)
+	return r.Store.FlowMetrics(ctx, q, longWaitsAt)
 }
 
 // newTenancy holds acme (testOrg) and example-labs (otherOrg).

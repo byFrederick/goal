@@ -572,6 +572,21 @@ func (e VersionState) Valid() bool {
 	}
 }
 
+// Defines values for GetMetricsParamsCompare.
+const (
+	Previous GetMetricsParamsCompare = "previous"
+)
+
+// Valid indicates whether the value is a known member of the GetMetricsParamsCompare enum.
+func (e GetMetricsParamsCompare) Valid() bool {
+	switch e {
+	case Previous:
+		return true
+	default:
+		return false
+	}
+}
+
 // Actor Who did something; in phase 2.2 every person is the local user
 type Actor struct {
 	// Id "local" for the local user, an agent's name or a job's name
@@ -1364,7 +1379,9 @@ type MergeRequestMethod string
 
 // Metrics defines model for Metrics.
 type Metrics struct {
-	ItemsDone int `json:"items_done"`
+	// From The range's first UTC day
+	From      openapi_types.Date `json:"from"`
+	ItemsDone int                `json:"items_done"`
 
 	// LeadTimeHours Percentiles of created → done of the items done in the window; null when none were
 	LeadTimeHours *struct {
@@ -1372,11 +1389,24 @@ type Metrics struct {
 		P85 float64 `json:"p85"`
 	} `json:"lead_time_hours"`
 
+	// LongWaits The items that waited (queued or ready) over threshold_hours in front of the constraint and stopped waiting in the range or still wait; null when the line has no constraint
+	LongWaits *struct {
+		Items          int     `json:"items"`
+		Station        string  `json:"station"`
+		ThresholdHours float64 `json:"threshold_hours"`
+	} `json:"long_waits"`
+
+	// Previous With compare=previous, the same metrics over the range of the same length just before
+	Previous *MetricsSummary `json:"previous"`
+
 	// ReworkRate Share of the items done in the window that were sent back at least once (0 when none were done)
 	ReworkRate float64 `json:"rework_rate"`
 
 	// SpendUsd Cost of the agent runs started in the window
 	SpendUsd float64 `json:"spend_usd"`
+
+	// Targets The flow targets of the factory's definition (spec.board.flow.targets); null when not set
+	Targets Targets `json:"targets"`
 
 	// Throughput Items done per UTC day, one entry for every day of the window, oldest first
 	Throughput []struct {
@@ -1384,11 +1414,35 @@ type Metrics struct {
 		Done int                `json:"done"`
 	} `json:"throughput"`
 
-	// Window The window asked for, as in 7d
+	// ThroughputPerDay items_done divided by the range's days
+	ThroughputPerDay float64 `json:"throughput_per_day"`
+
+	// To The range's last UTC day
+	To openapi_types.Date `json:"to"`
+
+	// Type The work type asked for; null for every type
+	Type *string `json:"type"`
+
+	// Window The range's length in days, as in 7d
 	Window string `json:"window"`
 
 	// Wip Items in the line now, neither done nor cancelled
 	Wip int `json:"wip"`
+}
+
+// MetricsSummary The headline metrics of one range, to compare with
+type MetricsSummary struct {
+	From      openapi_types.Date `json:"from"`
+	ItemsDone int                `json:"items_done"`
+
+	// LeadTimeHours Percentiles of created → done of the items done in the range; null when none were
+	LeadTimeHours *struct {
+		P50 float64 `json:"p50"`
+		P85 float64 `json:"p85"`
+	} `json:"lead_time_hours"`
+	ReworkRate       float64            `json:"rework_rate"`
+	ThroughputPerDay float64            `json:"throughput_per_day"`
+	To               openapi_types.Date `json:"to"`
 }
 
 // NewFactoryRequest defines model for NewFactoryRequest.
@@ -1795,6 +1849,16 @@ type StreamEvent struct {
 	Station *string   `json:"station,omitempty"`
 }
 
+// Targets The flow targets of the factory's definition (spec.board.flow.targets); null when not set
+type Targets struct {
+	// ExpediteLeadTimeMinutes Lead time of each expedite item
+	ExpediteLeadTimeMinutes *int `json:"expedite_lead_time_minutes"`
+
+	// LeadTimeHours The p85 lead time to stay under
+	LeadTimeHours    *float64 `json:"lead_time_hours"`
+	ThroughputPerDay *float64 `json:"throughput_per_day"`
+}
+
 // Template defines model for Template.
 type Template struct {
 	Agents int `json:"agents"`
@@ -1992,6 +2056,30 @@ type WaitingSummary struct {
 	} `json:"tool_approvals"`
 }
 
+// WeeklyThroughput defines model for WeeklyThroughput.
+type WeeklyThroughput struct {
+	// Targets The flow targets of the factory's definition (spec.board.flow.targets); null when not set
+	Targets Targets `json:"targets"`
+
+	// To The last UTC day of the last week
+	To openapi_types.Date `json:"to"`
+
+	// Type The work type asked for; null for every type
+	Type *string `json:"type"`
+
+	// Weeks Seven-day buckets ending on `to`, oldest first
+	Weeks []struct {
+		Done int                `json:"done"`
+		From openapi_types.Date `json:"from"`
+
+		// PerDay done divided by 7
+		PerDay float64 `json:"per_day"`
+
+		// To The week's last day
+		To openapi_types.Date `json:"to"`
+	} `json:"weeks"`
+}
+
 // FactoryRef defines model for FactoryRef.
 type FactoryRef = string
 
@@ -2010,11 +2098,20 @@ type ItemRef = string
 // OrgRef defines model for OrgRef.
 type OrgRef = string
 
+// RangeFrom defines model for RangeFrom.
+type RangeFrom = openapi_types.Date
+
+// RangeTo defines model for RangeTo.
+type RangeTo = openapi_types.Date
+
 // SectionRef defines model for SectionRef.
 type SectionRef = Section
 
 // VersionSelector defines model for VersionSelector.
 type VersionSelector = string
+
+// WorkTypeFilter defines model for WorkTypeFilter.
+type WorkTypeFilter = string
 
 // ListAuditParams defines parameters for ListAudit.
 type ListAuditParams struct {
@@ -2100,8 +2197,33 @@ type ListItemsParams struct {
 
 // GetMetricsParams defines parameters for GetMetrics.
 type GetMetricsParams struct {
-	// Window The last N UTC calendar days, today included, written Nd (1d to 90d). Items count when they reached done in the window; spend counts agent runs started in it.
+	// Window The last N UTC calendar days, today included, written Nd (1d to 90d); kept for the CLI. Not together with from or to.
 	Window *string `form:"window,omitempty" json:"window,omitempty"`
+
+	// From The first UTC day of the range; 6 days before `to` when absent
+	From *RangeFrom `form:"from,omitempty" json:"from,omitempty"`
+
+	// To The last UTC day of the range, included; today when absent
+	To *RangeTo `form:"to,omitempty" json:"to,omitempty"`
+
+	// Type Only items of this work type (one the factory declares); every type when absent
+	Type *WorkTypeFilter `form:"type,omitempty" json:"type,omitempty"`
+
+	// Compare previous adds the same metrics over the range of the same length just before
+	Compare *GetMetricsParamsCompare `form:"compare,omitempty" json:"compare,omitempty"`
+}
+
+// GetMetricsParamsCompare defines parameters for GetMetrics.
+type GetMetricsParamsCompare string
+
+// GetWeeklyThroughputParams defines parameters for GetWeeklyThroughput.
+type GetWeeklyThroughputParams struct {
+	// To The last UTC day of the last week; today when absent
+	To    *openapi_types.Date `form:"to,omitempty" json:"to,omitempty"`
+	Weeks *int                `form:"weeks,omitempty" json:"weeks,omitempty"`
+
+	// Type Only items of this work type (one the factory declares); every type when absent
+	Type *WorkTypeFilter `form:"type,omitempty" json:"type,omitempty"`
 }
 
 // ListVersionsParams defines parameters for ListVersions.
@@ -2838,10 +2960,19 @@ type ClientInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
 	SubmitItem(ctx context.Context, org OrgRef, factory FactoryRef, body SubmitItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetMetrics The factory's flow over the last days
+	// GetMetrics The factory's flow over a range of UTC days
+	//
+	// Items count when they reached done in the range; spend counts agent runs started in it; wip is the line now. The range is from to to, both included, at most 90 days, to not after today; without one it is the last 7 days. 400 for a bad range, both a window and a range, or a type the factory does not declare.
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics (the `GetMetrics` operationId).
 	GetMetrics(ctx context.Context, org OrgRef, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetWeeklyThroughput Items finished in each of the last weeks
+	//
+	// Seven-day buckets ending on `to` (included), oldest first. 400 for a `to` after today, weeks outside 1 to 26 or a type the factory does not declare.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics/weekly (the `GetWeeklyThroughput` operationId).
+	GetWeeklyThroughput(ctx context.Context, org OrgRef, factory FactoryRef, params *GetWeeklyThroughputParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PauseFactory Stop the factory taking work; runs in progress finish
 	//
@@ -3810,11 +3941,30 @@ func (c *Client) SubmitItem(ctx context.Context, org OrgRef, factory FactoryRef,
 	return c.Client.Do(req)
 }
 
-// GetMetrics The factory's flow over the last days
+// GetMetrics The factory's flow over a range of UTC days
+//
+// Items count when they reached done in the range; spend counts agent runs started in it; wip is the line now. The range is from to to, both included, at most 90 days, to not after today; without one it is the last 7 days. 400 for a bad range, both a window and a range, or a type the factory does not declare.
 //
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics (the `GetMetrics` operationId).
 func (c *Client) GetMetrics(ctx context.Context, org OrgRef, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetMetricsRequest(c.Server, org, factory, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetWeeklyThroughput Items finished in each of the last weeks
+//
+// Seven-day buckets ending on `to` (included), oldest first. 400 for a `to` after today, weeks outside 1 to 26 or a type the factory does not declare.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics/weekly (the `GetWeeklyThroughput` operationId).
+func (c *Client) GetWeeklyThroughput(ctx context.Context, org OrgRef, factory FactoryRef, params *GetWeeklyThroughputParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetWeeklyThroughputRequest(c.Server, org, factory, params)
 	if err != nil {
 		return nil, err
 	}
@@ -6137,6 +6287,146 @@ func NewGetMetricsRequest(server string, org OrgRef, factory FactoryRef, params 
 
 		}
 
+		if params.From != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "from", *params.From, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.To != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "to", *params.To, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Type != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "type", *params.Type, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Compare != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "compare", *params.Compare, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetWeeklyThroughputRequest constructs an http.Request for the GetWeeklyThroughput method
+func NewGetWeeklyThroughputRequest(server string, org OrgRef, factory FactoryRef, params *GetWeeklyThroughputParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/metrics/weekly", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.To != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "to", *params.To, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Weeks != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "weeks", *params.Weeks, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Type != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "type", *params.Type, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -7772,12 +8062,23 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
 	SubmitItemWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body SubmitItemJSONRequestBody, reqEditors ...RequestEditorFn) (*SubmitItemResponse, error)
 
-	// GetMetricsWithResponse The factory's flow over the last days
+	// GetMetricsWithResponse The factory's flow over a range of UTC days
+	//
+	// Items count when they reached done in the range; spend counts agent runs started in it; wip is the line now. The range is from to to, both included, at most 90 days, to not after today; without one it is the last 7 days. 400 for a bad range, both a window and a range, or a type the factory does not declare.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics (the `GetMetrics` operationId).
 	GetMetricsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*GetMetricsResponse, error)
+
+	// GetWeeklyThroughputWithResponse Items finished in each of the last weeks
+	//
+	// Seven-day buckets ending on `to` (included), oldest first. 400 for a `to` after today, weeks outside 1 to 26 or a type the factory does not declare.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics/weekly (the `GetWeeklyThroughput` operationId).
+	GetWeeklyThroughputWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetWeeklyThroughputParams, reqEditors ...RequestEditorFn) (*GetWeeklyThroughputResponse, error)
 
 	// PauseFactoryWithResponse Stop the factory taking work; runs in progress finish
 	//
@@ -9636,6 +9937,54 @@ func (r GetMetricsResponse) ContentType() string {
 	return ""
 }
 
+type GetWeeklyThroughputResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *WeeklyThroughput
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetWeeklyThroughputResponse) GetJSON200() *WeeklyThroughput {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetWeeklyThroughputResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetWeeklyThroughputResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetWeeklyThroughputResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetWeeklyThroughputResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetWeeklyThroughputResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type PauseFactoryResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -11376,7 +11725,9 @@ func (c *ClientWithResponses) SubmitItemWithResponse(ctx context.Context, org Or
 	return ParseSubmitItemResponse(rsp)
 }
 
-// GetMetricsWithResponse The factory's flow over the last days
+// GetMetricsWithResponse The factory's flow over a range of UTC days
+//
+// Items count when they reached done in the range; spend counts agent runs started in it; wip is the line now. The range is from to to, both included, at most 90 days, to not after today; without one it is the last 7 days. 400 for a bad range, both a window and a range, or a type the factory does not declare.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -11387,6 +11738,21 @@ func (c *ClientWithResponses) GetMetricsWithResponse(ctx context.Context, org Or
 		return nil, err
 	}
 	return ParseGetMetricsResponse(rsp)
+}
+
+// GetWeeklyThroughputWithResponse Items finished in each of the last weeks
+//
+// Seven-day buckets ending on `to` (included), oldest first. 400 for a `to` after today, weeks outside 1 to 26 or a type the factory does not declare.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics/weekly (the `GetWeeklyThroughput` operationId).
+func (c *ClientWithResponses) GetWeeklyThroughputWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetWeeklyThroughputParams, reqEditors ...RequestEditorFn) (*GetWeeklyThroughputResponse, error) {
+	rsp, err := c.GetWeeklyThroughput(ctx, org, factory, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetWeeklyThroughputResponse(rsp)
 }
 
 // PauseFactoryWithResponse Stop the factory taking work; runs in progress finish
@@ -12927,6 +13293,39 @@ func ParseGetMetricsResponse(rsp *http.Response) (*GetMetricsResponse, error) {
 	return response, nil
 }
 
+// ParseGetWeeklyThroughputResponse parses an HTTP response from a GetWeeklyThroughputWithResponse call
+func ParseGetWeeklyThroughputResponse(rsp *http.Response) (*GetWeeklyThroughputResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetWeeklyThroughputResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest WeeklyThroughput
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParsePauseFactoryResponse parses an HTTP response from a PauseFactoryWithResponse call
 func ParsePauseFactoryResponse(rsp *http.Response) (*PauseFactoryResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -13793,9 +14192,12 @@ type ServerInterface interface {
 	// SubmitItem Submit a work item to a factory's first station
 	// (POST /v1/orgs/{org}/factories/{factory}/items)
 	SubmitItem(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
-	// GetMetrics The factory's flow over the last days
+	// GetMetrics The factory's flow over a range of UTC days
 	// (GET /v1/orgs/{org}/factories/{factory}/metrics)
 	GetMetrics(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetMetricsParams)
+	// GetWeeklyThroughput Items finished in each of the last weeks
+	// (GET /v1/orgs/{org}/factories/{factory}/metrics/weekly)
+	GetWeeklyThroughput(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetWeeklyThroughputParams)
 	// PauseFactory Stop the factory taking work; runs in progress finish
 	// (POST /v1/orgs/{org}/factories/{factory}/pause)
 	PauseFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
@@ -15343,8 +15745,137 @@ func (siw *ServerInterfaceWrapper) GetMetrics(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "compare" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "compare", r.URL.Query(), &params.Compare, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "compare"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "compare", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMetrics(w, r, org, factory, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetWeeklyThroughput operation middleware
+func (siw *ServerInterfaceWrapper) GetWeeklyThroughput(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetWeeklyThroughputParams
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "weeks" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "weeks", r.URL.Query(), &params.Weeks, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "weeks"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "weeks", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetWeeklyThroughput(w, r, org, factory, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -16449,6 +16980,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/items", wrapper.SubmitItem)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/board", wrapper.GetBoard)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics", wrapper.GetMetrics)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/weekly", wrapper.GetWeeklyThroughput)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/stream", wrapper.StreamEvents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}", wrapper.GetItem)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/events", wrapper.ListItemEvents)
@@ -17862,6 +18394,47 @@ func (response GetMetricsdefaultApplicationProblemPlusJSONResponse) VisitGetMetr
 	return err
 }
 
+type GetWeeklyThroughputRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Params  GetWeeklyThroughputParams
+}
+
+type GetWeeklyThroughputResponseObject interface {
+	VisitGetWeeklyThroughputResponse(w http.ResponseWriter) error
+}
+
+type GetWeeklyThroughput200JSONResponse WeeklyThroughput
+
+func (response GetWeeklyThroughput200JSONResponse) VisitGetWeeklyThroughputResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetWeeklyThroughputdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetWeeklyThroughputdefaultApplicationProblemPlusJSONResponse) VisitGetWeeklyThroughputResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type PauseFactoryRequestObject struct {
 	Org     OrgRef     `json:"org"`
 	Factory FactoryRef `json:"factory"`
@@ -18936,9 +19509,12 @@ type StrictServerInterface interface {
 	// SubmitItem Submit a work item to a factory's first station
 	// (POST /v1/orgs/{org}/factories/{factory}/items)
 	SubmitItem(ctx context.Context, request SubmitItemRequestObject) (SubmitItemResponseObject, error)
-	// GetMetrics The factory's flow over the last days
+	// GetMetrics The factory's flow over a range of UTC days
 	// (GET /v1/orgs/{org}/factories/{factory}/metrics)
 	GetMetrics(ctx context.Context, request GetMetricsRequestObject) (GetMetricsResponseObject, error)
+	// GetWeeklyThroughput Items finished in each of the last weeks
+	// (GET /v1/orgs/{org}/factories/{factory}/metrics/weekly)
+	GetWeeklyThroughput(ctx context.Context, request GetWeeklyThroughputRequestObject) (GetWeeklyThroughputResponseObject, error)
 	// PauseFactory Stop the factory taking work; runs in progress finish
 	// (POST /v1/orgs/{org}/factories/{factory}/pause)
 	PauseFactory(ctx context.Context, request PauseFactoryRequestObject) (PauseFactoryResponseObject, error)
@@ -20046,6 +20622,34 @@ func (sh *strictHandler) GetMetrics(w http.ResponseWriter, r *http.Request, org 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetMetricsResponseObject); ok {
 		if err := validResponse.VisitGetMetricsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetWeeklyThroughput operation middleware
+func (sh *strictHandler) GetWeeklyThroughput(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetWeeklyThroughputParams) {
+	var request GetWeeklyThroughputRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetWeeklyThroughput(ctx, request.(GetWeeklyThroughputRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetWeeklyThroughput")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetWeeklyThroughputResponseObject); ok {
+		if err := validResponse.VisitGetWeeklyThroughputResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

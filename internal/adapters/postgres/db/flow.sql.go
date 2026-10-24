@@ -78,6 +78,234 @@ func (q *Queries) CurrentRun(ctx context.Context, arg CurrentRunParams) (Current
 	return i, err
 }
 
+const flowDoneByBucket = `-- name: FlowDoneByBucket :many
+SELECT floor(extract(epoch FROM done_at - $1::timestamptz) / $2::float8)::int AS bucket,
+       count(*) AS done
+FROM work_items
+WHERE factory_id = $3 AND done_at >= $1::timestamptz AND done_at < $4::timestamptz
+  AND ($5::text = '' OR type = $5::text)
+GROUP BY 1
+ORDER BY 1
+`
+
+type FlowDoneByBucketParams struct {
+	Start         time.Time
+	BucketSeconds float64
+	FactoryID     uuid.UUID
+	Until         time.Time
+	Type          string
+}
+
+type FlowDoneByBucketRow struct {
+	Bucket int32
+	Done   int64
+}
+
+// Items done in consecutive buckets of bucket_seconds from start to until, by bucket (0 the
+// oldest; empty buckets left out), on work_items_done_at_idx.
+func (q *Queries) FlowDoneByBucket(ctx context.Context, arg FlowDoneByBucketParams) ([]FlowDoneByBucketRow, error) {
+	rows, err := q.db.Query(ctx, flowDoneByBucket,
+		arg.Start,
+		arg.BucketSeconds,
+		arg.FactoryID,
+		arg.Until,
+		arg.Type,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FlowDoneByBucketRow
+	for rows.Next() {
+		var i FlowDoneByBucketRow
+		if err := rows.Scan(&i.Bucket, &i.Done); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const flowDonePerDay = `-- name: FlowDonePerDay :many
+
+SELECT date_trunc('day', done_at, 'UTC')::timestamptz AS day, count(*) AS done
+FROM work_items
+WHERE factory_id = $1 AND done_at >= $2::timestamptz AND done_at < $3::timestamptz
+  AND ($4::text = '' OR type = $4::text)
+GROUP BY 1
+ORDER BY 1
+`
+
+type FlowDonePerDayParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+	Until     time.Time
+	Type      string
+}
+
+type FlowDonePerDayRow struct {
+	Day  time.Time
+	Done int64
+}
+
+// Windowed metrics (FlowStats.FlowMetrics, DoneByBucket) over [since, until). Each keeps the
+// items of one work type, every type when type is ”.
+// Items done by UTC day, on work_items_done_at_idx.
+func (q *Queries) FlowDonePerDay(ctx context.Context, arg FlowDonePerDayParams) ([]FlowDonePerDayRow, error) {
+	rows, err := q.db.Query(ctx, flowDonePerDay,
+		arg.FactoryID,
+		arg.Since,
+		arg.Until,
+		arg.Type,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FlowDonePerDayRow
+	for rows.Next() {
+		var i FlowDonePerDayRow
+		if err := rows.Scan(&i.Day, &i.Done); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const flowDoneStats = `-- name: FlowDoneStats :one
+SELECT count(*) AS items_done,
+       count(*) FILTER (WHERE rework_count > 0) AS reworked,
+       coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM done_at - created_at)::float8), 0)::float8 AS p50_seconds,
+       coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM done_at - created_at)::float8), 0)::float8 AS p85_seconds
+FROM work_items
+WHERE factory_id = $1 AND done_at >= $2::timestamptz AND done_at < $3::timestamptz
+  AND ($4::text = '' OR type = $4::text)
+`
+
+type FlowDoneStatsParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+	Until     time.Time
+	Type      string
+}
+
+type FlowDoneStatsRow struct {
+	ItemsDone  int64
+	Reworked   int64
+	P50Seconds float64
+	P85Seconds float64
+}
+
+// Items done, those reworked, and lead-time (created to done) percentiles in seconds,
+// interpolated between ranks.
+func (q *Queries) FlowDoneStats(ctx context.Context, arg FlowDoneStatsParams) (FlowDoneStatsRow, error) {
+	row := q.db.QueryRow(ctx, flowDoneStats,
+		arg.FactoryID,
+		arg.Since,
+		arg.Until,
+		arg.Type,
+	)
+	var i FlowDoneStatsRow
+	err := row.Scan(
+		&i.ItemsDone,
+		&i.Reworked,
+		&i.P50Seconds,
+		&i.P85Seconds,
+	)
+	return i, err
+}
+
+const flowLongWaits = `-- name: FlowLongWaits :one
+SELECT count(DISTINCT item_id)
+FROM item_spans
+WHERE factory_id = $1 AND station = $2::text
+  AND entered_at < $3::timestamptz AND (left_at IS NULL OR left_at > $4::timestamptz)
+  AND state IN ('queued', 'ready')
+  AND least(coalesce(left_at, $3::timestamptz), $3::timestamptz) - entered_at
+      > make_interval(secs => $5::float8)
+  AND ($6::text = '' OR type = $6::text)
+`
+
+type FlowLongWaitsParams struct {
+	FactoryID        uuid.UUID
+	Station          string
+	Until            time.Time
+	Since            time.Time
+	ThresholdSeconds float64
+	Type             string
+}
+
+// Items with a span waiting (queued or ready) at a station that overlaps the window and had
+// lasted over the threshold by its end, on item_spans_station_idx.
+func (q *Queries) FlowLongWaits(ctx context.Context, arg FlowLongWaitsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, flowLongWaits,
+		arg.FactoryID,
+		arg.Station,
+		arg.Until,
+		arg.Since,
+		arg.ThresholdSeconds,
+		arg.Type,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const flowOpenItems = `-- name: FlowOpenItems :one
+SELECT count(*) FROM work_items
+WHERE factory_id = $1 AND state NOT IN ('done', 'cancelled')
+  AND ($2::text = '' OR type = $2::text)
+`
+
+type FlowOpenItemsParams struct {
+	FactoryID uuid.UUID
+	Type      string
+}
+
+// Items in the line now, on work_items_open_idx.
+func (q *Queries) FlowOpenItems(ctx context.Context, arg FlowOpenItemsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, flowOpenItems, arg.FactoryID, arg.Type)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const flowSpend = `-- name: FlowSpend :one
+SELECT coalesce(sum(r.cost_usd), 0)::float8 AS spend_usd
+FROM agent_runs r
+JOIN work_items w ON w.id = r.item_id
+WHERE r.factory_id = $1 AND r.started_at >= $2::timestamptz AND r.started_at < $3::timestamptz
+  AND ($4::text = '' OR w.type = $4::text)
+`
+
+type FlowSpendParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+	Until     time.Time
+	Type      string
+}
+
+// The cost of the runs started in the window, on agent_runs_factory_started_idx; a run has its
+// item's work type.
+func (q *Queries) FlowSpend(ctx context.Context, arg FlowSpendParams) (float64, error) {
+	row := q.db.QueryRow(ctx, flowSpend,
+		arg.FactoryID,
+		arg.Since,
+		arg.Until,
+		arg.Type,
+	)
+	var spend_usd float64
+	err := row.Scan(&spend_usd)
+	return spend_usd, err
+}
+
 const itemSpans = `-- name: ItemSpans :many
 
 SELECT station, state, rework_round, rework_by, entered_at, left_at
