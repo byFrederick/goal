@@ -6,6 +6,10 @@
 # request acts as the one local user. Every route but /v1/health and /v1/orgs belongs to an
 # organization and lives under /v1/orgs/{org}; an unknown or deleted organization is 404.
 # Requests that change something from a browser must be same-origin (cross-origin protection).
+#
+# Every operation names the permission it needs in `x-goal-scope`, one of api/permissions.yaml
+# (phase 3). cmd/permgen (`task api:gen`) generates goald's table from both files and `task
+# check` fails when an operation lacks a scope, names an unknown one, or the table is stale.
 openapi: 3.0.3
 info:
   title: Goal API
@@ -42,6 +46,7 @@ paths:
   /v1/health:
     get:
       operationId: getHealth
+      x-goal-scope: public
       summary: Liveness of goald
       responses:
         "200":
@@ -52,6 +57,7 @@ paths:
   /v1/orgs:
     get:
       operationId: listOrgs
+      x-goal-scope: authenticated
       tags: [orgs]
       summary: Every organization on the install, by name
       responses:
@@ -63,6 +69,7 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     post:
       operationId: createOrg
+      x-goal-scope: org:create
       tags: [orgs]
       summary: Create an organization
       description: >-
@@ -87,6 +94,7 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     get:
       operationId: getOrg
+      x-goal-scope: org:read
       tags: [orgs]
       summary: One organization
       responses:
@@ -98,6 +106,7 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     delete:
       operationId: deleteOrg
+      x-goal-scope: org:delete
       tags: [orgs]
       summary: Delete an organization
       description: >-
@@ -123,6 +132,7 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     get:
       operationId: getOrgSettings
+      x-goal-scope: org:read
       tags: [orgs]
       summary: The organization's settings, slot caps included
       responses:
@@ -134,6 +144,7 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     patch:
       operationId: updateOrgSettings
+      x-goal-scope: org:manage
       tags: [orgs]
       summary: Change the organization's settings
       description: >-
@@ -159,6 +170,7 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     get:
       operationId: listAudit
+      x-goal-scope: audit:read
       tags: [orgs]
       summary: The organization's audit log, newest first
       parameters:
@@ -195,6 +207,7 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     get:
       operationId: getOrgAttention
+      x-goal-scope: org:read
       tags: [shell]
       summary: What each factory of the organization needs from people now, for the rail's badges
       description: >-
@@ -213,6 +226,7 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     get:
       operationId: getFactoryOverview
+      x-goal-scope: org:read
       tags: [shell]
       summary: Every factory of the organization summarized for the Factories home, ordered by name
       parameters:
@@ -235,6 +249,7 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     get:
       operationId: getInbox
+      x-goal-scope: org:read
       tags: [shell]
       summary: What waits for a person across the organization's factories
       description: >-
@@ -270,6 +285,7 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     get:
       operationId: listFactories
+      x-goal-scope: org:read
       tags: [definitions]
       summary: The organization's factories, published or not
       description: >-
@@ -285,6 +301,7 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     post:
       operationId: createFactory
+      x-goal-scope: factory:create
       tags: [definitions]
       summary: Create a factory with its first draft
       description: >-
@@ -319,6 +336,7 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     get:
       operationId: getFactory
+      x-goal-scope: factory:read
       tags: [definitions]
       summary: One factory, published or not
       responses:
@@ -330,6 +348,7 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     delete:
       operationId: deleteFactory
+      x-goal-scope: definition:edit
       tags: [definitions]
       summary: Delete a factory that was never published, with its draft (the wizard's Cancel)
       description: 409 factory-published once a version was published.
@@ -342,6 +361,7 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     post:
       operationId: pauseFactory
+      x-goal-scope: factory:manage
       tags: [definitions]
       summary: Stop the factory taking work; runs in progress finish
       responses:
@@ -357,6 +377,7 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     post:
       operationId: resumeFactory
+      x-goal-scope: factory:manage
       tags: [definitions]
       summary: Start a paused factory again
       responses:
@@ -372,6 +393,7 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     get:
       operationId: getDraft
+      x-goal-scope: factory:read
       tags: [definitions]
       summary: The factory's open draft, its changes and problems
       description: 404 no-draft when none is open.
@@ -389,6 +411,7 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     post:
       operationId: openDraft
+      x-goal-scope: definition:edit
       tags: [definitions]
       summary: Open the factory's draft, or return the open one
       description: >-
@@ -414,6 +437,7 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     delete:
       operationId: discardDraft
+      x-goal-scope: definition:edit
       tags: [definitions]
       summary: Discard (archive) the open draft; the version that runs is unchanged
       description: >-
@@ -430,6 +454,7 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     get:
       operationId: getDraftModel
+      x-goal-scope: factory:read
       tags: [definitions]
       summary: The draft's factory model for the Visual editor
       description: >-
@@ -451,6 +476,7 @@ paths:
       - $ref: "#/components/parameters/SectionRef"
     put:
       operationId: saveDraftSection
+      x-goal-scope: definition:edit
       tags: [definitions]
       summary: Save one section of the model (a Visual save)
       description: >-
@@ -482,6 +508,7 @@ paths:
       - $ref: "#/components/parameters/SectionRef"
     post:
       operationId: revertDraftSection
+      x-goal-scope: definition:edit
       tags: [definitions]
       summary: Put back the base's value at edited fields of a section (Undo)
       description: >-
@@ -507,6 +534,7 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     get:
       operationId: listDraftFiles
+      x-goal-scope: factory:read
       tags: [definitions]
       summary: The draft's files by path
       responses:
@@ -523,6 +551,7 @@ paths:
       - $ref: "#/components/parameters/FilePath"
     get:
       operationId: getDraftFile
+      x-goal-scope: factory:read
       tags: [definitions]
       summary: One file of the draft, as stored
       description: 404 file-not-found. The ETag is the file's sha256, the If-Match of putDraftFile and deleteDraftFile.
@@ -540,6 +569,7 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     put:
       operationId: putDraftFile
+      x-goal-scope: definition:edit
       tags: [definitions]
       summary: Write one file of the draft exactly as sent (YAML mode)
       description: >-
@@ -564,6 +594,7 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     delete:
       operationId: deleteDraftFile
+      x-goal-scope: definition:edit
       tags: [definitions]
       summary: Delete one file of the draft
       description: If-Match is the file's sha256 (428 without it, 412 when stale); 404 file-not-found.
@@ -582,6 +613,7 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     put:
       operationId: replaceDraftTree
+      x-goal-scope: definition:edit
       tags: [definitions]
       summary: Make files the draft's whole tree (goal factory push)
       description: >-
@@ -605,6 +637,7 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     post:
       operationId: validateDraft
+      x-goal-scope: definition:edit
       tags: [definitions]
       summary: Validate the draft at its revision, as publish will
       description: >-
@@ -628,6 +661,7 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     post:
       operationId: publishDraft
+      x-goal-scope: definition:publish
       tags: [definitions]
       summary: Publish the open draft as the factory's next version
       description: >-
@@ -655,6 +689,7 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     get:
       operationId: listVersions
+      x-goal-scope: factory:read
       tags: [definitions]
       summary: One page of the factory's published versions, newest first
       parameters:
@@ -679,6 +714,7 @@ paths:
       - $ref: "#/components/parameters/VersionSelector"
     get:
       operationId: getVersion
+      x-goal-scope: factory:read
       tags: [definitions]
       summary: One version with its files
       description: 404 version-not-found (source too, which is a starting tree and no version).
@@ -696,6 +732,7 @@ paths:
       - $ref: "#/components/parameters/VersionSelector"
     get:
       operationId: getVersionModel
+      x-goal-scope: factory:read
       tags: [definitions]
       summary: The factory model of a version, for a read-only Visual view
       description: 409 yaml-invalid (with parse_error) when its factory.yaml does not parse.
@@ -714,6 +751,7 @@ paths:
       - $ref: "#/components/parameters/FilePath"
     get:
       operationId: getVersionFile
+      x-goal-scope: factory:read
       tags: [definitions]
       summary: One file of a version
       description: >-
@@ -741,6 +779,7 @@ paths:
       - $ref: "#/components/parameters/VersionSelector"
     post:
       operationId: restoreVersion
+      x-goal-scope: definition:publish
       tags: [definitions]
       summary: Run an older published version again (rollback)
       description: >-
@@ -765,6 +804,7 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     get:
       operationId: compareVersions
+      x-goal-scope: factory:read
       tags: [definitions]
       summary: The semantic difference between two versions
       description: >-
@@ -790,6 +830,7 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     get:
       operationId: listTemplates
+      x-goal-scope: org:read
       tags: [definitions]
       summary: The template catalog, the latest version of each template by name
       responses:
@@ -809,6 +850,7 @@ paths:
         schema: { type: string }
     get:
       operationId: getTemplate
+      x-goal-scope: org:read
       tags: [definitions]
       summary: One version of a template with a preview of its model
       description: 404 template-not-found.
@@ -829,6 +871,7 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     post:
       operationId: validateDefinition
+      x-goal-scope: org:read
       tags: [definitions]
       summary: Validate files that belong to no factory yet (Import YAML preview, CLI validate)
       description: 413 too-large; 422 bad-path.
@@ -849,6 +892,7 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     post:
       operationId: formatDefinition
+      x-goal-scope: org:read
       tags: [definitions]
       summary: Format a factory.yaml the way Visual saves write changed lines (Format)
       description: 422 yaml-invalid (with parse_error) when it does not parse.
@@ -870,6 +914,7 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     get:
       operationId: listItems
+      x-goal-scope: factory:read
       summary: One page of a factory's items, newest first
       parameters:
         - name: state
@@ -896,6 +941,7 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     post:
       operationId: submitItem
+      x-goal-scope: item:create
       summary: Submit a work item to a factory's first station
       requestBody:
         required: true
@@ -915,6 +961,7 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     get:
       operationId: getBoard
+      x-goal-scope: factory:read
       summary: The factory's board, station by station in line order
       description: >-
         Every open item (up to 500, newest first) at its station, and the 20 newest done items at
@@ -945,6 +992,7 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     get:
       operationId: getMetrics
+      x-goal-scope: factory:read
       tags: [work]
       summary: The factory's flow over a range of UTC days
       description: >-
@@ -979,6 +1027,7 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     get:
       operationId: getWeeklyThroughput
+      x-goal-scope: factory:read
       tags: [work]
       summary: Items finished in each of the last weeks
       description: >-
@@ -1006,6 +1055,7 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     get:
       operationId: getConstraintReport
+      x-goal-scope: factory:read
       tags: [work]
       summary: The constraint over a range of UTC days, with the top candidates
       description: >-
@@ -1030,6 +1080,7 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     get:
       operationId: getLeadTimeBridge
+      x-goal-scope: factory:read
       tags: [work]
       summary: Why the p85 lead time is over its target, over a range of UTC days
       description: >-
@@ -1060,6 +1111,7 @@ paths:
         schema: { type: string }
     get:
       operationId: getAgentStats
+      x-goal-scope: factory:read
       tags: [work]
       summary: One agent's work over a range of UTC days
       description: >-
@@ -1086,6 +1138,7 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     get:
       operationId: getAndon
+      x-goal-scope: factory:read
       tags: [work]
       summary: The factory's andon cord, its recent pulls and the tallies of its gates
       parameters:
@@ -1102,6 +1155,7 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     post:
       operationId: pullAndon
+      x-goal-scope: andon:manage
       tags: [work]
       summary: Pull the andon cord, stopping the factory's line
       description: >-
@@ -1128,6 +1182,7 @@ paths:
       - $ref: "#/components/parameters/FactoryRef"
     post:
       operationId: clearAndon
+      x-goal-scope: andon:manage
       tags: [work]
       summary: Clear the andon cord, restarting the factory's line
       description: >-
@@ -1150,6 +1205,7 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     get:
       operationId: streamEvents
+      x-goal-scope: org:read
       summary: The organization's events as they happen (Server-Sent Events)
       description: >-
         A text/event-stream of one organization's events only. Each committed item event arrives
@@ -1188,6 +1244,7 @@ paths:
       - $ref: "#/components/parameters/ItemRef"
     get:
       operationId: getItem
+      x-goal-scope: factory:read
       summary: One work item
       responses:
         "200":
@@ -1202,6 +1259,7 @@ paths:
       - $ref: "#/components/parameters/ItemRef"
     get:
       operationId: listItemEvents
+      x-goal-scope: factory:read
       summary: One page of an item's history, oldest first
       parameters:
         - name: after
@@ -1224,6 +1282,7 @@ paths:
       - $ref: "#/components/parameters/ItemRef"
     get:
       operationId: listItemRuns
+      x-goal-scope: factory:read
       tags: [work]
       summary: An item's agent runs, oldest first (at most 200)
       responses:
@@ -1239,6 +1298,7 @@ paths:
       - $ref: "#/components/parameters/ItemRef"
     post:
       operationId: noteItem
+      x-goal-scope: item:operate
       tags: [work]
       summary: Leave a note for the agents working an item
       description: >-
@@ -1267,6 +1327,7 @@ paths:
         schema: { type: string }
     get:
       operationId: getRun
+      x-goal-scope: factory:read
       tags: [work]
       summary: One agent run (404 for a run of another organization)
       responses:
@@ -1282,6 +1343,7 @@ paths:
       - $ref: "#/components/parameters/ItemRef"
     post:
       operationId: approveItem
+      x-goal-scope: item:decide
       summary: Approve an item waiting for a human; it moves to the next station
       responses:
         "200":
@@ -1296,6 +1358,7 @@ paths:
       - $ref: "#/components/parameters/ItemRef"
     post:
       operationId: rejectItem
+      x-goal-scope: item:decide
       summary: Send an item back for rework with the reason
       description: >-
         An item waiting for a human, blocked or in progress goes to its station's rework target
@@ -1320,6 +1383,7 @@ paths:
       - $ref: "#/components/parameters/ItemRef"
     post:
       operationId: moveItem
+      x-goal-scope: item:operate
       tags: [work]
       summary: Put an item at another station of its line
       description: >-
@@ -1346,6 +1410,7 @@ paths:
       - $ref: "#/components/parameters/ItemRef"
     post:
       operationId: pauseItem
+      x-goal-scope: item:operate
       tags: [work]
       summary: Stop an open item where it is until a retry resumes it
       description: >-
@@ -1369,6 +1434,7 @@ paths:
       - $ref: "#/components/parameters/ItemRef"
     post:
       operationId: retryItem
+      x-goal-scope: item:decide
       summary: Send a blocked item back to its station's queue (409 if it is not blocked)
       responses:
         "200":
@@ -1383,6 +1449,7 @@ paths:
       - $ref: "#/components/parameters/ItemRef"
     post:
       operationId: mergeItem
+      x-goal-scope: item:decide
       summary: Merge the item's pull request, then approve it
       description: >-
         Only for an item waiting at a human station with action merge. goald merges the pull
@@ -1408,6 +1475,7 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     get:
       operationId: getBuilderMeta
+      x-goal-scope: org:read
       tags: [builder]
       summary: What the factory editor needs to know about the install
       description: >-
@@ -1426,6 +1494,7 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     get:
       operationId: searchSkills
+      x-goal-scope: org:read
       tags: [builder]
       summary: One page of the skills catalog
       description: >-
@@ -1460,6 +1529,7 @@ paths:
       - { name: skill, in: path, required: true, schema: { $ref: "#/components/schemas/SkillName" } }
     get:
       operationId: getSkillFiles
+      x-goal-scope: org:read
       tags: [builder]
       summary: A catalog skill's files at its pinned commit, to vendor into a draft
       description: >-

@@ -316,7 +316,8 @@ var (
 	yamlBody   = http.Header{"Content-Type": {"text/yaml"}}
 )
 
-// operations reads every operationId of the contract.
+// operations reads every operationId of the contract, failing for one without an x-goal-scope
+// (the permission it needs, api/permissions.yaml).
 func operations(t *testing.T) []string {
 	t.Helper()
 
@@ -339,6 +340,10 @@ func operations(t *testing.T) []string {
 		for _, op := range ops {
 			if m, ok := op.(map[string]any); ok {
 				if id, ok := m["operationId"].(string); ok {
+					if scope, _ := m["x-goal-scope"].(string); scope == "" {
+						t.Errorf("operation %s has no x-goal-scope: give it one of api/permissions.yaml", id)
+					}
+
 					ids = append(ids, id)
 				}
 			}

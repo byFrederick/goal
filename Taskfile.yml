@@ -101,11 +101,17 @@ tasks:
       - sqlc generate
 
   api:gen:
-    desc: Regenerate both clients of api/openapi.yaml, the Go server and client (internal/api/gen) and the TypeScript types (packages/api-client)
+    desc: Regenerate from api/openapi.yaml and api/permissions.yaml, the permission table (internal/api/permissions_gen.go), the Go server and client (internal/api/gen) and the TypeScript types (packages/api-client)
     deps: [worker:install]
     cmds:
+      - go run ./cmd/permgen
       - go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@{{.OAPI_CODEGEN_VERSION}} -config internal/api/gen/oapi-codegen.yaml api/openapi.yaml
       - pnpm --filter @goal/api-client run --silent gen
+
+  api:permissions-check:
+    desc: The generated permission table matches api/permissions.yaml and every operation's x-goal-scope (cmd/permgen -check)
+    cmds:
+      - go run ./cmd/permgen -check
 
   validate:
     desc: Validate factory definitions offline, without goald (the test fixtures by default; FACTORIES=<glob> for others)
@@ -166,6 +172,7 @@ tasks:
     cmds:
       - task: lint
       - task: test
+      - task: api:permissions-check
       - task: worker:check
       - task: api-client:check
       - task: web:check
