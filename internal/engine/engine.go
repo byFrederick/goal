@@ -17,7 +17,12 @@
 // (budget.go). A line whose budget is used up claims no agent work; under BudgetStop the runs
 // this instance has in progress there are cancelled and their items requeued. Queue releases
 // and human decisions carry on. The per-run cancel and the transition log are local to the
-// instance; every instance enforces the budget on its own runs.
+// instance; every instance enforces the budget on its own runs. The spend is the cost runs
+// record when they finish (Store.SpendSince), and nothing is reserved at claim time, so a line
+// can overshoot its cap by what its claimed items spend before the next tick sees it: at most
+// the slots of its agent stations (across instances) × 2 (a run and its one retry) × the per-run
+// cap (Runtime.PerItemUSD, or an agent's own). A tick at $59 of $60 that fills four free slots of
+// $4 runs may end near $75, or $91 if every one retries.
 //
 // The andon cord (andon.go). A person pulls it to stop a factory's line and clears it to restart
 // the line. While a pull is open the line releases nothing from its queue stations and claims
