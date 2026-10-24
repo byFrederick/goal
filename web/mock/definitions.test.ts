@@ -152,6 +152,39 @@ describe('the draft', () => {
     expect(refused.body.problems?.some((p) => p.code === 'unknown-agent')).toBe(true);
   });
 
+  it('asks where the items queued at a removed station go, and publishes with the move', async () => {
+    const { model, value } = await lineSave((s) => {
+      s.splice(0, 1); // inbox, where #14 and #15 wait
+    });
+    await call(`${goal}/draft/model/line`, put({ value }, model.etags.line));
+
+    const validate = (body: unknown) =>
+      call<Validation>(`${goal}/draft/validate`, { method: 'POST', body: JSON.stringify(body) });
+    const { body: v } = await validate({});
+    const problem = v.problems.find((p) => p.code === 'items-at-removed-station');
+    expect(v.ok).toBe(false);
+    expect(problem?.message).toMatch(/removes station inbox, where 2 items are waiting/);
+    expect(problem?.fixes[0]).toMatchObject({
+      label: 'Move them to spec',
+      section: 'publish',
+      patch: [{ op: 'add', path: '/station_moves/inbox', value: 'spec' }],
+    });
+    expect(v.checks.find((c) => c.id === 'items')?.status).toBe('failed');
+
+    const moved = await validate({ station_moves: { inbox: 'spec' } });
+    expect(moved.body.problems.some((p) => p.code === 'items-at-removed-station')).toBe(false);
+
+    const res = await call<Version>(`${goal}/draft/publish`, {
+      method: 'POST',
+      body: JSON.stringify({
+        revision: v.revision,
+        expected_current_version_id: '019a1c00-0000-7000-8000-0000000000d8',
+        station_moves: { inbox: 'spec' },
+      }),
+    });
+    expect(res.status).toBe(201);
+  });
+
   it('publishes the draft as v9, which then runs', async () => {
     const res = await call<Version>(`${goal}/draft/publish`, {
       method: 'POST',

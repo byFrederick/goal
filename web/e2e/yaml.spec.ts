@@ -3,72 +3,13 @@
 // in factory.yaml with its comments, YAML edits count on the tiles, switching keeps the place, an
 // unknown agent is a problem with a fix, and a factory.yaml that stops parsing holds Visual until
 // it parses again. Monaco on desktop and tablet, the textarea on phones.
-import { expect, type Page, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { definition, editor, expectShown, openYaml, problems, replaceLine, status, tile } from './editor';
 import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
-
-const definition = '/o/acme/f/goal/definition';
-const label = 'factory.yaml, draft of v9';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
 });
-
-const editor = (page: Page) => page.getByRole('textbox', { name: label });
-const tiles = (page: Page) => page.getByRole('navigation', { name: /^Definition sections/ });
-const tile = (page: Page, name: RegExp) => tiles(page).getByRole('link', { name });
-const status = (page: Page) => page.getByRole('status').filter({ hasText: /Based on|runs now/ });
-const problems = (page: Page) => page.getByRole('region', { name: /^Problems/ });
-
-async function openYaml(page: Page, section = 'line', search = '') {
-  await page.goto(`${definition}/${section}?mode=yaml${search}`);
-  await expect(page.getByRole('heading', { level: 1, name: 'Definition' })).toBeVisible();
-  await expect(editor(page)).toBeAttached();
-  if (!isPhone(page)) await expect(page.locator('.monaco-editor .view-line').first()).toBeVisible();
-}
-
-/**
- * Moves the cursor to the first `text` in Monaco the way a person would: Find (Ctrl/Cmd+F), the
- * text, Enter, Escape; the match is selected and scrolled into view.
- */
-async function find(page: Page, text: string) {
-  await editor(page).focus();
-  await page.keyboard.press('ControlOrMeta+f');
-  await page.keyboard.insertText(text);
-  await page.keyboard.press('Enter');
-  await page.keyboard.press('Escape');
-}
-
-/** The editor shows `text`: on a phone in the textarea, in Monaco on a line found by Find. */
-async function expectShown(page: Page, text: string) {
-  if (isPhone(page)) {
-    await expect(editor(page)).toHaveValue(new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-    return;
-  }
-  await find(page, text);
-  await expect(page.locator('.monaco-editor .view-line').filter({ hasText: text }).first()).toBeVisible();
-}
-
-/**
- * Replaces one line's content (without its indent) and leaves the cursor on it: in Monaco by
- * finding it and selecting from its end to its first character; on phones by editing the
- * textarea's value, then putting the cursor on that line (a key press reports it, as typing would).
- */
-async function replaceLine(page: Page, from: string, to: string) {
-  if (isPhone(page)) {
-    const area = editor(page);
-    const value = await area.inputValue();
-    const at = value.indexOf(from);
-    expect(at).toBeGreaterThanOrEqual(0);
-    await area.fill(value.replace(from, to));
-    await area.evaluate((el: HTMLTextAreaElement, i: number) => el.setSelectionRange(i, i), at);
-    await area.press('ArrowRight');
-    return;
-  }
-  await find(page, from);
-  await page.keyboard.press('End');
-  await page.keyboard.press('Shift+Home');
-  await page.keyboard.insertText(to);
-}
 
 test('the YAML view: tiles jump to blocks, problems and changes beside, accessible at every width', async ({
   page,

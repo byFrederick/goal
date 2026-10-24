@@ -17,14 +17,16 @@ const AgentsSection = lazy(() => import('./agents/agents-section').then((m) => (
 const ConnectionsSection = lazy(() =>
   import('./connections/connections-section').then((m) => ({ default: m.ConnectionsSection })),
 );
+const ReviewSection = lazy(() => import('./review/review-section').then((m) => ({ default: m.ReviewSection })));
+const VersionsSection = lazy(() => import('./versions/versions-section').then((m) => ({ default: m.VersionsSection })));
 
 export const sectionViews: Record<EditorSection, ComponentType<SectionViewProps> | null> = {
   basics: BasicsSection,
   line: LineSection,
   agents: AgentsSection,
   connections: ConnectionsSection,
-  review: null,
-  versions: null,
+  review: ReviewSection,
+  versions: VersionsSection,
 };
 
 /** The YAML view of the whole draft (D10), with Monaco and monaco-yaml in chunks of their own. */

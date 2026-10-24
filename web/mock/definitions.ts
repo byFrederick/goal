@@ -770,9 +770,81 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
   const emit = (f: Factory, data: Omit<DefinitionEvent, 'org_id' | 'factory_id'>) =>
     deps.broadcast(f.org_id, 'definition', { org_id: f.org_id, factory_id: f.id, ...data } satisfies DefinitionEvent);
 
-  const checked = (f: Factory, t: Tree, reference: Tree | undefined) => {
+  /** The stations of a tree's line; empty when factory.yaml does not parse. */
+  const stationIds = (t: Tree) => {
+    const r = modelOf(t);
+    return r && !(r instanceof ParseError) ? list((r.model.line as Json).stations).map((s) => String(s.id)) : [];
+  };
+
+  /**
+   * B's items check (B §4.3): items queued or in progress at stations of the running version the
+   * tree removes. In-progress ones must finish first; queued ones need a station move, one fix per
+   * station of the new line. Items waiting on a person or blocked are refused by publish alone.
+   */
+  const itemProblems = (f: Factory, t: Tree, moves: Json): DefinitionProblem[] => {
+    const def = defOf(f);
+    const current = byId(def, def.current);
+    const kept = stationIds(t);
+    if (!current || kept.length === 0) return [];
+    const ranges = (modelOf(t) as Read).ranges;
+    const out: DefinitionProblem[] = [];
+    for (const station of stationIds(current.files).filter((id) => !kept.includes(id))) {
+      const at = st().items.filter((it) => it.factory === f.name && it.station === station);
+      const working = at.filter((it) => it.state === 'in_progress').length;
+      const waiting = at.filter((it) => it.state === 'queued' || it.state === 'ready').length;
+      const items = (n: number, verb: string) => (n === 1 ? `1 item is ${verb}` : `${n} items are ${verb}`);
+      if (working > 0) {
+        out.push(
+          located(
+            'items-at-removed-station',
+            'error',
+            'items',
+            'line',
+            '/line/stations',
+            `the draft removes station ${station}, where ${items(working, 'in progress')}; let the runs finish or stop them first`,
+            ranges,
+            [],
+          ),
+        );
+      }
+      const to = moves[station];
+      if (waiting > 0 && !(typeof to === 'string' && kept.includes(to))) {
+        out.push(
+          located(
+            'items-at-removed-station',
+            'error',
+            'items',
+            'line',
+            '/line/stations',
+            `the draft removes station ${station}, where ${items(waiting, 'waiting')}; choose a station to move them to`,
+            ranges,
+            kept.map((k) => ({
+              label: `Move them to ${k}`,
+              section: 'publish',
+              patch: [{ op: 'add', path: `/station_moves/${station}`, value: k }],
+            })),
+          ),
+        );
+      }
+    }
+    return out;
+  };
+
+  const checked = (f: Factory, t: Tree, reference: Tree | undefined, moves: Json = {}) => {
     const changes = reference ? diff(side(reference), side(t)).changes : [];
-    return { ...validate(t, { org: f.org_id, factory: f.id, state: st(), changes: changes.length }), changes };
+    const result = validate(t, { org: f.org_id, factory: f.id, state: st(), changes: changes.length });
+    const items = result.read ? itemProblems(f, t, moves) : [];
+    if (result.read && defOf(f).current) {
+      const v = result.validation;
+      v.problems.push(...items);
+      v.ok = v.ok && items.length === 0;
+      v.checks.push(
+        items.length > 0
+          ? { id: 'items', section: 'line', status: 'failed', summary: plural(items.length, 'error', 'errors') }
+          : { id: 'items', section: 'line', status: 'passed', summary: 'No open items wait at a station it removes' },
+      );
+    }
+    return { ...result, changes };
   };
 
   const summaries = (f: Factory, def: MockDefinition, d: MockVersion) => {
@@ -1449,7 +1521,8 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
       const body = await readJson(req);
       const d = draftOf(def);
       const files = new Map([...d.files, ...treeOf(body.overlay)]);
-      const { validation } = checked(f, files, referenceOf(def, d));
+      const moves = isObject(body.station_moves) ? body.station_moves : {};
+      const { validation } = checked(f, files, referenceOf(def, d), moves);
       send(res, 200, { ...validation, revision: d.revision });
       return true;
     }
@@ -1461,7 +1534,8 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
       if ((body.expected_current_version_id ?? null) !== def.current) {
         refuse(409, 'Conflict', 'draft-base-moved', {}, 'another version was published or restored since');
       }
-      const { validation, changes } = checked(f, d.files, referenceOf(def, d));
+      const moves = isObject(body.station_moves) ? body.station_moves : {};
+      const { validation, changes } = checked(f, d.files, referenceOf(def, d), moves);
       if (!validation.ok) {
         const name = validation.problems.find((p) => p.code === 'name-taken');
         refuse(
