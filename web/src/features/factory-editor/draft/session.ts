@@ -186,6 +186,12 @@ export class DraftSession {
    * before a later save of a section, answering late, must not put the older value back.
    */
   private readonly heldAt = new Map<Section, number>();
+  /**
+   * When this session's last save of the draft was answered (epoch ms): a file read that started
+   * before it (answering late, or still cached when the YAML view mounts again) may predate the
+   * save, so it is left for the read the save's refresh starts.
+   */
+  private savedUntil = 0;
 
   constructor(private readonly opts: SessionOptions) {
     this.api = opts.api ?? definitions;
@@ -329,9 +335,9 @@ export class DraftSession {
   }
 
   /** A file of the draft as loaded; unsaved text of it is kept. */
-  adoptFile(path: string, file: { text: string; sha256: string }): void {
+  adoptFile(path: string, file: { text: string; sha256: string; readAt?: number }): void {
     const cur = this.state.files.get(path);
-    if (cur?.inFlight) return;
+    if (cur?.inFlight || (file.readAt !== undefined && file.readAt < this.savedUntil)) return;
     if (cur?.dirty) {
       this.setFile(path, { server: file.text, serverSha: cur.serverSha ?? file.sha256 });
       return;
@@ -616,6 +622,7 @@ export class DraftSession {
 
   /** A save goald took: the draft's revision, counts and tiles. */
   private saved(result: SaveResult): void {
+    this.savedUntil = Date.now();
     this.failed.clear();
     this.attempt = 0;
     clearTimeout(this.retryTimer);

@@ -263,10 +263,17 @@ export const draftFilesQuery = (org: string, factory: string) =>
     queryFn: ({ signal }) => listDraftFiles(org, factory, signal),
   });
 
+/**
+ * One file of the draft, with when the read started (`readAt`, epoch ms): the draft session
+ * leaves a read that started before its last save for the one the save's refresh starts.
+ */
 export const draftFileQuery = (org: string, factory: string, path: string) =>
   queryOptions({
     queryKey: defKeys.draftFile(org, factory, path),
-    queryFn: ({ signal }) => getDraftFile(org, factory, path, signal),
+    queryFn: async ({ signal }) => {
+      const readAt = Date.now();
+      return { ...(await getDraftFile(org, factory, path, signal)), readAt };
+    },
     retry: retryUnlessRefused,
   });
 

@@ -521,6 +521,44 @@ describe('publish', () => {
 });
 
 describe('files', () => {
+  it('keeps a file this tab saved over a read of it that started before the save', async () => {
+    session.adoptFile('factory.yaml', { text: 'kind: Factory\n', sha256: 'aaa' });
+    session.editFile('factory.yaml', 'kind: Factory: x\n');
+    void session.flush();
+    await flushPromises();
+    // The YAML view mounting again with the cached read, or a refetch that started before the save.
+    const before = Date.now();
+    await vi.advanceTimersByTimeAsync(5);
+    fake.files.shift()?.resolve(fake.result(43, 'e43', 'bbb'));
+    await flushPromises();
+
+    session.adoptFile('factory.yaml', { text: 'kind: Factory\n', sha256: 'aaa', readAt: before });
+
+    expect(session.getSnapshot().files.get('factory.yaml')).toMatchObject({
+      text: 'kind: Factory: x\n',
+      serverSha: 'bbb',
+      dirty: false,
+    });
+  });
+
+  it('takes a read that started after the save, even of text the file had before', async () => {
+    session.adoptFile('factory.yaml', { text: 'agent: spec-writer\n', sha256: 'aaa' });
+    session.editFile('factory.yaml', 'agent: ghost\n');
+    void session.flush();
+    await flushPromises();
+    fake.files.shift()?.resolve(fake.result(43, 'e43', 'bbb'));
+    await flushPromises();
+    await vi.advanceTimersByTimeAsync(5);
+
+    // A fix saved through the Line section put the text back as it was.
+    session.adoptFile('factory.yaml', { text: 'agent: spec-writer\n', sha256: 'aaa', readAt: Date.now() });
+
+    expect(session.getSnapshot().files.get('factory.yaml')).toMatchObject({
+      text: 'agent: spec-writer\n',
+      serverSha: 'aaa',
+    });
+  });
+
   it('forgets a deleted file and its pending save', async () => {
     session.editFile('agents/old.md', '# old\n');
     session.forgetFile('agents/old.md');
