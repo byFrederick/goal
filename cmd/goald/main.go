@@ -111,7 +111,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// in ctx: the engine takes it from each line, the API from the request.
 	store := postgres.New(pool)
 
-	identity, err := authentication(ctx, s, store, log)
+	identity, proxySecret, err := authentication(ctx, s, store, secrets, log)
 	if err != nil {
 		return err
 	}
@@ -213,7 +213,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	servers := httpServers(s, apiHandler, gw, web.Handler(web.Options{StrictTransport: s.strictTransport()}), log)
+	servers := httpServers(s, proxySecret, apiHandler, gw, web.Handler(web.Options{StrictTransport: s.strictTransport()}), log)
 
 	// Deleted organizations go, rows and bucket objects, once their retention has passed.
 	purger := retention.New(store, objects, clock, s.OrgRetention, log)
@@ -253,10 +253,10 @@ func containers(ctx context.Context, s settings, log *slog.Logger) (*client.Clie
 // endpoints (/api/auth/*, api.AuthProxy). Every request to the main one but the health check and
 // the agents' gateway must name goald (DNS rebinding); the gateway's serves nothing that a Host
 // could matter to.
-func httpServers(s settings, apiHandler, gw, spa http.Handler, log *slog.Logger) []*http.Server {
+func httpServers(s settings, proxySecret string, apiHandler, gw, spa http.Handler, log *slog.Logger) []*http.Server {
 	primary, gatewayOnly := routes(s.GatewayListen != "", apiHandler, gw, spa)
 	if s.Auth == authSession {
-		primary = api.AuthProxy(api.AuthProxyConfig{Upstream: s.AuthUpstream, TrustedProxies: s.TrustedProxies, Logger: log}, primary)
+		primary = api.AuthProxy(api.AuthProxyConfig{Upstream: s.AuthUpstream, TrustedProxies: s.TrustedProxies, Secret: proxySecret, Logger: log}, primary)
 	}
 
 	servers := []*http.Server{httpServer(s.Listen, api.CheckHost(s.hosts(), primary))}
@@ -538,24 +538,31 @@ const authUnreachableAfter = 2 * time.Second
 // identity self-check (postgres.CheckIdentity), returns the per-request identity lookups, and
 // warns, without stopping, when the identity service does not answer (signed-in people keep
 // working) or no one has signed in yet.
-func authentication(ctx context.Context, s settings, store *postgres.Store, log *slog.Logger) (api.Identity, error) {
+func authentication(ctx context.Context, s settings, store *postgres.Store, secrets ports.Secrets, log *slog.Logger) (api.Identity, string, error) {
 	log.InfoContext(ctx, "authentication", slog.String("mode", string(s.Auth)), slog.String("public_url", s.PublicURL))
 
 	if s.Auth == authNone {
 		log.WarnContext(ctx, "GOAL_AUTH=none: sign-in is off and every request to "+s.Listen+" acts as the local user, "+
 			"agent containers included; one developer's laptop only")
 
-		return nil, nil //nolint:nilnil // no identity lookups under none: api.New ignores Identity there
+		return nil, "", nil
+	}
+
+	proxySecret, err := secrets.Resolve(ctx, authProxySecretRef)
+	if err != nil || len(proxySecret) < minKeyBytes {
+		return nil, "", fmt.Errorf("GOAL_AUTH=session needs %s, at least %d bytes: the secret goald sends the identity service with "+
+			"every request it forwards, which refuses any other (goal up generates one for both; when you start them yourself, "+
+			"give both the same: openssl rand -hex 32)", authProxySecretEnv, minKeyBytes)
 	}
 
 	if err := postgres.CheckIdentity(ctx, store); err != nil {
-		return nil, fmt.Errorf("GOAL_AUTH=session: %w (goald migrates the database at start; check the roles with goal db init)", err)
+		return nil, "", fmt.Errorf("GOAL_AUTH=session: %w (goald migrates the database at start; check the roles with goal db init)", err)
 	}
 
 	log.InfoContext(ctx, "identity self-check passed")
 
 	if signedIn, err := postgres.AnyoneSignedIn(ctx, store); err != nil {
-		return nil, err
+		return nil, "", err
 	} else if !signedIn {
 		log.WarnContext(ctx, "no one can sign in yet: set GOAL_BOOTSTRAP_OWNER_EMAIL and BETTER_AUTH_SECRET and start the "+
 			"auth service (goal up does), or set GOAL_AUTH=none")
@@ -566,7 +573,7 @@ func authentication(ctx context.Context, s settings, store *postgres.Store, log 
 			slog.String("upstream", s.AuthUpstream.String()), slog.Any("error", err))
 	}
 
-	return postgres.NewIdentity(store), nil
+	return postgres.NewIdentity(store), proxySecret, nil
 }
 
 // authReachable asks the identity service's health check (GET /api/auth/ok).

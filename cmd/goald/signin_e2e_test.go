@@ -310,6 +310,7 @@ func startE2EStack(t *testing.T) *e2eStack {
 	startMailpit(t)
 
 	authKey, gatewayKey := randomSuffix(t)+randomSuffix(t)+randomSuffix(t), randomSuffix(t)+randomSuffix(t)+randomSuffix(t)
+	proxySecret := randomSuffix(t) + randomSuffix(t) + randomSuffix(t) + randomSuffix(t)
 	home, _ := os.UserHomeDir()
 
 	goaldEnv := []string{
@@ -318,7 +319,7 @@ func startE2EStack(t *testing.T) *e2eStack {
 		"GOAL_MIGRATE_DATABASE_URL=" + roleURL(t, database, postgres.OwnerRole), "GOAL_DATABASE_URL=" + roleURL(t, database, postgres.AppRole),
 		"GOAL_S3_BUCKET=" + bucket, "GOAL_S3_ENDPOINT=" + os.Getenv("GOAL_S3_ENDPOINT"), "GOAL_S3_ACCESS_KEY=" + os.Getenv("GOAL_S3_ACCESS_KEY"),
 		"GOAL_S3_SECRET_KEY=" + os.Getenv("GOAL_S3_SECRET_KEY"), "AWS_REGION=us-east-1", "GOAL_WORKSPACE_ROOT=" + t.TempDir(),
-		"GOAL_RUN_DIR=" + t.TempDir(), "GOAL_LOG_FORMAT=text",
+		"GOAL_RUN_DIR=" + t.TempDir(), "GOAL_LOG_FORMAT=text", "GOAL_AUTH_PROXY_SECRET=" + proxySecret,
 	}
 	if docker := os.Getenv("DOCKER_HOST"); docker != "" {
 		goaldEnv = append(goaldEnv, "DOCKER_HOST="+docker)
@@ -329,7 +330,7 @@ func startE2EStack(t *testing.T) *e2eStack {
 	s.start(t, "auth service", e2eAuthListen, "/api/auth/ok", []string{"node", "../../auth/dist/server.js"}, []string{
 		"PATH=" + os.Getenv("PATH"), "HOME=" + home, "GOAL_PUBLIC_URL=" + e2ePublicURL, "GOAL_AUTH_LISTEN=" + e2eAuthListen,
 		"GOAL_AUTH_DATABASE_URL=" + roleURL(t, database, postgres.AuthRole), "BETTER_AUTH_SECRET=" + authKey,
-		"GOAL_BOOTSTRAP_OWNER_EMAIL=" + s.owner,
+		"GOAL_BOOTSTRAP_OWNER_EMAIL=" + s.owner, "GOAL_AUTH_PROXY_SECRET=" + proxySecret,
 	})
 
 	return s

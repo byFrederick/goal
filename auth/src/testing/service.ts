@@ -6,7 +6,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type pg from 'pg';
 import { vi } from 'vitest';
-import { createApp } from '../app.js';
+import { createApp, proxySecretHeader } from '../app.js';
 import { createAuth } from '../auth.js';
 import type { Clock } from '../goal.js';
 import type { Logger } from '../log.js';
@@ -19,6 +19,9 @@ let clients = 0;
 
 /** One throwaway secret per test file, so a session cookie from one harness works in another. */
 const secret = randomBytes(32).toString('hex');
+
+/** The secret goald's proxy would send; every harness request carries it. */
+export const proxySecret = randomBytes(32).toString('hex');
 
 export interface HarnessOptions {
   publicURL?: string;
@@ -38,6 +41,7 @@ export function harness(pool: pg.Pool, opts: HarnessOptions = {}) {
     settings: loadSettings({
       GOAL_PUBLIC_URL: publicURL,
       BETTER_AUTH_SECRET: secret,
+      GOAL_AUTH_PROXY_SECRET: proxySecret,
       ...opts.env,
     }),
     pool,
@@ -45,8 +49,13 @@ export function harness(pool: pg.Pool, opts: HarnessOptions = {}) {
     mailer,
     ...(opts.clock ? { clock: opts.clock } : {}),
   });
-  const app = createApp(auth);
-  const headers = (extra: Record<string, string>) => ({ origin: publicURL, 'x-goal-client-ip': ip, ...extra });
+  const app = createApp(auth, proxySecret);
+  const headers = (extra: Record<string, string>) => ({
+    origin: publicURL,
+    'x-goal-client-ip': ip,
+    [proxySecretHeader]: proxySecret,
+    ...extra,
+  });
 
   const post = (path: string, body: unknown, extra: Record<string, string> = {}) =>
     app.request(`/api/auth${path}`, {

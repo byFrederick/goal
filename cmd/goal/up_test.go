@@ -80,6 +80,42 @@ func TestUp_EachProcessGetsItsOwnVariables(t *testing.T) {
 	}
 }
 
+// Review 3, L4: goald and the auth service get one shared secret, the one the auth service
+// requires of every request: .env's, else a new one per goal up, never two different ones.
+func TestUp_GoaldAndTheAuthServiceShareAProxySecret(t *testing.T) {
+	t.Parallel()
+
+	environ := []string{"PATH=/usr/bin", "BETTER_AUTH_SECRET=auth-secret"}
+	none := func(string) string { return "" }
+
+	shared := withProxySecret(environ, none)
+	secretOf := func(env []string) []string {
+		var out []string
+
+		for _, kv := range env {
+			if v, ok := strings.CutPrefix(kv, proxySecretEnv+"="); ok {
+				out = append(out, v)
+			}
+		}
+
+		return out
+	}
+
+	auth, goald := secretOf(authEnv(shared, "http://127.0.0.1:8080")), secretOf(goaldEnv(shared, none, true, "http://127.0.0.1:8080"))
+	if len(auth) != 1 || len(auth[0]) != 64 || !slices.Equal(auth, goald) {
+		t.Errorf("auth service gets %v, goald %v; want one 32-byte secret for both", auth, goald)
+	}
+
+	if again := secretOf(withProxySecret(environ, none)); slices.Equal(again, auth) {
+		t.Error("two goal ups generated the same secret")
+	}
+
+	set := append(slices.Clone(environ), proxySecretEnv+"=from-dotenv")
+	if got := withProxySecret(set, func(n string) string { return map[string]string{proxySecretEnv: "from-dotenv"}[n] }); !slices.Equal(got, set) {
+		t.Errorf("with .env's secret: %v; want it unchanged", got)
+	}
+}
+
 // goald and the auth service agree on the origin people open: GOAL_PUBLIC_URL, else goald's
 // listen address over http.
 func TestUp_PublicURLIsGoaldsDefault(t *testing.T) {

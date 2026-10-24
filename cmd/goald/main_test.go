@@ -97,7 +97,7 @@ func TestHTTPServers_ProxyAuthOnlyUnderSession(t *testing.T) {
 		hits.Store(0)
 
 		s := settings{Listen: defaultListen, Auth: tt.mode, AuthUpstream: u}
-		main := httpServers(s, stub, stub, ui, nil)[0]
+		main := httpServers(s, "proxy-secret-for-tests-only-0123456789", stub, stub, ui, nil)[0]
 
 		r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/auth/get-session", nil)
 		r.Host = defaultListen
@@ -139,7 +139,7 @@ func TestAuthentication_NoneWarnsThatEveryRequestIsTheLocalUser(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	identity, err := authentication(t.Context(), settings{Auth: authNone, Listen: "127.0.0.1:8080"}, nil, slog.New(slog.NewTextHandler(&buf, nil)))
+	identity, _, err := authentication(t.Context(), settings{Auth: authNone, Listen: "127.0.0.1:8080"}, nil, nil, slog.New(slog.NewTextHandler(&buf, nil)))
 	if err != nil || identity != nil {
 		t.Fatalf("authentication under none = %v, %v; want no identity lookups", identity, err)
 	}

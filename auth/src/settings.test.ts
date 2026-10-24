@@ -3,7 +3,8 @@ import { loadSettings, SettingsError } from './settings.js';
 
 // Throwaway values: 32 bytes and more, never real secrets.
 const secret = 'a'.repeat(32);
-const base = { BETTER_AUTH_SECRET: secret };
+const proxySecret = 'p'.repeat(32);
+const base = { BETTER_AUTH_SECRET: secret, GOAL_AUTH_PROXY_SECRET: proxySecret };
 
 function problems(env: Record<string, string>): string[] {
   try {
@@ -26,6 +27,7 @@ describe('loadSettings', () => {
     expect(s.secret).toBe(secret);
     expect(s.bootstrapOwnerEmail).toBeUndefined();
     expect(s.smtp).toEqual({ url: 'smtp://127.0.0.1:1025', from: 'Goal <goal@localhost>' });
+    expect(s.proxySecret).toBe(proxySecret);
   });
 
   it('reads the bootstrap owner trimmed and in lower case', () => {
@@ -54,7 +56,10 @@ describe('loadSettings', () => {
   });
 
   it('reads versioned secrets, newest first', () => {
-    const s = loadSettings({ BETTER_AUTH_SECRETS: `2:${'b'.repeat(40)}, 1:${secret}` });
+    const s = loadSettings({
+      BETTER_AUTH_SECRETS: `2:${'b'.repeat(40)}, 1:${secret}`,
+      GOAL_AUTH_PROXY_SECRET: proxySecret,
+    });
 
     expect(s.secrets).toEqual([
       { version: 2, value: 'b'.repeat(40) },
@@ -101,6 +106,17 @@ describe('loadSettings', () => {
     ['a bootstrap owner that is no address', { ...base, GOAL_BOOTSTRAP_OWNER_EMAIL: 'ada' }, 'an email address'],
     ['a mail server that is not SMTP', { ...base, GOAL_SMTP_URL: 'http://127.0.0.1:1025' }, 'GOAL_SMTP_URL must be'],
     ['a sender that is no address', { ...base, GOAL_SMTP_FROM: 'Goal' }, 'GOAL_SMTP_FROM must be'],
+    ['no proxy secret', { BETTER_AUTH_SECRET: secret }, 'GOAL_AUTH_PROXY_SECRET is required'],
+    [
+      'a short proxy secret',
+      { ...base, GOAL_AUTH_PROXY_SECRET: 'short' },
+      'GOAL_AUTH_PROXY_SECRET must be at least 32 bytes',
+    ],
+    [
+      'the Better Auth secret as the proxy secret',
+      { ...base, GOAL_AUTH_PROXY_SECRET: secret },
+      'must not be a Better Auth secret',
+    ],
   ])('refuses %s', (_, env, want) => {
     expect(problems(env).join('\n')).toContain(want);
   });
@@ -121,6 +137,7 @@ describe('loadSettings', () => {
     const leaked = 'leaked-secret-value';
     const got = problems({
       BETTER_AUTH_SECRET: leaked,
+      GOAL_AUTH_PROXY_SECRET: proxySecret,
       GOAL_AUTH_LISTEN: '0.0.0.0:1',
       GOAL_AUTH_GOOGLE: 'on',
       GOOGLE_CLIENT_SECRET: leaked,

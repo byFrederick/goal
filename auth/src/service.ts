@@ -36,7 +36,11 @@ export async function startService(env: Env, log: Logger, mailer?: Mailer): Prom
 
     server = await new Promise<ServerType>((resolve, reject) => {
       const s = serve(
-        { fetch: createApp(auth).fetch, hostname: settings.listen.host, port: settings.listen.port },
+        {
+          fetch: createApp(auth, settings.proxySecret).fetch,
+          hostname: settings.listen.host,
+          port: settings.listen.port,
+        },
         () => resolve(s),
       );
       s.once('error', reject);

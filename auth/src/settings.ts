@@ -28,6 +28,12 @@ export interface Settings {
   bootstrapOwnerEmail: string | undefined;
   /** GOAL_SMTP_URL (it may hold the server's credentials) and GOAL_SMTP_FROM: where mail goes. */
   smtp: { url: string; from: string };
+  /**
+   * GOAL_AUTH_PROXY_SECRET: goald sends it with every request it forwards (X-Goal-Proxy-Secret),
+   * and the service answers nothing else but its health check, so a process that reaches its
+   * loopback port directly, without goald's checks and rate-limit address, gets nowhere.
+   */
+  proxySecret: string;
 }
 
 export type Env = Readonly<Record<string, string | undefined>>;
@@ -77,6 +83,18 @@ export function loadSettings(env: Env): Settings {
     problems.push(`BETTER_AUTH_SECRET must be at least ${minSecretBytes} bytes`);
   }
 
+  const proxySecret = get('GOAL_AUTH_PROXY_SECRET');
+  if (proxySecret === undefined) {
+    problems.push(
+      'GOAL_AUTH_PROXY_SECRET is required: the secret goald sends with every request it forwards ' +
+        '(goal up generates one for both; when you start them yourself, give both the same: openssl rand -hex 32)',
+    );
+  } else if (byteLength(proxySecret) < minSecretBytes) {
+    problems.push(`GOAL_AUTH_PROXY_SECRET must be at least ${minSecretBytes} bytes`);
+  } else if (proxySecret === secret || secrets?.some((s) => s.value === proxySecret)) {
+    problems.push('GOAL_AUTH_PROXY_SECRET must not be a Better Auth secret');
+  }
+
   const google = parseGoogle(get, problems);
 
   const bootstrapOwnerEmail = get('GOAL_BOOTSTRAP_OWNER_EMAIL')?.toLowerCase();
@@ -90,9 +108,11 @@ export function loadSettings(env: Env): Settings {
     get('GOAL_AUTH_DATABASE_URL') ??
     `postgres://goal_auth:${encodeURIComponent(password)}@127.0.0.1:5432/goal?sslmode=disable`;
 
-  if (problems.length > 0 || listen === undefined || publicURL === undefined) throw new SettingsError(problems);
+  if (problems.length > 0 || listen === undefined || publicURL === undefined || proxySecret === undefined) {
+    throw new SettingsError(problems);
+  }
 
-  return { listen, publicURL, databaseURL, secret, secrets, google, bootstrapOwnerEmail, smtp };
+  return { listen, publicURL, databaseURL, secret, secrets, google, bootstrapOwnerEmail, smtp, proxySecret };
 }
 
 function parseListen(value: string, problems: string[]): Settings['listen'] | undefined {

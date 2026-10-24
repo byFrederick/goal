@@ -29,6 +29,10 @@ const AuthPath = "/api/auth"
 // session records. goald always writes it: a client's own value never passes.
 const clientIPHeader = "X-Goal-Client-Ip"
 
+// proxySecretHeader carries AuthProxyConfig.Secret to the identity service, which refuses
+// requests without it. goald always writes it: a client's own value never passes.
+const proxySecretHeader = "X-Goal-Proxy-Secret" //nolint:gosec // a header name, not a credential
+
 // authTokenHeader is the bearer plugin's header carrying a new session token, which no browser
 // response may expose to scripts.
 const authTokenHeader = "Set-Auth-Token" //nolint:gosec // a header name, not a credential
@@ -76,6 +80,9 @@ type AuthProxyConfig struct {
 	// TrustedProxies are the proxies in front of goald whose X-Forwarded-For is believed
 	// (GOAL_TRUSTED_PROXIES).
 	TrustedProxies []netip.Prefix
+	// Secret is sent as X-Goal-Proxy-Secret with every forwarded request (GOAL_AUTH_PROXY_SECRET),
+	// so the service answers goald and nothing else on its loopback port.
+	Secret string
 	// DialTimeout, HeaderTimeout and RequestTimeout bound reaching the service, waiting for its
 	// response headers and the whole request; zero is 2 s, 10 s and 15 s.
 	DialTimeout, HeaderTimeout, RequestTimeout time.Duration
@@ -95,6 +102,7 @@ type AuthProxyConfig struct {
 //   - loses every X-Forwarded-* header, Forwarded, X-Real-Ip and X-Goal-Client-Ip, and gets
 //     X-Goal-Client-Ip: the right-most X-Forwarded-For entry outside TrustedProxies when the peer
 //     is one of them, else the peer's address;
+//   - carries Secret in X-Goal-Proxy-Secret, whatever the client sent there;
 //   - names the upstream as its Host, so the service builds its links from its own static base URL;
 //   - is answered without Set-Auth-Token, and with 503 problem auth-unavailable when the service is
 //     down or slower than the timeouts.
@@ -129,6 +137,7 @@ func underAPI(p string) bool {
 type authProxy struct {
 	proxy   *httputil.ReverseProxy
 	trusted []netip.Prefix
+	secret  string
 	timeout time.Duration
 	log     *slog.Logger
 	handler http.Handler
@@ -140,7 +149,7 @@ func newAuthProxy(c AuthProxyConfig) *authProxy {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	p := &authProxy{trusted: c.TrustedProxies, timeout: orDefault(c.RequestTimeout, defaultAuthRequestTimeout), log: log}
+	p := &authProxy{trusted: c.TrustedProxies, secret: c.Secret, timeout: orDefault(c.RequestTimeout, defaultAuthRequestTimeout), log: log}
 	upstream := *c.Upstream
 
 	p.proxy = &httputil.ReverseProxy{
@@ -288,8 +297,12 @@ func (p *authProxy) rewrite(pr *httputil.ProxyRequest, upstream *url.URL) {
 		}
 	}
 
-	for _, name := range []string{"Forwarded", "X-Real-Ip", clientIPHeader} {
+	for _, name := range []string{"Forwarded", "X-Real-Ip", clientIPHeader, proxySecretHeader} {
 		pr.Out.Header.Del(name)
+	}
+
+	if p.secret != "" {
+		pr.Out.Header.Set(proxySecretHeader, p.secret)
 	}
 
 	if ip := clientIP(pr.In.RemoteAddr, pr.In.Header.Values("X-Forwarded-For"), p.trusted); ip.IsValid() {

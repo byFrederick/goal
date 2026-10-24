@@ -11,7 +11,9 @@ creates, renames and deletes organizations.
 - `goal up` runs `node auth/dist/server.js` under `GOAL_AUTH=session` (the default), with its own
   variables only (`.env.example`, "Sign-in"), and Mailpit for the codes.
 - `task auth:build` builds `dist/`; `task auth:dev` runs it from `src/`, rebuilt on change, mailing to
-  Mailpit (needs `goal db init` and `BETTER_AUTH_SECRET`).
+  Mailpit (needs `goal db init`, `BETTER_AUTH_SECRET` and `GOAL_AUTH_PROXY_SECRET`, the one goald is given too).
+- It answers only requests that carry `GOAL_AUTH_PROXY_SECRET` in `X-Goal-Proxy-Secret`, as goald's proxy
+  sends them, and its health check (`GET /api/auth/ok`); anything else that reaches its port is 403.
 - It connects as the role `goal_auth` (`GOAL_AUTH_DATABASE_URL`), which has DML on schema `auth`
   and nothing in `public`; it refuses to start as a superuser, a `BYPASSRLS` role, a table owner,
   a member of `goal_owner` or `goal_app`, or on a non-loopback listen.

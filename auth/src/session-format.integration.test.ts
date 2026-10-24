@@ -104,7 +104,7 @@ describe('the device grant', () => {
 
     // Device-Approve opens the code first, which claims it for the signed-in user, then approves.
     const signedIn = { cookie: `${cookie.name}=${cookie.value}`, origin: 'http://127.0.0.1:8080' };
-    const claim = await s.app.request(`/api/auth/device?user_code=${userCode}`, { headers: signedIn });
+    const claim = await s.get(`/device?user_code=${userCode}`, signedIn);
     expect(claim.status).toBe(200);
 
     const approve = await s.post('/device/approve', { userCode }, signedIn);
@@ -120,9 +120,7 @@ describe('the device grant', () => {
     expect(accessToken).toMatch(/^[A-Za-z0-9]{32}$/);
     expect(await sessionTokens()).toContain(accessToken);
 
-    const session = await s.app.request('/api/auth/get-session', {
-      headers: { authorization: `Bearer ${accessToken}` },
-    });
+    const session = await s.get('/get-session', { authorization: `Bearer ${accessToken}` });
     expect(((await session.json()) as { user: { email: string } }).user.email).toBe(email);
   });
 

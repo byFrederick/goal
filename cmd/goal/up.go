@@ -39,6 +39,8 @@ const (
 	authModeEnv   = "GOAL_AUTH"
 	authSecretEnv = "BETTER_AUTH_SECRET" //nolint:gosec // a variable name, not a credential
 	gatewayKeyEnv = "GOAL_GATEWAY_KEY"
+	// proxySecretEnv is the secret goald and the auth service share (withProxySecret).
+	proxySecretEnv = "GOAL_AUTH_PROXY_SECRET" //nolint:gosec // a variable name, not a credential
 	// authServer is the auth service's build (task auth:build), from the repository root.
 	authServer = "auth/dist/server.js"
 	// mailpitInbox is compose.yaml's Mailpit, where sign-in codes arrive locally; its UI and API
@@ -53,7 +55,7 @@ const (
 var authVariables = []string{
 	"PATH", "HOME", "GOAL_PUBLIC_URL", "GOAL_AUTH_GOOGLE", "GOAL_AUTH_LISTEN", "GOAL_AUTH_DATABASE_URL", "GOAL_PG_AUTH_PASSWORD",
 	"BETTER_AUTH_SECRET", "BETTER_AUTH_SECRETS", "GOAL_BOOTSTRAP_OWNER_EMAIL", "GOAL_SMTP_URL", "GOAL_SMTP_FROM",
-	"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "NODE_ENV", "NODE_OPTIONS", "NODE_EXTRA_CA_CERTS",
+	"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "NODE_ENV", "NODE_OPTIONS", "NODE_EXTRA_CA_CERTS", proxySecretEnv,
 }
 
 // authOnly are the auth service's variables goald never gets: its secrets, its database, its
@@ -112,6 +114,8 @@ func up(ctx context.Context, out *printer, getenv func(string) string, args []st
 	publicURL := publicURLOf(getenv)
 
 	if signIn {
+		environ = withProxySecret(environ, getenv)
+
 		inbox, err := mailpitAuth(getenv)
 		if err != nil {
 			return err
@@ -229,6 +233,20 @@ func sessionMode(getenv func(string) string) string {
 	}
 
 	return "GOAL_AUTH=session"
+}
+
+// withProxySecret gives goald and the auth service one GOAL_AUTH_PROXY_SECRET, the secret goald
+// sends with every request it forwards to the service, which refuses any other: .env's when it
+// sets one, else a new random one for this goal up.
+func withProxySecret(environ []string, getenv func(string) string) []string {
+	if strings.TrimSpace(getenv(proxySecretEnv)) != "" {
+		return environ
+	}
+
+	secret := make([]byte, 32)
+	_, _ = rand.Read(secret)
+
+	return append(slices.Clone(environ), proxySecretEnv+"="+hex.EncodeToString(secret))
 }
 
 // mailpitAuth makes sure Mailpit's password file exists (compose.yaml mounts it; Mailpit does

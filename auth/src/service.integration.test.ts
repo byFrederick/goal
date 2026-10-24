@@ -37,8 +37,11 @@ async function env(databaseURL: string) {
     GOAL_AUTH_DATABASE_URL: databaseURL,
     GOAL_AUTH_LISTEN: `127.0.0.1:${await freePort()}`,
     BETTER_AUTH_SECRET: randomBytes(32).toString('hex'),
+    GOAL_AUTH_PROXY_SECRET: proxySecret,
   };
 }
+
+const proxySecret = randomBytes(32).toString('hex');
 
 describe('startService', () => {
   it('starts as goal_auth on a database at the goose head and answers its health check', async () => {
@@ -49,6 +52,33 @@ describe('startService', () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ ok: true });
       expect((await fetch(`${service.url}/v1/health`)).status).toBe(404);
+    } finally {
+      await service.close();
+    }
+  });
+
+  // Review 3, L4: what reaches the loopback port without goald (an agent before ADR 0009, any
+  // local process) gets nothing but the health check: no sign-in, no rate-limit address of its own.
+  it("refuses every request but the health check without goald's secret", async () => {
+    const service = await startService(await env(head.url('goal_auth')), silent, noMail);
+    try {
+      const send = (secret?: string) =>
+        fetch(`${service.url}/api/auth/email-otp/send-verification-otp`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            origin: 'http://127.0.0.1:8080',
+            'x-goal-client-ip': '198.51.100.9',
+            ...(secret === undefined ? {} : { 'x-goal-proxy-secret': secret }),
+          },
+          body: JSON.stringify({ email: 'owner@example.com', type: 'sign-in' }),
+        });
+
+      expect((await send()).status).toBe(403);
+      expect((await send('a'.repeat(64))).status).toBe(403);
+      expect((await fetch(`${service.url}/api/auth/get-session`)).status).toBe(403);
+      expect((await send(proxySecret)).status).toBe(200);
+      expect((await fetch(`${service.url}/api/auth/ok`)).status).toBe(200);
     } finally {
       await service.close();
     }

@@ -145,18 +145,22 @@ const (
 	schemeHTTPS    = "https"
 	taskEnvEnv     = "GOAL_TASK_ENV"
 	egressNameEnv  = "GOAL_EGRESS_NAME"
-	egressImageEnv = "GOAL_EGRESS_IMAGE"
-	agentEgressEnv = "GOAL_AGENT_EGRESS"
-	defaultModels  = "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5"
-	defaultListen  = "127.0.0.1:8080"
-	defaultTaskEnv = "CLAUDE_CODE_OAUTH_TOKEN=env:CLAUDE_CODE_OAUTH_TOKEN"
-	defaultKeyRef  = "env:GOAL_GATEWAY_KEY"
-	defaultImage   = "ghcr.io/byfrederick/goal-agent:0.1.0"
+	// authProxySecretEnv is the secret goald's /api/auth proxy sends the identity service, which
+	// refuses requests without it (GOAL_AUTH=session only; goal up generates one for both).
+	authProxySecretEnv = "GOAL_AUTH_PROXY_SECRET" //nolint:gosec // a variable name, not a credential
+	authProxySecretRef = "env:" + authProxySecretEnv
+	egressImageEnv     = "GOAL_EGRESS_IMAGE"
+	agentEgressEnv     = "GOAL_AGENT_EGRESS"
+	defaultModels      = "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5"
+	defaultListen      = "127.0.0.1:8080"
+	defaultTaskEnv     = "CLAUDE_CODE_OAUTH_TOKEN=env:CLAUDE_CODE_OAUTH_TOKEN"
+	defaultKeyRef      = "env:GOAL_GATEWAY_KEY"
+	defaultImage       = "ghcr.io/byfrederick/goal-agent:0.1.0"
 )
 
 // forbiddenTaskEnv never reaches a task: on a laptop the model is reached with the subscription
 // token, and an API key in a container would silently take over billing.
-var forbiddenTaskEnv = []string{"ANTHROPIC_API_KEY", "GOAL_GATEWAY_KEY", repositoryToken}
+var forbiddenTaskEnv = []string{"ANTHROPIC_API_KEY", "GOAL_GATEWAY_KEY", authProxySecretEnv, repositoryToken}
 
 // repositoryToken is the install's GitHub token, for the factory's runtime.repository (clones,
 // merges). Until phase 4's connectors give each connection its own credential, a definition may
@@ -175,7 +179,7 @@ const (
 var ownVariables = []string{
 	"GOAL_MIGRATE_DATABASE_URL", "GOAL_DATABASE_URL", "GOAL_PG_PASSWORD", "GOAL_PG_OWNER_PASSWORD", "GOAL_PG_APP_PASSWORD",
 	listenEnv, publicURLEnv, gatewayEnv, gatewayURLEnv, "GOAL_GATEWAY_KEY_REF", "GOAL_GATEWAY_KEY", taskEnvEnv,
-	authEnv, upstreamEnv, proxiesEnv, googleEnv,
+	authEnv, upstreamEnv, proxiesEnv, googleEnv, authProxySecretEnv,
 	"GOAL_WORKSPACE_ROOT", "GOAL_RUN_DIR", "GOAL_TICK_EVERY", "GOAL_REFRESH_EVERY", "GOAL_MAX_RUNS",
 	"GOAL_GITHUB_API_URL", githubWebEnv, "GOAL_LOG_LEVEL", "GOAL_LOG_FORMAT", "GOAL_DEFAULT_AGENT_IMAGE", "GOAL_ORG_RETENTION", "GOAL_MODELS",
 	"GOAL_DEFINITION_CACHE_BYTES", "GOAL_LEGACY_IMPORT", egressNameEnv, egressImageEnv, agentEgressEnv,

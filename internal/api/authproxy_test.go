@@ -347,6 +347,33 @@ func checkForwarded(t *testing.T, in seen, want, serviceAddr string) {
 	}
 }
 
+// Review 3, L4: the identity service answers only goald, which sends it the shared secret with
+// every forwarded request; a client's own X-Goal-Proxy-Secret never passes, configured or not.
+func TestAuthProxy_SendsTheSharedSecret(t *testing.T) {
+	t.Parallel()
+
+	for _, secret := range []string{"proxy-secret-for-tests-only-0123456789", ""} {
+		svc := newIdentityService(t, nil)
+		h := proxyOf(t, api.AuthProxyConfig{Upstream: svc.url(t), Secret: secret})
+
+		r := forgedRequest(t, "192.0.2.10:5100", nil)
+		r.Header.Set("X-Goal-Proxy-Secret", "a-client-guess")
+
+		if rec := serve(h, r); rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", rec.Code)
+		}
+
+		got := svc.received()
+		if len(got) != 1 {
+			t.Fatalf("the service received %d requests, want 1", len(got))
+		}
+
+		if values := got[0].header.Values("X-Goal-Proxy-Secret"); strings.Join(values, ",") != secret {
+			t.Errorf("secret %q: the service received %q; want only goald's", secret, values)
+		}
+	}
+}
+
 // The bearer plugin's Set-Auth-Token never reaches a browser; the session cookie does.
 func TestAuthProxy_DropsSetAuthToken(t *testing.T) {
 	t.Parallel()
@@ -527,7 +554,7 @@ func TestAuthProxy_RefusesCrossOriginWrites(t *testing.T) {
 func TestAuthProxy_LogsNoSecrets(t *testing.T) {
 	t.Parallel()
 
-	secrets := []string{"cookie-secret", "bearer-secret", "query-secret", "body-secret", "set-cookie-secret", "auth-token-secret"}
+	secrets := []string{"cookie-secret", "bearer-secret", "query-secret", "body-secret", "set-cookie-secret", "auth-token-secret", "proxy-shared-secret"}
 
 	svc := newIdentityService(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Set-Cookie", "goal.session_token=set-cookie-secret")
@@ -541,7 +568,7 @@ func TestAuthProxy_LogsNoSecrets(t *testing.T) {
 	for _, upstream := range []*url.URL{svc.url(t), downURL} {
 		var buf bytes.Buffer
 
-		h := proxyOf(t, api.AuthProxyConfig{Upstream: upstream, Logger: slog.New(slog.NewJSONHandler(&buf, nil))})
+		h := proxyOf(t, api.AuthProxyConfig{Upstream: upstream, Secret: "proxy-shared-secret", Logger: slog.New(slog.NewJSONHandler(&buf, nil))})
 
 		r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/auth/sign-in/email-otp?code=query-secret",
 			strings.NewReader(`{"otp":"body-secret"}`))
