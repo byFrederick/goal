@@ -306,8 +306,17 @@ func (p *Proxy) forwardHTTP(w http.ResponseWriter, r *http.Request, who role) {
 		return
 	}
 
-	p.cfg.Log.Info("egress forward", slog.String("role", who.String()), slog.String("dest", dest))
-	p.forward.ServeHTTP(w, r)
+	// Logged once the destination answered (forwardProxy), since the dial may still refuse it.
+	p.forward.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), forwardKey{}, forwarded{who: who, dest: dest})))
+}
+
+// forwardKey is the context key of a plain-http request's forwarded: its client's role and its
+// normalized destination, for forwardProxy's log lines.
+type forwardKey struct{}
+
+type forwarded struct {
+	who  role
+	dest string
 }
 
 // dial connects to dest (host:port, normalized): a trusted destination by name; any other at the
@@ -421,9 +430,15 @@ func (p *Proxy) forwardProxy() *httputil.ReverseProxy {
 			},
 			MaxIdleConns: 32, IdleConnTimeout: 90 * time.Second,
 		},
+		ModifyResponse: func(res *http.Response) error {
+			f, _ := res.Request.Context().Value(forwardKey{}).(forwarded)
+			p.cfg.Log.Info("egress forward", slog.String("role", f.who.String()), slog.String("dest", f.dest))
+
+			return nil
+		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-			who := p.roleOf(r.RemoteAddr)
-			p.dialFailed(w, r, who, r.URL.Host, err)
+			f, _ := r.Context().Value(forwardKey{}).(forwarded)
+			p.dialFailed(w, r, f.who, f.dest, err)
 		},
 	}
 }

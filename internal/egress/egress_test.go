@@ -2,10 +2,13 @@ package egress
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -440,6 +443,94 @@ func TestProxy_ForwardsPlainHTTPForToolsOnly(t *testing.T) {
 
 	if !slices.Equal(got, []string{"deb.debian.org/debian/dists/bookworm/Release proxy-auth="}) {
 		t.Errorf("upstream saw %v; want the one allowed request, without the proxy's headers", got)
+	}
+}
+
+// lockedBuffer is a log's output, written by the proxy's goroutines and read by the test.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return b.buf.Write(p)
+}
+
+// byMessage is the log's destinations by message.
+func (b *lockedBuffer) byMessage(t *testing.T) map[string][]string {
+	t.Helper()
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	got := map[string][]string{}
+
+	for line := range strings.Lines(b.buf.String()) {
+		var rec struct{ Msg, Dest string }
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			t.Fatalf("log line %q: %v", line, err)
+		}
+
+		got[rec.Msg] = append(got[rec.Msg], rec.Dest)
+	}
+
+	return got
+}
+
+// The log is the proxy's record of where traffic went: a plain-http request refused at the dial
+// (its name or address is not public) is one refusal, never also a forward.
+func TestProxy_LogsAForwardOnlyWhenItWasForwarded(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	t.Cleanup(upstream.Close)
+
+	w := &world{
+		names:  map[string][]string{"deb.debian.org": {"151.101.2.132"}, "internal.example.com": {"192.168.1.20"}},
+		routes: map[string]string{"151.101.2.132:80": upstream.Listener.Addr().String()},
+	}
+
+	var out lockedBuffer
+
+	tools := startProxy(t, Config{Tools: loopback, Log: slog.New(slog.NewJSONHandler(&out, nil))}, w)
+	proxyURL, _ := url.Parse(tools.URL)
+	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
+
+	for target, want := range map[string]int{
+		"http://deb.debian.org/debian/dists/bookworm/Release": http.StatusOK,
+		"http://169.254.169.254/latest/meta-data/":            http.StatusForbidden,
+		"http://internal.example.com/":                        http.StatusForbidden,
+	} {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, target, http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		res, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_ = res.Body.Close()
+
+		if res.StatusCode != want {
+			t.Errorf("GET %s = %d, want %d", target, res.StatusCode, want)
+		}
+	}
+
+	got := out.byMessage(t)
+	if !slices.Equal(got["egress forward"], []string{"deb.debian.org:80"}) {
+		t.Errorf("forwards logged: %v; want only deb.debian.org:80", got["egress forward"])
+	}
+
+	refused := got["egress refused"]
+	slices.Sort(refused)
+
+	if !slices.Equal(refused, []string{"169.254.169.254:80", "internal.example.com:80"}) {
+		t.Errorf("refusals logged: %v; want the metadata address and the private name, once each", refused)
 	}
 }
 
