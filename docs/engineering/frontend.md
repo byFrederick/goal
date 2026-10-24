@@ -52,7 +52,7 @@ Rules:
 | Styling | Tailwind v4 with `@theme` tokens generated from MASTER.md | One source of truth for palette, type, radii; no hex values in components |
 | Components | shadcn/ui on Radix, in `packages/ui` | Accessible primitives we own and can restyle |
 | Board drag and drop | dnd-kit with keyboard sensors, plus a Move menu on every card | WCAG 2.2 dragging alternative |
-| Factory editor | Monaco with monaco-yaml bound to `schema/factory.schema.json`; xyflow for the line preview | Autocompletion and inline errors while editing YAML |
+| Factory editor | Monaco with monaco-yaml bound to `schema/factory.schema.json`; the line preview is a plain HTML list, and stations reorder with dnd-kit plus ↑ ↓ buttons and Alt+Arrow | Autocompletion and inline errors while editing YAML; a linear line needs no graph canvas, and a list is accessible |
 | Charts | Small SVG components in `packages/ui` (hatched bars, bridge, sparkline) | Exactly the design system's marks; no heavy chart library |
 | Long lists | TanStack Virtual for traces and big boards | Keeps the main thread free |
 
@@ -85,7 +85,7 @@ app/          the shell: AppShell and ShellFrame, Rail, PhoneTopRow, PhoneCrumb,
 features/
   factories/  floor/  board/  items/  org-settings/   one folder per screen: page, cards, feature-only logic (items/timeline.ts, org-settings/form.ts)
   factory-editor/   the wizard and Definition (D); draft/: the draft session (session.ts, use-draft.ts), merge.ts, ops.ts, pointer.ts;
-                    frame/: the editor frame, status line, tiles, dialogs and unsaved guard; section-views.tsx: each section's view (basics/, …)
+                    frame/: the editor frame, status line, tiles, dialogs and unsaved guard; section-views.tsx: each section's view (basics/, line/, …)
 shared/       code more than one feature uses: decisions (approve, send back, merge, retry), new item,
               the andon cord (andon.tsx: the line status and the pull and clear dialogs, from Board.line),
               definition/ (typed views of B's FactoryModel, where an agent works, slots at full WIP, pointer ↔ line),

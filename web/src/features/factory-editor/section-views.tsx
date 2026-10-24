@@ -3,6 +3,7 @@
 // it lands, the Visual | YAML toggle shows YAML as Later.
 import { type ComponentType, lazy } from 'react';
 import { BasicsSection } from './basics/basics-section';
+import { LineSection } from './line/line-section';
 import type { DefinitionSearch, EditorSection } from './sections';
 
 export interface SectionViewProps {
@@ -20,7 +21,7 @@ const ConnectionsSection = lazy(() =>
 
 export const sectionViews: Record<EditorSection, ComponentType<SectionViewProps> | null> = {
   basics: BasicsSection,
-  line: null,
+  line: LineSection,
   agents: AgentsSection,
   connections: ConnectionsSection,
   review: null,

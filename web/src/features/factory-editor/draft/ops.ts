@@ -141,6 +141,32 @@ export function addStation(
   return { edit: withStations(line, next), station };
 }
 
+/**
+ * Copies a station right after it, as "<name> copy" with the slug of that as its id; Done is not
+ * copied (a line has one end).
+ */
+export function duplicateStation(
+  line: LineSection,
+  id: string,
+): { edit: Edit<'line'>; station: ModelStation } | undefined {
+  const stations = stationsOf(line);
+  const at = stations.findIndex((s) => s.id === id);
+  const source = stations[at];
+  if (!source || source.kind === 'done') return undefined;
+  const name = `${source.name || source.id} copy`;
+  const station: ModelStation = {
+    ...structuredClone(source),
+    id: uniqueName(
+      slug(name),
+      stations.map((s) => s.id),
+    ),
+    name,
+  };
+  const next = [...stations];
+  next.splice(at + 1, 0, station);
+  return { edit: withStations(line, next), station };
+}
+
 /** Rewrites what names a station: other stations' gates and the flow's constraint. */
 function renameStationRefs(line: LineSection, from: string, to: string | undefined): LineSection {
   const stations = stationsOf(line).map((s) => {

@@ -10,6 +10,7 @@ import {
   applyFix,
   copyAgent,
   duplicateAgent,
+  duplicateStation,
   moveStation,
   removeAgent,
   removeConnection,
@@ -91,6 +92,15 @@ describe('stations', () => {
     expect(ids(before.edit.value)).toEqual(['inbox', 'build', 'review', 'merge', 'build-2', 'done']);
     const after = addStation(m.line, 'human', { name: 'Approve spec', after: 'inbox' });
     expect(ids(after.edit.value)).toEqual(['inbox', 'approve-spec', 'build', 'review', 'merge', 'done']);
+  });
+
+  it('duplicates a station right after it with a free id, and never Done', () => {
+    const m = model();
+    const copy = duplicateStation(m.line, 'review');
+    expect(copy?.station).toMatchObject({ id: 'review-copy', name: 'Review copy', agent: 'engineer', wip: 1 });
+    expect(ids(copy?.edit.value ?? {})).toEqual(['inbox', 'build', 'review', 'review-copy', 'merge', 'done']);
+    expect(duplicateStation(m.line, 'done')).toBeUndefined();
+    expect(m.line.stations).toHaveLength(5);
   });
 
   it('renames a new station with its id and every reference to it', () => {

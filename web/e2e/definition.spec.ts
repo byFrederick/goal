@@ -44,11 +44,11 @@ test('the definition frame is accessible and fits the screen', async ({ page }) 
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
-  // A section a later PR builds says how to change it until then.
+  // Moving between sections focuses the section's heading.
   await tile(page, /^Line, 2 changes$/).click();
   await expect(page).toHaveURL(/\/definition\/line$/);
-  await expect(page.getByRole('heading', { level: 2, name: 'Line' })).toBeFocused();
-  await expect(page.getByText(/Editing line here arrives later/)).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Line', exact: true })).toBeFocused();
+  await expect(page.getByRole('list', { name: 'Stations, in order' })).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
