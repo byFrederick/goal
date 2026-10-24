@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -167,6 +168,14 @@ func (l *loads) record(_ context.Context, lines []domain.Line) error {
 	}
 
 	return nil
+}
+
+// count is how many reloads ran.
+func (l *loads) count() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	return len(l.lines)
 }
 
 func (l *loads) last() []domain.Line {
@@ -571,6 +580,119 @@ func TestLookup_ReloadsOnAMiss(t *testing.T) {
 
 	if f, err := c.Lookup(ctxOf(t, org), string(acmeID)); err != nil || f.Metadata.Name != acmeName {
 		t.Errorf("Lookup by id = %v, %v; want the factory", f, err)
+	}
+}
+
+// A miss reloads the organization only when the store has a current version of that factory the
+// cache lacks, once however many lookups miss together; a typo, a stale ref or a factory with only
+// a draft reloads nothing.
+func TestLookup_AMissReloadsOnlyForACurrentVersionTheCacheLacks(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	l := newLoads()
+	c := h.cache(t, l.record)
+
+	if _, _, err := h.store.CreateFactory(ctxOf(t, org), ports.NewFactory{
+		ID: otherID, Name: "wizard-draft", Manifest: domain.Manifest{}, Source: domain.VersionSource{Kind: domain.SourceBlank}, By: domain.LocalUser,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, ref := range []string{"acme-typo", "wizard-draft", string(otherID), "00000000-0000-4000-8000-000000000000"} {
+		if _, err := c.Lookup(ctxOf(t, org), ref); !errors.Is(err, ports.ErrNotFound) {
+			t.Errorf("Lookup(%s) = %v, want ErrNotFound", ref, err)
+		}
+	}
+
+	if n := l.count(); n != 1 {
+		t.Fatalf("%d loads after the misses, want only the first refresh", n)
+	}
+
+	h.publish(t, org, acme(acmeName, noteContract)) // no notice reaches this cache
+
+	var wg sync.WaitGroup
+
+	for range 8 {
+		wg.Go(func() {
+			if f, err := c.Lookup(ctxOf(t, org), acmeName); err != nil || f.Metadata.ID != string(acmeID) {
+				t.Errorf("Lookup after the publish = %v, %v; want the factory", f, err)
+			}
+		})
+	}
+
+	wg.Wait()
+
+	if n := l.count(); n != 2 {
+		t.Errorf("%d loads after the lookups of the published factory, want one more", n)
+	}
+}
+
+// Names match without case, as in authoring, and ids in any case.
+func TestLookup_MatchesNamesWithoutCase(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.publish(t, org, acme(acmeName, noteContract))
+
+	l := newLoads()
+	c := h.cache(t, l.record)
+
+	for _, ref := range []string{"ACME", "Acme", strings.ToUpper(string(acmeID))} {
+		if f, err := c.Lookup(ctxOf(t, org), ref); err != nil || f.Metadata.ID != string(acmeID) {
+			t.Errorf("Lookup(%s) = %v, %v; want acme", ref, f, err)
+		}
+	}
+
+	if n := l.count(); n != 1 {
+		t.Errorf("%d loads, want none besides the refresh", n)
+	}
+}
+
+// failingRecords is a definition store whose factory reads fail once broken is set.
+type failingRecords struct {
+	*porttest.Definitions
+
+	broken atomic.Bool
+}
+
+var errStoreDown = errors.New("database unreachable")
+
+func (f *failingRecords) FactoryRecord(ctx context.Context, id domain.FactoryID) (ports.FactoryRecord, error) {
+	if f.broken.Load() {
+		return ports.FactoryRecord{}, errStoreDown
+	}
+
+	return f.Definitions.FactoryRecord(ctx, id)
+}
+
+func (f *failingRecords) FactoryRecords(ctx context.Context) ([]ports.FactoryRecord, error) {
+	if f.broken.Load() {
+		return nil, errStoreDown
+	}
+
+	return f.Definitions.FactoryRecords(ctx)
+}
+
+// A store that fails while a miss is checked leaves the answer a miss: the factory is not found,
+// as the cache knows it, rather than an internal error.
+func TestLookup_AStoreErrorOnAMissIsNotFound(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	store := &failingRecords{Definitions: h.store}
+
+	c := New(store, h.orgs, nil, Config{}, nil)
+	if _, err := c.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	store.broken.Store(true)
+
+	for _, ref := range []string{acmeName, string(acmeID)} {
+		if _, err := c.Lookup(ctxOf(t, org), ref); !errors.Is(err, ports.ErrNotFound) || errors.Is(err, errStoreDown) {
+			t.Errorf("Lookup(%s) with the store down = %v, want ErrNotFound", ref, err)
+		}
 	}
 }
 

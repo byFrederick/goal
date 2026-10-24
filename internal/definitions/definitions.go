@@ -31,8 +31,11 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 
 	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/domain"
@@ -96,6 +99,8 @@ type Cache struct {
 	log    *slog.Logger
 
 	reload sync.Mutex // one reload at a time, so onLoad sees them in order
+	// misses folds the reloads of lookups that miss together, by organization.
+	misses singleflight.Group
 
 	mu      sync.RWMutex
 	current map[domain.FactoryID]current
@@ -370,9 +375,12 @@ func (c *Cache) Factories(ctx context.Context) []*config.Factory {
 	return out
 }
 
-// Lookup finds the current definition of a factory of the organization in ctx by id or
-// metadata.name. When nothing matches it reloads the organization once, so a factory published
-// a moment ago is found, then returns an error wrapping ports.ErrNotFound.
+// Lookup finds the current definition of a factory of the organization in ctx by id or by
+// metadata.name, without case (as authoring does). On a miss it reloads the organization only
+// when the store has a current version of that factory the cache lacks (a publish whose notice
+// has not arrived yet), one reload for every lookup that misses meanwhile, so a typo, a stale ref
+// or a factory with only a draft costs one read of the organization's factory records. Anything
+// else, a store that fails on the way included, is an error wrapping ports.ErrNotFound.
 func (c *Cache) Lookup(ctx context.Context, ref string) (*config.Factory, error) {
 	org, ok := domain.OrgFrom(ctx)
 	if !ok {
@@ -383,27 +391,76 @@ func (c *Cache) Lookup(ctx context.Context, ref string) (*config.Factory, error)
 		return f, nil
 	}
 
-	if _, err := c.reloadOrgs(ctx, []domain.OrgID{org}); err != nil {
-		return nil, err
-	}
-
-	if f := c.find(org, ref); f != nil {
-		return f, nil
+	if c.catchUp(ctx, org, ref) {
+		if f := c.find(org, ref); f != nil {
+			return f, nil
+		}
 	}
 
 	return nil, fmt.Errorf("factory %q: %w", ref, ports.ErrNotFound)
+}
+
+// catchUp reloads org when the store names a current version of ref's factory that the cache
+// lacks, and reports whether it did. A failure is logged: the lookup stays a miss.
+func (c *Cache) catchUp(ctx context.Context, org domain.OrgID, ref string) bool {
+	log := c.log.With(slog.String("org_id", string(org)), slog.String("factory", ref))
+
+	recs, err := c.store.FactoryRecords(ctx)
+	if err != nil {
+		log.WarnContext(ctx, "factory lookup cannot read the factory records; answered as not found", slog.Any("error", err))
+		return false
+	}
+
+	i := slices.IndexFunc(recs, func(r ports.FactoryRecord) bool { return matches(string(r.ID), r.Name, ref) })
+	if i < 0 || recs[i].Current == nil || c.has(recs[i].Current.ID) {
+		return false
+	}
+
+	want := recs[i].Current.ID
+
+	// The reload outlives a caller that gives up: others may be waiting on it.
+	_, err, _ = c.misses.Do(string(org), func() (any, error) {
+		if c.has(want) {
+			return nil, nil
+		}
+
+		_, err := c.reloadOrgs(context.WithoutCancel(ctx), []domain.OrgID{org})
+
+		return nil, err
+	})
+	if err != nil {
+		log.WarnContext(ctx, "factory lookup reload failed; answered as not found", slog.Any("error", err))
+		return false
+	}
+
+	return true
+}
+
+// has reports whether version id is current in the cache.
+func (c *Cache) has(id domain.DefinitionVersionID) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	_, ok := c.byID[id]
+
+	return ok
+}
+
+// matches reports whether ref names the factory with this id or name, without case.
+func matches(id, name, ref string) bool {
+	return strings.EqualFold(id, ref) || strings.EqualFold(name, ref)
 }
 
 func (c *Cache) find(org domain.OrgID, ref string) *config.Factory {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	if cur, ok := c.current[domain.FactoryID(ref)]; ok && cur.org == org {
+	if cur, ok := c.current[domain.FactoryID(strings.ToLower(ref))]; ok && cur.org == org {
 		return cur.factory
 	}
 
 	for _, cur := range c.current {
-		if cur.org == org && cur.factory.Metadata.Name == ref {
+		if cur.org == org && strings.EqualFold(cur.factory.Metadata.Name, ref) {
 			return cur.factory
 		}
 	}
