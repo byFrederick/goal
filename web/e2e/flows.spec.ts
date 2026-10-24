@@ -327,6 +327,8 @@ test('an item shows its time at each station against its target', async ({ page 
   const path = page.getByRole('region', { name: 'Path' });
   await expect(path.locator('[aria-current="step"]')).toContainText('spec-writer-1 working');
   await expect(path.getByRole('listitem').filter({ hasText: 'Inbox' })).toContainText(/Spent \d+ min/);
+  // A station not reached yet is named, never given a state it does not have ("Finished").
+  await expect(path.getByRole('listitem').last()).toHaveText('Done');
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });

@@ -2,7 +2,7 @@
 // each station, its lead-time target, the task limits and the run in progress (Item and
 // Mobile-Item boards).
 import { ExternalLink } from 'lucide-react';
-import type { CurrentRun, Factory, Item, ItemFlow, ItemSpan } from '../../api/types';
+import type { CurrentRun, Factory, Item, ItemFlow, ItemSpan, Station } from '../../api/types';
 import { formatClock, formatDuration, formatUsd, humanize } from '../../shared/format';
 import { describeState, pullRequestLabel, pullRequestOf } from '../../shared/item-state';
 import { SectionCard, StatRow } from '../../ui/card';
@@ -187,12 +187,16 @@ export function TimeCard({
   );
 }
 
-const kindNote = {
+/**
+ * What an unreached station without a description does. The done station is its name alone: a
+ * note there ("Finished") would read as the item's state.
+ */
+const kindNote: Record<Station['kind'], string | null> = {
   queue: 'Waits to be pulled',
   agent: 'Agents work here',
   human: 'You decide here',
-  done: 'Finished',
-} as const;
+  done: null,
+};
 
 /** An item's visits to one station: consecutive spans there, with the time spent. */
 function visitsAt(spans: readonly ItemSpan[], station: string, end: number) {
@@ -226,6 +230,11 @@ export function PathCard({ item, factory, className }: { item: Item; factory: Fa
           const { visits, spent, first } = visitsAt(flow.spans, s.id, end);
           const current = s.id === item.station;
           const visited = visits > 0 || current;
+          const note = current
+            ? state.text
+            : visited
+              ? `Spent ${formatDuration(spent)}`
+              : (s.description ?? kindNote[s.kind]);
           const dot = current
             ? {
                 run: 'bg-run ring-run-tint',
@@ -246,14 +255,12 @@ export function PathCard({ item, factory, className }: { item: Item; factory: Fa
               <span aria-hidden="true" className={cn('mt-1 ml-[5px] size-3 rounded-full ring-4', dot)} />
               <span>
                 <span className="block text-[15px] font-medium">{humanize(s.id)}</span>
-                <span className="mt-0.5 block text-[13px] text-muted">
-                  {current
-                    ? state.text
-                    : visited
-                      ? `Spent ${formatDuration(spent)}`
-                      : (s.description ?? kindNote[s.kind])}
-                  {visits > 1 ? `, ${visits} visits` : ''}
-                </span>
+                {note ? (
+                  <span className="mt-0.5 block text-[13px] text-muted">
+                    {note}
+                    {visits > 1 ? `, ${visits} visits` : ''}
+                  </span>
+                ) : null}
               </span>
               <span className="text-[13px] text-muted tabular-nums">{first ? formatClock(first) : ''}</span>
             </li>
