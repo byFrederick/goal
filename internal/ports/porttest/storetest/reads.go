@@ -3,6 +3,7 @@ package storetest
 import (
 	"cmp"
 	"errors"
+	"fmt"
 	"math"
 	"reflect"
 	"slices"
@@ -302,7 +303,15 @@ func testAttention(f *fixture) {
 	}
 }
 
-func testWaitingHuman(f *fixture) {
+// Titles of the inbox test's items.
+const (
+	inLane       = "in the expedite lane"
+	titleBlocked = "blocked by checks"
+	titlePaused  = "paused by a person"
+	titleMoved   = "changed last"
+)
+
+func testInboxItems(f *fixture) {
 	t := f.t
 
 	const secondTitle = "in the second factory"
@@ -314,15 +323,35 @@ func testWaitingHuman(f *fixture) {
 	f.create(t, domain.NewItem{Title: "tie-a", State: domain.StateWaitingHuman, CreatedAt: at(1)})
 	f.create(t, domain.NewItem{Title: "tie-b", State: domain.StateWaitingHuman, CreatedAt: at(1)})
 	f.create(t, domain.NewItem{FactoryID: second, Title: secondTitle, State: domain.StateWaitingHuman, CreatedAt: at(2)})
-	// Not waiting for a person, or not in the factories asked for.
+	f.create(t, domain.NewItem{Title: inLane, Class: domain.ClassExpedite, State: domain.StateInProgress, CreatedAt: at(3)})
+	blocked := f.create(t, domain.NewItem{Title: titleBlocked, State: domain.StateBlocked, CreatedAt: at(4)})
+	paused := f.create(t, domain.NewItem{Title: titlePaused, State: domain.StateBlocked, CreatedAt: at(6)})
+	// Not waiting on a person, or not in the factories asked for.
 	f.create(t, domain.NewItem{Title: "queued", CreatedAt: at(9)})
-	f.create(t, domain.NewItem{Title: "blocked", State: domain.StateBlocked, CreatedAt: at(9)})
+	f.create(t, domain.NewItem{Title: "done expedite", Class: domain.ClassExpedite, Station: stDone, State: domain.StateDone, CreatedAt: at(9)})
 	f.create(t, domain.NewItem{FactoryID: third, Title: "third", State: domain.StateWaitingHuman, CreatedAt: at(9)})
 
+	block := func(it domain.Item, kind domain.EventKind, reason string, m int) domain.Event {
+		data := map[string]any{}
+		if reason != "" {
+			data["reason"] = reason
+		}
+
+		return domain.Event{FactoryID: it.FactoryID, ItemID: it.ID, At: at(m), Kind: kind, Station: stWork, Actor: domain.ActorEngine, Data: data}
+	}
+
+	// The latest blocking event says why: the run's failure, then a person's pause over it.
+	if err := f.Store.AppendEvents(f.ctx(t),
+		block(blocked, domain.EventBlocked, "an older failure", 4), block(blocked, domain.EventBlocked, "checks failed", 5),
+		block(paused, domain.EventBlocked, "first", 6), block(paused, domain.EventPaused, "", 7),
+	); err != nil {
+		t.Fatal(err)
+	}
+
 	// A decision that changed last comes first, though it was created first.
-	moved := f.create(t, domain.NewItem{Title: "moved", State: domain.StateWaitingHuman, CreatedAt: at(0)})
+	moved := f.create(t, domain.NewItem{Title: titleMoved, State: domain.StateWaitingHuman, CreatedAt: at(0)})
 	if _, err := f.Store.Transition(f.ctx(t), ports.Transition{
-		ItemID: moved.ID, From: moved.Position(), To: domain.Position{Station: stNext, State: domain.StateWaitingHuman}, At: at(5),
+		ItemID: moved.ID, From: moved.Position(), To: domain.Position{Station: stNext, State: domain.StateWaitingHuman}, At: at(8),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -339,20 +368,45 @@ func testWaitingHuman(f *fixture) {
 		limit     int
 		want      []string
 	}{
-		{name: "newest change first, ties by id", factories: factories, limit: 10, want: []string{"moved", secondTitle, "tie-a", "tie-b", "oldest"}},
-		{name: "up to limit", factories: factories, limit: 2, want: []string{"moved", secondTitle}},
+		{
+			name: "newest change first, ties by id", factories: factories, limit: 20,
+			want: []string{titleMoved, titlePaused, titleBlocked, inLane, secondTitle, "tie-a", "tie-b", "oldest"},
+		},
+		{name: "up to limit", factories: factories, limit: 2, want: []string{titleMoved, titlePaused}},
 		{name: "one factory", factories: []domain.FactoryID{second}, limit: 10, want: []string{secondTitle}},
 		{name: "no factories", factories: nil, limit: 10, want: []string{}},
 	}
 
 	for _, tt := range tests {
-		got, err := f.Store.WaitingHuman(f.ctx(t), tt.factories, tt.limit)
+		got, err := f.Flow.InboxItems(f.ctx(t), tt.factories, tt.limit)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if titles := titlesOf(got); !reflect.DeepEqual(titles, tt.want) {
-			t.Errorf("%s: WaitingHuman = %v; want %v", tt.name, titles, tt.want)
+		titles := []string{}
+		for _, a := range got {
+			titles = append(titles, a.Item.Title)
+		}
+
+		if !reflect.DeepEqual(titles, tt.want) {
+			t.Errorf("%s: InboxItems = %v; want %v", tt.name, titles, tt.want)
+		}
+	}
+
+	got, err := f.Flow.InboxItems(f.ctx(t), factories, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	why := map[string]string{}
+	for _, a := range got {
+		why[a.Item.Title] = fmt.Sprintf("%q paused=%v", a.BlockedReason, a.Paused)
+	}
+
+	want := map[string]string{titleBlocked: `"checks failed" paused=false`, titlePaused: `"" paused=true`, titleMoved: `"" paused=false`}
+	for title, w := range want {
+		if why[title] != w {
+			t.Errorf("%s: blocked reason %s; want %s", title, why[title], w)
 		}
 	}
 }

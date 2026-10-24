@@ -60,7 +60,7 @@ export function FloorPage() {
       <div className={grid}>
         <ThroughputCard metrics={metrics} className="[grid-area:tp]" />
         <ConstraintCard report={constraint} board={board} className="[grid-area:hero]" />
-        <NeedsYouCard board={board} factory={factory} className="[grid-area:needs]" />
+        <NeedsYouCard factory={factory} className="[grid-area:needs]" />
         <LeadTimeCard bridge={bridge} factory={factory} className="[grid-area:flow]" />
         <WeeklyCard weekly={weekly} className="[grid-area:wk]" />
       </div>

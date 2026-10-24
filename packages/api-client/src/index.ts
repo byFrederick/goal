@@ -145,6 +145,7 @@ export type FactoryHealth = Schemas["FactoryHealth"];
 export type Inbox = Schemas["Inbox"];
 export type InboxEntry = Schemas["InboxEntry"];
 export type InboxEntryKind = Schemas["InboxEntryKind"];
+export type ApprovalBrief = Schemas["ApprovalBrief"];
 
 /** createGoalClient returns a typed fetch client for goald at baseUrl ("" for the same origin). */
 export function createGoalClient(baseUrl: string, options: Omit<ClientOptions, "baseUrl"> = {}) {

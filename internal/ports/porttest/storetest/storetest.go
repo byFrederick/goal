@@ -69,7 +69,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"FlowMetrics_DoneLeadTimeReworkWIPAndSpend", testFlowMetrics},
 		{"SpendSince_WindowBoundsAndFactoryIsolation", testSpendSince},
 		{"Attention_CountsWaitingBlockedAndTheOpenAndon", testAttention},
-		{"WaitingHuman_NewestChangeFirstInTheGivenFactories", testWaitingHuman},
+		{"InboxItems_DecisionsBlockedAndExpediteNewestChangeFirst", testInboxItems},
 		{"Concurrent_CreateItemNumbersAreUnique", testConcurrentCreate},
 		{"Concurrent_ClaimsNeverShareASlotOrAnItem", testConcurrentClaims},
 		{"Concurrent_RequeueOrTransitionWinsNeverBoth", testRequeueRace},

@@ -165,7 +165,7 @@ export interface paths {
         };
         /**
          * What waits for a person across the organization's factories
-         * @description The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. Kind decision is an item waiting for a human decision at a human station; later phases add other kinds, and clients render kinds they do not know as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind, then oldest first.
+         * @description The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (decision, then blocked, then expedite). Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision, andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
          */
         get: operations["getInbox"];
         put?: never;
@@ -2349,9 +2349,9 @@ export interface components {
          * @description What waits; later phases add kinds, which clients that do not know them show as a generic row
          * @enum {string}
          */
-        InboxEntryKind: "decision";
+        InboxEntryKind: "decision" | "andon" | "rework_warning" | "blocked" | "expedite";
         InboxEntry: {
-            /** @description "<kind>:<id of what waits>", as in decision:<item id> */
+            /** @description "<kind>:<id of what waits>": decision:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station> */
             id: string;
             kind: components["schemas"]["InboxEntryKind"];
             factory: {
@@ -2361,7 +2361,7 @@ export interface components {
             };
             /**
              * Format: date-time
-             * @description Since when it waits (the item's last change)
+             * @description Since when it waits: the item's last change (decision, blocked), its creation (expedite), the pull (andon), now (rework_warning)
              */
             since: string;
             /** @description The item it is about, or null for an entry that is about no item */
@@ -2370,6 +2370,50 @@ export interface components {
             station: string | null;
             /** @description merge for a decision at a merge station (POST /v1/orgs/{org}/items/{item}/merge), else null */
             action: components["schemas"]["StationAction"] | null;
+            /** @description A decision's brief, for deciding without opening the item; null for other kinds */
+            approval: components["schemas"]["ApprovalBrief"] | null;
+            /** @description Why a blocked item is blocked; null for other kinds */
+            blocked: components["schemas"]["InboxBlocked"] | null;
+            /** @description The open pull of an andon entry; null for other kinds */
+            andon: components["schemas"]["AndonPull"] | null;
+            /** @description The gate tally of a rework warning; null for other kinds */
+            rework: components["schemas"]["ReworkWarning"] | null;
+        };
+        /** @description From the output of the latest station that has one: its summary field, up to four of its other short top-level fields (strings of at most 120 characters, numbers, booleans; by key; never summary, pull_request, lane, decision, reason or category), the pull request the outputs name, and what the item has cost */
+        ApprovalBrief: {
+            summary: string | null;
+            facts: {
+                /** @description The output's field */
+                key: string;
+                /** @description The value as text (true and false read yes and no) */
+                value: string;
+            }[];
+            pull_request: string | null;
+            /** Format: double */
+            spend_usd: number;
+        };
+        InboxBlocked: {
+            /** @description The reason of the item's latest blocked or paused event, as written then; null without one */
+            reason: string | null;
+            /** @description A person paused it (goal retry resumes it) */
+            paused: boolean;
+        };
+        ReworkWarning: {
+            /** @description The gate station */
+            station: string;
+            /** @description Rejections among its last verdicts since the last andon clear */
+            rejected: number;
+            /** @description Verdicts counted (at most window) */
+            verdicts: number;
+            /** @description The andon policy's window */
+            window: number;
+            /**
+             * Format: double
+             * @description The andon policy's rework rate
+             */
+            threshold: number;
+            /** @description The most frequent category or reason of the rejections */
+            top_reason: string | null;
         };
         BuilderMeta: {
             models: components["schemas"]["BuilderModel"][];

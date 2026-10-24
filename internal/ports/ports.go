@@ -159,11 +159,6 @@ type Store interface {
 	// AndonPulls returns up to limit of the factory's andon pulls, open and cleared, the most
 	// recently pulled first.
 	AndonPulls(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.AndonPull, error)
-
-	// WaitingHuman returns up to limit items in state waiting_human in the given factories, most
-	// recently changed first (updated_at descending, then id). Interim: phase 2.2-E (E11)
-	// replaces it with FlowStats.InboxItems.
-	WaitingHuman(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.Item, error)
 }
 
 // FlowStats is the read model of how work flows: spans of time items spend at stations and the
@@ -216,6 +211,12 @@ type FlowStats interface {
 	// next rework round from another station; its label comes from the rejection (gate_rejected
 	// or rejected) that station gave then, or from a person's manual move back.
 	AgentStats(ctx context.Context, factory domain.FactoryID, agent string, since, until time.Time) (domain.AgentStats, error)
+
+	// InboxItems returns up to limit of the open items in the given factories that may need a
+	// person (the organization's inbox): waiting for a decision, blocked (with the reason of its
+	// latest blocked or paused event), or in the expedite lane, most recently changed first
+	// (updated_at descending, then id). work_items_attention_idx (migration 00033) serves it.
+	InboxItems(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.AttentionItem, error)
 }
 
 // FlowQuery is what a FlowStats read measures: one factory's items over [Since, Until).

@@ -208,16 +208,16 @@ func (e CheckResultStatus) Valid() bool {
 
 // Defines values for ClassOfService.
 const (
-	Expedite ClassOfService = "expedite"
-	Standard ClassOfService = "standard"
+	ClassOfServiceExpedite ClassOfService = "expedite"
+	ClassOfServiceStandard ClassOfService = "standard"
 )
 
 // Valid indicates whether the value is a known member of the ClassOfService enum.
 func (e ClassOfService) Valid() bool {
 	switch e {
-	case Expedite:
+	case ClassOfServiceExpedite:
 		return true
-	case Standard:
+	case ClassOfServiceStandard:
 		return true
 	default:
 		return false
@@ -379,13 +379,25 @@ func (e ImportStartKind) Valid() bool {
 
 // Defines values for InboxEntryKind.
 const (
-	Decision InboxEntryKind = "decision"
+	InboxEntryKindAndon         InboxEntryKind = "andon"
+	InboxEntryKindBlocked       InboxEntryKind = "blocked"
+	InboxEntryKindDecision      InboxEntryKind = "decision"
+	InboxEntryKindExpedite      InboxEntryKind = "expedite"
+	InboxEntryKindReworkWarning InboxEntryKind = "rework_warning"
 )
 
 // Valid indicates whether the value is a known member of the InboxEntryKind enum.
 func (e InboxEntryKind) Valid() bool {
 	switch e {
-	case Decision:
+	case InboxEntryKindAndon:
+		return true
+	case InboxEntryKindBlocked:
+		return true
+	case InboxEntryKindDecision:
+		return true
+	case InboxEntryKindExpedite:
+		return true
+	case InboxEntryKindReworkWarning:
 		return true
 	default:
 		return false
@@ -819,6 +831,20 @@ type AndonState struct {
 
 	// Recent The latest pulls, open and cleared, the most recent first (up to limit)
 	Recent []AndonPull `json:"recent"`
+}
+
+// ApprovalBrief From the output of the latest station that has one: its summary field, up to four of its other short top-level fields (strings of at most 120 characters, numbers, booleans; by key; never summary, pull_request, lane, decision, reason or category), the pull request the outputs name, and what the item has cost
+type ApprovalBrief struct {
+	Facts []struct {
+		// Key The output's field
+		Key string `json:"key"`
+
+		// Value The value as text (true and false read yes and no)
+		Value string `json:"value"`
+	} `json:"facts"`
+	PullRequest *string `json:"pull_request"`
+	SpendUsd    float64 `json:"spend_usd"`
+	Summary     *string `json:"summary"`
 }
 
 // AuditEntry defines model for AuditEntry.
@@ -1550,17 +1576,35 @@ type Inbox struct {
 	Truncated bool `json:"truncated"`
 }
 
+// InboxBlocked defines model for InboxBlocked.
+type InboxBlocked struct {
+	// Paused A person paused it (goal retry resumes it)
+	Paused bool `json:"paused"`
+
+	// Reason The reason of the item's latest blocked or paused event, as written then; null without one
+	Reason *string `json:"reason"`
+}
+
 // InboxEntry defines model for InboxEntry.
 type InboxEntry struct {
 	// Action merge for a decision at a merge station (POST /v1/orgs/{org}/items/{item}/merge), else null
-	Action  *StationAction `json:"action"`
+	Action *StationAction `json:"action"`
+
+	// Andon The open pull of an andon entry; null for other kinds
+	Andon *AndonPull `json:"andon"`
+
+	// Approval A decision's brief, for deciding without opening the item; null for other kinds
+	Approval *ApprovalBrief `json:"approval"`
+
+	// Blocked Why a blocked item is blocked; null for other kinds
+	Blocked *InboxBlocked `json:"blocked"`
 	Factory struct {
 		Id    string  `json:"id"`
 		Name  string  `json:"name"`
 		Title *string `json:"title"`
 	} `json:"factory"`
 
-	// Id "<kind>:<id of what waits>", as in decision:<item id>
+	// Id "<kind>:<id of what waits>": decision:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>
 	Id string `json:"id"`
 
 	// Item The item it is about, or null for an entry that is about no item
@@ -1569,7 +1613,10 @@ type InboxEntry struct {
 	// Kind What waits; later phases add kinds, which clients that do not know them show as a generic row
 	Kind InboxEntryKind `json:"kind"`
 
-	// Since Since when it waits (the item's last change)
+	// Rework The gate tally of a rework warning; null for other kinds
+	Rework *ReworkWarning `json:"rework"`
+
+	// Since Since when it waits: the item's last change (decision, blocked), its creation (expedite), the pull (andon), now (rework_warning)
 	Since time.Time `json:"since"`
 
 	// Station The station where it waits
@@ -2139,6 +2186,27 @@ type RestoreRequest struct {
 // RevertRequest defines model for RevertRequest.
 type RevertRequest struct {
 	Pointers []string `json:"pointers"`
+}
+
+// ReworkWarning defines model for ReworkWarning.
+type ReworkWarning struct {
+	// Rejected Rejections among its last verdicts since the last andon clear
+	Rejected int `json:"rejected"`
+
+	// Station The gate station
+	Station string `json:"station"`
+
+	// Threshold The andon policy's rework rate
+	Threshold float64 `json:"threshold"`
+
+	// TopReason The most frequent category or reason of the rejections
+	TopReason *string `json:"top_reason"`
+
+	// Verdicts Verdicts counted (at most window)
+	Verdicts int `json:"verdicts"`
+
+	// Window The andon policy's window
+	Window int `json:"window"`
 }
 
 // Run One agent run: one container working one item at one station. Its full transcript is not kept (phase 2.2); the item's events carry the trace.
@@ -3609,7 +3677,7 @@ type ClientInterface interface {
 
 	// GetInbox What waits for a person across the organization's factories
 	//
-	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. Kind decision is an item waiting for a human decision at a human station; later phases add other kinds, and clients render kinds they do not know as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind, then oldest first.
+	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (decision, then blocked, then expedite). Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision, andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 	//
 	// Corresponds with GET /v1/orgs/{org}/inbox (the `GetInbox` operationId).
 	GetInbox(ctx context.Context, org OrgRef, params *GetInboxParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -4872,7 +4940,7 @@ func (c *Client) RestoreVersion(ctx context.Context, org OrgRef, factory Factory
 
 // GetInbox What waits for a person across the organization's factories
 //
-// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. Kind decision is an item waiting for a human decision at a human station; later phases add other kinds, and clients render kinds they do not know as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind, then oldest first.
+// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (decision, then blocked, then expedite). Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision, andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 //
 // Corresponds with GET /v1/orgs/{org}/inbox (the `GetInbox` operationId).
 func (c *Client) GetInbox(ctx context.Context, org OrgRef, params *GetInboxParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -9602,7 +9670,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetInboxWithResponse What waits for a person across the organization's factories
 	//
-	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. Kind decision is an item waiting for a human decision at a human station; later phases add other kinds, and clients render kinds they do not know as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind, then oldest first.
+	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (decision, then blocked, then expedite). Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision, andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -13860,7 +13928,7 @@ func (c *ClientWithResponses) RestoreVersionWithResponse(ctx context.Context, or
 
 // GetInboxWithResponse What waits for a person across the organization's factories
 //
-// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. Kind decision is an item waiting for a human decision at a human station; later phases add other kinds, and clients render kinds they do not know as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind, then oldest first.
+// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (decision, then blocked, then expedite). Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision, andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 //
 // Returns a wrapper object for the known response body format(s).
 //

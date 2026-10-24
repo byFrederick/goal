@@ -207,8 +207,8 @@ func (s *Store) attention(org domain.OrgID, factory domain.FactoryID) domain.Att
 	return a
 }
 
-// WaitingHuman implements ports.Store.
-func (s *Store) WaitingHuman(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.Item, error) {
+// InboxItems implements ports.FlowStats.
+func (s *Store) InboxItems(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.AttentionItem, error) {
 	org, err := orgOf(ctx)
 	if err != nil {
 		return nil, err
@@ -220,7 +220,7 @@ func (s *Store) WaitingHuman(ctx context.Context, factories []domain.FactoryID, 
 	var match []*domain.Item
 
 	for _, it := range s.items {
-		if it.OrgID == org && it.State == domain.StateWaitingHuman && slices.Contains(factories, it.FactoryID) {
+		if it.OrgID == org && needsPerson(it) && slices.Contains(factories, it.FactoryID) {
 			match = append(match, it)
 		}
 	}
@@ -229,10 +229,37 @@ func (s *Store) WaitingHuman(ctx context.Context, factories []domain.FactoryID, 
 		return cmp.Or(b.UpdatedAt.Compare(a.UpdatedAt), cmp.Compare(a.ID, b.ID))
 	})
 
-	out := make([]domain.Item, 0, min(limit, len(match)))
+	out := make([]domain.AttentionItem, 0, min(limit, len(match)))
 	for _, it := range match[:min(limit, len(match))] {
-		out = append(out, clone(it))
+		a := domain.AttentionItem{Item: clone(it)}
+		if it.State == domain.StateBlocked {
+			a.BlockedReason, a.Paused = s.blocker(it.ID)
+		}
+
+		out = append(out, a)
 	}
 
 	return out, nil
+}
+
+// needsPerson reports whether an item belongs in the inbox: waiting for a decision, blocked, or
+// open in the expedite lane.
+func needsPerson(it *domain.Item) bool {
+	open := it.State != domain.StateDone && it.State != domain.StateCancelled
+
+	return it.State == domain.StateWaitingHuman || it.State == domain.StateBlocked || (it.Class == domain.ClassExpedite && open)
+}
+
+// blocker is the reason of an item's latest blocked or paused event and whether it was a pause.
+// Callers hold s.mu.
+func (s *Store) blocker(id domain.ItemID) (string, bool) {
+	for _, e := range slices.Backward(s.events) {
+		if e.ItemID == id && (e.Kind == domain.EventBlocked || e.Kind == domain.EventPaused) {
+			reason, _ := e.Data["reason"].(string)
+
+			return reason, e.Kind == domain.EventPaused
+		}
+	}
+
+	return "", false
 }

@@ -195,19 +195,20 @@ func overviewLines(l gen.FactoryOverviewList) []string {
 	return out
 }
 
-func TestAPI_InboxListsEveryDecision(t *testing.T) {
+func TestAPI_InboxListsDecisionsFirst(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
 	approve := h.waitingAtApprove(t) // changed at t0
 	older := h.seed(t, stMerge, domain.StateWaitingHuman, t0.Add(-2*time.Hour))
 	old := h.seed(t, stMerge, domain.StateWaitingHuman, t0.Add(-time.Hour))
-	h.seed(t, stBuild, domain.StateBlocked, t0)
+	blocked := h.seed(t, stBuild, domain.StateBlocked, t0)
 
 	every := []string{
 		"decision:" + string(older.ID) + " line#1 at merge (action merge), since " + t0.Add(-2*time.Hour).Format(time.RFC3339),
 		"decision:" + string(old.ID) + " line#2 at merge (action merge), since " + t0.Add(-time.Hour).Format(time.RFC3339),
 		"decision:" + approve.Id + " acme#1 at approve, since " + t0.Format(time.RFC3339),
+		"blocked:" + string(blocked.ID) + " line#3 at build, kind blocked of factory line, since " + t0.Format(time.RFC3339),
 	}
 
 	tests := []struct {
@@ -215,9 +216,9 @@ func TestAPI_InboxListsEveryDecision(t *testing.T) {
 		truncated  bool
 		want       []string
 	}{
-		{name: "every decision, oldest first", path: "/v1/orgs/acme/inbox", want: every},
-		{name: "the most recent, truncated", path: "/v1/orgs/acme/inbox?limit=2", truncated: true, want: every[1:]},
-		{name: "one factory", path: "/v1/orgs/acme/inbox?factory=acme", want: every[2:]},
+		{name: "decisions first, oldest first", path: "/v1/orgs/acme/inbox", want: every},
+		{name: "the most recent, truncated", path: "/v1/orgs/acme/inbox?limit=3", truncated: true, want: every[1:]},
+		{name: "one factory", path: "/v1/orgs/acme/inbox?factory=acme", want: every[2:3]},
 		{name: "another organization", path: "/v1/orgs/example-labs/inbox", want: []string{}},
 	}
 
@@ -236,12 +237,17 @@ func entryLines(in gen.Inbox) []string {
 	out := []string{}
 
 	for _, e := range in.Entries {
-		s := fmt.Sprintf("%s %s at %s", e.Id, e.Item.Ref, *e.Station)
+		ref := "-"
+		if e.Item != nil {
+			ref = e.Item.Ref
+		}
+
+		s := fmt.Sprintf("%s %s at %s", e.Id, ref, deref(e.Station))
 		if e.Action != nil {
 			s += " (action " + string(*e.Action) + ")"
 		}
 
-		if e.Kind != gen.Decision || !strings.HasPrefix(e.Item.Ref, e.Factory.Name+"#") {
+		if e.Kind != gen.InboxEntryKindDecision || !strings.HasPrefix(ref, e.Factory.Name+"#") {
 			s += fmt.Sprintf(", kind %s of factory %s", e.Kind, e.Factory.Name)
 		}
 

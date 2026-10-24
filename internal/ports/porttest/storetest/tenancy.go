@@ -104,8 +104,8 @@ func testNoOrg(f *fixture) {
 	_, err = f.Store.Attention(ctx)
 	expect(t, "Attention", err, domain.ErrNoOrg)
 
-	_, err = f.Store.WaitingHuman(ctx, []domain.FactoryID{f.factory}, 10)
-	expect(t, "WaitingHuman", err, domain.ErrNoOrg)
+	_, err = f.Flow.InboxItems(ctx, []domain.FactoryID{f.factory}, 10)
+	expect(t, "InboxItems", err, domain.ErrNoOrg)
 
 	if got := f.item(t, it.ID); got.State != domain.StateInProgress || got.OrgID != f.org {
 		t.Errorf("item = %+v; want it unchanged, in progress in org %s", got, f.org)
@@ -186,9 +186,9 @@ func (f *fixture) seesNoItemsOf(t *testing.T, factory domain.FactoryID) {
 		t.Errorf("ListItems = %+v, %v; want nothing", items, err)
 	}
 
-	waitingHuman, err := f.Store.WaitingHuman(ctx, []domain.FactoryID{factory}, 10)
-	if err != nil || len(waitingHuman) != 0 {
-		t.Errorf("WaitingHuman = %+v, %v; want nothing", waitingHuman, err)
+	inbox, err := f.Flow.InboxItems(ctx, []domain.FactoryID{factory}, 10)
+	if err != nil || len(inbox) != 0 {
+		t.Errorf("InboxItems = %+v, %v; want nothing", inbox, err)
 	}
 
 	attention, err := f.Store.Attention(ctx)

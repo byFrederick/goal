@@ -82,7 +82,7 @@ type Items interface {
 	SpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
 	ItemTimes(ctx context.Context, q ports.FlowQuery) ([]domain.ItemTime, error)
 	Attention(ctx context.Context) ([]domain.Attention, error)
-	WaitingHuman(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.Item, error)
+	InboxItems(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.AttentionItem, error)
 	ItemSpans(ctx context.Context, id domain.ItemID) ([]domain.Span, error)
 	CurrentRun(ctx context.Context, id domain.ItemID) (*domain.CurrentRun, error)
 	LiveTurns(ctx context.Context, factory domain.FactoryID) (map[domain.ItemID]int, error)
@@ -120,7 +120,7 @@ type Deps struct {
 	Authorizer Authorizer
 	// Feed serves /v1/orgs/{org}/stream; the caller runs it (Feed.Run).
 	Feed *Feed
-	// InboxSources add entries to /v1/orgs/{org}/inbox after the built-in decisions (shell.go);
+	// InboxSources add entries to /v1/orgs/{org}/inbox after the built-in work entries (inbox.go);
 	// later phases register theirs here.
 	InboxSources []InboxSource
 	// Builder serves the factory editor's metadata and the skills catalog.
@@ -171,7 +171,7 @@ func New(d Deps) (http.Handler, error) {
 		engine: d.Engine, items: d.Items, factories: d.Factories, defs: d.Definitions, versions: d.Versions, orgs: d.Orgs, audit: d.Audit,
 		retention: d.OrgRetention, authz: d.Authorizer, feed: d.Feed, builder: d.Builder, clock: d.Clock, log: log,
 	}
-	s.inbox = append([]InboxSource{decisions{s: s}}, d.InboxSources...)
+	s.inbox = append([]InboxSource{workInbox{s: s}}, d.InboxSources...)
 
 	strict := gen.NewStrictHandlerWithOptions(s, []gen.StrictMiddlewareFunc{s.scope}, gen.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {

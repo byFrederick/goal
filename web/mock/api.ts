@@ -11,6 +11,7 @@ import type {
   AgentStats,
   AndonPull,
   AndonState,
+  ApprovalBrief,
   AuditPage,
   Board,
   BoardStation,
@@ -500,15 +501,101 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     };
   };
 
-  const decision = (it: MockItem, f: Factory): InboxEntry => ({
-    id: `decision:${it.id}`,
-    kind: 'decision',
+  /** An entry of kind about `what` of factory f, waiting since. */
+  const entry = (f: Factory, kind: InboxEntry['kind'], what: string, since: string): InboxEntry => ({
+    id: `${kind}:${what}`,
+    kind,
     factory: { id: f.id, name: f.name, title: f.title ?? null },
-    since: it.updated_at,
-    item: card(it),
-    station: it.station,
-    action: f.stations.find((s) => s.id === it.station)?.action ?? null,
+    since,
+    item: null,
+    station: null,
+    action: null,
+    approval: null,
+    blocked: null,
+    andon: null,
+    rework: null,
   });
+
+  /** The brief of a decision, from the output of the latest station that has one (as goald builds it). */
+  const briefOf = (it: MockItem, f: Factory): ApprovalBrief => {
+    const out = f.stations
+      .map((s) => it.outputs[s.id])
+      .findLast((o): o is Record<string, unknown> => typeof o === 'object' && o !== null && !Array.isArray(o));
+    const skipped = ['summary', 'pull_request', 'lane', 'decision', 'reason', 'category'];
+    const facts = Object.keys(out ?? {})
+      .sort()
+      .filter((key) => !skipped.includes(key))
+      .flatMap((key) => {
+        const v = out?.[key];
+        if (typeof v === 'string' && v.trim() !== '' && [...v.trim()].length <= 120) return [{ key, value: v.trim() }];
+        if (typeof v === 'number') return [{ key, value: String(v) }];
+        if (typeof v === 'boolean') return [{ key, value: v ? 'yes' : 'no' }];
+        return [];
+      })
+      .slice(0, 4);
+    const summary = typeof out?.summary === 'string' ? out.summary.trim() : '';
+    return { summary: summary || null, facts, pull_request: it.pr_url, spend_usd: it.cost_usd };
+  };
+
+  /** Why a blocked item is blocked: its latest blocked or paused event. */
+  const blockerOf = (it: MockItem): InboxEntry['blocked'] => {
+    const last = state.events.findLast((e) => e.item_id === it.id && (e.kind === 'blocked' || e.kind === 'paused'));
+    const reason = typeof last?.data.reason === 'string' && last.data.reason ? last.data.reason : null;
+    return { reason, paused: last?.kind === 'paused' };
+  };
+
+  /** One factory's inbox entries, as goald's work source makes them (E §8.4). */
+  const inboxOf = (f: Factory): InboxEntry[] => {
+    const open = (it: MockItem) => it.state !== 'done' && it.state !== 'cancelled';
+    const items = state.items
+      .filter((it) => it.factory === f.name)
+      .flatMap((it): InboxEntry[] => {
+        const base = { ...entry(f, 'expedite', it.id, it.created_at), item: card(it), station: it.station };
+        if (it.state === 'waiting_human') {
+          return [
+            {
+              ...base,
+              id: `decision:${it.id}`,
+              kind: 'decision',
+              since: it.updated_at,
+              action: f.stations.find((s) => s.id === it.station)?.action ?? null,
+              approval: briefOf(it, f),
+            },
+          ];
+        }
+        if (it.state === 'blocked') {
+          return [{ ...base, id: `blocked:${it.id}`, kind: 'blocked', since: it.updated_at, blocked: blockerOf(it) }];
+        }
+        return it.class_of_service === 'expedite' && open(it) ? [base] : [];
+      });
+
+    const pull = openAndon(f);
+    if (pull) return [...items, { ...entry(f, 'andon', String(pull.id), pull.pulled_at), andon: pull }];
+
+    const gates = state.gates[f.name];
+    const now = new Date().toISOString();
+    const warnings = (gates?.tallies ?? []).flatMap((t): InboxEntry[] =>
+      t.warning && gates?.policy
+        ? [
+            {
+              ...entry(f, 'rework_warning', `${f.id}:${t.station}`, now),
+              station: t.station,
+              rework: {
+                station: t.station,
+                rejected: t.rejected,
+                verdicts: t.verdicts,
+                window: gates.policy.window,
+                threshold: gates.policy.rework_rate,
+                top_reason: t.top_reason,
+              },
+            },
+          ]
+        : [],
+    );
+    return [...items, ...warnings];
+  };
+
+  const kindOrder: InboxEntry['kind'][] = ['decision', 'andon', 'rework_warning', 'blocked', 'expedite'];
 
   /**
    * A board station's statistics: the seeded busy and send-back shares and queue trend, how long
@@ -815,7 +902,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     }
 
     if (rest === '/inbox' && method === 'GET') {
-      const limit = Number(url.searchParams.get('limit') ?? 20);
+      const limit = Number(url.searchParams.get('limit') ?? 200);
       if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
         return problem(res, 400, 'Bad Request', 'limit must be in [1, 500]');
       }
@@ -823,10 +910,18 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       const only = key ? findFactory(key, org.id) : undefined;
       if (key && !only) return problem(res, 404, 'Factory not found', key);
       const entries = (only ? [only] : factoriesOf(org.id))
-        .flatMap((f) => inState(f, 'waiting_human').map((it) => decision(it, f)))
-        .sort((a, b) => b.since.localeCompare(a.since));
-      // The most recent entries, oldest first, as goald orders them.
-      const body: Inbox = { entries: entries.slice(0, limit).reverse(), truncated: entries.length > limit };
+        .flatMap(inboxOf)
+        .sort((a, b) => b.since.localeCompare(a.since) || a.id.localeCompare(b.id));
+      // The most recent entries, by kind and then oldest first, as goald orders them.
+      const kept = entries
+        .slice(0, limit)
+        .sort(
+          (a, b) =>
+            kindOrder.indexOf(a.kind) - kindOrder.indexOf(b.kind) ||
+            a.since.localeCompare(b.since) ||
+            a.id.localeCompare(b.id),
+        );
+      const body: Inbox = { entries: kept, truncated: entries.length > limit };
       return json(res, 200, body);
     }
 

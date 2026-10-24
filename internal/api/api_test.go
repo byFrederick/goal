@@ -249,9 +249,9 @@ func (r reads) Attention(ctx context.Context) ([]domain.Attention, error) {
 	return r.Store.Attention(ctx)
 }
 
-func (r reads) WaitingHuman(ctx context.Context, fs []domain.FactoryID, limit int) ([]domain.Item, error) {
-	r.seam.record("WaitingHuman")
-	return r.Store.WaitingHuman(ctx, fs, limit)
+func (r reads) InboxItems(ctx context.Context, fs []domain.FactoryID, limit int) ([]domain.AttentionItem, error) {
+	r.seam.record("InboxItems")
+	return r.Store.InboxItems(ctx, fs, limit)
 }
 
 func (r reads) FlowMetrics(ctx context.Context, q ports.FlowQuery, longWaitsAt string) (domain.FlowMetrics, error) {

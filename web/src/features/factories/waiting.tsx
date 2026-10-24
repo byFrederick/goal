@@ -15,7 +15,14 @@ export const waitingId = 'waiting';
 
 const iconProps = { size: 18, strokeWidth: 1.5 } as const;
 
-const newestFirst = (entries: readonly InboxEntry[]) => entries.toSorted((a, b) => b.since.localeCompare(a.since));
+/**
+ * The inbox's kinds that wait on no one's decision: a stopped line, a rework warning, blocked and
+ * expedited work show on each factory's Floor, not in this list of what waits on you.
+ */
+const notDecisions: ReadonlySet<InboxEntry['kind']> = new Set(['andon', 'rework_warning', 'blocked', 'expedite']);
+
+const newestFirst = (entries: readonly InboxEntry[]) =>
+  entries.filter((e) => !notDecisions.has(e.kind)).toSorted((a, b) => b.since.localeCompare(a.since));
 
 export function WaitingList({ org, inbox, className }: { org: OrgSummary; inbox: Inbox; className?: string }) {
   const entries = newestFirst(inbox.entries);
@@ -113,7 +120,7 @@ export function WaitingBanner({
   const total = overview.waiting_on_you;
   if (total === 0) return null;
 
-  const only = total === 1 ? inbox.entries.find((e) => e.item !== null) : undefined;
+  const only = total === 1 ? newestFirst(inbox.entries).find((e) => e.item !== null) : undefined;
   const className =
     'grid min-h-14 grid-cols-[36px_minmax(0,1fr)_12px] items-center gap-3 rounded-card bg-you-tint px-3.5 py-2 text-ink no-underline md:hidden';
   const content = (

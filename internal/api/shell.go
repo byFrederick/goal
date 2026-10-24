@@ -23,7 +23,9 @@ import (
 
 // Limits of the shell's reads.
 const (
-	defaultInboxLimit = 20
+	// defaultInboxLimit is enough for every screen to count what it groups: the Floor's Needs you
+	// card and the phone's Items view show all of a factory's decisions (E §8.4).
+	defaultInboxLimit = 200
 	maxInboxLimit     = 500
 	// An overview slower than this, or over more factories, is logged: it reads 3 queries per
 	// factory, fine at the expected organization size.
@@ -32,8 +34,9 @@ const (
 )
 
 // InboxSource adds entries to the organization's inbox (GET /v1/orgs/{org}/inbox). The built-in
-// source is decisions; phase 2.2-E and phase 3 register theirs in Deps.InboxSources. The request's
-// actor and organization are in ctx.
+// source is the work's (inbox.go: decisions, andon pulls, rework warnings, blocked and expedite
+// items); later phases register theirs in Deps.InboxSources (phase 4's tool approvals). The
+// request's actor and organization are in ctx.
 type InboxSource interface {
 	Inbox(ctx context.Context, q InboxQuery) ([]gen.InboxEntry, error)
 }
@@ -49,7 +52,10 @@ type InboxQuery struct {
 }
 
 // inboxKinds orders the inbox's entries by kind; a kind not listed comes last.
-var inboxKinds = []gen.InboxEntryKind{gen.Decision}
+var inboxKinds = []gen.InboxEntryKind{
+	gen.InboxEntryKindDecision, gen.InboxEntryKindAndon, gen.InboxEntryKindReworkWarning, gen.InboxEntryKindBlocked,
+	gen.InboxEntryKindExpedite,
+}
 
 func (s *server) GetOrgAttention(ctx context.Context, _ gen.GetOrgAttentionRequestObject) (gen.GetOrgAttentionResponseObject, error) {
 	attention, err := s.attention(ctx)
@@ -254,53 +260,4 @@ func kindRank(k gen.InboxEntryKind) int {
 	}
 
 	return len(inboxKinds)
-}
-
-// decisions is the inbox's built-in source: every item waiting for a human decision, which in
-// phase 2.2 is waiting on you. Interim: phase 2.2-E replaces it with its item source.
-type decisions struct {
-	s *server
-}
-
-// Inbox implements InboxSource.
-func (d decisions) Inbox(ctx context.Context, q InboxQuery) ([]gen.InboxEntry, error) {
-	byID := make(map[domain.FactoryID]*config.Factory, len(q.Factories))
-	ids := make([]domain.FactoryID, 0, len(q.Factories))
-
-	for _, f := range q.Factories {
-		id := domain.FactoryID(f.Metadata.ID)
-		byID[id] = f
-		ids = append(ids, id)
-	}
-
-	items, err := d.s.items.WaitingHuman(ctx, ids, q.Limit+1)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]gen.InboxEntry, 0, len(items))
-
-	for _, it := range items {
-		f := byID[it.FactoryID]
-		l := f.Line()
-
-		cards, err := d.s.cards(ctx, f, l, "", []domain.Item{it}) // decisions wait on a person, never in a buffer
-		if err != nil {
-			return nil, err
-		}
-
-		e := gen.InboxEntry{
-			Id: string(gen.Decision) + ":" + string(it.ID), Kind: gen.Decision, Since: it.UpdatedAt,
-			Item: &cards[0], Station: optional(it.Station),
-		}
-		e.Factory.Id, e.Factory.Name, e.Factory.Title = f.Metadata.ID, f.Metadata.Name, optional(f.Metadata.Title)
-
-		if st, ok := l.Station(it.Station); ok {
-			e.Action = actionOf(string(st.Action))
-		}
-
-		out = append(out, e)
-	}
-
-	return out, nil
 }

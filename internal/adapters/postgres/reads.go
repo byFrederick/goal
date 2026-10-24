@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"time"
@@ -151,8 +152,8 @@ func (s *Store) Attention(ctx context.Context) ([]domain.Attention, error) {
 	return out, nil
 }
 
-// WaitingHuman implements ports.Store. A factory id that is not a UUID names no factory.
-func (s *Store) WaitingHuman(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.Item, error) {
+// InboxItems implements ports.FlowStats. A factory id that is not a UUID names no factory.
+func (s *Store) InboxItems(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.AttentionItem, error) {
 	ids := make([]uuid.UUID, 0, len(factories))
 
 	for _, f := range factories {
@@ -161,12 +162,31 @@ func (s *Store) WaitingHuman(ctx context.Context, factories []domain.FactoryID, 
 		}
 	}
 
-	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.WorkItem, error) {
-		return q.WaitingHumanItems(ctx, db.WaitingHumanItemsParams{Factories: ids, MaxItems: int64(limit)})
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.InboxItemsRow, error) {
+		return q.InboxItems(ctx, db.InboxItemsParams{Factories: ids, MaxItems: int64(limit)})
 	})
 	if err != nil {
-		return nil, fmt.Errorf("items waiting for a person: %w", err)
+		return nil, fmt.Errorf("items that may need a person: %w", err)
 	}
 
-	return convertAll(rows, itemFrom)
+	return convertAll(rows, attentionItemFrom)
+}
+
+func attentionItemFrom(r db.InboxItemsRow) (domain.AttentionItem, error) {
+	it, err := itemFrom(r.WorkItem)
+	if err != nil {
+		return domain.AttentionItem{}, err
+	}
+
+	var data struct {
+		Reason string `json:"reason"`
+	}
+
+	if err := json.Unmarshal(r.BlockerData, &data); err != nil {
+		return domain.AttentionItem{}, fmt.Errorf("item %s: blocking event: %w", it.ID, err)
+	}
+
+	return domain.AttentionItem{
+		Item: it, BlockedReason: data.Reason, Paused: r.BlockerKind == string(domain.EventPaused),
+	}, nil
 }

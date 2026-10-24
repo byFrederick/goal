@@ -103,11 +103,22 @@ interface Props {
   /** `stack` fills the width with 44px targets, for phones and narrow cards. */
   layout?: 'row' | 'stack';
   size?: 'md' | 'lg';
+  /** The send back button's words where there are no controls ("Send back" by default). */
+  sendBackLabel?: string;
   className?: string;
 }
 
 /** The decisions available on an item, or nothing when there are none. */
-export function ItemDecisions({ item, factory, station, controls, layout = 'row', size = 'md', className }: Props) {
+export function ItemDecisions({
+  item,
+  factory,
+  station,
+  controls,
+  layout = 'row',
+  size = 'md',
+  sendBackLabel = 'Send back',
+  className,
+}: Props) {
   const decide = useDecision(item, factory);
   const can = decisionsFor(item, station);
   const ctl = controls ? controlsFor(item, controls.reworkTarget) : { pause: false, sendBack: false, move: false };
@@ -119,7 +130,7 @@ export function ItemDecisions({ item, factory, station, controls, layout = 'row'
   const pending = decide.isPending ? decide.variables?.kind : undefined;
   const btn = layout === 'stack' ? 'w-full justify-center' : '';
   const s = layout === 'stack' ? 'lg' : size;
-  const backTo = controls?.reworkTarget ? `Send back to ${humanize(controls.reworkTarget)}` : 'Send back';
+  const backTo = controls?.reworkTarget ? `Send back to ${humanize(controls.reworkTarget)}` : sendBackLabel;
   const resume = controls?.paused ?? false;
 
   return (

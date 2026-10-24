@@ -10,6 +10,7 @@ import { NewItemButton } from '../../shared/new-item';
 import { useOrg } from '../../shared/org';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
+import { PhoneNeedsYou } from './phone-needs-you';
 
 export const itemFilters: { state?: ItemState; label: string }[] = [
   { label: 'All' },
@@ -39,6 +40,8 @@ export function ItemsPage() {
           <NewItemButton factory={factory} />
         </span>
       </header>
+
+      <PhoneNeedsYou factory={factory} />
 
       <nav aria-label="Filter items" className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
         <ul className="m-0 flex list-none gap-1 p-0">

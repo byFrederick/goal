@@ -345,6 +345,8 @@ func TestRLS_OtherOrgInvisible(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	expectInboxOfItsOrgOnly(t, s, a, b, factory)
+
 	for _, table := range orgTables {
 		var n int
 		if err := asOrg(t, pool, b, "SELECT count(*) FROM "+table+" WHERE org_id <> '"+string(b)+"'", &n); err != nil || n != 0 {
@@ -376,5 +378,28 @@ func TestRLS_OtherOrgInvisible(t *testing.T) {
 
 	if got, err := s.Item(ctxA, it.ID); err != nil || got.Title != "a's" || got.State != domain.StateInProgress {
 		t.Errorf("a's item = %+v, %v; want it untouched", got, err)
+	}
+}
+
+// expectInboxOfItsOrgOnly adds a decision to factory of owner and checks it is in
+// that organization's inbox and in no other's, even when the other names the factory.
+func expectInboxOfItsOrgOnly(t *testing.T, s *Store, owner, other domain.OrgID, factory domain.FactoryID) {
+	t.Helper()
+
+	ctx := domain.WithOrg(t.Context(), owner)
+
+	if _, err := s.CreateItem(ctx, domain.NewItem{
+		FactoryID: factory, Type: typeTask, Title: "a decision", Station: stApprove,
+		State: domain.StateWaitingHuman, Class: domain.ClassStandard, CreatedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if inbox, err := s.InboxItems(ctx, []domain.FactoryID{factory}, 10); err != nil || len(inbox) != 1 {
+		t.Errorf("the owner's inbox = %+v, %v; want its decision", inbox, err)
+	}
+
+	if inbox, err := s.InboxItems(domain.WithOrg(t.Context(), other), []domain.FactoryID{factory}, 10); err != nil || len(inbox) != 0 {
+		t.Errorf("another org's inbox over the factory = %+v, %v; want nothing", inbox, err)
 	}
 }

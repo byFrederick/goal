@@ -71,7 +71,7 @@ routes/       file-based route files (TanStack Router plugin; routeTree.gen.ts i
                                                   phone crumb and tab bar; its index is the Floor
                                                   (?from&to&type: the range of UTC days and work type)
                   /o/$org/f/$factory/board      → Board        (?station= picks the station on phones)
-                  /o/$org/f/$factory/items      → Items list   (?state= filters)
+                  /o/$org/f/$factory/items      → Items list   (?state= filters; on phones it opens with Needs you)
                   /o/$org/f/$factory/items/$ref → Item         ($ref: the number, goal#12 or the id)
                   /o/$org/f/$factory/definition → D's editor: frame + draft session; its index → /definition/line
                   /o/$org/f/$factory/definition/$section → basics|line|agents|connections|review|versions (?mode=yaml, ?station=, ?agent=, …)
@@ -88,6 +88,7 @@ features/
                     frame/: the editor frame, status line, tiles, dialogs and unsaved guard; section-views.tsx: each section's view (basics/, line/, …)
 shared/       code more than one feature uses: decisions (approve, send back, merge, retry), new item,
               the andon cord (andon.tsx: the line status and the pull and clear dialogs, from Board.line),
+              what waits on you (needs-you.ts: rows from the inbox; needs-you-list.tsx: the rows and the approval card),
               definition/ (typed views of B's FactoryModel, where an agent works, slots at full WIP, pointer ↔ line),
               the organization's live stream, org and factory helpers, marks, formatting (Intl), state labels, the address rule (org-rules.ts)
 ui/           design-system primitives on Radix: button, dialog, confirm-dialog (typed confirmation), field and input, segmented-control, sheet, menu, tooltip,

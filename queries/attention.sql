@@ -28,9 +28,20 @@ WHERE state = 'waiting_human'
 GROUP BY factory_id, type
 ORDER BY factory_id, type;
 
--- name: WaitingHumanItems :many
--- The decisions of the given factories, most recently changed first.
-SELECT * FROM work_items
-WHERE state = 'waiting_human' AND factory_id = ANY (sqlc.arg(factories)::uuid[])
-ORDER BY updated_at DESC, id
+-- name: InboxItems :many
+-- The open items of the given factories that may need a person (work_items_attention_idx, whose
+-- predicate this is), the most recently changed first, each blocked one with its latest blocked
+-- or paused event.
+SELECT sqlc.embed(w), coalesce(b.kind, '')::text AS blocker_kind, coalesce(b.data, '{}')::jsonb AS blocker_data
+FROM work_items w
+LEFT JOIN LATERAL (
+  SELECT e.kind, e.data FROM item_events e
+  WHERE e.item_id = w.id AND e.kind IN ('blocked', 'paused')
+  ORDER BY e.id DESC
+  LIMIT 1
+) b ON w.state = 'blocked'
+WHERE (w.state IN ('waiting_human', 'blocked')
+       OR (w.class_of_service = 'expedite' AND w.state NOT IN ('done', 'cancelled')))
+  AND w.factory_id = ANY (sqlc.arg(factories)::uuid[])
+ORDER BY w.updated_at DESC, w.id
 LIMIT sqlc.arg(max_items)::bigint;

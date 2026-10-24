@@ -975,8 +975,14 @@ const sreSeeds: Seed[] = [
     station: 'approve',
     state: 'waiting_human',
     createdMin: 300,
-    updatedMin: 120,
-    outputs: { investigate: { summary: 'Idle timeout 60 s; the clients ping every 90 s. Raise it to 120 s.' } },
+    updatedMin: 200,
+    outputs: {
+      investigate: {
+        summary: 'Idle timeout 60 s; the clients ping every 90 s. Raise it to 120 s.',
+        risk: 'Low',
+        change: '1 line of Terraform',
+      },
+    },
     steps: [
       { move: 'triage' },
       { run: 'triager', cost: 0.05, turns: 2, tools: [] },

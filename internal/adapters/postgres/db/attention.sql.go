@@ -79,6 +79,79 @@ func (q *Queries) FactoryAttention(ctx context.Context) ([]FactoryAttentionRow, 
 	return items, nil
 }
 
+const inboxItems = `-- name: InboxItems :many
+SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, coalesce(b.kind, '')::text AS blocker_kind, coalesce(b.data, '{}')::jsonb AS blocker_data
+FROM work_items w
+LEFT JOIN LATERAL (
+  SELECT e.kind, e.data FROM item_events e
+  WHERE e.item_id = w.id AND e.kind IN ('blocked', 'paused')
+  ORDER BY e.id DESC
+  LIMIT 1
+) b ON w.state = 'blocked'
+WHERE (w.state IN ('waiting_human', 'blocked')
+       OR (w.class_of_service = 'expedite' AND w.state NOT IN ('done', 'cancelled')))
+  AND w.factory_id = ANY ($1::uuid[])
+ORDER BY w.updated_at DESC, w.id
+LIMIT $2::bigint
+`
+
+type InboxItemsParams struct {
+	Factories []uuid.UUID
+	MaxItems  int64
+}
+
+type InboxItemsRow struct {
+	WorkItem    WorkItem
+	BlockerKind string
+	BlockerData []byte
+}
+
+// The open items of the given factories that may need a person (work_items_attention_idx, whose
+// predicate this is), the most recently changed first, each blocked one with its latest blocked
+// or paused event.
+func (q *Queries) InboxItems(ctx context.Context, arg InboxItemsParams) ([]InboxItemsRow, error) {
+	rows, err := q.db.Query(ctx, inboxItems, arg.Factories, arg.MaxItems)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InboxItemsRow
+	for rows.Next() {
+		var i InboxItemsRow
+		if err := rows.Scan(
+			&i.WorkItem.ID,
+			&i.WorkItem.FactoryID,
+			&i.WorkItem.Number,
+			&i.WorkItem.ParentID,
+			&i.WorkItem.Type,
+			&i.WorkItem.Lane,
+			&i.WorkItem.Title,
+			&i.WorkItem.Body,
+			&i.WorkItem.Station,
+			&i.WorkItem.State,
+			&i.WorkItem.ClassOfService,
+			&i.WorkItem.Priority,
+			&i.WorkItem.Size,
+			&i.WorkItem.ReworkCount,
+			&i.WorkItem.CostUsd,
+			&i.WorkItem.Outputs,
+			&i.WorkItem.CreatedAt,
+			&i.WorkItem.UpdatedAt,
+			&i.WorkItem.DoneAt,
+			&i.WorkItem.OrgID,
+			&i.BlockerKind,
+			&i.BlockerData,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const waitingByType = `-- name: WaitingByType :many
 SELECT factory_id, type, count(*) AS waiting
 FROM work_items
@@ -104,60 +177,6 @@ func (q *Queries) WaitingByType(ctx context.Context) ([]WaitingByTypeRow, error)
 	for rows.Next() {
 		var i WaitingByTypeRow
 		if err := rows.Scan(&i.FactoryID, &i.Type, &i.Waiting); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const waitingHumanItems = `-- name: WaitingHumanItems :many
-SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id FROM work_items
-WHERE state = 'waiting_human' AND factory_id = ANY ($1::uuid[])
-ORDER BY updated_at DESC, id
-LIMIT $2::bigint
-`
-
-type WaitingHumanItemsParams struct {
-	Factories []uuid.UUID
-	MaxItems  int64
-}
-
-// The decisions of the given factories, most recently changed first.
-func (q *Queries) WaitingHumanItems(ctx context.Context, arg WaitingHumanItemsParams) ([]WorkItem, error) {
-	rows, err := q.db.Query(ctx, waitingHumanItems, arg.Factories, arg.MaxItems)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []WorkItem
-	for rows.Next() {
-		var i WorkItem
-		if err := rows.Scan(
-			&i.ID,
-			&i.FactoryID,
-			&i.Number,
-			&i.ParentID,
-			&i.Type,
-			&i.Lane,
-			&i.Title,
-			&i.Body,
-			&i.Station,
-			&i.State,
-			&i.ClassOfService,
-			&i.Priority,
-			&i.Size,
-			&i.ReworkCount,
-			&i.CostUsd,
-			&i.Outputs,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DoneAt,
-			&i.OrgID,
-		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
