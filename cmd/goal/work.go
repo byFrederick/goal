@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -29,10 +30,16 @@ var stops = map[gen.ItemState]bool{
 	gen.ItemState("blocked"): true, gen.ItemState("cancelled"): true,
 }
 
+// newAPI opens goald's API: GOAL_API_URL, else api_url in the config file, else the local goald.
 func newAPI(getenv func(string) string) (*gen.ClientWithResponses, error) {
 	base := strings.TrimSpace(getenv("GOAL_API_URL"))
 	if base == "" {
-		base = defaultAPI
+		cfg, err := loadConfig(getenv)
+		if err != nil {
+			return nil, err
+		}
+
+		base = cmp.Or(cfg.APIURL, defaultAPI)
 	}
 
 	return gen.NewClientWithResponses(base, gen.WithHTTPClient(&http.Client{Timeout: 30 * time.Second}))
@@ -72,6 +79,7 @@ func runItem(ctx context.Context, out *printer, getenv func(string) string, args
 	body := fs.String("body", "", "item body")
 	priority := fs.Int("priority", 0, "priority (higher first)")
 	detach := fs.Bool("detach", false, "submit without following the item")
+	org := addOrgFlag(fs)
 
 	pos, err := parseInterspersed(fs, args)
 	if err != nil || len(pos) != 2 || strings.TrimSpace(pos[1]) == "" {
@@ -81,12 +89,12 @@ func runItem(ctx context.Context, out *printer, getenv func(string) string, args
 	title, rest, _ := strings.Cut(strings.TrimSpace(pos[1]), "\n")
 	text := strings.TrimSpace(strings.Join([]string{strings.TrimSpace(rest), *body}, "\n\n"))
 
-	c, err := newAPI(getenv)
+	c, err := connect(ctx, getenv, *org)
 	if err != nil {
 		return err
 	}
 
-	res, err := c.SubmitItemWithResponse(ctx, pos[0], gen.NewItem{
+	res, err := c.SubmitItemWithResponse(ctx, c.org, pos[0], gen.NewItem{
 		Title: strings.TrimSpace(title), Type: *typ, Body: &text, Priority: priority,
 	})
 	if err != nil {
@@ -111,13 +119,14 @@ func runItem(ctx context.Context, out *printer, getenv func(string) string, args
 func followItem(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs := newFlags("follow")
 	factory := fs.String("factory", "", "the factory of a bare item number")
+	org := addOrgFlag(fs)
 
 	pos, err := parseInterspersed(fs, args)
 	if err != nil || len(pos) != 1 {
 		return errUsage
 	}
 
-	c, err := newAPI(getenv)
+	c, err := connect(ctx, getenv, *org)
 	if err != nil {
 		return err
 	}
@@ -133,7 +142,7 @@ func followItem(ctx context.Context, out *printer, getenv func(string) string, a
 // itemRef turns the item a user names into what the API takes. An id or <factory>#<number>
 // passes as is; a bare number is that item of --factory, or of the one factory that has an
 // item with that number.
-func itemRef(ctx context.Context, c *gen.ClientWithResponses, arg, factory string) (string, error) {
+func itemRef(ctx context.Context, c orgClient, arg, factory string) (string, error) {
 	n, bare := bareNumber(arg)
 	if !bare {
 		return arg, nil
@@ -143,7 +152,7 @@ func itemRef(ctx context.Context, c *gen.ClientWithResponses, arg, factory strin
 		return domain.ItemRef{Factory: factory, Number: n}.String(), nil
 	}
 
-	res, err := c.ListFactoriesWithResponse(ctx)
+	res, err := c.ListFactoriesWithResponse(ctx, c.org)
 	if err != nil {
 		return "", apiDown(err)
 	}
@@ -157,7 +166,7 @@ func itemRef(ctx context.Context, c *gen.ClientWithResponses, arg, factory strin
 	for _, f := range res.JSON200.Factories {
 		ref := domain.ItemRef{Factory: f.Name, Number: n}.String()
 
-		it, err := c.GetItemWithResponse(ctx, ref)
+		it, err := c.GetItemWithResponse(ctx, c.org, ref)
 		if err != nil {
 			return "", apiDown(err)
 		}
@@ -179,14 +188,14 @@ func itemRef(ctx context.Context, c *gen.ClientWithResponses, arg, factory strin
 
 // follow prints the item's events as they happen until it reaches a state where someone else
 // has to act: a human station, done, blocked or cancelled. A blocked item is an error.
-func follow(ctx context.Context, out *printer, c *gen.ClientWithResponses, id string, after int64, every time.Duration) error {
+func follow(ctx context.Context, out *printer, c orgClient, id string, after int64, every time.Duration) error {
 	t := time.NewTicker(every)
 	defer t.Stop()
 
 	limit := eventPage
 
 	for {
-		item, err := c.GetItemWithResponse(ctx, id)
+		item, err := c.GetItemWithResponse(ctx, c.org, id)
 		if err != nil {
 			return following(ctx, apiDown(err))
 		}
@@ -196,7 +205,7 @@ func follow(ctx context.Context, out *printer, c *gen.ClientWithResponses, id st
 		}
 
 		for full := true; full; {
-			page, err := c.ListItemEventsWithResponse(ctx, id, &gen.ListItemEventsParams{After: &after, Limit: &limit})
+			page, err := c.ListItemEventsWithResponse(ctx, c.org, id, &gen.ListItemEventsParams{After: &after, Limit: &limit})
 			if err != nil {
 				return following(ctx, apiDown(err))
 			}
@@ -330,13 +339,14 @@ func str(e gen.Event, key string) string {
 func showItem(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs := newFlags("item")
 	factory := fs.String("factory", "", "the factory of a bare item number")
+	org := addOrgFlag(fs)
 
 	pos, err := parseInterspersed(fs, args)
 	if err != nil || len(pos) != 1 {
 		return errUsage
 	}
 
-	c, err := newAPI(getenv)
+	c, err := connect(ctx, getenv, *org)
 	if err != nil {
 		return err
 	}
@@ -346,7 +356,7 @@ func showItem(ctx context.Context, out *printer, getenv func(string) string, arg
 		return err
 	}
 
-	res, err := c.GetItemWithResponse(ctx, ref)
+	res, err := c.GetItemWithResponse(ctx, c.org, ref)
 	if err != nil {
 		return apiDown(err)
 	}
@@ -380,21 +390,21 @@ const (
 	verbMerge   = "merge"
 )
 
-// decide acts on an item: goal approve <item> [--by name]; goal reject <item> --reason "..."
-// [--by name]; goal retry <item> [--by name]; goal merge <item> [--by name]. Each takes
-// --factory for a bare item number.
+// decide acts on an item: goal approve <item>; goal reject <item> --reason "..."; goal retry
+// <item>; goal merge <item>. Each takes --factory for a bare item number and --org. The decider
+// is the request's actor, the local user (phase 2.2 has no sign-in).
 func decide(ctx context.Context, out *printer, getenv func(string) string, verb string, args []string) error {
 	fs := newFlags(verb)
-	by := fs.String("by", getenv("USER"), "who decides")
 	reason := fs.String("reason", "", "what must change (reject)")
 	factory := fs.String("factory", "", "the factory of a bare item number")
+	org := addOrgFlag(fs)
 
 	pos, err := parseInterspersed(fs, args)
-	if err != nil || len(pos) != 1 || strings.TrimSpace(*by) == "" || (verb == verbReject) != (*reason != "") {
+	if err != nil || len(pos) != 1 || (verb == verbReject) != (*reason != "") {
 		return errUsage
 	}
 
-	c, err := newAPI(getenv)
+	c, err := connect(ctx, getenv, *org)
 	if err != nil {
 		return err
 	}
@@ -404,7 +414,7 @@ func decide(ctx context.Context, out *printer, getenv func(string) string, verb 
 		return err
 	}
 
-	it, err := act(ctx, c, verb, ref, *by, *reason)
+	it, err := act(ctx, c, verb, ref, *reason)
 	if err != nil {
 		return err
 	}
@@ -418,31 +428,31 @@ func decide(ctx context.Context, out *printer, getenv func(string) string, verb 
 var done = map[string]string{verbApprove: "approved", verbReject: "rejected", verbRetry: "retried", verbMerge: "merged"}
 
 // act sends one decision and returns the item after it, or why it was refused.
-func act(ctx context.Context, c *gen.ClientWithResponses, verb, ref, by, reason string) (*gen.Item, error) {
+func act(ctx context.Context, c orgClient, verb, ref, reason string) (*gen.Item, error) {
 	switch verb {
 	case verbApprove:
-		res, err := c.ApproveItemWithResponse(ctx, ref, gen.Approval{By: by})
+		res, err := c.ApproveItemWithResponse(ctx, c.org, ref)
 		if err != nil {
 			return nil, apiDown(err)
 		}
 
 		return answer(res.JSON200, res.HTTPResponse, res.ApplicationproblemJSONDefault)
 	case verbReject:
-		res, err := c.RejectItemWithResponse(ctx, ref, gen.Rejection{By: by, Reason: reason})
+		res, err := c.RejectItemWithResponse(ctx, c.org, ref, gen.Rejection{Reason: reason})
 		if err != nil {
 			return nil, apiDown(err)
 		}
 
 		return answer(res.JSON200, res.HTTPResponse, res.ApplicationproblemJSONDefault)
 	case verbRetry:
-		res, err := c.RetryItemWithResponse(ctx, ref, gen.Retry{By: by})
+		res, err := c.RetryItemWithResponse(ctx, c.org, ref)
 		if err != nil {
 			return nil, apiDown(err)
 		}
 
 		return answer(res.JSON200, res.HTTPResponse, res.ApplicationproblemJSONDefault)
 	default:
-		res, err := c.MergeItemWithResponse(ctx, ref, gen.MergeRequest{By: by})
+		res, err := c.MergeItemWithResponse(ctx, c.org, ref, gen.MergeRequest{})
 		if err != nil {
 			return nil, apiDown(err)
 		}

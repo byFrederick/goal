@@ -257,20 +257,24 @@ type Transition struct {
 // instance: PostgreSQL LISTEN/NOTIFY. Each instance listens once and fans out to its own
 // clients, so no instance holds state another needs.
 type ItemNotices interface {
-	// Listen calls deliver for every item event committed while it listens, in commit order,
-	// until ctx ends; it returns nil then. Each time it starts listening (the first time, and
+	// Listen calls deliver for every item event, and every other organization event (Org),
+	// committed while it listens, in commit order, until ctx ends; it returns nil then. Each time it starts listening (the first time, and
 	// again after reconnecting when the connection was lost, which misses the events committed
 	// meanwhile) it first delivers a notice with Resync set. deliver must not block for long.
 	Listen(ctx context.Context, deliver func(ItemNotice)) error
 }
 
 // ItemNotice is one committed item event as listeners see it, with the item's state right
-// after it. A Resync notice carries nothing else: listeners must re-read what they show.
+// after it. A Resync notice carries nothing else: listeners must re-read what they show. A
+// notice with Org set is another of the organization's stream events (OrgID, FactoryID and Org
+// are set, the item fields are not).
 type ItemNotice struct {
 	Resync  bool
 	EventID int64
-	// OrgID is the organization of the item; a stream serves one organization's notices.
-	OrgID     domain.OrgID
+	// OrgID is the organization of the item or event; a stream serves one organization's notices.
+	OrgID domain.OrgID
+	// Org, when set, makes this an organization event rather than an item event.
+	Org       *OrgEvent
 	FactoryID domain.FactoryID
 	ItemID    domain.ItemID
 	// Number is the item's per-factory number.
@@ -279,6 +283,18 @@ type ItemNotice struct {
 	Station string
 	State   domain.ItemState
 	At      time.Time
+}
+
+// OrgEvent is an organization's stream event that is not an item event, NOTIFYed on the
+// goal_org_events channel ({org_id, event, factory_id?, data}) in the transaction that causes it,
+// such as phase 3's credential and connection events.
+type OrgEvent struct {
+	// Name is the stream's event name: lowercase letters, digits and dashes.
+	Name string
+	// FactoryID is set when the event concerns one factory, for streams filtered to it.
+	FactoryID domain.FactoryID
+	// Data is the event's JSON object, sent to subscribers as it is.
+	Data json.RawMessage
 }
 
 // CodeHost reaches the API of the host where a factory's repository lives (GitHub), with the

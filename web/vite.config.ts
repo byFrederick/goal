@@ -9,7 +9,9 @@ import { mockApi } from './mock/plugin.ts';
 // (GOAL_API_URL, default the local goald). GOAL_MOCK_LIVE=1 makes the mock's agents keep working.
 const useMock = process.env.GOAL_API === 'mock';
 const target = process.env.GOAL_API_URL ?? 'http://127.0.0.1:8080';
-const proxy = useMock ? undefined : { '/v1': { target, changeOrigin: true } };
+// The proxy keeps the browser's Host, so goald's cross-origin protection sees the page's own
+// origin (Origin = Host) as well as Sec-Fetch-Site: same-origin.
+const proxy = useMock ? undefined : { '/v1': { target, changeOrigin: false } };
 
 export default defineConfig({
   plugins: [

@@ -31,6 +31,7 @@ class FakeEventSource extends EventTarget {
 }
 
 const event: StreamEvent = {
+  org_id: "019a1c00-0000-7000-8000-0000000000aa",
   item_id: "0b6c1a52-3f43-4f53-9a43-0a8c33f3f1a1",
   ref: "goal#12",
   factory_id: "5d2b8f0e-6f1d-4a39-9d43-2d3c9b1e7a10",
@@ -49,7 +50,7 @@ function follow(extra: Partial<StreamHandlers> = {}) {
   };
   const stop = subscribe(
     "http://goald.example.com/",
-    { factory: "goal" },
+    { org: "acme", factory: "goal" },
     {
       onItem: (e) => log.items.push(e),
       onEvent: (name, data) => log.others.push([name, data]),
@@ -77,7 +78,7 @@ afterEach(() => {
 describe("subscribe", () => {
   test("opens the stream of the scope", () => {
     const { source } = follow();
-    expect(source.url).toBe("http://goald.example.com/v1/stream?factory=goal");
+    expect(source.url).toBe("http://goald.example.com/v1/orgs/acme/stream?factory=goal");
   });
 
   test("the first open is not a resync; every reopen after it is", () => {

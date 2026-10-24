@@ -1,11 +1,12 @@
 // Command goal is the Goal CLI: it validates factory definitions and moves them between a
-// local working copy and the bucket where they live, starts the local platform (goal up), and
-// submits, follows and decides on work items through goald's HTTP API.
+// local working copy and the bucket where they live, starts the local platform (goal up),
+// manages organizations, and submits, follows and decides on work items through goald's HTTP
+// API, always within one organization (org.go resolves which).
 //
 // Object storage comes from the environment: GOAL_S3_BUCKET, and for a local S3-compatible
 // server (RustFS) GOAL_S3_ENDPOINT, GOAL_S3_ACCESS_KEY and GOAL_S3_SECRET_KEY. On AWS the
-// standard credential chain applies. goald's API is GOAL_API_URL (default
-// http://127.0.0.1:8080).
+// standard credential chain applies. goald's API is GOAL_API_URL, else api_url in the CLI's
+// config file, else http://127.0.0.1:8080.
 package main
 
 import (
@@ -17,8 +18,6 @@ import (
 	"os/signal"
 	"runtime/debug"
 	"syscall"
-
-	"github.com/google/uuid"
 
 	"github.com/byFrederick/goal/internal/adapters/postgres"
 	"github.com/byFrederick/goal/internal/adapters/s3store"
@@ -35,16 +34,19 @@ const usage = `usage:
                                                   submit a work item and follow it until a human or done
   goal follow <item>                              follow an item's events again
   goal item <item>                                show an item with its outputs
-  goal approve <item> [--by NAME]                 approve an item waiting at a human station
-  goal reject <item> --reason "..." [--by NAME]   send it back for rework
-  goal retry <item> [--by NAME]                   send a blocked item back to its station's queue
-  goal merge <item> [--by NAME]                   merge the item's pull request, then approve it
+  goal approve <item>                             approve an item waiting at a human station
+  goal reject <item> --reason "..."               send it back for rework
+  goal retry <item>                               send a blocked item back to its station's queue
+  goal merge <item>                               merge the item's pull request, then approve it
                                                   (at a station with action: merge)
   goal factory validate <dir> ...                 validate local factory folders (alias: goal validate)
-  goal factory push <dir> [--org ID]              validate, then upload to
-                                                  orgs/<org>/factories/<metadata.id>/
-  goal factory pull <id|name> <dir> [--org ID]    download a factory into a new folder
-  goal factory list [--org ID]                    show and validate every factory of the organization
+  goal factory push <dir>                         validate, then upload to
+                                                  orgs/<org-id>/factories/<metadata.id>/
+  goal factory pull <id|name> <dir>               download a factory into a new folder
+  goal factory list                               show and validate every factory of the organization
+  goal org list                                   the organizations (* the one commands act in)
+  goal org use <slug>                             act in this organization from now on (config file)
+  goal org create <slug> --name N [--mark M]      create an organization
   goal storage init                               create the bucket if missing and enable versioning
   goal db init                                    create the database roles goald runs as (goal_owner,
                                                   goal_app) and hand the schema to goal_owner
@@ -53,8 +55,10 @@ const usage = `usage:
 <item> is goal#2 (factory and number), the item's id, or a bare number such as 2 when one
 factory has that item (--factory F picks the factory of a bare number)
 
---org is an organization's id; without it the factory commands use the default organization,
-which holds every factory from before organizations`
+Every command that talks to goald (run, follow, item, the decisions, factory push|pull|list)
+acts in one organization: --org <slug|id>, else GOAL_ORG, else org in the config file
+($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
+else the install's only organization (decisions are the local user's)`
 
 // errUsage marks a command line that names no valid command; main exits 2 for it.
 var errUsage = errors.New(usage)
@@ -99,6 +103,8 @@ func run(ctx context.Context, args []string, out *printer, getenv func(string) s
 		return showItem(ctx, out, getenv, rest)
 	case verbApprove, verbReject, verbRetry, verbMerge:
 		return decide(ctx, out, getenv, cmd, rest)
+	case "org":
+		return orgCommand(ctx, out, getenv, rest)
 	case "db", "storage":
 		return setUp(ctx, out, getenv, cmd, rest)
 	default:
@@ -117,7 +123,12 @@ func factory(ctx context.Context, out *printer, getenv func(string) string, args
 
 	cmd := args[0]
 
-	org, rest, err := factoryArgs(cmd, args[1:])
+	orgRef, rest, err := factoryArgs(cmd, args[1:])
+	if err != nil {
+		return err
+	}
+
+	org, err := factoryOrg(ctx, getenv, orgRef)
 	if err != nil {
 		return err
 	}
@@ -143,24 +154,39 @@ func factory(ctx context.Context, out *printer, getenv func(string) string, args
 	}
 }
 
-// factoryArgs parses the flags and arguments of goal factory push|pull|list.
-func factoryArgs(cmd string, args []string) (domain.OrgID, []string, error) {
+// factoryArgs parses the flags and arguments of goal factory push|pull|list: the --org given
+// (empty when none) and the positional arguments.
+func factoryArgs(cmd string, args []string) (string, []string, error) {
 	want, known := map[string]int{"push": 1, "pull": 2, "list": 0}[cmd]
 	if !known {
 		return "", nil, errUsage
 	}
 
 	fs := newFlags("factory " + cmd)
-	orgFlag := fs.String("org", string(postgres.DefaultOrgID), "the id of the organization that owns the factories")
+	org := addOrgFlag(fs)
 
 	rest, err := parseInterspersed(fs, args)
 	if err != nil || len(rest) != want {
 		return "", nil, errUsage
 	}
 
-	org, err := orgID(*orgFlag)
+	return *org, rest, nil
+}
 
-	return org, rest, err
+// factoryOrg resolves the organization whose bucket prefix the factory commands use, through
+// goald (GET /v1/orgs/{org}): the id always comes from the database, never from the command line.
+func factoryOrg(ctx context.Context, getenv func(string) string, orgFlag string) (domain.OrgID, error) {
+	c, err := connect(ctx, getenv, orgFlag)
+	if err != nil {
+		return "", err
+	}
+
+	o, err := getOrg(ctx, c.ClientWithResponses, c.org)
+	if err != nil {
+		return "", err
+	}
+
+	return domain.OrgID(o.Id), nil
 }
 
 // migrateLegacy moves the bucket layout before organizations into the default organization, as
@@ -178,16 +204,6 @@ func migrateLegacy(ctx context.Context, out *printer, store ports.ObjectStore) e
 	}
 
 	return nil
-}
-
-// orgID checks an organization id given on the command line: it becomes part of bucket keys.
-func orgID(s string) (domain.OrgID, error) {
-	id, err := uuid.Parse(s)
-	if err != nil {
-		return "", fmt.Errorf("--org %q is not an organization id", s)
-	}
-
-	return domain.OrgID(id.String()), nil
 }
 
 func newStore(ctx context.Context, getenv func(string) string) (*s3store.Store, error) {

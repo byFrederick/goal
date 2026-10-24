@@ -7,6 +7,7 @@ import { factoryTitle, refParam, useFactory } from '../../shared/factory';
 import { formatAge, formatUsd, humanize } from '../../shared/format';
 import { describeState, toneText } from '../../shared/item-state';
 import { NewItemButton } from '../../shared/new-item';
+import { useOrg } from '../../shared/org';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 
@@ -21,7 +22,8 @@ export const itemFilters: { state?: ItemState; label: string }[] = [
 export function ItemsPage() {
   const factory = useFactory();
   const { state } = useSearch({ from: '/f/$factory/items/' });
-  const { data } = useSuspenseQuery(itemsQuery(factory.name, { state, limit: 200 }));
+  const org = useOrg();
+  const { data } = useSuspenseQuery(itemsQuery(org, factory.name, { state, limit: 200 }));
 
   return (
     <>

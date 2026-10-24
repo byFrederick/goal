@@ -106,13 +106,13 @@ func TestAPI_ItemsByReference(t *testing.T) {
 
 	for _, ref := range []string{"acme%231", acmeID + "%231", submitted.Id} {
 		var it gen.Item
-		if code := h.call(t, http.MethodGet, "/v1/items/"+ref, "", &it); code != http.StatusOK || it.Id != submitted.Id || it.Ref != "acme#1" {
+		if code := h.call(t, http.MethodGet, "/v1/orgs/acme/items/"+ref, "", &it); code != http.StatusOK || it.Id != submitted.Id || it.Ref != "acme#1" {
 			t.Errorf("GET /v1/items/%s = %d %s %s, want the item", ref, code, it.Id, it.Ref)
 		}
 	}
 
 	for _, ref := range []string{"acme%232", "nope%231"} {
-		if code := h.call(t, http.MethodGet, "/v1/items/"+ref, "", nil); code != http.StatusNotFound {
+		if code := h.call(t, http.MethodGet, "/v1/orgs/acme/items/"+ref, "", nil); code != http.StatusNotFound {
 			t.Errorf("GET /v1/items/%s = %d, want 404", ref, code)
 		}
 	}
@@ -122,12 +122,12 @@ func TestAPI_ItemsByReference(t *testing.T) {
 	}
 
 	var page gen.EventPage
-	if code := h.call(t, http.MethodGet, "/v1/items/acme%231/events", "", &page); code != http.StatusOK || len(page.Events) == 0 {
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/items/acme%231/events", "", &page); code != http.StatusOK || len(page.Events) == 0 {
 		t.Errorf("events by reference = %d %+v", code, page)
 	}
 
 	var approved gen.Item
-	if code := h.call(t, http.MethodPost, "/v1/items/acme%231/approve", `{"by":"pat"}`, &approved); code != http.StatusOK || approved.Station != stDone {
+	if code := h.call(t, http.MethodPost, "/v1/orgs/acme/items/acme%231/approve", ``, &approved); code != http.StatusOK || approved.Station != stDone {
 		t.Errorf("approve by reference = %d at %s, want 200 at done", code, approved.Station)
 	}
 }
@@ -192,7 +192,7 @@ func TestAPI_BoardShowsEveryStationInLineOrder(t *testing.T) {
 	h.finished(t, t0.Add(-2*time.Hour), t0.Add(-time.Hour), false)
 
 	var board gen.Board
-	if code := h.call(t, http.MethodGet, "/v1/factories/line/board", "", &board); code != http.StatusOK {
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/board", "", &board); code != http.StatusOK {
 		t.Fatalf("board = %d", code)
 	}
 
@@ -221,7 +221,7 @@ func TestAPI_BoardCardsShowAgentPullRequestAndAge(t *testing.T) {
 	finished := h.finished(t, t0.Add(-2*time.Hour), t0.Add(-time.Hour), false)
 
 	var board gen.Board
-	if code := h.call(t, http.MethodGet, "/v1/factories/line/board", "", &board); code != http.StatusOK {
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/board", "", &board); code != http.StatusOK {
 		t.Fatalf("board = %d", code)
 	}
 
@@ -239,7 +239,7 @@ func TestAPI_BoardCardsShowAgentPullRequestAndAge(t *testing.T) {
 		t.Errorf("done card age %d s, want created → done (3600)", c.AgeSeconds)
 	}
 
-	if code := h.call(t, http.MethodGet, "/v1/factories/nope/board", "", nil); code != http.StatusNotFound {
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/nope/board", "", nil); code != http.StatusNotFound {
 		t.Errorf("board of an unknown factory = %d, want 404", code)
 	}
 }
@@ -249,7 +249,7 @@ func (h *harness) list(t *testing.T, query string) ([]int64, *int64) {
 	t.Helper()
 
 	var p gen.ItemPage
-	if code := h.call(t, http.MethodGet, "/v1/factories/line/items"+query, "", &p); code != http.StatusOK {
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/items"+query, "", &p); code != http.StatusOK {
 		t.Fatalf("list %s = %d", query, code)
 	}
 
@@ -292,7 +292,7 @@ func TestAPI_ListItemsNewestFirstByPage(t *testing.T) {
 	}
 
 	var page gen.ItemPage
-	h.call(t, http.MethodGet, "/v1/factories/line/items?limit=1", "", &page)
+	h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/items?limit=1", "", &page)
 
 	if c := page.Items[0]; c.Ref != "line#5" || c.AgeSeconds != 3600 || c.Lane == nil || *c.Lane != "api" || c.Agent != nil || c.PrUrl != nil {
 		t.Errorf("card %+v, want line#5, an hour old, lane api, no agent, no pull request", c)
@@ -305,12 +305,12 @@ func TestAPI_ListItemsRefusesBadQueries(t *testing.T) {
 	h := newHarness(t)
 
 	for _, query := range []string{"?limit=0", "?limit=201", "?after=0", "?state=sleeping"} {
-		if code := h.call(t, http.MethodGet, "/v1/factories/line/items"+query, "", nil); code != http.StatusBadRequest {
+		if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/items"+query, "", nil); code != http.StatusBadRequest {
 			t.Errorf("list %s = %d, want 400", query, code)
 		}
 	}
 
-	if code := h.call(t, http.MethodGet, "/v1/factories/nope/items", "", nil); code != http.StatusNotFound {
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/nope/items", "", nil); code != http.StatusNotFound {
 		t.Errorf("items of an unknown factory = %d, want 404", code)
 	}
 }
@@ -337,7 +337,7 @@ func TestAPI_MetricsOverTheWindow(t *testing.T) {
 	}
 
 	var m gen.Metrics
-	if code := h.call(t, http.MethodGet, "/v1/factories/line/metrics?window=7d", "", &m); code != http.StatusOK {
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/metrics?window=7d", "", &m); code != http.StatusOK {
 		t.Fatalf("metrics = %d", code)
 	}
 
@@ -348,7 +348,7 @@ func TestAPI_MetricsOverTheWindow(t *testing.T) {
 	}
 
 	var today gen.Metrics
-	h.call(t, http.MethodGet, "/v1/factories/line/metrics?window=1d", "", &today)
+	h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/metrics?window=1d", "", &today)
 
 	if want := "1d: 2026-10-23:1; 1 done, lead time p50 2.00h p85 2.00h, rework 1.00, wip 1, $0.50"; summary(today) != want {
 		t.Errorf("metrics\n  %s\nwant\n  %s", summary(today), want)
@@ -377,12 +377,12 @@ func TestAPI_MetricsWithNothingDoneAndBadWindows(t *testing.T) {
 	h := newHarness(t)
 
 	var m gen.Metrics
-	if h.call(t, http.MethodGet, "/v1/factories/acme/metrics", "", &m); m.Window != "7d" || len(m.Throughput) != 7 || m.LeadTimeHours != nil || m.ReworkRate != 0 {
+	if h.call(t, http.MethodGet, "/v1/orgs/acme/factories/acme/metrics", "", &m); m.Window != "7d" || len(m.Throughput) != 7 || m.LeadTimeHours != nil || m.ReworkRate != 0 {
 		t.Errorf("metrics with nothing done = %+v, want 7 empty days and no lead time", m)
 	}
 
 	for _, w := range []string{"0d", "91d", "7", "1w"} {
-		if code := h.call(t, http.MethodGet, "/v1/factories/line/metrics?window="+w, "", nil); code != http.StatusBadRequest {
+		if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/metrics?window="+w, "", nil); code != http.StatusBadRequest {
 			t.Errorf("window %s = %d, want 400", w, code)
 		}
 	}
@@ -395,17 +395,13 @@ func TestAPI_RetryABlockedItem(t *testing.T) {
 	h.seed(t, stBuild, domain.StateQueued, t0)
 	h.move(t, h.claim(t, 0), domain.Position{Station: stBuild, State: domain.StateBlocked}, nil)
 
-	if code := h.call(t, http.MethodPost, "/v1/items/line%231/retry", `{"by":" "}`, nil); code != http.StatusBadRequest {
-		t.Errorf("retry without by = %d, want 400", code)
-	}
-
 	var it gen.Item
-	if code := h.call(t, http.MethodPost, "/v1/items/line%231/retry", `{"by":"pat"}`, &it); code != http.StatusOK ||
+	if code := h.call(t, http.MethodPost, "/v1/orgs/acme/items/line%231/retry", ``, &it); code != http.StatusOK ||
 		it.State != gen.ItemState(domain.StateQueued) || it.Station != stBuild || it.ReworkCount != 0 {
 		t.Errorf("retry = %d %s at %s rework %d, want 200, queued at build, no rework", code, it.State, it.Station, it.ReworkCount)
 	}
 
-	if code := h.call(t, http.MethodPost, "/v1/items/line%231/retry", `{"by":"pat"}`, nil); code != http.StatusConflict {
+	if code := h.call(t, http.MethodPost, "/v1/orgs/acme/items/line%231/retry", ``, nil); code != http.StatusConflict {
 		t.Errorf("retry of a queued item = %d, want 409", code)
 	}
 }
@@ -419,12 +415,12 @@ func TestAPI_MergeAtTheMergeStation(t *testing.T) {
 		URL: prURL, Open: true, Mergeable: true, HeadSHA: "4b825dc6", HeadBranch: "goal/1-x", SameRepository: true, BaseBranch: "main",
 	})
 
-	if code := h.call(t, http.MethodPost, "/v1/items/line%231/merge", `{"by":"pat","method":"rebase"}`, nil); code != http.StatusBadRequest {
+	if code := h.call(t, http.MethodPost, "/v1/orgs/acme/items/line%231/merge", `{"method":"rebase"}`, nil); code != http.StatusBadRequest {
 		t.Errorf("merge with method rebase = %d, want 400", code)
 	}
 
 	var it gen.Item
-	if code := h.call(t, http.MethodPost, "/v1/items/line%231/merge", `{"by":"pat"}`, &it); code != http.StatusOK || it.Station != stDone {
+	if code := h.call(t, http.MethodPost, "/v1/orgs/acme/items/line%231/merge", ``, &it); code != http.StatusOK || it.Station != stDone {
 		t.Errorf("merge = %d at %s, want 200 at done", code, it.Station)
 	}
 
@@ -440,7 +436,7 @@ func TestAPI_MergeRefusalsAreConflicts(t *testing.T) {
 	stuck := h.atMerge(t)
 	h.codehost.Add(ports.PullRequest{URL: prURL, Open: true, HeadSHA: "5c1f0e2a", SameRepository: true}) // not mergeable
 
-	if code := h.call(t, http.MethodPost, "/v1/items/line%231/merge", `{"by":"pat"}`, nil); code != http.StatusConflict {
+	if code := h.call(t, http.MethodPost, "/v1/orgs/acme/items/line%231/merge", ``, nil); code != http.StatusConflict {
 		t.Errorf("merge of an unmergeable pull request = %d, want 409", code)
 	}
 
@@ -454,7 +450,7 @@ func TestAPI_MergeRefusalsAreConflicts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if code := h.call(t, http.MethodPost, "/v1/items/"+acme.Id+"/merge", `{"by":"pat"}`, nil); code != http.StatusConflict {
+	if code := h.call(t, http.MethodPost, "/v1/orgs/acme/items/"+acme.Id+"/merge", ``, nil); code != http.StatusConflict {
 		t.Errorf("merge at a plain human station = %d, want 409", code)
 	}
 }
@@ -491,7 +487,7 @@ func (h *harness) stream(t *testing.T, query string) (int, string, sse) {
 	ctx, cancel := context.WithTimeout(inOrg(t), 10*time.Second)
 	t.Cleanup(cancel)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.srv.URL+"/v1/stream"+query, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.srv.URL+"/v1/orgs/acme/stream"+query, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -525,18 +521,41 @@ func TestAPI_StreamSendsItemEventsAsTheyHappen(t *testing.T) {
 
 	at := t0.Add(time.Second)
 	h.notices.Publish(
-		ports.ItemNotice{EventID: 1, FactoryID: acmeID, ItemID: "acme-item", Number: 1, Kind: domain.EventCreated, Station: "inbox", State: domain.StateQueued, At: at},
+		ports.ItemNotice{OrgID: testOrg, EventID: 1, FactoryID: acmeID, ItemID: "acme-item", Number: 1, Kind: domain.EventCreated, Station: "inbox", State: domain.StateQueued, At: at},
+		ports.ItemNotice{OrgID: otherOrg, EventID: 3, FactoryID: lineID, ItemID: "other-item", Number: 1, Kind: domain.EventCreated, Station: "inbox", State: domain.StateQueued, At: at},
 		ports.ItemNotice{Resync: true},
-		ports.ItemNotice{EventID: 2, FactoryID: lineID, ItemID: "line-item", Number: 7, Kind: domain.EventMoved, Station: stBuild, State: domain.StateWaitingHuman, At: at},
+		ports.ItemNotice{OrgID: testOrg, EventID: 2, FactoryID: lineID, ItemID: "line-item", Number: 7, Kind: domain.EventMoved, Station: stBuild, State: domain.StateWaitingHuman, At: at},
+		ports.ItemNotice{OrgID: otherOrg, FactoryID: lineID, Org: &ports.OrgEvent{Name: "credential", FactoryID: lineID, Data: json.RawMessage(`{"name":"theirs"}`)}},
+		ports.ItemNotice{OrgID: testOrg, FactoryID: lineID, Org: &ports.OrgEvent{Name: "credential", FactoryID: lineID, Data: json.RawMessage("{\n \"name\": \"repo\"}")}},
 	)
 
 	if got := events.next(t); !reflect.DeepEqual(got, []string{"event: resync", "data: {}"}) {
-		t.Errorf("event %q, want a resync (and no event of another factory)", got)
+		t.Errorf("event %q, want a resync (and no event of another factory or organization)", got)
 	}
 
-	got := events.next(t)
-	if len(got) != 3 || got[0] != "event: item" || got[1] != "id: 2" || !strings.HasPrefix(got[2], "data: ") {
-		t.Fatalf("event %q, want an item event with its id", got)
+	station := stBuild
+	checkItemEvent(t, events.next(t), "id: 2", gen.StreamEvent{
+		OrgId: string(testOrg), ItemId: "line-item", Ref: "line#7", FactoryId: lineID, Kind: "moved", Station: &station,
+		State: gen.ItemState(domain.StateWaitingHuman), At: at,
+	})
+
+	if got := events.next(t); !reflect.DeepEqual(got, []string{"event: credential", `data: {"name":"repo"}`}) {
+		t.Errorf("event %q, want the organization's own credential event, on one line", got)
+	}
+
+	h.clock.Advance(15 * time.Second)
+
+	if got := events.next(t); !reflect.DeepEqual(got, []string{": heartbeat"}) {
+		t.Errorf("after 15s %q, want a heartbeat comment", got)
+	}
+}
+
+// checkItemEvent checks one SSE event: an item event with the id line and the data want.
+func checkItemEvent(t *testing.T, got []string, id string, want gen.StreamEvent) {
+	t.Helper()
+
+	if len(got) != 3 || got[0] != "event: item" || got[1] != id || !strings.HasPrefix(got[2], "data: ") {
+		t.Fatalf("event %q, want an item event with %s", got, id)
 	}
 
 	var data gen.StreamEvent
@@ -544,20 +563,8 @@ func TestAPI_StreamSendsItemEventsAsTheyHappen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	station := stBuild
-	want := gen.StreamEvent{
-		ItemId: "line-item", Ref: "line#7", FactoryId: lineID, Kind: "moved", Station: &station,
-		State: gen.ItemState(domain.StateWaitingHuman), At: at,
-	}
-
 	if !reflect.DeepEqual(data, want) {
 		t.Errorf("data %+v, want %+v", data, want)
-	}
-
-	h.clock.Advance(15 * time.Second)
-
-	if got := events.next(t); !reflect.DeepEqual(got, []string{": heartbeat"}) {
-		t.Errorf("after 15s %q, want a heartbeat comment", got)
 	}
 }
 

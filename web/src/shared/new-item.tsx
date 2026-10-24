@@ -10,6 +10,7 @@ import { Button } from '../ui/button';
 import { Dialog, DialogClose, DialogContent, DialogTrigger } from '../ui/dialog';
 import { refParam } from './factory';
 import { humanize } from './format';
+import { useOrg } from './org';
 
 const field =
   'w-full rounded-control border border-rule bg-surface px-3 text-base text-ink placeholder:text-muted aria-[invalid=true]:border-rework';
@@ -18,6 +19,7 @@ const field =
 export function NewItemButton({ factory, compact }: { factory: Factory; compact?: boolean }) {
   const id = useId();
   const client = useQueryClient();
+  const org = useOrg();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
@@ -27,14 +29,14 @@ export function NewItemButton({ factory, compact }: { factory: Factory; compact?
 
   const submit = useMutation({
     mutationFn: () =>
-      submitItem(factory.name, { title: title.trim(), type, ...(body.trim() ? { body: body.trim() } : {}) }),
+      submitItem(org, factory.name, { title: title.trim(), type, ...(body.trim() ? { body: body.trim() } : {}) }),
     onSuccess: (item) => {
       setOpen(false);
       setTitle('');
       setBody('');
       setTouched(false);
       toast.success(`Created ${item.ref}. It waits at ${humanize(item.station)}.`);
-      client.invalidateQueries({ queryKey: keys.factory(factory.name) });
+      client.invalidateQueries({ queryKey: keys.factory(org, factory.name) });
       navigate({ to: '/f/$factory/items/$ref', params: { factory: factory.name, ref: refParam(item.ref) } });
     },
     onError: (err) => toast.error('Could not create the item', { description: err.message }),

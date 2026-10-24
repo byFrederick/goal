@@ -2,17 +2,22 @@
 # the web UI (TypeScript client in packages/api-client). Change it first, then regenerate both
 # (`task api:gen`); the generated code is committed.
 #
-# No authentication yet: goald binds its API to 127.0.0.1 and serves one person on their own
-# machine. Authentication arrives with the first shared deployment.
+# No authentication yet (phase 2.2 has no identity): goald binds its API to 127.0.0.1 and every
+# request acts as the one local user. Every route but /v1/health and /v1/orgs belongs to an
+# organization and lives under /v1/orgs/{org}; an unknown or deleted organization is 404.
+# Requests that change something from a browser must be same-origin (cross-origin protection).
 openapi: 3.0.3
 info:
   title: Goal API
-  version: 0.2.0
+  version: 0.3.0
   description: >-
-    Factories, their boards and flow metrics, work items, their history, human decisions and a
-    realtime stream of item events.
+    Organizations, their factories, boards and flow metrics, work items, their history, human
+    decisions and a realtime stream of an organization's events.
 servers:
   - url: http://127.0.0.1:8080
+tags:
+  - name: orgs
+    description: Organizations, the tenant boundary of every factory, item and event
 paths:
   /v1/health:
     get:
@@ -24,10 +29,59 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Health" }
-  /v1/factories:
+  /v1/orgs:
+    get:
+      operationId: listOrgs
+      tags: [orgs]
+      summary: Every organization on the install, by name
+      responses:
+        "200":
+          description: The organizations
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrgList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createOrg
+      tags: [orgs]
+      summary: Create an organization
+      description: >-
+        The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and
+        not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default).
+        The mark defaults to the name's initials. A taken or reserved slug, or a malformed field,
+        is 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewOrg" }
+      responses:
+        "201":
+          description: The organization
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Org" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: getOrg
+      tags: [orgs]
+      summary: One organization
+      responses:
+        "200":
+          description: The organization
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Org" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
     get:
       operationId: listFactories
-      summary: The factories goald runs, from the bucket
+      summary: The organization's factories goald runs, from the bucket
       responses:
         "200":
           description: Factories ordered by name
@@ -35,8 +89,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/FactoryList" }
         default: { $ref: "#/components/responses/Problem" }
-  /v1/factories/{factory}/items:
+  /v1/orgs/{org}/factories/{factory}/items:
     parameters:
+      - $ref: "#/components/parameters/OrgRef"
       - $ref: "#/components/parameters/FactoryRef"
     get:
       operationId: listItems
@@ -79,8 +134,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
         default: { $ref: "#/components/responses/Problem" }
-  /v1/factories/{factory}/board:
+  /v1/orgs/{org}/factories/{factory}/board:
     parameters:
+      - $ref: "#/components/parameters/OrgRef"
       - $ref: "#/components/parameters/FactoryRef"
     get:
       operationId: getBoard
@@ -98,8 +154,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Board" }
         default: { $ref: "#/components/responses/Problem" }
-  /v1/factories/{factory}/metrics:
+  /v1/orgs/{org}/factories/{factory}/metrics:
     parameters:
+      - $ref: "#/components/parameters/OrgRef"
       - $ref: "#/components/parameters/FactoryRef"
     get:
       operationId: getMetrics
@@ -118,17 +175,21 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Metrics" }
         default: { $ref: "#/components/responses/Problem" }
-  /v1/stream:
+  /v1/orgs/{org}/stream:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
     get:
       operationId: streamEvents
-      summary: Item events as they happen (Server-Sent Events)
+      summary: The organization's events as they happen (Server-Sent Events)
       description: >-
-        A text/event-stream. Each committed item event arrives as `event: item` with `id:` the
-        event id and `data:` a StreamEvent. `event: resync` (data `{}`) means goald may have
-        missed events (it reconnected to the database): re-read what you show. A comment line
-        (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored,
-        so a client that reconnects re-reads what it shows. goald ends the stream of a client
-        that falls too far behind.
+        A text/event-stream of one organization's events only. Each committed item event arrives
+        as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names
+        (definition, factory, and later credential, approval, connection) carry their own data
+        object; clients ignore the names they do not know. `event: resync` (data `{}`) means
+        goald may have missed events (it reconnected to the database): re-read what you show. A
+        comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID
+        is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of
+        a client that falls too far behind.
       parameters:
         - name: factory
           in: query
@@ -141,8 +202,9 @@ paths:
             text/event-stream:
               schema: { $ref: "#/components/schemas/StreamEvent" }
         default: { $ref: "#/components/responses/Problem" }
-  /v1/items/{item}:
+  /v1/orgs/{org}/items/{item}:
     parameters:
+      - $ref: "#/components/parameters/OrgRef"
       - $ref: "#/components/parameters/ItemRef"
     get:
       operationId: getItem
@@ -154,8 +216,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
         default: { $ref: "#/components/responses/Problem" }
-  /v1/items/{item}/events:
+  /v1/orgs/{org}/items/{item}/events:
     parameters:
+      - $ref: "#/components/parameters/OrgRef"
       - $ref: "#/components/parameters/ItemRef"
     get:
       operationId: listItemEvents
@@ -175,17 +238,13 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EventPage" }
         default: { $ref: "#/components/responses/Problem" }
-  /v1/items/{item}/approve:
+  /v1/orgs/{org}/items/{item}/approve:
     parameters:
+      - $ref: "#/components/parameters/OrgRef"
       - $ref: "#/components/parameters/ItemRef"
     post:
       operationId: approveItem
       summary: Approve an item waiting for a human; it moves to the next station
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/Approval" }
       responses:
         "200":
           description: The item after the decision
@@ -193,8 +252,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
         default: { $ref: "#/components/responses/Problem" }
-  /v1/items/{item}/reject:
+  /v1/orgs/{org}/items/{item}/reject:
     parameters:
+      - $ref: "#/components/parameters/OrgRef"
       - $ref: "#/components/parameters/ItemRef"
     post:
       operationId: rejectItem
@@ -211,17 +271,13 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
         default: { $ref: "#/components/responses/Problem" }
-  /v1/items/{item}/retry:
+  /v1/orgs/{org}/items/{item}/retry:
     parameters:
+      - $ref: "#/components/parameters/OrgRef"
       - $ref: "#/components/parameters/ItemRef"
     post:
       operationId: retryItem
       summary: Send a blocked item back to its station's queue (409 if it is not blocked)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/Retry" }
       responses:
         "200":
           description: The item, queued at its station again
@@ -229,8 +285,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
         default: { $ref: "#/components/responses/Problem" }
-  /v1/items/{item}/merge:
+  /v1/orgs/{org}/items/{item}/merge:
     parameters:
+      - $ref: "#/components/parameters/OrgRef"
       - $ref: "#/components/parameters/ItemRef"
     post:
       operationId: mergeItem
@@ -243,7 +300,7 @@ paths:
         meanwhile is refused with 409 and nothing changes. After the merge it deletes the pull
         request's head branch (only when it lives on the same repository) and approves the item.
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema: { $ref: "#/components/schemas/MergeRequest" }
@@ -256,6 +313,12 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
 components:
   parameters:
+    OrgRef:
+      name: org
+      in: path
+      required: true
+      description: The organization's slug or id
+      schema: { type: string }
     FactoryRef:
       name: factory
       in: path
@@ -289,6 +352,52 @@ components:
         title: { type: string }
         status: { type: integer }
         detail: { type: string }
+        code:
+          type: string
+          pattern: "^[a-z]+(-[a-z]+)*$"
+          description: A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, ...)
+    OrgList:
+      type: object
+      required: [orgs]
+      properties:
+        orgs:
+          type: array
+          items: { $ref: "#/components/schemas/OrgSummary" }
+    OrgSummary:
+      type: object
+      description: An organization as the organization list shows it
+      required: [id, slug, name, mark, factory_count]
+      properties:
+        id: { type: string }
+        slug: { type: string, description: "The organization's address in URLs, as in /v1/orgs/acme" }
+        name: { type: string }
+        mark: { type: string, description: The one or two characters the organization rail shows }
+        factory_count: { type: integer }
+    Org:
+      type: object
+      required: [id, slug, name, mark, factory_count, created_at]
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        mark: { type: string }
+        factory_count: { type: integer }
+        created_at: { type: string, format: date-time }
+    NewOrg:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        slug: { type: string, pattern: "^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$" }
+        mark: { type: string, minLength: 1, maxLength: 2, description: Defaults to the name's initials }
+    Actor:
+      type: object
+      description: Who did something; in phase 2.2 every person is the local user
+      required: [kind, id, name]
+      properties:
+        kind: { type: string, enum: [user, agent, system] }
+        id: { type: string, description: '"local" for the local user, an agent''s name or a job''s name' }
+        name: { type: string }
     FactoryList:
       type: object
       required: [factories]
@@ -298,9 +407,10 @@ components:
           items: { $ref: "#/components/schemas/Factory" }
     Factory:
       type: object
-      required: [id, name, stations, work_types]
+      required: [id, org_id, name, stations, work_types]
       properties:
         id: { type: string }
+        org_id: { type: string, description: The organization that owns the factory }
         name: { type: string }
         title: { type: string }
         description: { type: string }
@@ -322,7 +432,7 @@ components:
       enum: [queue, agent, human, done]
     StationAction:
       type: string
-      description: What goald does when a human acts at this human station (merge → POST /v1/items/{item}/merge)
+      description: What goald does when a human acts at this human station (merge → POST /v1/orgs/{org}/items/{item}/merge)
       enum: [merge]
     ItemState:
       type: string
@@ -339,27 +449,14 @@ components:
         type: { type: string, minLength: 1, description: "One of the factory's work types" }
         lane: { type: string }
         priority: { type: integer, default: 0 }
-    Approval:
-      type: object
-      required: [by]
-      properties:
-        by: { type: string, minLength: 1, description: Who decided }
     Rejection:
       type: object
-      required: [by, reason]
+      required: [reason]
       properties:
-        by: { type: string, minLength: 1 }
         reason: { type: string, minLength: 1, description: What the agent must change }
-    Retry:
-      type: object
-      required: [by]
-      properties:
-        by: { type: string, minLength: 1, description: Who retries }
     MergeRequest:
       type: object
-      required: [by]
       properties:
-        by: { type: string, minLength: 1, description: Who merges }
         method: { type: string, enum: [squash], default: squash }
     Item:
       type: object
@@ -498,9 +595,10 @@ components:
         items_done: { type: integer }
     StreamEvent:
       type: object
-      description: "The data of one `event: item` on /v1/stream"
-      required: [item_id, ref, factory_id, kind, state, at]
+      description: "The data of one `event: item` on /v1/orgs/{org}/stream"
+      required: [org_id, item_id, ref, factory_id, kind, state, at]
       properties:
+        org_id: { type: string }
         item_id: { type: string }
         ref: { type: string, description: "<factory name>#<number>, as in goal#2" }
         factory_id: { type: string }

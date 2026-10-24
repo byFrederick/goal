@@ -1,17 +1,27 @@
 // An in-memory stand-in for goald's /v1 API, typed with the contract's shapes from
 // @goal/api-client, mounted into the Vite dev and preview servers when GOAL_API=mock
-// (mock/plugin.ts). It keeps state per process and broadcasts item events on /v1/stream like
-// goald does. POST /__mock/reset restores the seed.
+// (mock/plugin.ts). Like goald it serves /v1/orgs and every other route under
+// /v1/orgs/{org} (slug or id; unknown is 404), keeps state per process and broadcasts each
+// organization's item events on its /v1/orgs/{org}/stream. Decisions are the local user's.
+// POST /__mock/reset restores the seed.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { Board, BoardStation, Item, ItemCard, ItemEvent, ItemPage, StreamEvent } from '@goal/api-client';
+import type { Board, BoardStation, Item, ItemCard, ItemEvent, ItemPage, Org, StreamEvent } from '@goal/api-client';
 import { type MockItem, type MockState, seed } from './fixtures.ts';
 
 type Next = (err?: unknown) => void;
 
 interface Subscriber {
+  org: string;
   factory: string;
   res: ServerResponse;
 }
+
+/** Who decides: goald's request actor in phase 2.2. */
+const localUser = 'Local user';
+
+/** The slug rule and reserved words of POST /v1/orgs. */
+const slugRule = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
+const reserved = ['new', 'settings', 'api', 'v1', 'o', 'me', 'orgs', 'auth', 'invite', 'admin', 'default'];
 
 export interface MockApi {
   handle: (req: IncomingMessage, res: ServerResponse, next: Next) => void;
@@ -69,15 +79,24 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return { ...rest, ...(lane ? { lane } : {}), ref: ref(it), factory_id: factory?.id ?? '' };
   };
 
-  const findFactory = (key: string) => state.factories.find((f) => f.id === key || f.name === key);
+  const findOrg = (key: string) => state.orgs.find((o) => o.slug === key || o.id === key);
 
-  const findItem = (key: string) => {
+  const withCount = (o: Org): Org => ({
+    ...o,
+    factory_count: state.factories.filter((f) => f.org_id === o.id).length,
+  });
+
+  /** A factory by id or name; within org when given. Names are unique across the mock's orgs. */
+  const findFactory = (key: string, org?: string) =>
+    state.factories.find((f) => (f.id === key || f.name === key) && (org === undefined || f.org_id === org));
+
+  const findItem = (key: string, org: string) => {
     const [name, num] = key.split('#');
     if (num !== undefined) {
-      const factory = findFactory(name ?? '');
+      const factory = findFactory(name ?? '', org);
       return state.items.find((it) => it.factory === factory?.name && it.number === Number(num));
     }
-    return state.items.find((it) => it.id === key);
+    return state.items.find((it) => it.id === key && findFactory(it.factory)?.org_id === org);
   };
 
   const emit = (it: MockItem, kind: string, actor: string, data: Record<string, unknown> = {}) => {
@@ -88,6 +107,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
 
     const factory = findFactory(it.factory);
     const payload: StreamEvent = {
+      org_id: factory?.org_id ?? '',
       item_id: it.id,
       ref: ref(it),
       factory_id: factory?.id ?? '',
@@ -97,7 +117,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       at,
     };
     for (const sub of subscribers) {
-      if (sub.factory === factory?.id || sub.factory === factory?.name) {
+      const sameOrg = sub.org === factory?.org_id;
+      if (sameOrg && (sub.factory === '' || sub.factory === factory?.id || sub.factory === factory?.name)) {
         sub.res.write(`event: item\nid: ${event.id}\ndata: ${JSON.stringify(payload)}\n\n`);
       }
     }
@@ -158,29 +179,66 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (!path.startsWith('/v1/')) return next();
 
     if (path === '/v1/health') return json(res, 200, { status: 'ok' });
-    if (path === '/v1/factories') return json(res, 200, { factories: state.factories });
 
-    if (path === '/v1/stream') {
+    if (path === '/v1/orgs' && method === 'GET') {
+      const orgs = [...state.orgs].sort((a, b) => a.name.localeCompare(b.name)).map(withCount);
+      return json(res, 200, { orgs: orgs.map(({ created_at: _created, ...summary }) => summary) });
+    }
+    if (path === '/v1/orgs' && method === 'POST') {
+      const body = await readBody(req);
+      const name = typeof body.name === 'string' ? body.name.trim() : '';
+      const slug = typeof body.slug === 'string' ? body.slug : '';
+      if (!name || !slugRule.test(slug) || reserved.includes(slug) || findOrg(slug)) {
+        return problem(res, 409, 'Conflict', `slug "${slug}" is taken, reserved or malformed, or the name is empty`);
+      }
+      const words = name.split(/\s+/);
+      const initials = words.length > 1 ? `${words[0]?.[0]}${words[1]?.[0]}`.toUpperCase() : name.slice(0, 2);
+      const mark = typeof body.mark === 'string' && body.mark ? body.mark : initials;
+      const org: Org = {
+        id: crypto.randomUUID(),
+        slug,
+        name,
+        mark,
+        factory_count: 0,
+        created_at: new Date().toISOString(),
+      };
+      state.orgs.push(org);
+      return json(res, 201, org);
+    }
+
+    const scoped = path.match(/^\/v1\/orgs\/([^/]+)(\/.*)?$/);
+    if (!scoped) return problem(res, 404, 'Not Found', path);
+    const org = findOrg(decodeURIComponent(scoped[1] ?? ''));
+    if (!org) return json(res, 404, { title: 'Organization not found', status: 404, code: 'org-not-found' });
+    const rest = scoped[2] ?? '';
+
+    if (rest === '' && method === 'GET') return json(res, 200, withCount(org));
+    if (rest === '/factories') {
+      return json(res, 200, { factories: state.factories.filter((f) => f.org_id === org.id) });
+    }
+
+    if (rest === '/stream') {
       const factory = url.searchParams.get('factory') ?? '';
+      if (factory && !findFactory(factory, org.id)) return problem(res, 404, 'Factory not found', factory);
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
       });
       res.write('retry: 3000\n\n');
-      const sub = { factory, res };
+      const sub = { org: org.id, factory, res };
       subscribers.add(sub);
       req.on('close', () => subscribers.delete(sub));
       return;
     }
 
-    let m = path.match(/^\/v1\/factories\/([^/]+)\/(board|items|metrics)$/);
+    let m = rest.match(/^\/factories\/([^/]+)\/(board|items|metrics)$/);
     if (m) {
       const key = decodeURIComponent(m[1] ?? '');
-      const factory = findFactory(key);
+      const factory = findFactory(key, org.id);
       if (!factory) return problem(res, 404, 'Factory not found', key);
 
-      if (m[2] === 'board' && method === 'GET') return json(res, 200, board(key));
+      if (m[2] === 'board' && method === 'GET') return json(res, 200, board(factory.id));
       if (m[2] === 'metrics' && method === 'GET') return json(res, 200, state.metrics[factory.name]);
       if (m[2] === 'items' && method === 'GET') {
         const st = url.searchParams.get('state');
@@ -230,10 +288,10 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return problem(res, 405, 'Method not allowed');
     }
 
-    m = path.match(/^\/v1\/items\/([^/]+)(?:\/(events|approve|reject|merge|retry))?$/);
+    m = rest.match(/^\/items\/([^/]+)(?:\/(events|approve|reject|merge|retry))?$/);
     if (!m) return problem(res, 404, 'Not found', path);
 
-    const it = findItem(decodeURIComponent(m[1] ?? ''));
+    const it = findItem(decodeURIComponent(m[1] ?? ''), org.id);
     if (!it) return problem(res, 404, 'Item not found', decodeURIComponent(m[1] ?? ''));
     const action = m[2];
 
@@ -247,8 +305,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (method !== 'POST') return problem(res, 405, 'Method not allowed');
 
     const body = await readBody(req);
-    const by = typeof body.by === 'string' ? body.by.trim() : '';
-    if (!by) return problem(res, 400, 'Invalid decision', 'by is required');
+    const by = localUser;
     const stations = stationsOf(it);
     const index = stations.findIndex((s) => s.id === it.station);
 

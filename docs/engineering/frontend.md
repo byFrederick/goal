@@ -38,7 +38,7 @@ Rules:
 
 - Go: `oapi-codegen` generates a strict server interface that `internal/adapters/http` implements. Handlers call the engine through ports, as everywhere else.
 - TypeScript: `openapi-typescript` generates types into `packages/contracts`; `openapi-fetch` gives a typed client with no hand-written fetch code.
-- Realtime: `GET /v1/stream?factory=` streams Server-Sent Events: `event: item` (data: the `StreamEvent` schema in `api/openapi.yaml`, `id:` the event id) and `event: resync` (data `{}`: events may have been missed). There is no replay, so a client re-reads what it shows after a reconnect or a resync. The client turns each event into a TanStack Query cache invalidation, so screens update without polling.
+- Realtime: `GET /v1/orgs/{org}/stream?factory=` streams one organization's Server-Sent Events: `event: item` (data: the `StreamEvent` schema in `api/openapi.yaml`, `id:` the event id) and `event: resync` (data `{}`: events may have been missed). There is no replay, so a client re-reads what it shows after a reconnect or a resync. The client turns each event into a TanStack Query cache invalidation, so screens update without polling.
 - Factory and eval files keep their JSON Schemas in `schema/`; the same schemas drive Go validation, TS types and the YAML editor's autocompletion.
 
 ## Web app architecture
@@ -79,22 +79,24 @@ Route files stay thin (loader + component); screens live in `features/`. Feature
 
 ### The API module and `@goal/api-client`
 
-`packages/api-client` is the typed layer over the contract: `createGoalClient` (openapi-fetch over the types `openapi-typescript` generates into `src/schema.ts`, with `--default-non-nullable=false` so request fields with a default stay optional), `unwrap` (data on success, else it throws `ApiError`, which carries the RFC 9457 `Problem`, rebuilt from the status line when a proxy answers with something else), `subscribe(baseUrl, scope, handlers)` for the stream, and the schema types. Organization-owned routes are written relative to the organization with `orgPath("/factories/{factory}/board")`; `routes.ts` holds the one prefix (`orgRoutes`, `/v1` today), so moving the routes under `/v1/orgs/{org}` (phase 2.2 A5) changes that prefix and `StreamScope`, and the compiler names every call that still lacks `org`.
+`packages/api-client` is the typed layer over the contract: `createGoalClient` (openapi-fetch over the types `openapi-typescript` generates into `src/schema.ts`, with `--default-non-nullable=false` so request fields with a default stay optional), `unwrap` (data on success, else it throws `ApiError`, which carries the RFC 9457 `Problem`, rebuilt from the status line when a proxy answers with something else), `subscribe(baseUrl, scope, handlers)` for the stream, and the schema types. Organization-owned routes are written relative to the organization with `orgPath("/factories/{factory}/board")`; `routes.ts` holds the one prefix (`orgRoutes`, `/v1/orgs/{org}`), and every such call passes `org` (slug or id) as a path parameter, as `StreamScope` does.
 
-In `web`, `src/api/types.ts` re-exports the generated types under the names the screens use, and `client.ts` holds every request (`listFactories`, `getBoard`, `getMetrics`, `listItems`, `getItem`, `listItemEvents`, `submitItem`, `approveItem`, `rejectItem`, `mergeItem`, `retryItem`, `subscribeToFactory`) over `createGoalClient`. Nothing else in `web/src` touches `fetch` or `EventSource`; `web/mock` is typed with the same generated shapes.
+In `web`, `src/api/types.ts` re-exports the generated types under the names the screens use, and `client.ts` holds every request (`listOrgs`, `getOrg`, `createOrg`; then, each taking `org` first, `listFactories`, `getBoard`, `getMetrics`, `listItems`, `getItem`, `listItemEvents`, `submitItem`, `approveItem`, `rejectItem`, `mergeItem`, `retryItem`, `subscribeToFactory`) over `createGoalClient`. Nothing else in `web/src` touches `fetch` or `EventSource`; `web/mock` is typed with the same generated shapes. Query keys (`queries.ts`) are rooted at the organization's id: `['orgs']`, `['org', org, 'detail']`, `['org', org, 'factories']`, `['org', org, 'factory', f, 'board' | 'metrics' | 'items', …]`, `['org', org, 'item', ref]` and `['org', org, 'item', ref, 'events']`.
+
+Until phase 2.2 C's `/o/:org` routes name the organization in the URL, the UI works in the first organization goald lists (`shared/org.ts`, the interim first-org shim: `interimOrg` in the `/f/$factory` and `/` loaders, `useOrg()` in components); C3 replaces it.
 
 ### Live updates
 
-`shared/stream.tsx` opens one `EventSource` per open factory. Each `item` event invalidates the factory's board, metrics and lists and that item's queries, batched over 300 ms so a burst of tool calls costs one refetch; the item's history refetch asks only for events after the last one cached. `resync`, and every reconnect after the first open, invalidate everything.
+`shared/stream.tsx` opens one `EventSource` per open factory, on its organization's stream. Each `item` event invalidates the factory's board, metrics and lists and that item's queries within the organization (`shared/invalidation.ts`), batched over 300 ms so a burst of tool calls costs one refetch; the item's history refetch asks only for events after the last one cached. `resync`, and every reconnect after the first open, invalidate everything of the organization (`['org', org]`).
 
 ### Decisions
 
-Approve and retry act at once (they only move work forward); send back asks for a reason in a dialog, and merge asks for confirmation. Merge replaces approve at a human station whose `action` is `merge`; nothing is keyed by station names. `by` is read from `localStorage["goal.by"]`, else `web`, until goald gains sign-in.
+Approve and retry act at once (they only move work forward); send back asks for a reason in a dialog, and merge asks for confirmation. Merge replaces approve at a human station whose `action` is `merge`; nothing is keyed by station names. Decisions carry no actor: goald records the request's (the local user until phase 4 adds sign-in).
 
 ### Running it
 
 ```bash
-task web:dev                     # Vite on :5173, /v1 proxied to goald on 127.0.0.1:8080 (GOAL_API_URL to change)
+task web:dev                     # Vite on :5173, /v1 proxied to goald on 127.0.0.1:8080 (GOAL_API_URL to change), Host kept for goald's cross-origin check
 GOAL_API=mock task web:dev       # the same against the in-memory mock API (web/mock), no goald needed
 GOAL_API=mock GOAL_MOCK_LIVE=1 task web:dev   # the mock's agents keep calling tools, to watch the stream
 task web:check                   # tsc, Biome, Vitest
@@ -102,7 +104,7 @@ task web:e2e                     # Playwright (Chromium) at 375, 768, 1440 px wi
 task build                       # web:build, then go build -tags webui: goald serves the UI at /
 ```
 
-`web/mock` is a stand-in for goald's API with the contract's shapes and realistic fixtures (a goal factory building itself, a small SRE factory). It keeps state per server, broadcasts stream events like goald, and `POST /__mock/reset` restores the seed (the e2e tests reset before each test).
+`web/mock` is a stand-in for goald's API with the contract's shapes and realistic fixtures: two organizations, `acme` (a goal factory building itself, a small SRE factory, an empty support factory) and `example-labs` (one empty factory). It keeps state per server, broadcasts stream events like goald, and `POST /__mock/reset` restores the seed (the e2e tests reset before each test).
 
 ### Embedding in goald
 

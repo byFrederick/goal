@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -14,8 +15,16 @@ import (
 	"github.com/byFrederick/goal/internal/ports"
 )
 
-// noticeChannel is where the item_events trigger notifies (migrations 00001 and 00003).
-const noticeChannel = "goal_events"
+// Channels the listener follows: the item_events trigger notifies goal_events (migrations
+// 00001, 00003 and 00006); goal_org_events carries an organization's other stream events,
+// {org_id, event, factory_id?, data}, notified in the transaction that causes them.
+const (
+	noticeChannel   = "goal_events"
+	orgEventChannel = "goal_org_events"
+)
+
+// eventName is what an organization event may be called on the stream.
+var eventName = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 
 // Reconnect backoff after the listening connection is lost.
 const (
@@ -95,8 +104,10 @@ func (n *Notices) serve(ctx context.Context, deliver func(ports.ItemNotice)) (bo
 		_ = conn.Close(closeCtx)
 	}()
 
-	if _, err := conn.Exec(ctx, "LISTEN "+noticeChannel); err != nil {
-		return false, fmt.Errorf("listen: %w", err)
+	for _, channel := range []string{noticeChannel, orgEventChannel} {
+		if _, err := conn.Exec(ctx, "LISTEN "+channel); err != nil {
+			return false, fmt.Errorf("listen %s: %w", channel, err)
+		}
 	}
 
 	deliver(ports.ItemNotice{Resync: true})
@@ -107,7 +118,12 @@ func (n *Notices) serve(ctx context.Context, deliver func(ports.ItemNotice)) (bo
 			return true, err
 		}
 
-		notice, err := noticeFrom(msg.Payload)
+		read := noticeFrom
+		if msg.Channel == orgEventChannel {
+			read = orgEventFrom
+		}
+
+		notice, err := read(msg.Payload)
 		if err != nil {
 			n.log.WarnContext(ctx, "item notices: unreadable notification", slog.Any("error", err))
 			continue
@@ -143,5 +159,38 @@ func noticeFrom(raw string) (ports.ItemNotice, error) {
 	return ports.ItemNotice{
 		EventID: p.ID, OrgID: domain.OrgID(p.OrgID), FactoryID: domain.FactoryID(p.FactoryID), ItemID: domain.ItemID(p.ItemID), Number: p.Number,
 		Kind: domain.EventKind(p.Kind), Station: deref(p.Station), State: domain.ItemState(p.State), At: p.At.UTC(),
+	}, nil
+}
+
+// orgPayload is what goal_org_events carries.
+type orgPayload struct {
+	OrgID     string          `json:"org_id"`
+	Event     string          `json:"event"`
+	FactoryID string          `json:"factory_id"`
+	Data      json.RawMessage `json:"data"`
+}
+
+func orgEventFrom(raw string) (ports.ItemNotice, error) {
+	var p orgPayload
+	if err := json.Unmarshal([]byte(raw), &p); err != nil {
+		return ports.ItemNotice{}, fmt.Errorf("decode %q: %w", raw, err)
+	}
+
+	if p.OrgID == "" || !eventName.MatchString(p.Event) {
+		return ports.ItemNotice{}, fmt.Errorf("organization event %q without an organization or a valid name", p.Event)
+	}
+
+	data := p.Data
+	if len(data) == 0 || string(data) == "null" {
+		data = json.RawMessage("{}")
+	}
+
+	if data[0] != '{' {
+		return ports.ItemNotice{}, fmt.Errorf("organization event %s: data is not a JSON object", p.Event)
+	}
+
+	return ports.ItemNotice{
+		OrgID: domain.OrgID(p.OrgID), FactoryID: domain.FactoryID(p.FactoryID),
+		Org: &ports.OrgEvent{Name: p.Event, FactoryID: domain.FactoryID(p.FactoryID), Data: data},
 	}, nil
 }

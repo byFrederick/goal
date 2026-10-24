@@ -1,6 +1,6 @@
-// The organization's event stream (GET /v1/stream, text/event-stream). goald does not replay:
-// after a reconnect, and on `event: resync`, events may have been missed, so the subscriber
-// re-reads what it shows. EventSource reconnects by itself (goald sends `retry: 3000`).
+// An organization's event stream (GET /v1/orgs/{org}/stream, text/event-stream). goald does not
+// replay: after a reconnect, and on `event: resync`, events may have been missed, so the
+// subscriber re-reads what it shows. EventSource reconnects by itself (goald sends `retry: 3000`).
 import { orgPath, routeUrl } from "./routes";
 import type { components } from "./schema";
 
@@ -9,8 +9,10 @@ export type StreamEvent = components["schemas"]["StreamEvent"];
 /** The state of the connection: opening, open, or lost and retrying. */
 export type StreamStatus = "connecting" | "live" | "reconnecting";
 
-/** What the stream is filtered to. Phase 2.2 A5 adds `org` here (C §10.10). */
+/** What the stream is filtered to (C §10.10). */
 export interface StreamScope {
+  /** The organization (its slug or id): a stream carries only its events. */
+  org: string;
   /** Only this factory's events (its id or name); every factory's when absent. */
   factory?: string;
 }

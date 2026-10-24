@@ -89,53 +89,61 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object s
 
 ### HTTP API
 
-`api/openapi.yaml` is the contract ([ADR 0004](../adr/0004-frontend-and-monorepo.md)); `task api:gen` regenerates the Go server interface, models and client in `internal/api/gen` (oapi-codegen, pinned in `Taskfile.yml`) and the TypeScript types in `packages/api-client/src/schema.ts` (openapi-typescript); both are committed, and `task check` fails when the TypeScript side is stale. `internal/api` implements the strict server over small interfaces (the engine, the store's reads, the definitions cache, the stream feed, the clock) and answers errors as RFC 9457 problem details: 404 for unknown items and factories, 400 for invalid requests, 409 when the item's state does not allow the action (a decision on an item not waiting for a human, a retry of an item that is not blocked, a merge away from a merge station or one the pull request refuses).
+`api/openapi.yaml` is the contract ([ADR 0004](../adr/0004-frontend-and-monorepo.md)); `task api:gen` regenerates the Go server interface, models and client in `internal/api/gen` (oapi-codegen, pinned in `Taskfile.yml`) and the TypeScript types in `packages/api-client/src/schema.ts` (openapi-typescript); both are committed, and `task check` fails when the TypeScript side is stale. `internal/api` implements the strict server over small interfaces (the engine, the store's reads, the organizations, the definitions cache, the stream feed, the clock, the `Authorizer`) and answers errors as RFC 9457 problem details (`Problem{title, status, detail?, code?}`, `code` kebab-case): 404 for unknown organizations (one identical body, `org-not-found`, for unknown and deleted ones), items and factories, 400 for invalid requests, 409 when a rule is broken (a taken or reserved slug) or the item's state does not allow the action (a decision on an item not waiting for a human, a retry of an item that is not blocked, a merge away from a merge station or one the pull request refuses), 403 `forbidden` for a refusal of the `Authorizer` or of cross-origin protection.
 
-`{item}` is the item's id or `<factory>#<number>` (`goal#2`, the factory by name or id; `#` percent-encoded as `%23`), and every item carries its `ref`. `{factory}` is a factory's id or name.
+Every request passes the same layers, outermost first: a 1 MiB body cap; `http.CrossOriginProtection` (an unsafe method from a browser page of another origin is refused; `Sec-Fetch-Site: same-origin`, `Origin` equal to `Host`, and clients that send neither, such as the CLI, pass); a request id (`X-Request-Id`, the caller's when well formed, else new; echoed, and recorded by the audit log); the request actor (`internal/api/actor.go`, always `domain.LocalUser` in 2.2); then, per operation, the org middleware (`internal/api/org.go`: `Tenancy.Org(path {org})`, binding the request with `domain.WithOrg`, so row-level security scopes every store call) and the `Authorizer` seam (`internal/api/authz.go`; `api.AllowAll` in 2.2), which the two resolvers `s.factory` and `s.item` pass again with the factory. Phase 4 changes only the actor's source and the `Authorizer`.
+
+Every route but `/v1/health` and `/v1/orgs` lives under `/v1/orgs/{org}` (the organization's slug or id). `{item}` is the item's id or `<factory>#<number>` (`goal#2`, the factory by name or id; `#` percent-encoded as `%23`), and every item carries its `ref`. `{factory}` is a factory's id or name, within the organization.
 
 | Method and path | Does |
 | --- | --- |
 | `GET /v1/health` | liveness |
-| `GET /v1/factories` | the loaded factories with their stations (and a station's `action`) and work types |
-| `POST /v1/factories/{factory}/items` | submit `{title, type, body?, lane?, priority?}`; the type must be one of the factory's work types |
-| `GET /v1/factories/{factory}/items?state=&station=&limit=&after=` | one page of item cards, newest first, and `next_after` (the last number, or null) |
-| `GET /v1/factories/{factory}/board` | the stations in line order with their agents, `wip_limit`, `waiting`, `in_progress` and cards (every open item up to 500, the 20 newest done), and the `constraint` |
-| `GET /v1/factories/{factory}/metrics?window=7d` | throughput per UTC day, lead-time p50/p85 in hours, WIP, rework rate, spend and items done over the last N days |
-| `GET /v1/stream?factory=` | Server-Sent Events of item events (below) |
-| `GET /v1/items/{item}` | the item, with each station's output |
-| `GET /v1/items/{item}/events?after=&limit=` | one page of its history, oldest first, and `next_after` |
-| `POST /v1/items/{item}/approve` | `{by}`: a human approves an item waiting for one |
-| `POST /v1/items/{item}/reject` | `{by, reason}`: sends it back for rework |
-| `POST /v1/items/{item}/retry` | `{by}`: a blocked item goes back to its station's queue; its rework count is unchanged |
-| `POST /v1/items/{item}/merge` | `{by, method?: squash}`: merge the item's pull request, then approve it (below) |
+| `GET /v1/orgs` | every organization of the install, by name: `{orgs: [{id, slug, name, mark, factory_count}]}` |
+| `POST /v1/orgs` | create `{name, slug, mark?}` (mark defaults to the initials); a taken or reserved slug is 409 |
+| `GET /v1/orgs/{org}` | `{id, slug, name, mark, factory_count, created_at}` |
+| `GET /v1/orgs/{org}/factories` | the organization's loaded factories with their stations (and a station's `action`) and work types |
+| `POST /v1/orgs/{org}/factories/{factory}/items` | submit `{title, type, body?, lane?, priority?}`; the type must be one of the factory's work types |
+| `GET /v1/orgs/{org}/factories/{factory}/items?state=&station=&limit=&after=` | one page of item cards, newest first, and `next_after` (the last number, or null) |
+| `GET /v1/orgs/{org}/factories/{factory}/board` | the stations in line order with their agents, `wip_limit`, `waiting`, `in_progress` and cards (every open item up to 500, the 20 newest done), and the `constraint` |
+| `GET /v1/orgs/{org}/factories/{factory}/metrics?window=7d` | throughput per UTC day, lead-time p50/p85 in hours, WIP, rework rate, spend and items done over the last N days |
+| `GET /v1/orgs/{org}/stream?factory=` | Server-Sent Events of the organization's events (below) |
+| `GET /v1/orgs/{org}/items/{item}` | the item, with each station's output |
+| `GET /v1/orgs/{org}/items/{item}/events?after=&limit=` | one page of its history, oldest first, and `next_after` |
+| `POST /v1/orgs/{org}/items/{item}/approve` | the request's actor approves an item waiting for a human |
+| `POST /v1/orgs/{org}/items/{item}/reject` | `{reason}`: sends it back for rework |
+| `POST /v1/orgs/{org}/items/{item}/retry` | a blocked item goes back to its station's queue; its rework count is unchanged |
+| `POST /v1/orgs/{org}/items/{item}/merge` | `{method?: squash}`: merge the item's pull request, then approve it (below) |
+
+A decision's event names the decider (`actor`, the display name) and records `data.actor`, its ref (`user:local`).
 
 An item card is `{id, ref, number, title, type, lane, station, state, class_of_service, rework_count, cost_usd, created_at, updated_at, age_seconds, agent, pr_url}`: `agent` is the lease holder's agent while the item is in progress, `pr_url` the `pull_request` field of the item's latest station output, `age_seconds` the time since creation (created to done for a done item).
 
 The board's `constraint` is the agent station with the most work per slot right now, `(waiting + in_progress) / min(agents, wip)`, ties to the upstream station, null when no agent station has work. It is a snapshot heuristic; constraint detection over time (later, unscheduled) replaces it. Metrics count items that reached done in the window (the last N UTC calendar days, today included, 1d to 90d) and the cost of agent runs started in it; WIP is the items now neither done nor cancelled, the rework rate the share of the items done in the window that were sent back at least once.
 
-No API authentication yet: `goald` refuses to listen on anything but a loopback address. The CLI (`goal run`, `follow`, `item`, `approve`, `reject`, `retry`, `merge`) uses the generated Go client; a bare item number resolves when exactly one factory has an item with it (`--factory` otherwise). The web UI uses `@goal/api-client` (`packages/api-client`): `createGoalClient(baseUrl)` (openapi-fetch over the generated types) and `subscribe(baseUrl, handlers, factory?)` over the stream.
+No API authentication yet: `goald` refuses to listen on anything but a loopback address. The CLI (`goal run`, `follow`, `item`, `approve`, `reject`, `retry`, `merge`, `factory push|pull|list`, `org list|use|create`) uses the generated Go client in one organization: `--org`, else `GOAL_ORG`, else `org` in `$XDG_CONFIG_HOME/goal/config.json` (default `~/.config/goal/config.json`, mode 0600, `{"api_url", "org"}`; `goal org use` writes it), else the install's only organization; a bare item number resolves when exactly one factory of the organization has an item with it (`--factory` otherwise). The web UI uses `@goal/api-client` (`packages/api-client`): `createGoalClient(baseUrl)` (openapi-fetch over the generated types) and `subscribe(baseUrl, {org, factory?}, handlers)` over the stream.
 
 #### Realtime stream
 
-`GET /v1/stream` is `text/event-stream`. Each committed item event is `event: item`, `id:` the event id, `data:` `{item_id, ref, factory_id, kind, station, state, at}` (`StreamEvent` in the contract); `?factory=` keeps one factory's. `event: resync` (`data: {}`) says events may have been missed, so the client re-reads what it shows; a `: heartbeat` comment comes every 15 s and `retry: 3000` opens the stream. There is no replay (`Last-Event-ID` is ignored): a client re-reads on every (re)connection, which `subscribe` signals as a resync.
+`GET /v1/orgs/{org}/stream` is `text/event-stream` and carries one organization's events only. Each committed item event is `event: item`, `id:` the event id, `data:` `{org_id, item_id, ref, factory_id, kind, station, state, at}` (`StreamEvent` in the contract); `?factory=` keeps one factory's. An organization's other events (phase 3's `credential`, `connection`, ...) arrive under their own names with their data object, from the `goal_org_events` channel (`pg_notify('goal_org_events', {org_id, event, factory_id?, data})` in the transaction that causes them; `ports.ItemNotice.Org`); a name that is not lowercase letters, digits and dashes is never written. `event: resync` (`data: {}`) says events may have been missed, so the client re-reads what it shows; a `: heartbeat` comment comes every 15 s and `retry: 3000` opens the stream. There is no replay (`Last-Event-ID` is ignored): a client re-reads on every (re)connection, which `subscribe` signals as a resync.
 
 ```
 item_events INSERT ── trigger notify_item_event() ── pg_notify('goal_events', {org_id, id, factory_id, item_id, number, kind, station, state, at})
-        │  (any goald instance, in the transaction that changes the item)
+an org's other event (phase 3) ───────────────────── pg_notify('goal_org_events', {org_id, event, factory_id?, data})
+        │  (any goald instance, in the transaction that causes it)
         ▼
-goald: postgres.Notices.Listen (one connection, reconnect + Resync) ──▶ api.Feed (fan-out) ──▶ each SSE client of this instance
+goald: postgres.Notices.Listen (one connection, both channels, reconnect + Resync) ──▶ api.Feed (fan-out by org) ──▶ each SSE client of that org on this instance
 ```
 
-Each instance listens once and fans out to its own clients, so `goald` stays stateless and any instance serves any client. A client that falls 256 notices behind has its stream ended (it reconnects and re-reads) so it never holds up the others; at shutdown the feed ends every stream before HTTP drains.
+Each instance listens once and fans out to its own clients, each receiving only its organization's notices (and every resync), so `goald` stays stateless and any instance serves any client. A client that falls 256 notices behind has its stream ended (it reconnects and re-reads) so it never holds up the others; at shutdown the feed ends every stream before HTTP drains.
 
 #### Merge stations
 
-A human station may declare `action: merge` (schema: human stations only; the factory needs `runtime.repository`). `POST /v1/items/{item}/merge` (`goal merge <item>`) is `engine.Merge`:
+A human station may declare `action: merge` (schema: human stations only; the factory needs `runtime.repository`). `POST /v1/orgs/{org}/items/{item}/merge` (`goal merge <item>`) is `engine.Merge`:
 
 1. The item must be waiting at that station (409 otherwise), and one of its outputs must name a `pull_request` URL on the factory's repository (409 otherwise). The latest station on the line that names one wins.
 2. Through `CodeHost` with the repository's token: read the pull request; refuse (409, nothing changed) unless it is open and GitHub reports it mergeable. Then merge it with `merge_method` squash and the head SHA just read, so GitHub refuses if the branch moved; never forced. Read it again and require `merged`.
 3. Delete the pull request's head branch, only when it lives on the same repository and is not its base branch; a failure there is logged, not fatal. Nothing else is ever deleted.
-4. Approve the item in one transition with a `merged` event (`pull_request`, `sha`, `method`, `branch_deleted`) and an `approved` event by `by`.
+4. Approve the item in one transition with a `merged` event (`pull_request`, `sha`, `method`, `branch_deleted`) and an `approved` event by the request's actor.
 
 A pull request that is already merged (a merge whose approval failed) is approved again, so the step is safe to retry. No credential reaches events, errors or logs.
 
@@ -181,8 +189,8 @@ settings (env) ─┬─ envsecrets.New ─────────────�
                                                                   ▼
                         engine.New(Deps{..., Orgs: tenancy, RunEnded: gateway.EndRun}, Config{GatewayURL, GatewayKeyRef, TaskEnv, MaxRuns})
    load hook: every refresh → store.SaveFactory(each, in its org) → engine.SetLines(lines, each with its OrgID)
-   postgres.NewNotices(pool's conn config) → api.NewFeed ─────────── ItemNotices for /v1/stream
-   http.ServeMux: /v1/ → api.New(engine, store, defs, feed, clock)    /mcp → gateway
+   postgres.NewNotices(pool's conn config) → api.NewFeed ─────────── ItemNotices for /v1/orgs/{org}/stream
+   http.ServeMux: /v1/ → api.New(engine, store (Items, Orgs), defs, api.AllowAll{}, feed, clock)    /mcp → gateway
    goroutines: engine.Run (ticks + lease sweep), definitions refresh (GOAL_REFRESH_EVERY), feed.Run, HTTP
    startup: Refresh, then reap orphaned containers (task, check, sidecar), run folders and workspaces
    shutdown: HTTP, then the engine, then gateway.Close (stops every sidecar)
@@ -197,7 +205,7 @@ The definitions cache refreshes from the bucket at startup, every `GOAL_REFRESH_
 
 ```
 goal run goal "Add a goal version subcommand"
-  → POST /v1/factories/goal/items          engine.Submit: item #N queued at inbox
+  → POST /v1/orgs/default/factories/goal/items   engine.Submit: item #N queued at inbox
   → tick: inbox (queue) releases it to spec
   → tick: spec claims it (lease on a slot; heartbeat while the run lasts)
       StartRun
@@ -215,8 +223,8 @@ goal run goal "Add a goal version subcommand"
                           (retry once with the failing output)
       Workspaces.Remove
   → Transition to the next station (approve-spec: waiting_human)
-goal approve goal#N       POST /v1/items/goal%23N/approve → build, then review, then merge (human)
-goal merge goal#N         POST /v1/items/goal%23N/merge → squash-merge the build's pull request, approve → done
+goal approve goal#N       POST /v1/orgs/default/items/goal%23N/approve → build, then review, then merge (human)
+goal merge goal#N         POST /v1/orgs/default/items/goal%23N/merge → squash-merge the build's pull request, approve → done
 ``` A constructor takes its dependencies as interfaces and returns a concrete type.
 
 ## Scale and failure

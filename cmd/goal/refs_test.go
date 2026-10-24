@@ -38,10 +38,13 @@ func newRefGoald(t *testing.T) *refGoald {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /v1/factories", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /v1/orgs", func(w http.ResponseWriter, _ *http.Request) {
+		reply(w, http.StatusOK, gen.OrgList{Orgs: []gen.OrgSummary{{Id: "019a1c00-0000-7000-8000-0000000000aa", Slug: orgAcme, Name: "Acme", Mark: "Ac"}}})
+	})
+	mux.HandleFunc("GET /v1/orgs/acme/factories", func(w http.ResponseWriter, _ *http.Request) {
 		reply(w, http.StatusOK, gen.FactoryList{Factories: []gen.Factory{{Name: factoryGoal}, {Name: "sre"}}})
 	})
-	mux.HandleFunc("GET /v1/items/{item}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /v1/orgs/acme/items/{item}", func(w http.ResponseWriter, r *http.Request) {
 		if !items[r.PathValue("item")] {
 			w.Header().Set("Content-Type", "application/problem+json")
 			w.WriteHeader(http.StatusNotFound)
@@ -52,7 +55,7 @@ func newRefGoald(t *testing.T) *refGoald {
 
 		reply(w, http.StatusOK, item(r.PathValue("item")))
 	})
-	mux.HandleFunc("POST /v1/items/{item}/{verb}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v1/orgs/acme/items/{item}/{verb}", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, http.StatusOK, item(r.PathValue("item")))
 	})
 
@@ -90,7 +93,7 @@ func TestItemRef_BareNumbersResolveToTheOneFactoryThatHasThem(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got, err := itemRef(t.Context(), c, tt.arg, tt.factory)
+		got, err := itemRef(t.Context(), orgClient{ClientWithResponses: c, org: orgAcme}, tt.arg, tt.factory)
 
 		switch {
 		case tt.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErr)):
@@ -105,13 +108,7 @@ func TestDecide_RetryAndMergeByReference(t *testing.T) {
 	t.Parallel()
 
 	g := newRefGoald(t)
-	env := func(k string) string {
-		if k == "USER" {
-			return "pat"
-		}
-
-		return g.srv.URL
-	}
+	env := testEnv(t, g.srv.URL, nil) // no --org, GOAL_ORG or config: the install's only org
 
 	for _, verb := range []string{"retry", "merge"} {
 		var buf bytes.Buffer
@@ -128,7 +125,7 @@ func TestDecide_RetryAndMergeByReference(t *testing.T) {
 	defer g.mu.Unlock()
 
 	// The # of a reference travels percent-encoded, so it is not taken for a URL fragment.
-	for _, want := range []string{"POST /v1/items/goal%232/retry", "POST /v1/items/goal%232/merge"} {
+	for _, want := range []string{"POST /v1/orgs/acme/items/goal%232/retry", "POST /v1/orgs/acme/items/goal%232/merge"} {
 		if !strings.Contains(strings.Join(g.paths, "\n"), want) {
 			t.Errorf("requests %v; want %s", g.paths, want)
 		}

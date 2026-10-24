@@ -1,17 +1,17 @@
-// Where an organization's routes live. Every route except /v1/health belongs to an organization.
-// Today goald serves one implicit organization directly under /v1; phase 2.2 A5 moves the routes
-// under /v1/orgs/{org} (A §8.3). That move changes `orgRoutes` here, and the compiler then names
-// every call that still lacks the `org` path parameter. Nothing else spells the prefix.
+// Where an organization's routes live. Every route except /v1/health and /v1/orgs belongs to an
+// organization and lives under /v1/orgs/{org} (A §8.3), with `org` (the organization's slug or
+// id) a path parameter of every such call. Nothing else spells the prefix.
 
 /** The prefix of every organization-owned route. */
-export const orgRoutes = "/v1";
+export const orgRoutes = "/v1/orgs/{org}";
 
-/** The contract path of an organization-owned route, e.g. OrgPath<"/factories"> = "/v1/factories". */
+/** The contract path of an organization-owned route, e.g. OrgPath<"/factories"> = "/v1/orgs/{org}/factories". */
 export type OrgPath<Route extends `/${string}`> = `${typeof orgRoutes}${Route}`;
 
 /**
  * orgPath turns a route relative to the organization ("/factories/{factory}/board") into its
- * contract path, typed as the literal key of `paths` so openapi-fetch checks its parameters.
+ * contract path, typed as the literal key of `paths` so openapi-fetch checks its parameters,
+ * `org` among them.
  */
 export function orgPath<Route extends `/${string}`>(route: Route): OrgPath<Route> {
   return `${orgRoutes}${route}`;

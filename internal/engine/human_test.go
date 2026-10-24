@@ -45,9 +45,9 @@ func TestHuman_ApproveAdvancesRejectSendsBack(t *testing.T) {
 			)
 
 			if tt.reject {
-				got, err = h.e.Reject(inOrg(t), it.ID, "fcruz", "split it in two")
+				got, err = h.e.Reject(inOrg(t), it.ID, human, "split it in two")
 			} else {
-				got, err = h.e.Approve(inOrg(t), it.ID, "fcruz")
+				got, err = h.e.Approve(inOrg(t), it.ID, human)
 			}
 
 			if err != nil {
@@ -59,8 +59,8 @@ func TestHuman_ApproveAdvancesRejectSendsBack(t *testing.T) {
 			}
 
 			events := h.eventsOf(it.ID, tt.event)
-			if len(events) != 1 || events[0].Actor != "fcruz" {
-				t.Fatalf("events %v, want one %s by fcruz", h.kinds(it.ID), tt.event)
+			if len(events) != 1 || events[0].Actor != human.Name || events[0].Data["actor"] != "user:local" {
+				t.Fatalf("events %v, want one %s by the local user (user:local)", h.kinds(it.ID), tt.event)
 			}
 
 			if tt.reject && events[0].Data["reason"] != "split it in two" {
@@ -76,17 +76,17 @@ func TestHuman_DecisionsNeedAnItemWaitingForAHuman(t *testing.T) {
 	h := newHarness(t, humanLine(), porttest.Succeed(`{}`))
 	it := h.submit(t, domain.NewItem{}) // still queued in the inbox
 
-	if _, err := h.e.Approve(inOrg(t), it.ID, "fcruz"); !errors.Is(err, engine.ErrNotWaitingHuman) {
+	if _, err := h.e.Approve(inOrg(t), it.ID, human); !errors.Is(err, engine.ErrNotWaitingHuman) {
 		t.Errorf("Approve on a queued item: err = %v, want ErrNotWaitingHuman", err)
 	}
 
-	if _, err := h.e.Reject(inOrg(t), it.ID, "fcruz", "no"); !errors.Is(err, engine.ErrNotWaitingHuman) {
+	if _, err := h.e.Reject(inOrg(t), it.ID, human, "no"); !errors.Is(err, engine.ErrNotWaitingHuman) {
 		t.Errorf("Reject on a queued item: err = %v, want ErrNotWaitingHuman", err)
 	}
 
 	h.step(t)
 
-	if _, err := h.e.Reject(inOrg(t), it.ID, "fcruz", ""); err == nil {
+	if _, err := h.e.Reject(inOrg(t), it.ID, human, ""); err == nil {
 		t.Error("Reject without a reason succeeded")
 	}
 }
@@ -100,7 +100,7 @@ func TestHuman_ApprovingAGateEscalationAdvancesIt(t *testing.T) {
 	h.step(t)
 	h.step(t)
 
-	got, err := h.e.Approve(inOrg(t), it.ID, "fcruz")
+	got, err := h.e.Approve(inOrg(t), it.ID, human)
 	if err != nil {
 		t.Fatal(err)
 	}

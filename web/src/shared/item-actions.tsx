@@ -11,9 +11,9 @@ import type { Item, ItemState, Station } from '../api/types';
 import { Button } from '../ui/button';
 import { cn } from '../ui/cn';
 import { Dialog, DialogClose, DialogContent } from '../ui/dialog';
-import { actor } from './actor';
 import { humanize } from './format';
 import { decisionsFor, pullRequestLabel } from './item-state';
+import { useOrg } from './org';
 
 export interface DecidableItem {
   /** The id or ref the API accepts. */
@@ -29,22 +29,23 @@ type Decision = { kind: 'approve' } | { kind: 'reject'; reason: string } | { kin
 
 function useDecision(item: DecidableItem, factory: string) {
   const client = useQueryClient();
+  const org = useOrg();
   return useMutation({
+    // goald records the request's actor (the local user) as the decider.
     mutationFn: (d: Decision): Promise<Item> => {
-      const by = actor();
       switch (d.kind) {
         case 'approve':
-          return approveItem(item.key, by);
+          return approveItem(org, item.key);
         case 'reject':
-          return rejectItem(item.key, by, d.reason);
+          return rejectItem(org, item.key, d.reason);
         case 'merge':
-          return mergeItem(item.key, by);
+          return mergeItem(org, item.key);
         case 'retry':
-          return retryItem(item.key, by);
+          return retryItem(org, item.key);
       }
     },
     onSuccess: (updated, d) => {
-      client.setQueryData(keys.item(item.key), updated);
+      client.setQueryData(keys.item(org, item.key), updated);
       const where = updated.state === 'done' ? 'It is done.' : `It is now at ${humanize(updated.station)}.`;
       const done = {
         approve: `Approved ${item.ref}.`,
@@ -60,8 +61,8 @@ function useDecision(item: DecidableItem, factory: string) {
     },
     onSettled: () =>
       Promise.all([
-        client.invalidateQueries({ queryKey: keys.factory(factory) }),
-        client.invalidateQueries({ queryKey: keys.item(item.key) }),
+        client.invalidateQueries({ queryKey: keys.factory(org, factory) }),
+        client.invalidateQueries({ queryKey: keys.item(org, item.key) }),
       ]),
   });
 }

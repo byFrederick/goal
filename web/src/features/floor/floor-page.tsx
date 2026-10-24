@@ -5,6 +5,7 @@ import { FactorySwitcher, LiveStatus } from '../../shared/chrome';
 import { factoryTitle, useFactory } from '../../shared/factory';
 import { formatDay } from '../../shared/format';
 import { NewItemButton } from '../../shared/new-item';
+import { useOrg } from '../../shared/org';
 import { cn } from '../../ui/cn';
 import { LogoMark } from '../../ui/logo';
 import { ConstraintCard, DaysCard, FlowCard, ThroughputCard } from './cards';
@@ -21,8 +22,9 @@ const grid = cn(
 
 export function FloorPage() {
   const factory = useFactory();
-  const { data: board } = useSuspenseQuery(boardQuery(factory.name));
-  const { data: metrics } = useSuspenseQuery(metricsQuery(factory.name));
+  const org = useOrg();
+  const { data: board } = useSuspenseQuery(boardQuery(org, factory.name));
+  const { data: metrics } = useSuspenseQuery(metricsQuery(org, factory.name));
   const title = `${factoryTitle(factory)} floor`;
   const days = metrics.throughput;
   const range = days.length > 0 ? `${formatDay(days[0]?.day ?? '')} to ${formatDay(days.at(-1)?.day ?? '')}` : '';

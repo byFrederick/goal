@@ -1,11 +1,13 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"sync"
 	"time"
 
@@ -24,14 +26,15 @@ const (
 	reconnectMillis = 3000
 )
 
-// Feed fans the item notices of one listener out to this goald instance's stream clients.
-// It holds only the clients connected to this instance, so any instance serves any client.
+// Feed fans the notices of one listener out to this goald instance's stream clients, each
+// client receiving only its organization's notices (and every resync). It holds only the
+// clients connected to this instance, so any instance serves any client.
 type Feed struct {
 	notices ports.ItemNotices
 	log     *slog.Logger
 
 	mu      sync.Mutex
-	clients map[chan ports.ItemNotice]struct{}
+	clients map[chan ports.ItemNotice]domain.OrgID
 	closed  bool
 }
 
@@ -41,7 +44,7 @@ func NewFeed(notices ports.ItemNotices, log *slog.Logger) *Feed {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Feed{notices: notices, log: log, clients: map[chan ports.ItemNotice]struct{}{}}
+	return &Feed{notices: notices, log: log, clients: map[chan ports.ItemNotice]domain.OrgID{}}
 }
 
 // Run listens until ctx ends, then ends every client's stream.
@@ -60,13 +63,18 @@ func (f *Feed) Run(ctx context.Context) error {
 	return err
 }
 
-// broadcast hands a notice to every client without waiting: a client whose buffer is full is
-// dropped (its channel closed), so one slow client never holds up the others.
+// broadcast hands a notice to every client of its organization (a resync to every client)
+// without waiting: a client whose buffer is full is dropped (its channel closed), so one slow
+// client never holds up the others.
 func (f *Feed) broadcast(n ports.ItemNotice) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	for ch := range f.clients {
+	for ch, org := range f.clients {
+		if !n.Resync && n.OrgID != org {
+			continue
+		}
+
 		select {
 		case ch <- n:
 		default:
@@ -77,9 +85,9 @@ func (f *Feed) broadcast(n ports.ItemNotice) {
 	}
 }
 
-// subscribe returns a channel of notices, closed when the client is dropped or the feed stops,
-// and the function that unsubscribes it.
-func (f *Feed) subscribe() (<-chan ports.ItemNotice, func()) {
+// subscribe returns a channel of org's notices, closed when the client is dropped or the feed
+// stops, and the function that unsubscribes it.
+func (f *Feed) subscribe(org domain.OrgID) (<-chan ports.ItemNotice, func()) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -90,7 +98,7 @@ func (f *Feed) subscribe() (<-chan ports.ItemNotice, func()) {
 		return ch, func() {}
 	}
 
-	f.clients[ch] = struct{}{}
+	f.clients[ch] = org
 
 	return ch, func() {
 		f.mu.Lock()
@@ -107,7 +115,7 @@ func (s *server) StreamEvents(ctx context.Context, req gen.StreamEventsRequestOb
 	var factory domain.FactoryID
 
 	if ref := deref(req.Params.Factory); ref != "" {
-		f, err := s.factories.Lookup(ctx, ref)
+		f, err := s.factory(ctx, ref)
 		if err != nil {
 			return nil, err
 		}
@@ -115,7 +123,12 @@ func (s *server) StreamEvents(ctx context.Context, req gen.StreamEventsRequestOb
 		factory = domain.FactoryID(f.Metadata.ID)
 	}
 
-	notices, unsubscribe := s.feed.subscribe()
+	org, ok := domain.OrgFrom(ctx)
+	if !ok {
+		return nil, fmt.Errorf("stream: %w", domain.ErrNoOrg)
+	}
+
+	notices, unsubscribe := s.feed.subscribe(org)
 
 	return stream{ctx: ctx, s: s, factory: factory, notices: notices, unsubscribe: unsubscribe}, nil
 }
@@ -175,7 +188,7 @@ func (st stream) VisitStreamEventsResponse(w http.ResponseWriter) error {
 }
 
 // send writes one notice, unless it is another factory's, and reports whether the client is
-// still there.
+// still there. The feed hands it only its organization's notices.
 func (st stream) send(write func(string, ...any) bool, n ports.ItemNotice) bool {
 	if n.Resync {
 		return write("event: resync\ndata: {}\n\n")
@@ -185,8 +198,12 @@ func (st stream) send(write func(string, ...any) bool, n ports.ItemNotice) bool 
 		return true
 	}
 
+	if n.Org != nil {
+		return st.sendOrgEvent(write, n.Org)
+	}
+
 	data, err := json.Marshal(gen.StreamEvent{
-		ItemId: string(n.ItemID), Ref: st.s.ref(st.ctx, n.FactoryID, n.Number), FactoryId: string(n.FactoryID),
+		OrgId: string(n.OrgID), ItemId: string(n.ItemID), Ref: st.s.ref(st.ctx, n.FactoryID, n.Number), FactoryId: string(n.FactoryID),
 		Kind: string(n.Kind), Station: optional(n.Station), State: gen.ItemState(n.State), At: n.At,
 	})
 	if err != nil {
@@ -196,3 +213,18 @@ func (st stream) send(write func(string, ...any) bool, n ports.ItemNotice) bool 
 
 	return write("event: item\nid: %d\ndata: %s\n\n", n.EventID, data)
 }
+
+// sendOrgEvent writes an organization event under its own name, with its data object on one
+// line. A name or data that could break the event stream is never written.
+func (st stream) sendOrgEvent(write func(string, ...any) bool, e *ports.OrgEvent) bool {
+	var data bytes.Buffer
+	if err := json.Compact(&data, e.Data); err != nil || !eventName.MatchString(e.Name) {
+		st.s.log.WarnContext(st.ctx, "organization event not sent", slog.String("event", e.Name), slog.Any("error", err))
+		return true
+	}
+
+	return write("event: %s\ndata: %s\n\n", e.Name, data.Bytes())
+}
+
+// eventName is what a stream event may be called besides item and resync.
+var eventName = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)

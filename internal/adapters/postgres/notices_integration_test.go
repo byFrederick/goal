@@ -165,3 +165,32 @@ func TestNotices_ReconnectsAndResyncsAfterTheConnectionIsLost(t *testing.T) {
 		t.Errorf("notice after reconnecting = %+v; want the item's created event", n)
 	}
 }
+
+func TestNotices_OrgEventsArriveAsOrgNotices(t *testing.T) {
+	t.Parallel()
+
+	pool := newTestPool(t)
+	s := New(pool)
+	org := newOrgID(t, s)
+	factory := saveFactory(domain.WithOrg(t.Context(), org), t, s)
+	notices := listening(t, NewNotices(pool.Config().ConnConfig, nil), factory)
+
+	if n := next(t, notices); !n.Resync {
+		t.Fatalf("first notice = %+v; want Resync", n)
+	}
+
+	for _, payload := range []string{
+		`{"org_id":"` + string(org) + `","event":"bad name\ndata: x","factory_id":"` + string(factory) + `","data":{}}`,
+		`{"org_id":"` + string(org) + `","event":"credential","factory_id":"` + string(factory) + `","data":{"name":"repo"}}`,
+	} {
+		if _, err := pool.Exec(t.Context(), "SELECT pg_notify('goal_org_events', $1)", payload); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	n := next(t, notices)
+	if n.OrgID != org || n.FactoryID != factory || n.Org == nil || n.Org.Name != "credential" ||
+		n.Org.FactoryID != factory || string(n.Org.Data) != `{"name":"repo"}` {
+		t.Errorf("notice = %+v (org event %+v); want the credential event, the malformed one skipped", n, n.Org)
+	}
+}

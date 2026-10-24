@@ -1,19 +1,27 @@
-// Package api serves goald's HTTP API, the contract in api/openapi.yaml: health, the factories
-// goald runs, their boards and flow metrics, submitting and listing work items, reading items
-// and their history, human decisions (approve, reject, retry, merge) and a Server-Sent Events
-// stream of item events.
+// Package api serves goald's HTTP API, the contract in api/openapi.yaml: health, the install's
+// organizations and, under /v1/orgs/{org}, each organization's factories, their boards and flow
+// metrics, submitting and listing work items, reading items and their history, human decisions
+// (approve, reject, retry, merge) and a Server-Sent Events stream of the organization's events.
 //
 // The handlers implement the strict server interface generated into internal/api/gen
-// (`task api:gen`). They reach the engine, the store and the factory definitions only through
-// the small interfaces below; cmd/goald wires the real ones. Wherever a path takes an item,
-// it takes its id or <factory>#<number>. Errors are RFC 9457 problem details: unknown items
-// and factories are 404, invalid requests 400, an action the item's state does not allow (a
-// decision on an item not waiting for a human, a retry of an item not blocked, a merge that is
-// not the item's step or that the pull request refuses) 409; anything else is a 500 whose
-// detail stays in the log.
+// (`task api:gen`). They reach the engine, the store, the organizations and the factory
+// definitions only through the small interfaces below; cmd/goald wires the real ones.
+//
+// Every request goes through the same layers: cross-origin protection (a browser may change
+// things only from goald's own origin), a request id (X-Request-Id), the request's actor
+// (actor.go: always the local user in phase 2.2, which has no identity), then, per operation,
+// the organization of the path (org.go: unknown or deleted is 404, and the request is bound to
+// it with domain.WithOrg so row-level security scopes every store call) and the Authorizer seam
+// (authz.go), passed again by the two resolvers of factories and items. Wherever a path takes an
+// item, it takes its id or <factory>#<number>. Errors are RFC 9457 problem details: unknown
+// organizations, items and factories are 404, invalid requests 400, a broken rule (a taken
+// slug) or an action the item's state does not allow (a decision on an item not waiting for a
+// human, a retry of an item not blocked, a merge that is not the item's step or that the pull
+// request refuses) 409, a refusal of the Authorizer 403; anything else is a 500 whose detail
+// stays in the log.
 //
 // The stream is served from a Feed: one LISTEN per goald instance, fanned out to that
-// instance's clients, so any instance serves any client.
+// instance's clients of each organization, so any instance serves any client.
 //
 // No authentication yet: goald binds the API to 127.0.0.1.
 package api
@@ -39,10 +47,10 @@ import (
 // Engine moves items; *engine.Engine satisfies it.
 type Engine interface {
 	Submit(ctx context.Context, n domain.NewItem) (domain.Item, error)
-	Approve(ctx context.Context, id domain.ItemID, by string) (domain.Item, error)
-	Reject(ctx context.Context, id domain.ItemID, by, reason string) (domain.Item, error)
-	Retry(ctx context.Context, id domain.ItemID, by string) (domain.Item, error)
-	Merge(ctx context.Context, id domain.ItemID, by, method string) (domain.Item, error)
+	Approve(ctx context.Context, id domain.ItemID, by domain.Actor) (domain.Item, error)
+	Reject(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
+	Retry(ctx context.Context, id domain.ItemID, by domain.Actor) (domain.Item, error)
+	Merge(ctx context.Context, id domain.ItemID, by domain.Actor, method string) (domain.Item, error)
 }
 
 // Items reads items, their history, the leases on them and a factory's flow; ports.Store
@@ -71,14 +79,14 @@ type Deps struct {
 	Engine    Engine
 	Items     Items
 	Factories Factories
-	// Feed serves /v1/stream; the caller runs it (Feed.Run).
+	Orgs      Orgs
+	// Authorizer decides every request (AllowAll in phase 2.2).
+	Authorizer Authorizer
+	// Feed serves /v1/orgs/{org}/stream; the caller runs it (Feed.Run).
 	Feed *Feed
 	// Clock dates ages and metric windows and paces stream heartbeats.
-	Clock ports.Clock
-	// LegacyOrg is the organization every request runs in until the routes move under
-	// /v1/orgs/{org} (phase 2.2 A5 removes it).
-	LegacyOrg domain.OrgID
-	Logger    *slog.Logger
+	Clock  ports.Clock
+	Logger *slog.Logger
 }
 
 // Limits on requests.
@@ -93,8 +101,9 @@ var errInvalid = errors.New("invalid request")
 
 // New returns the API's handler for the /v1/ routes.
 func New(d Deps) (http.Handler, error) {
-	if d.Engine == nil || d.Items == nil || d.Factories == nil || d.Feed == nil || d.Clock == nil || d.LegacyOrg == "" {
-		return nil, errors.New("api: Engine, Items, Factories, Feed, Clock and LegacyOrg are required")
+	if d.Engine == nil || d.Items == nil || d.Factories == nil || d.Orgs == nil || d.Authorizer == nil || d.Feed == nil ||
+		d.Clock == nil {
+		return nil, errors.New("api: Engine, Items, Factories, Orgs, Authorizer, Feed and Clock are required")
 	}
 
 	log := d.Logger
@@ -102,28 +111,52 @@ func New(d Deps) (http.Handler, error) {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	s := &server{engine: d.Engine, items: d.Items, factories: d.Factories, feed: d.Feed, clock: d.Clock, log: log}
+	s := &server{
+		engine: d.Engine, items: d.Items, factories: d.Factories, orgs: d.Orgs, authz: d.Authorizer, feed: d.Feed,
+		clock: d.Clock, log: log,
+	}
 
-	strict := gen.NewStrictHandlerWithOptions(s, nil, gen.StrictHTTPServerOptions{
+	strict := gen.NewStrictHandlerWithOptions(s, []gen.StrictMiddlewareFunc{s.scope}, gen.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			s.problem(w, r, fmt.Errorf("%w: %w", errInvalid, err))
 		},
 		ResponseErrorHandlerFunc: s.problem,
 	})
 
+	// Paths that are no route answer a problem too, as an unknown resource.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		s.problem(w, r, fmt.Errorf("no route %s %s: %w", r.Method, r.URL.Path, ports.ErrNotFound))
+	})
+
 	h := gen.HandlerWithOptions(strict, gen.StdHTTPServerOptions{
+		BaseRouter: mux,
 		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			s.problem(w, r, fmt.Errorf("%w: %w", errInvalid, err))
 		},
 	})
 
-	return http.MaxBytesHandler(legacyOrg(d.LegacyOrg, h), maxRequestBytes), nil
+	// A browser page of another origin may read nothing it is not allowed to and change nothing:
+	// unsafe methods must come from goald's own origin (Sec-Fetch-Site, else Origin = Host).
+	// Clients without those headers (the CLI) pass.
+	cop := http.NewCrossOriginProtection()
+	cop.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.problem(w, r, errCrossOrigin)
+	}))
+
+	return http.MaxBytesHandler(cop.Handler(withRequestID(withActor(h))), maxRequestBytes), nil
 }
+
+// errCrossOrigin marks an unsafe request from another origin, which cross-origin protection
+// refuses (403).
+var errCrossOrigin = errors.New("cross-origin request refused: change things from goald's own origin")
 
 type server struct {
 	engine    Engine
 	items     Items
 	factories Factories
+	orgs      Orgs
+	authz     Authorizer
 	feed      *Feed
 	clock     ports.Clock
 	log       *slog.Logger
@@ -138,7 +171,7 @@ func (s *server) GetHealth(context.Context, gen.GetHealthRequestObject) (gen.Get
 func (s *server) ListFactories(ctx context.Context, _ gen.ListFactoriesRequestObject) (gen.ListFactoriesResponseObject, error) {
 	out := gen.ListFactories200JSONResponse{Factories: []gen.Factory{}}
 	for _, f := range s.factories.Factories(ctx) {
-		out.Factories = append(out.Factories, factoryOf(f))
+		out.Factories = append(out.Factories, factoryOf(orgOf(ctx).ID, f))
 	}
 
 	return out, nil
@@ -147,7 +180,7 @@ func (s *server) ListFactories(ctx context.Context, _ gen.ListFactoriesRequestOb
 func (s *server) SubmitItem(ctx context.Context, req gen.SubmitItemRequestObject) (gen.SubmitItemResponseObject, error) {
 	b := req.Body
 
-	f, err := s.factories.Lookup(ctx, req.Factory)
+	f, err := s.factory(ctx, req.Factory)
 	if err != nil {
 		return nil, err
 	}
@@ -178,21 +211,6 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 	}
 
 	return gen.GetItem200JSONResponse(s.itemOf(ctx, it)), nil
-}
-
-// item finds an item by its id or by <factory>#<number>.
-func (s *server) item(ctx context.Context, ref string) (domain.Item, error) {
-	r, ok := domain.ParseItemRef(ref)
-	if !ok {
-		return s.items.Item(ctx, domain.ItemID(ref))
-	}
-
-	f, err := s.factories.Lookup(ctx, r.Factory)
-	if err != nil {
-		return domain.Item{}, fmt.Errorf("item %s: %w", ref, err)
-	}
-
-	return s.items.ItemByNumber(ctx, domain.FactoryID(f.Metadata.ID), r.Number)
 }
 
 func (s *server) ListItemEvents(ctx context.Context, req gen.ListItemEventsRequestObject) (gen.ListItemEventsResponseObject, error) {
@@ -226,16 +244,12 @@ func (s *server) ListItemEvents(ctx context.Context, req gen.ListItemEventsReque
 }
 
 func (s *server) ApproveItem(ctx context.Context, req gen.ApproveItemRequestObject) (gen.ApproveItemResponseObject, error) {
-	if strings.TrimSpace(req.Body.By) == "" {
-		return nil, fmt.Errorf("%w: say who approves (by)", errInvalid)
-	}
-
-	it, err := s.item(ctx, req.Item)
+	by, it, err := s.decide(ctx, req.Item)
 	if err != nil {
 		return nil, err
 	}
 
-	if it, err = s.engine.Approve(ctx, it.ID, strings.TrimSpace(req.Body.By)); err != nil {
+	if it, err = s.engine.Approve(ctx, it.ID, by); err != nil {
 		return nil, err
 	}
 
@@ -243,12 +257,12 @@ func (s *server) ApproveItem(ctx context.Context, req gen.ApproveItemRequestObje
 }
 
 func (s *server) RejectItem(ctx context.Context, req gen.RejectItemRequestObject) (gen.RejectItemResponseObject, error) {
-	by, reason := strings.TrimSpace(req.Body.By), strings.TrimSpace(req.Body.Reason)
-	if by == "" || reason == "" {
-		return nil, fmt.Errorf("%w: a rejection needs who rejects (by) and a reason", errInvalid)
+	reason := strings.TrimSpace(req.Body.Reason)
+	if reason == "" {
+		return nil, fmt.Errorf("%w: a rejection needs a reason", errInvalid)
 	}
 
-	it, err := s.item(ctx, req.Item)
+	by, it, err := s.decide(ctx, req.Item)
 	if err != nil {
 		return nil, err
 	}
@@ -261,12 +275,7 @@ func (s *server) RejectItem(ctx context.Context, req gen.RejectItemRequestObject
 }
 
 func (s *server) RetryItem(ctx context.Context, req gen.RetryItemRequestObject) (gen.RetryItemResponseObject, error) {
-	by := strings.TrimSpace(req.Body.By)
-	if by == "" {
-		return nil, fmt.Errorf("%w: say who retries (by)", errInvalid)
-	}
-
-	it, err := s.item(ctx, req.Item)
+	by, it, err := s.decide(ctx, req.Item)
 	if err != nil {
 		return nil, err
 	}
@@ -279,61 +288,88 @@ func (s *server) RetryItem(ctx context.Context, req gen.RetryItemRequestObject) 
 }
 
 func (s *server) MergeItem(ctx context.Context, req gen.MergeItemRequestObject) (gen.MergeItemResponseObject, error) {
-	by := strings.TrimSpace(req.Body.By)
-	if by == "" {
-		return nil, fmt.Errorf("%w: say who merges (by)", errInvalid)
+	if b := req.Body; b != nil && b.Method != nil && *b.Method != gen.Squash {
+		return nil, fmt.Errorf("%w: merge method %q is not squash", errInvalid, *b.Method)
 	}
 
-	method := engine.MergeSquash
-
-	if m := req.Body.Method; m != nil && *m != gen.Squash {
-		return nil, fmt.Errorf("%w: merge method %q is not squash", errInvalid, *m)
-	}
-
-	it, err := s.item(ctx, req.Item)
+	by, it, err := s.decide(ctx, req.Item)
 	if err != nil {
 		return nil, err
 	}
 
-	if it, err = s.engine.Merge(ctx, it.ID, by, method); err != nil {
+	if it, err = s.engine.Merge(ctx, it.ID, by, engine.MergeSquash); err != nil {
 		return nil, err
 	}
 
 	return gen.MergeItem200JSONResponse(s.itemOf(ctx, it)), nil
 }
 
+// decide resolves the item a decision is about, and who decides: the request's actor.
+func (s *server) decide(ctx context.Context, ref string) (domain.Actor, domain.Item, error) {
+	by, ok := domain.ActorFrom(ctx)
+	if !ok {
+		return domain.Actor{}, domain.Item{}, errors.New("decision: the request has no actor")
+	}
+
+	it, err := s.item(ctx, ref)
+
+	return by, it, err
+}
+
 // problem writes err as problem details with the status its kind maps to.
 func (s *server) problem(w http.ResponseWriter, r *http.Request, err error) {
-	status, detail := http.StatusInternalServerError, "see goald's log"
-
-	var tooLarge *http.MaxBytesError
-
-	switch {
-	case errors.Is(err, ports.ErrNotFound):
-		status, detail = http.StatusNotFound, err.Error()
-	case errors.Is(err, engine.ErrNotWaitingHuman), errors.Is(err, engine.ErrNotBlocked),
-		errors.Is(err, engine.ErrNotMergeStep), errors.Is(err, ports.ErrNotMergeable):
-		status, detail = http.StatusConflict, err.Error()
-	case errors.As(err, &tooLarge):
-		status, detail = http.StatusRequestEntityTooLarge, err.Error()
-	case errors.Is(err, errInvalid):
-		status, detail = http.StatusBadRequest, err.Error()
-	default:
+	p := problemOf(err)
+	if p.Status == http.StatusInternalServerError {
 		s.log.ErrorContext(r.Context(), "api request failed", slog.String("method", r.Method),
-			slog.String("path", r.URL.Path), slog.Any("error", err))
+			slog.String("path", r.URL.Path), slog.String("request_id", w.Header().Get(requestIDHeader)), slog.Any("error", err))
 	}
 
 	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(status)
+	w.WriteHeader(p.Status)
 
-	if err := json.NewEncoder(w).Encode(gen.Problem{Title: http.StatusText(status), Status: status, Detail: &detail}); err != nil {
+	if err := json.NewEncoder(w).Encode(p); err != nil {
 		s.log.WarnContext(r.Context(), "write problem response", slog.Any("error", err))
 	}
 }
 
-func factoryOf(f *config.Factory) gen.Factory {
+// problemOf maps an error to its problem details. An unknown and a deleted organization get the
+// same body, so nobody learns which organizations once existed.
+func problemOf(err error) gen.Problem {
+	var tooLarge *http.MaxBytesError
+
+	switch {
+	case errors.Is(err, errOrgNotFound):
+		return gen.Problem{Title: "Organization not found", Status: http.StatusNotFound, Code: optional("org-not-found")}
+	case errors.Is(err, ports.ErrNotFound):
+		return detailed(http.StatusNotFound, err)
+	case errors.Is(err, errForbidden), errors.Is(err, errCrossOrigin):
+		p := detailed(http.StatusForbidden, err)
+		p.Code = optional("forbidden")
+
+		return p
+	case errors.Is(err, domain.ErrInvalid), errors.Is(err, engine.ErrNotWaitingHuman), errors.Is(err, engine.ErrNotBlocked),
+		errors.Is(err, engine.ErrNotMergeStep), errors.Is(err, ports.ErrNotMergeable):
+		return detailed(http.StatusConflict, err)
+	case errors.As(err, &tooLarge):
+		return detailed(http.StatusRequestEntityTooLarge, err)
+	case errors.Is(err, errInvalid):
+		return detailed(http.StatusBadRequest, err)
+	default:
+		detail := "see goald's log"
+
+		return gen.Problem{Title: http.StatusText(http.StatusInternalServerError), Status: http.StatusInternalServerError, Detail: &detail}
+	}
+}
+
+func detailed(status int, err error) gen.Problem {
+	detail := err.Error()
+
+	return gen.Problem{Title: http.StatusText(status), Status: status, Detail: &detail}
+}
+
+func factoryOf(org domain.OrgID, f *config.Factory) gen.Factory {
 	out := gen.Factory{
-		Id: f.Metadata.ID, Name: f.Metadata.Name, Title: optional(f.Metadata.Title),
+		Id: f.Metadata.ID, OrgId: string(org), Name: f.Metadata.Name, Title: optional(f.Metadata.Title),
 		Description: optional(f.Metadata.Description), WorkTypes: slices.Clone(f.Spec.Board.WorkTypes),
 		Stations: make([]gen.Station, 0, len(f.Spec.Board.Stations)),
 	}

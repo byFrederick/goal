@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,7 +26,7 @@ import (
 
 const (
 	acmeID    = "8d4f2b1a-3c5e-4f60-9a7b-1c2d3e4f5a6b"
-	acmeItems = "/v1/factories/acme/items"
+	acmeItems = "/v1/orgs/acme/factories/acme/items"
 )
 
 // acme is inbox → approve (human) → done: enough to submit, read and decide on items.
@@ -75,6 +76,10 @@ const lineID = "0b6f1c9e-5d0a-4c39-9a51-6f1f3f0e2a10"
 // creates): every store call carries one.
 const testOrg domain.OrgID = "00000000-0000-7000-8000-000000000001"
 
+// otherOrg is the second organization the harness creates (example-labs), which has no
+// factories: nothing of acme's may be reached through it.
+const otherOrg domain.OrgID = "00000000-0000-7000-8000-000000000002"
+
 // inOrg is the test's context bound to testOrg.
 func inOrg(t *testing.T) context.Context {
 	t.Helper()
@@ -91,6 +96,93 @@ type harness struct {
 	clock    *porttest.Clock
 	codehost *porttest.CodeHost
 	notices  *porttest.ItemNotices
+	seam     *seam
+	tenancy  *porttest.Tenancy
+}
+
+// seam is the harness's Authorizer: it records every question in order, together with the
+// API's reads of the store (reads), and answers deny (nil: allow).
+type seam struct {
+	mu    sync.Mutex
+	log   []step
+	denyF func(api.AccessRequest) error
+}
+
+// step is one entry of the seam's log: an authorization question or a store read.
+type step struct {
+	access *api.AccessRequest
+	read   string
+}
+
+func (s *seam) Authorize(_ context.Context, r api.AccessRequest) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.log = append(s.log, step{access: &r})
+
+	if s.denyF != nil {
+		return s.denyF(r)
+	}
+
+	return nil
+}
+
+func (s *seam) record(read string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.log = append(s.log, step{read: read})
+}
+
+// deny makes the seam answer every question with fn's error.
+func (s *seam) deny(fn func(api.AccessRequest) error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.denyF = fn
+}
+
+// steps returns the log and starts a new one.
+func (s *seam) steps() []step {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := s.log
+	s.log = nil
+
+	return out
+}
+
+// reads is the store as the API reads it, logging each read in the seam's log.
+type reads struct {
+	*porttest.Store
+
+	seam *seam
+}
+
+func (r reads) Item(ctx context.Context, id domain.ItemID) (domain.Item, error) {
+	r.seam.record("Item")
+	return r.Store.Item(ctx, id)
+}
+
+func (r reads) ItemByNumber(ctx context.Context, f domain.FactoryID, n int64) (domain.Item, error) {
+	r.seam.record("ItemByNumber")
+	return r.Store.ItemByNumber(ctx, f, n)
+}
+
+func (r reads) ListItems(ctx context.Context, q ports.ItemQuery) ([]domain.Item, error) {
+	r.seam.record("ListItems")
+	return r.Store.ListItems(ctx, q)
+}
+
+func (r reads) StationLoads(ctx context.Context, f domain.FactoryID) ([]domain.StationLoad, error) {
+	r.seam.record("StationLoads")
+	return r.Store.StationLoads(ctx, f)
+}
+
+func (r reads) FlowMetrics(ctx context.Context, f domain.FactoryID, since, until time.Time) (domain.FlowMetrics, error) {
+	r.seam.record("FlowMetrics")
+	return r.Store.FlowMetrics(ctx, f, since, until)
 }
 
 func newHarness(t *testing.T) *harness {
@@ -99,8 +191,14 @@ func newHarness(t *testing.T) *harness {
 	catalog := factorystore.New(porttest.NewObjectStore())
 
 	tenancy := porttest.NewTenancy(time.Now)
-	if o, err := tenancy.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: "acme", Name: "Acme"}); err != nil || o.ID != testOrg {
-		t.Fatalf("create organization = %v (%v), want %s", o.ID, err, testOrg)
+
+	for _, o := range []struct {
+		id         domain.OrgID
+		slug, name string
+	}{{testOrg, "acme", "Acme"}, {otherOrg, "example-labs", "Example Labs"}} {
+		if got, err := tenancy.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: o.slug, Name: o.name}); err != nil || got.ID != o.id {
+			t.Fatalf("create organization %s = %v (%v), want %s", o.slug, got.ID, err, o.id)
+		}
 	}
 
 	for _, files := range []map[string]string{
@@ -155,7 +253,12 @@ func newHarness(t *testing.T) *harness {
 
 	go func() { done <- feed.Run(ctx) }()
 
-	handler, err := api.New(api.Deps{Engine: e, Items: h.store, Factories: defs, Feed: feed, Clock: h.clock, LegacyOrg: testOrg})
+	h.seam, h.tenancy = &seam{}, tenancy
+
+	handler, err := api.New(api.Deps{
+		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Orgs: tenancy, Authorizer: h.seam,
+		Feed: feed, Clock: h.clock,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +336,7 @@ func TestAPI_HealthAndFactories(t *testing.T) {
 	}
 
 	var list gen.FactoryList
-	if code := h.call(t, http.MethodGet, "/v1/factories", "", &list); code != http.StatusOK {
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories", "", &list); code != http.StatusOK {
 		t.Fatalf("list factories = %d", code)
 	}
 
@@ -241,7 +344,7 @@ func TestAPI_HealthAndFactories(t *testing.T) {
 	// it is listed.
 	h.submit(t)
 
-	if code := h.call(t, http.MethodGet, "/v1/factories", "", &list); code != http.StatusOK || len(list.Factories) != 2 {
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories", "", &list); code != http.StatusOK || len(list.Factories) != 2 {
 		t.Fatalf("list factories = %d %+v", code, list)
 	}
 
@@ -260,9 +363,9 @@ func TestAPI_SubmitValidatesAgainstTheFactory(t *testing.T) {
 		name, path, body string
 		want             int
 	}{
-		{name: "by name", path: acmeItems, body: `{"title":"t","type":"fix"}`, want: http.StatusCreated},
-		{name: "by id", path: "/v1/factories/" + acmeID + "/items", body: `{"title":"t","type":"fix","priority":2}`, want: http.StatusCreated},
-		{name: "unknown factory", path: "/v1/factories/nope/items", body: `{"title":"t","type":"fix"}`, want: http.StatusNotFound},
+		{name: "by name", path: acmeItems, body: submitFix, want: http.StatusCreated},
+		{name: "by id", path: "/v1/orgs/acme/factories/" + acmeID + "/items", body: `{"title":"t","type":"fix","priority":2}`, want: http.StatusCreated},
+		{name: "unknown factory", path: "/v1/orgs/acme/factories/nope/items", body: submitFix, want: http.StatusNotFound},
 		{name: "unknown work type", path: acmeItems, body: `{"title":"t","type":"chore"}`, want: http.StatusBadRequest},
 		{name: "blank title", path: acmeItems, body: `{"title":"  ","type":"fix"}`, want: http.StatusBadRequest},
 		{name: "malformed body", path: acmeItems, body: `{"title":`, want: http.StatusBadRequest},
@@ -286,7 +389,7 @@ func TestAPI_GetItem(t *testing.T) {
 	}
 
 	var it gen.Item
-	if code := h.call(t, http.MethodGet, "/v1/items/"+submitted.Id, "", &it); code != http.StatusOK {
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/items/"+submitted.Id, "", &it); code != http.StatusOK {
 		t.Fatalf("get item = %d", code)
 	}
 
@@ -294,7 +397,7 @@ func TestAPI_GetItem(t *testing.T) {
 		t.Errorf("item at %s/%s number %d, want approve/waiting_human number 1", it.Station, it.State, it.Number)
 	}
 
-	if code := h.call(t, http.MethodGet, "/v1/items/00000000-0000-7000-8000-ffffffffffff", "", nil); code != http.StatusNotFound {
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/items/00000000-0000-7000-8000-ffffffffffff", "", nil); code != http.StatusNotFound {
 		t.Errorf("unknown item = %d, want 404", code)
 	}
 }
@@ -310,11 +413,11 @@ func TestAPI_EventPages(t *testing.T) {
 	}
 
 	var first, rest gen.EventPage
-	if code := h.call(t, http.MethodGet, "/v1/items/"+it.Id+"/events?limit=2", "", &first); code != http.StatusOK || len(first.Events) != 2 {
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/items/"+it.Id+"/events?limit=2", "", &first); code != http.StatusOK || len(first.Events) != 2 {
 		t.Fatalf("first page = %d %+v, want 2 events", code, first)
 	}
 
-	path := fmt.Sprintf("/v1/items/%s/events?after=%d", it.Id, first.NextAfter)
+	path := fmt.Sprintf("/v1/orgs/acme/items/%s/events?after=%d", it.Id, first.NextAfter)
 	if code := h.call(t, http.MethodGet, path, "", &rest); code != http.StatusOK || len(rest.Events) == 0 {
 		t.Fatalf("next page = %d %+v, want the remaining events", code, rest)
 	}
@@ -323,7 +426,7 @@ func TestAPI_EventPages(t *testing.T) {
 		t.Errorf("pages %+v then %+v; want created first and the second page after the first", first.Events, rest.Events)
 	}
 
-	if code := h.call(t, http.MethodGet, "/v1/items/"+it.Id+"/events?limit=5000", "", nil); code != http.StatusBadRequest {
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/items/"+it.Id+"/events?limit=5000", "", nil); code != http.StatusBadRequest {
 		t.Errorf("limit 5000 = %d, want 400", code)
 	}
 }
@@ -334,9 +437,9 @@ func TestAPI_HumanDecisions(t *testing.T) {
 	h := newHarness(t)
 	it := h.submit(t)
 
-	path := "/v1/items/" + it.Id
+	path := "/v1/orgs/acme/items/" + it.Id
 
-	if code := h.call(t, http.MethodPost, path+"/approve", `{"by":"pat"}`, nil); code != http.StatusConflict {
+	if code := h.call(t, http.MethodPost, path+"/approve", ``, nil); code != http.StatusConflict {
 		t.Errorf("approve while queued = %d, want 409", code)
 	}
 
@@ -344,17 +447,17 @@ func TestAPI_HumanDecisions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if code := h.call(t, http.MethodPost, path+"/reject", `{"by":"pat","reason":" "}`, nil); code != http.StatusBadRequest {
+	if code := h.call(t, http.MethodPost, path+"/reject", `{"reason":" "}`, nil); code != http.StatusBadRequest {
 		t.Errorf("reject without a reason = %d, want 400", code)
 	}
 
 	var done gen.Item
-	if code := h.call(t, http.MethodPost, path+"/approve", `{"by":"pat"}`, &done); code != http.StatusOK || done.Station != "done" {
+	if code := h.call(t, http.MethodPost, path+"/approve", ``, &done); code != http.StatusOK || done.Station != "done" {
 		t.Errorf("approve = %d at %s, want 200 at done", code, done.Station)
 	}
 
 	events := h.store.Events(domain.ItemID(it.Id))
-	if last := events[len(events)-3]; last.Kind != domain.EventApproved || last.Actor != "pat" {
-		t.Errorf("events %+v, want an approval by pat", events)
+	if last := events[len(events)-3]; last.Kind != domain.EventApproved || last.Actor != domain.LocalUser.Name || last.Data["actor"] != "user:local" {
+		t.Errorf("events %+v, want an approval by the local user", events)
 	}
 }

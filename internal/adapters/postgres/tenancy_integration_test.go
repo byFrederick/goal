@@ -69,7 +69,7 @@ func TestRLS_TenancyTablesNeedTheOrg(t *testing.T) {
 	}
 
 	if err := s.Append(domain.WithOrg(t.Context(), DefaultOrgID), domain.AuditEntry{
-		Actor: domain.LocalUser, Action: "andon.pulled", TargetKind: "factory", TargetID: "f",
+		Actor: domain.LocalUser, Action: andonPulled, TargetKind: "factory", TargetID: "f",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -82,10 +82,39 @@ func TestRLS_TenancyTablesNeedTheOrg(t *testing.T) {
 		t.Errorf("Org(acme) through goal_org_by_ref = %v", err)
 	}
 
-	if err := s.Append(t.Context(), domain.AuditEntry{Actor: domain.LocalUser, Action: "andon.pulled"}); !errors.Is(err, domain.ErrNoOrg) {
+	if err := s.Append(t.Context(), domain.AuditEntry{Actor: domain.LocalUser, Action: andonPulled}); !errors.Is(err, domain.ErrNoOrg) {
 		t.Errorf("Append without an org = %v; want ErrNoOrg", err)
 	}
 }
+
+func TestAudit_RecordsTheRequestID(t *testing.T) {
+	t.Parallel()
+
+	pool := newTestPool(t)
+	s := New(pool)
+
+	acme, err := s.CreateOrg(domain.WithRequestID(t.Context(), "req-acme-1"), domain.LocalUser, newOrg("acme", "Acme"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.Append(domain.WithOrg(t.Context(), acme.ID), domain.AuditEntry{
+		Actor: domain.Actor{Kind: domain.ActorSystem, ID: "engine", Name: "engine"}, Action: andonPulled, TargetKind: "factory", TargetID: "f",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var withID, without int
+
+	err = asOrg(t, pool, acme.ID, `SELECT count(*) FILTER (WHERE request_id = 'req-acme-1'), count(*) FILTER (WHERE request_id IS NULL)
+		FROM audit_log`, &withID, &without)
+	if err != nil || withID != 1 || without != 1 {
+		t.Errorf("entries with the request id %d, without one %d (%v); want org.created with it, the job's entry without", withID, without, err)
+	}
+}
+
+// andonPulled is an audit action the tests append on their own.
+const andonPulled = "andon.pulled"
 
 // asOrg runs one query in a transaction bound to org, as the store does, and scans its row.
 func asOrg(t *testing.T, pool *pgxpool.Pool, org domain.OrgID, sql string, dest ...any) error {

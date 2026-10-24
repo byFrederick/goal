@@ -1,6 +1,8 @@
-// Illustrative data for the mock API: a "goal" factory building itself and a small SRE factory
-// (sample org acme). Times are relative to when the mock starts, so ages read like a live floor.
-import type { ClassOfService, Factory, ItemEvent, ItemState, Metrics } from '@goal/api-client';
+// Illustrative data for the mock API: two organizations, as the Org-Switcher board shows them.
+// Acme has three factories (a "goal" factory building itself, a small SRE factory and an empty
+// support factory); Example Labs has one, empty. Times are relative to when the mock starts, so
+// ages read like a live floor.
+import type { ClassOfService, Factory, ItemEvent, ItemState, Metrics, Org } from '@goal/api-client';
 
 export interface MockItem {
   id: string;
@@ -30,6 +32,8 @@ export interface MockStationConfig {
 }
 
 export interface MockState {
+  /** Organizations by name; factory_count is computed from factories. */
+  orgs: Org[];
   factories: Factory[];
   stations: Record<string, Record<string, MockStationConfig>>;
   constraint: Record<string, string | null>;
@@ -80,8 +84,13 @@ interface Seed {
 const model = 'claude-sonnet-5-5';
 const repo = 'https://github.com/acme/goal';
 
+/** The organizations' ids. */
+export const acmeOrg = '019a1c00-0000-7000-8000-0000000000aa';
+export const labsOrg = '019a1c00-0000-7000-8000-0000000000bb';
+
 const goalFactory: Factory = {
   id: '6f0c2a7e-3d1b-4c55-9a7e-1f2b3c4d5e60',
+  org_id: acmeOrg,
   name: 'goal',
   title: 'Goal',
   description: 'Builds the Goal platform from this repository: engine, UI, infrastructure and its own factories.',
@@ -99,6 +108,7 @@ const goalFactory: Factory = {
 
 const sreFactory: Factory = {
   id: '0b7d9e21-58a4-4f0e-b6c3-2a9d8e7f6a51',
+  org_id: acmeOrg,
   name: 'sre',
   title: 'SRE',
   description: 'Triage, investigate and document production issues and SRE toil.',
@@ -111,6 +121,46 @@ const sreFactory: Factory = {
     { id: 'done', kind: 'done' },
   ],
 };
+
+const supportFactory: Factory = {
+  id: '5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a01',
+  org_id: acmeOrg,
+  name: 'support',
+  title: 'Support',
+  description: 'Answers questions from the acme shop, citing runbooks.',
+  work_types: ['question'],
+  stations: [
+    { id: 'inbox', kind: 'queue' },
+    { id: 'answer', kind: 'agent' },
+    { id: 'approve', kind: 'human' },
+    { id: 'done', kind: 'done' },
+  ],
+};
+
+const researchFactory: Factory = {
+  id: '9e8d7c6b-5a49-4382-9172-6a5b4c3d2e1f',
+  org_id: labsOrg,
+  name: 'research',
+  title: 'Research',
+  description: 'Reads papers and writes short notes for the Example Labs team.',
+  work_types: ['question'],
+  stations: [
+    { id: 'inbox', kind: 'queue' },
+    { id: 'read', kind: 'agent' },
+    { id: 'done', kind: 'done' },
+  ],
+};
+
+/** The metrics of a factory with nothing done yet. */
+const quiet = (day: (offset: number) => string): Metrics => ({
+  window: '7d',
+  throughput: [0, 0, 0, 0, 0, 0, 0].map((done, i) => ({ day: day(6 - i), done })),
+  lead_time_hours: null,
+  wip: 0,
+  rework_rate: 0,
+  spend_usd: 0,
+  items_done: 0,
+});
 
 const specOutput = (summary: string, criteria: string[], lane: string) => ({
   summary,
@@ -747,8 +797,13 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
 }
 
 export function seed(now = Date.now()): MockState {
+  const created = new Date(now - 90 * 86_400_000).toISOString();
   const state: MockState = {
-    factories: [goalFactory, sreFactory],
+    orgs: [
+      { id: acmeOrg, slug: 'acme', name: 'Acme', mark: 'Ac', factory_count: 0, created_at: created },
+      { id: labsOrg, slug: 'example-labs', name: 'Example Labs', mark: 'EL', factory_count: 0, created_at: created },
+    ],
+    factories: [goalFactory, sreFactory, supportFactory, researchFactory],
     stations: {
       goal: {
         inbox: { agents: [], wip_limit: null },
@@ -766,8 +821,19 @@ export function seed(now = Date.now()): MockState {
         approve: { agents: [], wip_limit: null },
         done: { agents: [], wip_limit: null },
       },
+      support: {
+        inbox: { agents: [], wip_limit: null },
+        answer: { agents: ['responder'], wip_limit: 2 },
+        approve: { agents: [], wip_limit: null },
+        done: { agents: [], wip_limit: null },
+      },
+      research: {
+        inbox: { agents: [], wip_limit: null },
+        read: { agents: ['reader'], wip_limit: 1 },
+        done: { agents: [], wip_limit: null },
+      },
     },
-    constraint: { goal: 'build', sre: null },
+    constraint: { goal: 'build', sre: null, support: null, research: null },
     metrics: {},
     items: [],
     events: [],
@@ -796,6 +862,8 @@ export function seed(now = Date.now()): MockState {
     spend_usd: 1.06,
     items_done: 2,
   };
+  state.metrics.support = quiet(day);
+  state.metrics.research = quiet(day);
 
   return state;
 }

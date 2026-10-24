@@ -33,7 +33,7 @@ func TestRetry_BlockedItemGoesBackToItsQueue(t *testing.T) {
 		t.Errorf("retried item at %+v rework %d, want queued at %s with no rework", got.Position(), got.ReworkCount, stWork)
 	}
 
-	if retried := h.eventsOf(it.ID, domain.EventRetried); len(retried) != 1 || retried[0].Actor != human || retried[0].Station != stWork {
+	if retried := h.eventsOf(it.ID, domain.EventRetried); len(retried) != 1 || retried[0].Actor != human.Name || retried[0].Station != stWork {
 		t.Errorf("retried events %+v, want one by fcruz at %s", retried, stWork)
 	}
 
@@ -42,8 +42,10 @@ func TestRetry_BlockedItemGoesBackToItsQueue(t *testing.T) {
 	}
 }
 
+// human decides in the tests: the local user, as every request in phase 2.2.
+var human = domain.LocalUser
+
 const (
-	human    = "fcruz"
 	stMerge  = "merge"
 	prURL    = "https://github.com/acme/app/pull/7"
 	headSHA  = "4b825dc6"
@@ -119,12 +121,12 @@ func TestMerge_MergesThePullRequestThenApproves(t *testing.T) {
 			}
 
 			merged := h.eventsOf(it.ID, domain.EventMerged)
-			if len(merged) != 1 || merged[0].Actor != human || merged[0].Data["pull_request"] != prURL ||
+			if len(merged) != 1 || merged[0].Actor != human.Name || merged[0].Data["pull_request"] != prURL ||
 				merged[0].Data["branch_deleted"] != (len(tt.wantDeleted) == 1) {
 				t.Errorf("merged events %+v, want one by fcruz naming the pull request", merged)
 			}
 
-			if approved := h.eventsOf(it.ID, domain.EventApproved); len(approved) != 1 || approved[0].Actor != human {
+			if approved := h.eventsOf(it.ID, domain.EventApproved); len(approved) != 1 || approved[0].Actor != human.Name {
 				t.Errorf("approved events %+v, want one by fcruz", approved)
 			}
 		})

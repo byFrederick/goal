@@ -8,6 +8,7 @@ import { factoryTitle, itemKey, stationKind, useFactory } from '../../shared/fac
 import { formatClock, formatDuration, formatUsd, humanize } from '../../shared/format';
 import { ItemDecisions } from '../../shared/item-actions';
 import { describeState, pullRequestLabel, pullRequestOf, type Tone } from '../../shared/item-state';
+import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { SectionCard, StatRow } from '../../ui/card';
 import { Chip, type ChipTone } from '../../ui/chip';
@@ -249,8 +250,9 @@ export function ItemPage() {
   const client = useQueryClient();
   const { ref } = useParams({ from: '/f/$factory/items/$ref' });
   const key = itemKey(factory.name, ref);
-  const { data: item } = useSuspenseQuery(itemQuery(key));
-  const { data: events } = useSuspenseQuery(eventsQuery(client, key));
+  const org = useOrg();
+  const { data: item } = useSuspenseQuery(itemQuery(org, key));
+  const { data: events } = useSuspenseQuery(eventsQuery(client, org, key));
   const trace = useMemo(() => buildTrace(events), [events]);
   const [fullTrace, setFullTrace] = useState(false);
   const station = factory.stations.find((s) => s.id === item.station);

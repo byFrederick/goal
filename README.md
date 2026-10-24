@@ -5,8 +5,8 @@ Goal runs AI agent factories on your machine. A factory is a definition: `factor
 Factory definitions are content, not code. They live in one versioned S3-compatible bucket, not in this repository (ADR 0005). The first factory, `goal`, builds this repository; others (`sre`, `university`) run the same engine on other work.
 
 ```
-cmd/goal/              CLI: goal up, run, follow, item, approve, reject, retry, merge; goal factory validate|push|pull|list; goal storage init; goal db init
-cmd/goald/             daemon: flow engine, HTTP API (/v1/, with an SSE stream), MCP gateway (/mcp), Docker agent runs
+cmd/goal/              CLI: goal up, run, follow, item, approve, reject, retry, merge; goal factory validate|push|pull|list; goal org list|use|create; goal storage init; goal db init
+cmd/goald/             daemon: flow engine, HTTP API (/v1/orgs/{org}/..., with an SSE stream per organization), MCP gateway (/mcp), Docker agent runs
 api/                   openapi.yaml: the HTTP API contract (Go types in internal/api/gen, TypeScript in packages/api-client)
 internal/engine/       flow engine: pull, WIP, gates, workspaces and command checks per run
 internal/config/       loader and cross-reference validation (reads a folder or a bucket prefix)
@@ -55,13 +55,15 @@ task up                                            # PostgreSQL + RustFS, bucket
 task factory:push DIR=../goal-factories/goal       # in another terminal: the definition goald runs
 bin/goal run goal "Add a goal version subcommand"  # submit; prints the timeline until a human must act
 bin/goal item goal#2                               # read the spec the architect wrote (or: goal item 2)
-bin/goal approve goal#2 --by "$USER"               # approve-spec → build → review → merge (you)
+bin/goal approve goal#2                            # approve-spec → build → review → merge (you)
 bin/goal follow goal#2                             # follow it again
 bin/goal merge goal#2                              # at the merge station: goald merges the pull request, then approves
 bin/goal retry goal#2                              # a blocked item goes back to its station's queue
 ```
 
-An item is `<factory>#<number>` (`goal#2`), its id, or a bare number when only one factory has an item with it (`--factory` picks one otherwise). `goal merge` works at a human station marked `action: merge` in `factory.yaml`: goald squash-merges the pull request named by the item's latest `pull_request` output on `runtime.repository`, with that repository's token, only if GitHub reports it open and mergeable; it never forces, and deletes only the pull request's head branch afterwards.
+Every factory, item and run belongs to an organization; what existed before organizations is in `default`. Commands act in one: `--org <slug>`, else `GOAL_ORG`, else `org` in `~/.config/goal/config.json` (`goal org use <slug>` writes it), else the install's only organization. `goal org list` shows them and `goal org create <slug> --name N` adds one. Decisions are recorded as the local user's: there is no sign-in yet.
+
+An item is `<factory>#<number>` (`goal#2`), its id, or a bare number when only one factory of the organization has an item with it (`--factory` picks one otherwise). `goal merge` works at a human station marked `action: merge` in `factory.yaml`: goald squash-merges the pull request named by the item's latest `pull_request` output on `runtime.repository`, with that repository's token, only if GitHub reports it open and mergeable; it never forces, and deletes only the pull request's head branch afterwards.
 
 `goal up` first runs `goal db init`: it creates the database roles goald uses (`goal_owner` runs migrations, `goal_app` everything else, under row-level security) and hands the existing tables to `goal_owner`, so a database from an earlier version upgrades on the next `goal up` with nothing to do by hand. Running `bin/goald` directly needs `bin/goal db init` once first (`task goald` does it). `GOAL_DATABASE_URL` must not name the superuser: goald refuses a role that bypasses row-level security.
 

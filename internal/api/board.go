@@ -36,7 +36,7 @@ var openStates = []domain.ItemState{
 var window = regexp.MustCompile(`^([1-9][0-9]?)d$`)
 
 func (s *server) GetBoard(ctx context.Context, req gen.GetBoardRequestObject) (gen.GetBoardResponseObject, error) {
-	f, err := s.factories.Lookup(ctx, req.Factory)
+	f, err := s.factory(ctx, req.Factory)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +123,7 @@ func (s *server) ListItems(ctx context.Context, req gen.ListItemsRequestObject) 
 		return nil, fmt.Errorf("%w: limit must be in [1, %d], after ≥ 1 and state an item state", errInvalid, maxItemLimit)
 	}
 
-	f, err := s.factories.Lookup(ctx, req.Factory)
+	f, err := s.factory(ctx, req.Factory)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +211,7 @@ func (s *server) GetMetrics(ctx context.Context, req gen.GetMetricsRequestObject
 		return nil, fmt.Errorf("%w: window %q is not 1d to %dd", errInvalid, w, maxWindowDays)
 	}
 
-	f, err := s.factories.Lookup(ctx, req.Factory)
+	f, err := s.factory(ctx, req.Factory)
 	if err != nil {
 		return nil, err
 	}

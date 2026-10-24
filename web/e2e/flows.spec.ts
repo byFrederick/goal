@@ -58,7 +58,7 @@ test('approve an item waiting on you from the floor', async ({ page }) => {
   await page.goto('/f/goal/items/12');
   await expect(page.getByText('At Build', { exact: true })).toBeVisible();
   await showTrace(page);
-  await expect(page.getByText('web approved')).toBeVisible();
+  await expect(page.getByText('Local user approved')).toBeVisible();
 });
 
 test('send an item back with a reason', async ({ page }) => {
@@ -114,7 +114,7 @@ test('the board updates live when an item moves elsewhere', async ({ page, reque
   await expect(page.getByText('Live', { exact: true }).first()).toBeVisible();
 
   // Someone else approves (the CLI, another tab): the stream brings the change.
-  await request.post('/v1/items/goal%2312/approve', { data: { by: 'cli' } });
+  await request.post('/v1/orgs/acme/items/goal%2312/approve');
 
   await expect(approveSpec.getByRole('link', { name: 'goald: serve the embedded web UI' })).toHaveCount(0);
   const build = page.getByRole('region', { name: 'Build', exact: true });

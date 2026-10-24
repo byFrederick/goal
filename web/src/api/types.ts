@@ -15,6 +15,9 @@ export type {
   ItemState,
   Metrics,
   NewItem,
+  NewOrg,
+  Org,
+  OrgSummary,
   Problem,
   Station,
   StationAction,
@@ -25,5 +28,5 @@ export type {
 /** One page of a factory's items (`ItemPage` in the contract). */
 export type ItemList = ItemPage;
 
-/** How goald merges a pull request (POST /v1/items/{item}/merge). */
+/** How goald merges a pull request (POST /v1/orgs/{org}/items/{item}/merge). */
 export type MergeMethod = NonNullable<MergeRequest['method']>;

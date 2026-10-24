@@ -35,20 +35,19 @@ func TestParseInterspersed_FlagsAnywhere(t *testing.T) {
 func TestDecide_RejectNeedsAReasonAndApproveNone(t *testing.T) {
 	t.Parallel()
 
-	env := func(k string) string {
-		if k == "USER" {
-			return "pat"
-		}
+	env := testEnv(t, "http://127.0.0.1:1", nil) // never reached
 
-		return "http://127.0.0.1:1" // never reached
-	}
-
-	for _, args := range [][]string{{"reject", "item-1"}, {"approve", "item-1", "--reason", "x"}, {"approve"}} {
+	for _, args := range [][]string{
+		{"reject", item1}, {"approve", item1, "--reason", "x"}, {"approve"}, {"approve", item1, "--by", "pat"},
+	} {
 		if err := decide(t.Context(), &printer{w: &bytes.Buffer{}}, env, args[0], args[1:]); !errors.Is(err, errUsage) {
 			t.Errorf("goal %v = %v, want a usage error", args, err)
 		}
 	}
 }
+
+// item1 is the id of the item fakeGoald plays.
+const item1 = "item-1"
 
 // fakeGoald plays an item that reaches the approve station after a few polls.
 func fakeGoald(t *testing.T) *httptest.Server {
@@ -69,16 +68,16 @@ func fakeGoald(t *testing.T) *httptest.Server {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /v1/items/{id}", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /v1/orgs/acme/items/{id}", func(w http.ResponseWriter, _ *http.Request) {
 		state := gen.ItemState("in_progress")
 		if polls.Add(1) >= 3 {
 			state = "waiting_human"
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(gen.Item{Id: "item-1", Ref: "goal#1", Number: 1, State: state, Station: "approve-spec", CostUsd: 0.42})
+		_ = json.NewEncoder(w).Encode(gen.Item{Id: item1, Ref: "goal#1", Number: 1, State: state, Station: "approve-spec", CostUsd: 0.42})
 	})
-	mux.HandleFunc("GET /v1/items/{id}/events", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /v1/orgs/acme/items/{id}/events", func(w http.ResponseWriter, r *http.Request) {
 		after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
 		// One new event per poll, as if they were happening.
 		visible := min(int(polls.Load())+1, len(events))
@@ -106,13 +105,13 @@ func TestFollow_PrintsEachEventOnceUntilAHumanMustAct(t *testing.T) {
 
 	srv := fakeGoald(t)
 
-	c, err := newAPI(func(string) string { return srv.URL })
+	c, err := connect(t.Context(), testEnv(t, srv.URL, map[string]string{"GOAL_ORG": orgAcme}), "")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	var buf bytes.Buffer
-	if err := follow(t.Context(), &printer{w: &buf}, c, "item-1", 0, time.Millisecond); err != nil {
+	if err := follow(t.Context(), &printer{w: &buf}, c, item1, 0, time.Millisecond); err != nil {
 		t.Fatal(err)
 	}
 

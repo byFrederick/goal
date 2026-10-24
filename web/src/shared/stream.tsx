@@ -1,9 +1,10 @@
-// Live updates: one stream subscription per open factory. Each item event invalidates the queries it
-// can change; invalidations are batched so a burst of tool calls causes one refetch.
+// Live updates: one stream subscription per open factory, within its organization. Each item
+// event invalidates the queries it can change (invalidation.ts); invalidations are batched so a
+// burst of tool calls causes one refetch.
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
 import { type StreamStatus, subscribeToFactory } from '../api/client';
-import { keys } from '../api/queries';
+import { itemInvalidations, resyncInvalidations } from './invalidation';
 
 const StatusContext = createContext<StreamStatus>('connecting');
 
@@ -13,7 +14,7 @@ export function useStreamStatus(): StreamStatus {
 
 const batchMs = 300;
 
-export function FactoryStream({ factory, children }: { factory: string; children: ReactNode }) {
+export function FactoryStream({ org, factory, children }: { org: string; factory: string; children: ReactNode }) {
   const client = useQueryClient();
   const [status, setStatus] = useState<StreamStatus>('connecting');
 
@@ -23,19 +24,21 @@ export function FactoryStream({ factory, children }: { factory: string; children
 
     const flush = () => {
       timer = undefined;
-      client.invalidateQueries({ queryKey: keys.factory(factory) });
-      for (const item of items) client.invalidateQueries({ queryKey: keys.item(item) });
+      for (const queryKey of itemInvalidations(org, factory, items)) client.invalidateQueries({ queryKey });
       items.clear();
     };
 
     const unsubscribe = subscribeToFactory(
+      org,
       factory,
       (e) => {
         items.add(e.ref);
         items.add(e.item_id);
         timer ??= setTimeout(flush, batchMs);
       },
-      () => client.invalidateQueries(),
+      () => {
+        for (const queryKey of resyncInvalidations(org)) client.invalidateQueries({ queryKey });
+      },
       setStatus,
     );
 
@@ -43,7 +46,7 @@ export function FactoryStream({ factory, children }: { factory: string; children
       unsubscribe();
       if (timer) clearTimeout(timer);
     };
-  }, [client, factory]);
+  }, [client, org, factory]);
 
   return <StatusContext value={status}>{children}</StatusContext>;
 }

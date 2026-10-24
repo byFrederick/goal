@@ -9,6 +9,7 @@ import { factoryTitle, useFactory } from '../../shared/factory';
 import { formatAge, humanize, plural } from '../../shared/format';
 import { waitingOnYou } from '../../shared/item-state';
 import { NewItemButton } from '../../shared/new-item';
+import { useOrg } from '../../shared/org';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
@@ -248,7 +249,8 @@ function StationTabs({ board, factory, selected }: { board: Board; factory: stri
 
 export function BoardPage() {
   const factory = useFactory();
-  const { data: board } = useSuspenseQuery(boardQuery(factory.name));
+  const org = useOrg();
+  const { data: board } = useSuspenseQuery(boardQuery(org, factory.name));
   const search = useSearch({ from: '/f/$factory/board' });
   const expedite = board.stations.flatMap((s) => s.items.filter(isExpedite));
   const wip = board.stations.reduce((n, s) => n + s.in_progress, 0);

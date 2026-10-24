@@ -180,7 +180,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	feed := api.NewFeed(postgres.NewNotices(pool.Config().ConnConfig, log), log)
 
 	apiHandler, err := api.New(api.Deps{
-		Engine: eng, Items: store, Factories: defs, Feed: feed, Clock: clock, LegacyOrg: postgres.DefaultOrgID, Logger: log,
+		Engine: eng, Items: store, Factories: defs, Orgs: store, Authorizer: api.AllowAll{}, Feed: feed, Clock: clock, Logger: log,
 	})
 	if err != nil {
 		return err

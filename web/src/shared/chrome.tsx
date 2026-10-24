@@ -8,6 +8,7 @@ import type { Factory } from '../api/types';
 import { cn } from '../ui/cn';
 import { Dialog, DialogContent, DialogTrigger } from '../ui/dialog';
 import { factoryTitle } from './factory';
+import { useOrg } from './org';
 import { useStreamStatus } from './stream';
 
 export const iconProps = { size: 18, strokeWidth: 1.5, 'aria-hidden': true } as const;
@@ -43,8 +44,9 @@ export function LaterLinks() {
 }
 
 export function FactoryLinks({ current, onNavigate }: { current: string; onNavigate?: () => void }) {
-  const { data: factories } = useSuspenseQuery(factoriesQuery);
-  const boards = useQueries({ queries: factories.map((f) => boardQuery(f.name)) });
+  const org = useOrg();
+  const { data: factories } = useSuspenseQuery(factoriesQuery(org));
+  const boards = useQueries({ queries: factories.map((f) => boardQuery(org, f.name)) });
 
   return (
     <ul className="m-0 flex list-none flex-col gap-1 p-0">

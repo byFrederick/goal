@@ -21,14 +21,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/factories": {
+    "/v1/orgs": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The factories goald runs, from the bucket */
+        /** Every organization on the install, by name */
+        get: operations["listOrgs"];
+        put?: never;
+        /**
+         * Create an organization
+         * @description The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409.
+         */
+        post: operations["createOrg"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /** One organization */
+        get: operations["getOrg"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /** The organization's factories goald runs, from the bucket */
         get: operations["listFactories"];
         put?: never;
         post?: never;
@@ -38,11 +82,13 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/factories/{factory}/items": {
+    "/v1/orgs/{org}/factories/{factory}/items": {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
                 /** @description The factory's metadata.id or metadata.name */
                 factory: components["parameters"]["FactoryRef"];
             };
@@ -59,11 +105,13 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/factories/{factory}/board": {
+    "/v1/orgs/{org}/factories/{factory}/board": {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
                 /** @description The factory's metadata.id or metadata.name */
                 factory: components["parameters"]["FactoryRef"];
             };
@@ -82,11 +130,13 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/factories/{factory}/metrics": {
+    "/v1/orgs/{org}/factories/{factory}/metrics": {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
                 /** @description The factory's metadata.id or metadata.name */
                 factory: components["parameters"]["FactoryRef"];
             };
@@ -102,16 +152,19 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/stream": {
+    "/v1/orgs/{org}/stream": {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
             cookie?: never;
         };
         /**
-         * Item events as they happen (Server-Sent Events)
-         * @description A text/event-stream. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+         * The organization's events as they happen (Server-Sent Events)
+         * @description A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
          */
         get: operations["streamEvents"];
         put?: never;
@@ -122,11 +175,13 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/items/{item}": {
+    "/v1/orgs/{org}/items/{item}": {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
                 /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
                 item: components["parameters"]["ItemRef"];
             };
@@ -142,11 +197,13 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/items/{item}/events": {
+    "/v1/orgs/{org}/items/{item}/events": {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
                 /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
                 item: components["parameters"]["ItemRef"];
             };
@@ -162,11 +219,13 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/items/{item}/approve": {
+    "/v1/orgs/{org}/items/{item}/approve": {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
                 /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
                 item: components["parameters"]["ItemRef"];
             };
@@ -182,11 +241,13 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/items/{item}/reject": {
+    "/v1/orgs/{org}/items/{item}/reject": {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
                 /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
                 item: components["parameters"]["ItemRef"];
             };
@@ -202,11 +263,13 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/items/{item}/retry": {
+    "/v1/orgs/{org}/items/{item}/retry": {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
                 /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
                 item: components["parameters"]["ItemRef"];
             };
@@ -222,11 +285,13 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/items/{item}/merge": {
+    "/v1/orgs/{org}/items/{item}/merge": {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
                 /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
                 item: components["parameters"]["ItemRef"];
             };
@@ -257,12 +322,52 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, ...) */
+            code?: string;
+        };
+        OrgList: {
+            orgs: components["schemas"]["OrgSummary"][];
+        };
+        /** @description An organization as the organization list shows it */
+        OrgSummary: {
+            id: string;
+            /** @description The organization's address in URLs, as in /v1/orgs/acme */
+            slug: string;
+            name: string;
+            /** @description The one or two characters the organization rail shows */
+            mark: string;
+            factory_count: number;
+        };
+        Org: {
+            id: string;
+            slug: string;
+            name: string;
+            mark: string;
+            factory_count: number;
+            /** Format: date-time */
+            created_at: string;
+        };
+        NewOrg: {
+            name: string;
+            slug: string;
+            /** @description Defaults to the name's initials */
+            mark?: string;
+        };
+        /** @description Who did something; in phase 2.2 every person is the local user */
+        Actor: {
+            /** @enum {string} */
+            kind: "user" | "agent" | "system";
+            /** @description "local" for the local user, an agent's name or a job's name */
+            id: string;
+            name: string;
         };
         FactoryList: {
             factories: components["schemas"]["Factory"][];
         };
         Factory: {
             id: string;
+            /** @description The organization that owns the factory */
+            org_id: string;
             name: string;
             title?: string;
             description?: string;
@@ -277,7 +382,7 @@ export interface components {
         /** @enum {string} */
         StationKind: "queue" | "agent" | "human" | "done";
         /**
-         * @description What goald does when a human acts at this human station (merge → POST /v1/items/{item}/merge)
+         * @description What goald does when a human acts at this human station (merge → POST /v1/orgs/{org}/items/{item}/merge)
          * @enum {string}
          */
         StationAction: "merge";
@@ -294,22 +399,11 @@ export interface components {
             /** @default 0 */
             priority?: number;
         };
-        Approval: {
-            /** @description Who decided */
-            by: string;
-        };
         Rejection: {
-            by: string;
             /** @description What the agent must change */
             reason: string;
         };
-        Retry: {
-            /** @description Who retries */
-            by: string;
-        };
         MergeRequest: {
-            /** @description Who merges */
-            by: string;
             /**
              * @default squash
              * @enum {string}
@@ -438,8 +532,9 @@ export interface components {
             spend_usd: number;
             items_done: number;
         };
-        /** @description The data of one `event: item` on /v1/stream */
+        /** @description The data of one `event: item` on /v1/orgs/{org}/stream */
         StreamEvent: {
+            org_id: string;
             item_id: string;
             /** @description <factory name>#<number>, as in goal#2 */
             ref: string;
@@ -486,6 +581,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description The organization's slug or id */
+        OrgRef: string;
         /** @description The factory's metadata.id or metadata.name */
         FactoryRef: string;
         /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
@@ -517,11 +614,84 @@ export interface operations {
             };
         };
     };
-    listFactories: {
+    listOrgs: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The organizations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createOrg: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewOrg"];
+            };
+        };
+        responses: {
+            /** @description The organization */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Org"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getOrg: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The organization */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Org"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listFactories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -551,6 +721,8 @@ export interface operations {
             };
             header?: never;
             path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
                 /** @description The factory's metadata.id or metadata.name */
                 factory: components["parameters"]["FactoryRef"];
             };
@@ -575,6 +747,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
                 /** @description The factory's metadata.id or metadata.name */
                 factory: components["parameters"]["FactoryRef"];
             };
@@ -603,6 +777,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
                 /** @description The factory's metadata.id or metadata.name */
                 factory: components["parameters"]["FactoryRef"];
             };
@@ -630,6 +806,8 @@ export interface operations {
             };
             header?: never;
             path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
                 /** @description The factory's metadata.id or metadata.name */
                 factory: components["parameters"]["FactoryRef"];
             };
@@ -656,7 +834,10 @@ export interface operations {
                 factory?: string;
             };
             header?: never;
-            path?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -678,6 +859,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
                 /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
                 item: components["parameters"]["ItemRef"];
             };
@@ -706,6 +889,8 @@ export interface operations {
             };
             header?: never;
             path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
                 /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
                 item: components["parameters"]["ItemRef"];
             };
@@ -730,16 +915,14 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
                 /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
                 item: components["parameters"]["ItemRef"];
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["Approval"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description The item after the decision */
             200: {
@@ -758,6 +941,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
                 /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
                 item: components["parameters"]["ItemRef"];
             };
@@ -786,16 +971,14 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
                 /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
                 item: components["parameters"]["ItemRef"];
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["Retry"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description The item, queued at its station again */
             200: {
@@ -814,12 +997,14 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
                 /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
                 item: components["parameters"]["ItemRef"];
             };
             cookie?: never;
         };
-        requestBody: {
+        requestBody?: {
             content: {
                 "application/json": components["schemas"]["MergeRequest"];
             };

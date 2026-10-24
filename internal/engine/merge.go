@@ -23,7 +23,7 @@ const MergeSquash = "squash"
 // moves meanwhile, is refused with an error wrapping ports.ErrNotMergeable and nothing changes.
 // After a successful merge the pull request's head branch is deleted, and nothing else.
 // A pull request that is already merged (a merge whose approval failed) is approved again.
-func (e *Engine) Merge(ctx context.Context, id domain.ItemID, by, method string) (domain.Item, error) {
+func (e *Engine) Merge(ctx context.Context, id domain.ItemID, by domain.Actor, method string) (domain.Item, error) {
 	it, l, err := e.waitingHuman(ctx, id)
 	if err != nil {
 		return domain.Item{}, err
@@ -64,10 +64,10 @@ func (e *Engine) Merge(ctx context.Context, id domain.ItemID, by, method string)
 	now := e.clock.Now()
 	t := ports.Transition{
 		ItemID: it.ID, From: it.Position(), At: now,
-		Events: []domain.Event{event(it, domain.EventMerged, now, by, merged), event(it, domain.EventApproved, now, by, nil)},
+		Events: []domain.Event{decision(it, domain.EventMerged, now, by, merged), decision(it, domain.EventApproved, now, by, nil)},
 	}
 
-	if err := e.advance(l, it, by, &t); err != nil {
+	if err := e.advance(l, it, by.Name, &t); err != nil {
 		return domain.Item{}, fmt.Errorf("merge %s: %w", id, err)
 	}
 

@@ -14,7 +14,7 @@ export const Route = createFileRoute('/f/$factory/items/')({
   validateSearch: (search: Record<string, unknown>): ItemsSearch =>
     isState(search.state) ? { state: search.state } : {},
   loaderDeps: ({ search }) => ({ state: search.state }),
-  loader: ({ context: { queryClient, factory }, deps }) =>
-    queryClient.ensureQueryData(itemsQuery(factory.name, { state: deps.state, limit: 200 })),
+  loader: ({ context: { queryClient, org, factory }, deps }) =>
+    queryClient.ensureQueryData(itemsQuery(org.id, factory.name, { state: deps.state, limit: 200 })),
   component: ItemsPage,
 });

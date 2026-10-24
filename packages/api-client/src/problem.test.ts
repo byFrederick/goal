@@ -21,13 +21,13 @@ const problemJson = (status: number, body: unknown) =>
 describe("unwrap", () => {
   test("resolves to the data of a success", async () => {
     const { goal, requests } = goaldAnswering(Response.json({ factories: [] }));
-    await expect(unwrap(goal.GET(orgPath("/factories")))).resolves.toEqual({ factories: [] });
-    expect(requests[0]?.url).toBe("http://goald.example.com/v1/factories");
+    await expect(unwrap(goal.GET(orgPath("/factories"), { params: { path: { org: "acme" } } }))).resolves.toEqual({ factories: [] });
+    expect(requests[0]?.url).toBe("http://goald.example.com/v1/orgs/acme/factories");
   });
 
   test("throws the Problem goald answered with", async () => {
     const { goal } = goaldAnswering(problemJson(409, { title: "Item is not blocked", status: 409, detail: "goal#2 is done" }));
-    const call = unwrap(goal.POST(orgPath("/items/{item}/retry"), { params: { path: { item: "goal#2" } }, body: { by: "web" } }));
+    const call = unwrap(goal.POST(orgPath("/items/{item}/retry"), { params: { path: { org: "acme", item: "goal#2" } } }));
 
     const err = await call.catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
@@ -37,19 +37,19 @@ describe("unwrap", () => {
 
   test("percent-encodes an item reference in the path", async () => {
     const { goal, requests } = goaldAnswering(Response.json({}));
-    await unwrap(goal.GET(orgPath("/items/{item}"), { params: { path: { item: "goal#2" } } }));
-    expect(requests[0]?.url).toBe("http://goald.example.com/v1/items/goal%232");
+    await unwrap(goal.GET(orgPath("/items/{item}"), { params: { path: { org: "acme", item: "goal#2" } } }));
+    expect(requests[0]?.url).toBe("http://goald.example.com/v1/orgs/acme/items/goal%232");
   });
 
   test("takes the status from the response, not the body", async () => {
     const { goal } = goaldAnswering(problemJson(404, { title: "Factory not found", status: 500 }));
-    const err = await unwrap(goal.GET(orgPath("/factories"))).catch((e: unknown) => e);
+    const err = await unwrap(goal.GET(orgPath("/factories"), { params: { path: { org: "acme" } } })).catch((e: unknown) => e);
     expect((err as ApiError).status).toBe(404);
   });
 
   test("builds a Problem from the status line when the body is not one", async () => {
     const { goal } = goaldAnswering(new Response("<html>Bad gateway</html>", { status: 502, statusText: "Bad Gateway" }));
-    const err = await unwrap(goal.GET(orgPath("/factories"))).catch((e: unknown) => e);
+    const err = await unwrap(goal.GET(orgPath("/factories"), { params: { path: { org: "acme" } } })).catch((e: unknown) => e);
     expect((err as ApiError).problem).toEqual({ title: "Bad Gateway", status: 502 });
   });
 });

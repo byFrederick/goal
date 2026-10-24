@@ -260,8 +260,8 @@ func (s *Store) AuditLog(ctx context.Context, aq ports.AuditQuery) ([]domain.Aud
 }
 
 // appendAudit appends e to the audit log of the transaction's organization (org_id defaults to
-// goal_org()). Every adapter file that changes something appends its entry with it, in the same
-// transaction as the change.
+// goal_org()), with the id of the API request in ctx when there is one. Every adapter file that
+// changes something appends its entry with it, in the same transaction as the change.
 func appendAudit(ctx context.Context, q *db.Queries, e domain.AuditEntry) error {
 	var factory *uuid.UUID
 
@@ -287,6 +287,7 @@ func appendAudit(ctx context.Context, q *db.Queries, e domain.AuditEntry) error 
 	err = q.InsertAudit(ctx, db.InsertAuditParams{
 		At: optionalTime(e.At), ActorKind: string(e.Actor.Kind), ActorID: e.Actor.ID, ActorName: e.Actor.Name,
 		Action: e.Action, TargetKind: e.TargetKind, TargetID: e.TargetID, FactoryID: factory, Data: raw,
+		RequestID: optional(domain.RequestIDFrom(ctx)),
 	})
 	if err != nil {
 		return fmt.Errorf("append audit entry %s: %w", e.Action, ruleError(err, ""))

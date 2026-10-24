@@ -7,12 +7,12 @@ import { itemKey } from '../shared/factory';
 
 // $ref is the item's number in the factory ("12"), a full ref ("goal#12") or its id.
 export const Route = createFileRoute('/f/$factory/items/$ref')({
-  loader: async ({ context: { queryClient, factory }, params }) => {
+  loader: async ({ context: { queryClient, org, factory }, params }) => {
     const key = itemKey(factory.name, params.ref);
     try {
       await Promise.all([
-        queryClient.ensureQueryData(itemQuery(key)),
-        queryClient.ensureQueryData(eventsQuery(queryClient, key)),
+        queryClient.ensureQueryData(itemQuery(org.id, key)),
+        queryClient.ensureQueryData(eventsQuery(queryClient, org.id, key)),
       ]);
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) throw notFound();

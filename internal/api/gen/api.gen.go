@@ -141,12 +141,6 @@ func (e StationKind) Valid() bool {
 	}
 }
 
-// Approval defines model for Approval.
-type Approval struct {
-	// By Who decided
-	By string `json:"by"`
-}
-
 // Board defines model for Board.
 type Board struct {
 	// Constraint The id of the agent station with the most work per slot now, or null
@@ -161,7 +155,7 @@ type Board struct {
 
 // BoardStation defines model for BoardStation.
 type BoardStation struct {
-	// Action What goald does when a human acts at this human station (merge → POST /v1/items/{item}/merge)
+	// Action What goald does when a human acts at this human station (merge → POST /v1/orgs/{org}/items/{item}/merge)
 	Action *StationAction `json:"action,omitempty"`
 
 	// Agents The agents that work here (one, or one per routed lane)
@@ -205,12 +199,15 @@ type EventPage struct {
 
 // Factory defines model for Factory.
 type Factory struct {
-	Description *string   `json:"description,omitempty"`
-	Id          string    `json:"id"`
-	Name        string    `json:"name"`
-	Stations    []Station `json:"stations"`
-	Title       *string   `json:"title,omitempty"`
-	WorkTypes   []string  `json:"work_types"`
+	Description *string `json:"description,omitempty"`
+	Id          string  `json:"id"`
+	Name        string  `json:"name"`
+
+	// OrgId The organization that owns the factory
+	OrgId     string    `json:"org_id"`
+	Stations  []Station `json:"stations"`
+	Title     *string   `json:"title,omitempty"`
+	WorkTypes []string  `json:"work_types"`
 }
 
 // FactoryList defines model for FactoryList.
@@ -293,8 +290,6 @@ type ItemState string
 
 // MergeRequest defines model for MergeRequest.
 type MergeRequest struct {
-	// By Who merges
-	By     string              `json:"by"`
 	Method *MergeRequestMethod `json:"method,omitempty"`
 }
 
@@ -341,8 +336,46 @@ type NewItem struct {
 	Type string `json:"type"`
 }
 
+// NewOrg defines model for NewOrg.
+type NewOrg struct {
+	// Mark Defaults to the name's initials
+	Mark *string `json:"mark,omitempty"`
+	Name string  `json:"name"`
+	Slug string  `json:"slug"`
+}
+
+// Org defines model for Org.
+type Org struct {
+	CreatedAt    time.Time `json:"created_at"`
+	FactoryCount int       `json:"factory_count"`
+	Id           string    `json:"id"`
+	Mark         string    `json:"mark"`
+	Name         string    `json:"name"`
+	Slug         string    `json:"slug"`
+}
+
+// OrgList defines model for OrgList.
+type OrgList struct {
+	Orgs []OrgSummary `json:"orgs"`
+}
+
+// OrgSummary An organization as the organization list shows it
+type OrgSummary struct {
+	FactoryCount int    `json:"factory_count"`
+	Id           string `json:"id"`
+
+	// Mark The one or two characters the organization rail shows
+	Mark string `json:"mark"`
+	Name string `json:"name"`
+
+	// Slug The organization's address in URLs, as in /v1/orgs/acme
+	Slug string `json:"slug"`
+}
+
 // Problem defines model for Problem.
 type Problem struct {
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, ...)
+	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 	Status int     `json:"status"`
 	Title  string  `json:"title"`
@@ -350,40 +383,33 @@ type Problem struct {
 
 // Rejection defines model for Rejection.
 type Rejection struct {
-	By string `json:"by"`
-
 	// Reason What the agent must change
 	Reason string `json:"reason"`
 }
 
-// Retry defines model for Retry.
-type Retry struct {
-	// By Who retries
-	By string `json:"by"`
-}
-
 // Station defines model for Station.
 type Station struct {
-	// Action What goald does when a human acts at this human station (merge → POST /v1/items/{item}/merge)
+	// Action What goald does when a human acts at this human station (merge → POST /v1/orgs/{org}/items/{item}/merge)
 	Action *StationAction `json:"action,omitempty"`
 	Id     string         `json:"id"`
 	Kind   StationKind    `json:"kind"`
 }
 
-// StationAction What goald does when a human acts at this human station (merge → POST /v1/items/{item}/merge)
+// StationAction What goald does when a human acts at this human station (merge → POST /v1/orgs/{org}/items/{item}/merge)
 type StationAction string
 
 // StationKind defines model for StationKind.
 type StationKind string
 
-// StreamEvent The data of one `event: item` on /v1/stream
+// StreamEvent The data of one `event: item` on /v1/orgs/{org}/stream
 type StreamEvent struct {
 	At        time.Time `json:"at"`
 	FactoryId string    `json:"factory_id"`
 	ItemId    string    `json:"item_id"`
 
 	// Kind The event kind (created, moved, approved, tool_call, ...)
-	Kind string `json:"kind"`
+	Kind  string `json:"kind"`
+	OrgId string `json:"org_id"`
 
 	// Ref <factory name>#<number>, as in goal#2
 	Ref     string    `json:"ref"`
@@ -396,6 +422,9 @@ type FactoryRef = string
 
 // ItemRef defines model for ItemRef.
 type ItemRef = string
+
+// OrgRef defines model for OrgRef.
+type OrgRef = string
 
 // ListItemsParams defines parameters for ListItems.
 type ListItemsParams struct {
@@ -429,20 +458,17 @@ type StreamEventsParams struct {
 	Factory *string `form:"factory,omitempty" json:"factory,omitempty"`
 }
 
+// CreateOrgJSONRequestBody defines body for CreateOrg for application/json ContentType.
+type CreateOrgJSONRequestBody = NewOrg
+
 // SubmitItemJSONRequestBody defines body for SubmitItem for application/json ContentType.
 type SubmitItemJSONRequestBody = NewItem
-
-// ApproveItemJSONRequestBody defines body for ApproveItem for application/json ContentType.
-type ApproveItemJSONRequestBody = Approval
 
 // MergeItemJSONRequestBody defines body for MergeItem for application/json ContentType.
 type MergeItemJSONRequestBody = MergeRequest
 
 // RejectItemJSONRequestBody defines body for RejectItem for application/json ContentType.
 type RejectItemJSONRequestBody = Rejection
-
-// RetryItemJSONRequestBody defines body for RetryItem for application/json ContentType.
-type RetryItemJSONRequestBody = Retry
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -518,70 +544,89 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 // The interface specification for the client above.
 type ClientInterface interface {
 
-	// ListFactories The factories goald runs, from the bucket
-	//
-	// Corresponds with GET /v1/factories (the `ListFactories` operationId).
-	ListFactories(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetBoard The factory's board, station by station in line order
-	//
-	// Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time.
-	//
-	// Corresponds with GET /v1/factories/{factory}/board (the `GetBoard` operationId).
-	GetBoard(ctx context.Context, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ListItems One page of a factory's items, newest first
-	//
-	// Corresponds with GET /v1/factories/{factory}/items (the `ListItems` operationId).
-	ListItems(ctx context.Context, factory FactoryRef, params *ListItemsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// SubmitItemWithBody Submit a work item to a factory's first station
-	//
-	// Takes any type of body and a specified content type.
-	//
-	// Corresponds with POST /v1/factories/{factory}/items (the `SubmitItem` operationId).
-	SubmitItemWithBody(ctx context.Context, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// SubmitItem Submit a work item to a factory's first station
-	//
-	// Takes a body of the `application/json` content type.
-	//
-	// Corresponds with POST /v1/factories/{factory}/items (the `SubmitItem` operationId).
-	SubmitItem(ctx context.Context, factory FactoryRef, body SubmitItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetMetrics The factory's flow over the last days
-	//
-	// Corresponds with GET /v1/factories/{factory}/metrics (the `GetMetrics` operationId).
-	GetMetrics(ctx context.Context, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// GetHealth Liveness of goald
 	//
 	// Corresponds with GET /v1/health (the `GetHealth` operationId).
 	GetHealth(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetItem One work item
+	// ListOrgs Every organization on the install, by name
 	//
-	// Corresponds with GET /v1/items/{item} (the `GetItem` operationId).
-	GetItem(ctx context.Context, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with GET /v1/orgs (the `ListOrgs` operationId).
+	ListOrgs(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ApproveItemWithBody Approve an item waiting for a human; it moves to the next station
+	// CreateOrgWithBody Create an organization
+	//
+	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409.
 	//
 	// Takes any type of body and a specified content type.
 	//
-	// Corresponds with POST /v1/items/{item}/approve (the `ApproveItem` operationId).
-	ApproveItemWithBody(ctx context.Context, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with POST /v1/orgs (the `CreateOrg` operationId).
+	CreateOrgWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ApproveItem Approve an item waiting for a human; it moves to the next station
+	// CreateOrg Create an organization
+	//
+	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409.
 	//
 	// Takes a body of the `application/json` content type.
 	//
-	// Corresponds with POST /v1/items/{item}/approve (the `ApproveItem` operationId).
-	ApproveItem(ctx context.Context, item ItemRef, body ApproveItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with POST /v1/orgs (the `CreateOrg` operationId).
+	CreateOrg(ctx context.Context, body CreateOrgJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetOrg One organization
+	//
+	// Corresponds with GET /v1/orgs/{org} (the `GetOrg` operationId).
+	GetOrg(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListFactories The organization's factories goald runs, from the bucket
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories (the `ListFactories` operationId).
+	ListFactories(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetBoard The factory's board, station by station in line order
+	//
+	// Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/board (the `GetBoard` operationId).
+	GetBoard(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListItems One page of a factory's items, newest first
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/items (the `ListItems` operationId).
+	ListItems(ctx context.Context, org OrgRef, factory FactoryRef, params *ListItemsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SubmitItemWithBody Submit a work item to a factory's first station
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
+	SubmitItemWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SubmitItem Submit a work item to a factory's first station
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
+	SubmitItem(ctx context.Context, org OrgRef, factory FactoryRef, body SubmitItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetMetrics The factory's flow over the last days
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics (the `GetMetrics` operationId).
+	GetMetrics(ctx context.Context, org OrgRef, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetItem One work item
+	//
+	// Corresponds with GET /v1/orgs/{org}/items/{item} (the `GetItem` operationId).
+	GetItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ApproveItem Approve an item waiting for a human; it moves to the next station
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/approve (the `ApproveItem` operationId).
+	ApproveItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListItemEvents One page of an item's history, oldest first
 	//
-	// Corresponds with GET /v1/items/{item}/events (the `ListItemEvents` operationId).
-	ListItemEvents(ctx context.Context, item ItemRef, params *ListItemEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with GET /v1/orgs/{org}/items/{item}/events (the `ListItemEvents` operationId).
+	ListItemEvents(ctx context.Context, org OrgRef, item ItemRef, params *ListItemEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// MergeItemWithBody Merge the item's pull request, then approve it
 	//
@@ -589,8 +634,8 @@ type ClientInterface interface {
 	//
 	// Takes any type of body and a specified content type.
 	//
-	// Corresponds with POST /v1/items/{item}/merge (the `MergeItem` operationId).
-	MergeItemWithBody(ctx context.Context, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/merge (the `MergeItem` operationId).
+	MergeItemWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// MergeItem Merge the item's pull request, then approve it
 	//
@@ -598,139 +643,34 @@ type ClientInterface interface {
 	//
 	// Takes a body of the `application/json` content type.
 	//
-	// Corresponds with POST /v1/items/{item}/merge (the `MergeItem` operationId).
-	MergeItem(ctx context.Context, item ItemRef, body MergeItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/merge (the `MergeItem` operationId).
+	MergeItem(ctx context.Context, org OrgRef, item ItemRef, body MergeItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RejectItemWithBody Reject an item waiting for a human; it goes back for rework with the reason
 	//
 	// Takes any type of body and a specified content type.
 	//
-	// Corresponds with POST /v1/items/{item}/reject (the `RejectItem` operationId).
-	RejectItemWithBody(ctx context.Context, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/reject (the `RejectItem` operationId).
+	RejectItemWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RejectItem Reject an item waiting for a human; it goes back for rework with the reason
 	//
 	// Takes a body of the `application/json` content type.
 	//
-	// Corresponds with POST /v1/items/{item}/reject (the `RejectItem` operationId).
-	RejectItem(ctx context.Context, item ItemRef, body RejectItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// RetryItemWithBody Send a blocked item back to its station's queue (409 if it is not blocked)
-	//
-	// Takes any type of body and a specified content type.
-	//
-	// Corresponds with POST /v1/items/{item}/retry (the `RetryItem` operationId).
-	RetryItemWithBody(ctx context.Context, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/reject (the `RejectItem` operationId).
+	RejectItem(ctx context.Context, org OrgRef, item ItemRef, body RejectItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RetryItem Send a blocked item back to its station's queue (409 if it is not blocked)
 	//
-	// Takes a body of the `application/json` content type.
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/retry (the `RetryItem` operationId).
+	RetryItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	//
-	// Corresponds with POST /v1/items/{item}/retry (the `RetryItem` operationId).
-	RetryItem(ctx context.Context, item ItemRef, body RetryItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// StreamEvents Item events as they happen (Server-Sent Events)
+	// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
 	//
-	// A text/event-stream. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
-	//
-	// Corresponds with GET /v1/stream (the `StreamEvents` operationId).
-	StreamEvents(ctx context.Context, params *StreamEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-}
-
-// ListFactories The factories goald runs, from the bucket
-//
-// Corresponds with GET /v1/factories (the `ListFactories` operationId).
-func (c *Client) ListFactories(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListFactoriesRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// GetBoard The factory's board, station by station in line order
-//
-// Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time.
-//
-// Corresponds with GET /v1/factories/{factory}/board (the `GetBoard` operationId).
-func (c *Client) GetBoard(ctx context.Context, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetBoardRequest(c.Server, factory)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// ListItems One page of a factory's items, newest first
-//
-// Corresponds with GET /v1/factories/{factory}/items (the `ListItems` operationId).
-func (c *Client) ListItems(ctx context.Context, factory FactoryRef, params *ListItemsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListItemsRequest(c.Server, factory, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// SubmitItemWithBody Submit a work item to a factory's first station
-//
-// Takes any type of body and a specified content type.
-//
-// Corresponds with POST /v1/factories/{factory}/items (the `SubmitItem` operationId).
-func (c *Client) SubmitItemWithBody(ctx context.Context, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewSubmitItemRequestWithBody(c.Server, factory, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// SubmitItem Submit a work item to a factory's first station
-//
-// Takes a body of the `application/json` content type.
-//
-// Corresponds with POST /v1/factories/{factory}/items (the `SubmitItem` operationId).
-func (c *Client) SubmitItem(ctx context.Context, factory FactoryRef, body SubmitItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewSubmitItemRequest(c.Server, factory, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// GetMetrics The factory's flow over the last days
-//
-// Corresponds with GET /v1/factories/{factory}/metrics (the `GetMetrics` operationId).
-func (c *Client) GetMetrics(ctx context.Context, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetMetricsRequest(c.Server, factory, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
+	// Corresponds with GET /v1/orgs/{org}/stream (the `StreamEvents` operationId).
+	StreamEvents(ctx context.Context, org OrgRef, params *StreamEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // GetHealth Liveness of goald
@@ -748,11 +688,11 @@ func (c *Client) GetHealth(ctx context.Context, reqEditors ...RequestEditorFn) (
 	return c.Client.Do(req)
 }
 
-// GetItem One work item
+// ListOrgs Every organization on the install, by name
 //
-// Corresponds with GET /v1/items/{item} (the `GetItem` operationId).
-func (c *Client) GetItem(ctx context.Context, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetItemRequest(c.Server, item)
+// Corresponds with GET /v1/orgs (the `ListOrgs` operationId).
+func (c *Client) ListOrgs(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListOrgsRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -763,13 +703,160 @@ func (c *Client) GetItem(ctx context.Context, item ItemRef, reqEditors ...Reques
 	return c.Client.Do(req)
 }
 
-// ApproveItemWithBody Approve an item waiting for a human; it moves to the next station
+// CreateOrgWithBody Create an organization
+//
+// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409.
 //
 // Takes any type of body and a specified content type.
 //
-// Corresponds with POST /v1/items/{item}/approve (the `ApproveItem` operationId).
-func (c *Client) ApproveItemWithBody(ctx context.Context, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewApproveItemRequestWithBody(c.Server, item, contentType, body)
+// Corresponds with POST /v1/orgs (the `CreateOrg` operationId).
+func (c *Client) CreateOrgWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateOrgRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateOrg Create an organization
+//
+// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs (the `CreateOrg` operationId).
+func (c *Client) CreateOrg(ctx context.Context, body CreateOrgJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateOrgRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetOrg One organization
+//
+// Corresponds with GET /v1/orgs/{org} (the `GetOrg` operationId).
+func (c *Client) GetOrg(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetOrgRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListFactories The organization's factories goald runs, from the bucket
+//
+// Corresponds with GET /v1/orgs/{org}/factories (the `ListFactories` operationId).
+func (c *Client) ListFactories(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListFactoriesRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetBoard The factory's board, station by station in line order
+//
+// Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/board (the `GetBoard` operationId).
+func (c *Client) GetBoard(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetBoardRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListItems One page of a factory's items, newest first
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/items (the `ListItems` operationId).
+func (c *Client) ListItems(ctx context.Context, org OrgRef, factory FactoryRef, params *ListItemsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListItemsRequest(c.Server, org, factory, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SubmitItemWithBody Submit a work item to a factory's first station
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
+func (c *Client) SubmitItemWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSubmitItemRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SubmitItem Submit a work item to a factory's first station
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
+func (c *Client) SubmitItem(ctx context.Context, org OrgRef, factory FactoryRef, body SubmitItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSubmitItemRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetMetrics The factory's flow over the last days
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics (the `GetMetrics` operationId).
+func (c *Client) GetMetrics(ctx context.Context, org OrgRef, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetMetricsRequest(c.Server, org, factory, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetItem One work item
+//
+// Corresponds with GET /v1/orgs/{org}/items/{item} (the `GetItem` operationId).
+func (c *Client) GetItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetItemRequest(c.Server, org, item)
 	if err != nil {
 		return nil, err
 	}
@@ -782,11 +869,9 @@ func (c *Client) ApproveItemWithBody(ctx context.Context, item ItemRef, contentT
 
 // ApproveItem Approve an item waiting for a human; it moves to the next station
 //
-// Takes a body of the `application/json` content type.
-//
-// Corresponds with POST /v1/items/{item}/approve (the `ApproveItem` operationId).
-func (c *Client) ApproveItem(ctx context.Context, item ItemRef, body ApproveItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewApproveItemRequest(c.Server, item, body)
+// Corresponds with POST /v1/orgs/{org}/items/{item}/approve (the `ApproveItem` operationId).
+func (c *Client) ApproveItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewApproveItemRequest(c.Server, org, item)
 	if err != nil {
 		return nil, err
 	}
@@ -799,9 +884,9 @@ func (c *Client) ApproveItem(ctx context.Context, item ItemRef, body ApproveItem
 
 // ListItemEvents One page of an item's history, oldest first
 //
-// Corresponds with GET /v1/items/{item}/events (the `ListItemEvents` operationId).
-func (c *Client) ListItemEvents(ctx context.Context, item ItemRef, params *ListItemEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListItemEventsRequest(c.Server, item, params)
+// Corresponds with GET /v1/orgs/{org}/items/{item}/events (the `ListItemEvents` operationId).
+func (c *Client) ListItemEvents(ctx context.Context, org OrgRef, item ItemRef, params *ListItemEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListItemEventsRequest(c.Server, org, item, params)
 	if err != nil {
 		return nil, err
 	}
@@ -818,9 +903,9 @@ func (c *Client) ListItemEvents(ctx context.Context, item ItemRef, params *ListI
 //
 // Takes any type of body and a specified content type.
 //
-// Corresponds with POST /v1/items/{item}/merge (the `MergeItem` operationId).
-func (c *Client) MergeItemWithBody(ctx context.Context, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewMergeItemRequestWithBody(c.Server, item, contentType, body)
+// Corresponds with POST /v1/orgs/{org}/items/{item}/merge (the `MergeItem` operationId).
+func (c *Client) MergeItemWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewMergeItemRequestWithBody(c.Server, org, item, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -837,9 +922,9 @@ func (c *Client) MergeItemWithBody(ctx context.Context, item ItemRef, contentTyp
 //
 // Takes a body of the `application/json` content type.
 //
-// Corresponds with POST /v1/items/{item}/merge (the `MergeItem` operationId).
-func (c *Client) MergeItem(ctx context.Context, item ItemRef, body MergeItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewMergeItemRequest(c.Server, item, body)
+// Corresponds with POST /v1/orgs/{org}/items/{item}/merge (the `MergeItem` operationId).
+func (c *Client) MergeItem(ctx context.Context, org OrgRef, item ItemRef, body MergeItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewMergeItemRequest(c.Server, org, item, body)
 	if err != nil {
 		return nil, err
 	}
@@ -854,9 +939,9 @@ func (c *Client) MergeItem(ctx context.Context, item ItemRef, body MergeItemJSON
 //
 // Takes any type of body and a specified content type.
 //
-// Corresponds with POST /v1/items/{item}/reject (the `RejectItem` operationId).
-func (c *Client) RejectItemWithBody(ctx context.Context, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewRejectItemRequestWithBody(c.Server, item, contentType, body)
+// Corresponds with POST /v1/orgs/{org}/items/{item}/reject (the `RejectItem` operationId).
+func (c *Client) RejectItemWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRejectItemRequestWithBody(c.Server, org, item, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -871,26 +956,9 @@ func (c *Client) RejectItemWithBody(ctx context.Context, item ItemRef, contentTy
 //
 // Takes a body of the `application/json` content type.
 //
-// Corresponds with POST /v1/items/{item}/reject (the `RejectItem` operationId).
-func (c *Client) RejectItem(ctx context.Context, item ItemRef, body RejectItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewRejectItemRequest(c.Server, item, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// RetryItemWithBody Send a blocked item back to its station's queue (409 if it is not blocked)
-//
-// Takes any type of body and a specified content type.
-//
-// Corresponds with POST /v1/items/{item}/retry (the `RetryItem` operationId).
-func (c *Client) RetryItemWithBody(ctx context.Context, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewRetryItemRequestWithBody(c.Server, item, contentType, body)
+// Corresponds with POST /v1/orgs/{org}/items/{item}/reject (the `RejectItem` operationId).
+func (c *Client) RejectItem(ctx context.Context, org OrgRef, item ItemRef, body RejectItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRejectItemRequest(c.Server, org, item, body)
 	if err != nil {
 		return nil, err
 	}
@@ -903,11 +971,9 @@ func (c *Client) RetryItemWithBody(ctx context.Context, item ItemRef, contentTyp
 
 // RetryItem Send a blocked item back to its station's queue (409 if it is not blocked)
 //
-// Takes a body of the `application/json` content type.
-//
-// Corresponds with POST /v1/items/{item}/retry (the `RetryItem` operationId).
-func (c *Client) RetryItem(ctx context.Context, item ItemRef, body RetryItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewRetryItemRequest(c.Server, item, body)
+// Corresponds with POST /v1/orgs/{org}/items/{item}/retry (the `RetryItem` operationId).
+func (c *Client) RetryItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRetryItemRequest(c.Server, org, item)
 	if err != nil {
 		return nil, err
 	}
@@ -918,13 +984,13 @@ func (c *Client) RetryItem(ctx context.Context, item ItemRef, body RetryItemJSON
 	return c.Client.Do(req)
 }
 
-// StreamEvents Item events as they happen (Server-Sent Events)
+// StreamEvents The organization's events as they happen (Server-Sent Events)
 //
-// A text/event-stream. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
 //
-// Corresponds with GET /v1/stream (the `StreamEvents` operationId).
-func (c *Client) StreamEvents(ctx context.Context, params *StreamEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewStreamEventsRequest(c.Server, params)
+// Corresponds with GET /v1/orgs/{org}/stream (the `StreamEvents` operationId).
+func (c *Client) StreamEvents(ctx context.Context, org OrgRef, params *StreamEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStreamEventsRequest(c.Server, org, params)
 	if err != nil {
 		return nil, err
 	}
@@ -935,8 +1001,8 @@ func (c *Client) StreamEvents(ctx context.Context, params *StreamEventsParams, r
 	return c.Client.Do(req)
 }
 
-// NewListFactoriesRequest constructs an http.Request for the ListFactories method
-func NewListFactoriesRequest(server string) (*http.Request, error) {
+// NewGetHealthRequest constructs an http.Request for the GetHealth method
+func NewGetHealthRequest(server string) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -944,7 +1010,142 @@ func NewListFactoriesRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/factories")
+	operationPath := fmt.Sprintf("/v1/health")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListOrgsRequest constructs an http.Request for the ListOrgs method
+func NewListOrgsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateOrgRequest calls the generic CreateOrg builder with application/json body
+func NewCreateOrgRequest(server string, body CreateOrgJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateOrgRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreateOrgRequestWithBody constructs an http.Request for the CreateOrg method, with any body, and a specified content type
+func NewCreateOrgRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetOrgRequest constructs an http.Request for the GetOrg method
+func NewGetOrgRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListFactoriesRequest constructs an http.Request for the ListFactories method
+func NewListFactoriesRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -963,12 +1164,19 @@ func NewListFactoriesRequest(server string) (*http.Request, error) {
 }
 
 // NewGetBoardRequest constructs an http.Request for the GetBoard method
-func NewGetBoardRequest(server string, factory FactoryRef) (*http.Request, error) {
+func NewGetBoardRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
 	if err != nil {
 		return nil, err
 	}
@@ -978,7 +1186,7 @@ func NewGetBoardRequest(server string, factory FactoryRef) (*http.Request, error
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/factories/%s/board", pathParam0)
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/board", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -997,12 +1205,19 @@ func NewGetBoardRequest(server string, factory FactoryRef) (*http.Request, error
 }
 
 // NewListItemsRequest constructs an http.Request for the ListItems method
-func NewListItemsRequest(server string, factory FactoryRef, params *ListItemsParams) (*http.Request, error) {
+func NewListItemsRequest(server string, org OrgRef, factory FactoryRef, params *ListItemsParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
 	if err != nil {
 		return nil, err
 	}
@@ -1012,7 +1227,7 @@ func NewListItemsRequest(server string, factory FactoryRef, params *ListItemsPar
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/factories/%s/items", pathParam0)
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/items", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1094,23 +1309,30 @@ func NewListItemsRequest(server string, factory FactoryRef, params *ListItemsPar
 }
 
 // NewSubmitItemRequest calls the generic SubmitItem builder with application/json body
-func NewSubmitItemRequest(server string, factory FactoryRef, body SubmitItemJSONRequestBody) (*http.Request, error) {
+func NewSubmitItemRequest(server string, org OrgRef, factory FactoryRef, body SubmitItemJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewSubmitItemRequestWithBody(server, factory, "application/json", bodyReader)
+	return NewSubmitItemRequestWithBody(server, org, factory, "application/json", bodyReader)
 }
 
 // NewSubmitItemRequestWithBody constructs an http.Request for the SubmitItem method, with any body, and a specified content type
-func NewSubmitItemRequestWithBody(server string, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+func NewSubmitItemRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
 	if err != nil {
 		return nil, err
 	}
@@ -1120,7 +1342,7 @@ func NewSubmitItemRequestWithBody(server string, factory FactoryRef, contentType
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/factories/%s/items", pathParam0)
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/items", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1141,12 +1363,19 @@ func NewSubmitItemRequestWithBody(server string, factory FactoryRef, contentType
 }
 
 // NewGetMetricsRequest constructs an http.Request for the GetMetrics method
-func NewGetMetricsRequest(server string, factory FactoryRef, params *GetMetricsParams) (*http.Request, error) {
+func NewGetMetricsRequest(server string, org OrgRef, factory FactoryRef, params *GetMetricsParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
 	if err != nil {
 		return nil, err
 	}
@@ -1156,7 +1385,7 @@ func NewGetMetricsRequest(server string, factory FactoryRef, params *GetMetricsP
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/factories/%s/metrics", pathParam0)
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/metrics", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1201,40 +1430,20 @@ func NewGetMetricsRequest(server string, factory FactoryRef, params *GetMetricsP
 	return req, nil
 }
 
-// NewGetHealthRequest constructs an http.Request for the GetHealth method
-func NewGetHealthRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/health")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 // NewGetItemRequest constructs an http.Request for the GetItem method
-func NewGetItemRequest(server string, item ItemRef) (*http.Request, error) {
+func NewGetItemRequest(server string, org OrgRef, item ItemRef) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
 	if err != nil {
 		return nil, err
 	}
@@ -1244,7 +1453,7 @@ func NewGetItemRequest(server string, item ItemRef) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/items/%s", pathParam0)
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1262,24 +1471,20 @@ func NewGetItemRequest(server string, item ItemRef) (*http.Request, error) {
 	return req, nil
 }
 
-// NewApproveItemRequest calls the generic ApproveItem builder with application/json body
-func NewApproveItemRequest(server string, item ItemRef, body ApproveItemJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewApproveItemRequestWithBody(server, item, "application/json", bodyReader)
-}
-
-// NewApproveItemRequestWithBody constructs an http.Request for the ApproveItem method, with any body, and a specified content type
-func NewApproveItemRequestWithBody(server string, item ItemRef, contentType string, body io.Reader) (*http.Request, error) {
+// NewApproveItemRequest constructs an http.Request for the ApproveItem method
+func NewApproveItemRequest(server string, org OrgRef, item ItemRef) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
 	if err != nil {
 		return nil, err
 	}
@@ -1289,7 +1494,7 @@ func NewApproveItemRequestWithBody(server string, item ItemRef, contentType stri
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/items/%s/approve", pathParam0)
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/approve", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1299,23 +1504,28 @@ func NewApproveItemRequestWithBody(server string, item ItemRef, contentType stri
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
-
-	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
 
 // NewListItemEventsRequest constructs an http.Request for the ListItemEvents method
-func NewListItemEventsRequest(server string, item ItemRef, params *ListItemEventsParams) (*http.Request, error) {
+func NewListItemEventsRequest(server string, org OrgRef, item ItemRef, params *ListItemEventsParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
 	if err != nil {
 		return nil, err
 	}
@@ -1325,7 +1535,7 @@ func NewListItemEventsRequest(server string, item ItemRef, params *ListItemEvent
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/items/%s/events", pathParam0)
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/events", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1383,23 +1593,30 @@ func NewListItemEventsRequest(server string, item ItemRef, params *ListItemEvent
 }
 
 // NewMergeItemRequest calls the generic MergeItem builder with application/json body
-func NewMergeItemRequest(server string, item ItemRef, body MergeItemJSONRequestBody) (*http.Request, error) {
+func NewMergeItemRequest(server string, org OrgRef, item ItemRef, body MergeItemJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewMergeItemRequestWithBody(server, item, "application/json", bodyReader)
+	return NewMergeItemRequestWithBody(server, org, item, "application/json", bodyReader)
 }
 
 // NewMergeItemRequestWithBody constructs an http.Request for the MergeItem method, with any body, and a specified content type
-func NewMergeItemRequestWithBody(server string, item ItemRef, contentType string, body io.Reader) (*http.Request, error) {
+func NewMergeItemRequestWithBody(server string, org OrgRef, item ItemRef, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
 	if err != nil {
 		return nil, err
 	}
@@ -1409,7 +1626,7 @@ func NewMergeItemRequestWithBody(server string, item ItemRef, contentType string
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/items/%s/merge", pathParam0)
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/merge", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1430,23 +1647,30 @@ func NewMergeItemRequestWithBody(server string, item ItemRef, contentType string
 }
 
 // NewRejectItemRequest calls the generic RejectItem builder with application/json body
-func NewRejectItemRequest(server string, item ItemRef, body RejectItemJSONRequestBody) (*http.Request, error) {
+func NewRejectItemRequest(server string, org OrgRef, item ItemRef, body RejectItemJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewRejectItemRequestWithBody(server, item, "application/json", bodyReader)
+	return NewRejectItemRequestWithBody(server, org, item, "application/json", bodyReader)
 }
 
 // NewRejectItemRequestWithBody constructs an http.Request for the RejectItem method, with any body, and a specified content type
-func NewRejectItemRequestWithBody(server string, item ItemRef, contentType string, body io.Reader) (*http.Request, error) {
+func NewRejectItemRequestWithBody(server string, org OrgRef, item ItemRef, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
 	if err != nil {
 		return nil, err
 	}
@@ -1456,7 +1680,7 @@ func NewRejectItemRequestWithBody(server string, item ItemRef, contentType strin
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/items/%s/reject", pathParam0)
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/reject", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1476,24 +1700,20 @@ func NewRejectItemRequestWithBody(server string, item ItemRef, contentType strin
 	return req, nil
 }
 
-// NewRetryItemRequest calls the generic RetryItem builder with application/json body
-func NewRetryItemRequest(server string, item ItemRef, body RetryItemJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewRetryItemRequestWithBody(server, item, "application/json", bodyReader)
-}
-
-// NewRetryItemRequestWithBody constructs an http.Request for the RetryItem method, with any body, and a specified content type
-func NewRetryItemRequestWithBody(server string, item ItemRef, contentType string, body io.Reader) (*http.Request, error) {
+// NewRetryItemRequest constructs an http.Request for the RetryItem method
+func NewRetryItemRequest(server string, org OrgRef, item ItemRef) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
 	if err != nil {
 		return nil, err
 	}
@@ -1503,7 +1723,7 @@ func NewRetryItemRequestWithBody(server string, item ItemRef, contentType string
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/items/%s/retry", pathParam0)
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/retry", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1513,26 +1733,31 @@ func NewRetryItemRequestWithBody(server string, item ItemRef, contentType string
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
-
-	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
 
 // NewStreamEventsRequest constructs an http.Request for the StreamEvents method
-func NewStreamEventsRequest(server string, params *StreamEventsParams) (*http.Request, error) {
+func NewStreamEventsRequest(server string, org OrgRef, params *StreamEventsParams) (*http.Request, error) {
 	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
 
 	serverURL, err := url.Parse(server)
 	if err != nil {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/stream")
+	operationPath := fmt.Sprintf("/v1/orgs/%s/stream", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1621,50 +1846,6 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 
-	// ListFactoriesWithResponse The factories goald runs, from the bucket
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with GET /v1/factories (the `ListFactories` operationId).
-	ListFactoriesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListFactoriesResponse, error)
-
-	// GetBoardWithResponse The factory's board, station by station in line order
-	//
-	// Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time.
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with GET /v1/factories/{factory}/board (the `GetBoard` operationId).
-	GetBoardWithResponse(ctx context.Context, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetBoardResponse, error)
-
-	// ListItemsWithResponse One page of a factory's items, newest first
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with GET /v1/factories/{factory}/items (the `ListItems` operationId).
-	ListItemsWithResponse(ctx context.Context, factory FactoryRef, params *ListItemsParams, reqEditors ...RequestEditorFn) (*ListItemsResponse, error)
-
-	// SubmitItemWithBodyWithResponse Submit a work item to a factory's first station
-	//
-	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with POST /v1/factories/{factory}/items (the `SubmitItem` operationId).
-	SubmitItemWithBodyWithResponse(ctx context.Context, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SubmitItemResponse, error)
-
-	// SubmitItemWithResponse Submit a work item to a factory's first station
-	//
-	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with POST /v1/factories/{factory}/items (the `SubmitItem` operationId).
-	SubmitItemWithResponse(ctx context.Context, factory FactoryRef, body SubmitItemJSONRequestBody, reqEditors ...RequestEditorFn) (*SubmitItemResponse, error)
-
-	// GetMetricsWithResponse The factory's flow over the last days
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with GET /v1/factories/{factory}/metrics (the `GetMetrics` operationId).
-	GetMetricsWithResponse(ctx context.Context, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*GetMetricsResponse, error)
-
 	// GetHealthWithResponse Liveness of goald
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -1672,33 +1853,102 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/health (the `GetHealth` operationId).
 	GetHealthWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetHealthResponse, error)
 
+	// ListOrgsWithResponse Every organization on the install, by name
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs (the `ListOrgs` operationId).
+	ListOrgsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListOrgsResponse, error)
+
+	// CreateOrgWithBodyWithResponse Create an organization
+	//
+	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs (the `CreateOrg` operationId).
+	CreateOrgWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateOrgResponse, error)
+
+	// CreateOrgWithResponse Create an organization
+	//
+	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs (the `CreateOrg` operationId).
+	CreateOrgWithResponse(ctx context.Context, body CreateOrgJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateOrgResponse, error)
+
+	// GetOrgWithResponse One organization
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org} (the `GetOrg` operationId).
+	GetOrgWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetOrgResponse, error)
+
+	// ListFactoriesWithResponse The organization's factories goald runs, from the bucket
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories (the `ListFactories` operationId).
+	ListFactoriesWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListFactoriesResponse, error)
+
+	// GetBoardWithResponse The factory's board, station by station in line order
+	//
+	// Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/board (the `GetBoard` operationId).
+	GetBoardWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetBoardResponse, error)
+
+	// ListItemsWithResponse One page of a factory's items, newest first
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/items (the `ListItems` operationId).
+	ListItemsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *ListItemsParams, reqEditors ...RequestEditorFn) (*ListItemsResponse, error)
+
+	// SubmitItemWithBodyWithResponse Submit a work item to a factory's first station
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
+	SubmitItemWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SubmitItemResponse, error)
+
+	// SubmitItemWithResponse Submit a work item to a factory's first station
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
+	SubmitItemWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body SubmitItemJSONRequestBody, reqEditors ...RequestEditorFn) (*SubmitItemResponse, error)
+
+	// GetMetricsWithResponse The factory's flow over the last days
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics (the `GetMetrics` operationId).
+	GetMetricsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*GetMetricsResponse, error)
+
 	// GetItemWithResponse One work item
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with GET /v1/items/{item} (the `GetItem` operationId).
-	GetItemWithResponse(ctx context.Context, item ItemRef, reqEditors ...RequestEditorFn) (*GetItemResponse, error)
-
-	// ApproveItemWithBodyWithResponse Approve an item waiting for a human; it moves to the next station
-	//
-	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with POST /v1/items/{item}/approve (the `ApproveItem` operationId).
-	ApproveItemWithBodyWithResponse(ctx context.Context, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ApproveItemResponse, error)
+	// Corresponds with GET /v1/orgs/{org}/items/{item} (the `GetItem` operationId).
+	GetItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*GetItemResponse, error)
 
 	// ApproveItemWithResponse Approve an item waiting for a human; it moves to the next station
 	//
-	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	// Returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with POST /v1/items/{item}/approve (the `ApproveItem` operationId).
-	ApproveItemWithResponse(ctx context.Context, item ItemRef, body ApproveItemJSONRequestBody, reqEditors ...RequestEditorFn) (*ApproveItemResponse, error)
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/approve (the `ApproveItem` operationId).
+	ApproveItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*ApproveItemResponse, error)
 
 	// ListItemEventsWithResponse One page of an item's history, oldest first
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with GET /v1/items/{item}/events (the `ListItemEvents` operationId).
-	ListItemEventsWithResponse(ctx context.Context, item ItemRef, params *ListItemEventsParams, reqEditors ...RequestEditorFn) (*ListItemEventsResponse, error)
+	// Corresponds with GET /v1/orgs/{org}/items/{item}/events (the `ListItemEvents` operationId).
+	ListItemEventsWithResponse(ctx context.Context, org OrgRef, item ItemRef, params *ListItemEventsParams, reqEditors ...RequestEditorFn) (*ListItemEventsResponse, error)
 
 	// MergeItemWithBodyWithResponse Merge the item's pull request, then approve it
 	//
@@ -1706,8 +1956,8 @@ type ClientWithResponsesInterface interface {
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with POST /v1/items/{item}/merge (the `MergeItem` operationId).
-	MergeItemWithBodyWithResponse(ctx context.Context, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*MergeItemResponse, error)
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/merge (the `MergeItem` operationId).
+	MergeItemWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*MergeItemResponse, error)
 
 	// MergeItemWithResponse Merge the item's pull request, then approve it
 	//
@@ -1715,45 +1965,223 @@ type ClientWithResponsesInterface interface {
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with POST /v1/items/{item}/merge (the `MergeItem` operationId).
-	MergeItemWithResponse(ctx context.Context, item ItemRef, body MergeItemJSONRequestBody, reqEditors ...RequestEditorFn) (*MergeItemResponse, error)
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/merge (the `MergeItem` operationId).
+	MergeItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body MergeItemJSONRequestBody, reqEditors ...RequestEditorFn) (*MergeItemResponse, error)
 
 	// RejectItemWithBodyWithResponse Reject an item waiting for a human; it goes back for rework with the reason
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with POST /v1/items/{item}/reject (the `RejectItem` operationId).
-	RejectItemWithBodyWithResponse(ctx context.Context, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RejectItemResponse, error)
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/reject (the `RejectItem` operationId).
+	RejectItemWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RejectItemResponse, error)
 
 	// RejectItemWithResponse Reject an item waiting for a human; it goes back for rework with the reason
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with POST /v1/items/{item}/reject (the `RejectItem` operationId).
-	RejectItemWithResponse(ctx context.Context, item ItemRef, body RejectItemJSONRequestBody, reqEditors ...RequestEditorFn) (*RejectItemResponse, error)
-
-	// RetryItemWithBodyWithResponse Send a blocked item back to its station's queue (409 if it is not blocked)
-	//
-	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with POST /v1/items/{item}/retry (the `RetryItem` operationId).
-	RetryItemWithBodyWithResponse(ctx context.Context, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RetryItemResponse, error)
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/reject (the `RejectItem` operationId).
+	RejectItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body RejectItemJSONRequestBody, reqEditors ...RequestEditorFn) (*RejectItemResponse, error)
 
 	// RetryItemWithResponse Send a blocked item back to its station's queue (409 if it is not blocked)
 	//
-	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	// Returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with POST /v1/items/{item}/retry (the `RetryItem` operationId).
-	RetryItemWithResponse(ctx context.Context, item ItemRef, body RetryItemJSONRequestBody, reqEditors ...RequestEditorFn) (*RetryItemResponse, error)
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/retry (the `RetryItem` operationId).
+	RetryItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*RetryItemResponse, error)
 
-	// StreamEventsWithResponse Item events as they happen (Server-Sent Events)
+	// StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
 	//
-	// A text/event-stream. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+	// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with GET /v1/stream (the `StreamEvents` operationId).
-	StreamEventsWithResponse(ctx context.Context, params *StreamEventsParams, reqEditors ...RequestEditorFn) (*StreamEventsResponse, error)
+	// Corresponds with GET /v1/orgs/{org}/stream (the `StreamEvents` operationId).
+	StreamEventsWithResponse(ctx context.Context, org OrgRef, params *StreamEventsParams, reqEditors ...RequestEditorFn) (*StreamEventsResponse, error)
+}
+
+type GetHealthResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Health
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetHealthResponse) GetJSON200() *Health {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetHealthResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetHealthResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetHealthResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetHealthResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListOrgsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *OrgList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListOrgsResponse) GetJSON200() *OrgList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListOrgsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListOrgsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListOrgsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListOrgsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListOrgsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateOrgResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Org
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateOrgResponse) GetJSON201() *Org {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateOrgResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateOrgResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateOrgResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateOrgResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateOrgResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetOrgResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Org
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetOrgResponse) GetJSON200() *Org {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetOrgResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetOrgResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetOrgResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetOrgResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetOrgResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
 }
 
 type ListFactoriesResponse struct {
@@ -1990,47 +2418,6 @@ func (r GetMetricsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetMetricsResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type GetHealthResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Health
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r GetHealthResponse) GetJSON200() *Health {
-	return r.JSON200
-}
-
-// GetBody returns the raw response body bytes
-func (r GetHealthResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r GetHealthResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetHealthResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r GetHealthResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -2366,86 +2753,6 @@ func (r StreamEventsResponse) ContentType() string {
 	return ""
 }
 
-// ListFactoriesWithResponse The factories goald runs, from the bucket
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with GET /v1/factories (the `ListFactories` operationId).
-func (c *ClientWithResponses) ListFactoriesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListFactoriesResponse, error) {
-	rsp, err := c.ListFactories(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseListFactoriesResponse(rsp)
-}
-
-// GetBoardWithResponse The factory's board, station by station in line order
-//
-// Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time.
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with GET /v1/factories/{factory}/board (the `GetBoard` operationId).
-func (c *ClientWithResponses) GetBoardWithResponse(ctx context.Context, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetBoardResponse, error) {
-	rsp, err := c.GetBoard(ctx, factory, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetBoardResponse(rsp)
-}
-
-// ListItemsWithResponse One page of a factory's items, newest first
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with GET /v1/factories/{factory}/items (the `ListItems` operationId).
-func (c *ClientWithResponses) ListItemsWithResponse(ctx context.Context, factory FactoryRef, params *ListItemsParams, reqEditors ...RequestEditorFn) (*ListItemsResponse, error) {
-	rsp, err := c.ListItems(ctx, factory, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseListItemsResponse(rsp)
-}
-
-// SubmitItemWithBodyWithResponse Submit a work item to a factory's first station
-//
-// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-//
-// Corresponds with POST /v1/factories/{factory}/items (the `SubmitItem` operationId).
-func (c *ClientWithResponses) SubmitItemWithBodyWithResponse(ctx context.Context, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SubmitItemResponse, error) {
-	rsp, err := c.SubmitItemWithBody(ctx, factory, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseSubmitItemResponse(rsp)
-}
-
-// SubmitItemWithResponse Submit a work item to a factory's first station
-//
-// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-//
-// Corresponds with POST /v1/factories/{factory}/items (the `SubmitItem` operationId).
-func (c *ClientWithResponses) SubmitItemWithResponse(ctx context.Context, factory FactoryRef, body SubmitItemJSONRequestBody, reqEditors ...RequestEditorFn) (*SubmitItemResponse, error) {
-	rsp, err := c.SubmitItem(ctx, factory, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseSubmitItemResponse(rsp)
-}
-
-// GetMetricsWithResponse The factory's flow over the last days
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with GET /v1/factories/{factory}/metrics (the `GetMetrics` operationId).
-func (c *ClientWithResponses) GetMetricsWithResponse(ctx context.Context, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*GetMetricsResponse, error) {
-	rsp, err := c.GetMetrics(ctx, factory, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetMetricsResponse(rsp)
-}
-
 // GetHealthWithResponse Liveness of goald
 //
 // Returns a wrapper object for the known response body format(s).
@@ -2459,39 +2766,162 @@ func (c *ClientWithResponses) GetHealthWithResponse(ctx context.Context, reqEdit
 	return ParseGetHealthResponse(rsp)
 }
 
+// ListOrgsWithResponse Every organization on the install, by name
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs (the `ListOrgs` operationId).
+func (c *ClientWithResponses) ListOrgsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListOrgsResponse, error) {
+	rsp, err := c.ListOrgs(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListOrgsResponse(rsp)
+}
+
+// CreateOrgWithBodyWithResponse Create an organization
+//
+// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs (the `CreateOrg` operationId).
+func (c *ClientWithResponses) CreateOrgWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateOrgResponse, error) {
+	rsp, err := c.CreateOrgWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateOrgResponse(rsp)
+}
+
+// CreateOrgWithResponse Create an organization
+//
+// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs (the `CreateOrg` operationId).
+func (c *ClientWithResponses) CreateOrgWithResponse(ctx context.Context, body CreateOrgJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateOrgResponse, error) {
+	rsp, err := c.CreateOrg(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateOrgResponse(rsp)
+}
+
+// GetOrgWithResponse One organization
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org} (the `GetOrg` operationId).
+func (c *ClientWithResponses) GetOrgWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetOrgResponse, error) {
+	rsp, err := c.GetOrg(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetOrgResponse(rsp)
+}
+
+// ListFactoriesWithResponse The organization's factories goald runs, from the bucket
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories (the `ListFactories` operationId).
+func (c *ClientWithResponses) ListFactoriesWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListFactoriesResponse, error) {
+	rsp, err := c.ListFactories(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListFactoriesResponse(rsp)
+}
+
+// GetBoardWithResponse The factory's board, station by station in line order
+//
+// Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/board (the `GetBoard` operationId).
+func (c *ClientWithResponses) GetBoardWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetBoardResponse, error) {
+	rsp, err := c.GetBoard(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetBoardResponse(rsp)
+}
+
+// ListItemsWithResponse One page of a factory's items, newest first
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/items (the `ListItems` operationId).
+func (c *ClientWithResponses) ListItemsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *ListItemsParams, reqEditors ...RequestEditorFn) (*ListItemsResponse, error) {
+	rsp, err := c.ListItems(ctx, org, factory, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListItemsResponse(rsp)
+}
+
+// SubmitItemWithBodyWithResponse Submit a work item to a factory's first station
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
+func (c *ClientWithResponses) SubmitItemWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SubmitItemResponse, error) {
+	rsp, err := c.SubmitItemWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSubmitItemResponse(rsp)
+}
+
+// SubmitItemWithResponse Submit a work item to a factory's first station
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
+func (c *ClientWithResponses) SubmitItemWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body SubmitItemJSONRequestBody, reqEditors ...RequestEditorFn) (*SubmitItemResponse, error) {
+	rsp, err := c.SubmitItem(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSubmitItemResponse(rsp)
+}
+
+// GetMetricsWithResponse The factory's flow over the last days
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics (the `GetMetrics` operationId).
+func (c *ClientWithResponses) GetMetricsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*GetMetricsResponse, error) {
+	rsp, err := c.GetMetrics(ctx, org, factory, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetMetricsResponse(rsp)
+}
+
 // GetItemWithResponse One work item
 //
 // Returns a wrapper object for the known response body format(s).
 //
-// Corresponds with GET /v1/items/{item} (the `GetItem` operationId).
-func (c *ClientWithResponses) GetItemWithResponse(ctx context.Context, item ItemRef, reqEditors ...RequestEditorFn) (*GetItemResponse, error) {
-	rsp, err := c.GetItem(ctx, item, reqEditors...)
+// Corresponds with GET /v1/orgs/{org}/items/{item} (the `GetItem` operationId).
+func (c *ClientWithResponses) GetItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*GetItemResponse, error) {
+	rsp, err := c.GetItem(ctx, org, item, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseGetItemResponse(rsp)
 }
 
-// ApproveItemWithBodyWithResponse Approve an item waiting for a human; it moves to the next station
-//
-// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-//
-// Corresponds with POST /v1/items/{item}/approve (the `ApproveItem` operationId).
-func (c *ClientWithResponses) ApproveItemWithBodyWithResponse(ctx context.Context, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ApproveItemResponse, error) {
-	rsp, err := c.ApproveItemWithBody(ctx, item, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseApproveItemResponse(rsp)
-}
-
 // ApproveItemWithResponse Approve an item waiting for a human; it moves to the next station
 //
-// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+// Returns a wrapper object for the known response body format(s).
 //
-// Corresponds with POST /v1/items/{item}/approve (the `ApproveItem` operationId).
-func (c *ClientWithResponses) ApproveItemWithResponse(ctx context.Context, item ItemRef, body ApproveItemJSONRequestBody, reqEditors ...RequestEditorFn) (*ApproveItemResponse, error) {
-	rsp, err := c.ApproveItem(ctx, item, body, reqEditors...)
+// Corresponds with POST /v1/orgs/{org}/items/{item}/approve (the `ApproveItem` operationId).
+func (c *ClientWithResponses) ApproveItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*ApproveItemResponse, error) {
+	rsp, err := c.ApproveItem(ctx, org, item, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -2502,9 +2932,9 @@ func (c *ClientWithResponses) ApproveItemWithResponse(ctx context.Context, item 
 //
 // Returns a wrapper object for the known response body format(s).
 //
-// Corresponds with GET /v1/items/{item}/events (the `ListItemEvents` operationId).
-func (c *ClientWithResponses) ListItemEventsWithResponse(ctx context.Context, item ItemRef, params *ListItemEventsParams, reqEditors ...RequestEditorFn) (*ListItemEventsResponse, error) {
-	rsp, err := c.ListItemEvents(ctx, item, params, reqEditors...)
+// Corresponds with GET /v1/orgs/{org}/items/{item}/events (the `ListItemEvents` operationId).
+func (c *ClientWithResponses) ListItemEventsWithResponse(ctx context.Context, org OrgRef, item ItemRef, params *ListItemEventsParams, reqEditors ...RequestEditorFn) (*ListItemEventsResponse, error) {
+	rsp, err := c.ListItemEvents(ctx, org, item, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -2517,9 +2947,9 @@ func (c *ClientWithResponses) ListItemEventsWithResponse(ctx context.Context, it
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
-// Corresponds with POST /v1/items/{item}/merge (the `MergeItem` operationId).
-func (c *ClientWithResponses) MergeItemWithBodyWithResponse(ctx context.Context, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*MergeItemResponse, error) {
-	rsp, err := c.MergeItemWithBody(ctx, item, contentType, body, reqEditors...)
+// Corresponds with POST /v1/orgs/{org}/items/{item}/merge (the `MergeItem` operationId).
+func (c *ClientWithResponses) MergeItemWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*MergeItemResponse, error) {
+	rsp, err := c.MergeItemWithBody(ctx, org, item, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -2532,9 +2962,9 @@ func (c *ClientWithResponses) MergeItemWithBodyWithResponse(ctx context.Context,
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
-// Corresponds with POST /v1/items/{item}/merge (the `MergeItem` operationId).
-func (c *ClientWithResponses) MergeItemWithResponse(ctx context.Context, item ItemRef, body MergeItemJSONRequestBody, reqEditors ...RequestEditorFn) (*MergeItemResponse, error) {
-	rsp, err := c.MergeItem(ctx, item, body, reqEditors...)
+// Corresponds with POST /v1/orgs/{org}/items/{item}/merge (the `MergeItem` operationId).
+func (c *ClientWithResponses) MergeItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body MergeItemJSONRequestBody, reqEditors ...RequestEditorFn) (*MergeItemResponse, error) {
+	rsp, err := c.MergeItem(ctx, org, item, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -2545,9 +2975,9 @@ func (c *ClientWithResponses) MergeItemWithResponse(ctx context.Context, item It
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
-// Corresponds with POST /v1/items/{item}/reject (the `RejectItem` operationId).
-func (c *ClientWithResponses) RejectItemWithBodyWithResponse(ctx context.Context, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RejectItemResponse, error) {
-	rsp, err := c.RejectItemWithBody(ctx, item, contentType, body, reqEditors...)
+// Corresponds with POST /v1/orgs/{org}/items/{item}/reject (the `RejectItem` operationId).
+func (c *ClientWithResponses) RejectItemWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RejectItemResponse, error) {
+	rsp, err := c.RejectItemWithBody(ctx, org, item, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -2558,54 +2988,166 @@ func (c *ClientWithResponses) RejectItemWithBodyWithResponse(ctx context.Context
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
-// Corresponds with POST /v1/items/{item}/reject (the `RejectItem` operationId).
-func (c *ClientWithResponses) RejectItemWithResponse(ctx context.Context, item ItemRef, body RejectItemJSONRequestBody, reqEditors ...RequestEditorFn) (*RejectItemResponse, error) {
-	rsp, err := c.RejectItem(ctx, item, body, reqEditors...)
+// Corresponds with POST /v1/orgs/{org}/items/{item}/reject (the `RejectItem` operationId).
+func (c *ClientWithResponses) RejectItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body RejectItemJSONRequestBody, reqEditors ...RequestEditorFn) (*RejectItemResponse, error) {
+	rsp, err := c.RejectItem(ctx, org, item, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseRejectItemResponse(rsp)
 }
 
-// RetryItemWithBodyWithResponse Send a blocked item back to its station's queue (409 if it is not blocked)
-//
-// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-//
-// Corresponds with POST /v1/items/{item}/retry (the `RetryItem` operationId).
-func (c *ClientWithResponses) RetryItemWithBodyWithResponse(ctx context.Context, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RetryItemResponse, error) {
-	rsp, err := c.RetryItemWithBody(ctx, item, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseRetryItemResponse(rsp)
-}
-
 // RetryItemWithResponse Send a blocked item back to its station's queue (409 if it is not blocked)
-//
-// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-//
-// Corresponds with POST /v1/items/{item}/retry (the `RetryItem` operationId).
-func (c *ClientWithResponses) RetryItemWithResponse(ctx context.Context, item ItemRef, body RetryItemJSONRequestBody, reqEditors ...RequestEditorFn) (*RetryItemResponse, error) {
-	rsp, err := c.RetryItem(ctx, item, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseRetryItemResponse(rsp)
-}
-
-// StreamEventsWithResponse Item events as they happen (Server-Sent Events)
-//
-// A text/event-stream. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
 //
 // Returns a wrapper object for the known response body format(s).
 //
-// Corresponds with GET /v1/stream (the `StreamEvents` operationId).
-func (c *ClientWithResponses) StreamEventsWithResponse(ctx context.Context, params *StreamEventsParams, reqEditors ...RequestEditorFn) (*StreamEventsResponse, error) {
-	rsp, err := c.StreamEvents(ctx, params, reqEditors...)
+// Corresponds with POST /v1/orgs/{org}/items/{item}/retry (the `RetryItem` operationId).
+func (c *ClientWithResponses) RetryItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*RetryItemResponse, error) {
+	rsp, err := c.RetryItem(ctx, org, item, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRetryItemResponse(rsp)
+}
+
+// StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
+//
+// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/stream (the `StreamEvents` operationId).
+func (c *ClientWithResponses) StreamEventsWithResponse(ctx context.Context, org OrgRef, params *StreamEventsParams, reqEditors ...RequestEditorFn) (*StreamEventsResponse, error) {
+	rsp, err := c.StreamEvents(ctx, org, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseStreamEventsResponse(rsp)
+}
+
+// ParseGetHealthResponse parses an HTTP response from a GetHealthWithResponse call
+func ParseGetHealthResponse(rsp *http.Response) (*GetHealthResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetHealthResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Health
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListOrgsResponse parses an HTTP response from a ListOrgsWithResponse call
+func ParseListOrgsResponse(rsp *http.Response) (*ListOrgsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListOrgsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OrgList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateOrgResponse parses an HTTP response from a CreateOrgWithResponse call
+func ParseCreateOrgResponse(rsp *http.Response) (*CreateOrgResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateOrgResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Org
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetOrgResponse parses an HTTP response from a GetOrgWithResponse call
+func ParseGetOrgResponse(rsp *http.Response) (*GetOrgResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetOrgResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Org
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
 }
 
 // ParseListFactoriesResponse parses an HTTP response from a ListFactoriesWithResponse call
@@ -2767,32 +3309,6 @@ func ParseGetMetricsResponse(rsp *http.Response) (*GetMetricsResponse, error) {
 			return nil, err
 		}
 		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetHealthResponse parses an HTTP response from a GetHealthWithResponse call
-func ParseGetHealthResponse(rsp *http.Response) (*GetHealthResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetHealthResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Health
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
 
 	}
 
@@ -3025,45 +3541,54 @@ func ParseStreamEventsResponse(rsp *http.Response) (*StreamEventsResponse, error
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// ListFactories The factories goald runs, from the bucket
-	// (GET /v1/factories)
-	ListFactories(w http.ResponseWriter, r *http.Request)
-	// GetBoard The factory's board, station by station in line order
-	// (GET /v1/factories/{factory}/board)
-	GetBoard(w http.ResponseWriter, r *http.Request, factory FactoryRef)
-	// ListItems One page of a factory's items, newest first
-	// (GET /v1/factories/{factory}/items)
-	ListItems(w http.ResponseWriter, r *http.Request, factory FactoryRef, params ListItemsParams)
-	// SubmitItem Submit a work item to a factory's first station
-	// (POST /v1/factories/{factory}/items)
-	SubmitItem(w http.ResponseWriter, r *http.Request, factory FactoryRef)
-	// GetMetrics The factory's flow over the last days
-	// (GET /v1/factories/{factory}/metrics)
-	GetMetrics(w http.ResponseWriter, r *http.Request, factory FactoryRef, params GetMetricsParams)
 	// GetHealth Liveness of goald
 	// (GET /v1/health)
 	GetHealth(w http.ResponseWriter, r *http.Request)
+	// ListOrgs Every organization on the install, by name
+	// (GET /v1/orgs)
+	ListOrgs(w http.ResponseWriter, r *http.Request)
+	// CreateOrg Create an organization
+	// (POST /v1/orgs)
+	CreateOrg(w http.ResponseWriter, r *http.Request)
+	// GetOrg One organization
+	// (GET /v1/orgs/{org})
+	GetOrg(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// ListFactories The organization's factories goald runs, from the bucket
+	// (GET /v1/orgs/{org}/factories)
+	ListFactories(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// GetBoard The factory's board, station by station in line order
+	// (GET /v1/orgs/{org}/factories/{factory}/board)
+	GetBoard(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ListItems One page of a factory's items, newest first
+	// (GET /v1/orgs/{org}/factories/{factory}/items)
+	ListItems(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params ListItemsParams)
+	// SubmitItem Submit a work item to a factory's first station
+	// (POST /v1/orgs/{org}/factories/{factory}/items)
+	SubmitItem(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// GetMetrics The factory's flow over the last days
+	// (GET /v1/orgs/{org}/factories/{factory}/metrics)
+	GetMetrics(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetMetricsParams)
 	// GetItem One work item
-	// (GET /v1/items/{item})
-	GetItem(w http.ResponseWriter, r *http.Request, item ItemRef)
+	// (GET /v1/orgs/{org}/items/{item})
+	GetItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
 	// ApproveItem Approve an item waiting for a human; it moves to the next station
-	// (POST /v1/items/{item}/approve)
-	ApproveItem(w http.ResponseWriter, r *http.Request, item ItemRef)
+	// (POST /v1/orgs/{org}/items/{item}/approve)
+	ApproveItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
 	// ListItemEvents One page of an item's history, oldest first
-	// (GET /v1/items/{item}/events)
-	ListItemEvents(w http.ResponseWriter, r *http.Request, item ItemRef, params ListItemEventsParams)
+	// (GET /v1/orgs/{org}/items/{item}/events)
+	ListItemEvents(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, params ListItemEventsParams)
 	// MergeItem Merge the item's pull request, then approve it
-	// (POST /v1/items/{item}/merge)
-	MergeItem(w http.ResponseWriter, r *http.Request, item ItemRef)
+	// (POST /v1/orgs/{org}/items/{item}/merge)
+	MergeItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
 	// RejectItem Reject an item waiting for a human; it goes back for rework with the reason
-	// (POST /v1/items/{item}/reject)
-	RejectItem(w http.ResponseWriter, r *http.Request, item ItemRef)
+	// (POST /v1/orgs/{org}/items/{item}/reject)
+	RejectItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
 	// RetryItem Send a blocked item back to its station's queue (409 if it is not blocked)
-	// (POST /v1/items/{item}/retry)
-	RetryItem(w http.ResponseWriter, r *http.Request, item ItemRef)
-	// StreamEvents Item events as they happen (Server-Sent Events)
-	// (GET /v1/stream)
-	StreamEvents(w http.ResponseWriter, r *http.Request, params StreamEventsParams)
+	// (POST /v1/orgs/{org}/items/{item}/retry)
+	RetryItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// StreamEvents The organization's events as they happen (Server-Sent Events)
+	// (GET /v1/orgs/{org}/stream)
+	StreamEvents(w http.ResponseWriter, r *http.Request, org OrgRef, params StreamEventsParams)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -3075,11 +3600,91 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
+// GetHealth operation middleware
+func (siw *ServerInterfaceWrapper) GetHealth(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetHealth(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListOrgs operation middleware
+func (siw *ServerInterfaceWrapper) ListOrgs(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListOrgs(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateOrg operation middleware
+func (siw *ServerInterfaceWrapper) CreateOrg(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateOrg(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOrg operation middleware
+func (siw *ServerInterfaceWrapper) GetOrg(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOrg(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListFactories operation middleware
 func (siw *ServerInterfaceWrapper) ListFactories(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListFactories(w, r)
+		siw.Handler.ListFactories(w, r, org)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3095,6 +3700,15 @@ func (siw *ServerInterfaceWrapper) GetBoard(w http.ResponseWriter, r *http.Reque
 	var err error
 	_ = err
 
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
 	// ------------- Path parameter "factory" -------------
 	var factory FactoryRef
 
@@ -3105,7 +3719,7 @@ func (siw *ServerInterfaceWrapper) GetBoard(w http.ResponseWriter, r *http.Reque
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetBoard(w, r, factory)
+		siw.Handler.GetBoard(w, r, org, factory)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3120,6 +3734,15 @@ func (siw *ServerInterfaceWrapper) ListItems(w http.ResponseWriter, r *http.Requ
 
 	var err error
 	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
 
 	// ------------- Path parameter "factory" -------------
 	var factory FactoryRef
@@ -3186,7 +3809,7 @@ func (siw *ServerInterfaceWrapper) ListItems(w http.ResponseWriter, r *http.Requ
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListItems(w, r, factory, params)
+		siw.Handler.ListItems(w, r, org, factory, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3202,6 +3825,15 @@ func (siw *ServerInterfaceWrapper) SubmitItem(w http.ResponseWriter, r *http.Req
 	var err error
 	_ = err
 
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
 	// ------------- Path parameter "factory" -------------
 	var factory FactoryRef
 
@@ -3212,7 +3844,7 @@ func (siw *ServerInterfaceWrapper) SubmitItem(w http.ResponseWriter, r *http.Req
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.SubmitItem(w, r, factory)
+		siw.Handler.SubmitItem(w, r, org, factory)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3227,6 +3859,15 @@ func (siw *ServerInterfaceWrapper) GetMetrics(w http.ResponseWriter, r *http.Req
 
 	var err error
 	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
 
 	// ------------- Path parameter "factory" -------------
 	var factory FactoryRef
@@ -3254,21 +3895,7 @@ func (siw *ServerInterfaceWrapper) GetMetrics(w http.ResponseWriter, r *http.Req
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetMetrics(w, r, factory, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetHealth operation middleware
-func (siw *ServerInterfaceWrapper) GetHealth(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetHealth(w, r)
+		siw.Handler.GetMetrics(w, r, org, factory, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3284,6 +3911,15 @@ func (siw *ServerInterfaceWrapper) GetItem(w http.ResponseWriter, r *http.Reques
 	var err error
 	_ = err
 
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
 	// ------------- Path parameter "item" -------------
 	var item ItemRef
 
@@ -3294,7 +3930,7 @@ func (siw *ServerInterfaceWrapper) GetItem(w http.ResponseWriter, r *http.Reques
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetItem(w, r, item)
+		siw.Handler.GetItem(w, r, org, item)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3310,6 +3946,15 @@ func (siw *ServerInterfaceWrapper) ApproveItem(w http.ResponseWriter, r *http.Re
 	var err error
 	_ = err
 
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
 	// ------------- Path parameter "item" -------------
 	var item ItemRef
 
@@ -3320,7 +3965,7 @@ func (siw *ServerInterfaceWrapper) ApproveItem(w http.ResponseWriter, r *http.Re
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ApproveItem(w, r, item)
+		siw.Handler.ApproveItem(w, r, org, item)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3335,6 +3980,15 @@ func (siw *ServerInterfaceWrapper) ListItemEvents(w http.ResponseWriter, r *http
 
 	var err error
 	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
 
 	// ------------- Path parameter "item" -------------
 	var item ItemRef
@@ -3375,7 +4029,7 @@ func (siw *ServerInterfaceWrapper) ListItemEvents(w http.ResponseWriter, r *http
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListItemEvents(w, r, item, params)
+		siw.Handler.ListItemEvents(w, r, org, item, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3391,6 +4045,15 @@ func (siw *ServerInterfaceWrapper) MergeItem(w http.ResponseWriter, r *http.Requ
 	var err error
 	_ = err
 
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
 	// ------------- Path parameter "item" -------------
 	var item ItemRef
 
@@ -3401,7 +4064,7 @@ func (siw *ServerInterfaceWrapper) MergeItem(w http.ResponseWriter, r *http.Requ
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.MergeItem(w, r, item)
+		siw.Handler.MergeItem(w, r, org, item)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3417,6 +4080,15 @@ func (siw *ServerInterfaceWrapper) RejectItem(w http.ResponseWriter, r *http.Req
 	var err error
 	_ = err
 
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
 	// ------------- Path parameter "item" -------------
 	var item ItemRef
 
@@ -3427,7 +4099,7 @@ func (siw *ServerInterfaceWrapper) RejectItem(w http.ResponseWriter, r *http.Req
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.RejectItem(w, r, item)
+		siw.Handler.RejectItem(w, r, org, item)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3443,6 +4115,15 @@ func (siw *ServerInterfaceWrapper) RetryItem(w http.ResponseWriter, r *http.Requ
 	var err error
 	_ = err
 
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
 	// ------------- Path parameter "item" -------------
 	var item ItemRef
 
@@ -3453,7 +4134,7 @@ func (siw *ServerInterfaceWrapper) RetryItem(w http.ResponseWriter, r *http.Requ
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.RetryItem(w, r, item)
+		siw.Handler.RetryItem(w, r, org, item)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3468,6 +4149,15 @@ func (siw *ServerInterfaceWrapper) StreamEvents(w http.ResponseWriter, r *http.R
 
 	var err error
 	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params StreamEventsParams
@@ -3486,7 +4176,7 @@ func (siw *ServerInterfaceWrapper) StreamEvents(w http.ResponseWriter, r *http.R
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.StreamEvents(w, r, params)
+		siw.Handler.StreamEvents(w, r, org, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3617,25 +4307,166 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/health", wrapper.GetHealth)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/factories", wrapper.ListFactories)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/factories/{factory}/items", wrapper.ListItems)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/factories/{factory}/items", wrapper.SubmitItem)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/factories/{factory}/board", wrapper.GetBoard)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/factories/{factory}/metrics", wrapper.GetMetrics)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/stream", wrapper.StreamEvents)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/items/{item}", wrapper.GetItem)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/items/{item}/events", wrapper.ListItemEvents)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/items/{item}/approve", wrapper.ApproveItem)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/items/{item}/reject", wrapper.RejectItem)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/items/{item}/retry", wrapper.RetryItem)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/items/{item}/merge", wrapper.MergeItem)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs", wrapper.ListOrgs)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs", wrapper.CreateOrg)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}", wrapper.GetOrg)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories", wrapper.ListFactories)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/items", wrapper.ListItems)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/items", wrapper.SubmitItem)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/board", wrapper.GetBoard)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics", wrapper.GetMetrics)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/stream", wrapper.StreamEvents)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}", wrapper.GetItem)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/events", wrapper.ListItemEvents)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/approve", wrapper.ApproveItem)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/reject", wrapper.RejectItem)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/retry", wrapper.RetryItem)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/merge", wrapper.MergeItem)
 
 	return m
 }
 
 type ProblemApplicationProblemPlusJSONResponse Problem
 
+type GetHealthRequestObject struct {
+}
+
+type GetHealthResponseObject interface {
+	VisitGetHealthResponse(w http.ResponseWriter) error
+}
+
+type GetHealth200JSONResponse Health
+
+func (response GetHealth200JSONResponse) VisitGetHealthResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListOrgsRequestObject struct {
+}
+
+type ListOrgsResponseObject interface {
+	VisitListOrgsResponse(w http.ResponseWriter) error
+}
+
+type ListOrgs200JSONResponse OrgList
+
+func (response ListOrgs200JSONResponse) VisitListOrgsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListOrgsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListOrgsdefaultApplicationProblemPlusJSONResponse) VisitListOrgsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateOrgRequestObject struct {
+	Body *CreateOrgJSONRequestBody
+}
+
+type CreateOrgResponseObject interface {
+	VisitCreateOrgResponse(w http.ResponseWriter) error
+}
+
+type CreateOrg201JSONResponse Org
+
+func (response CreateOrg201JSONResponse) VisitCreateOrgResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateOrgdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateOrgdefaultApplicationProblemPlusJSONResponse) VisitCreateOrgResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOrgRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type GetOrgResponseObject interface {
+	VisitGetOrgResponse(w http.ResponseWriter) error
+}
+
+type GetOrg200JSONResponse Org
+
+func (response GetOrg200JSONResponse) VisitGetOrgResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOrgdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetOrgdefaultApplicationProblemPlusJSONResponse) VisitGetOrgResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListFactoriesRequestObject struct {
+	Org OrgRef `json:"org"`
 }
 
 type ListFactoriesResponseObject interface {
@@ -3674,6 +4505,7 @@ func (response ListFactoriesdefaultApplicationProblemPlusJSONResponse) VisitList
 }
 
 type GetBoardRequestObject struct {
+	Org     OrgRef     `json:"org"`
 	Factory FactoryRef `json:"factory"`
 }
 
@@ -3713,6 +4545,7 @@ func (response GetBoarddefaultApplicationProblemPlusJSONResponse) VisitGetBoardR
 }
 
 type ListItemsRequestObject struct {
+	Org     OrgRef     `json:"org"`
 	Factory FactoryRef `json:"factory"`
 	Params  ListItemsParams
 }
@@ -3753,6 +4586,7 @@ func (response ListItemsdefaultApplicationProblemPlusJSONResponse) VisitListItem
 }
 
 type SubmitItemRequestObject struct {
+	Org     OrgRef     `json:"org"`
 	Factory FactoryRef `json:"factory"`
 	Body    *SubmitItemJSONRequestBody
 }
@@ -3793,6 +4627,7 @@ func (response SubmitItemdefaultApplicationProblemPlusJSONResponse) VisitSubmitI
 }
 
 type GetMetricsRequestObject struct {
+	Org     OrgRef     `json:"org"`
 	Factory FactoryRef `json:"factory"`
 	Params  GetMetricsParams
 }
@@ -3832,28 +4667,8 @@ func (response GetMetricsdefaultApplicationProblemPlusJSONResponse) VisitGetMetr
 	return err
 }
 
-type GetHealthRequestObject struct {
-}
-
-type GetHealthResponseObject interface {
-	VisitGetHealthResponse(w http.ResponseWriter) error
-}
-
-type GetHealth200JSONResponse Health
-
-func (response GetHealth200JSONResponse) VisitGetHealthResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
 type GetItemRequestObject struct {
+	Org  OrgRef  `json:"org"`
 	Item ItemRef `json:"item"`
 }
 
@@ -3893,8 +4708,8 @@ func (response GetItemdefaultApplicationProblemPlusJSONResponse) VisitGetItemRes
 }
 
 type ApproveItemRequestObject struct {
+	Org  OrgRef  `json:"org"`
 	Item ItemRef `json:"item"`
-	Body *ApproveItemJSONRequestBody
 }
 
 type ApproveItemResponseObject interface {
@@ -3933,6 +4748,7 @@ func (response ApproveItemdefaultApplicationProblemPlusJSONResponse) VisitApprov
 }
 
 type ListItemEventsRequestObject struct {
+	Org    OrgRef  `json:"org"`
 	Item   ItemRef `json:"item"`
 	Params ListItemEventsParams
 }
@@ -3973,6 +4789,7 @@ func (response ListItemEventsdefaultApplicationProblemPlusJSONResponse) VisitLis
 }
 
 type MergeItemRequestObject struct {
+	Org  OrgRef  `json:"org"`
 	Item ItemRef `json:"item"`
 	Body *MergeItemJSONRequestBody
 }
@@ -4013,6 +4830,7 @@ func (response MergeItemdefaultApplicationProblemPlusJSONResponse) VisitMergeIte
 }
 
 type RejectItemRequestObject struct {
+	Org  OrgRef  `json:"org"`
 	Item ItemRef `json:"item"`
 	Body *RejectItemJSONRequestBody
 }
@@ -4053,8 +4871,8 @@ func (response RejectItemdefaultApplicationProblemPlusJSONResponse) VisitRejectI
 }
 
 type RetryItemRequestObject struct {
+	Org  OrgRef  `json:"org"`
 	Item ItemRef `json:"item"`
-	Body *RetryItemJSONRequestBody
 }
 
 type RetryItemResponseObject interface {
@@ -4093,6 +4911,7 @@ func (response RetryItemdefaultApplicationProblemPlusJSONResponse) VisitRetryIte
 }
 
 type StreamEventsRequestObject struct {
+	Org    OrgRef `json:"org"`
 	Params StreamEventsParams
 }
 
@@ -4162,44 +4981,53 @@ func (response StreamEventsdefaultApplicationProblemPlusJSONResponse) VisitStrea
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// ListFactories The factories goald runs, from the bucket
-	// (GET /v1/factories)
-	ListFactories(ctx context.Context, request ListFactoriesRequestObject) (ListFactoriesResponseObject, error)
-	// GetBoard The factory's board, station by station in line order
-	// (GET /v1/factories/{factory}/board)
-	GetBoard(ctx context.Context, request GetBoardRequestObject) (GetBoardResponseObject, error)
-	// ListItems One page of a factory's items, newest first
-	// (GET /v1/factories/{factory}/items)
-	ListItems(ctx context.Context, request ListItemsRequestObject) (ListItemsResponseObject, error)
-	// SubmitItem Submit a work item to a factory's first station
-	// (POST /v1/factories/{factory}/items)
-	SubmitItem(ctx context.Context, request SubmitItemRequestObject) (SubmitItemResponseObject, error)
-	// GetMetrics The factory's flow over the last days
-	// (GET /v1/factories/{factory}/metrics)
-	GetMetrics(ctx context.Context, request GetMetricsRequestObject) (GetMetricsResponseObject, error)
 	// GetHealth Liveness of goald
 	// (GET /v1/health)
 	GetHealth(ctx context.Context, request GetHealthRequestObject) (GetHealthResponseObject, error)
+	// ListOrgs Every organization on the install, by name
+	// (GET /v1/orgs)
+	ListOrgs(ctx context.Context, request ListOrgsRequestObject) (ListOrgsResponseObject, error)
+	// CreateOrg Create an organization
+	// (POST /v1/orgs)
+	CreateOrg(ctx context.Context, request CreateOrgRequestObject) (CreateOrgResponseObject, error)
+	// GetOrg One organization
+	// (GET /v1/orgs/{org})
+	GetOrg(ctx context.Context, request GetOrgRequestObject) (GetOrgResponseObject, error)
+	// ListFactories The organization's factories goald runs, from the bucket
+	// (GET /v1/orgs/{org}/factories)
+	ListFactories(ctx context.Context, request ListFactoriesRequestObject) (ListFactoriesResponseObject, error)
+	// GetBoard The factory's board, station by station in line order
+	// (GET /v1/orgs/{org}/factories/{factory}/board)
+	GetBoard(ctx context.Context, request GetBoardRequestObject) (GetBoardResponseObject, error)
+	// ListItems One page of a factory's items, newest first
+	// (GET /v1/orgs/{org}/factories/{factory}/items)
+	ListItems(ctx context.Context, request ListItemsRequestObject) (ListItemsResponseObject, error)
+	// SubmitItem Submit a work item to a factory's first station
+	// (POST /v1/orgs/{org}/factories/{factory}/items)
+	SubmitItem(ctx context.Context, request SubmitItemRequestObject) (SubmitItemResponseObject, error)
+	// GetMetrics The factory's flow over the last days
+	// (GET /v1/orgs/{org}/factories/{factory}/metrics)
+	GetMetrics(ctx context.Context, request GetMetricsRequestObject) (GetMetricsResponseObject, error)
 	// GetItem One work item
-	// (GET /v1/items/{item})
+	// (GET /v1/orgs/{org}/items/{item})
 	GetItem(ctx context.Context, request GetItemRequestObject) (GetItemResponseObject, error)
 	// ApproveItem Approve an item waiting for a human; it moves to the next station
-	// (POST /v1/items/{item}/approve)
+	// (POST /v1/orgs/{org}/items/{item}/approve)
 	ApproveItem(ctx context.Context, request ApproveItemRequestObject) (ApproveItemResponseObject, error)
 	// ListItemEvents One page of an item's history, oldest first
-	// (GET /v1/items/{item}/events)
+	// (GET /v1/orgs/{org}/items/{item}/events)
 	ListItemEvents(ctx context.Context, request ListItemEventsRequestObject) (ListItemEventsResponseObject, error)
 	// MergeItem Merge the item's pull request, then approve it
-	// (POST /v1/items/{item}/merge)
+	// (POST /v1/orgs/{org}/items/{item}/merge)
 	MergeItem(ctx context.Context, request MergeItemRequestObject) (MergeItemResponseObject, error)
 	// RejectItem Reject an item waiting for a human; it goes back for rework with the reason
-	// (POST /v1/items/{item}/reject)
+	// (POST /v1/orgs/{org}/items/{item}/reject)
 	RejectItem(ctx context.Context, request RejectItemRequestObject) (RejectItemResponseObject, error)
 	// RetryItem Send a blocked item back to its station's queue (409 if it is not blocked)
-	// (POST /v1/items/{item}/retry)
+	// (POST /v1/orgs/{org}/items/{item}/retry)
 	RetryItem(ctx context.Context, request RetryItemRequestObject) (RetryItemResponseObject, error)
-	// StreamEvents Item events as they happen (Server-Sent Events)
-	// (GET /v1/stream)
+	// StreamEvents The organization's events as they happen (Server-Sent Events)
+	// (GET /v1/orgs/{org}/stream)
 	StreamEvents(ctx context.Context, request StreamEventsRequestObject) (StreamEventsResponseObject, error)
 }
 
@@ -4242,9 +5070,116 @@ type strictHandler struct {
 	options     StrictHTTPServerOptions
 }
 
+// GetHealth operation middleware
+func (sh *strictHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
+	var request GetHealthRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetHealth(ctx, request.(GetHealthRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetHealth")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetHealthResponseObject); ok {
+		if err := validResponse.VisitGetHealthResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListOrgs operation middleware
+func (sh *strictHandler) ListOrgs(w http.ResponseWriter, r *http.Request) {
+	var request ListOrgsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListOrgs(ctx, request.(ListOrgsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListOrgs")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListOrgsResponseObject); ok {
+		if err := validResponse.VisitListOrgsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateOrg operation middleware
+func (sh *strictHandler) CreateOrg(w http.ResponseWriter, r *http.Request) {
+	var request CreateOrgRequestObject
+
+	var body CreateOrgJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateOrg(ctx, request.(CreateOrgRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateOrg")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateOrgResponseObject); ok {
+		if err := validResponse.VisitCreateOrgResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetOrg operation middleware
+func (sh *strictHandler) GetOrg(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request GetOrgRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetOrg(ctx, request.(GetOrgRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetOrg")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetOrgResponseObject); ok {
+		if err := validResponse.VisitGetOrgResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListFactories operation middleware
-func (sh *strictHandler) ListFactories(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) ListFactories(w http.ResponseWriter, r *http.Request, org OrgRef) {
 	var request ListFactoriesRequestObject
+
+	request.Org = org
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListFactories(ctx, request.(ListFactoriesRequestObject))
@@ -4267,9 +5202,10 @@ func (sh *strictHandler) ListFactories(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetBoard operation middleware
-func (sh *strictHandler) GetBoard(w http.ResponseWriter, r *http.Request, factory FactoryRef) {
+func (sh *strictHandler) GetBoard(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
 	var request GetBoardRequestObject
 
+	request.Org = org
 	request.Factory = factory
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
@@ -4293,9 +5229,10 @@ func (sh *strictHandler) GetBoard(w http.ResponseWriter, r *http.Request, factor
 }
 
 // ListItems operation middleware
-func (sh *strictHandler) ListItems(w http.ResponseWriter, r *http.Request, factory FactoryRef, params ListItemsParams) {
+func (sh *strictHandler) ListItems(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params ListItemsParams) {
 	var request ListItemsRequestObject
 
+	request.Org = org
 	request.Factory = factory
 	request.Params = params
 
@@ -4320,9 +5257,10 @@ func (sh *strictHandler) ListItems(w http.ResponseWriter, r *http.Request, facto
 }
 
 // SubmitItem operation middleware
-func (sh *strictHandler) SubmitItem(w http.ResponseWriter, r *http.Request, factory FactoryRef) {
+func (sh *strictHandler) SubmitItem(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
 	var request SubmitItemRequestObject
 
+	request.Org = org
 	request.Factory = factory
 
 	var body SubmitItemJSONRequestBody
@@ -4353,9 +5291,10 @@ func (sh *strictHandler) SubmitItem(w http.ResponseWriter, r *http.Request, fact
 }
 
 // GetMetrics operation middleware
-func (sh *strictHandler) GetMetrics(w http.ResponseWriter, r *http.Request, factory FactoryRef, params GetMetricsParams) {
+func (sh *strictHandler) GetMetrics(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetMetricsParams) {
 	var request GetMetricsRequestObject
 
+	request.Org = org
 	request.Factory = factory
 	request.Params = params
 
@@ -4379,34 +5318,11 @@ func (sh *strictHandler) GetMetrics(w http.ResponseWriter, r *http.Request, fact
 	}
 }
 
-// GetHealth operation middleware
-func (sh *strictHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
-	var request GetHealthRequestObject
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetHealth(ctx, request.(GetHealthRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetHealth")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetHealthResponseObject); ok {
-		if err := validResponse.VisitGetHealthResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
 // GetItem operation middleware
-func (sh *strictHandler) GetItem(w http.ResponseWriter, r *http.Request, item ItemRef) {
+func (sh *strictHandler) GetItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
 	var request GetItemRequestObject
 
+	request.Org = org
 	request.Item = item
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
@@ -4430,17 +5346,11 @@ func (sh *strictHandler) GetItem(w http.ResponseWriter, r *http.Request, item It
 }
 
 // ApproveItem operation middleware
-func (sh *strictHandler) ApproveItem(w http.ResponseWriter, r *http.Request, item ItemRef) {
+func (sh *strictHandler) ApproveItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
 	var request ApproveItemRequestObject
 
+	request.Org = org
 	request.Item = item
-
-	var body ApproveItemJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ApproveItem(ctx, request.(ApproveItemRequestObject))
@@ -4463,9 +5373,10 @@ func (sh *strictHandler) ApproveItem(w http.ResponseWriter, r *http.Request, ite
 }
 
 // ListItemEvents operation middleware
-func (sh *strictHandler) ListItemEvents(w http.ResponseWriter, r *http.Request, item ItemRef, params ListItemEventsParams) {
+func (sh *strictHandler) ListItemEvents(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, params ListItemEventsParams) {
 	var request ListItemEventsRequestObject
 
+	request.Org = org
 	request.Item = item
 	request.Params = params
 
@@ -4490,17 +5401,21 @@ func (sh *strictHandler) ListItemEvents(w http.ResponseWriter, r *http.Request, 
 }
 
 // MergeItem operation middleware
-func (sh *strictHandler) MergeItem(w http.ResponseWriter, r *http.Request, item ItemRef) {
+func (sh *strictHandler) MergeItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
 	var request MergeItemRequestObject
 
+	request.Org = org
 	request.Item = item
 
 	var body MergeItemJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
 	}
-	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.MergeItem(ctx, request.(MergeItemRequestObject))
@@ -4523,9 +5438,10 @@ func (sh *strictHandler) MergeItem(w http.ResponseWriter, r *http.Request, item 
 }
 
 // RejectItem operation middleware
-func (sh *strictHandler) RejectItem(w http.ResponseWriter, r *http.Request, item ItemRef) {
+func (sh *strictHandler) RejectItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
 	var request RejectItemRequestObject
 
+	request.Org = org
 	request.Item = item
 
 	var body RejectItemJSONRequestBody
@@ -4556,17 +5472,11 @@ func (sh *strictHandler) RejectItem(w http.ResponseWriter, r *http.Request, item
 }
 
 // RetryItem operation middleware
-func (sh *strictHandler) RetryItem(w http.ResponseWriter, r *http.Request, item ItemRef) {
+func (sh *strictHandler) RetryItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
 	var request RetryItemRequestObject
 
+	request.Org = org
 	request.Item = item
-
-	var body RetryItemJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.RetryItem(ctx, request.(RetryItemRequestObject))
@@ -4589,9 +5499,10 @@ func (sh *strictHandler) RetryItem(w http.ResponseWriter, r *http.Request, item 
 }
 
 // StreamEvents operation middleware
-func (sh *strictHandler) StreamEvents(w http.ResponseWriter, r *http.Request, params StreamEventsParams) {
+func (sh *strictHandler) StreamEvents(w http.ResponseWriter, r *http.Request, org OrgRef, params StreamEventsParams) {
 	var request StreamEventsRequestObject
 
+	request.Org = org
 	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {

@@ -10,6 +10,6 @@ interface BoardSearch {
 export const Route = createFileRoute('/f/$factory/board')({
   validateSearch: (search: Record<string, unknown>): BoardSearch =>
     typeof search.station === 'string' && search.station !== '' ? { station: search.station } : {},
-  loader: ({ context: { queryClient, factory } }) => queryClient.ensureQueryData(boardQuery(factory.name)),
+  loader: ({ context: { queryClient, org, factory } }) => queryClient.ensureQueryData(boardQuery(org.id, factory.name)),
   component: BoardPage,
 });

@@ -1,7 +1,8 @@
 // The only module that speaks HTTP to goald, over the generated @goal/api-client. Screens call
 // these functions through TanStack Query (queries.ts). Every failure throws ApiError, which
-// carries goald's Problem. Routes are written relative to the organization (orgPath), so their
-// move under /v1/orgs/{org} happens in @goal/api-client's routes.ts.
+// carries goald's Problem. Every route but the organization list belongs to an organization:
+// those functions take its slug or id first (`org`), and their paths are written relative to it
+// (orgPath). Decisions carry no actor: goald takes the request's (the local user in phase 2.2).
 import {
   ApiError,
   createGoalClient,
@@ -11,7 +12,20 @@ import {
   subscribe,
   unwrap,
 } from '@goal/api-client';
-import type { Board, EventPage, Factory, Item, ItemList, ItemState, MergeMethod, Metrics, NewItem } from './types';
+import type {
+  Board,
+  EventPage,
+  Factory,
+  Item,
+  ItemList,
+  ItemState,
+  MergeMethod,
+  Metrics,
+  NewItem,
+  NewOrg,
+  Org,
+  OrgSummary,
+} from './types';
 
 export { ApiError, type StreamStatus };
 
@@ -23,19 +37,34 @@ const goal = createGoalClient(apiBase, { headers: { Accept: 'application/json' }
 /** Request options openapi-fetch takes beside the parameters; `signal` cancels a query. */
 const cancel = (signal: AbortSignal | undefined) => (signal ? { signal } : {});
 
-export async function listFactories(signal?: AbortSignal): Promise<Factory[]> {
-  const body = await unwrap(goal.GET(orgPath('/factories'), cancel(signal)));
+export async function listOrgs(signal?: AbortSignal): Promise<OrgSummary[]> {
+  const body = await unwrap(goal.GET('/v1/orgs', cancel(signal)));
+  return body.orgs;
+}
+
+export function getOrg(org: string, signal?: AbortSignal): Promise<Org> {
+  return unwrap(goal.GET('/v1/orgs/{org}', { params: { path: { org } }, ...cancel(signal) }));
+}
+
+export function createOrg(org: NewOrg): Promise<Org> {
+  return unwrap(goal.POST('/v1/orgs', { body: org }));
+}
+
+export async function listFactories(org: string, signal?: AbortSignal): Promise<Factory[]> {
+  const body = await unwrap(goal.GET(orgPath('/factories'), { params: { path: { org } }, ...cancel(signal) }));
   return body.factories;
 }
 
-export function getBoard(factory: string, signal?: AbortSignal): Promise<Board> {
-  return unwrap(goal.GET(orgPath('/factories/{factory}/board'), { params: { path: { factory } }, ...cancel(signal) }));
+export function getBoard(org: string, factory: string, signal?: AbortSignal): Promise<Board> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/board'), { params: { path: { org, factory } }, ...cancel(signal) }),
+  );
 }
 
-export function getMetrics(factory: string, window: string, signal?: AbortSignal): Promise<Metrics> {
+export function getMetrics(org: string, factory: string, window: string, signal?: AbortSignal): Promise<Metrics> {
   return unwrap(
     goal.GET(orgPath('/factories/{factory}/metrics'), {
-      params: { path: { factory }, query: { window } },
+      params: { path: { org, factory }, query: { window } },
       ...cancel(signal),
     }),
   );
@@ -59,65 +88,69 @@ function itemQuery({ state, station, limit, after }: ItemFilter) {
   };
 }
 
-export function listItems(factory: string, filter: ItemFilter, signal?: AbortSignal): Promise<ItemList> {
+export function listItems(org: string, factory: string, filter: ItemFilter, signal?: AbortSignal): Promise<ItemList> {
   return unwrap(
     goal.GET(orgPath('/factories/{factory}/items'), {
-      params: { path: { factory }, query: itemQuery(filter) },
+      params: { path: { org, factory }, query: itemQuery(filter) },
       ...cancel(signal),
     }),
   );
 }
 
 /** `item` is an id or a `<factory>#<number>` ref. */
-export function getItem(item: string, signal?: AbortSignal): Promise<Item> {
-  return unwrap(goal.GET(orgPath('/items/{item}'), { params: { path: { item } }, ...cancel(signal) }));
+export function getItem(org: string, item: string, signal?: AbortSignal): Promise<Item> {
+  return unwrap(goal.GET(orgPath('/items/{item}'), { params: { path: { org, item } }, ...cancel(signal) }));
 }
 
-export function listItemEvents(item: string, after: number, limit: number, signal?: AbortSignal): Promise<EventPage> {
+export function listItemEvents(
+  org: string,
+  item: string,
+  after: number,
+  limit: number,
+  signal?: AbortSignal,
+): Promise<EventPage> {
   return unwrap(
     goal.GET(orgPath('/items/{item}/events'), {
-      params: { path: { item }, query: { after, limit } },
+      params: { path: { org, item }, query: { after, limit } },
       ...cancel(signal),
     }),
   );
 }
 
-export function submitItem(factory: string, item: NewItem): Promise<Item> {
-  return unwrap(goal.POST(orgPath('/factories/{factory}/items'), { params: { path: { factory } }, body: item }));
+export function submitItem(org: string, factory: string, item: NewItem): Promise<Item> {
+  return unwrap(goal.POST(orgPath('/factories/{factory}/items'), { params: { path: { org, factory } }, body: item }));
 }
 
-export function approveItem(item: string, by: string): Promise<Item> {
-  return unwrap(goal.POST(orgPath('/items/{item}/approve'), { params: { path: { item } }, body: { by } }));
+export function approveItem(org: string, item: string): Promise<Item> {
+  return unwrap(goal.POST(orgPath('/items/{item}/approve'), { params: { path: { org, item } } }));
 }
 
-export function rejectItem(item: string, by: string, reason: string): Promise<Item> {
-  return unwrap(goal.POST(orgPath('/items/{item}/reject'), { params: { path: { item } }, body: { by, reason } }));
+export function rejectItem(org: string, item: string, reason: string): Promise<Item> {
+  return unwrap(goal.POST(orgPath('/items/{item}/reject'), { params: { path: { org, item } }, body: { reason } }));
 }
 
-export function mergeItem(item: string, by: string, method?: MergeMethod): Promise<Item> {
+export function mergeItem(org: string, item: string, method?: MergeMethod): Promise<Item> {
   return unwrap(
-    goal.POST(orgPath('/items/{item}/merge'), {
-      params: { path: { item } },
-      body: method ? { by, method } : { by },
-    }),
+    goal.POST(orgPath('/items/{item}/merge'), { params: { path: { org, item } }, body: method ? { method } : {} }),
   );
 }
 
-export function retryItem(item: string, by: string): Promise<Item> {
-  return unwrap(goal.POST(orgPath('/items/{item}/retry'), { params: { path: { item } }, body: { by } }));
+export function retryItem(org: string, item: string): Promise<Item> {
+  return unwrap(goal.POST(orgPath('/items/{item}/retry'), { params: { path: { org, item } } }));
 }
 
 /**
- * Subscribes to a factory's item events. goald does not replay: after a reconnect (not the first
- * open), and on `event: resync`, events may have been missed, so `onResync` asks the caller to
- * re-read what it shows. `onStatus` reports the connection so screens can say when they are
- * live. Returns the unsubscribe function.
+ * Subscribes to a factory's item events in an organization. goald does not replay: after a
+ * reconnect (not the first open), and on `event: resync`, events may have been missed, so
+ * `onResync` asks the caller to re-read what it shows. `onStatus` reports the connection so
+ * screens can say when they are live. Returns the unsubscribe function.
  */
 export function subscribeToFactory(
+  org: string,
   factory: string,
   onEvent: (e: StreamEvent) => void,
   onResync: () => void,
   onStatus: (s: StreamStatus) => void,
 ): () => void {
-  return subscribe(apiBase, { factory }, { onItem: onEvent, onResync, onStatus });
+  return subscribe(apiBase, { org, factory }, { onItem: onEvent, onResync, onStatus });
 }
