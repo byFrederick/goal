@@ -120,27 +120,30 @@ func (e *Engine) forgetBudgets(lines map[domain.FactoryID]domain.Line) {
 }
 
 // track registers the run this instance is about to work on under lease and returns its
-// context, which cancelRuns and stopRun cancel; untrack must follow when the work ends.
-func (e *Engine) track(ctx context.Context, lease domain.Lease) context.Context {
+// context, which cancelRuns and stopRun cancel, and the run itself, which untrack must be given
+// when the work ends. A later claim of the same item replaces the entry: the earlier run, taken
+// from its item by a person, may still be winding down.
+func (e *Engine) track(ctx context.Context, lease domain.Lease) (context.Context, *activeRun) {
 	runCtx, cancel := context.WithCancelCause(ctx)
+	r := &activeRun{factory: lease.FactoryID, lease: lease, cancel: cancel}
 
 	e.activeMu.Lock()
-	e.active[lease.ItemID] = activeRun{factory: lease.FactoryID, lease: lease, cancel: cancel}
+	e.active[lease.ItemID] = r
 	e.activeMu.Unlock()
 
-	return runCtx
+	return runCtx, r
 }
 
-// untrack forgets the run of item and releases its context.
-func (e *Engine) untrack(item domain.ItemID) {
+// untrack forgets r unless a later claim of its item replaced it, and releases r's context
+// only, never that of the item's next run.
+func (e *Engine) untrack(r *activeRun) {
 	e.activeMu.Lock()
-	r, ok := e.active[item]
-	delete(e.active, item)
+	if e.active[r.lease.ItemID] == r {
+		delete(e.active, r.lease.ItemID)
+	}
 	e.activeMu.Unlock()
 
-	if ok {
-		r.cancel(nil)
-	}
+	r.cancel(nil)
 }
 
 // cancelRuns cancels, with cause, every run this instance is working on at factory. Each run's

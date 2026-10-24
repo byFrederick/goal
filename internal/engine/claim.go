@@ -221,12 +221,12 @@ func (e *Engine) claimAt(ctx context.Context, l domain.Line, st domain.Station, 
 		e.log.InfoContext(ctx, "item claimed", slog.String("org_id", string(l.OrgID)), slog.String("factory", string(l.FactoryID)),
 			slog.String("station", st.ID), slog.String("item", string(it.ID)), slog.Int("slot", slot))
 
-		runCtx := e.track(ctx, lease)
+		runCtx, run := e.track(ctx, lease)
 
 		e.running.Add(1)
 		e.runs.Go(func() {
 			defer e.running.Add(-1)
-			defer e.untrack(it.ID)
+			defer e.untrack(run)
 
 			e.work(runCtx, l, st, it, lease)
 		})

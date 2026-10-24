@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/byFrederick/goal/internal/domain"
@@ -391,6 +392,70 @@ func TestHumanControl_MidRunCancelsTheRun(t *testing.T) {
 			})
 		}
 	}
+}
+
+// A run still winding down after a person sent its item back (task stop, sidecars, workspace)
+// must not stop the item's next run: when the old run's work ends it forgets and cancels only
+// its own claim, so the next one keeps running and finishes.
+func TestHumanControl_WindingDownRunLeavesTheNextClaimRunning(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		windDown, release := make(chan struct{}), make(chan struct{})
+		h := newHarness(t, controlLine(), func(ctx context.Context, spec ports.TaskSpec, _ chan<- ports.RunEvent) domain.RunResult {
+			if spec.Station == stWork { // the first run: once cancelled, slow to wind down
+				<-ctx.Done()
+				<-windDown
+
+				return domain.RunResult{Status: domain.RunCancelled, Error: ctx.Err().Error()}
+			}
+
+			select {
+			case <-release:
+				return ok(`{}`)
+			case <-ctx.Done():
+				return domain.RunResult{Status: domain.RunCancelled, Error: ctx.Err().Error()}
+			}
+		})
+		it := h.at(t, h.submit(t, domain.NewItem{}), stWork, domain.StateQueued)
+
+		if err := h.e.Tick(inOrg(t)); err != nil {
+			t.Fatal(err)
+		}
+
+		synctest.Wait() // the first run works at work
+
+		if _, err := h.e.Reject(inOrg(t), it.ID, human, "wrong approach"); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := h.e.Tick(inOrg(t)); err != nil { // the item's next claim, at spec
+			t.Fatal(err)
+		}
+
+		synctest.Wait()
+
+		if n := len(h.runner.Started()); n != 2 {
+			t.Fatalf("%d runs started; want the first still winding down and the next at spec", n)
+		}
+
+		close(windDown)
+		synctest.Wait() // the first run's work has ended
+
+		if got := h.item(t, it.ID); got.Position() != (domain.Position{Station: stSpec, State: domain.StateInProgress}) {
+			t.Fatalf("after the first run ended the item is at %+v (events %v); want its next run still working at spec",
+				got.Position(), h.kinds(it.ID))
+		}
+
+		close(release)
+		h.wait(t, h.e)
+
+		if got := h.item(t, it.ID); got.Position() != (domain.Position{Station: stWork, State: domain.StateQueued}) {
+			t.Errorf("item at %+v (events %v); want the next run to finish and move it on to work", got.Position(), h.kinds(it.ID))
+		}
+
+		h.expectOutcomes(t, it.ID, domain.LeaseTaken, domain.LeaseAdvanced)
+	})
 }
 
 // An old lease_taken notice, from before the item's current claim or of another station, never

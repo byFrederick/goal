@@ -167,7 +167,7 @@ type Engine struct {
 
 	// active holds this instance's runs by item, so the engine can cancel them (BudgetStop).
 	activeMu sync.Mutex
-	active   map[domain.ItemID]activeRun
+	active   map[domain.ItemID]*activeRun
 	// exhausted holds the factories whose weekly budget was used up at the last tick, so each
 	// transition is logged once. It is a local hint, not state: an instance that starts reads
 	// the spend afresh and logs what it finds.
@@ -207,7 +207,7 @@ func New(d Deps, cfg Config) (*Engine, error) {
 	return &Engine{
 		store: d.Store, orgs: d.Orgs, runner: d.Runner, workspaces: d.Workspaces, checker: d.Checker, contracts: d.Contracts,
 		secrets: d.Secrets, codehost: d.CodeHost, clock: d.Clock, log: log, runEnded: d.RunEnded, cfg: cfg, lines: lines,
-		active: map[domain.ItemID]activeRun{}, exhausted: map[domain.FactoryID]bool{},
+		active: map[domain.ItemID]*activeRun{}, exhausted: map[domain.FactoryID]bool{},
 	}, nil
 }
 
