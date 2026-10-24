@@ -1,0 +1,334 @@
+package config
+
+import (
+	"cmp"
+	"encoding/json"
+	"reflect"
+	"strings"
+	"testing"
+	"testing/fstest"
+
+	"github.com/byFrederick/goal/internal/domain"
+)
+
+// baseFactory is a valid factory.yaml that each case edits. Cases mark the line a problem must
+// point at with a "#here" comment.
+const baseFactory = `apiVersion: goal/v1
+kind: Factory
+metadata:
+  id: 00000000-0000-4000-8000-000000000010
+  name: acme-check
+spec:
+  runtime:
+    runner: docker
+    image: ghcr.io/acme/agent:1.0.0
+    auth: claude-subscription
+  knowledgeBase:
+    collections: [notes]
+  agents:
+    - name: worker
+      prompt: ./agents/worker.md
+  board:
+    stations:
+      - id: inbox
+        kind: queue
+      - id: work
+        kind: agent
+        agent: worker
+      - id: done
+        kind: done
+`
+
+const (
+	workAgentLine = "        agent: worker\n"
+	doneStation   = "      - id: done\n"
+	agentPrompt   = "      prompt: ./agents/worker.md\n"
+	runtimeAuth   = "    auth: claude-subscription\n"
+	specAgents    = "  agents:\n"
+)
+
+// edited applies old → new replacements to baseFactory.
+func edited(pairs ...string) string {
+	doc := baseFactory
+	for i := 0; i+1 < len(pairs); i += 2 {
+		doc = strings.Replace(doc, pairs[i], pairs[i+1], 1)
+	}
+
+	return doc
+}
+
+func checkTree(doc string, extra map[string]string) fstest.MapFS {
+	files := fstest.MapFS{"agents/worker.md": {Data: []byte("# worker\n")}}
+	if doc != "" {
+		files[FileName] = &fstest.MapFile{Data: []byte(doc)}
+	}
+
+	for p, body := range extra {
+		files[p] = &fstest.MapFile{Data: []byte(body)}
+	}
+
+	return files
+}
+
+// markedLine is the 1-based line of doc that carries the #here marker, 0 when none does.
+func markedLine(doc string) int {
+	for i, l := range strings.Split(doc, "\n") {
+		if strings.Contains(l, "#here") {
+			return i + 1
+		}
+	}
+
+	return 0
+}
+
+// locatedCases are the cases of TestCheck_EveryProblemIsLocated, one per problem code.
+var locatedCases = []struct {
+	name, doc     string
+	extra         map[string]string
+	code, section string
+	pointer, file string
+	severity      domain.ProblemSeverity
+	anyLine       bool // a parser error: the line is the parser's
+	wantFixes     int
+}{
+	{
+		name: "factory.yaml does not parse", doc: edited("kind: Factory\n", "kind: [Factory\n"),
+		code: "yaml-invalid", section: domain.SectionFiles, anyLine: true,
+	},
+	{
+		name: "another YAML file does not parse", doc: baseFactory, extra: map[string]string{"evals/evals.yaml": "a: [b\n"},
+		code: "yaml-invalid", section: domain.SectionFiles, file: "evals/evals.yaml", anyLine: true,
+	},
+	{
+		name: "a JSON file does not parse", doc: baseFactory, extra: map[string]string{"contracts/answer.schema.json": "{"},
+		code: "json-invalid", section: domain.SectionFiles, file: "contracts/answer.schema.json",
+	},
+	{name: "no factory.yaml", code: "factory-yaml-missing", section: domain.SectionFiles},
+	{
+		name: "missing required key", doc: edited("      - id: work\n        kind: agent\n", "      - id: work #here\n"),
+		code: "schema-required", section: domain.SectionLine, pointer: "/line/stations/1/kind",
+	},
+	{
+		name: "unknown key", doc: edited(workAgentLine, workAgentLine+"        colour: red #here\n"),
+		code: "schema-unknown-key", section: domain.SectionLine, pointer: "/line/stations/1/colour",
+	},
+	{
+		name: "value not allowed", doc: edited("        kind: agent\n", "        kind: robot #here\n", workAgentLine, ""),
+		code: "schema-enum", section: domain.SectionLine, pointer: "/line/stations/1/kind",
+	},
+	{
+		name: "wrong type", doc: edited(workAgentLine, workAgentLine+"        agents: two #here\n"),
+		code: "schema-type", section: domain.SectionLine, pointer: "/line/stations/1/agents",
+	},
+	{
+		name: "none of the forms matches", doc: edited("      - id: work\n", "      - id: work #here\n", workAgentLine, ""),
+		code: "schema-invalid", section: domain.SectionLine, pointer: "/line/stations/1",
+	},
+	{
+		name: "outside the model", doc: edited(runtimeAuth, "    auth: password #here\n"),
+		code: "schema-enum", section: domain.SectionFiles,
+	},
+	{
+		name: "last station not done", doc: edited("        kind: done\n", "        kind: human #here\n"),
+		code: "last-station-not-done", section: domain.SectionLine, pointer: "/line/stations/2/kind",
+	},
+	{
+		name: "gate not upstream", doc: edited(workAgentLine, workAgentLine+"        gate: { onReject: done } #here\n"),
+		code: "gate-not-upstream", section: domain.SectionLine, pointer: "/line/stations/1/gate/on_reject",
+	},
+	{
+		name: "gate to no station", doc: edited(workAgentLine, workAgentLine+"        gate: { onReject: nowhere } #here\n"),
+		code: "unknown-station", section: domain.SectionLine, pointer: "/line/stations/1/gate/on_reject",
+	},
+	{
+		name: "agents beyond wip", doc: edited(workAgentLine, workAgentLine+"        agents: 3 #here\n        wip: 2\n"),
+		code: "agents-exceed-wip", section: domain.SectionLine, pointer: "/line/stations/1/agents", wantFixes: 2,
+	},
+	{
+		name: "command check without run", doc: edited(workAgentLine, workAgentLine+"        checks: [{ kind: command }] #here\n"),
+		code: "check-run-missing", section: domain.SectionLine, pointer: "/line/stations/1/checks/0",
+	},
+	{
+		name: "merge without repository", doc: edited(doneStation, "      - { id: merge, kind: human, action: merge } #here\n"+doneStation),
+		code: "merge-needs-repository", section: domain.SectionLine, pointer: "/line/stations/2/action", wantFixes: 1,
+	},
+	{
+		name: "duplicate station", doc: edited(doneStation, "      - { id: work, kind: queue } #here\n"+doneStation),
+		code: "duplicate-name", section: domain.SectionLine, pointer: "/line/stations/2/id",
+	},
+	{
+		name: "unknown agent", doc: edited(workAgentLine, "        agent: ghost #here\n"),
+		code: "unknown-agent", section: domain.SectionLine, pointer: "/line/stations/1/agent",
+	},
+	{
+		name: "unknown skill", doc: edited(agentPrompt, agentPrompt+"      skills: [nope] #here\n"),
+		code: "unknown-skill", section: domain.SectionAgents, pointer: "/agents/agents/0/skills/0",
+	},
+	{
+		name: "unknown connection", doc: edited(agentPrompt, agentPrompt+"      connections: [nope] #here\n"),
+		code: "unknown-connection", section: domain.SectionAgents, pointer: "/agents/agents/0/connections/0",
+	},
+	{
+		name: "unknown contract", doc: edited(workAgentLine, workAgentLine+"        output: answer #here\n"),
+		code: "unknown-contract", section: domain.SectionLine, pointer: "/line/stations/1/output",
+	},
+	{
+		name: "unknown collection", doc: baseFactory + "  learning:\n    librarian: { agent: worker, writes: [ghosts] } #here\n",
+		code: "unknown-collection", section: domain.SectionFiles,
+	},
+	{
+		name: "unknown librarian", doc: baseFactory + "  learning:\n    librarian: { agent: ghost } #here\n",
+		code: "unknown-agent", section: domain.SectionLine, pointer: "/line/librarian",
+	},
+	{
+		name: "prompt not found", doc: edited(agentPrompt, "      prompt: ./agents/missing.md #here\n"),
+		code: "prompt-not-found", section: domain.SectionAgents, pointer: "/agents/agents/0/prompt",
+	},
+	{
+		name: "skill folder not found", doc: edited(specAgents, "  skills:\n    - { name: local, source: ./skills/local } #here\n"+specAgents),
+		code: "skill-not-found", section: domain.SectionAgents, pointer: "/agents/skills/0/source",
+	},
+	{
+		name: "contract not found", doc: edited(specAgents, "  contracts:\n    answer: ./contracts/answer.json #here\n"+specAgents),
+		code: "contract-not-found", section: domain.SectionFiles,
+	},
+	{
+		name: "unpinned image", doc: edited(specAgents, "  connections:\n    - { name: shop-db, type: mcp, transport: stdio, image: ghcr.io/acme/db:latest } #here\n"+specAgents),
+		code: "image-unpinned", severity: domain.SeverityWarning, section: domain.SectionConnections, pointer: "/connections/0/settings/image",
+	},
+	{
+		name: "literal secret", doc: edited(specAgents, "  connections:\n    - name: tickets\n      type: mcp\n      transport: http\n      url: https://tickets.example.com/mcp\n      headers:\n        Authorization: some-literal #here\n"+specAgents),
+		code: "literal-secret", severity: domain.SeverityWarning, section: domain.SectionConnections, pointer: "/connections/0/settings/headers/Authorization",
+	},
+	{
+		name: "built-in ask", doc: edited(agentPrompt, agentPrompt+"      builtins: { read: ask } #here\n"),
+		code: "builtin-ask-unavailable", severity: domain.SeverityWarning, section: domain.SectionAgents, pointer: "/agents/agents/0/builtins/read",
+	},
+	{
+		name: "connector form", doc: edited(specAgents, "  connections:\n    - { connector: playwright, name: browser } #here\n"+specAgents),
+		code: "connector-unavailable", severity: domain.SeverityWarning, section: domain.SectionConnections, pointer: "/connections/0/connector",
+	},
+	{
+		name: "connector agent unknown", doc: edited(specAgents, "  connections:\n    - { connector: playwright, agents: [ghost] } #here\n"+specAgents),
+		code: "unknown-agent", section: domain.SectionConnections, pointer: "/connections/0/agents/0",
+	},
+	{
+		name: "tool agent not on the connection", doc: edited(specAgents, "  connections:\n    - connector: playwright\n      agents: [worker]\n      tools:\n        playwright__click: { agents: [worker, ghost] } #here\n"+specAgents),
+		code: "tool-agent-not-on-connection", section: domain.SectionConnections, pointer: "/connections/0/tools/playwright__click/agents/1",
+	},
+	{
+		name: "repository through a connection", doc: edited(runtimeAuth, runtimeAuth+"    repository: { connection: github, repo: acme/app } #here\n", specAgents, "  connections:\n    - { connector: github }\n"+specAgents),
+		code: "repository-connection-unavailable", section: domain.SectionBasics, pointer: "/basics/repository/connection",
+	},
+}
+
+// Every problem config reports names its code and severity and is located for both editors:
+// the Visual section and model pointer, and the file and line of factory.yaml.
+func TestCheck_EveryProblemIsLocated(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range locatedCases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, problems := Check(checkTree(tt.doc, tt.extra))
+
+			i := indexOf(problems, tt.code)
+			if i < 0 {
+				t.Fatalf("no %s problem in %+v", tt.code, problems)
+			}
+
+			want := problems[i]
+			want.Severity, want.Section, want.Pointer, want.File = cmp.Or(tt.severity, domain.SeverityError), tt.section, tt.pointer, cmp.Or(tt.file, FileName)
+
+			if !tt.anyLine {
+				want.Line = markedLine(tt.doc)
+			}
+
+			if p := problems[i]; !reflect.DeepEqual(p, want) || p.Check == "" || p.Line == 0 && tt.anyLine || len(p.Fixes) != tt.wantFixes {
+				t.Errorf("problem =\n%+v\nwant\n%+v, with a check and %d fixes", p, want, tt.wantFixes)
+			}
+		})
+	}
+}
+
+func indexOf(problems []domain.DefinitionProblem, code string) int {
+	for i, p := range problems {
+		if p.Code == code {
+			return i
+		}
+	}
+
+	return -1
+}
+
+// A fix is a patch on the model section, so the Visual editor can apply it as it is.
+func TestCheck_FixesPatchTheirSection(t *testing.T) {
+	t.Parallel()
+
+	_, problems := Check(checkTree(edited(workAgentLine, workAgentLine+"        agents: 3\n        wip: 2\n"), nil))
+
+	p := problems[indexOf(problems, "agents-exceed-wip")]
+	want := []domain.ProblemFix{
+		{Label: "Set WIP to 3", Section: domain.SectionLine, Patch: []domain.PatchOp{{Op: "replace", Path: "/stations/1/wip", Value: json.RawMessage("3")}}},
+		{Label: "Set agents to 2", Section: domain.SectionLine, Patch: []domain.PatchOp{{Op: "replace", Path: "/stations/1/agents", Value: json.RawMessage("2")}}},
+	}
+
+	if !reflect.DeepEqual(p.Fixes, want) {
+		t.Errorf("fixes =\n%+v\nwant\n%+v", p.Fixes, want)
+	}
+}
+
+// Warnings do not stop a factory from loading; errors do, each with its place and code.
+func TestLoad_FailsOnErrorsOnly(t *testing.T) {
+	t.Parallel()
+
+	f, err := Load(checkTree(edited(agentPrompt, agentPrompt+"      builtins: { read: ask }\n"), nil))
+	if err != nil {
+		t.Fatalf("a warning failed the load: %v", err)
+	}
+
+	if w := f.Warnings(); len(w) != 1 || !strings.Contains(w[0], "read is ask") {
+		t.Errorf("warnings = %q, want the ask warning", w)
+	}
+
+	_, err = Load(checkTree(edited(workAgentLine, "        agent: ghost\n"), nil))
+	if err == nil || !strings.Contains(err.Error(), `factory.yaml:22:16: station work: unknown agent "ghost" (unknown-agent)`) {
+		t.Errorf("err = %v, want the located unknown agent", err)
+	}
+}
+
+// A problem another package finds in a definition (the credentials check) is located the same way.
+func TestLocate_PlacesAPathOrItsNearestParent(t *testing.T) {
+	t.Parallel()
+
+	f, err := Load(checkTree(baseFactory, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if l := f.Locate("/spec/board/stations/1/agent"); l.Line != 22 || l.Column != 16 || l.EndColumn != 22 || l.Pointer != "/line/stations/1/agent" {
+		t.Errorf("existing path = %+v, want line 22, columns 16-22", l)
+	}
+
+	if l := f.Locate("/spec/runtime/repository/token"); l.Line != 7 || l.Section != domain.SectionBasics || l.Pointer != "/basics/repository/token" {
+		t.Errorf("missing path = %+v, want the runtime key on line 7", l)
+	}
+}
+
+// Check takes any text a person types in the YAML editor: it never panics, and every problem
+// it reports has a code, a check and a severity.
+func FuzzCheck(f *testing.F) {
+	for _, c := range locatedCases {
+		f.Add(c.doc)
+	}
+
+	f.Fuzz(func(t *testing.T, doc string) {
+		_, problems := Check(checkTree(doc, nil))
+		for _, p := range problems {
+			if p.Code == "" || p.Check == "" || p.Severity == "" {
+				t.Fatalf("incomplete problem %+v", p)
+			}
+		}
+	})
+}

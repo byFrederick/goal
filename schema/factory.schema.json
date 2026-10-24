@@ -21,7 +21,8 @@
         },
         "name": { "$ref": "#/$defs/slug", "description": "Human-friendly slug shown in the UI and CLI. Safe to rename." },
         "title": { "type": "string" },
-        "description": { "type": "string" },
+        "purpose": { "type": "string", "maxLength": 500, "description": "What the factory is for, in one or two sentences. Agents read it before every item." },
+        "description": { "type": "string", "description": "Deprecated alias of purpose, read when purpose is absent." },
         "owner": { "type": "string" }
       }
     },
@@ -72,12 +73,23 @@
         "model": { "$ref": "#/$defs/model" },
         "repository": {
           "type": "object",
-          "description": "The git repository agent tasks work on. goald clones it on the host for every run, on the item's branch (goal/<number>-<slug>); the clone credential never reaches the agent container.",
-          "required": ["url"],
-          "additionalProperties": false,
-          "properties": {
-            "url": { "type": "string", "pattern": "^https://[^/@]+/.+", "description": "https clone URL without credentials" },
-            "token": { "$ref": "#/$defs/secretRef", "description": "Token for cloning a private repository (GitHub: a fine-grained PAT)" }
+          "description": "The git repository agent tasks work on. goald clones it on the host for every run, on the item's branch (goal/<number>-<slug>); the clone credential never reaches the agent container. Either an https URL with a token reference, or (from phase 3) a code-host connection and the repository's owner/name.",
+          "if": { "required": ["connection"] },
+          "then": {
+            "required": ["connection", "repo"],
+            "additionalProperties": false,
+            "properties": {
+              "connection": { "$ref": "#/$defs/slug", "description": "A connection of this factory whose connector is a code host; its credential clones and merges (phase 3)." },
+              "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "description": "owner/name on the connection's code host" }
+            }
+          },
+          "else": {
+            "required": ["url"],
+            "additionalProperties": false,
+            "properties": {
+              "url": { "type": "string", "pattern": "^https://[^/@]+/.+", "description": "https clone URL without credentials" },
+              "token": { "$ref": "#/$defs/secretRef", "description": "Token for cloning a private repository (GitHub: a fine-grained PAT)" }
+            }
           }
         },
         "budget": {
@@ -85,6 +97,8 @@
           "additionalProperties": false,
           "properties": {
             "dailyUsd": { "type": "number", "minimum": 0 },
+            "weeklyUsd": { "type": "number", "minimum": 0, "description": "Spend cap over a rolling 7 days." },
+            "onExhausted": { "enum": ["drain", "stop"], "description": "At the weekly cap: drain starts no new agent work and lets running tasks finish; stop also stops them. Default drain." },
             "perItemUsd": { "type": "number", "minimum": 0 },
             "maxTurnsPerTask": { "type": "integer", "minimum": 1 }
           }
@@ -111,6 +125,41 @@
       }
     },
     "connection": {
+      "type": "object",
+      "description": "A tool source agents reach through the gateway: the inline form (type and transport, served today) or the connector form (a catalog connector, phase 3).",
+      "if": { "required": ["connector"] },
+      "then": { "$ref": "#/$defs/connectorConnection" },
+      "else": { "$ref": "#/$defs/typedConnection" }
+    },
+    "connectorConnection": {
+      "type": "object",
+      "description": "A connection from the connector catalog. Any key not listed here is a setting of the connector, validated against the connector's settings schema in phase 3.",
+      "required": ["connector"],
+      "not": { "required": ["type"] },
+      "properties": {
+        "connector": { "type": "string", "pattern": "^[a-z][a-z0-9-]*[a-z0-9](@[A-Za-z0-9._-]+)?$", "description": "A catalog connector, curated or org-private: name, or name@version." },
+        "name": { "$ref": "#/$defs/slug", "description": "Unique in the factory; defaults to the connector's name." },
+        "credential": { "$ref": "#/$defs/slug", "description": "The organization credential the connection signs in with (phase 3); omitted when it needs none." },
+        "agents": { "type": "array", "items": { "type": "string" }, "description": "Agents that may use the connection; tools may narrow it further." },
+        "tools": {
+          "type": "object",
+          "description": "Overrides of the catalog's per-tool defaults, by served tool name (<connection>__<tool>).",
+          "additionalProperties": { "$ref": "#/$defs/toolRule" }
+        }
+      }
+    },
+    "toolRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "description": "false: the tool is never served." },
+        "agents": { "type": "array", "items": { "type": "string" }, "description": "A subset of the connection's agents." },
+        "approval": { "enum": ["required", "none"] },
+        "scope": { "type": "string", "description": "A scope the connector declares." },
+        "access": { "type": "string", "description": "The catalog's class for the tool; accepted, never required." }
+      }
+    },
+    "typedConnection": {
       "type": "object",
       "required": ["name", "type"],
       "properties": {
@@ -186,24 +235,55 @@
         "description": { "type": "string" },
         "prompt": { "type": "string" },
         "model": { "$ref": "#/$defs/model" },
+        "maxTurns": { "type": "integer", "minimum": 1, "description": "Overrides runtime.budget.maxTurnsPerTask for this agent." },
+        "perItemUsd": { "type": "number", "minimum": 0, "description": "Overrides runtime.budget.perItemUsd for this agent." },
         "skills": { "type": "array", "items": { "type": "string" } },
         "connections": { "type": "array", "items": { "type": "string" } },
         "tools": {
           "type": "object",
+          "description": "Custom rules in Claude Code's permission syntax. builtins replaces them; an agent has one or the other.",
           "additionalProperties": false,
           "properties": {
             "allow": { "type": "array", "items": { "type": "string" } },
             "deny": { "type": "array", "items": { "type": "string" } }
           }
+        },
+        "builtins": {
+          "type": "object",
+          "description": "Built-in tools by group, each off, ask or allowed; an omitted group is off. ask is served as off until tool approvals cover built-in tools.",
+          "additionalProperties": false,
+          "properties": {
+            "read": { "$ref": "#/$defs/builtinMode", "description": "Read, Grep, Glob" },
+            "edit": { "$ref": "#/$defs/builtinMode", "description": "Edit, Write" },
+            "run": {
+              "description": "Bash: a mode, or a mode and the commands it may run (Bash(<command>:*) each).",
+              "if": { "type": "object" },
+              "then": {
+                "required": ["mode"],
+                "additionalProperties": false,
+                "properties": {
+                  "mode": { "$ref": "#/$defs/builtinMode" },
+                  "commands": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z0-9_.+-]+$" } }
+                }
+              },
+              "else": { "$ref": "#/$defs/builtinMode" }
+            },
+            "web": { "$ref": "#/$defs/builtinMode", "description": "WebFetch, WebSearch" },
+            "subagents": { "$ref": "#/$defs/builtinMode", "description": "Task" }
+          }
         }
-      }
+      },
+      "not": { "required": ["tools", "builtins"] }
     },
+    "builtinMode": { "enum": ["off", "ask", "allowed"] },
     "station": {
       "type": "object",
       "required": ["id", "kind"],
       "additionalProperties": false,
       "properties": {
         "id": { "$ref": "#/$defs/slug" },
+        "name": { "type": "string", "maxLength": 40, "description": "Display name; id stays the key everything references." },
+        "description": { "type": "string", "maxLength": 200, "description": "The note shown under the station." },
         "kind": { "enum": ["queue", "agent", "human", "done"] },
         "agent": { "type": "string" },
         "route": {
@@ -219,12 +299,17 @@
         "checks": {
           "type": "array",
           "items": {
-            "type": "object",
-            "required": ["kind"],
-            "properties": {
-              "kind": { "enum": ["schema", "evidence-links", "command"] },
-              "min": { "type": "integer" },
-              "run": { "type": "string" }
+            "description": "A check, or its shorthand: \"schema\", \"evidence-links\" or a command line (\"go test ./...\").",
+            "if": { "type": "string" },
+            "then": { "minLength": 1 },
+            "else": {
+              "type": "object",
+              "required": ["kind"],
+              "properties": {
+                "kind": { "enum": ["schema", "evidence-links", "command"] },
+                "min": { "type": "integer" },
+                "run": { "type": "string" }
+              }
             }
           }
         },

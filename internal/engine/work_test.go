@@ -337,6 +337,23 @@ func TestRun_TaskSpecCarriesAgentPolicy(t *testing.T) {
 	}
 }
 
+// An agent's own caps replace the runtime's for its tasks; an unset one falls back.
+func TestRun_AgentCapsOverrideTheRuntimeBudget(t *testing.T) {
+	t.Parallel()
+
+	line := policyLine()
+	line.Agents[1].MaxTurns = 12
+
+	h := newHarness(t, line, porttest.Succeed(`{}`))
+	h.submit(t, domain.NewItem{Title: "Expire stale leases"})
+
+	h.step(t)
+
+	if got, want := h.runner.Started()[0].Budget, (ports.Budget{MaxTurns: 12, MaxUSD: 3}); got != want {
+		t.Errorf("budget = %+v, want %+v", got, want)
+	}
+}
+
 func TestRun_GatewayTokenIsScopedToTheTask(t *testing.T) {
 	t.Parallel()
 

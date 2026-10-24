@@ -2,6 +2,7 @@ package config
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/byFrederick/goal/internal/domain"
@@ -64,5 +65,61 @@ func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 
 	if !reflect.DeepEqual(l.ExpediteTypes, []string{"incident"}) {
 		t.Errorf("expedite types = %v, want [incident]", l.ExpediteTypes)
+	}
+}
+
+// The builder's keys reach the engine: built-in tool groups become the worker's rules, agent
+// caps ride along, and check shorthand runs as commands.
+func TestLine_MapsBuiltinsCapsAndCheckShorthand(t *testing.T) {
+	t.Parallel()
+
+	f, err := Load(checkTree(edited(
+		agentPrompt, agentPrompt+`      maxTurns: 40
+      perItemUsd: 1.5
+      builtins:
+        read: allowed
+        edit: allowed
+        run: { mode: allowed, commands: [pnpm, go] }
+        web: ask
+`,
+		doneStation, "      - id: build\n        kind: agent\n        agent: worker\n        checks: [schema, go test ./..., { kind: command, run: make lint }]\n"+doneStation,
+	), nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	l := f.Line()
+
+	a := l.Agents[0]
+	if a.MaxTurns != 40 || a.PerItemUSD != 1.5 {
+		t.Errorf("caps = %d turns, %v USD; want 40, 1.5", a.MaxTurns, a.PerItemUSD)
+	}
+
+	const wantAllow, wantDeny = "Read Grep Glob Edit Write Bash(pnpm:*) Bash(go:*)", "WebFetch WebSearch Task"
+
+	if strings.Join(a.ToolsAllow, " ") != wantAllow || strings.Join(a.ToolsDeny, " ") != wantDeny {
+		t.Errorf("allow %q deny %q\nwant allow %q deny %q", a.ToolsAllow, a.ToolsDeny, wantAllow, wantDeny)
+	}
+
+	if got := l.Stations[2].Checks; !reflect.DeepEqual(got, []string{"go test ./...", "make lint"}) {
+		t.Errorf("checks = %q, want the two command lines", got)
+	}
+}
+
+// Every group off leaves the agent no built-in tool: the worker's read-only default is denied too.
+func TestLine_BuiltinsAllOffDenyEveryTool(t *testing.T) {
+	t.Parallel()
+
+	f, err := Load(checkTree(edited(agentPrompt, agentPrompt+"      builtins: { read: off }\n"), nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	a := f.Line().Agents[0]
+
+	const want = "Read Grep Glob Edit Write WebFetch WebSearch Task Bash"
+
+	if len(a.ToolsAllow) != 0 || strings.Join(a.ToolsDeny, " ") != want {
+		t.Errorf("allow %q deny %q, want nothing allowed and %q denied", a.ToolsAllow, a.ToolsDeny, want)
 	}
 }

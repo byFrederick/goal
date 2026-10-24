@@ -89,8 +89,11 @@ type Gate struct {
 type AgentSpec struct {
 	Name string
 	// PromptPath is the agent's prompt file, resolved against the factory folder.
-	PromptPath  string
-	Model       string
+	PromptPath string
+	Model      string
+	// MaxTurns and PerItemUSD cap one task of this agent; zero falls back to the Runtime's.
+	MaxTurns    int
+	PerItemUSD  float64
 	Skills      []SkillRef
 	Connections []string
 	ToolsAllow  []string
@@ -220,3 +223,17 @@ func (s Station) Arrival() ItemState {
 
 // CanRework reports whether an item already reworked reworkCount times may go back again.
 func (g Gate) CanRework(reworkCount int) bool { return reworkCount < g.MaxRework }
+
+// Limits are the caps of one task of this agent: its own, else the runtime's.
+func (a AgentSpec) Limits(rt Runtime) (maxTurns int, perItemUSD float64) {
+	maxTurns, perItemUSD = a.MaxTurns, a.PerItemUSD
+	if maxTurns == 0 {
+		maxTurns = rt.MaxTurnsPerTask
+	}
+
+	if perItemUSD == 0 {
+		perItemUSD = rt.PerItemUSD
+	}
+
+	return maxTurns, perItemUSD
+}

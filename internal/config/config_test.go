@@ -190,6 +190,47 @@ spec:
 	}
 }
 
+// The keys the builder writes are optional additions: a definition using all of them loads,
+// and the connector form keeps its connector settings and takes its name from the connector.
+func TestLoad_AcceptsTheBuilderKeys(t *testing.T) {
+	t.Parallel()
+
+	f, err := Load(checkTree(edited(
+		"  name: acme-check\n", "  name: acme-check\n  purpose: Answers acme's support questions.\n",
+		runtimeAuth, runtimeAuth+"    budget: { weeklyUsd: 50, onExhausted: stop, perItemUsd: 2 }\n",
+		specAgents, `  connections:
+    - connector: playwright@2
+      agents: [worker]
+      origins: [https://preview.example.com]
+      tools:
+        playwright__click: { agents: [worker], scope: preview, approval: required, enabled: true }
+`+specAgents,
+		agentPrompt, agentPrompt+"      maxTurns: 30\n      builtins: { read: allowed, run: allowed, subagents: off }\n",
+		"      - id: work\n", "      - id: work\n        name: Work\n        description: Where the worker answers.\n        checks: [schema, make test]\n",
+	), nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := f.Spec.Connections[0]
+	if c.Name != "playwright" || string(c.Settings["origins"]) != `["https://preview.example.com"]` || len(c.Settings) != 1 {
+		t.Errorf("connection = %+v, want name playwright and one setting, origins", c)
+	}
+
+	if b := f.Spec.Runtime.Budget; b.WeeklyUSD != 50 || b.OnExhausted != "stop" || f.Metadata.Purpose == "" {
+		t.Errorf("budget = %+v, purpose %q", b, f.Metadata.Purpose)
+	}
+}
+
+func TestLoad_RejectsBuiltinsBesideCustomTools(t *testing.T) {
+	t.Parallel()
+
+	_, err := Load(checkTree(edited(agentPrompt, agentPrompt+"      tools: { allow: [Read] }\n      builtins: { read: allowed }\n"), nil))
+	if err == nil || !strings.Contains(err.Error(), "schema") {
+		t.Fatalf("err = %v, want a schema problem", err)
+	}
+}
+
 func write(t *testing.T, path, content string) {
 	t.Helper()
 

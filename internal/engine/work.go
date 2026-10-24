@@ -316,6 +316,7 @@ func (e *Engine) start(ctx context.Context, c claimed, runID domain.RunID, brief
 	}
 
 	a, rt := c.agent, c.line.Runtime
+	maxTurns, maxUSD := a.Limits(rt)
 
 	task, err := e.runner.Start(ctx, ports.TaskSpec{
 		FactoryID: c.line.FactoryID, ItemID: c.item.ID, RunID: runID, Station: c.station.ID, Agent: a.Name,
@@ -323,7 +324,7 @@ func (e *Engine) start(ctx context.Context, c claimed, runID domain.RunID, brief
 		ToolsAllow: a.ToolsAllow, ToolsDeny: a.ToolsDeny, GatewayURL: e.cfg.GatewayURL, GatewayToken: token,
 		Brief: brief, Inputs: c.item.Outputs, Output: c.station.Output, WorkspaceDir: workspace, Env: env,
 		Timeout: e.cfg.TaskTimeout,
-		Budget:  ports.Budget{MaxTurns: rt.MaxTurnsPerTask, MaxUSD: rt.PerItemUSD},
+		Budget:  ports.Budget{MaxTurns: maxTurns, MaxUSD: maxUSD},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start task: %w", err)
