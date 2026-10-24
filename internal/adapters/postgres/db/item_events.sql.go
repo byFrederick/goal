@@ -7,9 +7,55 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
+
+const insertNote = `-- name: InsertNote :one
+INSERT INTO item_events (factory_id, item_id, run_id, at, kind, station, actor, data)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, factory_id, item_id, run_id, at, kind, station, actor, data, org_id
+`
+
+type InsertNoteParams struct {
+	FactoryID uuid.UUID
+	ItemID    uuid.UUID
+	RunID     *uuid.UUID
+	At        time.Time
+	Kind      string
+	Station   *string
+	Actor     string
+	Data      []byte
+}
+
+// A person's note, returned with its id.
+func (q *Queries) InsertNote(ctx context.Context, arg InsertNoteParams) (ItemEvent, error) {
+	row := q.db.QueryRow(ctx, insertNote,
+		arg.FactoryID,
+		arg.ItemID,
+		arg.RunID,
+		arg.At,
+		arg.Kind,
+		arg.Station,
+		arg.Actor,
+		arg.Data,
+	)
+	var i ItemEvent
+	err := row.Scan(
+		&i.ID,
+		&i.FactoryID,
+		&i.ItemID,
+		&i.RunID,
+		&i.At,
+		&i.Kind,
+		&i.Station,
+		&i.Actor,
+		&i.Data,
+		&i.OrgID,
+	)
+	return i, err
+}
 
 const itemEvents = `-- name: ItemEvents :many
 SELECT id, factory_id, item_id, run_id, at, kind, station, actor, data, org_id FROM item_events
@@ -27,6 +73,47 @@ type ItemEventsParams struct {
 // One page of an item's history in append order, after a known event id (0 for the start).
 func (q *Queries) ItemEvents(ctx context.Context, arg ItemEventsParams) ([]ItemEvent, error) {
 	rows, err := q.db.Query(ctx, itemEvents, arg.ItemID, arg.After, arg.MaxEvents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ItemEvent
+	for rows.Next() {
+		var i ItemEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.FactoryID,
+			&i.ItemID,
+			&i.RunID,
+			&i.At,
+			&i.Kind,
+			&i.Station,
+			&i.Actor,
+			&i.Data,
+			&i.OrgID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const notesSinceLastRun = `-- name: NotesSinceLastRun :many
+SELECT n.id, n.factory_id, n.item_id, n.run_id, n.at, n.kind, n.station, n.actor, n.data, n.org_id FROM item_events n
+WHERE n.item_id = $1 AND n.kind = 'note'
+  AND n.id > coalesce((SELECT max(r.id) FROM item_events r
+                       WHERE r.item_id = $1 AND r.kind = 'run_started'), 0)
+ORDER BY n.id
+`
+
+// An item's notes after its latest run_started event, both on item_events_item_idx: what the
+// next run's brief carries.
+func (q *Queries) NotesSinceLastRun(ctx context.Context, itemID uuid.UUID) ([]ItemEvent, error) {
+	rows, err := q.db.Query(ctx, notesSinceLastRun, itemID)
 	if err != nil {
 		return nil, err
 	}

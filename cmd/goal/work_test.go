@@ -46,6 +46,72 @@ func TestDecide_RejectNeedsAReasonAndApproveNone(t *testing.T) {
 	}
 }
 
+// The items the note test leaves notes on: one open, one done.
+const (
+	notedRef  = "goal#1"
+	closedRef = "goal#2"
+)
+
+func TestNote_SendsTheTextToTheItem(t *testing.T) {
+	t.Parallel()
+
+	var (
+		gotItem string
+		gotNote gen.NewNote
+	)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/orgs/acme/items/{item}/notes", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("item") == closedRef {
+			detail := "item is done or cancelled"
+
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(gen.Problem{Title: "Conflict", Status: http.StatusConflict, Detail: &detail})
+
+			return
+		}
+
+		gotItem = r.PathValue("item")
+		if err := json.NewDecoder(r.Body).Decode(&gotNote); err != nil {
+			t.Error(err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(gen.NoteReceipt{EventId: 42, Delivery: gen.NextRun})
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	env := testEnv(t, srv.URL, map[string]string{envOrg: orgAcme})
+
+	var buf bytes.Buffer
+	if err := run(t.Context(), []string{verbNote, notedRef, "Check the connection pool."}, &printer{w: &buf}, env, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if gotItem != notedRef || gotNote.Text != "Check the connection pool." {
+		t.Errorf("goald got a note on %q: %+v", gotItem, gotNote)
+	}
+
+	if got := buf.String(); got != "✓ note left on "+notedRef+"; the next run reads it\n" {
+		t.Errorf("output %q", got)
+	}
+
+	err := run(t.Context(), []string{verbNote, closedRef, "late"}, &printer{w: &bytes.Buffer{}}, env, nil)
+	if err == nil || !strings.Contains(err.Error(), "item is done or cancelled") {
+		t.Errorf("note on a done item = %v, want goald's refusal", err)
+	}
+
+	for _, args := range [][]string{{verbNote}, {verbNote, notedRef}, {verbNote, notedRef, "  "}, {verbNote, notedRef, "a", "b"}} {
+		if err := run(t.Context(), args, &printer{w: &bytes.Buffer{}}, env, nil); !errors.Is(err, errUsage) {
+			t.Errorf("goal %v = %v, want a usage error", args, err)
+		}
+	}
+}
+
 // item1 is the id of the item fakeGoald plays.
 const item1 = "item-1"
 

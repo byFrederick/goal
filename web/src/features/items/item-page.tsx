@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 import { ChevronLeft } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 import { eventsQuery, itemQuery, runsQuery } from '../../api/queries';
 import type { Item, Station } from '../../api/types';
 import { factoryTitle, itemKey, useFactory, useFactoryParams } from '../../shared/factory';
@@ -14,8 +14,9 @@ import { SectionCard } from '../../ui/card';
 import { Chip, type ChipTone } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { PathCard, TimeCard } from './flow-cards';
+import { NoteComposer } from './note-composer';
 import { OutputsCard } from './outputs';
-import { activeRun, buildTrace, latestToolCalls, runLabel, type Trace } from './timeline';
+import { activeRun, buildTrace, latestToolCalls, noteRecipient, runLabel, type Trace } from './timeline';
 import { ToolRow, TraceList } from './trace-view';
 
 /** The agent copy working the item now, as the trace names it. */
@@ -26,7 +27,17 @@ function agentOf(trace: Trace): string | null {
 
 const chipTone: Record<Tone, ChipTone> = { run: 'run', you: 'you', rework: 'rework', muted: 'plain', ok: 'ok' };
 
-function TraceCard({ item, trace, className }: { item: Item; trace: Trace; className?: string }) {
+function TraceCard({
+  item,
+  trace,
+  className,
+  children,
+}: {
+  item: Item;
+  trace: Trace;
+  className?: string;
+  children?: ReactNode;
+}) {
   const run = item.state === 'in_progress' ? activeRun(trace) : undefined;
   return (
     <SectionCard
@@ -47,6 +58,7 @@ function TraceCard({ item, trace, className }: { item: Item; trace: Trace; class
       }
     >
       <TraceList entries={trace.entries} itemState={item.state} />
+      {children}
     </SectionCard>
   );
 }
@@ -88,6 +100,7 @@ export function ItemPage() {
   const { data: runs } = useQuery(runsQuery(org.id, key));
   const trace = useMemo(() => buildTrace(events, runs?.runs), [events, runs]);
   const [fullTrace, setFullTrace] = useState(false);
+  const recipient = noteRecipient(trace, item.station);
   const station = factory.stations.find((s) => s.id === item.station);
   const state = describeState({
     state: item.state,
@@ -182,8 +195,11 @@ export function ItemPage() {
             item={item}
             trace={trace}
             className={cn('order-6 @[720px]:order-none', !fullTrace && 'hidden @[720px]:flex')}
-          />
+          >
+            <NoteComposer itemKey={key} state={item.state} agent={recipient} className="mt-1 hidden @[720px]:flex" />
+          </TraceCard>
         </div>
+        <NoteComposer itemKey={key} state={item.state} agent={recipient} compact className="order-8 @[720px]:hidden" />
       </div>
     </>
   );

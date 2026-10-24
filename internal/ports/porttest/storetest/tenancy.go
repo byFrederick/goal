@@ -80,6 +80,12 @@ func testNoOrg(f *fixture) {
 	_, err = f.Store.ItemEvents(ctx, it.ID, 0, 10)
 	expect(t, "ItemEvents", err, domain.ErrNoOrg)
 
+	_, err = f.Store.AppendNote(ctx, note(it, "x", t1), domain.LocalUser)
+	expect(t, "AppendNote", err, domain.ErrNoOrg)
+
+	_, err = f.Store.NotesSinceLastRun(ctx, it.ID)
+	expect(t, "NotesSinceLastRun", err, domain.ErrNoOrg)
+
 	_, err = f.Store.ItemByNumber(ctx, f.factory, it.Number)
 	expect(t, "ItemByNumber", err, domain.ErrNoOrg)
 
@@ -142,6 +148,9 @@ func testOtherOrg(f *fixture) {
 	_, err = other.Store.Run(ctx, run)
 	expect(t, "Run from another org", err, ports.ErrNotFound)
 
+	_, err = f.Store.AppendNote(ctx, note(it, "x", t1), domain.LocalUser)
+	expect(t, "AppendNote from another org", err, ports.ErrNotFound)
+
 	other.seesNothingOf(t, f.factory, it.ID)
 
 	if got := f.item(t, it.ID); got.State != domain.StateInProgress || len(f.runs(t, it.ID)) != 1 {
@@ -201,6 +210,11 @@ func (f *fixture) seesNoFlowOf(t *testing.T, factory domain.FactoryID, item doma
 	events, err := f.Store.ItemEvents(ctx, item, 0, 100)
 	if err != nil || len(events) != 0 {
 		t.Errorf("ItemEvents = %+v, %v; want nothing", events, err)
+	}
+
+	notes, err := f.Store.NotesSinceLastRun(ctx, item)
+	if err != nil || len(notes) != 0 {
+		t.Errorf("NotesSinceLastRun = %+v, %v; want nothing", notes, err)
 	}
 
 	m, err := f.Store.FlowMetrics(ctx, factory, t0, t1.Add(time.Hour))

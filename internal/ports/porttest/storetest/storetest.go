@@ -60,6 +60,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Runs_FinishOnceAndAddCost", testRuns},
 		{"Runs_OldestFirstUpToLimitAndOneByID", testRunReads},
 		{"AppendEvents_InOrder", testAppendEvents},
+		{"Notes_AppendToOpenItemsReadSinceTheLatestRun", testNotes},
+		{"Notes_RefusedOnClosedItems", testNotesOnClosedItems},
 		{"ItemEvents_PagesInAppendOrder", testItemEvents},
 		{"ItemByNumber_PerFactory", testItemByNumber},
 		{"ListItems_NewestFirstFilteredAndPaged", testListItems},

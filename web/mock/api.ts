@@ -22,6 +22,7 @@ import type {
   ItemEvent,
   ItemFlow,
   ItemPage,
+  NoteReceipt,
   Org,
   OrgAttention,
   OrgSettings,
@@ -623,7 +624,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return json(res, 200, run);
     }
 
-    m = rest.match(/^\/items\/([^/]+)(?:\/(events|runs|approve|reject|merge|retry))?$/);
+    m = rest.match(/^\/items\/([^/]+)(?:\/(events|runs|notes|approve|reject|merge|retry))?$/);
     if (!m) return problem(res, 404, 'Not found', path);
 
     const it = findItem(decodeURIComponent(m[1] ?? ''), org.id);
@@ -648,6 +649,17 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const by = localUser;
     const stations = stationsOf(it);
     const index = stations.findIndex((s) => s.id === it.station);
+
+    if (action === 'notes') {
+      const text = typeof body.text === 'string' ? body.text.trim() : '';
+      if (!text || [...text].length > 2000) return problem(res, 400, 'Bad Request', 'a note is 1 to 2000 characters');
+      if (it.state === 'done' || it.state === 'cancelled') {
+        return problem(res, 409, 'Conflict', `${ref(it)} is ${it.state}`, 'item-closed');
+      }
+      emit(it, 'note', by, { text, actor: 'user:local' });
+      const receipt: NoteReceipt = { event_id: state.nextEventId - 1, delivery: 'next_run' };
+      return json(res, 202, receipt);
+    }
 
     if (action === 'retry') {
       if (it.state !== 'blocked') return problem(res, 409, 'Item is not blocked', `${ref(it)} is ${it.state}`);

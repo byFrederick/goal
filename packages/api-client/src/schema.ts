@@ -924,6 +924,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/items/{item}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Leave a note for the agents working an item
+         * @description The note is recorded as the item's event (kind note) and carried by the brief of the item's next run, at whatever station, under "Notes from people". A note on a done or cancelled item is refused with 409 item-closed.
+         */
+        post: operations["noteItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/runs/{run}": {
         parameters: {
             query?: never;
@@ -1518,6 +1543,22 @@ export interface components {
             data: {
                 [key: string]: unknown;
             };
+        };
+        NewNote: {
+            /** @description What the agent should know, 1 to 2000 characters (surrounding space is trimmed) */
+            text: string;
+        };
+        NoteReceipt: {
+            /**
+             * Format: int64
+             * @description The note's event in the item's history
+             */
+            event_id: number;
+            /**
+             * @description next_run, the next run's brief carries it (live, to a running agent, comes later)
+             * @enum {string}
+             */
+            delivery: "live" | "next_run";
         };
         RunList: {
             runs: components["schemas"]["Run"][];
@@ -3640,6 +3681,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    noteItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewNote"];
+            };
+        };
+        responses: {
+            /** @description The note is recorded; delivery says when an agent reads it */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoteReceipt"];
                 };
             };
             default: components["responses"]["Problem"];

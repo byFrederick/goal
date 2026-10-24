@@ -53,7 +53,14 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 		return
 	}
 
-	brief := briefOf(it)
+	// The notes people left since the item's last run; a retry adds those left meanwhile.
+	notes, err := e.withNotes(ctx, it.ID, nil)
+	if err != nil {
+		e.block(ctx, log, c, err.Error())
+		return
+	}
+
+	brief := briefOf(it, notes)
 
 	for attempt := 1; ; attempt++ {
 		res, verdict, err := e.runOnce(ctx, c, brief)
@@ -83,7 +90,11 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 			return
 		}
 
-		brief = briefOf(it) + "\n\nYour previous attempt was rejected: " + rejected.err.Error() +
+		if notes, err = e.withNotes(ctx, it.ID, notes); err != nil {
+			log.WarnContext(ctx, "notes left during the run do not reach its retry", slog.Any("error", err))
+		}
+
+		brief = briefOf(it, notes) + "\n\nYour previous attempt was rejected: " + rejected.err.Error() +
 			"\nFix that and return output that satisfies the station contract."
 	}
 }
@@ -542,12 +553,4 @@ func modelOf(c claimed) string {
 	}
 
 	return c.line.Runtime.Model
-}
-
-func briefOf(it domain.Item) string {
-	if it.Body == "" {
-		return it.Title
-	}
-
-	return it.Title + "\n\n" + it.Body
 }

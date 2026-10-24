@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
@@ -20,9 +21,11 @@ var _ ports.Store = (*Store)(nil)
 // atomic like a PostgreSQL transaction. Like row-level security, every method needs an
 // organization in ctx (domain.ErrNoOrg otherwise) and sees only that organization's rows. A
 // factory belongs to the organization AddFactory names, or to the one its first item is created
-// in. Slot caps are set with SetSlotCaps (Tenancy.UpdateOrg does it for a linked store).
+// in. Slot caps are set with SetSlotCaps (Tenancy.UpdateOrg does it for a linked store); a linked
+// Tenancy also keeps the store's audit entries.
 type Store struct {
 	mu        sync.Mutex
+	audit     ports.Audit
 	factories map[domain.FactoryID]domain.OrgID
 	orgCaps   map[domain.OrgID]int
 	factCaps  map[domain.FactoryID]int
@@ -57,6 +60,14 @@ func NewStore() *Store {
 		runs:      map[domain.RunID]*domain.Run{},
 		spans:     map[domain.ItemID][]domain.Span{},
 	}
+}
+
+// auditTo makes a keep the audit entries the store appends.
+func (s *Store) auditTo(a ports.Audit) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.audit = a
 }
 
 // AddFactory registers a factory in an organization, as SaveFactory does for PostgreSQL.
@@ -624,6 +635,79 @@ func (s *Store) AppendEvents(ctx context.Context, events ...domain.Event) error 
 	}
 
 	return nil
+}
+
+// AppendNote implements ports.Store. The audit entry goes to the linked Tenancy, if any, after
+// the note: the fake has no transaction spanning both.
+func (s *Store) AppendNote(ctx context.Context, e domain.Event, by domain.Actor) (domain.Event, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.Event{}, err
+	}
+
+	got, audit, err := s.appendNote(org, e)
+	if err != nil || audit == nil {
+		return got, err
+	}
+
+	text, _ := e.Data["text"].(string)
+
+	if err := audit.Append(ctx, domain.AuditEntry{
+		At: e.At, Actor: by, Action: domain.AuditItemNoted, TargetKind: domain.AuditTargetItem, TargetID: string(e.ItemID),
+		FactoryID: e.FactoryID, Data: map[string]any{"length": utf8.RuneCountInString(text)},
+	}); err != nil {
+		return domain.Event{}, fmt.Errorf("audit note: %w", err)
+	}
+
+	return got, nil
+}
+
+func (s *Store) appendNote(org domain.OrgID, e domain.Event) (domain.Event, ports.Audit, error) {
+	s.mu.Lock()
+	defer s.changes.signal()
+	defer s.mu.Unlock()
+
+	it, ok := s.visible(e.ItemID, org)
+	if !ok {
+		return domain.Event{}, nil, fmt.Errorf("item %s: %w", e.ItemID, ports.ErrNotFound)
+	}
+
+	if it.State == domain.StateDone || it.State == domain.StateCancelled {
+		return domain.Event{}, nil, fmt.Errorf("note on item %s, %s: %w", e.ItemID, it.State, ports.ErrConflict)
+	}
+
+	s.append(e)
+
+	return s.events[len(s.events)-1], s.audit, nil
+}
+
+// NotesSinceLastRun implements ports.Store.
+func (s *Store) NotesSinceLastRun(ctx context.Context, item domain.ItemID) ([]domain.Event, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	notes := []domain.Event{}
+
+	if _, ok := s.visible(item, org); !ok {
+		return notes, nil
+	}
+
+	for _, e := range s.events {
+		switch {
+		case e.ItemID != item:
+		case e.Kind == domain.EventRunStarted:
+			notes = notes[:0]
+		case e.Kind == domain.EventNote:
+			notes = append(notes, e)
+		}
+	}
+
+	return notes, nil
 }
 
 // ItemEvents implements ports.Store.

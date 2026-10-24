@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { ItemEvent } from '../../api/types';
-import { activeRun, buildTrace, latestToolCalls, type RunEntry, runLabel, toolArgument } from './timeline';
+import {
+  activeRun,
+  buildTrace,
+  latestToolCalls,
+  noteRecipient,
+  type RunEntry,
+  runLabel,
+  toolArgument,
+} from './timeline';
 
 let nextId = 1;
 const ev = (kind: string, data: Record<string, unknown> = {}, extra: Partial<ItemEvent> = {}): ItemEvent => ({
@@ -68,6 +76,30 @@ describe('buildTrace', () => {
       { text: 'fcruz sent it back', detail: 'Wrong lane', tone: 'rework' },
       { text: 'Waiting on you', tone: 'you' },
     ]);
+  });
+
+  it('shows a person’s note with its text, for the next run', () => {
+    const trace = buildTrace([
+      ev('note', { text: 'Also check the pool.', actor: 'user:local' }, { actor: 'Local user' }),
+    ]);
+    expect(trace.entries).toMatchObject([
+      { kind: 'note', text: 'Local user left a note for the next run', detail: 'Also check the pool.' },
+    ]);
+  });
+
+  it('addresses a note to the agent working the item, or the last one at its station', () => {
+    const spec = { run_id: 's', actor: 'spec-writer', station: 'spec' };
+    const build = { run_id: 'b', actor: 'builder', station: 'build' };
+    const working = buildTrace([ev('run_started', {}, spec), ev('run_started', {}, build)]);
+    expect(noteRecipient(working, 'build')).toBe('builder');
+
+    const waiting = buildTrace([
+      ev('run_started', {}, spec),
+      ev('run_finished', { status: 'succeeded' }, spec),
+      ev('moved', { from: 'spec', to: 'approve' }),
+    ]);
+    expect(noteRecipient(waiting, 'spec')).toBe('spec-writer');
+    expect(noteRecipient(waiting, 'approve')).toBeUndefined();
   });
 
   it('shows event kinds it does not know instead of dropping them', () => {

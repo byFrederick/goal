@@ -353,6 +353,24 @@ func (e MergeRequestMethod) Valid() bool {
 	}
 }
 
+// Defines values for NoteReceiptDelivery.
+const (
+	Live    NoteReceiptDelivery = "live"
+	NextRun NoteReceiptDelivery = "next_run"
+)
+
+// Valid indicates whether the value is a known member of the NoteReceiptDelivery enum.
+func (e NoteReceiptDelivery) Valid() bool {
+	switch e {
+	case Live:
+		return true
+	case NextRun:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PatchOpOp.
 const (
 	Add     PatchOpOp = "add"
@@ -1349,6 +1367,12 @@ type NewItem struct {
 	Type string `json:"type"`
 }
 
+// NewNote defines model for NewNote.
+type NewNote struct {
+	// Text What the agent should know, 1 to 2000 characters (surrounding space is trimmed)
+	Text string `json:"text"`
+}
+
 // NewOrg defines model for NewOrg.
 type NewOrg struct {
 	// Mark Defaults to the name's initials
@@ -1356,6 +1380,18 @@ type NewOrg struct {
 	Name string  `json:"name"`
 	Slug string  `json:"slug"`
 }
+
+// NoteReceipt defines model for NoteReceipt.
+type NoteReceipt struct {
+	// Delivery next_run, the next run's brief carries it (live, to a running agent, comes later)
+	Delivery NoteReceiptDelivery `json:"delivery"`
+
+	// EventId The note's event in the item's history
+	EventId int64 `json:"event_id"`
+}
+
+// NoteReceiptDelivery next_run, the next run's brief carries it (live, to a running agent, comes later)
+type NoteReceiptDelivery string
 
 // OpenDraftRequest defines model for OpenDraftRequest.
 type OpenDraftRequest struct {
@@ -2091,6 +2127,9 @@ type RestoreVersionJSONRequestBody = RestoreRequest
 
 // MergeItemJSONRequestBody defines body for MergeItem for application/json ContentType.
 type MergeItemJSONRequestBody = MergeRequest
+
+// NoteItemJSONRequestBody defines body for NoteItem for application/json ContentType.
+type NoteItemJSONRequestBody = NewNote
 
 // RejectItemJSONRequestBody defines body for RejectItem for application/json ContentType.
 type RejectItemJSONRequestBody = Rejection
@@ -2843,6 +2882,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/merge (the `MergeItem` operationId).
 	MergeItem(ctx context.Context, org OrgRef, item ItemRef, body MergeItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// NoteItemWithBody Leave a note for the agents working an item
+	//
+	// The note is recorded as the item's event (kind note) and carried by the brief of the item's next run, at whatever station, under "Notes from people". A note on a done or cancelled item is refused with 409 item-closed.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/notes (the `NoteItem` operationId).
+	NoteItemWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// NoteItem Leave a note for the agents working an item
+	//
+	// The note is recorded as the item's event (kind note) and carried by the brief of the item's next run, at whatever station, under "Notes from people". A note on a done or cancelled item is refused with 409 item-closed.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/notes (the `NoteItem` operationId).
+	NoteItem(ctx context.Context, org OrgRef, item ItemRef, body NoteItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RejectItemWithBody Reject an item waiting for a human; it goes back for rework with the reason
 	//
@@ -3938,6 +3995,44 @@ func (c *Client) MergeItemWithBody(ctx context.Context, org OrgRef, item ItemRef
 // Corresponds with POST /v1/orgs/{org}/items/{item}/merge (the `MergeItem` operationId).
 func (c *Client) MergeItem(ctx context.Context, org OrgRef, item ItemRef, body MergeItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewMergeItemRequest(c.Server, org, item, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// NoteItemWithBody Leave a note for the agents working an item
+//
+// The note is recorded as the item's event (kind note) and carried by the brief of the item's next run, at whatever station, under "Notes from people". A note on a done or cancelled item is refused with 409 item-closed.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/notes (the `NoteItem` operationId).
+func (c *Client) NoteItemWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewNoteItemRequestWithBody(c.Server, org, item, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// NoteItem Leave a note for the agents working an item
+//
+// The note is recorded as the item's event (kind note) and carried by the brief of the item's next run, at whatever station, under "Notes from people". A note on a done or cancelled item is refused with 409 item-closed.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/notes (the `NoteItem` operationId).
+func (c *Client) NoteItem(ctx context.Context, org OrgRef, item ItemRef, body NoteItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewNoteItemRequest(c.Server, org, item, body)
 	if err != nil {
 		return nil, err
 	}
@@ -6638,6 +6733,60 @@ func NewMergeItemRequestWithBody(server string, org OrgRef, item ItemRef, conten
 	return req, nil
 }
 
+// NewNoteItemRequest calls the generic NoteItem builder with application/json body
+func NewNoteItemRequest(server string, org OrgRef, item ItemRef, body NoteItemJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewNoteItemRequestWithBody(server, org, item, "application/json", bodyReader)
+}
+
+// NewNoteItemRequestWithBody constructs an http.Request for the NoteItem method, with any body, and a specified content type
+func NewNoteItemRequestWithBody(server string, org OrgRef, item ItemRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/notes", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewRejectItemRequest calls the generic RejectItem builder with application/json body
 func NewRejectItemRequest(server string, org OrgRef, item ItemRef, body RejectItemJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -7662,6 +7811,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/merge (the `MergeItem` operationId).
 	MergeItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body MergeItemJSONRequestBody, reqEditors ...RequestEditorFn) (*MergeItemResponse, error)
+
+	// NoteItemWithBodyWithResponse Leave a note for the agents working an item
+	//
+	// The note is recorded as the item's event (kind note) and carried by the brief of the item's next run, at whatever station, under "Notes from people". A note on a done or cancelled item is refused with 409 item-closed.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/notes (the `NoteItem` operationId).
+	NoteItemWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*NoteItemResponse, error)
+
+	// NoteItemWithResponse Leave a note for the agents working an item
+	//
+	// The note is recorded as the item's event (kind note) and carried by the brief of the item's next run, at whatever station, under "Notes from people". A note on a done or cancelled item is refused with 409 item-closed.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/notes (the `NoteItem` operationId).
+	NoteItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body NoteItemJSONRequestBody, reqEditors ...RequestEditorFn) (*NoteItemResponse, error)
 
 	// RejectItemWithBodyWithResponse Reject an item waiting for a human; it goes back for rework with the reason
 	//
@@ -9965,6 +10132,54 @@ func (r MergeItemResponse) ContentType() string {
 	return ""
 }
 
+type NoteItemResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *NoteReceipt
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r NoteItemResponse) GetJSON202() *NoteReceipt {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r NoteItemResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r NoteItemResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r NoteItemResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r NoteItemResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r NoteItemResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type RejectItemResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -11289,6 +11504,36 @@ func (c *ClientWithResponses) MergeItemWithResponse(ctx context.Context, org Org
 		return nil, err
 	}
 	return ParseMergeItemResponse(rsp)
+}
+
+// NoteItemWithBodyWithResponse Leave a note for the agents working an item
+//
+// The note is recorded as the item's event (kind note) and carried by the brief of the item's next run, at whatever station, under "Notes from people". A note on a done or cancelled item is refused with 409 item-closed.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/notes (the `NoteItem` operationId).
+func (c *ClientWithResponses) NoteItemWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*NoteItemResponse, error) {
+	rsp, err := c.NoteItemWithBody(ctx, org, item, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseNoteItemResponse(rsp)
+}
+
+// NoteItemWithResponse Leave a note for the agents working an item
+//
+// The note is recorded as the item's event (kind note) and carried by the brief of the item's next run, at whatever station, under "Notes from people". A note on a done or cancelled item is refused with 409 item-closed.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/notes (the `NoteItem` operationId).
+func (c *ClientWithResponses) NoteItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body NoteItemJSONRequestBody, reqEditors ...RequestEditorFn) (*NoteItemResponse, error) {
+	rsp, err := c.NoteItem(ctx, org, item, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseNoteItemResponse(rsp)
 }
 
 // RejectItemWithBodyWithResponse Reject an item waiting for a human; it goes back for rework with the reason
@@ -13010,6 +13255,39 @@ func ParseMergeItemResponse(rsp *http.Response) (*MergeItemResponse, error) {
 	return response, nil
 }
 
+// ParseNoteItemResponse parses an HTTP response from a NoteItemWithResponse call
+func ParseNoteItemResponse(rsp *http.Response) (*NoteItemResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &NoteItemResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest NoteReceipt
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseRejectItemResponse parses an HTTP response from a RejectItemWithResponse call
 func ParseRejectItemResponse(rsp *http.Response) (*RejectItemResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -13473,6 +13751,9 @@ type ServerInterface interface {
 	// MergeItem Merge the item's pull request, then approve it
 	// (POST /v1/orgs/{org}/items/{item}/merge)
 	MergeItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// NoteItem Leave a note for the agents working an item
+	// (POST /v1/orgs/{org}/items/{item}/notes)
+	NoteItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
 	// RejectItem Reject an item waiting for a human; it goes back for rework with the reason
 	// (POST /v1/orgs/{org}/items/{item}/reject)
 	RejectItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
@@ -15519,6 +15800,41 @@ func (siw *ServerInterfaceWrapper) MergeItem(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// NoteItem operation middleware
+func (siw *ServerInterfaceWrapper) NoteItem(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.NoteItem(w, r, org, item)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // RejectItem operation middleware
 func (siw *ServerInterfaceWrapper) RejectItem(w http.ResponseWriter, r *http.Request) {
 
@@ -16040,6 +16356,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}", wrapper.GetItem)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/events", wrapper.ListItemEvents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/runs", wrapper.ListItemRuns)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/notes", wrapper.NoteItem)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs/{run}", wrapper.GetRun)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/approve", wrapper.ApproveItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/reject", wrapper.RejectItem)
@@ -17950,6 +18267,47 @@ func (response MergeItemdefaultApplicationProblemPlusJSONResponse) VisitMergeIte
 	return err
 }
 
+type NoteItemRequestObject struct {
+	Org  OrgRef  `json:"org"`
+	Item ItemRef `json:"item"`
+	Body *NoteItemJSONRequestBody
+}
+
+type NoteItemResponseObject interface {
+	VisitNoteItemResponse(w http.ResponseWriter) error
+}
+
+type NoteItem202JSONResponse NoteReceipt
+
+func (response NoteItem202JSONResponse) VisitNoteItemResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type NoteItemdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response NoteItemdefaultApplicationProblemPlusJSONResponse) VisitNoteItemResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type RejectItemRequestObject struct {
 	Org  OrgRef  `json:"org"`
 	Item ItemRef `json:"item"`
@@ -18519,6 +18877,9 @@ type StrictServerInterface interface {
 	// MergeItem Merge the item's pull request, then approve it
 	// (POST /v1/orgs/{org}/items/{item}/merge)
 	MergeItem(ctx context.Context, request MergeItemRequestObject) (MergeItemResponseObject, error)
+	// NoteItem Leave a note for the agents working an item
+	// (POST /v1/orgs/{org}/items/{item}/notes)
+	NoteItem(ctx context.Context, request NoteItemRequestObject) (NoteItemResponseObject, error)
 	// RejectItem Reject an item waiting for a human; it goes back for rework with the reason
 	// (POST /v1/orgs/{org}/items/{item}/reject)
 	RejectItem(ctx context.Context, request RejectItemRequestObject) (RejectItemResponseObject, error)
@@ -19934,6 +20295,40 @@ func (sh *strictHandler) MergeItem(w http.ResponseWriter, r *http.Request, org O
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(MergeItemResponseObject); ok {
 		if err := validResponse.VisitMergeItemResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// NoteItem operation middleware
+func (sh *strictHandler) NoteItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
+	var request NoteItemRequestObject
+
+	request.Org = org
+	request.Item = item
+
+	var body NoteItemJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.NoteItem(ctx, request.(NoteItemRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "NoteItem")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(NoteItemResponseObject); ok {
+		if err := validResponse.VisitNoteItemResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

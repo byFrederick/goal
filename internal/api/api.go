@@ -57,6 +57,7 @@ type Engine interface {
 	Reject(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Retry(ctx context.Context, id domain.ItemID, by domain.Actor) (domain.Item, error)
 	Merge(ctx context.Context, id domain.ItemID, by domain.Actor, method string) (domain.Item, error)
+	Note(ctx context.Context, id domain.ItemID, by domain.Actor, text string) (domain.Event, error)
 }
 
 // Items reads items, their history and runs, the leases on them, a factory's flow, an item's
@@ -452,7 +453,7 @@ func problemOf(err error) gen.Problem {
 
 		return p
 	case errors.Is(err, domain.ErrInvalid), errors.Is(err, engine.ErrNotWaitingHuman), errors.Is(err, engine.ErrNotBlocked),
-		errors.Is(err, engine.ErrNotMergeStep), errors.Is(err, ports.ErrNotMergeable):
+		errors.Is(err, engine.ErrNotMergeStep), errors.Is(err, ports.ErrNotMergeable), errors.Is(err, engine.ErrItemClosed):
 		p := detailed(http.StatusConflict, err)
 		p.Code = optional(problemCode(err))
 

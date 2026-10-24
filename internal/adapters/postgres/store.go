@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -530,6 +531,68 @@ func (s *Store) AppendEvents(ctx context.Context, events ...domain.Event) error 
 	}
 
 	return nil
+}
+
+// AppendNote implements ports.Store: the item is locked first, so a note never lands on an
+// item a concurrent transition just closed.
+func (s *Store) AppendNote(ctx context.Context, e domain.Event, by domain.Actor) (domain.Event, error) {
+	row, err := eventRow(e)
+	if err != nil {
+		return domain.Event{}, err
+	}
+
+	var out domain.Event
+
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		it, err := q.LockItem(ctx, row.ItemID)
+		if notFound(err) {
+			return fmt.Errorf("item %s: %w", e.ItemID, ports.ErrNotFound)
+		}
+
+		if err != nil {
+			return fmt.Errorf("lock item: %w", err)
+		}
+
+		if state := domain.ItemState(it.State); state == domain.StateDone || state == domain.StateCancelled {
+			return fmt.Errorf("item %s is %s: %w", e.ItemID, state, ports.ErrConflict)
+		}
+
+		ev, err := q.InsertNote(ctx, db.InsertNoteParams(row))
+		if err != nil {
+			return err
+		}
+
+		if out, err = eventFrom(ev); err != nil {
+			return err
+		}
+
+		text, _ := e.Data["text"].(string)
+
+		return appendAudit(ctx, q, domain.AuditEntry{
+			At: e.At, Actor: by, Action: domain.AuditItemNoted, TargetKind: domain.AuditTargetItem, TargetID: string(e.ItemID),
+			FactoryID: e.FactoryID, Data: map[string]any{"length": utf8.RuneCountInString(text)},
+		})
+	})
+	if err != nil {
+		return domain.Event{}, fmt.Errorf("note on item %s: %w", e.ItemID, err)
+	}
+
+	return out, nil
+}
+
+// NotesSinceLastRun implements ports.Store.
+func (s *Store) NotesSinceLastRun(ctx context.Context, item domain.ItemID) ([]domain.Event, error) {
+	uid, err := parseID("item", string(item))
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.ItemEvent, error) { return q.NotesSinceLastRun(ctx, uid) })
+	if err != nil {
+		return nil, fmt.Errorf("notes of item %s: %w", item, err)
+	}
+
+	return convertAll(rows, eventFrom)
 }
 
 // ItemEvents implements ports.Store.

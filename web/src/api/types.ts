@@ -51,6 +51,7 @@ export type {
   NewFactoryRequest,
   NewItem,
   NewOrg,
+  NoteReceipt,
   Org,
   OrgAttention,
   OrgDeleted,

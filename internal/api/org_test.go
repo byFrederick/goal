@@ -257,6 +257,7 @@ var probes = map[string]probe{
 	"rejectItem":         {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/reject", body: `{"reason":"no"}`, org: testOrg, factory: acmeID},
 	"retryItem":          {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/retry", org: testOrg, factory: acmeID},
 	"mergeItem":          {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/merge", org: testOrg, factory: acmeID},
+	"noteItem":           {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/notes", body: `{"text":"hi"}`, org: testOrg, factory: acmeID},
 	"listItemRuns":       {method: http.MethodGet, path: "/v1/orgs/acme/items/acme%231/runs", org: testOrg, factory: acmeID},
 	// No run exists here; TestAPI_RunsOfAnItem checks that the run resolver passes the seam with its factory.
 	"getRun":         {method: http.MethodGet, path: "/v1/orgs/acme/runs/00000000-0000-7000-8000-ffffffffffff", org: testOrg},

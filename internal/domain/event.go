@@ -32,6 +32,17 @@ const (
 	// EventUsage is a running agent's report of one turn's token usage; a run's usage events
 	// count its turns so far.
 	EventUsage EventKind = "usage"
+	// EventNote is a person's note for the agents working the item; data text and actor (ref).
+	// The next run's brief carries it.
+	EventNote EventKind = "note"
+)
+
+// Audit of items.
+const (
+	// AuditItemNoted is a note left on an item; its data is the note's length, never its text.
+	AuditItemNoted = "item.noted"
+	// AuditTargetItem is the target kind of entries about an item.
+	AuditTargetItem = "item"
 )
 
 // ActorEngine is the actor of events the engine writes on its own.

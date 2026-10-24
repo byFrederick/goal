@@ -340,6 +340,35 @@ test('the trace heads each run with its agent copy, model, turns, cost and versi
   await expectNoHorizontalScroll(page);
 });
 
+test('leave a note for the agent: it will be in the next run', async ({ page }) => {
+  await page.goto('/o/acme/f/goal/items/8');
+  await expect(page.getByRole('heading', { level: 1, name: 'Worker: report usage per message' })).toBeVisible();
+
+  // One composer per layout: in the trace from 720 px, at the end of the page on a phone.
+  const field = page.getByLabel('Note to the builder').filter({ visible: true });
+  await expect(field).toHaveCount(1);
+  await field.fill('Also report the cache tokens.');
+  await page
+    .getByRole('button', { name: /^Send( note)?$/ })
+    .filter({ visible: true })
+    .click();
+
+  await expect(page.getByText('Will be in the next run')).toBeVisible();
+  await expect(field).toHaveValue('');
+  await expectAccessible(page);
+
+  await showTrace(page);
+  const trace = page.getByRole('region', { name: 'Trace' });
+  await expect(trace.getByText('Local user left a note for the next run')).toBeVisible();
+  await expect(trace.getByText('Also report the cache tokens.')).toBeVisible();
+});
+
+test('a done item takes no notes', async ({ page }) => {
+  await page.goto('/o/acme/f/goal/items/4');
+  await expect(page.getByText('At Done', { exact: true })).toBeVisible();
+  await expect(page.getByLabel(/^Note to the/)).toHaveCount(0);
+});
+
 test('the board updates live when an item moves elsewhere', async ({ page, request }) => {
   test.skip(isPhone(page), 'the columns are the desktop board');
   await page.goto('/o/acme/f/goal/board');

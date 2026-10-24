@@ -303,3 +303,43 @@ func (s *Store) recordAndon(ctx context.Context, t *testing.T, f domain.FactoryI
 		t.Fatal(err)
 	}
 }
+
+// A note is audited in its transaction, by its length: the text stays on the item only.
+func TestStore_NoteIsAuditedByLength(t *testing.T) {
+	t.Parallel()
+
+	s := New(newTestPool(t))
+	ctx := domain.WithOrg(t.Context(), newOrgID(t, s))
+	f := saveFactory(ctx, t, s)
+
+	it, err := s.CreateItem(ctx, domain.NewItem{
+		FactoryID: f, Type: "task", Title: "an item", Station: stWork, State: domain.StateQueued, Class: domain.ClassStandard,
+		CreatedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = s.AppendNote(ctx, domain.Event{
+		FactoryID: f, ItemID: it.ID, At: time.Now(), Kind: domain.EventNote, Station: stWork, Actor: domain.LocalUser.Name,
+		Data: map[string]any{"text": "Check the pool. ✓", "actor": domain.LocalUser.Ref()},
+	}, domain.LocalUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := s.AuditLog(ctx, ports.AuditQuery{Action: domain.AuditItemNoted, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) != 1 {
+		t.Fatalf("item.noted entries = %+v, want one", entries)
+	}
+
+	e := entries[0]
+	if e.TargetKind != domain.AuditTargetItem || e.TargetID != string(it.ID) || e.FactoryID != f || e.Actor != domain.LocalUser ||
+		e.Data["length"] != float64(17) || len(e.Data) != 1 {
+		t.Errorf("audit entry %+v, want the item, the local user and only the note's length (17)", e)
+	}
+}

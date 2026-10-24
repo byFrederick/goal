@@ -301,6 +301,7 @@ var describers = map[string]func(gen.Event) string{
 		return fmt.Sprintf("check `%s` failed (exit %v)", str(e, "command"), e.Data["exit_code"])
 	},
 	"approved":        func(e gen.Event) string { return "approved by " + e.Actor },
+	"note":            func(e gen.Event) string { return "note from " + e.Actor + ": " + cut(oneLine(str(e, "text")), 300) },
 	"contract_failed": withReason,
 	"blocked":         withReason,
 	"rejected":        withReason,
@@ -388,6 +389,8 @@ const (
 	verbReject  = "reject"
 	verbRetry   = "retry"
 	verbMerge   = "merge"
+	// verbNote leaves a note for the agents; not a decision.
+	verbNote = "note"
 )
 
 // decide acts on an item: goal approve <item>; goal reject <item> --reason "..."; goal retry
@@ -420,6 +423,42 @@ func decide(ctx context.Context, out *printer, getenv func(string) string, verb 
 	}
 
 	out.printf("✓ %s %s; now %s at %s\n", done[verb], it.Ref, it.State, it.Station)
+
+	return nil
+}
+
+// noteItem leaves the local user's note for the agents working an item: goal note <item>
+// "<text>" [--factory F]. goald records it; the item's next run reads it in its brief.
+func noteItem(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs := newFlags(verbNote)
+	factory := fs.String("factory", "", "the factory of a bare item number")
+	org := addOrgFlag(fs)
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 2 || strings.TrimSpace(pos[1]) == "" {
+		return errUsage
+	}
+
+	c, err := connect(ctx, getenv, *org)
+	if err != nil {
+		return err
+	}
+
+	ref, err := itemRef(ctx, c, pos[0], *factory)
+	if err != nil {
+		return err
+	}
+
+	res, err := c.NoteItemWithResponse(ctx, c.org, ref, gen.NewNote{Text: pos[1]})
+	if err != nil {
+		return apiDown(err)
+	}
+
+	if res.JSON202 == nil {
+		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+
+	out.printf("✓ note left on %s; the next run reads it\n", ref)
 
 	return nil
 }

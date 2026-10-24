@@ -102,6 +102,16 @@ type Store interface {
 	// AppendEvents appends events that come with no state change.
 	AppendEvents(ctx context.Context, events ...domain.Event) error
 
+	// AppendNote appends e, a person's note (kind note), to an item that is neither done nor
+	// cancelled, with the audit entry item.noted by `by` (the note's length, never its text), and
+	// returns it with its id. It returns ErrConflict when the item is done or cancelled and
+	// ErrNotFound when there is no such item.
+	AppendNote(ctx context.Context, e domain.Event, by domain.Actor) (domain.Event, error)
+
+	// NotesSinceLastRun returns an item's notes appended after its latest run_started event (every
+	// note before its first run), in append order: what the next run's brief carries.
+	NotesSinceLastRun(ctx context.Context, item domain.ItemID) ([]domain.Event, error)
+
 	// ItemEvents returns up to limit of an item's events with an id greater than after, in
 	// append order (ascending id). An unknown item has no events; an id no item could have is
 	// ErrNotFound.

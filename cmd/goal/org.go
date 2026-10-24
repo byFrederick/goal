@@ -126,6 +126,9 @@ func connect(ctx context.Context, getenv func(string) string, orgFlag string) (o
 	return orgClient{ClientWithResponses: c, org: org}, nil
 }
 
+// envOrg names the organization commands act in, after --org.
+const envOrg = "GOAL_ORG"
+
 // resolveOrg finds the organization a command acts in: --org, then GOAL_ORG, then org in the
 // config file, then the install's only organization. Otherwise it fails, listing them.
 func resolveOrg(ctx context.Context, c *gen.ClientWithResponses, getenv func(string) string, orgFlag string) (string, error) {
@@ -133,7 +136,7 @@ func resolveOrg(ctx context.Context, c *gen.ClientWithResponses, getenv func(str
 		return org, nil
 	}
 
-	if org := strings.TrimSpace(getenv("GOAL_ORG")); org != "" {
+	if org := strings.TrimSpace(getenv(envOrg)); org != "" {
 		return org, nil
 	}
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/engine"
 	"github.com/byFrederick/goal/internal/ports"
 )
 
@@ -221,6 +222,8 @@ func problemCode(err error) string {
 		return "slug-taken"
 	case errors.Is(err, errConfirmMismatch):
 		return "confirmation-mismatch"
+	case errors.Is(err, engine.ErrItemClosed):
+		return "item-closed"
 	default:
 		return ""
 	}

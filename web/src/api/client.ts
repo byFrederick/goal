@@ -27,6 +27,7 @@ import type {
   Metrics,
   NewItem,
   NewOrg,
+  NoteReceipt,
   Org,
   OrgAttention,
   OrgDeleted,
@@ -182,6 +183,11 @@ export function listItemEvents(
 /** An item's agent runs, oldest first (at most 200; `truncated` says there are more). */
 export function listItemRuns(org: string, item: string, signal?: AbortSignal): Promise<RunList> {
   return unwrap(goal.GET(orgPath('/items/{item}/runs'), { params: { path: { org, item } }, ...cancel(signal) }));
+}
+
+/** Leaves the local user's note for the agents working an item; the receipt says when one reads it. */
+export function noteItem(org: string, item: string, text: string): Promise<NoteReceipt> {
+  return unwrap(goal.POST(orgPath('/items/{item}/notes'), { params: { path: { org, item } }, body: { text } }));
 }
 
 export function submitItem(org: string, factory: string, item: NewItem): Promise<Item> {

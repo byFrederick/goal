@@ -40,6 +40,8 @@ const usage = `usage:
   goal retry <item>                               send a blocked item back to its station's queue
   goal merge <item>                               merge the item's pull request, then approve it
                                                   (at a station with action: merge)
+  goal note <item> "<text>"                       leave a note for the agents: the item's next run
+                                                  reads it
   goal factory validate <dir> ...                 validate local factory folders (alias: goal validate)
   goal factory push <dir>                         validate, then upload to
                                                   orgs/<org-id>/factories/<metadata.id>/
@@ -92,12 +94,22 @@ func main() {
 	}
 }
 
+// itemCommand is a command on one work item.
+type itemCommand func(ctx context.Context, out *printer, getenv func(string) string, args []string) error
+
 func run(ctx context.Context, args []string, out *printer, getenv func(string) string, readBuildInfo buildInfoFunc) error {
 	if len(args) == 0 {
 		return errUsage
 	}
 
-	switch cmd, rest := args[0], args[1:]; cmd {
+	cmd, rest := args[0], args[1:]
+
+	// The commands on one item, by name.
+	if onItem, ok := map[string]itemCommand{"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem}[cmd]; ok {
+		return onItem(ctx, out, getenv, rest)
+	}
+
+	switch cmd {
 	case "version":
 		return version(out, readBuildInfo, rest)
 	case "validate":
@@ -106,12 +118,6 @@ func run(ctx context.Context, args []string, out *printer, getenv func(string) s
 		return factory(ctx, out, getenv, rest)
 	case "up":
 		return up(ctx, out, getenv, rest)
-	case "run":
-		return runItem(ctx, out, getenv, rest)
-	case "follow":
-		return followItem(ctx, out, getenv, rest)
-	case "item":
-		return showItem(ctx, out, getenv, rest)
 	case verbApprove, verbReject, verbRetry, verbMerge:
 		return decide(ctx, out, getenv, cmd, rest)
 	case "org":

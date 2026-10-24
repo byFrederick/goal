@@ -50,12 +50,14 @@ func NewTenancy(now func() time.Time) *Tenancy {
 }
 
 // WithStore links t to the store whose factories and slot caps UpdateOrg and FactorySlots
-// reach, as one PostgreSQL database holds both, and returns t.
+// reach, as one PostgreSQL database holds both, and whose audit entries (notes) t keeps, and
+// returns t.
 func (t *Tenancy) WithStore(s *Store) *Tenancy {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	t.store = s
+	s.auditTo(t)
 
 	return t
 }
