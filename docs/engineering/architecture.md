@@ -38,7 +38,7 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object s
 | `Store` | Items, events, leases, factories, runs; transactions | `postgres` |
 | `Runner` | Start, watch and stop one agent task | `docker` (laptop), `ecs` (AWS); a Vercel Sandbox adapter is possible later |
 | `Secrets` | Resolve `env:`, ARN and (later) `op://` references at the edge | `envsecrets` (now), `awssecrets` (AWS), `onepassword` (last phase) |
-| `ObjectStore` | Versioned objects in one bucket: factory definitions now, knowledge documents from phase 3 | `s3store` (Amazon S3 on AWS, RustFS on a laptop) |
+| `ObjectStore` | Versioned objects in one bucket: factory definitions now, knowledge documents later (unscheduled) | `s3store` (Amazon S3 on AWS, RustFS on a laptop) |
 | `Knowledge` | `kb_search`, `kb_write`, sync | `bedrockkb` |
 | `ModelAuth` | Credentials for the model per factory | subscription token (laptop only), API key, Bedrock |
 | `Clock` | Time, for deterministic tests | `sysclock`, fake |
@@ -103,7 +103,7 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object s
 
 An item card is `{id, ref, number, title, type, lane, station, state, class_of_service, rework_count, cost_usd, created_at, updated_at, age_seconds, agent, pr_url}`: `agent` is the lease holder's agent while the item is in progress, `pr_url` the `pull_request` field of the item's latest station output, `age_seconds` the time since creation (created to done for a done item).
 
-The board's `constraint` is the agent station with the most work per slot right now, `(waiting + in_progress) / min(agents, wip)`, ties to the upstream station, null when no agent station has work. It is a snapshot heuristic; constraint detection over time (phase 4) replaces it. Metrics count items that reached done in the window (the last N UTC calendar days, today included, 1d to 90d) and the cost of agent runs started in it; WIP is the items now neither done nor cancelled, the rework rate the share of the items done in the window that were sent back at least once.
+The board's `constraint` is the agent station with the most work per slot right now, `(waiting + in_progress) / min(agents, wip)`, ties to the upstream station, null when no agent station has work. It is a snapshot heuristic; constraint detection over time (later, unscheduled) replaces it. Metrics count items that reached done in the window (the last N UTC calendar days, today included, 1d to 90d) and the cost of agent runs started in it; WIP is the items now neither done nor cancelled, the rework rate the share of the items done in the window that were sent back at least once.
 
 No API authentication yet: `goald` refuses to listen on anything but a loopback address. The CLI (`goal run`, `follow`, `item`, `approve`, `reject`, `retry`, `merge`) uses the generated Go client; a bare item number resolves when exactly one factory has an item with it (`--factory` otherwise). The web UI uses `@goal/api-client` (`packages/api-client`): `createGoalClient(baseUrl)` (openapi-fetch over the generated types) and `subscribe(baseUrl, handlers, factory?)` over the stream.
 
@@ -138,7 +138,7 @@ Definitions are content, not code ([ADR 0005](../adr/0005-factory-definitions-in
 ```
 s3://<bucket>/factories/<factory-id>/
   factory.yaml  agents/  skills/  contracts/  evals/     the definition
-  knowledge/<collection>/                                reserved for the knowledge base (phase 3)
+  knowledge/<collection>/                                reserved for the knowledge base (later, unscheduled)
 ```
 
 - `internal/config` loads a definition from any `fs.FS`; `LoadDir` wraps a local working copy. Paths in `factory.yaml` resolve inside that tree only.

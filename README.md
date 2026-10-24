@@ -19,7 +19,7 @@ queries/               SQL for sqlc (pgx/v5)
 compose.yaml           local PostgreSQL 18 and RustFS (S3-compatible object storage)
 worker/                agent container images (TypeScript, Claude Agent SDK): runtime and dev (Go, task, Terraform, PostgreSQL)
 web/                   UI (React) — phase 2
-terraform/             AWS infrastructure: bucket, KMS, S3 Vectors, one Bedrock KB per factory (phase 3)
+terraform/             AWS infrastructure: bucket, KMS, S3 Vectors, one Bedrock KB per factory (later, unscheduled)
 design-system/         UI rules generated with ui-ux-pro-max, plus the user's overrides (MASTER.md)
 docs/adr/              decisions (0001 stack, 0002 Jonah evals, 0003 hexagonal architecture, 0004 frontend, 0005 definitions in object storage, 0006 workspaces and command checks)
 docs/engineering/      architecture and testing rules
@@ -80,7 +80,7 @@ s3://<bucket>/factories/<factory-id>/
   skills/<name>/SKILL.md
   contracts/*.schema.json
   evals/          evals.yaml, cases/, judges/, fixtures/
-  knowledge/      reserved for the knowledge base (<collection>/<doc>.md); phase 3
+  knowledge/      reserved for the knowledge base (<collection>/<doc>.md); later, unscheduled
 ```
 
 Every push writes new object versions, so a previous definition is restorable by version id. `goal factory push` mirrors a folder to its prefix: changed files are uploaded (`factory.yaml` last), files you removed are deleted, unchanged files keep their version, and `knowledge/` is never touched. The CLI prints the object version of every file it wrote.
@@ -117,7 +117,7 @@ PostgreSQL 18 is the only database: work items, the event log, leases (`FOR UPDA
 
 ## Infrastructure
 
-`terraform/` holds the AWS knowledge layer; knowledge-base provisioning is phase 3.
+`terraform/` holds the AWS knowledge layer; knowledge-base provisioning is later work, not yet scheduled.
 
 ```bash
 cd terraform
