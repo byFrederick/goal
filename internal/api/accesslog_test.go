@@ -109,8 +109,15 @@ func TestAPI_AccessLogNamesThePrincipalNeverItsSecrets(t *testing.T) {
 		}
 	}
 
+	// Paths and query strings are never logged: a device code in the path, an invitation's id in a
+	// query (§11.1 row 14).
+	device := h.request(t, http.MethodGet, "/v1/auth/device/WXYZ2345?next=/invite/inv-0b6f1c9e", "", cookie(ownerToken))
+	if line := logs.accessLine(t, device.header.Get("X-Request-Id")); line["operation"] != "getDeviceRequest" {
+		t.Errorf("device request line = %v; want getDeviceRequest", line)
+	}
+
 	all := logs.String()
-	for _, secret := range []string{ownerToken, freshToken, key.Secret, tok.Secret, "c2lnbmF0dXJl", "@example.com"} {
+	for _, secret := range []string{ownerToken, freshToken, key.Secret, tok.Secret, "c2lnbmF0dXJl", "@example.com", "WXYZ2345", "inv-0b6f1c9e"} {
 		if strings.Contains(all, secret) {
 			t.Errorf("the log holds %q:\n%s", secret, all)
 		}

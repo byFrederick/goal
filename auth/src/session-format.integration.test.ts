@@ -5,7 +5,7 @@
 // token being that raw token, and the shape of auth.session. An upgrade that changes any of it
 // fails here before goald misreads a session.
 import pg from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cliClientId } from './auth.js';
 import { createTestDatabase, type TestDatabase } from './testing/database.js';
 import { harness } from './testing/service.js';
@@ -124,6 +124,28 @@ describe('the device grant', () => {
       headers: { authorization: `Bearer ${accessToken}` },
     });
     expect(((await session.json()) as { user: { email: string } }).user.email).toBe(email);
+  });
+
+  it('expires a code after 10 minutes, approved or not (row 20)', async () => {
+    const s = service('http://127.0.0.1:8080');
+    const code = await s.post('/device/code', { client_id: cliClientId });
+    const { device_code: deviceCode, expires_in: expiresIn } = (await code.json()) as Record<string, string | number>;
+    expect(expiresIn).toBe(600);
+
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(Date.now() + 601_000);
+      const token = await s.post('/device/token', {
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+        device_code: deviceCode,
+        client_id: cliClientId,
+      });
+
+      expect(token.status).toBe(400);
+      expect(await token.json()).toMatchObject({ error: 'expired_token' });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('serves no other client', async () => {

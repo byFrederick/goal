@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -126,5 +129,23 @@ func TestHTTPServer_BoundsReadsAndIdleConnectionsButNotStreams(t *testing.T) {
 
 	if srv.Addr != defaultListen {
 		t.Errorf("addr %s, want the listen address", srv.Addr)
+	}
+}
+
+// Threat model row 36: GOAL_AUTH=none, only ever chosen explicitly from 3-16, says at startup that
+// every request, agents' included, acts as the local user, and looks nothing up.
+func TestAuthentication_NoneWarnsThatEveryRequestIsTheLocalUser(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	identity, err := authentication(t.Context(), settings{Auth: authNone, Listen: "127.0.0.1:8080"}, nil, slog.New(slog.NewTextHandler(&buf, nil)))
+	if err != nil || identity != nil {
+		t.Fatalf("authentication under none = %v, %v; want no identity lookups", identity, err)
+	}
+
+	if log := buf.String(); !strings.Contains(log, "level=WARN") || !strings.Contains(log, "acts as the local user") ||
+		!strings.Contains(log, "agent containers included") {
+		t.Errorf("startup log %q; want the local-user warning", log)
 	}
 }
