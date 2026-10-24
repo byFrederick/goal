@@ -2,13 +2,13 @@ import { Link } from '@tanstack/react-router';
 import { ChevronRight } from 'lucide-react';
 import type { Factory, LeadTimeBridge } from '../../api/types';
 import { useFactoryParams } from '../../shared/factory';
-import { plural } from '../../shared/format';
+import { formatHours, plural } from '../../shared/format';
 import { Bridge, type BridgeRow } from '../../ui/bridge';
 import { SectionCard } from '../../ui/card';
 import { bridgeInsight, stepLabel } from './bridge-words';
 
-/** Hours to one decimal: "6.0 h". */
-const hours = (h: number) => `${h.toFixed(1)} h`;
+/** An axis tick, in hours to one decimal so the scale reads evenly: "6.0 h". */
+const tick = (h: number) => `${h.toFixed(1)} h`;
 /** A target as it was set: "6 h", "6.5 h". */
 const targetHours = (h: number) => `${Number.isInteger(h) ? h : h.toFixed(1)} h`;
 
@@ -50,32 +50,32 @@ export function LeadTimeCard({
   const largest = bridge.steps[0];
   const insight = largest ? bridgeInsight(largest, bridge.constraint, factory.stations) : null;
   const rows: BridgeRow[] = [
-    { key: 'target', label: 'Target', text: hours(target) },
+    { key: 'target', label: 'Target', text: formatHours(target) },
     ...bridge.steps.map((s) => ({
       key: `${s.component}:${s.station ?? ''}`,
       label: stepLabel(s, factory.stations),
-      text: `+${hours(s.hours)}${s.items > 0 ? `, ${plural(s.items, 'item')}` : ''}`,
+      text: `+${formatHours(s.hours)}${s.items > 0 ? `, ${plural(s.items, 'item')}` : ''}`,
     })),
-    { key: 'actual', label: 'Actual', text: hours(actual) },
+    { key: 'actual', label: 'Actual', text: formatHours(actual) },
   ];
-  const summary = `Lead time p85 ${hours(actual)} against a target of ${targetHours(target)}: ${bridge.steps
-    .map((s) => `${stepLabel(s, factory.stations)} +${hours(s.hours)}`)
+  const summary = `Lead time p85 ${formatHours(actual)} against a target of ${targetHours(target)}: ${bridge.steps
+    .map((s) => `${stepLabel(s, factory.stations)} +${formatHours(s.hours)}`)
     .join(', ')}.`;
 
   return (
     <SectionCard
       title="Why lead time is over target"
-      description={`+${hours(gap)} over the ${targetHours(target)} target, p85`}
+      description={`+${formatHours(gap)} over the ${targetHours(target)} target, p85`}
       aside={flow}
       className={className}
     >
       <Bridge
         input={{ target, steps: bridge.steps.map((s, i) => ({ key: rows[i + 1]?.key ?? '', value: s.hours })), actual }}
         rows={rows}
-        formatTick={hours}
+        formatTick={tick}
         summary={summary}
         caption="Lead time from target to actual, p85"
-        columns={['Step', 'Hours']}
+        columns={['Step', 'Time']}
         className="mt-4"
       />
       {insight ? (
@@ -99,5 +99,5 @@ function quietSentence(b: LeadTimeBridge): string {
   const under = b.target_hours - b.actual_p85_hours;
   return under < 0.05
     ? `Lead time is on the ${targetHours(b.target_hours)} target, p85.`
-    : `Lead time is ${hours(under)} under the ${targetHours(b.target_hours)} target, p85.`;
+    : `Lead time is ${formatHours(under)} under the ${targetHours(b.target_hours)} target, p85.`;
 }

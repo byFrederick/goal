@@ -33,19 +33,23 @@ test('the floor shows throughput against last week and its target, and the last 
   await expect(card.getByText(/^\d+\.\d a day$/)).toBeVisible();
   await expect(card.getByText(/vs last week/)).toBeVisible();
   await expect(card.getByRole('meter', { name: /^\d+\.\d a day against a target of 8$/ })).toBeVisible();
-  await expect(card.getByText(/^(\d+(\.\d+)? h|Not enough data)$/)).toBeVisible();
+  await expect(card.getByText(/^(\d+ (s|min|h|d)( \d+ (min|h))?|Not enough data)$/)).toBeVisible();
 
   const weeks = page.getByRole('region', { name: 'Last 12 weeks' });
   await expect(weeks.getByRole('img', { name: /^Throughput by week from .+ Target 8\.$/ })).toBeVisible();
   await expect(weeks.getByRole('table', { name: 'Items finished per day, by week' }).getByRole('row')).toHaveCount(13);
 
   const bridge = page.getByRole('region', { name: 'Why lead time is over target' });
-  await expect(bridge.getByText(/^\+\d+\.\d h over the 6 h target, p85$/)).toBeVisible();
-  await expect(bridge.getByRole('img', { name: /^Lead time p85 \d+\.\d h against a target of 6 h: / })).toBeVisible();
+  // Durations read as on the Item page: "7 h 12 min", never "7.2 h" or "0.0 h".
+  const duration = String.raw`\d+ (s|min|h|d)( \d+ (min|h))?`;
+  await expect(bridge.getByText(new RegExp(`^\\+${duration} over the 6 h target, p85$`))).toBeVisible();
+  await expect(
+    bridge.getByRole('img', { name: new RegExp(`^Lead time p85 ${duration} against a target of 6 h: `) }),
+  ).toBeVisible();
   const steps = bridge.getByRole('table', { name: 'Lead time from target to actual, p85' }).getByRole('row');
   await expect(steps.first()).toContainText('Step');
-  await expect(steps.nth(1)).toContainText('Target6.0 h');
-  await expect(steps.last()).toContainText(/^Actual\d+\.\d h$/);
+  await expect(steps.nth(1)).toContainText('Target6 h');
+  await expect(steps.last()).toContainText(new RegExp(`^Actual${duration}$`));
   await expect(bridge.getByText(/ explains .+ of the gap\.$/)).toBeVisible();
 
   if (isPhone(page)) {

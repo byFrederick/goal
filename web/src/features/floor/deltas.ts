@@ -2,10 +2,10 @@
 // that say whether the change is better or worse (shown with an arrow and the sign, never colour
 // alone), and the sentences under the throughput numeral.
 import type { Metrics } from '../../api/types';
-import { humanize, plural } from '../../shared/format';
+import { formatDuration, humanize, plural } from '../../shared/format';
 
 export interface Delta {
-  /** Signed, with its unit: "−0.8", "+1.4 h", "−4 pts", or "Same". */
+  /** Signed, with its unit: "−0.8", "+1 h 24 min", "−4 pts", or "Same". */
   text: string;
   direction: 'up' | 'down' | 'flat';
   tone: 'better' | 'worse' | 'flat';
@@ -28,10 +28,10 @@ export function throughputDelta(perDay: number, previous: number): Delta {
   return delta(perDay - previous, 1, (n) => n.toFixed(1), true);
 }
 
-/** Lead time p85 against the previous range, in hours: longer is worse. */
+/** Lead time p85 against the previous range (hours), to the second: longer is worse. */
 export function leadTimeDelta(hours: number | null | undefined, previous: number | null | undefined): Delta | null {
   if (hours == null || previous == null) return null;
-  return delta(hours - previous, 1, (n) => `${n.toFixed(1)} h`, false);
+  return delta((hours - previous) * 3600, 0, (s) => formatDuration(s * 1000), false);
 }
 
 /** Rework rate against the previous range, in percentage points: more is worse. */

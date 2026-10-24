@@ -13,9 +13,12 @@ describe('throughputDelta', () => {
 });
 
 describe('leadTimeDelta', () => {
-  it('is worse when the p85 grows, in hours', () => {
-    expect(leadTimeDelta(9.2, 7.8)).toEqual({ text: '+1.4 h', direction: 'up', tone: 'worse' });
-    expect(leadTimeDelta(5, 6.3)).toEqual({ text: '−1.3 h', direction: 'down', tone: 'better' });
+  it('is worse when the p85 grows, said as the Item page says durations', () => {
+    expect(leadTimeDelta(9.2, 7.8)).toEqual({ text: '+1 h 24 min', direction: 'up', tone: 'worse' });
+    expect(leadTimeDelta(5, 6.3)).toEqual({ text: '−1 h 18 min', direction: 'down', tone: 'better' });
+    // Minutes-long lead times move by minutes and seconds, not by "0.0 h".
+    expect(leadTimeDelta(114 / 3600, 54 / 3600)).toEqual({ text: '+1 min', direction: 'up', tone: 'worse' });
+    expect(leadTimeDelta(40 / 3600, 10 / 3600)).toEqual({ text: '+30 s', direction: 'up', tone: 'worse' });
   });
 
   it('has no delta without both ranges', () => {

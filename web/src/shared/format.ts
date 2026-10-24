@@ -37,8 +37,9 @@ export function formatUsdCompact(n: number): string {
   return cents % 100 === 0 ? usdWhole.format(cents / 100) : usd.format(n);
 }
 
+/** A duration given in hours, said as formatDuration says it: "1 min", "1 h 30 min", "2 d 2 h". */
 export function formatHours(h: number): string {
-  return `${h < 10 ? h.toFixed(1) : Math.round(h)} h`;
+  return formatDuration(h * 3_600_000);
 }
 
 export function formatPercent(rate: number): string {
