@@ -57,19 +57,6 @@ describe('buildTrace', () => {
     expect(check).toMatchObject({ kind: 'check', passed: false, command: 'task lint', exitCode: 1 });
   });
 
-  it('records the stations an item visited with when it entered and left each', () => {
-    const trace = buildTrace([
-      ev('created', {}, { station: 'inbox', at: '2026-10-23T10:00:00Z' }),
-      ev('moved', { from: 'inbox', to: 'spec' }, { at: '2026-10-23T10:05:00Z' }),
-      ev('moved', { from: 'spec', to: 'approve-spec' }, { at: '2026-10-23T11:00:00Z' }),
-    ]);
-    expect(trace.visits).toEqual([
-      { station: 'inbox', enteredAt: '2026-10-23T10:00:00Z', leftAt: '2026-10-23T10:05:00Z' },
-      { station: 'spec', enteredAt: '2026-10-23T10:05:00Z', leftAt: '2026-10-23T11:00:00Z' },
-      { station: 'approve-spec', enteredAt: '2026-10-23T11:00:00Z' },
-    ]);
-  });
-
   it('keeps the reason a reviewer or a human sent work back, and marks it as rework', () => {
     const trace = buildTrace([
       ev('gate_rejected', { reason: 'Add a test for the TTL' }, { actor: 'reviewer' }),

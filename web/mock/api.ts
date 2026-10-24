@@ -19,6 +19,7 @@ import type {
   Item,
   ItemCard,
   ItemEvent,
+  ItemFlow,
   ItemPage,
   Org,
   OrgAttention,
@@ -26,7 +27,7 @@ import type {
   RunList,
   StreamEvent,
 } from '@goal/api-client';
-import { type MockItem, type MockSlots, type MockState, seed } from './fixtures.ts';
+import { type MockItem, type MockSlots, type MockState, seed, trackSpan } from './fixtures.ts';
 
 type Next = (err?: unknown) => void;
 
@@ -111,8 +112,53 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
 
   const full = (it: MockItem): Item => {
     const factory = state.factories.find((f) => f.name === it.factory);
-    const { agent: _agent, factory: _factory, pr_url: _pr, lane, ...rest } = it;
+    const { agent: _agent, factory: _factory, pr_url: _pr, spans: _spans, lane, ...rest } = it;
     return { ...rest, ...(lane ? { lane } : {}), ref: ref(it), factory_id: factory?.id ?? '' };
+  };
+
+  /** Item.flow, as GET of one item has it: spans, target, send-back station, budget, run in progress. */
+  const flowOf = (it: MockItem): ItemFlow => {
+    const stations = stationsOf(it);
+    const index = stations.findIndex((s) => s.id === it.station);
+    const config = state.stations[it.factory]?.[it.station];
+    const flow = state.flow[it.factory];
+    const open = it.state !== 'done' && it.state !== 'cancelled';
+    const back = stations
+      .slice(0, Math.max(0, index))
+      .reverse()
+      .find((s) => s.kind === 'agent');
+    const target = it.class_of_service === 'expedite' ? flow?.expedite_lead_time : flow?.lead_time;
+
+    // The run in progress: the item's last run without a run_finished event, under its agent.
+    let current: ItemFlow['current_run'] = null;
+    if (it.state === 'in_progress' && it.agent) {
+      const events = state.events.filter((e) => e.item_id === it.id);
+      const started = events.findLast((e) => e.kind === 'run_started' && e.run_id);
+      const runId = started?.run_id;
+      if (started && runId && !events.some((e) => e.run_id === runId && e.kind === 'run_finished')) {
+        const model = events.find((e) => e.run_id === runId && e.kind === 'agent_started')?.data.model;
+        const slot = events.findLast((e) => e.kind === 'claimed')?.data.slot;
+        current = {
+          id: runId,
+          agent: started.actor,
+          slot: (typeof slot === 'number' ? slot : 0) + 1,
+          model: typeof model === 'string' ? model : 'claude-sonnet-5-5',
+          // The mock's agents report no usage; each tool call stands for a turn.
+          turn: events.filter((e) => e.run_id === runId && e.kind === 'tool_call').length,
+          started_at: started.at,
+          output_contract: config?.output ?? null,
+          checks: config?.checks ?? [],
+        };
+      }
+    }
+
+    return {
+      spans: it.spans.map((s) => ({ ...s })),
+      target_seconds: target ?? null,
+      rework_target: open ? (back?.id ?? null) : null,
+      budget: { per_item_usd: flow?.per_item_usd ?? null, max_turns_per_task: flow?.max_turns_per_task ?? null },
+      current_run: current,
+    };
   };
 
   const findOrg = (key: string) => state.orgs.find((o) => o.slug === key || o.id === key);
@@ -216,6 +262,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const event: ItemEvent = { id: state.nextEventId++, item_id: it.id, at, kind, station: it.station, actor, data };
     state.events.push(event);
     it.updated_at = at;
+    trackSpan(it.spans, it, at);
 
     const factory = findFactory(it.factory);
     const payload: StreamEvent = {
@@ -533,6 +580,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
           updated_at: now,
           agent: null,
           pr_url: null,
+          spans: [],
         };
         state.items.push(it);
         emit(it, 'created', 'engine');
@@ -556,7 +604,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (!it) return problem(res, 404, 'Item not found', decodeURIComponent(m[1] ?? ''));
     const action = m[2];
 
-    if (!action && method === 'GET') return json(res, 200, full(it));
+    if (!action && method === 'GET') return json(res, 200, { ...full(it), flow: flowOf(it) });
     if (action === 'events' && method === 'GET') {
       const after = Number(url.searchParams.get('after') ?? 0);
       const limit = Math.min(1000, Number(url.searchParams.get('limit') ?? 200));
@@ -608,8 +656,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         .slice(0, index)
         .reverse()
         .find((s) => s.kind === 'agent');
-      it.rework_count += 1;
       emit(it, 'rejected', by, { reason });
+      it.rework_count += 1;
       moveTo(it, back?.id ?? it.station, by);
       return json(res, 200, full(it));
     }

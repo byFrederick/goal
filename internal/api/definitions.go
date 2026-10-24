@@ -328,7 +328,9 @@ func factoryOut(rec ports.FactoryRecord, f *config.Factory) gen.Factory {
 	}
 
 	for _, st := range f.Spec.Board.Stations {
-		out.Stations = append(out.Stations, gen.Station{Id: st.ID, Kind: gen.StationKind(st.Kind), Action: actionOf(st.Action)})
+		out.Stations = append(out.Stations, gen.Station{
+			Id: st.ID, Kind: gen.StationKind(st.Kind), Action: actionOf(st.Action), Description: optional(st.Description),
+		})
 	}
 
 	return out

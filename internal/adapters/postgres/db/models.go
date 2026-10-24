@@ -134,6 +134,21 @@ type ItemEvent struct {
 	OrgID     uuid.UUID
 }
 
+type ItemSpan struct {
+	ID             int64
+	OrgID          uuid.UUID
+	FactoryID      uuid.UUID
+	ItemID         uuid.UUID
+	Type           string
+	ClassOfService string
+	Station        string
+	State          string
+	ReworkRound    int32
+	ReworkBy       *string
+	EnteredAt      time.Time
+	LeftAt         *time.Time
+}
+
 type Lease struct {
 	ItemID      uuid.UUID
 	FactoryID   uuid.UUID

@@ -10,6 +10,7 @@ import type {
   ClassOfService,
   Factory,
   ItemEvent,
+  ItemSpan,
   ItemState,
   Metrics,
   Org,
@@ -37,11 +38,56 @@ export interface MockItem {
   done_at?: string;
   agent: string | null;
   pr_url: string | null;
+  /** Its spans at stations, kept as goald's trigger keeps item_spans (trackSpan). */
+  spans: ItemSpan[];
 }
 
 export interface MockStationConfig {
   agents: string[];
   wip_limit: number | null;
+  /** The contract the station's output must satisfy, and what it checks on submit. */
+  output?: string;
+  checks?: string[];
+}
+
+/** A factory's lead-time targets and task budget (flow.targets, runtime.budget), in seconds and dollars. */
+export interface MockFlow {
+  lead_time: number | null;
+  expedite_lead_time: number | null;
+  per_item_usd: number | null;
+  max_turns_per_task: number | null;
+}
+
+/** Where an item stands, as a span records it. */
+interface Position {
+  station: string;
+  state: ItemState;
+  rework_count: number;
+}
+
+/**
+ * Keeps an item's spans as goald's work_items trigger does: a change of station, state or rework
+ * count closes the open span at `at` and opens the next one, none once the item is done or
+ * cancelled; a new rework round is by the station the item left.
+ */
+export function trackSpan(spans: ItemSpan[], pos: Position, at: string) {
+  const open = spans.findLast((s) => s.left_at === null);
+  if (open && open.station === pos.station && open.state === pos.state && open.rework_round === pos.rework_count)
+    return;
+  let by: string | null = null;
+  if (open) {
+    open.left_at = at;
+    by = pos.rework_count > open.rework_round ? open.station : open.rework_by;
+  }
+  if (pos.state === 'done' || pos.state === 'cancelled') return;
+  spans.push({
+    station: pos.station,
+    state: pos.state,
+    rework_round: pos.rework_count,
+    rework_by: by,
+    entered_at: at,
+    left_at: null,
+  });
 }
 
 /** An organization's slot caps (null: no cap), by factory id for the factories. */
@@ -63,6 +109,8 @@ export interface MockState {
   metrics: Record<string, Metrics>;
   /** The open andon pull of each factory, by name; absent or null while its line runs. */
   andon: Record<string, AndonPull | null>;
+  /** Each factory's targets and task budget, by name; absent without any. */
+  flow: Record<string, MockFlow>;
   /** Each factory's runtime.budget.weeklyUsd, by name; absent or null without one. */
   weeklyBudget: Record<string, number | null>;
   /** Items done per day over the 7 days before the metrics window, by name. */
@@ -177,11 +225,11 @@ const sreFactory: Factory = {
   description: 'Triage, investigate and document production issues and SRE toil.',
   work_types: ['incident', 'change', 'toil'],
   stations: [
-    { id: 'inbox', kind: 'queue' },
-    { id: 'triage', kind: 'agent' },
-    { id: 'investigate', kind: 'agent' },
-    { id: 'approve', kind: 'human' },
-    { id: 'done', kind: 'done' },
+    { id: 'inbox', kind: 'queue', description: 'Alerts and requests arrive here' },
+    { id: 'triage', kind: 'agent', description: 'Sorts by severity and size' },
+    { id: 'investigate', kind: 'agent', description: 'Finds the cause, with evidence' },
+    { id: 'approve', kind: 'human', description: 'You' },
+    { id: 'done', kind: 'done', description: 'Closed' },
   ],
   current: published('019a1c00-0000-7000-8000-0000000000e3', 3, '2026-10-12T10:00:00Z'),
   draft: null,
@@ -832,6 +880,7 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
       updated_at: new Date(updated).toISOString(),
       agent: seed.agent ?? null,
       pr_url: seed.pr ? `${repo}/pull/${seed.pr}` : null,
+      spans: [],
     };
 
     if (seed.state === 'done') item.done_at = item.updated_at;
@@ -842,7 +891,20 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
     const dt = ticks > 1 ? (updated - created) / (ticks - 1) : 0;
     let at = created;
     let station = first;
+    const stationKinds = new Map(factory.stations.map((s) => [s.id, s.kind]));
+    const place = (kind: string): ItemState | undefined => {
+      if (kind === 'created' || kind === 'moved') {
+        const k = stationKinds.get(station);
+        return k === 'human' ? 'waiting_human' : k === 'done' ? 'done' : 'queued';
+      }
+      return ({ claimed: 'in_progress', waiting_human: 'waiting_human', blocked: 'blocked', done: 'done' } as const)[
+        kind as 'claimed'
+      ];
+    };
     const push = (kind: string, actor: string, data: Record<string, unknown> = {}, run?: string) => {
+      const placed = place(kind);
+      if (placed)
+        trackSpan(item.spans, { station, state: placed, rework_count: 0 }, new Date(Math.round(at)).toISOString());
       state.events.push({
         id: state.nextEventId++,
         item_id: id,
@@ -921,6 +983,8 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
       }
     }
     item.cost_usd = Math.round(item.cost_usd * 100) / 100;
+    // The history is illustrative; the item's row is the truth for where it stands now.
+    trackSpan(item.spans, item, item.updated_at);
     state.items.push(item);
   }
 }
@@ -943,9 +1007,9 @@ export function seed(now = Date.now()): MockState {
     stations: {
       goal: {
         inbox: { agents: [], wip_limit: null },
-        spec: { agents: ['spec-writer'], wip_limit: 2 },
+        spec: { agents: ['spec-writer'], wip_limit: 2, output: 'spec', checks: ['schema'] },
         'approve-spec': { agents: [], wip_limit: null },
-        build: { agents: ['builder-1', 'builder-2'], wip_limit: 2 },
+        build: { agents: ['builder-1', 'builder-2'], wip_limit: 2, output: 'change', checks: ['schema', 'task check'] },
         review: { agents: ['reviewer'], wip_limit: 1 },
         merge: { agents: [], wip_limit: null },
         done: { agents: [], wip_limit: null },
@@ -953,7 +1017,12 @@ export function seed(now = Date.now()): MockState {
       sre: {
         inbox: { agents: [], wip_limit: null },
         triage: { agents: ['triager'], wip_limit: 4 },
-        investigate: { agents: ['investigator'], wip_limit: 3 },
+        investigate: {
+          agents: ['investigator'],
+          wip_limit: 3,
+          output: 'diagnosis',
+          checks: ['schema', '2+ evidence links'],
+        },
         approve: { agents: [], wip_limit: null },
         done: { agents: [], wip_limit: null },
       },
@@ -977,6 +1046,10 @@ export function seed(now = Date.now()): MockState {
         pulled_by: 'user:local',
         pulled_at: new Date(now - 35 * 60_000).toISOString(),
       },
+    },
+    flow: {
+      goal: { lead_time: 6 * 3600, expedite_lead_time: 3600, per_item_usd: 4, max_turns_per_task: 80 },
+      sre: { lead_time: 4 * 3600, expedite_lead_time: 3600, per_item_usd: 2, max_turns_per_task: 40 },
     },
     weeklyBudget: { goal: 60, sre: 20 },
     previousPerDay: { goal: 1.6, sre: 0.4 },

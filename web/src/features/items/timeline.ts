@@ -62,15 +62,8 @@ export interface NoteEntry {
 
 export type Entry = RunEntry | CheckEntry | NoteEntry;
 
-export interface StationVisit {
-  station: string;
-  enteredAt: string;
-  leftAt?: string;
-}
-
 export interface Trace {
   entries: Entry[];
-  visits: StationVisit[];
   costUsd: number;
   turns: number;
   model?: string;
@@ -169,26 +162,13 @@ function applyRecord(run: RunEntry, record: Run) {
 export function buildTrace(events: readonly ItemEvent[], records: readonly Run[] = []): Trace {
   const entries: Entry[] = [];
   const runs = new Map<string, RunEntry>();
-  const visits: StationVisit[] = [];
   // The slot of the latest claim: every run until the next claim works in it.
   let slot: number | undefined;
-
-  const enter = (station: string, at: string) => {
-    const last = visits.at(-1);
-    if (last?.station === station) return;
-    if (last) last.leftAt = at;
-    visits.push({ station, enteredAt: at });
-  };
 
   for (const e of events) {
     const station = e.station ?? '';
 
     if (e.kind === 'claimed') slot = num(e.data.slot);
-    if (e.kind === 'created' && station) enter(station, e.at);
-    if (e.kind === 'moved') {
-      const to = str(e.data.to);
-      if (to) enter(to, e.at);
-    }
 
     if (e.run_id) {
       let run = runs.get(e.run_id);
@@ -288,7 +268,7 @@ export function buildTrace(events: readonly ItemEvent[], records: readonly Run[]
     model = run.model ?? model;
   }
 
-  return { entries, visits, costUsd, turns, ...(model ? { model } : {}) };
+  return { entries, costUsd, turns, ...(model ? { model } : {}) };
 }
 
 /** The last `n` tool calls across runs, newest last: the mobile "latest steps". */

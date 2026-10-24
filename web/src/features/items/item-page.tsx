@@ -1,21 +1,21 @@
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
-import { ChevronLeft, ExternalLink } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { eventsQuery, itemQuery, runsQuery } from '../../api/queries';
-import type { Factory, Item, Station, StationKind } from '../../api/types';
-import { factoryTitle, itemKey, stationKind, useFactory, useFactoryParams } from '../../shared/factory';
-import { formatClock, formatDuration, formatUsd, humanize } from '../../shared/format';
+import type { Item, Station } from '../../api/types';
+import { factoryTitle, itemKey, useFactory, useFactoryParams } from '../../shared/factory';
+import { humanize } from '../../shared/format';
 import { ItemDecisions } from '../../shared/item-actions';
-import { describeState, pullRequestLabel, pullRequestOf, type Tone } from '../../shared/item-state';
+import { describeState, pullRequestOf, type Tone } from '../../shared/item-state';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
-import { SectionCard, StatRow } from '../../ui/card';
+import { SectionCard } from '../../ui/card';
 import { Chip, type ChipTone } from '../../ui/chip';
 import { cn } from '../../ui/cn';
-import { Hatch, type HatchTone } from '../../ui/hatch';
+import { PathCard, TimeCard } from './flow-cards';
 import { OutputsCard } from './outputs';
-import { activeRun, buildTrace, latestToolCalls, runLabel, type StationVisit, type Trace } from './timeline';
+import { activeRun, buildTrace, latestToolCalls, runLabel, type Trace } from './timeline';
 import { ToolRow, TraceList } from './trace-view';
 
 /** The agent copy working the item now, as the trace names it. */
@@ -25,182 +25,6 @@ function agentOf(trace: Trace): string | null {
 }
 
 const chipTone: Record<Tone, ChipTone> = { run: 'run', you: 'you', rework: 'rework', muted: 'plain', ok: 'ok' };
-
-function useNow(): number {
-  // Ages are recomputed on every render; renders follow the stream, which is often enough.
-  return Date.now();
-}
-
-/** Agents' time teal, time waiting on a person violet, queue time gray; a blocked present rust. */
-function visitTone(item: Item, kind: StationKind | undefined, current: boolean): HatchTone {
-  if (current && item.state === 'blocked') return 'rework';
-  if (kind === 'agent') return 'run';
-  if (kind === 'human') return 'you';
-  return 'target';
-}
-
-function TimeCard({
-  item,
-  factory,
-  trace,
-  className,
-}: {
-  item: Item;
-  factory: Factory;
-  trace: Trace;
-  className?: string;
-}) {
-  const now = useNow();
-  const end = item.done_at ? Date.parse(item.done_at) : now;
-  const total = Math.max(1, end - Date.parse(item.created_at));
-  const visits: StationVisit[] =
-    trace.visits.length > 0 ? trace.visits : [{ station: item.station, enteredAt: item.created_at }];
-  const spans = visits.map((v, i) => ({
-    visit: v,
-    ms: Math.max(0, (v.leftAt ? Date.parse(v.leftAt) : end) - Date.parse(v.enteredAt)),
-    current: i === visits.length - 1 && !item.done_at,
-  }));
-  const byStation = new Map<string, number>();
-  for (const s of spans) byStation.set(s.visit.station, (byStation.get(s.visit.station) ?? 0) + s.ms);
-  const pr = pullRequestOf(
-    item.outputs,
-    factory.stations.map((s) => s.id),
-  );
-
-  return (
-    <SectionCard
-      title={item.done_at ? `Done in ${formatDuration(total)}` : `${formatDuration(total)} so far`}
-      description="Time at each station"
-      className={className}
-    >
-      <div
-        role="img"
-        aria-label={[...byStation].map(([s, ms]) => `${humanize(s)} ${formatDuration(ms)}`).join(', ')}
-        className="flex h-3 gap-[3px]"
-      >
-        {spans.map((s, i) => (
-          <div
-            key={`${s.visit.station}-${s.visit.enteredAt}`}
-            className={cn(
-              'h-full min-w-[3px] overflow-hidden',
-              i === 0 && 'rounded-l-[3px]',
-              i === spans.length - 1 && 'rounded-r-[3px]',
-            )}
-            style={{ width: `${(s.ms / total) * 100}%` }}
-          >
-            <Hatch tone={visitTone(item, stationKind(factory, s.visit.station), s.current)} />
-          </div>
-        ))}
-      </div>
-      <ul aria-hidden="true" className="m-0 -mt-1 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 text-[13px] text-muted">
-        {[...byStation].map(([s, ms]) => (
-          <li key={s}>
-            {humanize(s)} {formatDuration(ms)}
-          </li>
-        ))}
-      </ul>
-      <div className="flex flex-col">
-        <StatRow label="Spend">{formatUsd(item.cost_usd)}</StatRow>
-        <StatRow label="Turns">{trace.turns > 0 ? trace.turns : 'None finished yet'}</StatRow>
-        {trace.model ? (
-          <StatRow label="Model">
-            <span className="normal-nums">{trace.model}</span>
-          </StatRow>
-        ) : null}
-        <StatRow label="Sent back">
-          <span className={cn(item.rework_count > 0 && 'text-rework')}>
-            {item.rework_count === 0 ? 'Never' : `${item.rework_count}×`}
-          </span>
-        </StatRow>
-        {pr ? (
-          <StatRow label="Change">
-            <a href={pr} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-run">
-              {pullRequestLabel(pr)}
-              <ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" />
-              <span className="sr-only">(opens in a new tab)</span>
-            </a>
-          </StatRow>
-        ) : null}
-        <StatRow label="Created">{formatClock(item.created_at)}</StatRow>
-      </div>
-    </SectionCard>
-  );
-}
-
-const kindNote = {
-  queue: 'Waits to be pulled',
-  agent: 'Agents work here',
-  human: 'You decide here',
-  done: 'Finished',
-} as const;
-
-function PathCard({
-  item,
-  factory,
-  trace,
-  className,
-}: {
-  item: Item;
-  factory: Factory;
-  trace: Trace;
-  className?: string;
-}) {
-  const now = useNow();
-  const state = describeState({
-    state: item.state,
-    agent: agentOf(trace),
-    rework_count: item.rework_count,
-  });
-
-  return (
-    <SectionCard title="Path" className={className}>
-      <ol className="m-0 flex list-none flex-col p-0">
-        {factory.stations.map((s) => {
-          const visits = trace.visits.filter((v) => v.station === s.id);
-          const current = s.id === item.station;
-          const visited = visits.length > 0 || current;
-          const spent = visits.reduce(
-            (n, v) =>
-              n +
-              (v.leftAt ? Date.parse(v.leftAt) : item.done_at ? Date.parse(item.done_at) : now) -
-              Date.parse(v.enteredAt),
-            0,
-          );
-          const dot = current
-            ? {
-                run: 'bg-run ring-run-tint',
-                you: 'bg-you ring-you-tint',
-                rework: 'bg-rework ring-rework-tint',
-                muted: 'bg-ink ring-line',
-                ok: 'bg-ok ring-line',
-              }[state.tone]
-            : visited
-              ? 'bg-ink ring-line'
-              : 'bg-surface ring-[1.5px] ring-faint';
-          return (
-            <li
-              key={s.id}
-              aria-current={current ? 'step' : undefined}
-              className="grid grid-cols-[22px_minmax(0,1fr)_auto] items-start gap-3 py-[7px]"
-            >
-              <span aria-hidden="true" className={cn('mt-1 ml-[5px] size-3 rounded-full ring-4', dot)} />
-              <span>
-                <span className="block text-[15px] font-medium">{humanize(s.id)}</span>
-                <span className="mt-0.5 block text-[13px] text-muted">
-                  {current ? state.text : visited ? `Spent ${formatDuration(spent)}` : kindNote[s.kind]}
-                  {visits.length > 1 ? `, ${visits.length} visits` : ''}
-                </span>
-              </span>
-              <span className="text-[13px] text-muted tabular-nums">
-                {visits[0] ? formatClock(visits[0].enteredAt) : ''}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-    </SectionCard>
-  );
-}
 
 function TraceCard({ item, trace, className }: { item: Item; trace: Trace; className?: string }) {
   const run = item.state === 'in_progress' ? activeRun(trace) : undefined;
@@ -334,7 +158,7 @@ export function ItemPage() {
         <div className="contents @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
           <ItemDecisionsCard item={decidable} factory={factory.id} station={station} />
           <TimeCard item={item} factory={factory} trace={trace} className="order-2 @[720px]:order-none" />
-          <PathCard item={item} factory={factory} trace={trace} className="order-7 @[720px]:order-none" />
+          <PathCard item={item} factory={factory} className="order-7 @[720px]:order-none" />
         </div>
         <div className="contents @[720px]:col-span-2 @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
           {fullTrace ? null : (

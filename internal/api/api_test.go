@@ -46,9 +46,9 @@ spec:
       - { id: done, kind: done }
 `
 
-// line is inbox → build (agents, routed by lane) → merge (human, action merge) → done, on a
-// repository with a weekly budget: enough for boards, metrics, overviews, retries and merges. Tests seed its items straight
-// into the store.
+// line is inbox → build (agents, routed by lane, with a contract and checks) → merge (human,
+// action merge) → done, on a repository with budgets and a lead-time target: enough for boards,
+// metrics, overviews, item flow, retries and merges. Tests seed its items straight into the store.
 const line = `apiVersion: goal/v1
 kind: Factory
 metadata: { id: ` + lineID + `, name: line }
@@ -58,17 +58,27 @@ spec:
     image: ghcr.io/acme/agent:1.0.0
     auth: anthropic-api-key
     repository: { url: "https://github.com/acme/app.git", token: env:REPO_TOKEN }
-    budget: { weeklyUsd: 70 }
+    budget: { weeklyUsd: 70, perItemUsd: 4, maxTurnsPerTask: 80 }
   knowledgeBase: { collections: [notes] }
+  contracts:
+    change: ./contracts/change.schema.json
   agents:
     - { name: backend, prompt: ./agents/backend.md }
     - { name: frontend, prompt: ./agents/frontend.md }
   board:
     stations:
       - { id: inbox, kind: queue }
-      - { id: build, kind: agent, route: { api: backend, web: frontend }, agents: 2, wip: 2 }
+      - id: build
+        kind: agent
+        route: { api: backend, web: frontend }
+        agents: 2
+        wip: 2
+        output: change
+        checks: [schema, { kind: evidence-links, min: 2 }, task check]
       - { id: merge, kind: human, action: merge }
       - { id: done, kind: done }
+    flow:
+      targets: { leadTimeHours: 6, expediteLeadTimeMinutes: 60 }
 `
 
 const lineID = "0b6f1c9e-5d0a-4c39-9a51-6f1f3f0e2a10"
@@ -120,7 +130,10 @@ const (
 // The two factories' files.
 var (
 	acmeFiles = map[string]string{yamlFile: acme, writerFile: writerPrompt}
-	lineFiles = map[string]string{yamlFile: line, "agents/backend.md": "# backend\n", "agents/frontend.md": "# frontend\n"}
+	lineFiles = map[string]string{
+		yamlFile: line, "agents/backend.md": "# backend\n", "agents/frontend.md": "# frontend\n",
+		"contracts/change.schema.json": `{"type": "object"}`,
+	}
 )
 
 // publishImport creates a factory from files, keeping its id, and publishes it as v1.

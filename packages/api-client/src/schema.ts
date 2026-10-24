@@ -1274,6 +1274,8 @@ export interface components {
             id: string;
             kind: components["schemas"]["StationKind"];
             action?: components["schemas"]["StationAction"];
+            /** @description What happens at the station, from the definition (shown on the item's path) */
+            description?: string;
         };
         /** @enum {string} */
         StationKind: "queue" | "agent" | "human" | "done";
@@ -1335,6 +1337,59 @@ export interface components {
             updated_at: string;
             /** Format: date-time */
             done_at?: string;
+            flow?: components["schemas"]["ItemFlow"];
+        };
+        /** @description How the item flows, on GET of one item only */
+        ItemFlow: {
+            /** @description The item's spans in the order it entered them; an open item's last span is open */
+            spans: components["schemas"]["ItemSpan"][];
+            /**
+             * Format: int64
+             * @description The lead time the item is measured against (the expedite target for expedite items, the line's lead-time target otherwise), or null without one
+             */
+            target_seconds: number | null;
+            /** @description The station a send-back from the item's station goes to, or null when there is none (done, cancelled, nothing upstream) */
+            rework_target: string | null;
+            budget: components["schemas"]["ItemBudget"];
+            /** @description The agent run in progress, or null */
+            current_run: components["schemas"]["CurrentRun"] | null;
+        };
+        /** @description A stretch of time the item spent at one station in one state and rework round */
+        ItemSpan: {
+            station: string;
+            state: components["schemas"]["ItemState"];
+            /** @description The item's rework count during the span */
+            rework_round: number;
+            /** @description The station that sent the item back for this round; null in round 0 */
+            rework_by: string | null;
+            /** Format: date-time */
+            entered_at: string;
+            /**
+             * Format: date-time
+             * @description Null while the item is still in this span
+             */
+            left_at: string | null;
+        };
+        /** @description The limits of one task at the item's station (its agent's own, else the factory's runtime budget) */
+        ItemBudget: {
+            /** Format: double */
+            per_item_usd: number | null;
+            max_turns_per_task: number | null;
+        };
+        CurrentRun: {
+            id: string;
+            agent: string;
+            /** @description The agent copy working the item, 1-based (investigator-2) */
+            slot: number;
+            model: string;
+            /** @description Turns the run has reported so far */
+            turn: number;
+            /** Format: date-time */
+            started_at: string;
+            /** @description The contract the station's output must satisfy, or null */
+            output_contract: string | null;
+            /** @description What the output is checked for on submit: schema, evidence links, command lines */
+            checks: string[];
         };
         /** @description An item as boards and lists show it */
         ItemCard: {

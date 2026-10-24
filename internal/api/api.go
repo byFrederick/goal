@@ -59,8 +59,9 @@ type Engine interface {
 	Merge(ctx context.Context, id domain.ItemID, by domain.Actor, method string) (domain.Item, error)
 }
 
-// Items reads items, their history and runs, the leases on them, a factory's flow and what the
-// organization's factories need from people; ports.Store satisfies it.
+// Items reads items, their history and runs, the leases on them, a factory's flow, an item's
+// spans and run in progress, and what the organization's factories need from people; a store
+// that implements ports.Store and ports.FlowStats satisfies it.
 type Items interface {
 	Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
 	ItemByNumber(ctx context.Context, factory domain.FactoryID, number int64) (domain.Item, error)
@@ -73,6 +74,8 @@ type Items interface {
 	FlowMetrics(ctx context.Context, factory domain.FactoryID, since, until time.Time) (domain.FlowMetrics, error)
 	Attention(ctx context.Context) ([]domain.Attention, error)
 	WaitingHuman(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.Item, error)
+	ItemSpans(ctx context.Context, id domain.ItemID) ([]domain.Span, error)
+	CurrentRun(ctx context.Context, id domain.ItemID) (*domain.CurrentRun, error)
 }
 
 // Factories are the definitions goald runs; *definitions.Cache satisfies it.
@@ -285,7 +288,12 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 		return nil, err
 	}
 
-	return gen.GetItem200JSONResponse(s.itemOf(ctx, it)), nil
+	out := s.itemOf(ctx, it)
+	if out.Flow, err = s.itemFlow(ctx, it); err != nil {
+		return nil, err
+	}
+
+	return gen.GetItem200JSONResponse(out), nil
 }
 
 func (s *server) ListItemEvents(ctx context.Context, req gen.ListItemEventsRequestObject) (gen.ListItemEventsResponseObject, error) {

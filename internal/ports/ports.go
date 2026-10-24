@@ -138,6 +138,20 @@ type Store interface {
 	WaitingHuman(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.Item, error)
 }
 
+// FlowStats is the read model of how work flows: spans of time items spend at stations and the
+// statistics derived from them. It is separate from Store so the write side stays focused; the
+// PostgreSQL adapter implements both on one pool and porttest.Store both over the same state.
+// Every method reads within the organization in ctx (domain.WithOrg), as Store's do.
+type FlowStats interface {
+	// ItemSpans returns an item's spans in the order it entered them, the open one last. An
+	// item the organization does not have has none.
+	ItemSpans(ctx context.Context, id domain.ItemID) ([]domain.Span, error)
+
+	// CurrentRun returns the item's run in progress with its lease's slot and the turns reported
+	// so far, or nil when the item has none (no running run under a live lease).
+	CurrentRun(ctx context.Context, id domain.ItemID) (*domain.CurrentRun, error)
+}
+
 // Tenancy keeps the install's organizations. Methods marked (org) act on the organization in
 // ctx (domain.WithOrg) and fail with an error wrapping domain.ErrNoOrg without one. Each
 // mutating method appends its audit entry in the same transaction, so a change is never

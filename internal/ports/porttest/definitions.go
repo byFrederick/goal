@@ -1057,12 +1057,14 @@ func (s *Store) moveOffStations(org domain.OrgID, factory domain.FactoryID, m st
 	slices.SortFunc(move, func(a, b *domain.Item) int { return cmp.Compare(a.Number, b.Number) })
 
 	for _, it := range move {
-		from, to := it.Station, m.moves[it.Station]
+		from, to, before := it.Station, m.moves[it.Station], *it
 		it.Station, it.UpdatedAt = to.To, m.at
 
 		if it.State != domain.StateBlocked {
 			it.State = to.State
 		}
+
+		s.trackSpan(it, &before, m.at)
 
 		s.append(domain.Event{
 			FactoryID: factory, ItemID: it.ID, At: m.at, Kind: domain.EventMoved, Station: to.To, Actor: m.actor,

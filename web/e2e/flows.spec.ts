@@ -246,6 +246,37 @@ test('approve an item waiting on you from the floor', async ({ page }) => {
   await expect(page.getByText('Local user approved')).toBeVisible();
 });
 
+test('an item shows its time at each station against its target', async ({ page }) => {
+  // goal#16: an expedite fix created 38 minutes ago, its spec being written now.
+  await page.goto('/o/acme/f/goal/items/16');
+  const time = page.getByRole('region', { name: /so far$/ });
+  await expect(time.getByRole('heading', { name: /^3[89] min so far$/ })).toBeVisible();
+  await expect(
+    time.getByRole('img', {
+      name: /^Inbox \d+ min, Spec \d+ min \(\d+ min waiting, \d+ min working\), 2[12] min left/,
+    }),
+  ).toBeVisible();
+  await expect(time.getByText(/^Inbox \d+ min$/)).toBeVisible();
+  await expect(time.getByText('60 min', { exact: true })).toBeVisible();
+
+  // Below 720 px of content (phones, and tablets beside the sidebar) the card is compact.
+  if ((await page.locator('main').evaluate((main) => main.clientWidth)) < 720) {
+    await expect(time.getByText('target 60 min')).toBeVisible();
+    await expect(time.getByText('spec-writer-1 on turn 3 of 80, $0.31 of $4.00')).toBeVisible();
+  } else {
+    await expect(time.getByText('Expedite target: within 60 minutes')).toBeVisible();
+    await expect(time.getByText('3 of 80', { exact: true })).toBeVisible();
+    await expect(time.getByText('$0.31 of $4.00', { exact: true })).toBeVisible();
+    await expect(time.getByText('spec', { exact: true })).toBeVisible();
+  }
+
+  const path = page.getByRole('region', { name: 'Path' });
+  await expect(path.locator('[aria-current="step"]')).toContainText('spec-writer-1 working');
+  await expect(path.getByRole('listitem').filter({ hasText: 'Inbox' })).toContainText(/Spent \d+ min/);
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+});
+
 test('send an item back with a reason', async ({ page }) => {
   await page.goto('/o/acme/f/goal/items/12');
   await page.getByRole('button', { name: 'Send back' }).click();

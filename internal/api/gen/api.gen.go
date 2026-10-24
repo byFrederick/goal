@@ -772,6 +772,26 @@ type ConstraintSummary struct {
 	Station string   `json:"station"`
 }
 
+// CurrentRun defines model for CurrentRun.
+type CurrentRun struct {
+	Agent string `json:"agent"`
+
+	// Checks What the output is checked for on submit: schema, evidence links, command lines
+	Checks []string `json:"checks"`
+	Id     string   `json:"id"`
+	Model  string   `json:"model"`
+
+	// OutputContract The contract the station's output must satisfy, or null
+	OutputContract *string `json:"output_contract"`
+
+	// Slot The agent copy working the item, 1-based (investigator-2)
+	Slot      int       `json:"slot"`
+	StartedAt time.Time `json:"started_at"`
+
+	// Turn Turns the run has reported so far
+	Turn int `json:"turn"`
+}
+
 // DefinitionCounts defines model for DefinitionCounts.
 type DefinitionCounts struct {
 	Agents int `json:"agents"`
@@ -1151,9 +1171,12 @@ type Item struct {
 	CreatedAt      time.Time      `json:"created_at"`
 	DoneAt         *time.Time     `json:"done_at,omitempty"`
 	FactoryId      string         `json:"factory_id"`
-	Id             string         `json:"id"`
-	Lane           *string        `json:"lane,omitempty"`
-	Number         int64          `json:"number"`
+
+	// Flow How the item flows, on GET of one item only
+	Flow   *ItemFlow `json:"flow,omitempty"`
+	Id     string    `json:"id"`
+	Lane   *string   `json:"lane,omitempty"`
+	Number int64     `json:"number"`
 
 	// Outputs Each station's output, by station id
 	Outputs  map[string]interface{} `json:"outputs"`
@@ -1176,6 +1199,12 @@ type ItemAt struct {
 	Number  int64     `json:"number"`
 	State   ItemState `json:"state"`
 	Station string    `json:"station"`
+}
+
+// ItemBudget The limits of one task at the item's station (its agent's own, else the factory's runtime budget)
+type ItemBudget struct {
+	MaxTurnsPerTask *int     `json:"max_turns_per_task"`
+	PerItemUsd      *float64 `json:"per_item_usd"`
 }
 
 // ItemCard An item as boards and lists show it
@@ -1205,12 +1234,46 @@ type ItemCard struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+// ItemFlow How the item flows, on GET of one item only
+type ItemFlow struct {
+	// Budget The limits of one task at the item's station (its agent's own, else the factory's runtime budget)
+	Budget ItemBudget `json:"budget"`
+
+	// CurrentRun The agent run in progress, or null
+	CurrentRun *CurrentRun `json:"current_run"`
+
+	// ReworkTarget The station a send-back from the item's station goes to, or null when there is none (done, cancelled, nothing upstream)
+	ReworkTarget *string `json:"rework_target"`
+
+	// Spans The item's spans in the order it entered them; an open item's last span is open
+	Spans []ItemSpan `json:"spans"`
+
+	// TargetSeconds The lead time the item is measured against (the expedite target for expedite items, the line's lead-time target otherwise), or null without one
+	TargetSeconds *int64 `json:"target_seconds"`
+}
+
 // ItemPage defines model for ItemPage.
 type ItemPage struct {
 	Items []ItemCard `json:"items"`
 
 	// NextAfter Pass as `after` for the next page; null on the last page
 	NextAfter *int64 `json:"next_after"`
+}
+
+// ItemSpan A stretch of time the item spent at one station in one state and rework round
+type ItemSpan struct {
+	EnteredAt time.Time `json:"entered_at"`
+
+	// LeftAt Null while the item is still in this span
+	LeftAt *time.Time `json:"left_at"`
+
+	// ReworkBy The station that sent the item back for this round; null in round 0
+	ReworkBy *string `json:"rework_by"`
+
+	// ReworkRound The item's rework count during the span
+	ReworkRound int       `json:"rework_round"`
+	State       ItemState `json:"state"`
+	Station     string    `json:"station"`
 }
 
 // ItemState defines model for ItemState.
@@ -1616,8 +1679,11 @@ type SkillPage struct {
 type Station struct {
 	// Action What goald does when a human acts at this human station (merge → POST /v1/orgs/{org}/items/{item}/merge)
 	Action *StationAction `json:"action,omitempty"`
-	Id     string         `json:"id"`
-	Kind   StationKind    `json:"kind"`
+
+	// Description What happens at the station, from the definition (shown on the item's path)
+	Description *string     `json:"description,omitempty"`
+	Id          string      `json:"id"`
+	Kind        StationKind `json:"kind"`
 }
 
 // StationAction What goald does when a human acts at this human station (merge → POST /v1/orgs/{org}/items/{item}/merge)

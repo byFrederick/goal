@@ -21,6 +21,8 @@ import (
 // Harness is one store under test and what the suite needs to see beyond the port.
 type Harness struct {
 	Store ports.Store
+	// Flow reads the same store's flow statistics.
+	Flow ports.FlowStats
 	// NewOrg returns a new organization.
 	NewOrg func(t *testing.T) domain.OrgID
 	// NewFactory returns a factory of org the store accepts items for.
@@ -76,6 +78,9 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"SpendSince_OnlyTheCurrentOrg", testSpendSinceOneOrg},
 		{"ClaimNext_OrgAndFactorySlotCaps", testSlotCaps},
 		{"Concurrent_ClaimsNeverExceedTheOrgCap", testConcurrentClaimsCapped},
+		{"ItemSpans_FollowEveryTransition", testSpansFollowEveryTransition},
+		{"ItemSpans_OnlyOnChangeAndOnlyTheOrgs", testSpansOnlyOnChangeAndOnlyTheOrgs},
+		{"CurrentRun_RunningRunWithSlotAndTurns", testCurrentRun},
 	}
 
 	for _, tc := range tests {

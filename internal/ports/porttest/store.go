@@ -31,6 +31,7 @@ type Store struct {
 	leases    map[domain.ItemID]domain.Lease
 	runs      map[domain.RunID]*domain.Run
 	events    []domain.Event
+	spans     map[domain.ItemID][]domain.Span
 	andon     []andonRecord
 	ids       int
 	changes   changes
@@ -54,6 +55,7 @@ func NewStore() *Store {
 		numbers:   map[domain.FactoryID]int64{},
 		leases:    map[domain.ItemID]domain.Lease{},
 		runs:      map[domain.RunID]*domain.Run{},
+		spans:     map[domain.ItemID][]domain.Span{},
 	}
 }
 
@@ -115,6 +117,7 @@ func (s *Store) purge(org domain.OrgID) {
 
 			delete(s.items, id)
 			delete(s.leases, id)
+			delete(s.spans, id)
 		}
 	}
 
@@ -209,6 +212,7 @@ func (s *Store) CreateItem(ctx context.Context, n domain.NewItem) (domain.Item, 
 		Outputs: map[string]json.RawMessage{}, CreatedAt: n.CreatedAt, UpdatedAt: n.CreatedAt,
 	}
 	s.items[it.ID] = it
+	s.trackSpan(it, nil, n.CreatedAt)
 	s.append(domain.Event{
 		FactoryID: it.FactoryID, ItemID: it.ID, At: n.CreatedAt, Kind: domain.EventCreated,
 		Station: it.Station, Actor: domain.ActorEngine,
@@ -303,8 +307,10 @@ func (s *Store) ClaimNext(ctx context.Context, c ports.Claim) (domain.Item, doma
 	}
 
 	it := w[0]
+	before := *it
 	it.State = domain.StateInProgress
 	it.UpdatedAt = c.Now
+	s.trackSpan(it, &before, c.Now)
 
 	// An unrouted lane leases to "" (as documented on ports.Claim); the engine then blocks it.
 	agent, _ := c.Station.AgentFor(it.Lane)
@@ -400,7 +406,9 @@ func (s *Store) RequeueExpiredLeases(ctx context.Context, now time.Time, limit i
 		delete(s.leases, l.ItemID)
 
 		if it := s.items[l.ItemID]; it.State == domain.StateInProgress && it.Station == l.Station {
+			before := *it
 			it.State, it.UpdatedAt = domain.StateQueued, now
+			s.trackSpan(it, &before, now)
 		}
 
 		for _, r := range s.runs {
@@ -566,7 +574,9 @@ func (s *Store) Transition(ctx context.Context, t ports.Transition) (domain.Item
 		delete(s.leases, t.ItemID)
 	}
 
+	before := *it
 	it.Station, it.State, it.UpdatedAt = t.To.Station, t.To.State, t.At
+
 	if t.Lane != "" {
 		it.Lane = t.Lane
 	}
@@ -582,6 +592,8 @@ func (s *Store) Transition(ctx context.Context, t ports.Transition) (domain.Item
 	if t.To.State == domain.StateDone {
 		it.DoneAt = t.DoneAt
 	}
+
+	s.trackSpan(it, &before, t.At)
 
 	for _, e := range t.Events {
 		s.append(e)

@@ -23,7 +23,7 @@ const (
 	KindToolCall     domain.EventKind = "tool_call"
 	KindToolResult   domain.EventKind = "tool_result"
 	KindAgentMessage domain.EventKind = "agent_message"
-	KindUsage        domain.EventKind = "usage"
+	KindUsage                         = domain.EventUsage
 )
 
 var eventKinds = map[string]domain.EventKind{

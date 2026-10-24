@@ -36,6 +36,7 @@ func TestStore_Conformance(t *testing.T) {
 
 		return storetest.Harness{
 			Store:  s,
+			Flow:   s,
 			NewOrg: func(t *testing.T) domain.OrgID { t.Helper(); return newOrgID(t, s) },
 			NewFactory: func(t *testing.T, org domain.OrgID) domain.FactoryID {
 				t.Helper()

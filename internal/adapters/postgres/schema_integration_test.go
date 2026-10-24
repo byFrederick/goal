@@ -16,8 +16,8 @@ import (
 	"github.com/byFrederick/goal/internal/ports"
 )
 
-// orgTables are the tables 00006 gave org_id; later phases add theirs.
-var orgTables = []string{"factories", "work_items", "leases", "agent_runs", "item_events", "andon_pulls", "audit_log"}
+// orgTables are the tables 00006 gave org_id, then those later phases added with theirs.
+var orgTables = []string{"factories", "work_items", "leases", "agent_runs", "item_events", "andon_pulls", "audit_log", "item_spans"}
 
 // withoutOrgID are the tables that carry no org_id, and why. A phase that adds a table without
 // org_id adds it here in the same pull request, with its reason.
@@ -264,12 +264,21 @@ func TestRLS_RawSQLWithoutOrgFails(t *testing.T) {
 	db := newTestDB(t, OwnerRole)
 	owner := openPool(t, db.owner)
 	migrateTo(t, owner, 3)
-	insertRowsFromBefore(t, owner) // one row in every table, in the default organization
+	before := insertRowsFromBefore(t, owner) // one row in every table of 00001, in the default organization
 	migrate(t, db.owner)
 
 	pool := openPool(t, db.app)
-	if err := New(pool).Append(domain.WithOrg(t.Context(), DefaultOrgID), domain.AuditEntry{
+	ctx := domain.WithOrg(t.Context(), DefaultOrgID)
+
+	if err := New(pool).Append(ctx, domain.AuditEntry{
 		Actor: domain.LocalUser, Action: "andon.pulled", TargetKind: "factory", TargetID: "f",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := New(pool).CreateItem(ctx, domain.NewItem{ // its span fills item_spans
+		FactoryID: before.factory, Type: typeTask, Title: "after", Station: stWork,
+		State: domain.StateQueued, Class: domain.ClassStandard, CreatedAt: time.Now(),
 	}); err != nil {
 		t.Fatal(err)
 	}

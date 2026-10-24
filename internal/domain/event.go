@@ -29,6 +29,9 @@ const (
 	EventDone           EventKind = "done"
 	EventRetried        EventKind = "retried"
 	EventMerged         EventKind = "merged"
+	// EventUsage is a running agent's report of one turn's token usage; a run's usage events
+	// count its turns so far.
+	EventUsage EventKind = "usage"
 )
 
 // ActorEngine is the actor of events the engine writes on its own.

@@ -1470,6 +1470,7 @@ components:
         id: { type: string }
         kind: { $ref: "#/components/schemas/StationKind" }
         action: { $ref: "#/components/schemas/StationAction" }
+        description: { type: string, description: "What happens at the station, from the definition (shown on the item's path)" }
     StationKind:
       type: string
       enum: [queue, agent, human, done]
@@ -1527,6 +1528,75 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         done_at: { type: string, format: date-time }
+        flow:
+          $ref: "#/components/schemas/ItemFlow"
+    ItemFlow:
+      type: object
+      description: How the item flows, on GET of one item only
+      required: [spans, target_seconds, rework_target, budget, current_run]
+      properties:
+        spans:
+          type: array
+          description: The item's spans in the order it entered them; an open item's last span is open
+          items: { $ref: "#/components/schemas/ItemSpan" }
+        target_seconds:
+          type: integer
+          format: int64
+          nullable: true
+          description: The lead time the item is measured against (the expedite target for expedite items, the line's lead-time target otherwise), or null without one
+        rework_target:
+          type: string
+          nullable: true
+          description: The station a send-back from the item's station goes to, or null when there is none (done, cancelled, nothing upstream)
+        budget: { $ref: "#/components/schemas/ItemBudget" }
+        current_run:
+          description: The agent run in progress, or null
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/CurrentRun"
+    ItemSpan:
+      type: object
+      description: A stretch of time the item spent at one station in one state and rework round
+      required: [station, state, rework_round, rework_by, entered_at, left_at]
+      properties:
+        station: { type: string }
+        state: { $ref: "#/components/schemas/ItemState" }
+        rework_round: { type: integer, description: The item's rework count during the span }
+        rework_by:
+          type: string
+          nullable: true
+          description: The station that sent the item back for this round; null in round 0
+        entered_at: { type: string, format: date-time }
+        left_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Null while the item is still in this span
+    ItemBudget:
+      type: object
+      description: The limits of one task at the item's station (its agent's own, else the factory's runtime budget)
+      required: [per_item_usd, max_turns_per_task]
+      properties:
+        per_item_usd: { type: number, format: double, nullable: true }
+        max_turns_per_task: { type: integer, nullable: true }
+    CurrentRun:
+      type: object
+      required: [id, agent, slot, model, turn, started_at, output_contract, checks]
+      properties:
+        id: { type: string }
+        agent: { type: string }
+        slot: { type: integer, description: "The agent copy working the item, 1-based (investigator-2)" }
+        model: { type: string }
+        turn: { type: integer, description: Turns the run has reported so far }
+        started_at: { type: string, format: date-time }
+        output_contract:
+          type: string
+          nullable: true
+          description: The contract the station's output must satisfy, or null
+        checks:
+          type: array
+          description: "What the output is checked for on submit: schema, evidence links, command lines"
+          items: { type: string }
     ItemCard:
       type: object
       description: An item as boards and lists show it
