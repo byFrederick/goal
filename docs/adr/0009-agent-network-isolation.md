@@ -1,6 +1,6 @@
 # ADR 0009 — Agent network isolation and the egress proxy
 
-Status: accepted · 2026-10-24 · Builds on [ADR 0003](0003-hexagonal-architecture-and-deployment.md), [ADR 0006](0006-workspaces-and-command-checks.md) and [ADR 0007](0007-identity-better-auth.md). (0008 is reserved for phase 4's connectors, [spec 4](../specs/4-connections-runs-and-knowledge.md) §15.)
+Status: accepted · 2026-10-24 · Builds on [ADR 0003](0003-hexagonal-architecture-and-deployment.md), [ADR 0006](0006-workspaces-and-command-checks.md) and [ADR 0007](0007-identity-better-auth.md) · Amended in phase 4: decisions 1, 2 and 5 are changed by the [amendment](#amendment--phase-4-public-internet-for-agents) at the end ([ADR 0008](0008-portable-runs-connections-and-knowledge.md))
 
 ## Context
 
@@ -38,3 +38,18 @@ The same split maps onto `awsvpc` without the proxy knowing ECS: agent tasks and
 - `task egress:image` must have run once (`task up` does it); without the image goald starts but logs that no agent, networked sidecar or check can start.
 - Containers on the same internal network can reach each other's listening ports. Agents and checks open none by default; per-run isolation (a network per run, or security groups per task on ECS) is a later step.
 - Phase 4's egress filtering for sidecars starts from here: the tools' policy is "public hosts"; a connection's own host allowlist becomes another policy of the same proxy.
+
+## Amendment — phase 4: public internet for agents
+
+Status: accepted · 2026-10-24 · changes decisions 1, 2 and 5; decisions 3, 4 and 6 stay. Specified in [phase 4](../specs/4-connections-runs-and-knowledge.md) §5.10; built in PR 4-6. Follows [ADR 0008](0008-portable-runs-connections-and-knowledge.md).
+
+**Context.** A run is now a disposable box that clones repositories, installs toolchains and packages, calls the APIs of its connections and pushes pull requests (ADR 0008). The allow-list of decision 2 (`GOAL_AGENT_EGRESS`, the model API only) made every one of those a configuration change, and the credentials it protected are now in the box by design, bounded by their own scope. What still matters is that no box reaches the host, goald's network or a cloud metadata service. Stdio sidecars and the separate check container are gone, so the agents' and tools' roles collapse into one.
+
+**Decision.**
+
+1. **Agents get the public internet.** One policy for every client of the proxy: any destination whose resolved addresses are all public, by `CONNECT` or plain-http forwarding. Loopback, private, unique-local, link-local and metadata, CGNAT, reserved and "this network" addresses stay refused, rebinding-safe, exactly as decision 3 says. The agent allow-list and `GOAL_AGENT_EGRESS` are removed; the separate tools role and network go with the sidecars.
+2. **One internal network, made by Compose.** The agents' network (`internal: true`, no host-side address) and `goal-egress` are services of `compose.yaml`, configured by environment (`GOAL_EGRESS_GATEWAY`); goald no longer creates or replaces the proxy (`docker.Egress`, `GOAL_EGRESS_NAME` and `GOAL_EGRESS_IMAGE` go). The proxy still serves goald's gateway paths by its reverse path only: `/mcp` and `/run`.
+3. **Cloudflare.** Boxes run with `enableInternet: true` and reach goald's gateway through their own outbound handler (`gateway.internal`); Cloudflare gives containers no route to private addresses, which phase 4's first prototype verifies before any run goes there. There is no proxy on that target.
+4. **goald's own requests for connections** (remote MCP servers, connection tests, knowledge sync, STS, embeddings) dial public addresses only, through the same address check (`egress.PublicDialer`); `GOAL_ALLOW_PRIVATE_UPSTREAMS=true` lifts it for a laptop's own test servers and is refused off loopback.
+
+**Consequences.** A prompt-injected agent can send what its box holds to any public host; spec 4 §11.3 accepts this and makes narrow tokens the control. Tools that ignore proxy variables (raw TCP, ssh) still have no network locally; boxes on the shared agents' network can still reach each other's listening ports. The ECS section of this ADR no longer applies (ADR 0008 drops AWS).

@@ -1,6 +1,6 @@
 # ADR 0003 — Hexagonal architecture, manual wiring, cloud-ready deployment
 
-Status: accepted · 2026-10-23
+Status: accepted · 2026-10-23 · Decisions 4, 5 and 7 superseded by [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (phase 4: a Sandboxes port with Docker and Cloudflare adapters, local Compose and Cloudflare as the targets, model access as a connection); decisions 1–3 and 6 stand
 
 ## Context
 

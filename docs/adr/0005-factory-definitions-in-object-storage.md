@@ -1,6 +1,6 @@
 # ADR 0005 — Factory definitions in object storage
 
-Status: accepted · 2026-10-23 · Amends [ADR 0001](0001-technology-stack.md) and [ADR 0002](0002-jonah-evals.md) · Amended in 2.2: decisions 1, 2, 4, 5 and 7 are replaced by the [amendment](#amendment--22-versions-in-postgresql-content-as-blobs) at the end
+Status: accepted · 2026-10-23 · Amends [ADR 0001](0001-technology-stack.md) and [ADR 0002](0002-jonah-evals.md) · Amended in 2.2: decisions 1, 2, 4, 5 and 7 are replaced by the [amendment](#amendment--22-versions-in-postgresql-content-as-blobs) at the end · Amended in phase 4: [no object versions, knowledge uploads](#amendment--phase-4-no-object-versions-knowledge-uploads) ([ADR 0008](0008-portable-runs-connections-and-knowledge.md))
 
 ## Context
 
@@ -79,3 +79,17 @@ s3://<bucket>/
 - The bucket's object versioning stays on as protection, no longer as the version mechanism.
 - Where knowledge documents live in the bucket is decided with the knowledge base (later, unscheduled); decision 6 is unchanged.
 
+## Amendment — phase 4: no object versions, knowledge uploads
+
+Status: accepted · 2026-10-24 · changes the 2.2 amendment's decision 7 and its consequences on versioning, and decision 6. Specified in [phase 4](../specs/4-connections-runs-and-knowledge.md) §5.7 and §7; built in PRs 4-3 and 4-16. Follows [ADR 0008](0008-portable-runs-connections-and-knowledge.md).
+
+**Context.** Cloudflare R2, the cloud target's bucket, implements neither bucket versioning nor `ListObjectVersions`. Since 2.2 nothing needs versions: definition files are immutable content-addressed blobs written with a conditional put, and versions live in PostgreSQL. Only the port's shape (`Get` by version, version ids in listings, delete markers), `EnsureBucket` turning versioning on, the skills catalog cache keyed by version id and the one-time legacy import still use them. The knowledge base (ADR 0008) needs a place for uploaded documents.
+
+**Decision.**
+
+1. **The bucket needs no versioning.** `ports.ObjectStore` has no version ids: `Get(key)`, `Put`, `PutIfAbsent` (unchanged), `List(prefix)` over `ListObjectsV2`, `Delete(key)` and `DeletePrefix(prefix)` remove for good on an unversioned bucket, `ObjectInfo` carries an `ETag`. `EnsureBucket` calls no versioning API. RustFS and R2 behave the same; an older local bucket that still has versioning on keeps working.
+2. **Everything written stays immutable and content-addressed**, which is what replaces versions as protection: definition blobs `orgs/<org-id>/blobs/<sha256>` and, new, uploaded knowledge documents `orgs/<org-id>/knowledge/<sha256>`, both with `PutIfAbsent`. An upload's object is deleted when no document of the organization references it; the organization's purge removes `orgs/<org-id>/`.
+3. **The bucket holds definition content and knowledge uploads; nothing else.** Synced knowledge (chunks, embeddings) lives in PostgreSQL and its originals stay at their source. `catalog/connectors/` is dropped: connection kinds ship with goald or live in PostgreSQL (ADR 0008). `catalog/templates/` and `catalog/skills/` are unchanged; the skills index is cached by ETag.
+4. **The legacy import goes.** `internal/factorystore` and the import of pre-2.2 prefixes, which read object versions, are deleted; goald refuses to start while an organization still has an import pending, so an install upgrades through the release before first.
+
+**Consequences.** Deleted objects are gone for good: a mistaken delete is recovered from a bucket backup, not from an older version (definition blobs are never deleted by goald, so this concerns uploads and purges). The legacy prefixes of old installs are no longer read; they can be removed by hand.

@@ -1,6 +1,6 @@
 # ADR 0006 — Run workspaces and isolated command checks
 
-Status: accepted · 2026-10-23 · Builds on [ADR 0003](0003-hexagonal-architecture-and-deployment.md) and [ADR 0005](0005-factory-definitions-in-object-storage.md)
+Status: accepted · 2026-10-23 · Builds on [ADR 0003](0003-hexagonal-architecture-and-deployment.md) and [ADR 0005](0005-factory-definitions-in-object-storage.md) · Decisions 2–5 superseded by [ADR 0008](0008-portable-runs-connections-and-knowledge.md) in phase 4 (the clone, the agent and the checks run in the run's own box; one base image); decision 1 and the branch per item stand, decision 6 is unchanged
 
 ## Context
 
