@@ -363,6 +363,8 @@ type TaskSpec struct {
 	// GatewayURL is the MCP gateway; GatewayToken scopes this task's access to it.
 	GatewayURL   string
 	GatewayToken string
+	// Purpose is what the factory is for; the agent reads it before the work. Empty when unset.
+	Purpose string
 	// Brief is the work: the item's title and body, plus feedback from a failed attempt.
 	Brief string
 	// Inputs are the item's outputs from earlier stations, by station id.

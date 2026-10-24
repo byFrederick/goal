@@ -322,7 +322,7 @@ func (e *Engine) start(ctx context.Context, c claimed, runID domain.RunID, brief
 		FactoryID: c.line.FactoryID, ItemID: c.item.ID, RunID: runID, Station: c.station.ID, Agent: a.Name,
 		Image: rt.Image, Model: modelOf(c), PromptPath: a.PromptPath, Skills: a.Skills,
 		ToolsAllow: a.ToolsAllow, ToolsDeny: a.ToolsDeny, GatewayURL: e.cfg.GatewayURL, GatewayToken: token,
-		Brief: brief, Inputs: c.item.Outputs, Output: c.station.Output, WorkspaceDir: workspace, Env: env,
+		Purpose: c.line.Purpose, Brief: brief, Inputs: c.item.Outputs, Output: c.station.Output, WorkspaceDir: workspace, Env: env,
 		Timeout: e.cfg.TaskTimeout,
 		Budget:  ports.Budget{MaxTurns: maxTurns, MaxUSD: maxUSD},
 	})

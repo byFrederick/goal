@@ -19,6 +19,7 @@ export const TaskSpec = z.object({
   tools_allow: z.array(z.string()),
   tools_deny: z.array(z.string()),
   gateway_url: z.url().optional(),
+  purpose: z.string().optional(),
   brief: z.string(),
   inputs: z.record(z.string(), z.unknown()).optional(),
   output: z.string().optional(),

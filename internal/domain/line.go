@@ -42,6 +42,8 @@ type Line struct {
 	ExpediteTypes []string
 	// Flow is the line's flow policy and targets.
 	Flow FlowPolicy
+	// Purpose is what the factory is for; every agent task carries it.
+	Purpose string
 }
 
 // Runtime is what every agent task of the factory shares.

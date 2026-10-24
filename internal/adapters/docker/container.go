@@ -67,6 +67,7 @@ type workerSpec struct {
 	ToolsAllow []string                   `json:"tools_allow"`
 	ToolsDeny  []string                   `json:"tools_deny"`
 	GatewayURL string                     `json:"gateway_url,omitempty"`
+	Purpose    string                     `json:"purpose,omitempty"`
 	Brief      string                     `json:"brief"`
 	Inputs     map[string]json.RawMessage `json:"inputs,omitempty"`
 	Output     string                     `json:"output,omitempty"`
@@ -83,7 +84,7 @@ func workerSpecOf(t ports.TaskSpec) (workerSpec, error) {
 	s := workerSpec{
 		FactoryID: t.FactoryID, ItemID: t.ItemID, RunID: t.RunID, Station: t.Station, Agent: t.Agent, Model: t.Model,
 		Skills: make([]string, 0, len(t.Skills)), ToolsAllow: nonNil(t.ToolsAllow), ToolsDeny: nonNil(t.ToolsDeny),
-		GatewayURL: gateway, Brief: t.Brief, Inputs: t.Inputs, Output: t.Output,
+		GatewayURL: gateway, Purpose: t.Purpose, Brief: t.Brief, Inputs: t.Inputs, Output: t.Output,
 		MaxTurns: t.Budget.MaxTurns, MaxUSD: t.Budget.MaxUSD,
 	}
 	for _, sk := range t.Skills {

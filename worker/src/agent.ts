@@ -28,7 +28,7 @@ export function agentQuery(
   const gatewayToken = env.GOAL_GATEWAY_TOKEN;
   const options: Options = {
     cwd: paths.workspace,
-    systemPrompt: { type: 'preset', preset: 'claude_code', append: files.prompt },
+    systemPrompt: { type: 'preset', preset: 'claude_code', append: systemAppend(spec, files) },
     ...toolPolicy(spec, spec.gateway_url !== undefined),
     // Pre-approved rules run; anything else is denied, since nobody is there to ask.
     permissionMode: 'dontAsk',
@@ -96,6 +96,11 @@ export function agentEnv(env: NodeJS.ProcessEnv): Record<string, string | undefi
   const out: Record<string, string | undefined> = { ...env, CLAUDE_AGENT_SDK_CLIENT_APP: 'goal-worker/0.1.0' };
   for (const name of hiddenEnv) delete out[name];
   return out;
+}
+
+/** What goes after Claude Code's system prompt: the factory's purpose, when it has one, then the agent's prompt. */
+export function systemAppend(spec: Pick<TaskSpec, 'purpose'>, files: Pick<AgentFiles, 'prompt'>): string {
+  return spec.purpose ? `## This factory\n${spec.purpose}\n\n${files.prompt}` : files.prompt;
 }
 
 /** The user prompt: the brief, earlier stations' outputs and how to finish. */

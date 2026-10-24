@@ -2,8 +2,10 @@ package docker
 
 import (
 	"cmp"
+	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/moby/moby/api/types/container"
@@ -85,6 +87,28 @@ func TestWorkerSpecOf_KeepsSecretsOutAndRewritesLoopbackGateway(t *testing.T) {
 
 	if _, err := workerSpecOf(ports.TaskSpec{GatewayURL: "unix:///tmp/gw.sock"}); err == nil {
 		t.Error("a non-HTTP gateway URL must be rejected")
+	}
+}
+
+// spec.json carries the factory's purpose for the worker's system prompt, and leaves it out
+// when the factory has none.
+func TestWorkerSpecOf_CarriesThePurpose(t *testing.T) {
+	t.Parallel()
+
+	for _, purpose := range []string{"Answers acme's support questions.", ""} {
+		s, err := workerSpecOf(ports.TaskSpec{Purpose: purpose})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		b, err := json.Marshal(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if got := strings.Contains(string(b), `"purpose"`); s.Purpose != purpose || got != (purpose != "") {
+			t.Errorf("purpose %q: spec.json %s", purpose, b)
+		}
 	}
 }
 

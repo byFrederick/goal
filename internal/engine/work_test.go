@@ -354,6 +354,23 @@ func TestRun_AgentCapsOverrideTheRuntimeBudget(t *testing.T) {
 	}
 }
 
+// Agents read what the factory is for before every item: the line's purpose reaches each task.
+func TestStart_PurposeReachesTask(t *testing.T) {
+	t.Parallel()
+
+	line := policyLine()
+	line.Purpose = "Keeps the acme shop's leases healthy."
+
+	h := newHarness(t, line, porttest.Succeed(`{}`))
+	h.submit(t, domain.NewItem{Title: "Expire stale leases"})
+
+	h.step(t)
+
+	if got := h.runner.Started()[0].Purpose; got != line.Purpose {
+		t.Errorf("purpose = %q, want %q", got, line.Purpose)
+	}
+}
+
 func TestRun_GatewayTokenIsScopedToTheTask(t *testing.T) {
 	t.Parallel()
 

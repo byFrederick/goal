@@ -39,6 +39,7 @@ Environment: only the task's `Env` from goald (which carries `CLAUDE_CODE_OAUTH_
   "skills": ["goal-conventions"],
   "tools_allow": ["Read", "Edit", "Bash"], "tools_deny": ["Bash(git push*)"],
   "gateway_url": "http://host.docker.internal:8081/mcp",
+  "purpose": "what the factory is for (omitted when it has none)",
   "brief": "title and body of the item",
   "inputs": { "spec": { "…": "outputs of earlier stations" } },
   "output": "change",
@@ -48,7 +49,7 @@ Environment: only the task's `Env` from goald (which carries `CLAUDE_CODE_OAUTH_
 
 ## How the agent runs
 
-- Working directory `/workspace`; Claude Code's system prompt with `prompt.md` appended; the brief, earlier outputs and the finishing instruction as the user prompt.
+- Working directory `/workspace`; Claude Code's system prompt with, appended, `## This factory` and the `purpose` (when set), then `prompt.md`; the brief, earlier outputs and the finishing instruction as the user prompt.
 - Tools: the built-in tools named by `tools_allow` (Claude Code permission rules such as `Bash(npm test*)`) are the only ones available, and those rules are pre-approved. `tools_deny` rules are disallowed. Permission mode `dontAsk`: anything not pre-approved is denied, since nobody is there to ask. An agent that allows no tools gets `Read`, `Grep` and `Glob`.
 - Skills: copied from `/goal/agent/skills` to `~/.claude/skills`; only the listed names are enabled. Settings sources are `user` (those skills) and `project` (the checkout's `CLAUDE.md` and `.claude/`).
 - MCP: exactly one server, `goal`, at `gateway_url` over streamable HTTP with `Authorization: Bearer $GOAL_GATEWAY_TOKEN` (`strictMcpConfig`, so `.mcp.json` and other configs are ignored). Its tools are pre-approved and always loaded (`alwaysLoad`): Claude Code would otherwise defer them behind tool search, and agents called them by name and failed. The gateway serves only the agent's allowed tools, which keeps the list short.

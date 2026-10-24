@@ -48,6 +48,27 @@ func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 	}
 }
 
+// The purpose agents read is metadata.purpose, or the older description when that is all a
+// definition has.
+func TestLine_PurposeFallsBackToDescription(t *testing.T) {
+	t.Parallel()
+
+	for doc, want := range map[string]string{
+		edited("  name: acme-check\n", "  name: acme-check\n  purpose: Checks acme.\n  description: Old words.\n"): "Checks acme.",
+		edited("  name: acme-check\n", "  name: acme-check\n  description: Old words.\n"):                          "Old words.",
+		baseFactory: "",
+	} {
+		f, err := Load(checkTree(doc, nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if got := f.Line().Purpose; got != want {
+			t.Errorf("purpose = %q, want %q", got, want)
+		}
+	}
+}
+
 // A target is a positive number; zero or less is no target and is refused.
 func TestLoad_RefusesTargetsThatAreNotPositive(t *testing.T) {
 	t.Parallel()

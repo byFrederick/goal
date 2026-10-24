@@ -490,3 +490,12 @@ func (f *Factory) Warnings() []string {
 
 	return w
 }
+
+// Purpose is what the factory is for: metadata.purpose, or its deprecated alias description.
+func (f *Factory) Purpose() string {
+	if f.Metadata.Purpose != "" {
+		return f.Metadata.Purpose
+	}
+
+	return f.Metadata.Description
+}
