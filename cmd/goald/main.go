@@ -213,7 +213,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	mux.Handle("/", web.Handler())
 
 	// Every request but the health check and the agents' gateway must name goald (DNS rebinding).
-	srv := &http.Server{Addr: s.Listen, Handler: api.CheckHost(s.hosts(), mux), ReadHeaderTimeout: 10 * time.Second}
+	srv := httpServer(s, api.CheckHost(s.hosts(), mux))
 
 	// Deleted organizations go, rows and bucket objects, once their retention has passed.
 	purger := retention.New(store, objects, clock, s.OrgRetention, log)
@@ -356,6 +356,23 @@ func importLegacy(ctx context.Context, s settings, objects ports.ObjectStore, de
 		slog.Int("drafts", res.Drafts), slog.Int("present", res.Present), slog.Int("problems", res.Problems))
 
 	return nil
+}
+
+// HTTP server bounds: a client has readHeaderTimeout to send its headers and readTimeout for the
+// whole request (a definition tree is at most 24 MiB), and an idle keep-alive connection is
+// closed after idleTimeout. There is no write timeout: the realtime stream is one response that
+// lasts as long as its client listens.
+const (
+	readHeaderTimeout = 10 * time.Second
+	readTimeout       = 2 * time.Minute
+	idleTimeout       = 2 * time.Minute
+)
+
+// httpServer is goald's HTTP server on the listen address.
+func httpServer(s settings, h http.Handler) *http.Server {
+	return &http.Server{
+		Addr: s.Listen, Handler: h, ReadHeaderTimeout: readHeaderTimeout, ReadTimeout: readTimeout, IdleTimeout: idleTimeout,
+	}
 }
 
 // publishProblems is the legacy import's validation: authoring's, as a publish of the files
