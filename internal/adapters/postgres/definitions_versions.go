@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -224,7 +225,7 @@ func (d *Definitions) Publish(ctx context.Context, p ports.Publish) (domain.Defi
 			return err
 		}
 
-		moved, err := moveOffStations(ctx, q, v, p.RemovedStations, p.StationMoves, p.By)
+		moved, err := moveOffStations(ctx, q, v, p.RemovedStations, p.StationMoves, p.By, p.At)
 		if err != nil {
 			return err
 		}
@@ -293,7 +294,7 @@ func (d *Definitions) restore(ctx context.Context, q *db.Queries, f db.LockFacto
 		return fmt.Errorf("current version: %w", err)
 	}
 
-	if _, err := moveOffStations(ctx, q, v, r.RemovedStations, r.StationMoves, r.By); err != nil {
+	if _, err := moveOffStations(ctx, q, v, r.RemovedStations, r.StationMoves, r.By, r.At); err != nil {
 		return err
 	}
 
@@ -498,15 +499,19 @@ func pointFactory(ctx context.Context, q *db.Queries, p db.PointFactoryParams) e
 	return nil
 }
 
-// moveOffStations moves the open items of v's factory off the removed stations as moves say,
-// with a moved event each ({from, to, reason: "definition v<number>"}), and returns how many
-// moved. When any is in progress or unmapped it moves nothing and returns an
+// moveOffStations moves the open items of v's factory off the removed stations as moves say, at
+// the given time (now when zero), with a moved event each ({from, to, reason: "definition v<number>"}), and
+// returns how many moved. When any is in progress or unmapped it moves nothing and returns an
 // *ports.ItemsAtRemovedStationError.
 func moveOffStations(ctx context.Context, q *db.Queries, v domain.DefinitionVersion, removed []string,
-	moves map[string]ports.StationMove, by domain.Actor,
+	moves map[string]ports.StationMove, by domain.Actor, at time.Time,
 ) (int, error) {
 	if len(removed) == 0 {
 		return 0, nil
+	}
+
+	if at.IsZero() {
+		at = time.Now()
 	}
 
 	factory, err := uuid.Parse(string(v.FactoryID))
@@ -534,7 +539,7 @@ func moveOffStations(ctx context.Context, q *db.Queries, v domain.DefinitionVers
 		}
 
 		rows, err := q.MoveOffStation(ctx, db.MoveOffStationParams{
-			FactoryID: factory, FromStation: from, ToStation: to.To, State: string(to.State),
+			FactoryID: factory, FromStation: from, ToStation: to.To, State: string(to.State), At: at,
 		})
 		if err != nil {
 			return 0, fmt.Errorf("move items off %s: %w", from, err)

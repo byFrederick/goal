@@ -647,7 +647,7 @@ func (d *Definitions) Publish(ctx context.Context, p ports.Publish) (domain.Defi
 
 		number := f.last + 1
 
-		moved, err := d.moveItems(org, f.id, p.RemovedStations, p.StationMoves, p.By, number)
+		moved, err := d.moveItems(org, f.id, p.RemovedStations, p.StationMoves, p.By, number, p.At)
 		if err != nil {
 			return domain.DefinitionVersion{}, nil, err
 		}
@@ -703,7 +703,7 @@ func (d *Definitions) Restore(ctx context.Context, r ports.Restore) (ports.Facto
 			return ports.FactoryRecord{}, nil, fmt.Errorf("factory name %q: %w", r.Name, ports.ErrNameTaken)
 		}
 
-		if _, err := d.moveItems(org, f.id, r.RemovedStations, r.StationMoves, r.By, v.Number); err != nil {
+		if _, err := d.moveItems(org, f.id, r.RemovedStations, r.StationMoves, r.By, v.Number, r.At); err != nil {
 			return ports.FactoryRecord{}, nil, err
 		}
 
@@ -948,14 +948,21 @@ func (d *Definitions) hasVersionsLocked(factory domain.FactoryID) bool {
 	return false
 }
 
-// moveItems moves the open items of removed stations as moves say, for version number.
-func (d *Definitions) moveItems(org domain.OrgID, factory domain.FactoryID, removed []string, moves map[string]ports.StationMove, by domain.Actor, number int) (int, error) {
+// moveItems moves the open items of removed stations as moves say, for version number, at the
+// time given (now when zero).
+func (d *Definitions) moveItems(org domain.OrgID, factory domain.FactoryID, removed []string, moves map[string]ports.StationMove,
+	by domain.Actor, number int, at time.Time,
+) (int, error) {
 	if d.items == nil || len(removed) == 0 {
 		return 0, nil
 	}
 
+	if at.IsZero() {
+		at = d.stamp()
+	}
+
 	return d.items.moveOffStations(org, factory, stationMoves{
-		removed: removed, moves: moves, at: d.stamp(), actor: by.Ref(), reason: fmt.Sprintf("definition v%d", number),
+		removed: removed, moves: moves, at: at, actor: by.Ref(), reason: fmt.Sprintf("definition v%d", number),
 	})
 }
 

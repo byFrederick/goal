@@ -509,8 +509,8 @@ const moveOffStation = `-- name: MoveOffStation :many
 UPDATE work_items SET
   station = $1,
   state = CASE WHEN state = 'blocked' THEN state ELSE $2::text END,
-  updated_at = now()
-WHERE factory_id = $3 AND station = $4
+  updated_at = $3::timestamptz
+WHERE factory_id = $4 AND station = $5
   AND state NOT IN ('done', 'cancelled', 'in_progress')
 RETURNING id, number, updated_at
 `
@@ -518,6 +518,7 @@ RETURNING id, number, updated_at
 type MoveOffStationParams struct {
 	ToStation   string
 	State       string
+	At          time.Time
 	FactoryID   uuid.UUID
 	FromStation string
 }
@@ -528,12 +529,14 @@ type MoveOffStationRow struct {
 	UpdatedAt time.Time
 }
 
-// Moves a factory's open items off a removed station. Blocked items stay blocked; items in
-// progress are refused before this runs.
+// Moves a factory's open items off a removed station at the caller's time (at), as every other
+// change of an item, so their spans keep one clock. Blocked items stay blocked; items in progress
+// are refused before this runs.
 func (q *Queries) MoveOffStation(ctx context.Context, arg MoveOffStationParams) ([]MoveOffStationRow, error) {
 	rows, err := q.db.Query(ctx, moveOffStation,
 		arg.ToStation,
 		arg.State,
+		arg.At,
 		arg.FactoryID,
 		arg.FromStation,
 	)

@@ -124,12 +124,13 @@ ORDER BY number
 FOR NO KEY UPDATE;
 
 -- name: MoveOffStation :many
--- Moves a factory's open items off a removed station. Blocked items stay blocked; items in
--- progress are refused before this runs.
+-- Moves a factory's open items off a removed station at the caller's time (at), as every other
+-- change of an item, so their spans keep one clock. Blocked items stay blocked; items in progress
+-- are refused before this runs.
 UPDATE work_items SET
   station = sqlc.arg(to_station),
   state = CASE WHEN state = 'blocked' THEN state ELSE sqlc.arg(state)::text END,
-  updated_at = now()
+  updated_at = sqlc.arg(at)::timestamptz
 WHERE factory_id = sqlc.arg(factory_id) AND station = sqlc.arg(from_station)
   AND state NOT IN ('done', 'cancelled', 'in_progress')
 RETURNING id, number, updated_at;

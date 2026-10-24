@@ -215,6 +215,9 @@ func testPublishRemovedStations(f *fixture) {
 	f.finish(t, running, lease)
 
 	p.StationMoves = map[string]ports.StationMove{stQA: {To: stReview, State: domain.StateQueued}}
+	// The moves happen at the caller's clock, like every other change of an item, so spans never
+	// mix it with the database's (review 2.2 L4).
+	p.At = time.Now().UTC().Add(time.Hour).Truncate(time.Microsecond)
 
 	v, err := f.Definitions.Publish(ctx, p)
 	if err != nil {
@@ -228,6 +231,10 @@ func testPublishRemovedStations(f *fixture) {
 		}
 
 		f.movedTo(t, it, stReview, want, fmt.Sprintf("definition v%d", v.Number))
+
+		if got := f.itemNow(t, it.ID); !got.UpdatedAt.Equal(p.At) {
+			t.Errorf("item #%d moved at %s; want the publish's time %s", it.Number, got.UpdatedAt, p.At)
+		}
 	}
 
 	if got := f.itemNow(t, elsewhere.ID); got.Station != stBuild || got.State != domain.StateQueued {

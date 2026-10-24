@@ -201,6 +201,9 @@ type Publish struct {
 	// Start, on a first publish only, starts the factory; false creates it paused.
 	Start bool
 	By    domain.Actor
+	// At is when the moved items move (their updated_at, and so their spans and moved events),
+	// from the caller's clock like every other change of an item; zero means now.
+	At time.Time
 }
 
 // Restore points a factory back at one of its published versions. It returns ErrNotFound when
@@ -218,6 +221,8 @@ type Restore struct {
 	RemovedStations []string
 	StationMoves    map[string]StationMove
 	By              domain.Actor
+	// At is as for Publish.
+	At time.Time
 }
 
 // StationMove sends the open items of a removed station to a station the new version keeps.

@@ -69,7 +69,7 @@ func (s *Service) Publish(ctx context.Context, f domain.FactoryID, r PublishRequ
 	v, err := s.store.Publish(ctx, ports.Publish{
 		Factory: f, DraftRevision: r.Revision, ExpectedCurrent: r.ExpectedCurrent,
 		Name: c.factory.Metadata.Name, Title: c.factory.Metadata.Title, Message: r.Message,
-		RemovedStations: removed, StationMoves: moves, Start: r.Start == nil || *r.Start, By: by,
+		RemovedStations: removed, StationMoves: moves, Start: r.Start == nil || *r.Start, By: by, At: s.clock.Now(),
 	})
 	if errors.Is(err, ports.ErrConflict) {
 		return domain.DefinitionVersion{}, fmt.Errorf("publish %s: %w", f, ErrDraftConflict)
@@ -229,7 +229,7 @@ func (s *Service) Restore(ctx context.Context, f domain.FactoryID, r RestoreRequ
 	out, err := s.store.Restore(ctx, ports.Restore{
 		Factory: f, Version: v.ID, ExpectedCurrent: r.ExpectedCurrent,
 		Name: restored.Metadata.Name, Title: restored.Metadata.Title,
-		RemovedStations: removed, StationMoves: moves, By: by,
+		RemovedStations: removed, StationMoves: moves, By: by, At: s.clock.Now(),
 	})
 	if errors.Is(err, ports.ErrNotFound) {
 		return ports.FactoryRecord{}, fmt.Errorf("restore %s of %s: %w", r.Version, f, ErrVersionNotFound)
