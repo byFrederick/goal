@@ -71,6 +71,9 @@ export function CardDnd({
     // Enter stays the link's: it opens the item.
     useSensor(KeyboardSensor, {
       coordinateGetter: columnCoordinates,
+      // A column beside the view scrolls in at once, so the next arrow and the drop see where the
+      // columns went (a smooth scroll is still running when they come), as the Line editor does.
+      scrollBehavior: 'auto',
       keyboardCodes: { start: ['Space'], cancel: ['Escape'], end: ['Space', 'Enter'] },
     }),
   );

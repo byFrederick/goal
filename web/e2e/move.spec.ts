@@ -91,25 +91,30 @@ test('drag a card to another column, then confirm the move', async ({ page }) =>
   await expect(build.getByRole('link', { name: serveUI })).toBeVisible();
 });
 
-test('carry a card with the keyboard: Space picks it up, the arrows choose the column', async ({ page }) => {
+test('carry a card with the keyboard to a column off the screen: one arrow, one column', async ({ page }) => {
   test.skip(isPhone(page), 'phones move cards with the arrow button');
   await page.goto('/o/acme/f/goal/board');
+  const merge = page.getByRole('region', { name: 'Merge', exact: true });
   await page.getByRole('link', { name: serveUI }).focus();
+  // At 768 px the board scrolls sideways and Merge starts out of view.
+  if (page.viewportSize()?.width === 768) await expect(merge).not.toBeInViewport();
+
   await page.keyboard.press('Space');
   await expect(page.getByText('goal#12 is over Approve spec.')).toBeAttached();
-  // dnd-kit listens for the arrows a moment after the pick-up, so a first press can be lost, and a
-  // narrow board scrolls before the card moves: step toward Build until the card is over it.
-  const overBuild = page.getByText('goal#12 is over Build.');
-  const still = page.getByText('goal#12 is over Approve spec.');
-  await expect(async () => {
-    if ((await overBuild.count()) === 0)
-      await page.keyboard.press((await still.count()) > 0 ? 'ArrowRight' : 'ArrowLeft');
-    await expect(overBuild).toBeAttached({ timeout: 1000 });
-  }).toPass();
+  // dnd-kit starts listening for the arrows in a task it queues at the pick-up: let it run.
+  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve)));
+
+  // Three presses in a row, as a person taps: each carries the card one column, scrolling the
+  // board at once when the column is out of view, so the next press starts from there.
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByText('goal#12 is over Merge.')).toBeAttached();
+  await expect(merge).toBeInViewport();
   await page.keyboard.press('Space');
 
   const dialog = page.getByRole('dialog', { name: 'Move goal#12' });
-  await expect(dialog.getByRole('radio', { name: /Build/ })).toBeChecked();
+  await expect(dialog.getByRole('radio', { name: /Merge/ })).toBeChecked();
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
 });
