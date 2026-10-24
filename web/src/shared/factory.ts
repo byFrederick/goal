@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useRouteContext } from '@tanstack/react-router';
 import { useCallback } from 'react';
 import { factoriesQuery } from '../api/queries';
-import type { Factory, StationKind } from '../api/types';
+import type { Factory } from '../api/types';
 import { humanize } from './format';
 
 /**
@@ -30,10 +30,6 @@ export function findFactory(factories: readonly Factory[], key: string): Factory
 
 export function factoryTitle(f: { name: string; title?: string | undefined }): string {
   return f.title || humanize(f.name);
-}
-
-export function stationKind(factory: Factory, station: string): StationKind | undefined {
-  return factory.stations.find((s) => s.id === station)?.kind;
 }
 
 /** The API key of an item route's $ref: a bare number becomes `<factory>#<number>`. */

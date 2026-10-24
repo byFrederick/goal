@@ -15,8 +15,6 @@ import {
 import type {
   AgentStats,
   AndonPull,
-  AuditFilter,
-  AuditPage,
   Board,
   ConstraintReport,
   EventPage,
@@ -59,10 +57,6 @@ export const cancel = (signal: AbortSignal | undefined) => (signal ? { signal } 
 export async function listOrgs(signal?: AbortSignal): Promise<OrgSummary[]> {
   const body = await unwrap(goal.GET('/v1/orgs', cancel(signal)));
   return body.orgs;
-}
-
-export function getOrg(org: string, signal?: AbortSignal): Promise<Org> {
-  return unwrap(goal.GET('/v1/orgs/{org}', { params: { path: { org } }, ...cancel(signal) }));
 }
 
 export function createOrg(org: NewOrg): Promise<Org> {
@@ -111,11 +105,6 @@ export function patchOrgSettings(org: string, patch: OrgSettingsPatch): Promise<
 /** Deletes the organization; `confirm` must be its name. It 404s at once and is purged after purge_after. */
 export function deleteOrg(org: string, confirm: string): Promise<OrgDeleted> {
   return unwrap(goal.DELETE('/v1/orgs/{org}', { params: { path: { org } }, body: { confirm } }));
-}
-
-/** One page of the organization's audit log, newest first; pass next_before as `before` for the next. */
-export function listAudit(org: string, filter: AuditFilter = {}, signal?: AbortSignal): Promise<AuditPage> {
-  return unwrap(goal.GET(orgPath('/audit'), { params: { path: { org }, query: filter }, ...cancel(signal) }));
 }
 
 export async function listFactories(org: string, signal?: AbortSignal): Promise<Factory[]> {

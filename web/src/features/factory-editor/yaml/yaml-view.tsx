@@ -155,7 +155,7 @@ export function YamlView({ search }: SectionViewProps) {
 
   // The change gutter: this file against the version the draft is based on.
   const comparison = useQuery({
-    queryKey: [...defKeys.compare(org, f, 'base', 'draft'), revision],
+    queryKey: defKeys.compare(org, f, 'base', 'draft', revision),
     queryFn: ({ signal }) => compareVersions(org, f, 'base', 'draft', signal),
     enabled: hasDraft,
     placeholderData: keepPreviousData,

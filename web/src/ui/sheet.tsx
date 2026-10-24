@@ -4,7 +4,6 @@ import type { ReactNode, RefObject } from 'react';
 
 export const Sheet = D.Root;
 export const SheetTrigger = D.Trigger;
-export const SheetClose = D.Close;
 
 interface SheetContentProps {
   title: ReactNode;

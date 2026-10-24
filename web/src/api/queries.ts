@@ -23,11 +23,9 @@ import {
   getItem,
   getLeadTime,
   getMetrics,
-  getOrg,
   getOrgSettings,
   getWeekly,
   type ItemFilter,
-  listAudit,
   listFactories,
   listItemEvents,
   listItemRuns,
@@ -35,7 +33,6 @@ import {
   listOrgs,
 } from './client';
 import {
-  compareVersions,
   getDraft,
   getDraftFile,
   getDraftModel,
@@ -49,7 +46,7 @@ import {
   listVersions,
   validateDraft,
 } from './definitions';
-import type { AuditFilter, ItemEvent } from './types';
+import type { ItemEvent } from './types';
 
 /**
  * The one way route loaders load (loaders.test.ts keeps it so): an ensureQueryData that survives
@@ -74,11 +71,9 @@ export const keys = {
   orgs: ['orgs'] as const,
   /** The prefix of everything of one organization. */
   org: (org: string) => ['org', org] as const,
-  orgDetail: (org: string) => ['org', org, 'detail'] as const,
   /** What each factory needs from people now (the rail's badges). */
   attention: (org: string) => ['org', org, 'attention'] as const,
   settings: (org: string) => ['org', org, 'settings'] as const,
-  audit: (org: string, filter: AuditFilter) => ['org', org, 'audit', filter] as const,
   factories: (org: string) => ['org', org, 'factories'] as const,
   /** The prefix of every factory overview window. */
   overviews: (org: string) => ['org', org, 'overview'] as const,
@@ -112,9 +107,6 @@ export const orgsQuery = queryOptions({
   staleTime: 60_000,
 });
 
-export const orgQuery = (org: string) =>
-  queryOptions({ queryKey: keys.orgDetail(org), queryFn: ({ signal }) => getOrg(org, signal), staleTime: 60_000 });
-
 /** The rail's badges: cheap enough to refetch on every stream event. */
 export const attentionQuery = (org: string) =>
   queryOptions({
@@ -140,9 +132,6 @@ export const settingsQuery = (org: string) =>
     queryFn: ({ signal }) => getOrgSettings(org, signal),
     staleTime: 30_000,
   });
-
-export const auditQuery = (org: string, filter: AuditFilter = {}) =>
-  queryOptions({ queryKey: keys.audit(org, filter), queryFn: ({ signal }) => listAudit(org, filter, signal) });
 
 export const factoriesQuery = (org: string) =>
   queryOptions({
@@ -233,8 +222,9 @@ export const defKeys = {
   versionFile: (org: string, sha256: string) => ['org', org, 'blob', sha256] as const,
   /** The prefix of every comparison of the factory. */
   compares: (org: string, f: string) => ['org', org, 'factory', f, 'compare'] as const,
-  compare: (org: string, f: string, from: string, to: string) =>
-    ['org', org, 'factory', f, 'compare', from, to] as const,
+  /** A comparison involving the draft changes with its revision (0 when neither side is the draft). */
+  compare: (org: string, f: string, from: string, to: string, revision: number) =>
+    ['org', org, 'factory', f, 'compare', from, to, revision] as const,
   templates: (org: string) => ['org', org, 'templates'] as const,
   template: (org: string, name: string, version?: number) =>
     ['org', org, 'template', name, version ?? 'latest'] as const,
@@ -310,12 +300,6 @@ export const versionFileQuery = (org: string, factory: string, version: string, 
     queryKey: defKeys.versionFile(org, sha256),
     queryFn: ({ signal }) => getVersionFile(org, factory, version, path, signal),
     staleTime: Number.POSITIVE_INFINITY,
-  });
-
-export const compareQuery = (org: string, factory: string, from = 'base', to = 'draft') =>
-  queryOptions({
-    queryKey: defKeys.compare(org, factory, from, to),
-    queryFn: ({ signal }) => compareVersions(org, factory, from, to, signal),
   });
 
 /** The template catalog changes when an operator pushes a version: a few minutes are fresh enough. */

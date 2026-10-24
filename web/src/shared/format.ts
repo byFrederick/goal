@@ -4,7 +4,6 @@ const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD',
 const usdWhole = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const clock = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' });
 const dayMonth = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
-const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' });
 
 /** A coarse age for cards: "now", "6 min", "2 h", "3 d". */
 export function formatAge(seconds: number): string {
@@ -56,11 +55,6 @@ export function formatClock(iso: string, now = new Date()): string {
 /** "Oct 17" from an ISO date or day ("2026-10-17"). */
 export function formatDay(day: string): string {
   return dayMonth.format(new Date(day.length === 10 ? `${day}T12:00:00Z` : day));
-}
-
-/** "Mon" from a day ("2026-10-19"). */
-export function formatWeekday(day: string): string {
-  return weekday.format(new Date(`${day.slice(0, 10)}T12:00:00Z`));
 }
 
 /** Station and agent ids as words: "approve-spec" → "Approve spec". */

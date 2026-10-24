@@ -62,7 +62,7 @@ export function DraftChangesNote({ agent, className }: { agent: string; classNam
   // comparison at one revision never changes, so it is keyed by the revision.
   const draft = useQuery({ ...factoryQuery(org.id, factory.id), staleTime: 0 }).data?.draft;
   const compare = useQuery({
-    queryKey: [...defKeys.compare(org.id, factory.id, 'base', 'draft'), draft?.revision ?? 0],
+    queryKey: defKeys.compare(org.id, factory.id, 'base', 'draft', draft?.revision ?? 0),
     queryFn: ({ signal }) => compareVersions(org.id, factory.id, 'base', 'draft', signal),
     enabled: Boolean(draft),
     staleTime: Number.POSITIVE_INFINITY,

@@ -160,7 +160,7 @@ function definitionCache() {
   client.setQueryData(defKeys.validation(acme, goal, 4), {});
   client.setQueryData(defKeys.versions(acme, goal), {});
   client.setQueryData(defKeys.version(acme, goal, '8'), {});
-  client.setQueryData(defKeys.compare(acme, goal, 'base', 'draft'), {});
+  client.setQueryData(defKeys.compare(acme, goal, 'base', 'draft', 42), {});
   client.setQueryData(defKeys.versionFile(acme, 'a1b2'), '');
   client.setQueryData(defKeys.templates(acme), []);
   client.setQueryData(defKeys.draft(acme, sre), {});
@@ -217,7 +217,7 @@ describe('definitionInvalidations', () => {
         defKeys.versions(acme, goal),
         defKeys.version(acme, goal, '8'),
         defKeys.draft(acme, goal),
-        defKeys.compare(acme, goal, 'base', 'draft'),
+        defKeys.compare(acme, goal, 'base', 'draft', 42),
         keys.board(acme, goal),
         keys.overview(acme, '7d'),
         keys.factories(acme),

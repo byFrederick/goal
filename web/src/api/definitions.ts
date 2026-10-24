@@ -17,7 +17,6 @@ import type {
   Comparison,
   Draft,
   DraftModel,
-  DraftTree,
   Factory,
   FileInfo,
   FileMap,
@@ -95,14 +94,6 @@ export function createFactory(org: string, request: NewFactoryRequest): Promise<
 /** Deletes a factory never published (the wizard's Cancel); 409 `factory-published` otherwise. */
 export async function deleteFactory(org: string, factory: string): Promise<void> {
   await unwrap(goal.DELETE(orgPath('/factories/{factory}'), { params: { path: { org, factory } } }));
-}
-
-export function pauseFactory(org: string, factory: string): Promise<Factory> {
-  return unwrap(goal.POST(orgPath('/factories/{factory}/pause'), { params: { path: { org, factory } } }));
-}
-
-export function resumeFactory(org: string, factory: string): Promise<Factory> {
-  return unwrap(goal.POST(orgPath('/factories/{factory}/resume'), { params: { path: { org, factory } } }));
 }
 
 /** The latest version of every template of the catalog, by name. */
@@ -285,13 +276,6 @@ export function deleteDraftFile(org: string, factory: string, path: string, sha2
     goal.DELETE(orgPath('/factories/{factory}/draft/files/{path}'), {
       params: { path: { org, factory, path }, header: { 'If-Match': tag(sha256) } },
     }),
-  ).then(saved(factory));
-}
-
-/** Makes `tree.files` the draft's whole tree; 412 when `expected_revision` is stale. */
-export function replaceDraftTree(org: string, factory: string, tree: DraftTree): Promise<SaveResult> {
-  return unwrap(
-    goal.PUT(orgPath('/factories/{factory}/draft/tree'), { params: { path: { org, factory } }, body: tree }),
   ).then(saved(factory));
 }
 

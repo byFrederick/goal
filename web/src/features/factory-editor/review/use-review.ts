@@ -38,7 +38,7 @@ export function useComparison(pair: ComparePair | undefined): { data: Comparison
   const { org, factory, revision } = useEditorFacts();
   const draftSide = pair?.from === 'draft' || pair?.to === 'draft';
   const query = useQuery({
-    queryKey: [...defKeys.compare(org, factory, pair?.from ?? '', pair?.to ?? ''), draftSide ? revision : 0],
+    queryKey: defKeys.compare(org, factory, pair?.from ?? '', pair?.to ?? '', draftSide ? revision : 0),
     queryFn: ({ signal }) => compareVersions(org, factory, pair?.from, pair?.to, signal),
     enabled: pair !== undefined,
     placeholderData: keepPreviousData,

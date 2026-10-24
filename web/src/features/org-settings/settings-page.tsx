@@ -79,7 +79,6 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
       toast.success('Saved');
       // The rail, the sidebar and the route context read the organization from the list.
       await client.refetchQueries({ queryKey: keys.orgs });
-      void client.invalidateQueries({ queryKey: keys.orgDetail(org.id) });
       if (body.slug) {
         leaving.current = true;
         await navigate({ to: '/o/$org/settings', params: { org: next.slug }, replace: true });
