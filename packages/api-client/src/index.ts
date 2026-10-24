@@ -97,6 +97,16 @@ export type Change = Schemas["Change"];
 export type TemplateSummary = Schemas["TemplateSummary"];
 export type Template = Schemas["Template"];
 export type DefinitionEvent = Schemas["DefinitionEvent"];
+// Builder (D §8): editor metadata and the skills.sh skills catalog.
+export type BuilderMeta = Schemas["BuilderMeta"];
+export type BuilderModel = Schemas["BuilderModel"];
+export type BuilderCapabilities = Schemas["BuilderCapabilities"];
+export type BuilderLimits = Schemas["BuilderLimits"];
+export type SkillListing = Schemas["SkillListing"];
+export type SkillPage = Schemas["SkillPage"];
+export type SkillFiles = Schemas["SkillFiles"];
+export type TextFile = Schemas["TextFile"];
+export type Base64File = Schemas["Base64File"];
 export type Board = Schemas["Board"];
 export type BoardStation = Schemas["BoardStation"];
 export type Metrics = Schemas["Metrics"];

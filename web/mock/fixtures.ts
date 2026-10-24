@@ -17,6 +17,15 @@ import type {
   Run,
   VersionRef,
 } from '@goal/api-client';
+import {
+  type MockDefinition,
+  type MockSkill,
+  type MockTemplate,
+  seedDefinitions,
+  seedSkills,
+  seedTemplates,
+} from './definition-seed.ts';
+import type { MockFault } from './faults.ts';
 
 export interface MockItem {
   id: string;
@@ -120,6 +129,14 @@ export interface MockState {
   nextEventId: number;
   /** Every agent run, in start order; goald's agent_runs. */
   runs: Run[];
+  /** Each factory's versions and draft, by factory id. */
+  definitions: Record<string, MockDefinition>;
+  /** The template catalog (catalog/templates/). */
+  templates: MockTemplate[];
+  /** The skills.sh skills catalog (catalog/skills/). */
+  skills: MockSkill[];
+  /** Faults injected by POST /__mock/fail. */
+  faults: MockFault[];
 }
 
 type Tool = [name: string, input: string, summary: string, isError?: boolean];
@@ -996,7 +1013,7 @@ export function seed(now = Date.now()): MockState {
       { id: acmeOrg, slug: 'acme', name: 'Acme', mark: 'Ac', factory_count: 0, created_at: created },
       { id: labsOrg, slug: 'example-labs', name: 'Example Labs', mark: 'EL', factory_count: 0, created_at: created },
     ],
-    factories: [goalFactory, sreFactory, supportFactory, researchFactory],
+    factories: [goalFactory, sreFactory, supportFactory, researchFactory].map((f) => structuredClone(f)),
     // Acme shares 6 slots, at most 3 for goal and 2 for sre (Org-Settings board); labs has no caps.
     slots: {
       [acmeOrg]: { max: 6, factories: { [goalFactory.id]: 3, [sreFactory.id]: 2 } },
@@ -1057,6 +1074,10 @@ export function seed(now = Date.now()): MockState {
     events: [],
     nextEventId: 1,
     runs: [],
+    definitions: seedDefinitions(),
+    templates: seedTemplates(),
+    skills: seedSkills(),
+    faults: [],
   };
 
   const localUser = { kind: 'user', id: 'local', name: 'Local user' } as const;

@@ -24,7 +24,7 @@ export default defineConfig({
   preview: { port: 4173, strictPort: true, ...(proxy ? { proxy } : {}) },
   build: { target: 'es2023' },
   test: {
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'mock/**/*.test.ts'],
     environment: 'node',
   },
 });

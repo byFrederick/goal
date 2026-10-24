@@ -3,8 +3,9 @@
 // (mock/plugin.ts). Like goald it serves /v1/orgs and every other route under
 // /v1/orgs/{org} (slug or id; unknown is 404), among them the shell's attention, overview and
 // inbox, keeps state per process and broadcasts each organization's item events on its
-// /v1/orgs/{org}/stream. Decisions are the local user's: every decision waits on you.
-// POST /__mock/reset restores the seed.
+// /v1/orgs/{org}/stream. Decisions are the local user's: every decision waits on you. The
+// definitions and builder routes are definitions.ts's. POST /__mock/reset restores the seed;
+// POST /__mock/fail injects faults (faults.ts).
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
   AuditPage,
@@ -27,6 +28,8 @@ import type {
   RunList,
   StreamEvent,
 } from '@goal/api-client';
+import { createDefinitions } from './definitions.ts';
+import { parseFault, sleep, takeFault } from './faults.ts';
 import { type MockItem, type MockSlots, type MockState, seed, trackSpan } from './fixtures.ts';
 
 type Next = (err?: unknown) => void;
@@ -88,6 +91,14 @@ async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> 
 export function createMockApi(options: { live?: boolean } = {}): MockApi {
   let state: MockState = seed();
   const subscribers = new Set<Subscriber>();
+  const definitions = createDefinitions({
+    state: () => state,
+    broadcast: (org, event, data) => {
+      for (const sub of subscribers) {
+        if (sub.org === org) sub.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      }
+    },
+  });
 
   const ref = (it: MockItem) => `${it.factory}#${it.number}`;
 
@@ -391,7 +402,21 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       state = seed();
       return json(res, 200, { ok: true });
     }
+    if (path === '/__mock/fail' && method === 'POST') {
+      const fault = parseFault(await readBody(req));
+      if (!fault) return problem(res, 400, 'Bad Request', 'a fault names the path it applies to');
+      state.faults.push(fault);
+      return json(res, 200, { ok: true });
+    }
+    if (path === '/__mock/fail' && method === 'DELETE') {
+      state.faults = [];
+      return json(res, 200, { ok: true });
+    }
     if (!path.startsWith('/v1/')) return next();
+
+    const fault = takeFault(state.faults, method, path);
+    if (fault?.delay_ms) await sleep(fault.delay_ms);
+    if (fault?.status) return json(res, fault.status, definitions.faultBody(path, fault));
 
     if (path === '/v1/health') return json(res, 200, { status: 'ok' });
 
@@ -427,6 +452,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const org = findOrg(decodeURIComponent(scoped[1] ?? ''));
     if (!org) return json(res, 404, { title: 'Organization not found', status: 404, code: 'org-not-found' });
     const rest = scoped[2] ?? '';
+    if (await definitions.handle(org, rest, method, url, req, res)) return;
 
     if (rest === '' && method === 'GET') return json(res, 200, withCount(org));
     if (rest === '' && method === 'DELETE') {
