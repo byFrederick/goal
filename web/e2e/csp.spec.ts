@@ -24,7 +24,9 @@ test('the app runs under its Content-Security-Policy, Monaco and its workers too
 
   const response = await page.goto('/o/acme/f/goal');
   expect(response?.headers()['content-security-policy']).toContain("frame-ancestors 'none'");
+  expect(response?.headers()['content-security-policy']).toContain("object-src 'none'");
   expect(response?.headers()['x-frame-options']).toBe('DENY');
+  expect(response?.headers()['cross-origin-opener-policy']).toBe('same-origin');
   await expect(page.getByRole('heading', { level: 1, name: 'Goal floor' })).toBeVisible();
 
   await page.goto('/o/acme/f/goal/board');

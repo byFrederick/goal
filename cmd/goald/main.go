@@ -210,7 +210,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	servers := httpServers(s, apiHandler, gw, web.Handler())
+	servers := httpServers(s, apiHandler, gw, web.Handler(web.Options{StrictTransport: s.strictTransport()}), log)
 
 	// Deleted organizations go, rows and bucket objects, once their retention has passed.
 	purger := retention.New(store, objects, clock, s.OrgRetention, log)
@@ -219,10 +219,15 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 }
 
 // httpServers are goald's HTTP servers: the main listener and, with GOAL_GATEWAY_LISTEN, the
-// gateway's own. Every request to the main one but the health check and the agents' gateway must
-// name goald (DNS rebinding); the gateway's serves nothing that a Host could matter to.
-func httpServers(s settings, apiHandler, gw, spa http.Handler) []*http.Server {
+// gateway's own. Under GOAL_AUTH=session the main one also serves the identity service's
+// endpoints (/api/auth/*, api.AuthProxy). Every request to the main one but the health check and
+// the agents' gateway must name goald (DNS rebinding); the gateway's serves nothing that a Host
+// could matter to.
+func httpServers(s settings, apiHandler, gw, spa http.Handler, log *slog.Logger) []*http.Server {
 	primary, gatewayOnly := routes(s.GatewayListen != "", apiHandler, gw, spa)
+	if s.Auth == authSession {
+		primary = api.AuthProxy(api.AuthProxyConfig{Upstream: s.AuthUpstream, TrustedProxies: s.TrustedProxies, Logger: log}, primary)
+	}
 
 	servers := []*http.Server{httpServer(s.Listen, api.CheckHost(s.hosts(), primary))}
 	if gatewayOnly != nil {

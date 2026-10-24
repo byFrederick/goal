@@ -2,6 +2,7 @@ package main
 
 import (
 	"maps"
+	"net/netip"
 	"slices"
 	"strings"
 	"testing"
@@ -51,6 +52,55 @@ func TestSettings_Defaults(t *testing.T) {
 	want := map[string]string{"CLAUDE_CODE_OAUTH_TOKEN": "env:CLAUDE_CODE_OAUTH_TOKEN"} //nolint:gosec // a reference, not a secret
 	if !maps.Equal(s.TaskEnv, want) {
 		t.Errorf("task env = %v, want %v", s.TaskEnv, want)
+	}
+}
+
+// The single local user until sign-in exists, the identity service beside goald on loopback, no
+// proxy believed, and the public origin the listen address, over http.
+func TestSettings_AuthDefaults(t *testing.T) {
+	t.Parallel()
+
+	s, err := settingsFrom(envOf(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if s.Auth != authNone || s.AuthUpstream.String() != "http://127.0.0.1:8081" || len(s.TrustedProxies) != 0 {
+		t.Errorf("auth %s, upstream %s, trusted proxies %v; want none, http://127.0.0.1:8081 and none", s.Auth, s.AuthUpstream, s.TrustedProxies)
+	}
+
+	if s.PublicURL != "http://127.0.0.1:8080" || s.strictTransport() {
+		t.Errorf("public URL %s (strict transport %v), want http://127.0.0.1:8080 without", s.PublicURL, s.strictTransport())
+	}
+}
+
+// The identity service's address and the proxies goald believes, as configured: a loopback
+// upstream by any loopback name, CIDRs masked, single addresses as one-address prefixes.
+func TestSettings_AuthProxy(t *testing.T) {
+	t.Parallel()
+
+	s, err := settingsFrom(envOf(map[string]string{
+		upstreamEnv: "http://[::1]:9081/", proxiesEnv: " 10.1.2.3/8, 192.0.2.7 ,2001:db8::/32,::ffff:198.51.100.1",
+		publicURLEnv: "https://goal.example.com",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if s.AuthUpstream.String() != "http://[::1]:9081" {
+		t.Errorf("upstream = %s, want http://[::1]:9081", s.AuthUpstream)
+	}
+
+	want := []netip.Prefix{
+		netip.MustParsePrefix("10.0.0.0/8"), netip.MustParsePrefix("192.0.2.7/32"),
+		netip.MustParsePrefix("2001:db8::/32"), netip.MustParsePrefix("198.51.100.1/32"),
+	}
+	if !slices.Equal(s.TrustedProxies, want) {
+		t.Errorf("trusted proxies = %v, want %v", s.TrustedProxies, want)
+	}
+
+	if !s.strictTransport() {
+		t.Error("an https public URL is served without Strict-Transport-Security")
 	}
 }
 
@@ -117,6 +167,14 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 			env:  map[string]string{gatewayEnv: "127.0.0.1:8090", gatewayURLEnv: "http://host.docker.internal:8080/mcp"},
 			want: "names GOAL_LISTEN",
 		},
+		// Fail closed: no mode goald cannot enforce, and no unknown one.
+		{name: "sessions before goald checks them", env: map[string]string{authEnv: "session"}, want: "GOAL_AUTH=session"},
+		{name: "unknown auth mode", env: map[string]string{authEnv: "off"}, want: authEnv},
+		{name: "auth service off this machine", env: map[string]string{upstreamEnv: "http://auth.example.com:8081"}, want: upstreamEnv},
+		{name: "auth service over https", env: map[string]string{upstreamEnv: "https://127.0.0.1:8081"}, want: upstreamEnv},
+		{name: "auth service with a path", env: map[string]string{upstreamEnv: "http://127.0.0.1:8081/api/auth"}, want: upstreamEnv},
+		{name: "auth service with a user", env: map[string]string{upstreamEnv: "http://u:p@127.0.0.1:8081"}, want: upstreamEnv}, //nolint:gosec // a test URL
+		{name: "trusted proxy not a CIDR", env: map[string]string{proxiesEnv: "10.0.0.0/8,proxy.example.com"}, want: proxiesEnv},
 	}
 
 	for _, tt := range tests {
@@ -276,6 +334,29 @@ func TestSettings_EveryVariableGoaldReadsIsReserved(t *testing.T) {
 
 	if !slices.Contains(custom.reserved(), "ACME_SIGNING_KEY") {
 		t.Errorf("reserved %v, want the variable the gateway key reference names", custom.reserved())
+	}
+}
+
+// No factory definition can hand an agent the identity settings and secrets, whether goald reads
+// them or only the identity service, the CLI or `goal db init` does, even when goald was started
+// with them in its environment (spec 3, §5.6).
+func TestSettings_ReservedIncludesAuthVariables(t *testing.T) {
+	t.Parallel()
+
+	s, err := settingsFrom(envOf(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, name := range []string{
+		"GOAL_AUTH", "GOAL_PUBLIC_URL", "GOAL_AUTH_UPSTREAM", "GOAL_TRUSTED_PROXIES", "GOAL_GATEWAY_LISTEN", "GOAL_AUTH_GOOGLE",
+		"GOAL_AUTH_LISTEN", "GOAL_AUTH_DATABASE_URL", "BETTER_AUTH_SECRETS", "BETTER_AUTH_SECRET", "BETTER_AUTH_URL",
+		"GOAL_BOOTSTRAP_OWNER_EMAIL", "GOAL_SMTP_URL", "GOAL_SMTP_FROM", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
+		"GOAL_PG_AUTH_PASSWORD", "GOAL_API_KEY", "GOAL_DATABASE_ADMIN_URL",
+	} {
+		if !slices.Contains(s.reserved(), name) {
+			t.Errorf("definitions may reference %s", name)
+		}
 	}
 }
 

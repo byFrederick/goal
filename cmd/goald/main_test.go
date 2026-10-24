@@ -3,7 +3,11 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"sync/atomic"
 	"testing"
+
+	"github.com/byFrederick/goal/web"
 )
 
 // Without a gateway listener the main one serves the gateway beside the API and the SPA; with one,
@@ -52,6 +56,54 @@ func TestRoutes_TheGatewayListenerServesOnlyTheGateway(t *testing.T) {
 			if got := served(tt.h, path); got != tt.want[i] {
 				t.Errorf("%s: %s served by %s, want %s", tt.name, path, got, tt.want[i])
 			}
+		}
+	}
+}
+
+// goald forwards /api/auth/* to the identity service only under GOAL_AUTH=session; under none it
+// is no route at all (the UI's 404, never its index page), and the service is never reached.
+func TestHTTPServers_ProxyAuthOnlyUnderSession(t *testing.T) {
+	t.Parallel()
+
+	var hits atomic.Int32
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	u, err := url.Parse(upstream.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ui := web.Handler(web.Options{})
+	stub := http.NotFoundHandler()
+
+	tests := []struct {
+		mode authMode
+		want int
+		hits int32
+	}{
+		{mode: authNone, want: http.StatusNotFound, hits: 0},
+		{mode: authSession, want: http.StatusOK, hits: 1},
+	}
+
+	for _, tt := range tests {
+		hits.Store(0)
+
+		s := settings{Listen: defaultListen, Auth: tt.mode, AuthUpstream: u}
+		main := httpServers(s, stub, stub, ui, nil)[0]
+
+		r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/auth/get-session", nil)
+		r.Host = defaultListen
+
+		rec := httptest.NewRecorder()
+		main.Handler.ServeHTTP(rec, r)
+
+		if rec.Code != tt.want || hits.Load() != tt.hits {
+			t.Errorf("GOAL_AUTH=%s: status %d, the service reached %d times; want %d and %d", tt.mode, rec.Code, hits.Load(), tt.want, tt.hits)
 		}
 	}
 }

@@ -206,7 +206,7 @@ The auth service refuses a non-loopback `GOAL_AUTH_LISTEN`. There is no internal
 | --- | --- |
 | Paths | exactly the table below (method and path, case-sensitive); anything else under `/api/auth` is 404 problem `not-found` and never reaches the service |
 | Path hygiene | refuse (404) a `RawPath` containing `%2f`, `%2e` or `%5c` in any case, `//`, a dot segment, a trailing slash, or a path whose cleaned form differs |
-| Headers in | drop `X-Forwarded-*`, `Forwarded`, `X-Real-Ip` and any `X-Goal-Client-Ip`; set `X-Goal-Client-Ip` to the client address: the right-most `X-Forwarded-For` entry not in `GOAL_TRUSTED_PROXIES` when the peer is a trusted proxy, else the peer address; pass `X-Request-Id` |
+| Headers in | drop `X-Forwarded-*`, `Forwarded`, `X-Real-Ip` and any `X-Goal-Client-Ip`; set `X-Goal-Client-Ip` to the client address: the right-most `X-Forwarded-For` entry not in `GOAL_TRUSTED_PROXIES` when the peer is a trusted proxy, else the peer address (all entries trusted: the left-most; a malformed entry stops the walk at the last trusted address); pass `X-Request-Id` (goald's, as on `/v1`) |
 | Headers out | drop `Set-Auth-Token` (bearer plugin) from every response; nothing else is added |
 | Limits | body 64 KiB (`http.MaxBytesReader`, 413); dial 2 s, response headers 10 s, whole request 15 s; upstream down or timed out is 503 problem `auth-unavailable` |
 | Origin | wrapped in goald's `http.CrossOriginProtection`; Better Auth's own origin check stays on |
@@ -233,10 +233,10 @@ The CSP itself (`web/csp.txt`, with `worker-src 'self'`) and `X-Frame-Options: D
 
 | Variable | Read by | Default and rule |
 | --- | --- | --- |
-| `GOAL_AUTH` | goald | `none` until 3-16, then `session` (the default lives in `cmd/goald/settings.go`; `goal up` only passes it on) · `none` only with a loopback `GOAL_LISTEN` |
+| `GOAL_AUTH` | goald | `none` until 3-16, then `session` (the default lives in `cmd/goald/settings.go`; `goal up` only passes it on) · `none` only with a loopback `GOAL_LISTEN`; read since 3-7, which refuses `session` until 3-9 makes it work |
 | `GOAL_PUBLIC_URL` | goald, auth (as `BETTER_AUTH_URL`) | `http://<GOAL_LISTEN>` on loopback, required otherwise · https unless loopback; the origin people open (`localhost` and `127.0.0.1` are different origins to Better Auth) |
 | `GOAL_AUTH_UPSTREAM` | goald | `http://127.0.0.1:8081` · loopback http only |
-| `GOAL_TRUSTED_PROXIES` | goald | empty · CIDRs of proxies whose `X-Forwarded-For` is believed |
+| `GOAL_TRUSTED_PROXIES` | goald | empty · comma-separated CIDRs (or single addresses) of proxies whose `X-Forwarded-For` is believed |
 | `GOAL_GATEWAY_LISTEN` | goald | the main listener · required and different when `GOAL_LISTEN` is not loopback (§5.5) |
 | `GOAL_AUTH_GOOGLE` | goald, auth | `off` · `on` needs `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (auth) |
 | `GOAL_AUTH_LISTEN` | auth | `127.0.0.1:8081` · loopback only |

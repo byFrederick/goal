@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -15,11 +16,17 @@ const index = "<title>Goal</title>"
 func testSPA(t *testing.T) http.Handler {
 	t.Helper()
 
+	return testSPAWith(t, Options{})
+}
+
+func testSPAWith(t *testing.T, o Options) http.Handler {
+	t.Helper()
+
 	h, err := New(fstest.MapFS{
 		"index.html":           {Data: []byte("<!doctype html>" + index)},
 		"favicon.svg":          {Data: []byte("<svg/>")},
 		"assets/index-a1b2.js": {Data: []byte("console.log(1)")},
-	})
+	}, o)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,6 +54,9 @@ func TestSPA_ServesFilesAndFallsBackToIndexForRoutes(t *testing.T) {
 		{"/assets/index-gone.js", 404, "", ""},
 		{"/assets/", 404, "", ""},
 		{"/v1/unknown", 404, "", ""},
+		{"/api", 404, "", ""},
+		{"/api/auth/get-session", 404, "", ""},
+		{"/api/unknown", 404, "", ""},
 		{"/mcp/anything", 404, "", ""},
 		{"/robots.txt", 404, "", ""},
 		{"/../../etc/passwd", 200, index, revalidate}, // cleaned to a route, never a file outside the tree
@@ -74,30 +84,55 @@ func TestSPA_ServesFilesAndFallsBackToIndexForRoutes(t *testing.T) {
 	}
 }
 
-// Every answer carries the Content-Security-Policy and frame protection: Approve, Merge and the
-// andon cord must not be clickable through a frame once goald is reachable beyond localhost.
-func TestSPA_SetsContentSecurityPolicyAndFrameProtection(t *testing.T) {
+// Every answer carries the Content-Security-Policy, frame protection and the other security
+// headers: Approve, Merge and the andon cord must not be clickable through a frame, no script of
+// another origin may run, and no other origin keeps a handle on the app's window, once goald is
+// reachable beyond localhost. Over https, browsers are told to keep to it.
+func TestSPA_SetsSecurityHeaders(t *testing.T) {
 	t.Parallel()
 
-	const want = "default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; " +
-		"img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"
+	const csp = "default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; " +
+		"img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; " +
+		"form-action 'self'; frame-ancestors 'none'"
 
-	h := testSPA(t)
-	for _, p := range []string{"/", "/o/acme/f/goal/board", "/assets/index-a1b2.js", "/favicon.svg", "/v1/unknown"} {
-		t.Run(p, func(t *testing.T) {
-			t.Parallel()
+	want := map[string]string{
+		"Content-Security-Policy":    csp,
+		"X-Frame-Options":            "DENY",
+		"Cross-Origin-Opener-Policy": "same-origin",
+		"Referrer-Policy":            "same-origin",
+		"X-Content-Type-Options":     "nosniff",
+	}
 
-			rec := httptest.NewRecorder()
-			h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, p, nil))
+	for _, https := range []bool{false, true} {
+		h := testSPAWith(t, Options{StrictTransport: https})
 
-			if got := rec.Header().Get("Content-Security-Policy"); got != want {
-				t.Errorf("Content-Security-Policy = %q, want %q", got, want)
-			}
+		for _, req := range []struct{ method, path string }{
+			{http.MethodGet, "/"},
+			{http.MethodGet, "/o/acme/f/goal/board"},
+			{http.MethodGet, "/assets/index-a1b2.js"},
+			{http.MethodGet, "/favicon.svg"},
+			{http.MethodGet, "/v1/unknown"},
+			{http.MethodGet, "/api/unknown"},
+			{http.MethodPost, "/o/acme"},
+		} {
+			t.Run(fmt.Sprintf("https=%v %s %s", https, req.method, req.path), func(t *testing.T) {
+				t.Parallel()
 
-			if got := rec.Header().Get("X-Frame-Options"); got != "DENY" {
-				t.Errorf("X-Frame-Options = %q, want DENY", got)
-			}
-		})
+				rec := httptest.NewRecorder()
+				h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), req.method, req.path, nil))
+
+				for name, value := range want {
+					if got := rec.Header().Get(name); got != value {
+						t.Errorf("%s = %q, want %q", name, got, value)
+					}
+				}
+
+				hsts := rec.Header().Get("Strict-Transport-Security")
+				if https && hsts != "max-age=31536000" || !https && hsts != "" {
+					t.Errorf("Strict-Transport-Security = %q over https=%v", hsts, https)
+				}
+			})
+		}
 	}
 }
 
@@ -115,7 +150,7 @@ func TestSPA_RefusesWrites(t *testing.T) {
 func TestNew_NeedsIndex(t *testing.T) {
 	t.Parallel()
 
-	if _, err := New(fstest.MapFS{"assets/a.js": {Data: []byte("x")}}); err == nil {
+	if _, err := New(fstest.MapFS{"assets/a.js": {Data: []byte("x")}}, Options{}); err == nil {
 		t.Fatal("New accepted a tree without index.html")
 	}
 }
@@ -125,7 +160,7 @@ func TestNew_NeedsIndex(t *testing.T) {
 func TestHandler_ServesTheEmbeddedTree(t *testing.T) {
 	t.Parallel()
 
-	h := Handler()
+	h := Handler(Options{})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/f/goal/board", nil))
 

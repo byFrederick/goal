@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"maps"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -41,11 +42,22 @@ type settings struct {
 	// different, when Listen is not loopback (phase 3, §5.5). It may be off loopback, such as the
 	// Docker bridge's address on Linux: every request there needs a task token.
 	GatewayListen string
-	// PublicURL is the origin people open goald at when it is not the listen address, such as a
-	// reverse proxy's name (GOAL_PUBLIC_URL, optional; https unless its host is loopback). Its
-	// host is the one name besides the loopback names and the listen host that the Host check
-	// accepts (api.CheckHost).
+	// PublicURL is the origin people open goald at (GOAL_PUBLIC_URL, default http://<listen>;
+	// https unless its host is loopback), such as a reverse proxy's name. Its host is the one name
+	// besides the loopback names and the listen host that the Host check accepts (api.CheckHost),
+	// and over https the UI is served with Strict-Transport-Security.
 	PublicURL string
+	// Auth is how requests are authenticated (GOAL_AUTH): none, everyone is the local user. Phase
+	// 3 adds session (people sign in); until goald can check sessions it refuses that value, so
+	// no request is let through under a mode that is not there.
+	Auth authMode
+	// AuthUpstream is the identity service that /api/auth/* is proxied to under session
+	// (GOAL_AUTH_UPSTREAM, default http://127.0.0.1:8081; http on a loopback address only).
+	AuthUpstream *url.URL
+	// TrustedProxies are the proxies in front of goald whose X-Forwarded-For names the client the
+	// identity service is told about (GOAL_TRUSTED_PROXIES: comma-separated CIDRs or addresses,
+	// default none).
+	TrustedProxies []netip.Prefix
 	// GatewayURL is the MCP gateway as agent containers reach it, the only goald address they are
 	// given (GOAL_GATEWAY_URL, default http://<gateway listen or listen>/mcp, a wildcard host
 	// becoming 127.0.0.1; the Docker runner rewrites loopback to host.docker.internal).
@@ -101,6 +113,12 @@ const (
 	publicURLEnv   = "GOAL_PUBLIC_URL"
 	gatewayEnv     = "GOAL_GATEWAY_LISTEN"
 	gatewayURLEnv  = "GOAL_GATEWAY_URL"
+	authEnv        = "GOAL_AUTH"
+	upstreamEnv    = "GOAL_AUTH_UPSTREAM"
+	proxiesEnv     = "GOAL_TRUSTED_PROXIES"
+	defaultAuthURL = "http://127.0.0.1:8081"
+	schemeHTTP     = "http"
+	schemeHTTPS    = "https"
 	taskEnvEnv     = "GOAL_TASK_ENV"
 	defaultModels  = "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5"
 	defaultListen  = "127.0.0.1:8080"
@@ -123,13 +141,14 @@ const (
 )
 
 // ownVariables are the environment variables of goald itself: every setting it reads
-// (settingsFrom, s3store.ConfigFromEnv), the database passwords, the default gateway key and the
-// AWS credentials the bucket client reads. A factory definition may not reference them
-// (authoring.EnvReferences, env-reserved), so no definition can hand them to an agent or a
-// connection.
+// (settingsFrom, s3store.ConfigFromEnv) or reads later in phase 3 (GOAL_AUTH_GOOGLE), the
+// database passwords, the default gateway key and the AWS credentials the bucket client reads. A
+// factory definition may not reference them (authoring.EnvReferences, env-reserved), so no
+// definition can hand them to an agent or a connection.
 var ownVariables = []string{
 	"GOAL_MIGRATE_DATABASE_URL", "GOAL_DATABASE_URL", "GOAL_PG_PASSWORD", "GOAL_PG_OWNER_PASSWORD", "GOAL_PG_APP_PASSWORD",
 	"GOAL_LISTEN", publicURLEnv, gatewayEnv, gatewayURLEnv, "GOAL_GATEWAY_KEY_REF", "GOAL_GATEWAY_KEY", taskEnvEnv,
+	authEnv, upstreamEnv, proxiesEnv, "GOAL_AUTH_GOOGLE",
 	"GOAL_WORKSPACE_ROOT", "GOAL_RUN_DIR", "GOAL_TICK_EVERY", "GOAL_REFRESH_EVERY", "GOAL_MAX_RUNS",
 	"GOAL_GITHUB_API_URL", "GOAL_LOG_LEVEL", "GOAL_LOG_FORMAT", "GOAL_DEFAULT_AGENT_IMAGE", "GOAL_ORG_RETENTION", "GOAL_MODELS",
 	"GOAL_DEFINITION_CACHE_BYTES", "GOAL_LEGACY_IMPORT",
@@ -137,12 +156,22 @@ var ownVariables = []string{
 	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
 }
 
-// reserved is the variables definitions may not reference: goald's own, the one its gateway key
-// reference names, the platform secrets that never reach a task (forbiddenTaskEnv, but the
+// identityVariables are the identity service's (auth/: its listen address, database, secrets,
+// base URL, bootstrap owner, mail and Google client), a person's API key for the CLI and the
+// database administrator `goal db init` connects as. goald never reads them, and a definition may
+// not reference them either, even when goald was started with them in its environment.
+var identityVariables = []string{
+	"GOAL_AUTH_LISTEN", "GOAL_AUTH_DATABASE_URL", "GOAL_PG_AUTH_PASSWORD", "BETTER_AUTH_SECRETS", "BETTER_AUTH_SECRET",
+	"BETTER_AUTH_URL", "GOAL_BOOTSTRAP_OWNER_EMAIL", "GOAL_SMTP_URL", "GOAL_SMTP_FROM", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
+	"GOAL_API_KEY", "GOAL_DATABASE_ADMIN_URL",
+}
+
+// reserved is the variables definitions may not reference: goald's own, the identity service's,
+// the one its gateway key reference names, the platform secrets that never reach a task (forbiddenTaskEnv, but the
 // repository token, which serves the repository) and the variables GOAL_TASK_ENV hands every
 // task (the model's access, such as CLAUDE_CODE_OAUTH_TOKEN).
 func (s settings) reserved() []string {
-	out := slices.Clone(ownVariables)
+	out := slices.Concat(ownVariables, identityVariables)
 
 	add := func(ref string) {
 		if name, ok := strings.CutPrefix(ref, "env:"); ok && name != repositoryToken && !slices.Contains(out, name) {
@@ -197,10 +226,10 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 		DefaultAgentImage: or("GOAL_DEFAULT_AGENT_IMAGE", defaultImage),
 	}
 
-	s.PublicURL = strings.TrimSpace(getenv(publicURLEnv))
+	s.PublicURL = or(publicURLEnv, defaultPublicURL(s.Listen))
 	s.GatewayListen = strings.TrimSpace(getenv(gatewayEnv))
 	s.GatewayURL = or(gatewayURLEnv, defaultGatewayURL(s))
-	errs := listenErrors(s)
+	errs := append(listenErrors(s), authSettings(&s, or)...)
 
 	var err error
 	if s.TaskEnv, err = taskEnv(or(taskEnvEnv, defaultTaskEnv)); err != nil {
@@ -261,6 +290,90 @@ func definitionSettings(s *settings, or func(name, def string) string) []error {
 	}
 
 	return errs
+}
+
+// authMode is how goald authenticates requests (GOAL_AUTH).
+type authMode string
+
+const (
+	// authNone makes every request the local user's: one developer's laptop, loopback only.
+	authNone authMode = "none"
+	// authSession resolves each request's session or API key, and proxies /api/auth/* to the
+	// identity service.
+	authSession authMode = "session"
+)
+
+// authSettings reads GOAL_AUTH, GOAL_AUTH_UPSTREAM and GOAL_TRUSTED_PROXIES.
+func authSettings(s *settings, or func(name, def string) string) []error {
+	var errs []error
+
+	switch mode := authMode(or(authEnv, string(authNone))); mode {
+	case authNone:
+		s.Auth = mode
+	case authSession:
+		errs = append(errs, errors.New("GOAL_AUTH=session: this goald cannot check sign-ins yet; use none"))
+	default:
+		errs = append(errs, fmt.Errorf("GOAL_AUTH %q is not none or session", string(mode)))
+	}
+
+	var err error
+	if s.AuthUpstream, err = authUpstream(or(upstreamEnv, defaultAuthURL)); err != nil {
+		errs = append(errs, err)
+	}
+
+	if s.TrustedProxies, err = trustedProxies(or(proxiesEnv, "")); err != nil {
+		errs = append(errs, err)
+	}
+
+	return errs
+}
+
+// authUpstream parses GOAL_AUTH_UPSTREAM: an http origin on a loopback address, since the
+// identity service listens on loopback only and the proxy hands it people's cookies.
+func authUpstream(raw string) (*url.URL, error) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != schemeHTTP || u.Host == "" || !isLoopback(u.Hostname()) || strings.TrimSuffix(u.Path, "/") != "" ||
+		u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+		return nil, fmt.Errorf("%s %q is not an http origin on a loopback address, such as %s", upstreamEnv, raw, defaultAuthURL)
+	}
+
+	u.Path = ""
+
+	return u, nil
+}
+
+// trustedProxies parses GOAL_TRUSTED_PROXIES: comma-separated CIDRs or single addresses.
+func trustedProxies(raw string) ([]netip.Prefix, error) {
+	var out []netip.Prefix
+
+	for item := range strings.SplitSeq(raw, ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+
+		if p, err := netip.ParsePrefix(item); err == nil {
+			out = append(out, p.Masked())
+			continue
+		}
+
+		a, err := netip.ParseAddr(item)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %q is not a CIDR such as 10.0.0.0/8 or an address", proxiesEnv, item)
+		}
+
+		a = a.Unmap()
+		out = append(out, netip.PrefixFrom(a, a.BitLen()))
+	}
+
+	return out, nil
+}
+
+// strictTransport reports whether people open goald over https, so browsers must keep to it.
+func (s settings) strictTransport() bool {
+	u, err := url.Parse(s.PublicURL)
+
+	return err == nil && u.Scheme == schemeHTTPS
 }
 
 // localDatabase is compose.yaml's database as role.
@@ -341,7 +454,7 @@ func gatewayURL(s settings) error {
 	}
 
 	port := u.Port()
-	if port == "" && u.Scheme == "https" {
+	if port == "" && u.Scheme == schemeHTTPS {
 		port = "443"
 	} else if port == "" {
 		port = "80"
@@ -396,6 +509,16 @@ func defaultGatewayURL(s settings) string {
 	return "http://" + addr + "/mcp"
 }
 
+// defaultPublicURL is the listen address as an http origin when it is on loopback; off loopback
+// there is no default (phase 3 requires GOAL_PUBLIC_URL there).
+func defaultPublicURL(listen string) string {
+	if host, _, err := net.SplitHostPort(listen); err == nil && isLoopback(host) {
+		return schemeHTTP + "://" + listen
+	}
+
+	return ""
+}
+
 // isLoopback reports whether host (no port) names this machine.
 func isLoopback(host string) bool {
 	ip := net.ParseIP(host)
@@ -411,12 +534,12 @@ func publicURL(raw string) error {
 	}
 
 	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || strings.TrimSuffix(u.Path, "/") != "" ||
+	if err != nil || u.Host == "" || (u.Scheme != schemeHTTPS && u.Scheme != schemeHTTP) || strings.TrimSuffix(u.Path, "/") != "" ||
 		u.RawQuery != "" || u.Fragment != "" || u.User != nil {
 		return fmt.Errorf("GOAL_PUBLIC_URL %q is not an origin such as https://goal.example.com", raw)
 	}
 
-	if u.Scheme == "http" && !isLoopback(u.Hostname()) {
+	if u.Scheme == schemeHTTP && !isLoopback(u.Hostname()) {
 		return fmt.Errorf("GOAL_PUBLIC_URL %q must be https off this machine", raw)
 	}
 
@@ -459,11 +582,11 @@ func apiURL(raw string) error {
 		return fmt.Errorf("GOAL_GITHUB_API_URL %q is not a URL", raw)
 	}
 
-	if u.Scheme == "https" {
+	if u.Scheme == schemeHTTPS {
 		return nil
 	}
 
-	if u.Scheme != "http" || !isLoopback(u.Hostname()) {
+	if u.Scheme != schemeHTTP || !isLoopback(u.Hostname()) {
 		return fmt.Errorf("GOAL_GITHUB_API_URL %q must be https (http only on a loopback address)", raw)
 	}
 

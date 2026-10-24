@@ -13,9 +13,17 @@ const target = process.env.GOAL_API_URL ?? 'http://127.0.0.1:8080';
 // The proxy keeps the browser's Host, so goald's cross-origin protection sees the page's own
 // origin (Origin = Host) as well as Sec-Fetch-Site: same-origin.
 const proxy = useMock ? undefined : { '/v1': { target, changeOrigin: false } };
-// The Content-Security-Policy goald serves the build with (webui.go): preview sends it too, so the
-// e2e tests run the build under it. Not in dev, whose HMR client needs inline scripts and a socket.
+// The Content-Security-Policy and the other headers goald serves the build with (webui.go; HSTS
+// only over https): preview sends them too, so the e2e tests run the build under them. Not in
+// dev, whose HMR client needs inline scripts and a socket.
 const csp = readFileSync(new URL('./csp.txt', import.meta.url), 'utf8').trim();
+const securityHeaders = {
+  'Content-Security-Policy': csp,
+  'X-Frame-Options': 'DENY',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Referrer-Policy': 'same-origin',
+  'X-Content-Type-Options': 'nosniff',
+};
 
 export default defineConfig({
   plugins: [
@@ -35,7 +43,7 @@ export default defineConfig({
   preview: {
     port: 4173,
     strictPort: true,
-    headers: { 'Content-Security-Policy': csp, 'X-Frame-Options': 'DENY' },
+    headers: securityHeaders,
     ...(proxy ? { proxy } : {}),
   },
   build: {
