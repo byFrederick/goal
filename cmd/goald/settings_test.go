@@ -373,6 +373,10 @@ func TestSettings_GitHubWebHost(t *testing.T) {
 			if !slices.Contains(s.reserved(), githubWebEnv) {
 				t.Errorf("definitions may reference %s", githubWebEnv)
 			}
+
+			if got := s.credentials(envsecrets.New(nil)).RepositoryHosts; !slices.Equal(got, []string{tt.want}) {
+				t.Errorf("credentials check allows repositories on %v, want only %s", got, tt.want)
+			}
 		})
 	}
 }
@@ -436,9 +440,9 @@ func TestSettings_ReservesPlatformSecrets(t *testing.T) {
 			}
 
 			if slices.Contains(got.Reserved, repositoryToken) || !slices.Equal(got.RepositoryOnly, []string{repositoryToken}) ||
-				!slices.Equal(got.RepositoryHosts, []string{githubMCPHost}) {
+				!slices.Equal(got.ConnectionHosts, []string{githubMCPHost}) {
 				t.Errorf("reserved %v, repository only %v to %v; want %s kept to the repository and %s",
-					got.Reserved, got.RepositoryOnly, got.RepositoryHosts, repositoryToken, githubMCPHost)
+					got.Reserved, got.RepositoryOnly, got.ConnectionHosts, repositoryToken, githubMCPHost)
 			}
 		})
 	}

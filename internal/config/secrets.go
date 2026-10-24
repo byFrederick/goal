@@ -30,8 +30,8 @@ type SecretUse struct {
 	Doc        string
 	Purpose    SecretPurpose
 	Connection string // the connection's name, for PurposeConnection
-	// URL is the connection's url for a header value: where the header, and so the secret, is
-	// sent.
+	// URL is where the secret is sent: the connection's url for a header value, the repository's
+	// url for its token.
 	URL string
 	// Ref is the reference as written: "env:GOAL_GITHUB_TOKEN", "credential:acme-github",
 	// "op://…", "arn:…". It is empty for a literal value, which is never copied here.
@@ -50,7 +50,10 @@ func (f *Factory) SecretUses() []SecretUse {
 	var uses []SecretUse
 
 	if r := f.Spec.Runtime.Repository; r != nil && r.Token != "" {
-		uses = append(uses, use(at("spec", "runtime", "repository", "token"), PurposeRepository, "", r.Token)...)
+		for _, u := range use(at("spec", "runtime", "repository", "token"), PurposeRepository, "", r.Token) {
+			u.URL = r.URL
+			uses = append(uses, u)
+		}
 	}
 
 	for i, c := range f.Spec.Connections {

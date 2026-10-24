@@ -32,7 +32,10 @@ func TestSecretUses_ListsEveryReferenceAndLiteral(t *testing.T) {
 	}
 
 	want := []SecretUse{
-		{Path: "spec.runtime.repository.token", Doc: "/spec/runtime/repository/token", Purpose: PurposeRepository, Ref: "env:ACME_REPO_TOKEN"},
+		{
+			Path: "spec.runtime.repository.token", Doc: "/spec/runtime/repository/token", Purpose: PurposeRepository,
+			URL: "https://code.example.com/acme/app", Ref: "env:ACME_REPO_TOKEN",
+		},
 		{
 			Path: "spec.connections[0].headers.Authorization", Doc: "/spec/connections/0/headers/Authorization",
 			Purpose: PurposeConnection, Connection: "tickets", URL: "https://tickets.example.com/mcp", Ref: "env:ACME_TICKETS_TOKEN",

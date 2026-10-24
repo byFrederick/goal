@@ -201,11 +201,13 @@ func (s settings) reserved() []string {
 
 // credentials is the check of a definition's secret references until phase 4: env:NAME
 // references resolve through secrets, the reserved variables are refused (env-reserved), and
-// the repository token serves only the repository and GitHub's MCP server.
+// the repository token serves only the repository and GitHub's MCP server, and a repository must
+// be on the install's GitHub host (GOAL_GITHUB_WEB_URL), the only one clones reach.
 func (s settings) credentials(secrets ports.Secrets) authoring.EnvReferences {
 	return authoring.EnvReferences{
 		Secrets: secrets, Reserved: s.reserved(),
-		RepositoryOnly: []string{repositoryToken}, RepositoryHosts: []string{githubMCPHost},
+		RepositoryOnly: []string{repositoryToken}, ConnectionHosts: []string{githubMCPHost},
+		RepositoryHosts: []string{s.GitHubWebHost},
 	}
 }
 

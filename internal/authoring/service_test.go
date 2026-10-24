@@ -89,8 +89,9 @@ func newHarness(t *testing.T, opts ...option) *harness {
 	d := authoring.Deps{
 		Store: h.store, Loads: h.items, Templates: h.objects, Clock: h.clock,
 		Credentials: authoring.EnvReferences{
-			Secrets:  porttest.Secrets{"ACME_GIT_TOKEN": "a-token", "ACME_EMPTY": ""},
-			Reserved: []string{"GOAL_DATABASE_URL", "GOAL_GATEWAY_KEY"},
+			Secrets:         porttest.Secrets{"ACME_GIT_TOKEN": "a-token", "ACME_EMPTY": ""},
+			Reserved:        []string{"GOAL_DATABASE_URL", "GOAL_GATEWAY_KEY"},
+			RepositoryHosts: []string{"git.example.com"},
 		},
 		NewID:        func() string { return fmt.Sprintf("0b6f1c9e-0000-7000-8000-%012d", ids.Add(1)) },
 		DefaultImage: "ghcr.io/acme/agent:1.0.0",

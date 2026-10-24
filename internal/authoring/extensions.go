@@ -43,6 +43,9 @@ const (
 	// CodeCredentialsUnavailable: a credential: reference (or a reference of another secrets
 	// provider) this install cannot resolve yet.
 	CodeCredentialsUnavailable = "credentials-unavailable"
+	// CodeRepositoryHostNotAllowed: a runtime.repository token for a url on a host the install
+	// does not clone from (EnvReferences.RepositoryHosts).
+	CodeRepositoryHostNotAllowed = "repository-host-not-allowed"
 )
 
 var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
@@ -51,7 +54,9 @@ var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 // until phase 4"): model and repository access are platform secrets of the install, so every
 // env:NAME reference must name a variable that is set and non-empty in goald's environment
 // (resolved through Secrets, the value discarded) and is not one of goald's own settings
-// (Reserved, such as GOAL_DATABASE_URL and GOAL_GATEWAY_KEY); a credential: reference is an
+// (Reserved, such as GOAL_DATABASE_URL and GOAL_GATEWAY_KEY), and the repository's token is
+// refused for a repository on a host the install does not clone from (RepositoryHosts); a
+// credential: reference is an
 // error until credentials arrive with phase 4. There is nothing to grant before phase 4, so
 // there are no grant, expiry or purpose checks.
 type EnvReferences struct {
@@ -61,9 +66,15 @@ type EnvReferences struct {
 	Reserved []string
 	// RepositoryOnly are variables holding the install's repository token: a definition may use
 	// them for runtime.repository and, in a connection, only in the headers of an https
-	// connection to one of RepositoryHosts (host names, matched exactly). Phase 4's connectors
+	// connection to one of ConnectionHosts (host names, matched exactly). Phase 4's connectors
 	// replace this with a credential per connection.
 	RepositoryOnly  []string
+	ConnectionHosts []string
+	// RepositoryHosts are the hosts the install clones and merges on (host[:port], matched
+	// exactly without case; default github.com), the binding gitworkspace enforces at clone
+	// time: a runtime.repository whose url is on another host is refused at its token
+	// (repository-host-not-allowed), whichever reference that is, since the token would be sent
+	// there.
 	RepositoryHosts []string
 }
 
@@ -80,6 +91,11 @@ func (e EnvReferences) Check(ctx context.Context, _ domain.FactoryID, uses []con
 
 	for _, u := range uses {
 		if u.Literal() {
+			continue
+		}
+
+		if f := e.offHost(u); f != nil {
+			out = append(out, *f)
 			continue
 		}
 
@@ -108,22 +124,54 @@ func (e EnvReferences) Check(ctx context.Context, _ domain.FactoryID, uses []con
 	return out, nil
 }
 
+// offHost refuses (repository-host-not-allowed) the repository's token when the repository's
+// url is not on one of RepositoryHosts; nil for any other use.
+func (e EnvReferences) offHost(u config.SecretUse) *CredentialFinding {
+	if u.Purpose != config.PurposeRepository {
+		return nil
+	}
+
+	hosts := []string{"github.com"}
+	if len(e.RepositoryHosts) > 0 {
+		hosts = make([]string, 0, len(e.RepositoryHosts))
+		for _, h := range e.RepositoryHosts {
+			hosts = append(hosts, strings.ToLower(h))
+		}
+	}
+
+	target, err := url.Parse(u.URL)
+	if err == nil && slices.Contains(hosts, strings.ToLower(target.Host)) {
+		return nil
+	}
+
+	host := u.URL
+	if err == nil && target.Host != "" {
+		host = target.Host
+	}
+
+	return &CredentialFinding{
+		Use: u, Code: CodeRepositoryHostNotAllowed, Severity: domain.SeverityError,
+		Message: fmt.Sprintf("the repository is on %s, but this install clones only from %s: its repository token is sent nowhere else",
+			host, strings.Join(hosts, " or ")),
+	}
+}
+
 // misplaced refuses (env-reserved) a repository token used anywhere but the repository and the
-// https headers of a connection to one of RepositoryHosts; nil when u may use its reference.
+// https headers of a connection to one of ConnectionHosts; nil when u may use its reference.
 func (e EnvReferences) misplaced(u config.SecretUse) *CredentialFinding {
 	name, ok := strings.CutPrefix(u.Ref, "env:")
 	if !ok || !slices.Contains(e.RepositoryOnly, name) || u.Purpose == config.PurposeRepository {
 		return nil
 	}
 
-	if target, err := url.Parse(u.URL); err == nil && target.Scheme == "https" && slices.Contains(e.RepositoryHosts, target.Hostname()) {
+	if target, err := url.Parse(u.URL); err == nil && target.Scheme == "https" && slices.Contains(e.ConnectionHosts, target.Hostname()) {
 		return nil
 	}
 
 	return &CredentialFinding{
 		Use: u, Code: CodeEnvReserved, Severity: domain.SeverityError,
 		Message: fmt.Sprintf("env:%s is the repository's token: a connection may send it only in the headers of https://%s",
-			name, strings.Join(e.RepositoryHosts, " or https://")),
+			name, strings.Join(e.ConnectionHosts, " or https://")),
 	}
 }
 

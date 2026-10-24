@@ -79,6 +79,27 @@ func TestValidate_InterimCredentialsCheck(t *testing.T) {
 	}
 }
 
+// The repository's token is the install's, so a definition that points runtime.repository.url
+// at a host the install does not clone from is refused at the token, whose value would be sent
+// there, even though the reference itself resolves.
+func TestValidate_RefusesARepositoryOnAnotherHost(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	v, err := h.svc.ValidateFiles(h.ctx, acmeFiles(strings.Replace(acmeYAML,
+		"https://git.example.com/acme/review.git", "https://attacker.example/x.git", 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertTokenProblem(t, v, authoring.CodeRepositoryHostNotAllowed)
+
+	if p, _ := problem(v.Problems, authoring.CodeRepositoryHostNotAllowed); !strings.Contains(p.Message, "attacker.example") {
+		t.Errorf("message %q does not name the repository's host", p.Message)
+	}
+}
+
 // assertTokenProblem requires an error problem of code from the credentials check, located on
 // the repository token, naming no value.
 func assertTokenProblem(t *testing.T, v authoring.Validation, code string) {
@@ -130,36 +151,54 @@ func TestEnvReferences_ResolvesEachReferenceOnce(t *testing.T) {
 	}
 }
 
-// The repository's token serves the repository, and a connection only in the headers of an
-// https connection to one of the hosts it may reach (GitHub's MCP server); anywhere else, such
-// as a sidecar's environment or another server's headers, it is refused like goald's own
-// settings, so a definition cannot hand it to an agent or an arbitrary upstream.
+// The repository's token serves the repository on one of the hosts the install clones from, and
+// a connection only in the headers of an https connection to one of the hosts it may reach
+// (GitHub's MCP server); anywhere else, such as a sidecar's environment or another server's
+// headers, it is refused like goald's own settings, so a definition cannot hand it to an agent
+// or an arbitrary upstream. A repository on another host is refused whatever its token, since
+// goald would not clone it.
 func TestEnvReferences_RepositoryTokenServesOnlyTheRepositoryAndItsHosts(t *testing.T) {
 	t.Parallel()
 
 	e := authoring.EnvReferences{
 		Secrets: porttest.Secrets{"ACME_REPO_TOKEN": "t0ken", "ACME_TICKETS_TOKEN": "t1cket"}, Reserved: []string{"ACME_MODEL_TOKEN"},
-		RepositoryOnly: []string{"ACME_REPO_TOKEN"}, RepositoryHosts: []string{"code.example.com"},
+		RepositoryOnly: []string{"ACME_REPO_TOKEN"}, RepositoryHosts: []string{"git.example.com"}, ConnectionHosts: []string{"code.example.com"},
 	}
 	header := func(url, ref string) config.SecretUse {
 		return config.SecretUse{Path: "header " + url, Purpose: config.PurposeConnection, Connection: "c", URL: url, Ref: ref}
 	}
+	repo := func(url, ref string) config.SecretUse {
+		return config.SecretUse{Path: "repo " + url, Purpose: config.PurposeRepository, URL: url, Ref: ref}
+	}
+
+	const (
+		repoURL  = "https://git.example.com/acme/app.git"
+		reserved = authoring.CodeEnvReserved
+		host     = authoring.CodeRepositoryHostNotAllowed
+	)
 
 	tests := []struct {
-		name   string
-		use    config.SecretUse
-		reject bool
+		name string
+		use  config.SecretUse
+		code string // "" when allowed
 	}{
-		{name: "the repository's token", use: config.SecretUse{Path: "repo", Purpose: config.PurposeRepository, Ref: "env:ACME_REPO_TOKEN"}},
+		{name: "the repository's token", use: repo(repoURL, "env:ACME_REPO_TOKEN")},
+		{name: "the repository's host without case", use: repo("https://Git.Example.com/acme/app.git", "env:ACME_REPO_TOKEN")},
+		{name: "the repository on another host", use: repo("https://attacker.example/x.git", "env:ACME_REPO_TOKEN"), code: host},
+		{name: "the repository on a look-alike host", use: repo("https://git.example.com.attacker.example/x.git", "env:ACME_REPO_TOKEN"), code: host},
+		{name: "the repository's host on another port", use: repo("https://git.example.com:8443/acme/app.git", "env:ACME_REPO_TOKEN"), code: host},
+		{name: "the repository on the MCP host", use: repo("https://code.example.com/acme/app.git", "env:ACME_REPO_TOKEN"), code: host},
+		{name: "another token for a repository on another host", use: repo("https://attacker.example/x.git", "env:ACME_TICKETS_TOKEN"), code: host},
 		{name: "a header to the code host's MCP server", use: header("https://code.example.com/mcp/", "env:ACME_REPO_TOKEN")},
-		{name: "a header to another server", use: header("https://tickets.example.com/mcp", "env:ACME_REPO_TOKEN"), reject: true},
-		{name: "a header to the code host in clear text", use: header("http://code.example.com/mcp", "env:ACME_REPO_TOKEN"), reject: true},
-		{name: "a host ending in the code host's", use: header("https://evilcode.example.com/mcp", "env:ACME_REPO_TOKEN"), reject: true},
+		{name: "a header to the repository's host", use: header("https://git.example.com/mcp", "env:ACME_REPO_TOKEN"), code: reserved},
+		{name: "a header to another server", use: header("https://tickets.example.com/mcp", "env:ACME_REPO_TOKEN"), code: reserved},
+		{name: "a header to the code host in clear text", use: header("http://code.example.com/mcp", "env:ACME_REPO_TOKEN"), code: reserved},
+		{name: "a host ending in the code host's", use: header("https://evilcode.example.com/mcp", "env:ACME_REPO_TOKEN"), code: reserved},
 		{
-			name: "a sidecar's environment", reject: true,
+			name: "a sidecar's environment", code: reserved,
 			use: config.SecretUse{Path: "env", Purpose: config.PurposeConnection, Connection: "c", Ref: "env:ACME_REPO_TOKEN"},
 		},
-		{name: "a reserved variable for the repository", use: config.SecretUse{Path: "repo", Purpose: config.PurposeRepository, Ref: "env:ACME_MODEL_TOKEN"}, reject: true},
+		{name: "a reserved variable for the repository", use: repo(repoURL, "env:ACME_MODEL_TOKEN"), code: reserved},
 		{name: "another token in a header", use: header("https://tickets.example.com/mcp", "env:ACME_TICKETS_TOKEN")},
 	}
 
@@ -173,10 +212,10 @@ func TestEnvReferences_RepositoryTokenServesOnlyTheRepositoryAndItsHosts(t *test
 			}
 
 			switch {
-			case !tt.reject && len(findings) != 0:
+			case tt.code == "" && len(findings) != 0:
 				t.Errorf("findings %+v, want none", findings)
-			case tt.reject && (len(findings) != 1 || findings[0].Code != authoring.CodeEnvReserved || findings[0].Severity != domain.SeverityError):
-				t.Errorf("findings %+v, want one %s error", findings, authoring.CodeEnvReserved)
+			case tt.code != "" && (len(findings) != 1 || findings[0].Code != tt.code || findings[0].Severity != domain.SeverityError):
+				t.Errorf("findings %+v, want one %s error", findings, tt.code)
 			}
 		})
 	}
