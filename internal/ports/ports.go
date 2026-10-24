@@ -757,6 +757,11 @@ type ObjectStore interface {
 	// Delete makes key absent. Earlier versions stay readable by version id; deleting a missing
 	// key is not an error.
 	Delete(ctx context.Context, key string) error
+
+	// DeletePrefix removes, for good, every version and delete marker of every key that starts
+	// with prefix, and returns how many it removed. Nothing under the prefix stays readable. It
+	// refuses an empty prefix. The purge of a deleted organization uses it.
+	DeletePrefix(ctx context.Context, prefix string) (int, error)
 }
 
 // ObjectInfo identifies one version of an object.

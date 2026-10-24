@@ -19,10 +19,12 @@ const week = 7 * 24 * time.Hour
 
 var t0 = time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
 
-// failingDelete is a bucket whose deletes fail.
+// failingDelete is a bucket whose purges fail.
 type failingDelete struct{ *porttest.ObjectStore }
 
-func (failingDelete) Delete(context.Context, string) error { return errors.New("bucket unavailable") }
+func (failingDelete) DeletePrefix(context.Context, string) (int, error) {
+	return 0, errors.New("bucket unavailable")
+}
 
 type fixture struct {
 	tenancy *porttest.Tenancy
@@ -139,19 +141,19 @@ func TestPurge_ABucketFailureKeepsTheOrgForTheNextRun(t *testing.T) {
 	}
 }
 
-// failingFor is a bucket whose deletes fail under one organization's prefix.
+// failingFor is a bucket whose purge of one organization's prefix fails.
 type failingFor struct {
 	*porttest.ObjectStore
 
 	org domain.OrgID
 }
 
-func (b failingFor) Delete(ctx context.Context, key string) error {
-	if strings.HasPrefix(key, factorystore.OrgPrefix(b.org)) {
-		return errors.New("bucket unavailable")
+func (b failingFor) DeletePrefix(ctx context.Context, prefix string) (int, error) {
+	if prefix == factorystore.OrgPrefix(b.org) {
+		return 0, errors.New("bucket unavailable")
 	}
 
-	return b.ObjectStore.Delete(ctx, key)
+	return b.ObjectStore.DeletePrefix(ctx, prefix)
 }
 
 // Each organization is purged on its own: one whose objects cannot be deleted is kept, with its

@@ -89,14 +89,14 @@ func (p *Purger) Purge(ctx context.Context) ([]domain.OrgID, error) {
 	return purged, errors.Join(errs...)
 }
 
-// deleteObjects removes an organization's objects from the bucket.
+// deleteObjects removes every version of an organization's objects from the bucket.
 func (p *Purger) deleteObjects(ctx context.Context, org domain.OrgID) error {
 	n, err := factorystore.DeleteOrg(ctx, p.objects, org)
 	if err != nil {
 		return err
 	}
 
-	p.log.DebugContext(ctx, "organization objects deleted", slog.String("org_id", string(org)), slog.Int("objects", n))
+	p.log.DebugContext(ctx, "organization objects deleted", slog.String("org_id", string(org)), slog.Int("versions", n))
 
 	return nil
 }

@@ -173,6 +173,55 @@ func TestList_ReturnsCurrentObjectsUnderThePrefix(t *testing.T) {
 	}
 }
 
+// A purge leaves nothing under the prefix, no old version and no delete marker, and nothing
+// outside it is touched; an empty prefix, which would name the whole bucket, is refused.
+func TestDeletePrefix_RemovesEveryVersionUnderThePrefixOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	s := newTestStore(t)
+
+	var under []ports.ObjectInfo
+
+	for _, key := range []string{"orgs/a/x.yaml", "orgs/a/x.yaml", "orgs/a/blobs/y", "orgs/ab/z.yaml"} {
+		info, err := s.Put(ctx, key, []byte(key))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if strings.HasPrefix(key, "orgs/a/") {
+			under = append(under, info)
+		}
+	}
+
+	if err := s.Delete(ctx, "orgs/a/blobs/y"); err != nil {
+		t.Fatal(err)
+	}
+
+	if n, err := s.DeletePrefix(ctx, "orgs/a/"); err != nil || n != 4 {
+		t.Fatalf("DeletePrefix = %d, %v; want 3 versions and 1 delete marker", n, err)
+	}
+
+	page, err := s.client.ListObjectVersions(ctx, &s3.ListObjectVersionsInput{Bucket: aws.String(s.bucket), Prefix: aws.String("orgs/a/")})
+	if err != nil || len(page.Versions)+len(page.DeleteMarkers) != 0 {
+		t.Errorf("versions left under orgs/a/: %d and %d markers, %v; want none", len(page.Versions), len(page.DeleteMarkers), err)
+	}
+
+	for _, v := range under {
+		if _, err := s.Get(ctx, v.Key, v.Version); !errors.Is(err, ports.ErrNotFound) {
+			t.Errorf("Get(%s, %s) after the purge = %v; want ErrNotFound", v.Key, v.Version, err)
+		}
+	}
+
+	if _, err := s.Get(ctx, "orgs/ab/z.yaml", ""); err != nil {
+		t.Errorf("an object outside the prefix = %v; want it untouched", err)
+	}
+
+	if _, err := s.DeletePrefix(ctx, ""); err == nil {
+		t.Error("DeletePrefix of the whole bucket = nil; want it refused")
+	}
+}
+
 func TestGet_MissingKeyOrVersionIsNotFound(t *testing.T) {
 	t.Parallel()
 

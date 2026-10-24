@@ -304,6 +304,48 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
+// DeletePrefix implements ports.ObjectStore: it lists every version and delete marker under
+// prefix and deletes each by its version id, which removes it for good on a versioned bucket. A
+// failure stops it; what is left is removed by the next call.
+func (s *Store) DeletePrefix(ctx context.Context, prefix string) (int, error) {
+	if prefix == "" {
+		return 0, fmt.Errorf("delete s3://%s/: an empty prefix names the whole bucket", s.bucket)
+	}
+
+	n := 0
+
+	pages := s3.NewListObjectVersionsPaginator(s.client, &s3.ListObjectVersionsInput{
+		Bucket: aws.String(s.bucket),
+		Prefix: aws.String(prefix),
+	})
+	for pages.HasMorePages() {
+		page, err := pages.NextPage(ctx)
+		if err != nil {
+			return n, fmt.Errorf("list s3://%s/%s: %w", s.bucket, prefix, err)
+		}
+
+		keys := make([]types.ObjectIdentifier, 0, len(page.Versions)+len(page.DeleteMarkers))
+		for _, v := range page.Versions {
+			keys = append(keys, types.ObjectIdentifier{Key: v.Key, VersionId: v.VersionId})
+		}
+
+		for _, m := range page.DeleteMarkers {
+			keys = append(keys, types.ObjectIdentifier{Key: m.Key, VersionId: m.VersionId})
+		}
+
+		for _, k := range keys {
+			_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(s.bucket), Key: k.Key, VersionId: k.VersionId})
+			if err != nil {
+				return n, fmt.Errorf("delete s3://%s/%s version %s: %w", s.bucket, aws.ToString(k.Key), aws.ToString(k.VersionId), err)
+			}
+
+			n++
+		}
+	}
+
+	return n, nil
+}
+
 // contentType labels text files as text, so S3 consoles and tools (and readers that only
 // return bodies of text objects) treat definitions as the text they are.
 func contentType(key string) string {

@@ -2,6 +2,7 @@ package porttest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -115,7 +116,29 @@ func (s *ObjectStore) Delete(_ context.Context, key string) error {
 	return nil
 }
 
-// Versions returns how many versions, delete markers included, key has had.
+// DeletePrefix implements ports.ObjectStore.
+func (s *ObjectStore) DeletePrefix(_ context.Context, prefix string) (int, error) {
+	if prefix == "" {
+		return 0, errors.New("delete prefix: an empty prefix names the whole bucket")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	n := 0
+
+	for key, vs := range s.versions {
+		if strings.HasPrefix(key, prefix) {
+			n += len(vs)
+
+			delete(s.versions, key)
+		}
+	}
+
+	return n, nil
+}
+
+// Versions returns how many versions, delete markers included, key has.
 func (s *ObjectStore) Versions(key string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
