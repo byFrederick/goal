@@ -315,6 +315,22 @@ describe('failures', () => {
 });
 
 describe('the unsaved-changes guard', () => {
+  it('lets go while factory.yaml does not parse once its text is saved, but not with Visual changes held', async () => {
+    const parse_error = { line: 12, column: 3, message: 'did not find expected key' };
+    session.adoptParseError(parse_error);
+    expect(session.getSnapshot().status).toBe('held');
+    expect(session.hasUnsaved()).toBe(false);
+
+    session.editFile('factory.yaml', 'spec: [');
+    expect(session.hasUnsaved()).toBe(true);
+    session.edit(setStationField(line(session), 'build', 'wip', 3));
+    void session.flush();
+    await flushPromises();
+    fake.files.shift()?.resolve(fake.result(43, '', 'sha43'));
+    await flushPromises();
+    expect(session.hasUnsaved()).toBe(true); // the WIP waits for factory.yaml to parse
+  });
+
   it('holds while anything is dirty or in flight, and lets go once saved', async () => {
     expect(session.hasUnsaved()).toBe(false);
     session.edit(setStationField(line(session), 'build', 'wip', 3));
@@ -453,6 +469,33 @@ describe('discard', () => {
     await expect(session.discard()).rejects.toBeInstanceOf(ApiError);
 
     expect(session.getSnapshot().hasDraft).toBe(true);
+  });
+});
+
+describe('publish', () => {
+  it('closes the draft without calling it discarded elsewhere; the next edit opens a new one', async () => {
+    session.closeDraft();
+    session.adoptMissing();
+
+    expect(session.getSnapshot()).toMatchObject({ hasDraft: false, discarded: false, status: 'saved' });
+    expect(session.hasUnsaved()).toBe(false);
+    session.adoptVersion({ model: model() as unknown as FactoryModel, ranges: {} });
+    session.edit(setStationField(line(session), 'build', 'wip', 4));
+    void session.flush();
+    await flushPromises();
+    expect(fake.api.openDraft).toHaveBeenCalledOnce();
+  });
+});
+
+describe('files', () => {
+  it('forgets a deleted file and its pending save', async () => {
+    session.editFile('agents/old.md', '# old\n');
+    session.forgetFile('agents/old.md');
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fake.files).toHaveLength(0);
+    expect(session.getSnapshot().files.has('agents/old.md')).toBe(false);
+    expect(session.hasUnsaved()).toBe(false);
   });
 });
 

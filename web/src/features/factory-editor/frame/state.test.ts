@@ -6,10 +6,12 @@ import {
   baseSentence,
   changesSentence,
   conflictRows,
+  parseErrorTile,
   problemPlace,
   reviewTile,
   saveSentence,
   sectionTile,
+  yamlTileText,
 } from './state';
 
 const summary = (section: SectionSummary['section'], changes: number, problems: number): SectionSummary => ({
@@ -20,6 +22,14 @@ const summary = (section: SectionSummary['section'], changes: number, problems: 
 });
 
 describe('section tiles', () => {
+  test('jump to their block in YAML mode, and all say so while factory.yaml does not parse', () => {
+    expect(yamlTileText('line', [31, 45])).toBe('board, lines 31–45');
+    expect(yamlTileText('review', [46, 46])).toBe('budget, line 46');
+    const error = { line: 12, column: 3, message: 'did not find expected key' };
+    expect(parseErrorTile('line', error)).toEqual({ state: 'problem', text: 'Syntax error, line 12' });
+    expect(parseErrorTile('review', error)).toEqual({ state: 'problem', text: 'Fix factory.yaml first' });
+  });
+
   test('say a problem first, then changes, then nothing', () => {
     expect(sectionTile(summary('connections', 1, 1))).toEqual({ state: 'problem', text: '1 change, 1 problem' });
     expect(sectionTile(summary('agents', 0, 2))).toEqual({ state: 'problem', text: '2 problems' });

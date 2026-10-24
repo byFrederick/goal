@@ -20,6 +20,13 @@ export default defineConfig({
     tailwindcss(),
     ...(useMock ? [mockApi({ live: process.env.GOAL_MOCK_LIVE === '1' })] : []),
   ],
+  resolve: {
+    alias: [
+      // monaco-yaml's worker imports Monaco's editor worker by its pre-0.57 path, which Monaco's
+      // package exports now name without the esm/vs prefix.
+      { find: 'monaco-editor/esm/vs/editor/editor.worker.js', replacement: 'monaco-editor/editor/editor.worker' },
+    ],
+  },
   server: { port: 5173, strictPort: true, ...(proxy ? { proxy } : {}) },
   preview: { port: 4173, strictPort: true, ...(proxy ? { proxy } : {}) },
   build: { target: 'es2023' },

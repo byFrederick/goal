@@ -90,6 +90,21 @@ export function placeOfFile(model: Model, path: string): Place | undefined {
   return agent ? { section: 'agents', agent: agent.name } : undefined;
 }
 
+/**
+ * Where Visual opens from a place in the YAML view: the entity at a line of factory.yaml, or the
+ * agent whose prompt a file is; undefined when the line is outside the model.
+ */
+export function placeAtLine(model: Model, ranges: Ranges, file: string, line: number): Place | undefined {
+  if (cleanPath(file) !== 'factory.yaml') return placeOfFile(model, file);
+  const pointer = pointerAt(ranges, line);
+  return pointer ? placeOf(model, pointer) : undefined;
+}
+
+/** Where the YAML view opens from a place in Visual: its entity's first line, else its section's. */
+export function lineOfPlace(model: Model, ranges: Ranges, place: Place): number | undefined {
+  return firstLine(ranges, pointerOf(model, place));
+}
+
 /** The prompt file of an agent, as the draft's files list names it. */
 export function promptFile(model: Model, agent: string): string | undefined {
   const path = model.agents.agents?.find((a) => a.name === agent)?.prompt?.path;

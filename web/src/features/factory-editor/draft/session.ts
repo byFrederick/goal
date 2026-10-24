@@ -722,6 +722,15 @@ export class DraftSession {
    */
   async discard(): Promise<void> {
     await this.api.discardDraft(this.opts.org, this.opts.factory, this.state.revision);
+    this.closeDraft();
+  }
+
+  /**
+   * The draft is gone by this tab's own hand (discarded, or published as the next version): the
+   * editor shows the running version from now on, nothing waits, and the next edit opens a new
+   * draft. Unlike a discard elsewhere, it is not a refusal to report.
+   */
+  closeDraft(): void {
     for (const t of this.timers.values()) clearTimeout(t);
     this.timers.clear();
     clearTimeout(this.retryTimer);
@@ -755,10 +764,31 @@ export class DraftSession {
     });
   }
 
-  /** The guard's condition: something is unsaved, in flight, or waiting on a retry or a decision. */
+  /**
+   * The guard's condition: something is unsaved, in flight, or waiting on a retry or a decision.
+   * While factory.yaml does not parse, only Visual changes held back count: the text is saved.
+   */
   hasUnsaved(): boolean {
     const s = this.state;
-    return s.status !== 'saved' || s.discarded;
+    if (s.discarded) return true;
+    if (s.status === 'held') {
+      return (
+        sections.some((k) => s.sections[k].dirty || s.sections[k].inFlight) ||
+        [...s.files.values()].some((f) => f.dirty || f.inFlight)
+      );
+    }
+    return s.status !== 'saved';
+  }
+
+  /** A file deleted or renamed away from the draft: the session forgets its text. */
+  forgetFile(path: string): void {
+    if (!this.state.files.has(path)) return;
+    clearTimeout(this.timers.get(fileKey(path)));
+    this.timers.delete(fileKey(path));
+    const files = new Map(this.state.files);
+    files.delete(path);
+    const { [path]: _gone, ...fileConflicts } = this.state.fileConflicts;
+    this.set({ files, fileConflicts });
   }
 
   /** The editor mounted (again: React StrictMode unmounts and remounts once in development). */

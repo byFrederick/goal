@@ -11,13 +11,14 @@ import { draftQuery, factoryQuery } from '../../../api/queries';
 import type { Draft } from '../../../api/types';
 import { laterText } from '../../../app/screens';
 import { type Model, sections } from '../../../shared/definition/model';
+import { placeAtLine } from '../../../shared/definition/place';
 import { useFactory, useFactoryParams } from '../../../shared/factory';
 import { useOrg } from '../../../shared/org';
 import { Button } from '../../../ui/button';
 import { Chip } from '../../../ui/chip';
 import { cn } from '../../../ui/cn';
 import type { DraftSession, SessionState } from '../draft/session';
-import { useDraft, useDraftSession } from '../draft/use-draft';
+import { useDraft, useDraftSession, useModel } from '../draft/use-draft';
 import { yamlView } from '../section-views';
 import { type EditorSection, validateDefinitionSearch } from '../sections';
 import { ConflictDialog, DiscardedDialog, FileConflictDialog } from './conflict-dialog';
@@ -177,6 +178,8 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
         changeCount={changeCount}
         problemCount={problemCount}
         hasDraft={s.hasDraft}
+        yaml={yaml && yamlView !== null}
+        parseError={s.parseError}
       />
 
       {children}
@@ -200,16 +203,26 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
 const viewItem =
   'inline-flex h-[38px] items-center gap-1.5 rounded-chip px-3 text-sm text-ink-soft no-underline transition-colors duration-200 md:h-[34px]';
 
-/** Visual | YAML: two links, the current one aria-current="page"; YAML is Later until D10. */
+/**
+ * Visual | YAML: two links, the current one aria-current="page"; YAML is Later while no YAML view
+ * is registered. The entity stays across views; from YAML, Visual opens the entity at the
+ * cursor's line (`?line=`, kept by the YAML view), or the agent whose prompt is open.
+ */
 function ViewToggle({ section, yaml }: { section: EditorSection; yaml: boolean }) {
   const params = useFactoryParams();
   const showYaml = yaml && yamlView !== null;
-  // The entity stays across views; the YAML view's own place (file, line) does not.
-  const { mode: _mode, file: _file, line: _line, ...entity } = validateDefinitionSearch(useSearch({ strict: false }));
+  const { mode: _mode, file, line, ...entity } = validateDefinitionSearch(useSearch({ strict: false }));
+  const model = useModel();
+  const ranges = useDraft((s) => s.ranges);
+  const here =
+    showYaml && (line !== undefined || file)
+      ? placeAtLine(model, ranges, file ?? 'factory.yaml', line ?? 0)
+      : undefined;
+  const { section: visualSection, ...visualEntity } = here ?? { section, ...entity };
   const { 'aria-current': _visualPage, ...visual } = useLinkProps({
     to: '/o/$org/f/$factory/definition/$section',
-    params: { ...params, section },
-    search: entity,
+    params: { ...params, section: visualSection },
+    search: here ? visualEntity : entity,
   });
   const { 'aria-current': _yamlPage, ...yamlLink } = useLinkProps({
     to: '/o/$org/f/$factory/definition/$section',

@@ -1,6 +1,5 @@
 // What each editor section renders (D §10.1): the slot D7–D11 fill. A section whose view is null
-// shows LaterSection; the YAML view (D10) replaces the section's view when `?mode=yaml` and, until
-// it lands, the Visual | YAML toggle shows YAML as Later.
+// shows LaterSection; the YAML view (D10) replaces the section's view when `?mode=yaml`.
 import { type ComponentType, lazy } from 'react';
 import { BasicsSection } from './basics/basics-section';
 import { LineSection } from './line/line-section';
@@ -28,5 +27,7 @@ export const sectionViews: Record<EditorSection, ComponentType<SectionViewProps>
   versions: null,
 };
 
-/** The YAML view of the whole draft (D10). */
-export const yamlView: ComponentType<SectionViewProps> | null = null;
+/** The YAML view of the whole draft (D10), with Monaco and monaco-yaml in chunks of their own. */
+export const yamlView: ComponentType<SectionViewProps> | null = lazy(() =>
+  import('./yaml/yaml-view').then((m) => ({ default: m.YamlView })),
+);

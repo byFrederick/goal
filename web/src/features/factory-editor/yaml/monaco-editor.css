@@ -1,0 +1,38 @@
+/* Monaco's decorations for the YAML view (D §10.9), on the design tokens: lines added or changed
+   since the base get an ok tint and a "+" in the gutter, lines with a problem a rust tint and a
+   warning glyph. The marks are glyphs as well as colours, never colour alone. */
+.goal-line-added {
+  background: var(--color-ok-tint);
+}
+
+.goal-gutter-added::before {
+  content: "+";
+  display: block;
+  padding-left: 4px;
+  color: var(--color-ok-ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.goal-line-problem {
+  background: var(--color-rework-tint);
+}
+
+.goal-glyph-problem {
+  background-color: var(--color-rework);
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E")
+    center / 14px 14px no-repeat;
+}
+
+.goal-zone {
+  z-index: 10;
+}
+
+.goal-zone-body {
+  width: var(--goal-zone-width, 480px);
+  box-sizing: border-box;
+  padding: 4px 0 0 12px;
+  font-family: var(--font-sans);
+  white-space: normal;
+}

@@ -3,7 +3,7 @@
 // `section-views.tsx` inside it (or LaterSection), with a skeleton until the draft (or the
 // running version) has loaded and an error with Try again when it can't.
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams, useSearch } from '@tanstack/react-router';
+import { Link, useParams, useSearch } from '@tanstack/react-router';
 import { type ReactNode, Suspense } from 'react';
 import { ApiError } from '../../api/client';
 import { defKeys, draftModelQuery } from '../../api/queries';
@@ -48,6 +48,7 @@ export function SectionView({
   const session = useDraftSession();
   const client = useQueryClient();
   const ready = useDraft((s) => s.ready);
+  const parseError = useDraft((s) => s.parseError);
   const model = useQuery(draftModelQuery(session.org, session.factory));
   const failed = model.error && !isDraftState(model.error) ? model.error : null;
 
@@ -75,6 +76,9 @@ export function SectionView({
   if (!ready) return <SectionSkeleton />;
 
   const View = (search.mode === 'yaml' ? yamlView : null) ?? sectionViews[section];
+  if (parseError && View !== yamlView && section !== 'versions') {
+    return <ParseErrorState line={parseError.line} />;
+  }
   return View ? (
     <Suspense fallback={<SectionSkeleton />}>
       <View place={place} search={search} />
@@ -95,6 +99,30 @@ function SectionSkeleton() {
         {[0, 1, 2, 3].map((i) => (
           <div key={i} className="h-16 rounded-control bg-control/60" />
         ))}
+      </div>
+    </div>
+  );
+}
+
+/** Visual while factory.yaml does not parse (D §10.9): it opens again once the YAML parses. */
+function ParseErrorState({ line }: { line: number }) {
+  return (
+    <div
+      role="alert"
+      className="flex max-w-xl flex-col gap-3 rounded-card border border-rework-line bg-rework-tint p-5"
+    >
+      <h2 data-route-focus="" tabIndex={-1} className="m-0 text-xl font-medium text-rework-ink outline-none">
+        factory.yaml doesn’t parse
+      </h2>
+      <p className="m-0 text-[15px] leading-relaxed">
+        factory.yaml has a syntax error{line > 0 ? ` on line ${line}` : ''}. Visual opens again when it parses.
+      </p>
+      <div>
+        <Button asChild variant="primary">
+          <Link to="." search={{ mode: 'yaml', ...(line > 0 ? { line } : {}) }}>
+            Open in YAML
+          </Link>
+        </Button>
       </div>
     </div>
   );

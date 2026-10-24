@@ -1,12 +1,13 @@
 // What the editor frame says (D §10.3), as pure functions of the draft and the session: the
 // section tiles, the status line's sentences, the conflict dialog's rows and where "1 problem"
 // leads. The components in this folder only lay these out.
-import type { DefinitionProblem, Section, SectionSummary } from '../../../api/types';
+import type { DefinitionProblem, LineRange, ParseError, Section, SectionSummary } from '../../../api/types';
 import type { Model } from '../../../shared/definition/model';
 import { type Place, placeOf } from '../../../shared/definition/place';
 import { formatClock, humanize, plural } from '../../../shared/format';
 import type { Conflict } from '../draft/merge';
 import type { SaveStatus } from '../draft/session';
+import { linesText, sectionBlocks } from '../yaml/blocks';
 
 export type TileState = 'problem' | 'edited' | 'unchanged';
 
@@ -31,6 +32,17 @@ export function reviewTile({ problems, changes, hasDraft }: { problems: number; 
   if (problems > 0) return { state: 'problem', text: `Fix ${plural(problems, 'problem')} first` };
   if (hasDraft && changes > 0) return { state: 'ready', text: 'Ready to publish' };
   return { state: 'unchanged', text: 'No changes' };
+}
+
+/** Every tile while factory.yaml does not parse: Visual waits for it, Review cannot publish. */
+export function parseErrorTile(section: Section, error: ParseError): { state: TileState; text: string } {
+  if (section === 'review') return { state: 'problem', text: 'Fix factory.yaml first' };
+  return { state: 'problem', text: error.line > 0 ? `Syntax error, line ${error.line}` : 'Syntax error' };
+}
+
+/** A tile in YAML mode jumps to its block: "board, lines 31–45". */
+export function yamlTileText(section: Section, lines: LineRange | undefined): string {
+  return `${sectionBlocks[section]}, ${linesText(lines ?? [0, 0])}`;
 }
 
 /** "3 changes in 2 sections"; null without changes. */

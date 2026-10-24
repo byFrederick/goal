@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import type { Ranges } from '../../api/types';
 import type { Model } from './model';
-import { firstLine, placeOf, placeOfFile, pointerAt, pointerOf, promptFile } from './place';
+import { firstLine, lineOfPlace, placeAtLine, placeOf, placeOfFile, pointerAt, pointerOf, promptFile } from './place';
+
+describe('switching views keeps the place', () => {
+  it('opens Visual at the entity of the cursor, or the agent of a prompt', () => {
+    expect(placeAtLine(model, ranges, 'factory.yaml', 23)).toEqual({ section: 'line', station: 'build' });
+    expect(placeAtLine(model, ranges, 'factory.yaml', 4)).toEqual({ section: 'basics' });
+    expect(placeAtLine(model, ranges, 'factory.yaml', 1)).toBeUndefined();
+    expect(placeAtLine(model, ranges, 'agents/engineer.md', 3)).toEqual({ section: 'agents', agent: 'engineer' });
+  });
+
+  it("opens YAML at the entity's first line, else its section's", () => {
+    expect(lineOfPlace(model, ranges, { section: 'line', station: 'build' })).toBe(20);
+    expect(lineOfPlace(model, ranges, { section: 'line', station: 'gone' })).toBe(17);
+    expect(lineOfPlace(model, ranges, { section: 'review' })).toBeUndefined();
+  });
+});
 
 const model: Model = {
   basics: { name: 'goal', work_types: ['feature'] },

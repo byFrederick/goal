@@ -1,0 +1,176 @@
+// The YAML view (D10) against the mock: goal has a draft of v9 at revision 42 based on v8 (3
+// changes in 2 sections, 1 warning). Flows 2 and 3 of D §13, their YAML parts: Visual edits show
+// in factory.yaml with its comments, YAML edits count on the tiles, switching keeps the place, an
+// unknown agent is a problem with a fix, and a factory.yaml that stops parsing holds Visual until
+// it parses again. Monaco on desktop and tablet, the textarea on phones.
+import { expect, type Page, test } from '@playwright/test';
+import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
+
+const definition = '/o/acme/f/goal/definition';
+const label = 'factory.yaml, draft of v9';
+
+test.beforeEach(async ({ request }) => {
+  await request.post('/__mock/reset');
+});
+
+const editor = (page: Page) => page.getByRole('textbox', { name: label });
+const tiles = (page: Page) => page.getByRole('navigation', { name: /^Definition sections/ });
+const tile = (page: Page, name: RegExp) => tiles(page).getByRole('link', { name });
+const status = (page: Page) => page.getByRole('status').filter({ hasText: /Based on|runs now/ });
+const problems = (page: Page) => page.getByRole('region', { name: /^Problems/ });
+
+async function openYaml(page: Page, section = 'line', search = '') {
+  await page.goto(`${definition}/${section}?mode=yaml${search}`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Definition' })).toBeVisible();
+  await expect(editor(page)).toBeAttached();
+  if (!isPhone(page)) await expect(page.locator('.monaco-editor .view-line').first()).toBeVisible();
+}
+
+/**
+ * Moves the cursor to the first `text` in Monaco the way a person would: Find (Ctrl/Cmd+F), the
+ * text, Enter, Escape; the match is selected and scrolled into view.
+ */
+async function find(page: Page, text: string) {
+  await editor(page).focus();
+  await page.keyboard.press('ControlOrMeta+f');
+  await page.keyboard.insertText(text);
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Escape');
+}
+
+/** The editor shows `text`: on a phone in the textarea, in Monaco on a line found by Find. */
+async function expectShown(page: Page, text: string) {
+  if (isPhone(page)) {
+    await expect(editor(page)).toHaveValue(new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    return;
+  }
+  await find(page, text);
+  await expect(page.locator('.monaco-editor .view-line').filter({ hasText: text }).first()).toBeVisible();
+}
+
+/**
+ * Replaces one line's content (without its indent) and leaves the cursor on it: in Monaco by
+ * finding it and selecting from its end to its first character; on phones by editing the
+ * textarea's value, then putting the cursor on that line (a key press reports it, as typing would).
+ */
+async function replaceLine(page: Page, from: string, to: string) {
+  if (isPhone(page)) {
+    const area = editor(page);
+    const value = await area.inputValue();
+    const at = value.indexOf(from);
+    expect(at).toBeGreaterThanOrEqual(0);
+    await area.fill(value.replace(from, to));
+    await area.evaluate((el: HTMLTextAreaElement, i: number) => el.setSelectionRange(i, i), at);
+    await area.press('ArrowRight');
+    return;
+  }
+  await find(page, from);
+  await page.keyboard.press('End');
+  await page.keyboard.press('Shift+Home');
+  await page.keyboard.insertText(to);
+}
+
+test('the YAML view: tiles jump to blocks, problems and changes beside, accessible at every width', async ({
+  page,
+}) => {
+  await openYaml(page);
+  const toggle = page.getByRole('navigation', { name: 'Editor view' });
+  await expect(toggle.getByRole('link', { name: 'YAML' })).toHaveAttribute('aria-current', 'page');
+  await expect(tile(page, /^Line, board, lines \d+–\d+, 2 changes$/)).toHaveAttribute('aria-current', 'location');
+  await expect(tile(page, /^Agents, agents, lines \d+–\d+, 1 change, 1 problem$/)).toBeAttached();
+  await expect(page.getByRole('tab', { name: 'factory.yaml' })).toHaveAttribute('aria-selected', 'true');
+  await expect(problems(page)).toContainText('is asked as Off until tool approvals arrive');
+  await expect(page.getByRole('region', { name: 'Changes from v8' })).toContainText('Line: Build');
+  await expectAccessible(page);
+  await expectShown(page, "# the spec's lane picks the engineer");
+  await expectNoHorizontalScroll(page);
+
+  // A tile in YAML mode jumps to its block: the cursor goes to its first line (?line=).
+  await tile(page, /^Basics, metadata/).click();
+  await expect(page).toHaveURL(/\/definition\/basics\?mode=yaml&line=\d+/);
+
+  // An agent's prompt opens from the agents/ tab; Visual from there is that agent.
+  await page.getByRole('tab', { name: /^agents\/ \(4\)/ }).click();
+  await page.getByRole('menuitem', { name: 'agents/reviewer.md' }).click();
+  await expect(page.getByRole('textbox', { name: 'agents/reviewer.md, draft of v9' })).toBeAttached();
+  await expect(toggle.getByRole('link', { name: 'Visual' })).toHaveAttribute(
+    'href',
+    /\/definition\/agents\?agent=reviewer$/,
+  );
+  await expectAccessible(page);
+});
+
+test('Visual ↔ YAML: one draft, comments kept, the place kept (flow 2)', async ({ page }) => {
+  await page.goto(`${definition}/basics`);
+  const title = page.getByRole('textbox', { name: 'Title' });
+  await title.fill('Goal platform');
+  await expect(status(page)).toContainText('Autosaved');
+
+  await page.getByRole('navigation', { name: 'Editor view' }).getByRole('link', { name: 'YAML' }).click();
+  await expect(editor(page)).toBeAttached();
+  await expectShown(page, 'title: Goal platform');
+  await expectShown(page, "# the spec's lane picks the engineer");
+
+  // A check added in YAML is a change of the Line.
+  await replaceLine(
+    page,
+    '- { id: spec, name: Spec, kind: agent, agent: spec-writer, wip: 2 }',
+    '- { id: spec, name: Spec, kind: agent, agent: spec-writer, wip: 2, checks: [go vet] }',
+  );
+  await expect(tile(page, /^Line, board, lines \d+–\d+, 3 changes$/)).toBeAttached();
+
+  // Visual opens at the station under the cursor.
+  const visual = page.getByRole('navigation', { name: 'Editor view' }).getByRole('link', { name: 'Visual' });
+  await expect(visual).toHaveAttribute('href', /\/definition\/line\?station=spec$/);
+  await visual.click();
+  await expect(page).toHaveURL(/\/definition\/line\?station=spec$/);
+  await expect(tile(page, /^Line, 3 changes$/)).toBeAttached();
+  // The Spec row, with the check added in YAML, has focus.
+  await expect(page.getByRole('textbox', { name: 'Name of station 2' })).toBeFocused();
+  await expect(page.getByRole('listitem', { name: /^2\. Spec/ })).toContainText('go vet');
+});
+
+test('an unknown agent is a problem in place, with a fix (flow 3, YAML)', async ({ page }) => {
+  await openYaml(page);
+  await replaceLine(
+    page,
+    '- { id: spec, name: Spec, kind: agent, agent: spec-writer, wip: 2 }',
+    '- { id: spec, name: Spec, kind: agent, agent: ghost, wip: 2 }',
+  );
+
+  await expect(problems(page)).toContainText('station spec: unknown agent "ghost"');
+  await expect(problems(page)).toContainText(/Line \d+, line › spec/);
+  if (!isPhone(page)) await expect(page.locator('.monaco-editor .goal-glyph-problem').first()).toBeVisible();
+  await expect(tile(page, /^Line, board, lines \d+–\d+, 3 changes, 1 problem$/)).toBeAttached();
+  await expect(tile(page, /^Review and publish, budget, .*Fix 2 problems first$/)).toBeAttached();
+  await expectAccessible(page);
+
+  await problems(page).getByRole('button', { name: 'Set agent to spec-writer' }).click();
+  await expect(problems(page)).not.toContainText('ghost');
+  await expectShown(page, 'agent: spec-writer, wip: 2 }');
+  await expect(tile(page, /^Line, board, lines \d+–\d+, 2 changes$/)).toBeAttached();
+});
+
+test('a factory.yaml that stops parsing holds Visual until it parses again', async ({ page }) => {
+  await openYaml(page, 'basics');
+  await replaceLine(page, 'kind: Factory', 'kind: Factory: x');
+
+  await expect(tile(page, /^Basics, metadata, .*Syntax error, line \d+$/)).toBeAttached();
+  await expect(page.getByRole('button', { name: 'Format' })).toBeDisabled();
+  await expect(status(page)).toContainText('factory.yaml doesn’t parse');
+
+  await page.getByRole('navigation', { name: 'Editor view' }).getByRole('link', { name: 'Visual' }).click();
+  const held = page.getByRole('alert').filter({ hasText: 'factory.yaml doesn’t parse' });
+  await expect(held).toContainText(/has a syntax error on line \d+\. Visual opens again when it parses\./);
+  await expect(page.getByRole('textbox', { name: 'Title' })).toHaveCount(0);
+  await expectAccessible(page);
+
+  await held.getByRole('link', { name: 'Open in YAML' }).click();
+  await expect(editor(page)).toBeAttached();
+  await replaceLine(page, 'kind: Factory: x', 'kind: Factory');
+  await expect(tile(page, /^Basics, metadata, lines \d+–\d+, No changes$/)).toBeAttached();
+
+  await page.getByRole('navigation', { name: 'Editor view' }).getByRole('link', { name: 'Visual' }).click();
+  await expect(page.getByRole('textbox', { name: 'Title' })).toHaveValue('Goal');
+  await expect(status(page)).not.toContainText('doesn’t parse');
+});

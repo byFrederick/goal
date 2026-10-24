@@ -1,5 +1,6 @@
 // Links and navigation that change only the section's search params (?agent=, ?connection=),
-// keeping the route (Definition or the wizard) and its other params (?factory= in the wizard).
+// keeping the route (Definition or the wizard) and its other params (?factory= in the wizard);
+// useGoTo moves to a section (or stays) with exactly the search params given.
 import { Link, useNavigate } from '@tanstack/react-router';
 import { type ComponentProps, useCallback } from 'react';
 import type { DefinitionSearch, EditorSection } from './sections';
@@ -36,6 +37,27 @@ export function useSetSearch(): (patch: SearchPatch, opts?: { replace?: boolean 
   const navigate = useNavigate();
   return useCallback(
     (patch, opts) => void navigate({ to: '.', search: patched(patch), replace: opts?.replace ?? false }),
+    [navigate],
+  );
+}
+
+/**
+ * Goes to a section of the same editor (or stays, without one) with exactly `search`: Definition's
+ * /definition/$section or the wizard's /new/$step, whose ?factory= is kept.
+ */
+export function useGoTo(): (section: EditorSection | undefined, search: DefinitionSearch, replace?: boolean) => void {
+  const navigate = useNavigate();
+  return useCallback(
+    (section, search, replace = false) =>
+      void navigate({
+        to: '.',
+        ...(section
+          ? { params: (prev: Record<string, unknown>) => ({ ...prev, section, step: section }) as never }
+          : {}),
+        search: (prev: Record<string, unknown>) =>
+          ({ ...(typeof prev.factory === 'string' ? { factory: prev.factory } : {}), ...search }) as never,
+        replace,
+      }),
     [navigate],
   );
 }
