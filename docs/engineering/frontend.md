@@ -78,19 +78,19 @@ app/          the shell: AppShell and ShellFrame, Rail, PhoneTopRow, PhoneCrumb,
               OrgSidebar, OrgMark, screens.ts (the screen registry), attention, route focus and titles,
               loading/error/not-found screens
 features/
-  factories/  floor/  board/  items/        one folder per screen: page, cards, feature-only logic (items/timeline.ts)
+  factories/  floor/  board/  items/  org-settings/   one folder per screen: page, cards, feature-only logic (items/timeline.ts, org-settings/form.ts)
 shared/       code more than one feature uses: decisions (approve, send back, merge, retry), new item,
-              the organization's live stream, org and factory helpers, marks, formatting (Intl), state labels
-ui/           design-system primitives on Radix: button, dialog, sheet, tooltip, card, chip, count, mark, hatch, logo
+              the organization's live stream, org and factory helpers, marks, formatting (Intl), state labels, the address rule (org-rules.ts)
+ui/           design-system primitives on Radix: button, dialog, confirm-dialog (typed confirmation), field and input, sheet, tooltip, card, chip, count, mark, hatch, logo
 ```
 
 Route files stay thin (loader + component); screens live in `features/`. Features never import each other; shared code goes to `shared/` or `ui/`. Boundaries are kept in review for now; `dependency-cruiser` arrives with `packages/`, the same way depguard guards the Go engine. `ui/` moves to `packages/ui` when a second app needs it.
 
 ### The API module and `@goal/api-client`
 
-`packages/api-client` is the typed layer over the contract: `createGoalClient` (openapi-fetch over the types `openapi-typescript` generates into `src/schema.ts`, with `--default-non-nullable=false` so request fields with a default stay optional), `unwrap` (data on success, else it throws `ApiError`, which carries the RFC 9457 `Problem`, rebuilt from the status line when a proxy answers with something else), `subscribe(baseUrl, scope, handlers)` for the stream, and the schema types. Organization-owned routes are written relative to the organization with `orgPath("/factories/{factory}/board")`; `routes.ts` holds the one prefix (`orgRoutes`, `/v1/orgs/{org}`), and every such call passes `org` (slug or id) as a path parameter, as `StreamScope` does.
+`packages/api-client` is the typed layer over the contract: `createGoalClient` (openapi-fetch over the types `openapi-typescript` generates into `src/schema.ts`, with `--default-non-nullable=false` so request fields with a default stay optional), `unwrap` (data on success, else it throws `ApiError`, which carries the RFC 9457 `Problem` with its `code` (`slug-taken`, `confirmation-mismatch`, …) for screens to branch on, rebuilt from the status line when a proxy answers with something else), `subscribe(baseUrl, scope, handlers)` for the stream, and the schema types. Organization-owned routes are written relative to the organization with `orgPath("/factories/{factory}/board")`; `routes.ts` holds the one prefix (`orgRoutes`, `/v1/orgs/{org}`), and every such call passes `org` (slug or id) as a path parameter, as `StreamScope` does.
 
-In `web`, `src/api/types.ts` re-exports the generated types under the names the screens use, and `client.ts` holds every request (`listOrgs`, `getOrg`, `createOrg`; then, each taking `org` first, `getAttention`, `getFactoryOverview`, `getInbox`, `listFactories`, `getBoard`, `getMetrics`, `listItems`, `getItem`, `listItemEvents`, `submitItem`, `approveItem`, `rejectItem`, `mergeItem`, `retryItem`, `subscribeToOrg`) over `createGoalClient`; factories are named by id. Nothing else in `web/src` touches `fetch` or `EventSource`; `web/mock` is typed with the same generated shapes. Query keys (`queries.ts`) are rooted at the organization's id: `['orgs']`, `['org', org, 'detail']`, `['org', org, 'attention']`, `['org', org, 'overview', window]`, `['org', org, 'inbox', factory ?? 'all']`, `['org', org, 'factories']`, `['org', org, 'factory', f, 'board' | 'metrics' | 'items', …]` (f the factory's id), `['org', org, 'item', ref]` and `['org', org, 'item', ref, 'events']`.
+In `web`, `src/api/types.ts` re-exports the generated types under the names the screens use, and `client.ts` holds every request (`listOrgs`, `getOrg`, `createOrg`; then, each taking `org` first, `getAttention`, `getFactoryOverview`, `getInbox`, `getOrgSettings`, `patchOrgSettings`, `deleteOrg`, `listAudit`, `listFactories`, `getBoard`, `getMetrics`, `listItems`, `getItem`, `listItemEvents`, `submitItem`, `approveItem`, `rejectItem`, `mergeItem`, `retryItem`, `subscribeToOrg`) over `createGoalClient`; factories are named by id. Nothing else in `web/src` touches `fetch` or `EventSource`; `web/mock` is typed with the same generated shapes. Query keys (`queries.ts`) are rooted at the organization's id: `['orgs']`, `['org', org, 'detail']`, `['org', org, 'attention']`, `['org', org, 'overview', window]`, `['org', org, 'inbox', factory ?? 'all']`, `['org', org, 'settings']`, `['org', org, 'audit', filter]`, `['org', org, 'factories']`, `['org', org, 'factory', f, 'board' | 'metrics' | 'items', …]` (f the factory's id), `['org', org, 'item', ref]` and `['org', org, 'item', ref, 'events']`.
 
 The URL names the organization (`/o/$org`, its slug or id) and the factory (`/f/$factory`, its name or id). The `/o/$org` and `/o/$org/f/$factory` layouts resolve both in `beforeLoad`, so every screen reads them from the route context (`useOrg()`, `useFactory()` in `shared/`): queries are keyed and requests made by their ids, and links use the slug and the name (`useFactoryParams()`).
 
@@ -101,6 +101,10 @@ The URL names the organization (`/o/$org`, its slug or id) and the factory (`/f/
 ### Decisions
 
 Approve and retry act at once (they only move work forward); send back asks for a reason in a dialog, and merge asks for confirmation. Merge replaces approve at a human station whose `action` is `merge`; nothing is keyed by station names. Decisions carry no actor: goald records the request's (the local user until phase 4 adds sign-in).
+
+### Organization settings
+
+One form (`/o/$org/settings`): "Save changes" is enabled while it differs from what goald last answered and sends `PATCH …/settings` with only the changed fields (`changedFields`; slots always carry the organization's cap, which the contract requires). Fields are checked against goald's own rules first; a `slug-taken` answer is the Address field's "Taken", other refusals show the Problem's detail. After a save the organization list is refetched (rail, sidebar, route context); a new address replaces the URL with the new slug, and links with the old one stop working (review decision 2). Leaving with unsaved changes asks first (`useBlocker`). Delete takes the typed name, then `/` opens the next organization or says there is none. Model access and Vault say "Arrives with credentials" until phase 3.
 
 ### Running it
 

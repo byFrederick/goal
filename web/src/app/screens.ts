@@ -26,7 +26,7 @@ interface Screen {
 /** Paths of a factory's screens; their params are the organization's slug and the factory's name. */
 export type FactoryPath = '/o/$org/f/$factory' | '/o/$org/f/$factory/board' | '/o/$org/f/$factory/items';
 /** Paths of the organization's screens; their only param is its slug. */
-export type OrgPath = '/o/$org';
+export type OrgPath = '/o/$org' | '/o/$org/settings';
 
 type Availability<Path> = { available: true; to: Path; exact?: boolean } | { available: false };
 
@@ -78,8 +78,13 @@ export const credentialsScreen: OrgScreen = {
   icon: KeyRound,
   available: false,
 };
-// C7: /o/:org/settings.
-export const settingsScreen: OrgScreen = { id: 'settings', label: 'Settings', icon: Settings, available: false };
+export const settingsScreen: OrgScreen = {
+  id: 'settings',
+  label: 'Settings',
+  icon: Settings,
+  available: true,
+  to: '/o/$org/settings',
+};
 
 /** The organization sidebar, top to bottom. */
 export const orgScreens: readonly OrgScreen[] = [factoriesScreen, catalogScreen, credentialsScreen, settingsScreen];

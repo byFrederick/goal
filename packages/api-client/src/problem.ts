@@ -26,6 +26,11 @@ export class ApiError extends Error {
   get detail(): string | undefined {
     return this.problem.detail;
   }
+
+  /** The stable name of the error (slug-taken, confirmation-mismatch, …), when goald gives one. */
+  get code(): string | undefined {
+    return this.problem.code;
+  }
 }
 
 function isProblem(body: unknown): body is Pick<Problem, "title"> & Partial<Problem> {
@@ -39,6 +44,7 @@ export function problemOf(response: Response, body: unknown): Problem {
       title: body.title,
       status: response.status,
       ...(typeof body.detail === "string" && body.detail !== "" ? { detail: body.detail } : {}),
+      ...(typeof body.code === "string" && body.code !== "" ? { code: body.code } : {}),
     };
   }
   return { title: response.statusText || "Request failed", status: response.status };

@@ -14,6 +14,7 @@ import { Route as FSplatRouteImport } from './routes/f.$'
 import { Route as OOrgRouteImport } from './routes/o.$org'
 import { Route as OOrgOrgRouteImport } from './routes/o.$org._org'
 import { Route as OOrgOrgIndexRouteImport } from './routes/o.$org._org.index'
+import { Route as OOrgOrgSettingsRouteImport } from './routes/o.$org._org.settings'
 import { Route as OOrgFFactoryRouteImport } from './routes/o.$org.f.$factory'
 import { Route as OOrgFFactoryIndexRouteImport } from './routes/o.$org.f.$factory.index'
 import { Route as OOrgFFactoryBoardRouteImport } from './routes/o.$org.f.$factory.board'
@@ -42,6 +43,11 @@ const OOrgOrgRoute = OOrgOrgRouteImport.update({
 const OOrgOrgIndexRoute = OOrgOrgIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
+const OOrgOrgSettingsRoute = OOrgOrgSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => OOrgOrgRoute,
 } as any)
 const OOrgFFactoryRoute = OOrgFFactoryRouteImport.update({
@@ -74,6 +80,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/f/$': typeof FSplatRoute
   '/o/$org': typeof OOrgRouteWithChildren
+  '/o/$org/settings': typeof OOrgOrgSettingsRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
   '/o/$org/': typeof OOrgOrgIndexRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
@@ -85,6 +92,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/f/$': typeof FSplatRoute
   '/o/$org': typeof OOrgOrgIndexRoute
+  '/o/$org/settings': typeof OOrgOrgSettingsRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/items/$ref': typeof OOrgFFactoryItemsRefRoute
@@ -96,6 +104,7 @@ export interface FileRoutesById {
   '/f/$': typeof FSplatRoute
   '/o/$org': typeof OOrgRouteWithChildren
   '/o/$org/_org': typeof OOrgOrgRouteWithChildren
+  '/o/$org/_org/settings': typeof OOrgOrgSettingsRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
   '/o/$org/_org/': typeof OOrgOrgIndexRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
@@ -109,6 +118,7 @@ export interface FileRouteTypes {
     | '/'
     | '/f/$'
     | '/o/$org'
+    | '/o/$org/settings'
     | '/o/$org/f/$factory'
     | '/o/$org/'
     | '/o/$org/f/$factory/board'
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/'
     | '/f/$'
     | '/o/$org'
+    | '/o/$org/settings'
     | '/o/$org/f/$factory/board'
     | '/o/$org/f/$factory'
     | '/o/$org/f/$factory/items/$ref'
@@ -130,6 +141,7 @@ export interface FileRouteTypes {
     | '/f/$'
     | '/o/$org'
     | '/o/$org/_org'
+    | '/o/$org/_org/settings'
     | '/o/$org/f/$factory'
     | '/o/$org/_org/'
     | '/o/$org/f/$factory/board'
@@ -181,6 +193,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OOrgOrgIndexRouteImport
       parentRoute: typeof OOrgOrgRoute
     }
+    '/o/$org/_org/settings': {
+      id: '/o/$org/_org/settings'
+      path: '/settings'
+      fullPath: '/o/$org/settings'
+      preLoaderRoute: typeof OOrgOrgSettingsRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
     '/o/$org/f/$factory': {
       id: '/o/$org/f/$factory'
       path: '/f/$factory'
@@ -220,10 +239,12 @@ declare module '@tanstack/react-router' {
 }
 
 interface OOrgOrgRouteChildren {
+  OOrgOrgSettingsRoute: typeof OOrgOrgSettingsRoute
   OOrgOrgIndexRoute: typeof OOrgOrgIndexRoute
 }
 
 const OOrgOrgRouteChildren: OOrgOrgRouteChildren = {
+  OOrgOrgSettingsRoute: OOrgOrgSettingsRoute,
   OOrgOrgIndexRoute: OOrgOrgIndexRoute,
 }
 

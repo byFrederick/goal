@@ -35,6 +35,13 @@ describe("unwrap", () => {
     expect((err as ApiError).message).toBe("Item is not blocked: goal#2 is done");
   });
 
+  test("keeps the Problem's code for clients to branch on", async () => {
+    const { goal } = goaldAnswering(problemJson(409, { title: "Conflict", status: 409, detail: 'slug "example-labs" is taken', code: "slug-taken" }));
+    const err = await unwrap(goal.PATCH(orgPath("/settings"), { params: { path: { org: "acme" } }, body: { slug: "example-labs" } })).catch((e: unknown) => e);
+    expect((err as ApiError).problem).toEqual({ title: "Conflict", status: 409, detail: 'slug "example-labs" is taken', code: "slug-taken" });
+    expect((err as ApiError).code).toBe("slug-taken");
+  });
+
   test("percent-encodes an item reference in the path", async () => {
     const { goal, requests } = goaldAnswering(Response.json({}));
     await unwrap(goal.GET(orgPath("/items/{item}"), { params: { path: { org: "acme", item: "goal#2" } } }));
