@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { ApiError } from '@goal/api-client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { Draft, DraftModel, FactoryModel, SaveResult, Section, SectionSave } from '../../../api/types';
 import type { LineSection, Model } from '../../../shared/definition/model';
 import { addAgent, renameAgent, setBasics, setStationField } from './ops';
@@ -61,6 +61,17 @@ function fakeApi() {
       (_org: string, _f: string, path: string, text: string, base: unknown) =>
         new Promise<SaveResult>((resolve, reject) => files.push({ path, text, base, resolve, reject })),
     ),
+    getDraftFile: vi.fn(async (_org: string, _f: string, path: string) => {
+      throw new ApiError({
+        title: 'Not Found',
+        status: 404,
+        code: 'file-not-found',
+        detail: `${path} isn't in the draft`,
+      });
+    }),
+    getVersionFile: vi.fn(async (_org: string, _f: string, _v: string, path: string) => {
+      throw new ApiError({ title: 'Not Found', status: 404, code: 'file-not-found', detail: `${path} isn't there` });
+    }),
   };
   const result = (rev: number, etag: string, sha256?: string): SaveResult => ({
     revision: rev,
@@ -500,6 +511,50 @@ describe('undo', () => {
   });
 });
 
+describe('undoing a removal', () => {
+  // engineer works at stations, so its removal is written as the agents edit Remove… makes.
+  const removeEngineer = () =>
+    session.edit({ section: 'agents', value: { agents: [] }, removeFiles: ['agents/engineer.md'] });
+
+  it('writes back a removed file the session had not loaded, read from goald before the removal', async () => {
+    vi.mocked(fake.api.getDraftFile).mockResolvedValueOnce({ text: '# engineer\n\nBuild it.\n', sha256: 'aaa' });
+    expect(await session.fileText('agents/engineer.md')).toBe('# engineer\n\nBuild it.\n');
+    removeEngineer();
+    void session.flush();
+    await flushPromises();
+    expect(fake.saves[0]?.save).toMatchObject({ remove_files: ['agents/engineer.md'] });
+    await fake.ok();
+
+    session.undo();
+    expect(session.getSnapshot().files.get('agents/engineer.md')).toMatchObject({ text: '# engineer\n\nBuild it.\n' });
+    void session.flush();
+    await flushPromises();
+    expect(fake.saves[0]?.save).toMatchObject({
+      files: { 'agents/engineer.md': { text: '# engineer\n\nBuild it.\n' } },
+    });
+  });
+
+  it('reads a file only when it has no text of it, and the running version’s without a draft', async () => {
+    session.editFile('agents/engineer.md', '# engineer, typed\n');
+    expect(await session.fileText('agents/engineer.md')).toBe('# engineer, typed\n');
+    expect(fake.api.getDraftFile).not.toHaveBeenCalled();
+
+    const s = new DraftSession({ org: 'acme', factory: 'f1', api: fake.api });
+    s.adoptVersion({ model: model() as unknown as FactoryModel, ranges: {} });
+    vi.mocked(fake.api.getVersionFile).mockResolvedValueOnce({ text: '# engineer\n', sha256: 'aaa' });
+    expect(await s.fileText('agents/engineer.md')).toBe('# engineer\n');
+    expect(fake.api.getVersionFile).toHaveBeenCalledWith('acme', 'f1', 'current', 'agents/engineer.md');
+    expect(s.getSnapshot().files.get('agents/engineer.md')).toMatchObject({ text: '# engineer\n', dirty: false });
+    s.dispose();
+  });
+
+  it('refuses when goald cannot give the text, so the caller removes nothing', async () => {
+    vi.mocked(fake.api.getDraftFile).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await expect(session.fileText('agents/engineer.md')).rejects.toThrow('Failed to fetch');
+    expect(session.getSnapshot().files.has('agents/engineer.md')).toBe(false);
+  });
+});
+
 describe('typing', () => {
   it('is one undo step per field until another edit comes between', () => {
     const basics = () => session.getSnapshot().sections.basics.local;
@@ -611,7 +666,22 @@ describe('files', () => {
     expect(files.has('agents/engineer.md')).toBe(false);
   });
 
-  it('saves typing into a file an edit wrote over the text that edit saved', async () => {
+  it('saves typing into a file an edit wrote over the text that edit saved, even before its sha256 is computed', async () => {
+    // WebCrypto answers off the microtask queue: the test decides when, so typing can come first.
+    let release = () => {};
+    const held = new Promise<void>((r) => {
+      release = r;
+    });
+    const digest = vi.spyOn(crypto.subtle, 'digest').mockImplementation(async (_alg, data) => {
+      await held;
+      return new Uint8Array(
+        createHash('sha256')
+          .update(data as Uint8Array)
+          .digest(),
+      ).buffer;
+    });
+    onTestFinished(() => digest.mockRestore());
+
     session.edit(addAgent(session.getSnapshot().sections.agents.local, 'reviewer'));
     void session.flush();
     await flushPromises();
@@ -619,6 +689,8 @@ describe('files', () => {
 
     session.editFile('agents/reviewer.md', '# reviewer\n\nReview the change.\n');
     void session.flush();
+    await flushPromises();
+    release();
     await flushPromises();
 
     const sha = createHash('sha256').update('# reviewer\n').digest('hex');

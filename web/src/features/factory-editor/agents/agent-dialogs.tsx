@@ -34,6 +34,11 @@ export function agentNameError(name: string, taken: readonly string[]): string |
   return undefined;
 }
 
+/** A file goald doesn't have holds no text to lose. */
+const missingIsFine = (err: unknown) => {
+  if (!(err instanceof ApiError && err.code === 'file-not-found')) throw err;
+};
+
 const errorText = (err: unknown) =>
   err instanceof ApiError ? (err.detail ?? err.title) : 'goald can’t be reached. Try again.';
 
@@ -184,7 +189,7 @@ export function RenameAgentDialog({
       onSubmit={async (name) => {
         // Unsaved prompt typing goes first, so the moved file carries it.
         await session.flush();
-        const text = prompt.text ?? (await prompt.load());
+        const text = await prompt.load();
         session.edit(renameAgent(model, agent.name, name, text));
         setSearch({ agent: name }, { replace: true });
       }}
@@ -205,7 +210,29 @@ export function RemoveAgentDialog({
   const session = useDraftSession();
   const model = useModel();
   const setSearch = useSetSearch();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string>();
   const using = stationsUsing(model.line, agent.name);
+
+  const remove = async () => {
+    const path = promptFile(model, agent.name);
+    setPending(true);
+    setError(undefined);
+    try {
+      // Undo puts the prompt back, so its text is read before it goes; a missing file has none.
+      if (path) await session.fileText(path).catch(missingIsFine);
+      session.edit(removeAgent(model, agent.name));
+    } catch (err) {
+      if (!(err instanceof AgentInUseError))
+        setError('The prompt could not be read, so nothing was removed. Try again.');
+      return;
+    } finally {
+      setPending(false);
+    }
+    onOpenChange(false);
+    setSearch({ agent: undefined, add: undefined });
+    toast.success(`${agent.name} removed`);
+  };
 
   if (using.length > 0) {
     return (
@@ -242,23 +269,24 @@ export function RemoveAgentDialog({
   return (
     <ConfirmDialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        if (!next) setError(undefined);
+        onOpenChange(next);
+      }}
       tone="danger"
       title={`Remove ${agent.name}?`}
       description="Its prompt file goes with it, and connections stop listing it. Undo puts it back."
       confirmLabel="Remove agent"
-      onConfirm={() => {
-        try {
-          session.edit(removeAgent(model, agent.name));
-        } catch (err) {
-          if (!(err instanceof AgentInUseError)) throw err;
-          return;
-        }
-        onOpenChange(false);
-        setSearch({ agent: undefined, add: undefined });
-        toast.success(`${agent.name} removed`);
-      }}
-    />
+      pendingLabel="Removing…"
+      pending={pending}
+      onConfirm={() => void remove()}
+    >
+      {error ? (
+        <p role="alert" className="m-0 text-sm text-rework-ink">
+          {error}
+        </p>
+      ) : null}
+    </ConfirmDialog>
   );
 }
 

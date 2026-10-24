@@ -30,7 +30,14 @@ import { equal } from './pointer';
 /** The draft routes the session calls (definitions.ts; tests pass a fake of goald). */
 export type SessionApi = Pick<
   typeof definitions,
-  'getDraftModel' | 'openDraft' | 'saveDraftSection' | 'revertDraftSection' | 'putDraftFile' | 'discardDraft'
+  | 'getDraftModel'
+  | 'openDraft'
+  | 'saveDraftSection'
+  | 'revertDraftSection'
+  | 'putDraftFile'
+  | 'discardDraft'
+  | 'getDraftFile'
+  | 'getVersionFile'
 >;
 
 export interface SessionOptions {
@@ -366,6 +373,23 @@ export class DraftSession {
     this.setFile(path, { server: file.text, serverSha: file.sha256, text: file.text, dirty: false });
   }
 
+  /**
+   * A file's text for an edit that moves, copies or removes it: the session's, else goald's (the
+   * draft's; the running version's without a draft), adopted first so the edit's undo step can
+   * write it back. A failed read throws, and the caller makes no edit.
+   */
+  async fileText(path: string): Promise<string> {
+    const known = this.state.files.get(path);
+    if (known) return known.text;
+    const { org, factory } = this.opts;
+    const file = this.state.hasDraft
+      ? await this.api.getDraftFile(org, factory, path)
+      : await this.api.getVersionFile(org, factory, 'current', path);
+    // An edit meanwhile may have written the file: its text is the newer one.
+    if (!this.state.files.has(path)) this.setFile(path, { server: file.text, serverSha: file.sha256, text: file.text });
+    return this.state.files.get(path)?.text ?? file.text;
+  }
+
   /** "Start a new draft" after a discard elsewhere: the next save opens one, unsaved edits kept. */
   restart(): void {
     if (this.readOnly) return;
@@ -662,7 +686,9 @@ export class DraftSession {
     const sent = cur.text;
     this.setFile(path, { inFlight: true });
     try {
-      const base = cur.serverSha ? { sha256: cur.serverSha } : ({ create: true } as const);
+      // A file an edit wrote is goald's text before its sha256 is computed (changeFiles): name it by that text.
+      const serverSha = cur.serverSha ?? (cur.server !== null ? await sha256(cur.server) : null);
+      const base = serverSha ? { sha256: serverSha } : ({ create: true } as const);
       const result = await this.api.putDraftFile(this.opts.org, this.opts.factory, path, sent, base);
       const now = this.state.files.get(path);
       this.setFile(path, {

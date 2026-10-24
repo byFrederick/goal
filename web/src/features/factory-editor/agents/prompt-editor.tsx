@@ -3,7 +3,7 @@
 // when the editor loses focus. Preview renders it with react-markdown, without raw HTML. The
 // word count follows the text as it is typed. "Insert" placeholders are hidden in 2.2 (review
 // decision 5).
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Suspense, useEffect, useId, useState } from 'react';
 import { ApiError } from '../../../api/client';
 import { draftFileQuery, versionFileQuery } from '../../../api/queries';
@@ -25,7 +25,7 @@ export interface PromptText {
   text: string | undefined;
   /** goald's refusal to load it (`file-not-found` for a missing file). */
   error: ApiError | undefined;
-  /** The text, loading it first when it isn't yet. */
+  /** The text for an edit, read first when the session hasn't it (and adopted, so the edit's undo can write it back). */
   load: () => Promise<string>;
 }
 
@@ -36,7 +36,6 @@ export interface PromptText {
  */
 export function usePromptText(agent: string): PromptText {
   const session = useDraftSession();
-  const client = useQueryClient();
   const prompt = useSection('agents').agents?.find((a) => a.name === agent)?.prompt;
   const path = prompt?.path ? cleanPath(prompt.path) : undefined;
   const hasDraft = useDraft((s) => s.hasDraft);
@@ -60,12 +59,7 @@ export function usePromptText(agent: string): PromptText {
     path,
     text,
     error: loaded.error instanceof ApiError ? loaded.error : undefined,
-    load: async () => {
-      if (text !== undefined) return text;
-      if (!path) return '';
-      const file = hasDraft ? await client.fetchQuery(draftFile) : await client.fetchQuery(versionFile);
-      return file.text;
-    },
+    load: () => (path ? session.fileText(path) : Promise.resolve('')),
   };
 }
 

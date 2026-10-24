@@ -138,6 +138,51 @@ test('undoing a rename moves the prompt back', async ({ page }) => {
   await expect(page.getByText(/isn’t in the draft/)).toHaveCount(0);
 });
 
+test('removing an agent reads its prompt first: undo puts back one not loaded yet, a failed read removes nothing', async ({
+  page,
+  request,
+}) => {
+  await page.goto(agents);
+  await page.getByRole('button', { name: 'Add agent' }).click();
+  const add = page.getByRole('dialog', { name: 'Add agent' });
+  await add.getByRole('textbox', { name: 'Name' }).fill('docs-writer');
+  await add.getByRole('button', { name: 'Add agent' }).click();
+  await expect(prompt(page, 'docs-writer')).toBeVisible();
+  await expect(status(page)).toContainText('Autosaved');
+
+  // goald can't give the prompt: nothing is removed.
+  await request.post('/__mock/fail', { data: { path: 'docs-writer.md', method: 'GET', status: 503, times: 0 } });
+  await page.reload();
+  await page.getByRole('button', { name: 'Remove…' }).click();
+  const confirm = page.getByRole('dialog', { name: 'Remove docs-writer?' });
+  await confirm.getByRole('button', { name: 'Remove agent' }).click();
+  await expect(confirm.getByRole('alert')).toHaveText(
+    'The prompt could not be read, so nothing was removed. Try again.',
+  );
+  await confirm.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('heading', { level: 3, name: 'docs-writer' })).toBeVisible();
+  await request.delete('/__mock/fail');
+
+  // A fresh editor whose read of the prompt is still on its way when the agent is removed.
+  await request.post('/__mock/fail', { data: { path: 'docs-writer.md', method: 'GET', delay_ms: 3000 } });
+  await page.reload();
+  await expect(page.getByRole('heading', { level: 3, name: 'docs-writer' })).toBeVisible();
+  await page.getByRole('button', { name: 'Remove…' }).click();
+  await confirm.getByRole('button', { name: 'Remove agent' }).click();
+  const list = page.getByRole('navigation', { name: 'Agents' });
+  await expect(list.getByRole('heading', { name: '4 agents' })).toBeVisible();
+  await expect(status(page)).toContainText('Autosaved');
+
+  await page.keyboard.press('ControlOrMeta+Z');
+  await expect(list.getByRole('heading', { name: '5 agents' })).toBeVisible();
+  await expect(status(page)).toContainText('Saving');
+  await expect(status(page)).toContainText('Autosaved');
+  await openAgent(page, 'docs-writer');
+  await expect(prompt(page, 'docs-writer')).toBeVisible();
+  await expect(detail(page, 'docs-writer').getByText('Markdown, 2 words')).toBeVisible();
+  await expect(page.getByText(/isn’t in the draft/)).toHaveCount(0);
+});
+
 test('add, rename and remove an agent; a station keeps its agent from being removed', async ({ page, request }) => {
   await page.goto(agents);
   await page.getByRole('button', { name: 'Add agent' }).click();
