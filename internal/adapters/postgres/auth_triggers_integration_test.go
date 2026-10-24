@@ -195,6 +195,69 @@ func TestAuthTriggers_InvitationsOnlyToALiveOrg(t *testing.T) {
 	}
 }
 
+// Review L2: a pending invitation never outlives its inviter's right to send it. In the same
+// transaction as the change, removing an inviter cancels their pending invitations of the
+// organization, demoting one to member cancels them all, and an owner made admin loses the
+// invitations only an owner could send (owners); others' invitations and other organizations'
+// stay pending. Each cancellation is audited by its system actor.
+func TestAuthTriggers_InvitationsEndWithTheirInviter(t *testing.T) {
+	t.Parallel()
+
+	d := newIdentityDB(t)
+	owner, second, admin, leaver := d.user(nameCruz), d.user("A. Second"), d.user(nameDoe), d.user("L. Eaver")
+	acme := d.provision("acme", owner)
+	labs := d.provision("labs", admin)
+	d.member(acme, second, "owner")
+	d.member(acme, admin, "admin")
+	d.member(acme, leaver, "admin")
+
+	invite := func(org domain.OrgID, inviter, role string) string {
+		t.Helper()
+
+		var id string
+		if err := d.auth.QueryRow(t.Context(), `INSERT INTO auth.invitation ("organizationId", email, role, status, "expiresAt", "inviterId")
+			VALUES ($1, $2, $3, 'pending', now() + interval '3 days', $4) RETURNING id::text`,
+			string(org), role+"-"+randomHex(t)+"@example.com", role, inviter).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+
+		return id
+	}
+
+	adminsMember, adminsAdmin := invite(acme, admin, roleMember), invite(acme, admin, "admin")
+	adminsInLabs := invite(labs, admin, roleMember)
+	ownersOwner, ownersMember := invite(acme, owner, "owner"), invite(acme, owner, roleMember)
+	leaversMember := invite(acme, leaver, roleMember)
+	seconds := invite(acme, second, "owner")
+
+	d.exec(d.auth, `UPDATE auth.member SET role = 'member' WHERE "organizationId" = $1 AND "userId" = $2`, string(acme), admin)
+	d.exec(d.auth, `UPDATE auth.member SET role = 'admin' WHERE "organizationId" = $1 AND "userId" = $2`, string(acme), owner)
+	d.exec(d.auth, `DELETE FROM auth.member WHERE "organizationId" = $1 AND "userId" = $2`, string(acme), leaver)
+
+	want := map[string]string{
+		adminsMember: "canceled system:inviter-demoted", adminsAdmin: "canceled system:inviter-demoted",
+		adminsInLabs: "pending ", ownersOwner: "canceled system:inviter-demoted", ownersMember: "pending ",
+		leaversMember: "canceled system:inviter-removed", seconds: "pending ",
+	}
+
+	for id, w := range want {
+		var got string
+		if err := d.admin.QueryRow(t.Context(), `SELECT status || ' ' || coalesce("changedBy", '') FROM auth.invitation WHERE id = $1`, id).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+
+		if got != w {
+			t.Errorf("invitation %s = %q; want %q", id, got, w)
+		}
+	}
+
+	var audited int
+	if err := d.admin.QueryRow(t.Context(), `SELECT count(*) FROM audit_log WHERE org_id = $1 AND action = 'invitation.canceled'
+		AND actor_kind = 'system' AND actor_id IN ('inviter-demoted', 'inviter-removed')`, string(acme)).Scan(&audited); err != nil || audited != 4 {
+		t.Errorf("audited cancellations = %d, %v; want 4", audited, err)
+	}
+}
+
 func expectLogged(t *testing.T, got, want []logged) {
 	t.Helper()
 

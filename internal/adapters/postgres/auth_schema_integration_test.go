@@ -24,13 +24,13 @@ var authFunctions = []string{
 }
 
 // authTriggers are the triggers on Better Auth's tables, by table: the owner rule (00042), the
-// audit and the access notices (00043), invitations to live organizations only (00049). A
-// regenerated table that lost one fails here.
+// audit and the access notices (00043), invitations to live organizations only and ending with
+// their inviter (00049). A regenerated table that lost one fails here.
 var authTriggers = map[string][]string{
 	"invitation": {"invitation_audit_answered", "invitation_audit_created", "invitation_live_org"},
 	"member": {
 		"member_access_removed", "member_access_role_changed", "member_audit_added", "member_audit_removed",
-		"member_audit_role_changed", "member_keeps_an_owner",
+		"member_audit_role_changed", "member_keeps_an_owner", "member_retire_inviter_demoted", "member_retire_inviter_removed",
 	},
 	"session": {"session_access_ended"},
 }

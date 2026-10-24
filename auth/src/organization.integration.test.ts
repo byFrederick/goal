@@ -286,6 +286,27 @@ describe('an invitation', () => {
     expect(o.mailer.to(email)).toEqual([]);
   });
 
+  it('ends when its inviter is removed, in the same change (review L2)', async () => {
+    const sent = async (email: string, role: string) => {
+      const res = await o.h.post('/organization/invite-member', { organizationId: o.id, email, role }, as(o.admin));
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { id: string }).id;
+    };
+    const asAdmin = await sent(`own-${o.id}@example.com`, 'admin');
+
+    const removed = await o.h.post(
+      '/organization/remove-member',
+      { organizationId: o.id, memberIdOrEmail: o.admin.member },
+      as(o.owner),
+    );
+
+    expect(removed.status).toBe(200);
+    const { rows } = await admin.query(`SELECT status, "changedBy" AS by FROM auth.invitation WHERE id = $1`, [
+      asAdmin,
+    ]);
+    expect(rows).toEqual([{ status: 'canceled', by: 'system:inviter-removed' }]);
+  });
+
   it('links to GOAL_PUBLIC_URL whatever Host the request names, stamped with the inviter', async () => {
     const email = `new-${o.id}@example.com`;
     const res = await invite(
