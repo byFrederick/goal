@@ -119,7 +119,7 @@ async function goalLogin(s: ReturnType<typeof service>, cookie: Cookie): Promise
   const code = await s.post('/device/code', { client_id: cliClientId });
   const { device_code: deviceCode, user_code: userCode } = (await code.json()) as Record<string, string>;
   const signedIn = { cookie: `${cookie.name}=${cookie.value}` };
-  await s.app.request(`/api/auth/device?user_code=${userCode}`, { headers: signedIn });
+  await s.get(`/device?user_code=${userCode}`, signedIn);
   const approve = await s.post('/device/approve', { userCode }, signedIn);
   if (approve.status !== 200) throw new Error(`device/approve: ${approve.status}`);
   const token = await s.post('/device/token', {
@@ -187,7 +187,7 @@ describe('the device grant', () => {
     const code = await s.post('/device/code', { client_id: cliClientId });
     const { user_code: userCode } = (await code.json()) as Record<string, string>;
     const bearer = { authorization: `Bearer ${device}` };
-    await s.app.request(`/api/auth/device?user_code=${userCode}`, { headers: bearer });
+    await s.get(`/device?user_code=${userCode}`, bearer);
     const approve = await s.post('/device/approve', { userCode }, bearer);
 
     expect(approve.status).toBe(403);
@@ -196,7 +196,7 @@ describe('the device grant', () => {
     // Nor as a cookie Better Auth signed: extending the session (get-session, due within a day of
     // expiry) answers one to any holder of the token.
     await pool.query(`UPDATE auth.session SET "expiresAt" = now() + interval '1 hour' WHERE token = $1`, [device]);
-    const refreshed = sessionCookie(await s.app.request('/api/auth/get-session', { headers: bearer }));
+    const refreshed = sessionCookie(await s.get('/get-session', bearer));
     expect(decodeURIComponent(refreshed.value).split('.')[0]).toBe(device);
     const asCookie = await s.post('/device/approve', { userCode }, { cookie: `${refreshed.name}=${refreshed.value}` });
 
