@@ -83,6 +83,8 @@ export const keys = {
   inbox: (org: string, factory?: string) => ['org', org, 'inbox', factory ?? 'all'] as const,
   factory: (org: string, factory: string) => ['org', org, 'factory', factory] as const,
   board: (org: string, factory: string) => ['org', org, 'factory', factory, 'board'] as const,
+  /** The mutation key of moving an item of the factory (the Move menu): the stream waits for it. */
+  move: (org: string, factory: string) => ['org', org, 'factory', factory, 'move'] as const,
   metrics: (org: string, factory: string, range: FlowRange) =>
     ['org', org, 'factory', factory, 'metrics', range] as const,
   weekly: (org: string, factory: string, to: string | undefined, type: string | undefined) =>

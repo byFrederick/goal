@@ -5,6 +5,7 @@ import type { DefinitionEvent, StreamEvent } from '../api/types';
 import {
   definitionInvalidations,
   factoryInvalidations,
+  heldByMove,
   invalidationsFor,
   isOverviewKey,
   resyncInvalidations,
@@ -239,5 +240,28 @@ describe('definitionInvalidations', () => {
   test('ignores data that is no definition event', () => {
     expect(definitionInvalidations(acme, { kind: 'draft' })).toEqual([]);
     expect(definitionInvalidations(acme, null)).toEqual([]);
+  });
+});
+
+describe('a move in flight', () => {
+  test("holds back the stream's refetch of its factory's board, which would put the card back", async () => {
+    const client = new QueryClient();
+    let finish = () => {};
+    const answered = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const move = client
+      .getMutationCache()
+      .build(client, { mutationKey: keys.move(acme, goal), mutationFn: () => answered })
+      .execute(undefined);
+
+    expect(heldByMove(client, keys.board(acme, goal))).toBe(true);
+    expect(heldByMove(client, keys.board(acme, sre))).toBe(false);
+    expect(heldByMove(client, keys.board(labs, goal))).toBe(false);
+    expect(heldByMove(client, keys.metrics(acme, goal, {}))).toBe(false);
+
+    finish();
+    await move;
+    expect(heldByMove(client, keys.board(acme, goal))).toBe(false);
   });
 });

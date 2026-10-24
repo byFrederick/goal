@@ -1,6 +1,6 @@
 // What the organization's stream invalidates (C §10.10). Pure, so the rules are tested without an
 // EventSource.
-import type { QueryKey } from '@tanstack/react-query';
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import { savedHere } from '../api/definitions';
 import { defKeys, keys } from '../api/queries';
 import type { DefinitionEvent, FactoryEvent, StreamEvent } from '../api/types';
@@ -50,6 +50,16 @@ export function factoryInvalidations(org: string, event: FactoryEvent): QueryKey
     ...factoryWorkInvalidations(org, event.factory_id),
     keys.overviews(org),
   ];
+}
+
+/**
+ * Whether the stream should leave a key alone for now: a factory's board while a move of one of
+ * its items is in flight. A refetch then could answer with the card where it was and undo the
+ * optimistic move until the move's own event; the move refetches the board when it settles.
+ */
+export function heldByMove(client: QueryClient, key: QueryKey): boolean {
+  if (key[0] !== 'org' || key[2] !== 'factory' || key[4] !== 'board' || key.length !== 5) return false;
+  return client.isMutating({ mutationKey: keys.move(String(key[1]), String(key[3])) }) > 0;
 }
 
 /** Overviews are the dearest read; the stream refreshes them at most every few seconds. */

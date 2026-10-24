@@ -8,6 +8,7 @@ import { type StreamStatus, subscribeToOrg } from '../api/client';
 import {
   definitionInvalidations,
   factoryInvalidations,
+  heldByMove,
   invalidationsFor,
   isOverviewKey,
   resyncInvalidations,
@@ -38,7 +39,9 @@ function batcher(client: QueryClient, delay: number) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const flush = () => {
     timer = undefined;
-    for (const queryKey of pending.values()) client.invalidateQueries({ queryKey });
+    for (const queryKey of pending.values()) {
+      if (!heldByMove(client, queryKey)) client.invalidateQueries({ queryKey });
+    }
     pending.clear();
   };
   return {

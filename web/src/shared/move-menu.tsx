@@ -47,8 +47,10 @@ function useMove(item: Movable, factory: Factory, onMoved: (updated: Item) => vo
   const client = useQueryClient();
   const org = useOrg();
   const board = keys.board(org.id, factory.id);
+  const moveKey = keys.move(org.id, factory.id);
 
   return useMutation({
+    mutationKey: moveKey,
     mutationFn: ({ to, reason }: { to: string; reason: string }) => moveItem(org.id, item.key, to, reason || undefined),
     onMutate: async ({ to }) => {
       await client.cancelQueries({ queryKey: board });
@@ -67,7 +69,11 @@ function useMove(item: Movable, factory: Factory, onMoved: (updated: Item) => vo
     },
     onSettled: () =>
       Promise.all([
-        ...factoryWorkInvalidations(org.id, factory.id).map((queryKey) => client.invalidateQueries({ queryKey })),
+        ...factoryWorkInvalidations(org.id, factory.id)
+          // Another move still in flight refetches the board when it settles (TanStack's
+          // concurrent optimistic updates): this one would put that card back meanwhile.
+          .filter((queryKey) => queryKey.at(-1) !== 'board' || client.isMutating({ mutationKey: moveKey }) <= 1)
+          .map((queryKey) => client.invalidateQueries({ queryKey })),
         client.invalidateQueries({ queryKey: keys.attention(org.id) }),
         client.invalidateQueries({ queryKey: keys.inboxes(org.id) }),
         client.invalidateQueries({ queryKey: keys.item(org.id, item.key) }),
