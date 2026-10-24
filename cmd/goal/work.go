@@ -38,17 +38,27 @@ func newAPI(getenv func(string) string) (*gen.ClientWithResponses, error) {
 
 // newAPIWith is newAPI with the keychain to read a stored credential from.
 func newAPIWith(getenv func(string) string, kc keychain) (*gen.ClientWithResponses, error) {
+	c, _, err := openAPI(getenv, kc)
+
+	return c, err
+}
+
+// openAPI is newAPIWith, also reporting whether its credential acts in its own organization only:
+// an API key or a personal token, from GOAL_API_KEY or `goal login --token`.
+func openAPI(getenv func(string) string, kc keychain) (*gen.ClientWithResponses, bool, error) {
 	tg, err := apiTarget(getenv)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	cred, err := resolveCredential(getenv, tg.cfg, tg.origin, kc)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	return gen.NewClientWithResponses(tg.base, gen.WithHTTPClient(httpClient(tg.origin, cred)))
+	c, err := gen.NewClientWithResponses(tg.base, gen.WithHTTPClient(httpClient(tg.origin, cred)))
+
+	return c, cred != nil && cred.cred.Kind == kindToken, err
 }
 
 // parseInterspersed parses flags wherever they appear among the positional arguments, so

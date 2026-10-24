@@ -131,8 +131,8 @@ push is how a folder changes one, and goald ignores factory files written to the
 Every command that talks to goald (run, follow, item, note, move, pause, the decisions, andon, factory) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
-else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, commands
-act in the key's own organization
+else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or
+personal token stored by goal login --token, commands act in its own organization
 
 With sign-in on (GOAL_AUTH=session), commands send GOAL_API_KEY (an API key goal_sk_… or a
 personal token goal_pat_…) when it is set, else what goal login stored for goald's origin, and

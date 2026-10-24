@@ -176,6 +176,53 @@ func (g *keyGoald) headers() []string {
 	return slices.Clone(g.seen)
 }
 
+// Spec 3 §9: a key or personal token stored with `goal login --token` acts in its own
+// organization, like GOAL_API_KEY, not the config file's; a session from `goal login` still acts
+// in the one config.json names.
+func TestStoredToken_ActsInItsOwnOrganization(t *testing.T) {
+	t.Parallel()
+
+	for _, c := range []struct {
+		name string
+		cred credential
+		want string
+	}{
+		{"a personal token", credential{Kind: kindToken, Token: testPAT}, orgAcme},
+		{"an API key", credential{Kind: kindToken, Token: testKey}, orgAcme},
+		{"a session", credential{Kind: kindSession, Token: testSession}, fromConfig},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			g := newKeyGoald(t)
+			env := testEnv(t, g.srv.URL, nil)
+
+			if _, err := saveConfig(env, cliConfig{Org: fromConfig, CredentialStore: storeFile}); err != nil {
+				t.Fatal(err)
+			}
+
+			store, err := openStore(env, storeFile, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			origin, err := originOf(g.srv.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if err := store.put(origin, c.cred); err != nil {
+				t.Fatal(err)
+			}
+
+			got, err := connect(t.Context(), env, "")
+			if err != nil || got.org != c.want {
+				t.Errorf("org with %s = %q, %v; want %q", c.name, got.org, err, c.want)
+			}
+		})
+	}
+}
+
 // Spec 3 §9: with GOAL_API_KEY a command acts in the key's own organization (the only one it
 // lists), not the config file's, and every request carries the key.
 func TestAPIKeyEnv_ActsInTheKeysOrganization(t *testing.T) {
@@ -188,14 +235,9 @@ func TestAPIKeyEnv_ActsInTheKeysOrganization(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c, err := newAPI(env)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	org, err := resolveOrg(t.Context(), c, env, "")
-	if err != nil || org != orgAcme {
-		t.Errorf("org with a key = %q, %v; want the key's own (the only one listed), not the config file's", org, err)
+	c, err := connect(t.Context(), env, "")
+	if err != nil || c.org != orgAcme {
+		t.Errorf("org with a key = %q, %v; want the key's own (the only one listed), not the config file's", c.org, err)
 	}
 
 	if seen := g.headers(); len(seen) != 1 || seen[0] != "Bearer "+testKey {

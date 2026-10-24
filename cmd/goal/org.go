@@ -123,12 +123,12 @@ func addOrgFlag(fs *flag.FlagSet) *string {
 
 // connect opens goald's API and resolves the organization the command acts in.
 func connect(ctx context.Context, getenv func(string) string, orgFlag string) (orgClient, error) {
-	c, err := newAPI(getenv)
+	c, own, err := openAPI(getenv, osKeychain{})
 	if err != nil {
 		return orgClient{}, err
 	}
 
-	org, err := resolveOrg(ctx, c, getenv, orgFlag)
+	org, err := resolveOrg(ctx, c, getenv, orgFlag, own)
 	if err != nil {
 		return orgClient{}, err
 	}
@@ -140,9 +140,10 @@ func connect(ctx context.Context, getenv func(string) string, orgFlag string) (o
 const envOrg = "GOAL_ORG"
 
 // resolveOrg finds the organization a command acts in: --org, then GOAL_ORG, then org in the
-// config file (not with GOAL_API_KEY: a key acts in its own organization, the only one it lists),
-// then the install's only organization. Otherwise it fails, listing them.
-func resolveOrg(ctx context.Context, c *gen.ClientWithResponses, getenv func(string) string, orgFlag string) (string, error) {
+// config file (not when ownOrg: an API key or a personal token, from GOAL_API_KEY or goal login
+// --token, acts in its own organization, the only one it lists), then the install's only
+// organization. Otherwise it fails, listing them.
+func resolveOrg(ctx context.Context, c *gen.ClientWithResponses, getenv func(string) string, orgFlag string, ownOrg bool) (string, error) {
 	if org := strings.TrimSpace(orgFlag); org != "" {
 		return org, nil
 	}
@@ -156,7 +157,7 @@ func resolveOrg(ctx context.Context, c *gen.ClientWithResponses, getenv func(str
 		return "", err
 	}
 
-	if cfg.Org != "" && strings.TrimSpace(getenv(envAPIKey)) == "" {
+	if cfg.Org != "" && !ownOrg {
 		return cfg.Org, nil
 	}
 
@@ -215,7 +216,7 @@ func orgCommand(ctx context.Context, out *printer, getenv func(string) string, a
 		return errUsage
 	}
 
-	c, err := newAPI(getenv)
+	c, own, err := openAPI(getenv, osKeychain{})
 	if err != nil {
 		return err
 	}
@@ -226,7 +227,7 @@ func orgCommand(ctx context.Context, out *printer, getenv func(string) string, a
 			return errUsage
 		}
 
-		return orgList(ctx, out, c, getenv)
+		return orgList(ctx, out, c, getenv, own)
 	case "use":
 		if len(rest) != 1 {
 			return errUsage
@@ -244,7 +245,7 @@ func orgCommand(ctx context.Context, out *printer, getenv func(string) string, a
 	}
 }
 
-func orgList(ctx context.Context, out *printer, c *gen.ClientWithResponses, getenv func(string) string) error {
+func orgList(ctx context.Context, out *printer, c *gen.ClientWithResponses, getenv func(string) string, ownOrg bool) error {
 	orgs, err := listOrgs(ctx, c)
 	if err != nil {
 		return err
@@ -252,7 +253,7 @@ func orgList(ctx context.Context, out *printer, c *gen.ClientWithResponses, gete
 
 	// The current organization, as a command without --org would resolve it; none when that
 	// needs a choice.
-	current, _ := resolveOrg(ctx, c, getenv, "")
+	current, _ := resolveOrg(ctx, c, getenv, "", ownOrg)
 
 	for _, o := range orgs {
 		mark := " "
