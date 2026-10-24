@@ -213,12 +213,8 @@ func (t *Tenancy) DeleteOrg(ctx context.Context, by domain.Actor, now time.Time)
 	return nil
 }
 
-// PurgeDeletedOrgs implements ports.Tenancy. Like the database's single transaction, it purges
-// the batch, each organization with the linked store's rows of it, only when also succeeds for
-// every one of them.
-func (t *Tenancy) PurgeDeletedOrgs(ctx context.Context, cutoff time.Time, limit int,
-	also func(context.Context, domain.OrgID) error,
-) ([]domain.OrgID, error) {
+// DeletedOrgs implements ports.Tenancy.
+func (t *Tenancy) DeletedOrgs(_ context.Context, cutoff time.Time, limit int) ([]domain.OrgID, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -232,32 +228,41 @@ func (t *Tenancy) PurgeDeletedOrgs(ctx context.Context, cutoff time.Time, limit 
 
 	slices.SortFunc(due, func(a, b *orgRow) int { return cmp.Or(a.deleted.Compare(b.deleted), cmp.Compare(a.org.ID, b.org.ID)) })
 
-	due = due[:min(limit, len(due))]
-
-	for _, r := range due {
-		if also == nil {
-			break
-		}
-
-		if err := also(ctx, r.org.ID); err != nil {
-			return nil, fmt.Errorf("purge org %s: %w", r.org.ID, err)
-		}
-	}
-
-	var out []domain.OrgID
-
-	for _, r := range due {
-		delete(t.orgs, r.org.ID)
-		t.audit = slices.DeleteFunc(t.audit, func(a auditRow) bool { return a.org == r.org.ID })
-
-		if t.store != nil {
-			t.store.purge(r.org.ID)
-		}
-
+	out := make([]domain.OrgID, 0, min(limit, len(due)))
+	for _, r := range due[:min(limit, len(due))] {
 		out = append(out, r.org.ID)
 	}
 
 	return out, nil
+}
+
+// PurgeOrg implements ports.Tenancy. Like the database's transaction, it purges the organization,
+// with the linked store's rows of it, only when also succeeds.
+func (t *Tenancy) PurgeOrg(ctx context.Context, org domain.OrgID, cutoff time.Time,
+	also func(context.Context, domain.OrgID) error,
+) (bool, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	r, ok := t.orgs[org]
+	if !ok || r.deleted.IsZero() || !r.deleted.Before(cutoff) {
+		return false, nil
+	}
+
+	if also != nil {
+		if err := also(ctx, org); err != nil {
+			return false, fmt.Errorf("purge org %s: %w", org, err)
+		}
+	}
+
+	delete(t.orgs, org)
+	t.audit = slices.DeleteFunc(t.audit, func(a auditRow) bool { return a.org == org })
+
+	if t.store != nil {
+		t.store.purge(org)
+	}
+
+	return true, nil
 }
 
 // Append implements ports.Audit.

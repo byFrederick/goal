@@ -261,13 +261,17 @@ type Tenancy interface {
 	// DeleteOrg soft-deletes the organization: from now on Org, Orgs and ActiveOrgs no longer
 	// see it. It appends org.deleted. (org)
 	DeleteOrg(ctx context.Context, by domain.Actor, now time.Time) error
-	// PurgeDeletedOrgs hard-deletes up to limit organizations deleted before cutoff, with every
-	// row they own, and returns their ids. For each one, once its rows are gone and before that
-	// is committed, it calls also (when not nil) to remove what the organization keeps outside
-	// the database; an error from it keeps the organization, rows and all, for the next run. One
-	// purge runs at a time across goald instances: while another holds the purge lock it returns
-	// no ids. It needs no org (a system job).
-	PurgeDeletedOrgs(ctx context.Context, cutoff time.Time, limit int, also func(context.Context, domain.OrgID) error) ([]domain.OrgID, error)
+	// DeletedOrgs returns up to limit organizations deleted before cutoff, oldest deletion
+	// first. It needs no org (a system job).
+	DeletedOrgs(ctx context.Context, cutoff time.Time, limit int) ([]domain.OrgID, error)
+	// PurgeOrg hard-deletes org with every row it owns, in a transaction of its own, and reports
+	// whether it did: false, with nothing done, when org is not deleted, was deleted on or after
+	// cutoff, or is being purged by another goald instance (which it skips instead of waiting
+	// for). Once the rows are gone and before that is committed, it calls also (when not nil) to
+	// remove what the organization keeps outside the database; an error from it keeps the
+	// organization, rows and all, for the next run, and is returned. It needs no org (a system
+	// job).
+	PurgeOrg(ctx context.Context, org domain.OrgID, cutoff time.Time, also func(context.Context, domain.OrgID) error) (bool, error)
 }
 
 // NewOrg is an organization to create.

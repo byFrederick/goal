@@ -1,12 +1,14 @@
 // Package retention removes what outlived its retention window: organizations deleted longer
 // ago than the install's retention (GOAL_ORG_RETENTION), with every row they own and every
-// object under their bucket prefix. Any goald instance may run it; the purge lock lets one at a
-// time do the work, and every step is safe to repeat, so an instance that dies mid-purge leaves
-// nothing the next run cannot finish.
+// object under their bucket prefix. Any goald instance may run it: each organization is purged in
+// a transaction of its own, which another instance purging at the same time skips, and every
+// step is safe to repeat, so an instance that dies mid-purge leaves nothing the next run cannot
+// finish.
 package retention
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -18,12 +20,14 @@ import (
 
 // Orgs purges deleted organizations; ports.Tenancy satisfies it.
 type Orgs interface {
-	PurgeDeletedOrgs(ctx context.Context, cutoff time.Time, limit int,
-		also func(context.Context, domain.OrgID) error) ([]domain.OrgID, error)
+	DeletedOrgs(ctx context.Context, cutoff time.Time, limit int) ([]domain.OrgID, error)
+	PurgeOrg(ctx context.Context, org domain.OrgID, cutoff time.Time,
+		also func(context.Context, domain.OrgID) error) (bool, error)
 }
 
-// batch is how many organizations one purge transaction takes.
-const batch = 10
+// perRun is how many organizations one run takes, oldest deletion first; the next run takes the
+// rest.
+const perRun = 1000
 
 // Purger purges deleted organizations once their retention has passed.
 type Purger struct {
@@ -47,9 +51,10 @@ func New(orgs Orgs, objects ports.ObjectStore, clock ports.Clock, retention time
 // PurgeAfter is when an organization deleted at deletedAt may be purged.
 func (p *Purger) PurgeAfter(deletedAt time.Time) time.Time { return deletedAt.Add(p.retention) }
 
-// Purge purges every organization deleted more than the retention ago, in batches, and returns
-// their ids: each one's rows (goal_purge_org) and then delete markers on its bucket prefix, in
-// one transaction per batch, so a failure keeps the batch for the next run.
+// Purge purges every organization deleted more than the retention ago, each on its own, and
+// returns those it purged: an organization's rows (goal_purge_org) and then its bucket objects,
+// committed only when both are gone. One that fails is kept, rows and objects, for the next run
+// and does not hold up the others; the error names every one that failed.
 func (p *Purger) Purge(ctx context.Context) ([]domain.OrgID, error) {
 	if p.retention <= 0 {
 		return nil, fmt.Errorf("retention: %s is not a positive retention; nothing is purged", p.retention)
@@ -57,24 +62,31 @@ func (p *Purger) Purge(ctx context.Context) ([]domain.OrgID, error) {
 
 	cutoff := p.clock.Now().Add(-p.retention)
 
-	var purged []domain.OrgID
+	due, err := p.orgs.DeletedOrgs(ctx, cutoff, perRun)
+	if err != nil {
+		return nil, err
+	}
 
-	for {
-		ids, err := p.orgs.PurgeDeletedOrgs(ctx, cutoff, batch, p.deleteObjects)
+	var (
+		purged []domain.OrgID
+		errs   []error
+	)
+
+	for _, id := range due {
+		ok, err := p.orgs.PurgeOrg(ctx, id, cutoff, p.deleteObjects)
 		if err != nil {
-			return purged, err
+			errs = append(errs, err)
+			continue
 		}
 
-		for _, id := range ids {
+		if ok {
 			p.log.InfoContext(ctx, "organization purged", slog.String("org_id", string(id)))
-		}
 
-		purged = append(purged, ids...)
-
-		if len(ids) < batch {
-			return purged, nil
+			purged = append(purged, id)
 		}
 	}
+
+	return purged, errors.Join(errs...)
 }
 
 // deleteObjects removes an organization's objects from the bucket.

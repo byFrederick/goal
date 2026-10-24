@@ -246,54 +246,62 @@ func (s *Store) DeleteOrg(ctx context.Context, by domain.Actor, now time.Time) e
 	return nil
 }
 
-// PurgeDeletedOrgs implements ports.Tenancy: in one transaction it takes the purge lock (or
-// returns nothing when another instance holds it), locks up to limit deleted organizations and
-// purges each with goal_purge_org, then calls also. The transaction commits only when every
-// organization of the batch is purged.
-func (s *Store) PurgeDeletedOrgs(ctx context.Context, cutoff time.Time, limit int,
-	also func(context.Context, domain.OrgID) error,
-) ([]domain.OrgID, error) {
-	var out []domain.OrgID
+// DeletedOrgs implements ports.Tenancy. An organization another purge holds right now is left
+// out (goal_deleted_orgs skips locked rows).
+func (s *Store) DeletedOrgs(ctx context.Context, cutoff time.Time, limit int) ([]domain.OrgID, error) {
+	var ids []uuid.UUID
 
 	err := s.systemTx(ctx, func(q *db.Queries) error {
-		locked, err := q.TryLockOrgPurge(ctx)
-		if err != nil || !locked {
+		var err error
+
+		ids, err = q.DeletedOrgs(ctx, db.DeletedOrgsParams{Before: cutoff, MaxOrgs: int32(min(max(limit, 0), 1000))})
+
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("deleted orgs: %w", err)
+	}
+
+	out := make([]domain.OrgID, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, domain.OrgID(id.String()))
+	}
+
+	return out, nil
+}
+
+// PurgeOrg implements ports.Tenancy: in one transaction goal_purge_org locks the organization
+// (skipping it when another purge holds it) and deletes its rows, then also runs; the
+// transaction commits only when both succeed. Instances of one install that purge at the same
+// time share the organizations instead of waiting for each other.
+func (s *Store) PurgeOrg(ctx context.Context, org domain.OrgID, cutoff time.Time,
+	also func(context.Context, domain.OrgID) error,
+) (bool, error) {
+	id, err := parseID("org", string(org))
+	if err != nil {
+		return false, err
+	}
+
+	var purged bool
+
+	err = s.systemTx(ctx, func(q *db.Queries) error {
+		var err error
+
+		if purged, err = q.PurgeOrg(ctx, db.PurgeOrgParams{OrgID: id, Before: cutoff}); err != nil || !purged {
 			return err
 		}
 
-		ids, err := q.DeletedOrgs(ctx, db.DeletedOrgsParams{Before: cutoff, MaxOrgs: int32(min(limit, 1000))}) //nolint:gosec // capped
-		if err != nil {
-			return err
-		}
-
-		for _, id := range ids {
-			org := domain.OrgID(id.String())
-
-			purged, err := q.PurgeOrg(ctx, db.PurgeOrgParams{OrgID: id, Before: cutoff})
-			if err != nil {
-				return fmt.Errorf("org %s: %w", id, err)
-			}
-
-			if !purged {
-				continue
-			}
-
-			if also != nil {
-				if err := also(ctx, org); err != nil {
-					return fmt.Errorf("org %s: %w", id, err)
-				}
-			}
-
-			out = append(out, org)
+		if also != nil {
+			return also(ctx, org)
 		}
 
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("purge deleted orgs: %w", err)
+		return false, fmt.Errorf("purge org %s: %w", org, err)
 	}
 
-	return out, nil
+	return purged, nil
 }
 
 // Append implements ports.Audit.

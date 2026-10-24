@@ -36,51 +36,34 @@ func TestTenancy_Conformance(t *testing.T) {
 	})
 }
 
-// While another instance's purge is in its transaction, a purge does nothing; once that one has
-// committed, the next purge takes the organizations deleted since.
-func TestPurgeDeletedOrgs_OneInstanceAtATime(t *testing.T) {
+// Instances purging at the same time share the organizations: while one instance's purge of an
+// organization is in its transaction (in its hook), another instance neither lists nor purges
+// that organization, and purges the others at once instead of waiting.
+func TestPurgeOrg_SkipsAnOrgAnotherPurgeHolds(t *testing.T) {
 	t.Parallel()
 
 	s := New(newTestPool(t))
 	deleted := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
 	cutoff := deleted.Add(time.Second)
 	first := deletedOrg(t, s, "acme", deleted)
-
-	holding := holdPurge(t, s, cutoff)
-
-	if ids, err := s.PurgeDeletedOrgs(t.Context(), cutoff, 10, nil); err != nil || len(ids) != 0 {
-		t.Errorf("PurgeDeletedOrgs while another purge holds the lock = %v, %v; want nothing", ids, err)
-	}
-
 	second := deletedOrg(t, s, "example-labs", deleted)
 
-	if ids := holding.release(); len(ids) != 1 || ids[0] != first {
-		t.Errorf("the holding purge = %v; want [%s]", ids, first)
+	holding := holdPurge(t, s, first, cutoff)
+
+	if ids, err := s.DeletedOrgs(t.Context(), cutoff, 10); err != nil || len(ids) != 1 || ids[0] != second {
+		t.Errorf("DeletedOrgs while another purge holds %s = %v, %v; want [%s]", first, ids, err, second)
 	}
 
-	if ids, err := s.PurgeDeletedOrgs(t.Context(), cutoff, 10, nil); err != nil || len(ids) != 1 || ids[0] != second {
-		t.Errorf("PurgeDeletedOrgs after the lock is released = %v, %v; want [%s]", ids, err, second)
+	if ok, err := s.PurgeOrg(t.Context(), first, cutoff, nil); ok || err != nil {
+		t.Errorf("PurgeOrg of the held org = %v, %v; want false at once", ok, err)
 	}
-}
 
-// The purge lock belongs to one install (its schema): a purge running in another install on the
-// same PostgreSQL does not stop this one.
-func TestPurgeDeletedOrgs_InstallsDoNotWaitForEachOther(t *testing.T) {
-	t.Parallel()
+	if ok, err := s.PurgeOrg(t.Context(), second, cutoff, nil); !ok || err != nil {
+		t.Errorf("PurgeOrg of another org meanwhile = %v, %v; want it purged", ok, err)
+	}
 
-	deleted := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
-	cutoff := deleted.Add(time.Second)
-
-	other := New(newTestPool(t))
-	deletedOrg(t, other, "acme", deleted)
-
-	holdPurge(t, other, cutoff)
-
-	s := New(newTestPool(t))
-	o := deletedOrg(t, s, "acme", deleted)
-
-	if ids, err := s.PurgeDeletedOrgs(t.Context(), cutoff, 10, nil); err != nil || len(ids) != 1 || ids[0] != o {
-		t.Errorf("PurgeDeletedOrgs while another install purges = %v, %v; want [%s]", ids, err, o)
+	if ok := holding.release(); !ok {
+		t.Errorf("the holding purge of %s = false; want it purged", first)
 	}
 }
 
@@ -100,27 +83,25 @@ func deletedOrg(t *testing.T, s *Store, slug string, at time.Time) domain.OrgID 
 	return o.ID
 }
 
-// heldPurge is a purge stopped inside its transaction, in its hook for the first organization.
+// heldPurge is a purge of one organization stopped inside its transaction, in its hook.
 type heldPurge struct {
 	resume chan struct{}
-	done   chan []domain.OrgID
+	done   chan bool
 	once   sync.Once
-	ids    []domain.OrgID
+	purged bool
 }
 
-// holdPurge starts a purge of s that holds the purge lock until release, or until the test ends;
-// s needs a deleted organization for the purge to reach its hook.
-func holdPurge(t *testing.T, s *Store, cutoff time.Time) *heldPurge {
+// holdPurge starts a purge of org that stays in its transaction until release, or until the test
+// ends; org must be deleted before cutoff for the purge to reach its hook.
+func holdPurge(t *testing.T, s *Store, org domain.OrgID, cutoff time.Time) *heldPurge {
 	t.Helper()
 
-	h := &heldPurge{resume: make(chan struct{}), done: make(chan []domain.OrgID, 1)}
+	h := &heldPurge{resume: make(chan struct{}), done: make(chan bool, 1)}
 	inside := make(chan struct{})
 
 	go func() {
-		var once sync.Once
-
-		ids, err := s.PurgeDeletedOrgs(context.WithoutCancel(t.Context()), cutoff, 10, func(context.Context, domain.OrgID) error {
-			once.Do(func() { close(inside) })
+		ok, err := s.PurgeOrg(context.WithoutCancel(t.Context()), org, cutoff, func(context.Context, domain.OrgID) error {
+			close(inside)
 			<-h.resume
 
 			return nil
@@ -129,13 +110,13 @@ func holdPurge(t *testing.T, s *Store, cutoff time.Time) *heldPurge {
 			t.Errorf("the holding purge: %v", err)
 		}
 
-		h.done <- ids
+		h.done <- ok
 	}()
 
 	select {
 	case <-inside:
-	case ids := <-h.done:
-		t.Fatalf("the holding purge returned %v without reaching its hook", ids)
+	case ok := <-h.done:
+		t.Fatalf("the holding purge returned %v without reaching its hook", ok)
 	}
 
 	t.Cleanup(func() { h.release() })
@@ -143,14 +124,14 @@ func holdPurge(t *testing.T, s *Store, cutoff time.Time) *heldPurge {
 	return h
 }
 
-// release lets the held purge commit and returns what it purged.
-func (h *heldPurge) release() []domain.OrgID {
+// release lets the held purge commit and reports whether it purged.
+func (h *heldPurge) release() bool {
 	h.once.Do(func() {
 		close(h.resume)
-		h.ids = <-h.done
+		h.purged = <-h.done
 	})
 
-	return h.ids
+	return h.purged
 }
 
 func TestMigrate_CreatesTheDefaultOrg(t *testing.T) {

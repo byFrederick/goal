@@ -47,7 +47,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"OrgMethods_NoOrgIsAnError", testNoOrg},
 		{"UpdateOrg_SlotCaps", testSlotCaps},
 		{"UpdateOrg_SlotCapRulesRefused", testSlotCapRules},
-		{"PurgeDeletedOrgs_AllOfTheBatchOrNone", testPurgeHook},
+		{"PurgeOrg_OneOrgAtATime", testPurgeHook},
+		{"PurgeOrg_NothingThatIsNotDue", testPurgeRefused},
 	}
 
 	for _, tc := range tests {
@@ -203,15 +204,29 @@ func (f *fixture) log(o domain.Org, q ports.AuditQuery) []domain.AuditEntry {
 	return got
 }
 
+// purge purges every organization deleted before cutoff, as the purge job does, and returns them.
 func (f *fixture) purge(cutoff time.Time) []domain.OrgID {
 	f.t.Helper()
 
-	ids, err := f.Tenancy.PurgeDeletedOrgs(f.t.Context(), cutoff, 10, nil)
+	due, err := f.Tenancy.DeletedOrgs(f.t.Context(), cutoff, 10)
 	if err != nil {
 		f.t.Fatal(err)
 	}
 
-	return ids
+	var out []domain.OrgID
+
+	for _, id := range due {
+		ok, err := f.Tenancy.PurgeOrg(f.t.Context(), id, cutoff, nil)
+		if err != nil {
+			f.t.Fatal(err)
+		}
+
+		if ok {
+			out = append(out, id)
+		}
+	}
+
+	return out
 }
 
 func ids(entries []domain.AuditEntry) []int64 {
@@ -334,15 +349,15 @@ func testDeleteAndPurge(f *fixture) {
 	f.refused("CreateOrg with a deleted org's slug before the purge", err, domain.ErrInvalid)
 
 	if got := f.purge(t0); len(got) != 0 {
-		f.t.Errorf("PurgeDeletedOrgs before the cutoff = %v; want none", got)
+		f.t.Errorf("purge before the cutoff = %v; want none", got)
 	}
 
 	if got := f.purge(t0.Add(time.Second)); !slices.Equal(got, []domain.OrgID{gone.ID}) {
-		f.t.Errorf("PurgeDeletedOrgs after the cutoff = %v; want [%s]", got, gone.ID)
+		f.t.Errorf("purge after the cutoff = %v; want [%s]", got, gone.ID)
 	}
 
 	if got := f.purge(t0.Add(time.Second)); len(got) != 0 {
-		f.t.Errorf("PurgeDeletedOrgs again = %v; want none", got)
+		f.t.Errorf("purge again = %v; want none", got)
 	}
 
 	if got := f.log(gone, ports.AuditQuery{}); len(got) != 0 {

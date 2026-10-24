@@ -208,9 +208,8 @@ func TestPurge_RemovesDefinitions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	purged, err := f.s.PurgeDeletedOrgs(t.Context(), time.Now(), 10, nil)
-	if err != nil || len(purged) != 1 || purged[0] != f.org {
-		t.Fatalf("PurgeDeletedOrgs = %v, %v; want %s purged", purged, err, f.org)
+	if purged, err := f.s.PurgeOrg(t.Context(), f.org, time.Now(), nil); err != nil || !purged {
+		t.Fatalf("PurgeOrg = %v, %v; want %s purged", purged, err, f.org)
 	}
 
 	for _, table := range []string{"definition_versions", "definition_blobs", "factories"} {
