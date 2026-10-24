@@ -26,11 +26,15 @@ const (
 // Sign-in under goal up (spec 3 §5.6, §9).
 const (
 	// defaultAuthMode is goald's GOAL_AUTH default (cmd/goald/settings.go defaultAuth); goal up
-	// resolves the mode the same way and only passes the variable on. Both change in 3-16.
-	defaultAuthMode = "none"
+	// resolves the mode the same way and only passes the variable on.
+	defaultAuthMode = authSession
 	authSession     = "session"
-	authModeEnv     = "GOAL_AUTH"
-	gatewayKeyEnv   = "GOAL_GATEWAY_KEY"
+	authNone        = "none"
+	// keepLocalUser ends every refusal of sign-in: the explicit way back to the single local user.
+	keepLocalUser = "or set GOAL_AUTH=none to keep the single local user (loopback only, one developer's laptop)"
+	authModeEnv   = "GOAL_AUTH"
+	authSecretEnv = "BETTER_AUTH_SECRET" //nolint:gosec // a variable name, not a credential
+	gatewayKeyEnv = "GOAL_GATEWAY_KEY"
 	// authServer is the auth service's build (task auth:build), from the repository root.
 	authServer = "auth/dist/server.js"
 	// mailpitInbox is compose.yaml's Mailpit, where sign-in codes arrive locally.
@@ -55,11 +59,13 @@ var authOnly = []string{
 // up starts the local platform: PostgreSQL and RustFS from compose.yaml (waiting until they are
 // healthy), the database roles (goal db init, so an existing database is handed to goal_owner
 // before goald migrates it), the bucket, then goald in the foreground until Ctrl-C. Under
-// GOAL_AUTH=session it also starts Mailpit (compose) and the auth service (node
+// GOAL_AUTH=session, the default, it also starts Mailpit (compose) and the auth service (node
 // auth/dist/server.js) beside goald, each process with only its own variables, and refuses to
-// start without a usable BETTER_AUTH_SECRET, or without GOAL_BOOTSTRAP_OWNER_EMAIL while nobody
-// has signed in. It pushes no factory: the bucket's definitions are what goald runs. The compose
-// services keep running afterwards; `docker compose down` stops them.
+// start (before anything when it can tell, before the roles otherwise) without a usable
+// BETTER_AUTH_SECRET, the auth service's build, or GOAL_BOOTSTRAP_OWNER_EMAIL while nobody has
+// signed in, each refusal naming GOAL_AUTH=none as the way to keep the single local user. It
+// pushes no factory: the bucket's definitions are what goald runs. The compose services keep
+// running afterwards; `docker compose down` stops them.
 func up(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	if len(args) != 0 {
 		return errUsage
@@ -72,6 +78,13 @@ func up(ctx context.Context, out *printer, getenv func(string) string, args []st
 
 	if err := compose(ctx, out, "PostgreSQL and RustFS", "postgres", "rustfs"); err != nil {
 		return err
+	}
+
+	// Before the roles, the bucket, the auth service or goald: sign-in nobody could use.
+	if signIn {
+		if err := bootstrapReady(ctx, getenv); err != nil {
+			return err
+		}
 	}
 
 	if err := dbInit(ctx, out, getenv); err != nil {
@@ -91,7 +104,7 @@ func up(ctx context.Context, out *printer, getenv func(string) string, args []st
 	publicURL := publicURLOf(getenv)
 
 	if signIn {
-		stop, err := startSignIn(ctx, out, getenv, authEnv(environ, publicURL))
+		stop, err := startSignIn(ctx, out, authEnv(environ, publicURL))
 		if err != nil {
 			return err
 		}
@@ -112,7 +125,7 @@ func signInMode(getenv func(string) string) (bool, error) {
 	}
 
 	switch mode {
-	case defaultAuthMode:
+	case authNone:
 		return false, nil
 	case authSession:
 	default:
@@ -124,19 +137,25 @@ func signInMode(getenv func(string) string) (bool, error) {
 	}
 
 	if _, err := os.Stat(authServer); err != nil {
-		return false, fmt.Errorf("GOAL_AUTH=session needs the auth service's build %s: run task auth:build (or set GOAL_AUTH=none)", authServer)
+		return false, fmt.Errorf("%s needs the auth service's build %s: run task auth:build (task up does); %s", sessionMode(getenv), authServer, keepLocalUser)
 	}
 
 	return true, nil
 }
 
-// startSignIn starts what sign-in needs beside goald, once someone can sign in: Mailpit and the
-// auth service with env. It returns what stops the auth service.
-func startSignIn(ctx context.Context, out *printer, getenv func(string) string, env []string) (func(), error) {
-	if err := bootstrapReady(ctx, getenv); err != nil {
-		return nil, err
+// sessionMode names the sign-in mode in a refusal: "GOAL_AUTH=session (the default)" when .env
+// does not set it, so people upgrading learn why goal up asks for something new.
+func sessionMode(getenv func(string) string) string {
+	if strings.TrimSpace(getenv(authModeEnv)) == "" {
+		return "GOAL_AUTH=session (the default)"
 	}
 
+	return "GOAL_AUTH=session"
+}
+
+// startSignIn starts what sign-in needs beside goald: Mailpit and the auth service with env. It
+// returns what stops the auth service.
+func startSignIn(ctx context.Context, out *printer, env []string) (func(), error) {
 	if err := compose(ctx, out, "Mailpit", "mailpit"); err != nil {
 		return nil, err
 	}
@@ -268,9 +287,14 @@ func goaldEnv(environ []string, getenv func(string) string, signIn bool, publicU
 // authSecrets refuses to sign people in without BETTER_AUTH_SECRET or BETTER_AUTH_SECRETS, or
 // with one that is goald's gateway key: the two must never be the same secret.
 func authSecrets(getenv func(string) string) error {
-	secret, versioned := strings.TrimSpace(getenv("BETTER_AUTH_SECRET")), strings.TrimSpace(getenv("BETTER_AUTH_SECRETS"))
+	secret, versioned := strings.TrimSpace(getenv(authSecretEnv)), strings.TrimSpace(getenv("BETTER_AUTH_SECRETS"))
 	if secret == "" && versioned == "" {
-		return errors.New("GOAL_AUTH=session needs BETTER_AUTH_SECRET (openssl rand -hex 32) in .env; or set GOAL_AUTH=none")
+		need := "BETTER_AUTH_SECRET in .env (openssl rand -hex 32, not GOAL_GATEWAY_KEY)"
+		if strings.TrimSpace(getenv("GOAL_BOOTSTRAP_OWNER_EMAIL")) == "" {
+			need += " and, until the first owner signs in, GOAL_BOOTSTRAP_OWNER_EMAIL (that owner's address)"
+		}
+
+		return fmt.Errorf("%s needs %s; %s", sessionMode(getenv), need, keepLocalUser)
 	}
 
 	gateway := strings.TrimSpace(getenv(gatewayKeyEnv))
@@ -317,7 +341,8 @@ func bootstrapReady(ctx context.Context, getenv func(string) string) error {
 	}
 
 	if !exist {
-		return errors.New("nobody can sign in yet: set GOAL_BOOTSTRAP_OWNER_EMAIL in .env to the first owner's address; or set GOAL_AUTH=none")
+		return fmt.Errorf("nobody can sign in yet: %s needs GOAL_BOOTSTRAP_OWNER_EMAIL in .env, the first owner's address; %s",
+			sessionMode(getenv), keepLocalUser)
 	}
 
 	return nil

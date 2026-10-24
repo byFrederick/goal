@@ -330,9 +330,9 @@ const (
 	authSession authMode = "session"
 )
 
-// defaultAuth is GOAL_AUTH's default: none until web sign-in, API keys, goal login and recovery
-// all exist (spec 3, PR 3-16 makes it session).
-const defaultAuth = authNone
+// defaultAuth is GOAL_AUTH's default: people sign in (spec 3 §14, from PR 3-16). The single local
+// user (none) is only ever asked for, and only on a loopback listen.
+const defaultAuth = authSession
 
 // authSettings reads GOAL_AUTH, GOAL_AUTH_GOOGLE, GOAL_AUTH_UPSTREAM and GOAL_TRUSTED_PROXIES.
 func authSettings(s *settings, or func(name, def string) string) []error {

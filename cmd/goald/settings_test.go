@@ -62,8 +62,9 @@ func TestSettings_Defaults(t *testing.T) {
 	}
 }
 
-// The single local user until sign-in exists, the identity service beside goald on loopback, no
-// proxy believed, and the public origin the listen address, over http.
+// Sign-in by default (spec 3 §14, PR 3-16; GOAL_AUTH=none only when asked for), the identity
+// service beside goald on loopback, no proxy believed, and the public origin the listen address,
+// over http.
 func TestSettings_AuthDefaults(t *testing.T) {
 	t.Parallel()
 
@@ -72,8 +73,13 @@ func TestSettings_AuthDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if s.Auth != authNone || s.AuthUpstream.String() != "http://127.0.0.1:8081" || len(s.TrustedProxies) != 0 {
-		t.Errorf("auth %s, upstream %s, trusted proxies %v; want none, http://127.0.0.1:8081 and none", s.Auth, s.AuthUpstream, s.TrustedProxies)
+	if s.Auth != authSession || s.AuthUpstream.String() != "http://127.0.0.1:8081" || len(s.TrustedProxies) != 0 {
+		t.Errorf("auth %s, upstream %s, trusted proxies %v; want session, http://127.0.0.1:8081 and none", s.Auth, s.AuthUpstream, s.TrustedProxies)
+	}
+
+	none, err := settingsFrom(envOf(map[string]string{"GOAL_AUTH": "none"}))
+	if err != nil || none.Auth != authNone {
+		t.Errorf("GOAL_AUTH=none = %s, %v; want the local user when asked for", none.Auth, err)
 	}
 
 	if s.PublicURL != "http://127.0.0.1:8080" || s.strictTransport() {
@@ -179,7 +185,7 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 		},
 		// Fail closed: no mode goald cannot enforce, and no unknown one.
 		{
-			name: "the local user off loopback", env: map[string]string{listenEnv: "10.0.0.5:8080", gatewayEnv: testGateway, publicURLEnv: testPublicURL},
+			name: "the local user off loopback", env: map[string]string{authEnv: "none", listenEnv: "10.0.0.5:8080", gatewayEnv: testGateway, publicURLEnv: testPublicURL},
 			want: "GOAL_AUTH=none",
 		},
 		{

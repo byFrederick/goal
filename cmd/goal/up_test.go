@@ -94,6 +94,9 @@ func TestUp_PublicURLIsGoaldsDefault(t *testing.T) {
 	}
 }
 
+// wayBack is what every refusal of sign-in names: the explicit way to keep the single local user.
+const wayBack = "GOAL_AUTH=none"
+
 // goal up refuses, before starting anything, sign-in it could not run: no secret, the gateway
 // key reused as one, an unknown mode or no build of the auth service; each names the way out.
 func TestUp_RefusesSignInItCannotStart(t *testing.T) {
@@ -104,10 +107,16 @@ func TestUp_RefusesSignInItCannotStart(t *testing.T) {
 		env  map[string]string
 		want []string
 	}{
-		{name: "no secret", env: map[string]string{authModeEnv: authSession}, want: []string{"BETTER_AUTH_SECRET", "GOAL_AUTH=none"}},
+		{name: "no secret", env: map[string]string{authModeEnv: authSession}, want: []string{authSecretEnv, wayBack}},
+		// A laptop upgraded from 2.2 with nothing new in .env: sign-in is the default, and goal up
+		// names both variables it needs before it starts anything.
+		{
+			name: "nothing new set", env: map[string]string{},
+			want: []string{"GOAL_AUTH=session (the default)", authSecretEnv, "GOAL_BOOTSTRAP_OWNER_EMAIL", wayBack},
+		},
 		{
 			name: "the gateway key as the secret",
-			env:  map[string]string{authModeEnv: authSession, "BETTER_AUTH_SECRET": "same-0123456789abcdef0123456789ab", gatewayKeyEnv: "same-0123456789abcdef0123456789ab"},
+			env:  map[string]string{authModeEnv: authSession, authSecretEnv: "same-0123456789abcdef0123456789ab", gatewayKeyEnv: "same-0123456789abcdef0123456789ab"},
 			want: []string{"GOAL_GATEWAY_KEY"},
 		},
 		{
@@ -118,8 +127,8 @@ func TestUp_RefusesSignInItCannotStart(t *testing.T) {
 		{name: "an unknown mode", env: map[string]string{authModeEnv: "sso"}, want: []string{"GOAL_AUTH"}},
 		{
 			name: "no build of the auth service",
-			env:  map[string]string{authModeEnv: authSession, "BETTER_AUTH_SECRET": "auth-0123456789abcdef0123456789abc", gatewayKeyEnv: "gateway"},
-			want: []string{"task auth:build", "GOAL_AUTH=none"},
+			env:  map[string]string{authModeEnv: authSession, authSecretEnv: "auth-0123456789abcdef0123456789abc", gatewayKeyEnv: "gateway"},
+			want: []string{"task auth:build", wayBack},
 		},
 	} {
 		err := up(t.Context(), &printer{w: io.Discard}, func(n string) string { return c.env[n] }, nil)
