@@ -150,6 +150,22 @@ test('send a running item back to its rework station', async ({ page, request })
   );
 });
 
+test('Escape from Move, Send back and Pause puts focus back on the button that opened them', async ({ page }) => {
+  await page.goto('/o/acme/f/goal/items/12');
+  for (const [button, dialog] of [
+    ['Move', /^Move goal#12$/],
+    ['Send back to Spec', /^Send goal#12 back/],
+    ['Pause', /^Pause goal#12/],
+  ] as const) {
+    const opener = page.getByRole('button', { name: button, exact: true });
+    await opener.click();
+    await expect(page.getByRole('dialog', { name: dialog })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: dialog })).toBeHidden();
+    await expect(opener).toBeFocused();
+  }
+});
+
 test('a station a publish adds is a Move choice on the open Item page, without navigating', async ({
   page,
   request,
