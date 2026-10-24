@@ -35,7 +35,29 @@ export interface RunEntry {
   turns?: number;
   error?: string;
   tools: ToolCall[];
-  message?: string;
+  /** The agent's last reply: prose, or the output it returned (its final reply is JSON). */
+  reply?: Reply;
+}
+
+export type Reply = { kind: 'text'; text: string } | { kind: 'output'; value: unknown };
+
+/**
+ * What a reply says: an agent finishes by replying with its output, JSON (whole, or in a fenced
+ * block, as goald reads it), so that is the output, not words to quote; a JSON string output is
+ * text, and anything else is prose.
+ */
+export function replyOf(text: string): Reply {
+  const fenced = /```(?:json)?\s*\n([\s\S]*?)\n?```/.exec(text)?.[1];
+  for (const raw of [text.trim(), fenced?.trim()]) {
+    if (!raw || !/^[[{"]/.test(raw)) continue;
+    try {
+      const value: unknown = JSON.parse(raw);
+      return typeof value === 'string' ? { kind: 'text', text: value } : { kind: 'output', value };
+    } catch {
+      // not JSON: prose
+    }
+  }
+  return { kind: 'text', text };
 }
 
 export interface CheckEntry {
@@ -221,7 +243,7 @@ export function buildTrace(events: readonly ItemEvent[], records: readonly Run[]
         }
         case 'agent_message': {
           const text = str(e.data.text);
-          if (text) run.message = text;
+          if (text) run.reply = replyOf(text);
           break;
         }
         case 'run_finished': {

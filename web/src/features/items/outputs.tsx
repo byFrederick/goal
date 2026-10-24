@@ -8,6 +8,14 @@ import { SectionCard } from '../../ui/card';
 
 const prose = ['summary', 'description', 'diagnosis', 'reason', 'text'];
 
+/** The prose an output leads with (its summary, description, …), if it has one. */
+export function outputLead(value: unknown): string | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const obj = value as Record<string, unknown>;
+  const key = prose.find((k) => typeof obj[k] === 'string');
+  return key ? String(obj[key]) : undefined;
+}
+
 function Value({ name, value }: { name: string; value: unknown }) {
   if (Array.isArray(value) && value.every((v) => typeof v === 'string')) {
     return (

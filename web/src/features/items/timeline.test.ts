@@ -219,3 +219,29 @@ describe('toolArgument', () => {
     expect(toolArgument('{"command":"go test ./... -run Tes')).toBe('{"command":"go test ./... -run Tes');
   });
 });
+
+describe('the agent reply in a run', () => {
+  const run = { run_id: 'r9', actor: 'writer-1' };
+  const replyOf = (text: string) =>
+    (
+      buildTrace([ev('run_started', {}, run), ev('agent_message', { text }, run)]).entries.find(
+        (e) => e.kind === 'run',
+      ) as RunEntry
+    ).reply;
+
+  it('reads a JSON reply as the output it is, never as a quoted JSON string', () => {
+    expect(replyOf('{"summary":"Added /healthz","files":["main.go"]}')).toEqual({
+      kind: 'output',
+      value: { summary: 'Added /healthz', files: ['main.go'] },
+    });
+    expect(replyOf('Done.\n```json\n{"decision":"approve"}\n```')).toEqual({
+      kind: 'output',
+      value: { decision: 'approve' },
+    });
+  });
+
+  it('keeps prose, and a string output, as text', () => {
+    expect(replyOf('Looking at the router.')).toEqual({ kind: 'text', text: 'Looking at the router.' });
+    expect(replyOf('"The notes are written."')).toEqual({ kind: 'text', text: 'The notes are written.' });
+  });
+});

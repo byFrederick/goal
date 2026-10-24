@@ -6,7 +6,16 @@ import { toneText } from '../../shared/item-state';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
-import { type CheckEntry, type Entry, type NoteEntry, type RunEntry, runLabel, type ToolCall } from './timeline';
+import { outputLead } from './outputs';
+import {
+  type CheckEntry,
+  type Entry,
+  type NoteEntry,
+  type Reply,
+  type RunEntry,
+  runLabel,
+  type ToolCall,
+} from './timeline';
 
 const shownTools = 6;
 
@@ -71,8 +80,29 @@ function RunBlock({ run, itemState }: { run: RunEntry; itemState: ItemState }) {
           {all ? 'Show the latest only' : `Show all ${run.tools.length} tool calls`}
         </Button>
       ) : null}
-      {run.message ? <p className="m-0 text-sm leading-normal text-muted">“{run.message}”</p> : null}
+      {run.reply ? <ReplyLine reply={run.reply} /> : null}
       {run.error ? <p className="m-0 text-sm text-rework">{run.error}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * The agent's last reply: prose in quotes; the output it returned (a JSON reply) by its lead
+ * prose, else formatted, never as a quoted JSON string.
+ */
+function ReplyLine({ reply }: { reply: Reply }) {
+  if (reply.kind === 'text') return <p className="m-0 text-sm leading-normal text-muted">“{reply.text}”</p>;
+  const lead = outputLead(reply.value);
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <p className="m-0 text-[13px] text-muted">Returned its output</p>
+      {lead ? (
+        <p className="m-0 text-sm leading-normal">{lead}</p>
+      ) : (
+        <pre className="m-0 max-h-48 overflow-auto rounded-control bg-shell p-3 text-[13px] leading-normal">
+          {JSON.stringify(reply.value, null, 2)}
+        </pre>
+      )}
     </div>
   );
 }
