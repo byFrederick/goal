@@ -66,7 +66,7 @@ func factory(ctx context.Context, out *printer, getenv func(string) string, args
 
 	switch cmd, rest := args[0], args[1:]; cmd {
 	case "validate":
-		return factoryValidate(ctx, out, getenv, rest)
+		return factoryValidate(ctx, out, getenv, rest, "factory validate")
 	case "push":
 		return factoryPush(ctx, out, getenv, rest)
 	case "pull":
@@ -84,12 +84,16 @@ func factory(ctx context.Context, out *printer, getenv func(string) string, args
 	}
 }
 
+// validateAlias is goal validate: goal factory validate with --offline on by default.
+const validateAlias = "validate"
+
 // factoryValidate runs goal factory validate <dir>... [--offline]: through goald, over the open
 // draft for a factory it knows (the folder as overlay) and as a new definition otherwise; with
-// --offline (and as goal validate) the schema and reference checks run locally.
-func factoryValidate(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
-	fs := newFlags("factory validate")
-	offline := fs.Bool("offline", false, "check schema and references locally, without goald")
+// --offline the schema and reference checks run locally. As goal validate (name validateAlias)
+// it takes the same flags and --offline is the default.
+func factoryValidate(ctx context.Context, out *printer, getenv func(string) string, args []string, name string) error {
+	fs := newFlags(name)
+	offline := fs.Bool("offline", name == validateAlias, "check schema and references locally, without goald")
 	org := addOrgFlag(fs)
 
 	dirs, err := parseInterspersed(fs, args)
@@ -126,13 +130,9 @@ func factoryValidate(ctx context.Context, out *printer, getenv func(string) stri
 	return nil
 }
 
-// validate checks local folders offline (goal validate, goal factory validate --offline):
+// validate checks local folders offline (goal factory validate --offline, goal validate):
 // config.Check's schema and reference problems, and that no two folders share an id.
 func validate(out *printer, dirs []string) error {
-	if len(dirs) == 0 {
-		return errUsage
-	}
-
 	failed := 0
 	seen := map[string]string{} // factory id → folder
 

@@ -54,7 +54,8 @@ const usage = `usage:
                                                   write a version's files (default: the current one)
                                                   into a new folder, with .goal/pulled.json
   goal factory validate <dir>... [--offline]      validate folders through goald (--offline: schema and
-                                                  references only, without goald; alias: goal validate)
+                                                  references only, without goald; goal validate is
+                                                  goal factory validate --offline, same flags)
   goal factory push <dir> [--publish [--message M]] [--replace-draft] [--force] [--move S=T]...
                                                   make the folder the factory's draft (creating the
                                                   factory if its metadata.id is new); --publish then
@@ -145,7 +146,7 @@ func run(ctx context.Context, args []string, out *printer, getenv func(string) s
 	case "version":
 		return version(out, readBuildInfo, rest)
 	case "validate":
-		return validate(out, rest)
+		return factoryValidate(ctx, out, getenv, rest, validateAlias)
 	case "factory":
 		return factory(ctx, out, getenv, rest)
 	case "up":

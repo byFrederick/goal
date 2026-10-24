@@ -453,7 +453,10 @@ func TestFactoryValidate_OnlineAndOffline(t *testing.T) {
 	for _, args := range [][]string{
 		{"factory", "validate", good, broken},
 		{"factory", "validate", "--offline", good, broken},
-		{"validate", good, broken},
+		{validateAlias, good, broken},
+		// goal validate is goal factory validate --offline, with the same flags anywhere.
+		{validateAlias, "--offline", good, broken},
+		{validateAlias, good, "--org", "acme", broken},
 	} {
 		out, err := g.goal(t, args...)
 		if err == nil || !strings.Contains(err.Error(), "1 of 2 factories are invalid") {
