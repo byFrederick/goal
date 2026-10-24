@@ -53,7 +53,11 @@ test('the agents list says where each agent works and opens its detail', async (
     await expect(list).toBeHidden();
     await page.getByRole('link', { name: 'All agents' }).click();
     await expect(list).toBeVisible();
+    await list.getByRole('link', { name: /reviewer/ }).click();
   }
+  await page.getByRole('link', { name: 'Open agent page' }).click();
+  await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/agents\/reviewer$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'reviewer' })).toBeVisible();
 });
 
 test('model, prompt, a skills.sh skill and built-in tools save with the draft', async ({ page }) => {

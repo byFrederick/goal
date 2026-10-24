@@ -2,11 +2,14 @@
 // Model, Max turns and Cap per item, the prompt, its skills and its built-in tools. Every field
 // is a session edit (typing into one field is one undo step), saved 800 ms later or on leaving it.
 import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
+import { ChevronRight } from 'lucide-react';
 import { useId, useState } from 'react';
 import { toast } from 'sonner';
 import { builderMetaQuery } from '../../../api/queries';
 import type { ModelAgent } from '../../../shared/definition/model';
 import { whereLabel } from '../../../shared/definition/where';
+import { useFactoryParams } from '../../../shared/factory';
 import { formatClock } from '../../../shared/format';
 import { Button } from '../../../ui/button';
 import { Field, Input, NativeSelect } from '../../../ui/field';
@@ -28,7 +31,7 @@ interface AgentDetailProps {
   openPicker: boolean;
 }
 
-export function AgentDetail({ agent, openPicker }: AgentDetailProps) {
+export function AgentDetail({ agent, place, openPicker }: AgentDetailProps) {
   const session = useDraftSession();
   const agents = useSection('agents');
   const line = useSection('line');
@@ -74,6 +77,7 @@ export function AgentDetail({ agent, openPicker }: AgentDetailProps) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {place === 'definition' ? <AgentPageLink agent={agent.name} /> : null}
           <Button variant="white" size="sm" className="h-11 md:h-8" onClick={() => void duplicate()}>
             Duplicate
           </Button>
@@ -134,6 +138,19 @@ export function AgentDetail({ agent, openPicker }: AgentDetailProps) {
         <BuiltinsEditor agent={agent} index={index} />
       </div>
     </section>
+  );
+}
+
+/** Definition only: the agent's page (E's /agents/$agent), its statistics and cards. */
+function AgentPageLink({ agent }: { agent: string }) {
+  const params = useFactoryParams();
+  return (
+    <Button asChild variant="white" size="sm" className="h-11 md:h-8">
+      <Link to="/o/$org/f/$factory/agents/$agent" params={{ ...params, agent }}>
+        Open agent page
+        <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
+      </Link>
+    </Button>
   );
 }
 
