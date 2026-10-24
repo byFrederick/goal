@@ -159,6 +159,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   const apiKeys = createKeys({
     clock,
     actor: (req) => auth.actor(req),
+    person: (req) => auth.who(req)?.person,
+    member: (org, user) => state.people.members[org]?.some((m) => m.userId === user) ?? false,
     factories: (org) => state.factories.filter((f) => f.org_id === org),
     acme: acmeOrg,
   });
@@ -1054,7 +1056,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return json(res, 403, { title: 'Forbidden', status: 403, code: 'forbidden' });
     }
     if (await definitions.handle(org, rest, method, url, req, res)) return;
-    if (await apiKeys.handle(org, rest, method, req, res, () => readBody(req))) return;
+    if (await apiKeys.handle(forCaller(req, org), rest, method, req, res, () => readBody(req))) return;
 
     if (rest === '' && method === 'GET') return json(res, 200, forCaller(req, withCount(org)));
     if (rest === '' && method === 'DELETE') {

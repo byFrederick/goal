@@ -1358,6 +1358,15 @@ type CreatedApiKey struct {
 	Secret string `json:"secret"`
 }
 
+// CreatedPersonalToken defines model for CreatedPersonalToken.
+type CreatedPersonalToken struct {
+	// Secret goal_pat_ and base64url of 32 random bytes. Shown this once; send it as Authorization Bearer.
+	Secret string `json:"secret"`
+
+	// Token A member's personal token in one organization, never its secret
+	Token PersonalToken `json:"token"`
+}
+
 // CurrentRun defines model for CurrentRun.
 type CurrentRun struct {
 	Agent string `json:"agent"`
@@ -2110,11 +2119,16 @@ type Me struct {
 	Kind MeKind `json:"kind"`
 
 	// Mode session: people sign in and every request carries a session or an API key. none: sign-in is off (GOAL_AUTH=none, a loopback install), every request acts as the local user.
-	Mode          AuthMode `json:"mode"`
-	PlatformAdmin bool     `json:"platform_admin"`
+	Mode AuthMode `json:"mode"`
 
-	// Session A signed-in person's session; absent for a key and under mode none
+	// PlatformAdmin Always false with a personal token
+	PlatformAdmin bool `json:"platform_admin"`
+
+	// Session A signed-in person's session; absent for a key, a personal token and under mode none
 	Session *MeSession `json:"session,omitempty"`
+
+	// Token The person's personal token, when the request carries one (kind user, no session)
+	Token *MeToken `json:"token,omitempty"`
 
 	// User The signed-in person; absent for a key and under mode none (the local user)
 	User *User `json:"user,omitempty"`
@@ -2137,6 +2151,17 @@ type MeSession struct {
 
 	// FreshUntil Until when changes that need a recent sign-in pass (10 minutes after created_at)
 	FreshUntil time.Time `json:"fresh_until"`
+}
+
+// MeToken The personal token a request carries
+type MeToken struct {
+	ExpiresAt time.Time `json:"expires_at"`
+	Id        string    `json:"id"`
+	Name      string    `json:"name"`
+
+	// OrgId The one organization it acts in
+	OrgId  string       `json:"org_id"`
+	Scopes []Permission `json:"scopes"`
 }
 
 // Member defines model for Member.
@@ -2309,6 +2334,15 @@ type NewOrg struct {
 	Slug string  `json:"slug"`
 }
 
+// NewPersonalToken defines model for NewPersonalToken.
+type NewPersonalToken struct {
+	ExpiresInDays *int   `json:"expires_in_days,omitempty"`
+	Name          string `json:"name"`
+
+	// Scopes Permissions personal tokens may carry, held by you now
+	Scopes []Permission `json:"scopes"`
+}
+
 // NewPlatformAdmin defines model for NewPlatformAdmin.
 type NewPlatformAdmin struct {
 	Email string `json:"email"`
@@ -2459,6 +2493,33 @@ type PauseRequest struct {
 // Permission One permission of api/permissions.yaml, such as org:read or item:decide
 type Permission = string
 
+// PersonalToken A member's personal token in one organization, never its secret
+type PersonalToken struct {
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+
+	// Hint goal_pat_ and the secret's first four characters
+	//
+	// Example: goal_pat_Q7mk
+	Hint string `json:"hint"`
+	Id   string `json:"id"`
+
+	// LastUsedAt Recorded at most once a minute
+	LastUsedAt *time.Time `json:"last_used_at"`
+	Name       string     `json:"name"`
+
+	// Owner The member it acts as
+	Owner     User         `json:"owner"`
+	RevokedAt *time.Time   `json:"revoked_at"`
+	RevokedBy *Actor       `json:"revoked_by"`
+	Scopes    []Permission `json:"scopes"`
+}
+
+// PersonalTokenList defines model for PersonalTokenList.
+type PersonalTokenList struct {
+	Tokens []PersonalToken `json:"tokens"`
+}
+
 // PlatformAdmin defines model for PlatformAdmin.
 type PlatformAdmin struct {
 	AddedAt time.Time `json:"added_at"`
@@ -2475,7 +2536,7 @@ type PlatformAdminList struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold. api-key-name-taken (409): another live key of the organization has the name. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found.
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found.
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
@@ -3303,6 +3364,9 @@ type RejectItemJSONRequestBody = Rejection
 // SetFactoryRoleJSONRequestBody defines body for SetFactoryRole for application/json ContentType.
 type SetFactoryRoleJSONRequestBody = FactoryRoleChange
 
+// CreatePersonalTokenJSONRequestBody defines body for CreatePersonalToken for application/json ContentType.
+type CreatePersonalTokenJSONRequestBody = NewPersonalToken
+
 // UpdateOrgSettingsJSONRequestBody defines body for UpdateOrgSettings for application/json ContentType.
 type UpdateOrgSettingsJSONRequestBody = OrgSettingsPatch
 
@@ -3642,7 +3706,7 @@ type ClientInterface interface {
 
 	// GetMe Who the request acts for
 	//
-	// The signed-in person (name, email, platform admin, the session's times) or the API key. Under GOAL_AUTH=none, the local user. Without a valid credential, 401 unauthenticated.
+	// The signed-in person (name, email, platform admin, the session's times) or the API key. With a personal token, the person and the token (its name, organization, scopes and expiry), never a session or platform admin. Under GOAL_AUTH=none, the local user. Without a valid credential, 401 unauthenticated.
 	//
 	// Corresponds with GET /v1/me (the `GetMe` operationId).
 	GetMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -4273,6 +4337,20 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
 	ListItemRuns(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListMemberTokens Every member's personal tokens in the organization
+	//
+	// For owners and admins: every member's live tokens and those revoked in the last 30 days, with their owner, live ones first, newest first. Never a secret.
+	//
+	// Corresponds with GET /v1/orgs/{org}/member-tokens (the `ListMemberTokens` operationId).
+	ListMemberTokens(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RevokeMemberToken Revoke a member's personal token
+	//
+	// The token stops working on its next request, and the streams it holds end. Revoking a revoked token changes nothing; an unknown one is 404. Needs a sign-in from the last 10 minutes. Audited as personal_token.revoked.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/member-tokens/{token} (the `RevokeMemberToken` operationId).
+	RevokeMemberToken(ctx context.Context, org OrgRef, token string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListMembers The organization's members, by name
 	//
 	// Each member with their organization role, their factory roles (on the factories the caller sees), when they joined and were last active, and what the caller may change about them. Inviting, changing an organization role and removing go to the identity service (/api/auth/organization/*, Better Auth's contract), whose owner rules apply; can_change_role and can_remove say in advance what it would refuse.
@@ -4309,6 +4387,38 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/overview (the `GetFactoryOverview` operationId).
 	GetFactoryOverview(ctx context.Context, org OrgRef, params *GetFactoryOverviewParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListPersonalTokens Your personal tokens in the organization
+	//
+	// The caller's own live tokens in the organization and those revoked in the last 30 days, live ones first, newest first, each by its hint (goal_pat_ and the secret's first four characters). Never another member's, and never a secret. Under GOAL_AUTH=none, none.
+	//
+	// Corresponds with GET /v1/orgs/{org}/personal-tokens (the `ListPersonalTokens` operationId).
+	ListPersonalTokens(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreatePersonalTokenWithBody Create a personal token
+	//
+	// A personal token lets the CLI or a script act as you in this organization, with no more than its scopes and your role at each request allow, until it expires (1 to 90 days, default 30) or is revoked; removing you from the organization deletes it. Each scope must be a permission tokens may carry and held by you now (an org permission by your role, a factory permission on at least one factory), else 400 scope-not-allowed. A live token's name is unique among yours, case ignored (409 personal-token-name-taken). Created in the browser only, with a sign-in from the last 10 minutes: a CLI session, an API key or a token gets 403 (browser-session-required for a CLI session). The answer carries the secret, once, with Cache-Control no-store: goald keeps only its hash. Audited as personal_token.created.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/personal-tokens (the `CreatePersonalToken` operationId).
+	CreatePersonalTokenWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreatePersonalToken Create a personal token
+	//
+	// A personal token lets the CLI or a script act as you in this organization, with no more than its scopes and your role at each request allow, until it expires (1 to 90 days, default 30) or is revoked; removing you from the organization deletes it. Each scope must be a permission tokens may carry and held by you now (an org permission by your role, a factory permission on at least one factory), else 400 scope-not-allowed. A live token's name is unique among yours, case ignored (409 personal-token-name-taken). Created in the browser only, with a sign-in from the last 10 minutes: a CLI session, an API key or a token gets 403 (browser-session-required for a CLI session). The answer carries the secret, once, with Cache-Control no-store: goald keeps only its hash. Audited as personal_token.created.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/personal-tokens (the `CreatePersonalToken` operationId).
+	CreatePersonalToken(ctx context.Context, org OrgRef, body CreatePersonalTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RevokePersonalToken Revoke one of your personal tokens
+	//
+	// The token stops working on its next request, and the streams it holds end. Only your own: another member's token is 404, as an unknown one. No recent sign-in needed, so a leaked token is revoked at once. Revoking a revoked token changes nothing. Audited as personal_token.revoked.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/personal-tokens/{token} (the `RevokePersonalToken` operationId).
+	RevokePersonalToken(ctx context.Context, org OrgRef, token string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetRun One agent run (404 for a run of another organization)
 	//
@@ -4466,7 +4576,7 @@ func (c *Client) GetHealth(ctx context.Context, reqEditors ...RequestEditorFn) (
 
 // GetMe Who the request acts for
 //
-// The signed-in person (name, email, platform admin, the session's times) or the API key. Under GOAL_AUTH=none, the local user. Without a valid credential, 401 unauthenticated.
+// The signed-in person (name, email, platform admin, the session's times) or the API key. With a personal token, the person and the token (its name, organization, scopes and expiry), never a session or platform admin. Under GOAL_AUTH=none, the local user. Without a valid credential, 401 unauthenticated.
 //
 // Corresponds with GET /v1/me (the `GetMe` operationId).
 func (c *Client) GetMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -5927,6 +6037,40 @@ func (c *Client) ListItemRuns(ctx context.Context, org OrgRef, item ItemRef, req
 	return c.Client.Do(req)
 }
 
+// ListMemberTokens Every member's personal tokens in the organization
+//
+// For owners and admins: every member's live tokens and those revoked in the last 30 days, with their owner, live ones first, newest first. Never a secret.
+//
+// Corresponds with GET /v1/orgs/{org}/member-tokens (the `ListMemberTokens` operationId).
+func (c *Client) ListMemberTokens(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListMemberTokensRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RevokeMemberToken Revoke a member's personal token
+//
+// The token stops working on its next request, and the streams it holds end. Revoking a revoked token changes nothing; an unknown one is 404. Needs a sign-in from the last 10 minutes. Audited as personal_token.revoked.
+//
+// Corresponds with DELETE /v1/orgs/{org}/member-tokens/{token} (the `RevokeMemberToken` operationId).
+func (c *Client) RevokeMemberToken(ctx context.Context, org OrgRef, token string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRevokeMemberTokenRequest(c.Server, org, token)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // ListMembers The organization's members, by name
 //
 // Each member with their organization role, their factory roles (on the factories the caller sees), when they joined and were last active, and what the caller may change about them. Inviting, changing an organization role and removing go to the identity service (/api/auth/organization/*, Better Auth's contract), whose owner rules apply; can_change_role and can_remove say in advance what it would refuse.
@@ -6004,6 +6148,78 @@ func (c *Client) SetFactoryRole(ctx context.Context, org OrgRef, user UserRef, f
 // Corresponds with GET /v1/orgs/{org}/overview (the `GetFactoryOverview` operationId).
 func (c *Client) GetFactoryOverview(ctx context.Context, org OrgRef, params *GetFactoryOverviewParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetFactoryOverviewRequest(c.Server, org, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListPersonalTokens Your personal tokens in the organization
+//
+// The caller's own live tokens in the organization and those revoked in the last 30 days, live ones first, newest first, each by its hint (goal_pat_ and the secret's first four characters). Never another member's, and never a secret. Under GOAL_AUTH=none, none.
+//
+// Corresponds with GET /v1/orgs/{org}/personal-tokens (the `ListPersonalTokens` operationId).
+func (c *Client) ListPersonalTokens(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListPersonalTokensRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreatePersonalTokenWithBody Create a personal token
+//
+// A personal token lets the CLI or a script act as you in this organization, with no more than its scopes and your role at each request allow, until it expires (1 to 90 days, default 30) or is revoked; removing you from the organization deletes it. Each scope must be a permission tokens may carry and held by you now (an org permission by your role, a factory permission on at least one factory), else 400 scope-not-allowed. A live token's name is unique among yours, case ignored (409 personal-token-name-taken). Created in the browser only, with a sign-in from the last 10 minutes: a CLI session, an API key or a token gets 403 (browser-session-required for a CLI session). The answer carries the secret, once, with Cache-Control no-store: goald keeps only its hash. Audited as personal_token.created.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/personal-tokens (the `CreatePersonalToken` operationId).
+func (c *Client) CreatePersonalTokenWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreatePersonalTokenRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreatePersonalToken Create a personal token
+//
+// A personal token lets the CLI or a script act as you in this organization, with no more than its scopes and your role at each request allow, until it expires (1 to 90 days, default 30) or is revoked; removing you from the organization deletes it. Each scope must be a permission tokens may carry and held by you now (an org permission by your role, a factory permission on at least one factory), else 400 scope-not-allowed. A live token's name is unique among yours, case ignored (409 personal-token-name-taken). Created in the browser only, with a sign-in from the last 10 minutes: a CLI session, an API key or a token gets 403 (browser-session-required for a CLI session). The answer carries the secret, once, with Cache-Control no-store: goald keeps only its hash. Audited as personal_token.created.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/personal-tokens (the `CreatePersonalToken` operationId).
+func (c *Client) CreatePersonalToken(ctx context.Context, org OrgRef, body CreatePersonalTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreatePersonalTokenRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RevokePersonalToken Revoke one of your personal tokens
+//
+// The token stops working on its next request, and the streams it holds end. Only your own: another member's token is 404, as an unknown one. No recent sign-in needed, so a leaked token is revoked at once. Revoking a revoked token changes nothing. Audited as personal_token.revoked.
+//
+// Corresponds with DELETE /v1/orgs/{org}/personal-tokens/{token} (the `RevokePersonalToken` operationId).
+func (c *Client) RevokePersonalToken(ctx context.Context, org OrgRef, token string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRevokePersonalTokenRequest(c.Server, org, token)
 	if err != nil {
 		return nil, err
 	}
@@ -9896,6 +10112,81 @@ func NewListItemRunsRequest(server string, org OrgRef, item ItemRef) (*http.Requ
 	return req, nil
 }
 
+// NewListMemberTokensRequest constructs an http.Request for the ListMemberTokens method
+func NewListMemberTokensRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/member-tokens", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRevokeMemberTokenRequest constructs an http.Request for the RevokeMemberToken method
+func NewRevokeMemberTokenRequest(server string, org OrgRef, token string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "token", token, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/member-tokens/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewListMembersRequest constructs an http.Request for the ListMembers method
 func NewListMembersRequest(server string, org OrgRef) (*http.Request, error) {
 	var err error
@@ -10093,6 +10384,128 @@ func NewGetFactoryOverviewRequest(server string, org OrgRef, params *GetFactoryO
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListPersonalTokensRequest constructs an http.Request for the ListPersonalTokens method
+func NewListPersonalTokensRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/personal-tokens", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreatePersonalTokenRequest calls the generic CreatePersonalToken builder with application/json body
+func NewCreatePersonalTokenRequest(server string, org OrgRef, body CreatePersonalTokenJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreatePersonalTokenRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewCreatePersonalTokenRequestWithBody constructs an http.Request for the CreatePersonalToken method, with any body, and a specified content type
+func NewCreatePersonalTokenRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/personal-tokens", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewRevokePersonalTokenRequest constructs an http.Request for the RevokePersonalToken method
+func NewRevokePersonalTokenRequest(server string, org OrgRef, token string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "token", token, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/personal-tokens/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -10682,7 +11095,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetMeWithResponse Who the request acts for
 	//
-	// The signed-in person (name, email, platform admin, the session's times) or the API key. Under GOAL_AUTH=none, the local user. Without a valid credential, 401 unauthenticated.
+	// The signed-in person (name, email, platform admin, the session's times) or the API key. With a personal token, the person and the token (its name, organization, scopes and expiry), never a session or platform admin. Under GOAL_AUTH=none, the local user. Without a valid credential, 401 unauthenticated.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -11395,6 +11808,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
 	ListItemRunsWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*ListItemRunsResponse, error)
 
+	// ListMemberTokensWithResponse Every member's personal tokens in the organization
+	//
+	// For owners and admins: every member's live tokens and those revoked in the last 30 days, with their owner, live ones first, newest first. Never a secret.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/member-tokens (the `ListMemberTokens` operationId).
+	ListMemberTokensWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListMemberTokensResponse, error)
+
+	// RevokeMemberTokenWithResponse Revoke a member's personal token
+	//
+	// The token stops working on its next request, and the streams it holds end. Revoking a revoked token changes nothing; an unknown one is 404. Needs a sign-in from the last 10 minutes. Audited as personal_token.revoked.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/member-tokens/{token} (the `RevokeMemberToken` operationId).
+	RevokeMemberTokenWithResponse(ctx context.Context, org OrgRef, token string, reqEditors ...RequestEditorFn) (*RevokeMemberTokenResponse, error)
+
 	// ListMembersWithResponse The organization's members, by name
 	//
 	// Each member with their organization role, their factory roles (on the factories the caller sees), when they joined and were last active, and what the caller may change about them. Inviting, changing an organization role and removing go to the identity service (/api/auth/organization/*, Better Auth's contract), whose owner rules apply; can_change_role and can_remove say in advance what it would refuse.
@@ -11437,6 +11868,42 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/overview (the `GetFactoryOverview` operationId).
 	GetFactoryOverviewWithResponse(ctx context.Context, org OrgRef, params *GetFactoryOverviewParams, reqEditors ...RequestEditorFn) (*GetFactoryOverviewResponse, error)
+
+	// ListPersonalTokensWithResponse Your personal tokens in the organization
+	//
+	// The caller's own live tokens in the organization and those revoked in the last 30 days, live ones first, newest first, each by its hint (goal_pat_ and the secret's first four characters). Never another member's, and never a secret. Under GOAL_AUTH=none, none.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/personal-tokens (the `ListPersonalTokens` operationId).
+	ListPersonalTokensWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListPersonalTokensResponse, error)
+
+	// CreatePersonalTokenWithBodyWithResponse Create a personal token
+	//
+	// A personal token lets the CLI or a script act as you in this organization, with no more than its scopes and your role at each request allow, until it expires (1 to 90 days, default 30) or is revoked; removing you from the organization deletes it. Each scope must be a permission tokens may carry and held by you now (an org permission by your role, a factory permission on at least one factory), else 400 scope-not-allowed. A live token's name is unique among yours, case ignored (409 personal-token-name-taken). Created in the browser only, with a sign-in from the last 10 minutes: a CLI session, an API key or a token gets 403 (browser-session-required for a CLI session). The answer carries the secret, once, with Cache-Control no-store: goald keeps only its hash. Audited as personal_token.created.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/personal-tokens (the `CreatePersonalToken` operationId).
+	CreatePersonalTokenWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreatePersonalTokenResponse, error)
+
+	// CreatePersonalTokenWithResponse Create a personal token
+	//
+	// A personal token lets the CLI or a script act as you in this organization, with no more than its scopes and your role at each request allow, until it expires (1 to 90 days, default 30) or is revoked; removing you from the organization deletes it. Each scope must be a permission tokens may carry and held by you now (an org permission by your role, a factory permission on at least one factory), else 400 scope-not-allowed. A live token's name is unique among yours, case ignored (409 personal-token-name-taken). Created in the browser only, with a sign-in from the last 10 minutes: a CLI session, an API key or a token gets 403 (browser-session-required for a CLI session). The answer carries the secret, once, with Cache-Control no-store: goald keeps only its hash. Audited as personal_token.created.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/personal-tokens (the `CreatePersonalToken` operationId).
+	CreatePersonalTokenWithResponse(ctx context.Context, org OrgRef, body CreatePersonalTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*CreatePersonalTokenResponse, error)
+
+	// RevokePersonalTokenWithResponse Revoke one of your personal tokens
+	//
+	// The token stops working on its next request, and the streams it holds end. Only your own: another member's token is 404, as an unknown one. No recent sign-in needed, so a leaked token is revoked at once. Revoking a revoked token changes nothing. Audited as personal_token.revoked.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/personal-tokens/{token} (the `RevokePersonalToken` operationId).
+	RevokePersonalTokenWithResponse(ctx context.Context, org OrgRef, token string, reqEditors ...RequestEditorFn) (*RevokePersonalTokenResponse, error)
 
 	// GetRunWithResponse One agent run (404 for a run of another organization)
 	//
@@ -14714,6 +15181,95 @@ func (r ListItemRunsResponse) ContentType() string {
 	return ""
 }
 
+type ListMemberTokensResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PersonalTokenList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListMemberTokensResponse) GetJSON200() *PersonalTokenList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListMemberTokensResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListMemberTokensResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListMemberTokensResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListMemberTokensResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListMemberTokensResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RevokeMemberTokenResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RevokeMemberTokenResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RevokeMemberTokenResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RevokeMemberTokenResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RevokeMemberTokenResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RevokeMemberTokenResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListMembersResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -14893,6 +15449,150 @@ func (r GetFactoryOverviewResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetFactoryOverviewResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListPersonalTokensResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PersonalTokenList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListPersonalTokensResponse) GetJSON200() *PersonalTokenList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListPersonalTokensResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListPersonalTokensResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListPersonalTokensResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListPersonalTokensResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListPersonalTokensResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// CreatePersonalTokenResponse201Headers the declared response headers of an HTTP 201 response for CreatePersonalToken
+type CreatePersonalTokenResponse201Headers struct {
+	CacheControl string
+}
+
+type CreatePersonalTokenResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *CreatedPersonalToken
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *CreatePersonalTokenResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreatePersonalTokenResponse) GetJSON201() *CreatedPersonalToken {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreatePersonalTokenResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreatePersonalTokenResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreatePersonalTokenResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreatePersonalTokenResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreatePersonalTokenResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RevokePersonalTokenResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RevokePersonalTokenResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RevokePersonalTokenResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RevokePersonalTokenResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RevokePersonalTokenResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RevokePersonalTokenResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -15458,7 +16158,7 @@ func (c *ClientWithResponses) GetHealthWithResponse(ctx context.Context, reqEdit
 
 // GetMeWithResponse Who the request acts for
 //
-// The signed-in person (name, email, platform admin, the session's times) or the API key. Under GOAL_AUTH=none, the local user. Without a valid credential, 401 unauthenticated.
+// The signed-in person (name, email, platform admin, the session's times) or the API key. With a personal token, the person and the token (its name, organization, scopes and expiry), never a session or platform admin. Under GOAL_AUTH=none, the local user. Without a valid credential, 401 unauthenticated.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -16669,6 +17369,36 @@ func (c *ClientWithResponses) ListItemRunsWithResponse(ctx context.Context, org 
 	return ParseListItemRunsResponse(rsp)
 }
 
+// ListMemberTokensWithResponse Every member's personal tokens in the organization
+//
+// For owners and admins: every member's live tokens and those revoked in the last 30 days, with their owner, live ones first, newest first. Never a secret.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/member-tokens (the `ListMemberTokens` operationId).
+func (c *ClientWithResponses) ListMemberTokensWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListMemberTokensResponse, error) {
+	rsp, err := c.ListMemberTokens(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListMemberTokensResponse(rsp)
+}
+
+// RevokeMemberTokenWithResponse Revoke a member's personal token
+//
+// The token stops working on its next request, and the streams it holds end. Revoking a revoked token changes nothing; an unknown one is 404. Needs a sign-in from the last 10 minutes. Audited as personal_token.revoked.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/member-tokens/{token} (the `RevokeMemberToken` operationId).
+func (c *ClientWithResponses) RevokeMemberTokenWithResponse(ctx context.Context, org OrgRef, token string, reqEditors ...RequestEditorFn) (*RevokeMemberTokenResponse, error) {
+	rsp, err := c.RevokeMemberToken(ctx, org, token, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRevokeMemberTokenResponse(rsp)
+}
+
 // ListMembersWithResponse The organization's members, by name
 //
 // Each member with their organization role, their factory roles (on the factories the caller sees), when they joined and were last active, and what the caller may change about them. Inviting, changing an organization role and removing go to the identity service (/api/auth/organization/*, Better Auth's contract), whose owner rules apply; can_change_role and can_remove say in advance what it would refuse.
@@ -16740,6 +17470,66 @@ func (c *ClientWithResponses) GetFactoryOverviewWithResponse(ctx context.Context
 		return nil, err
 	}
 	return ParseGetFactoryOverviewResponse(rsp)
+}
+
+// ListPersonalTokensWithResponse Your personal tokens in the organization
+//
+// The caller's own live tokens in the organization and those revoked in the last 30 days, live ones first, newest first, each by its hint (goal_pat_ and the secret's first four characters). Never another member's, and never a secret. Under GOAL_AUTH=none, none.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/personal-tokens (the `ListPersonalTokens` operationId).
+func (c *ClientWithResponses) ListPersonalTokensWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListPersonalTokensResponse, error) {
+	rsp, err := c.ListPersonalTokens(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListPersonalTokensResponse(rsp)
+}
+
+// CreatePersonalTokenWithBodyWithResponse Create a personal token
+//
+// A personal token lets the CLI or a script act as you in this organization, with no more than its scopes and your role at each request allow, until it expires (1 to 90 days, default 30) or is revoked; removing you from the organization deletes it. Each scope must be a permission tokens may carry and held by you now (an org permission by your role, a factory permission on at least one factory), else 400 scope-not-allowed. A live token's name is unique among yours, case ignored (409 personal-token-name-taken). Created in the browser only, with a sign-in from the last 10 minutes: a CLI session, an API key or a token gets 403 (browser-session-required for a CLI session). The answer carries the secret, once, with Cache-Control no-store: goald keeps only its hash. Audited as personal_token.created.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/personal-tokens (the `CreatePersonalToken` operationId).
+func (c *ClientWithResponses) CreatePersonalTokenWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreatePersonalTokenResponse, error) {
+	rsp, err := c.CreatePersonalTokenWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreatePersonalTokenResponse(rsp)
+}
+
+// CreatePersonalTokenWithResponse Create a personal token
+//
+// A personal token lets the CLI or a script act as you in this organization, with no more than its scopes and your role at each request allow, until it expires (1 to 90 days, default 30) or is revoked; removing you from the organization deletes it. Each scope must be a permission tokens may carry and held by you now (an org permission by your role, a factory permission on at least one factory), else 400 scope-not-allowed. A live token's name is unique among yours, case ignored (409 personal-token-name-taken). Created in the browser only, with a sign-in from the last 10 minutes: a CLI session, an API key or a token gets 403 (browser-session-required for a CLI session). The answer carries the secret, once, with Cache-Control no-store: goald keeps only its hash. Audited as personal_token.created.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/personal-tokens (the `CreatePersonalToken` operationId).
+func (c *ClientWithResponses) CreatePersonalTokenWithResponse(ctx context.Context, org OrgRef, body CreatePersonalTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*CreatePersonalTokenResponse, error) {
+	rsp, err := c.CreatePersonalToken(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreatePersonalTokenResponse(rsp)
+}
+
+// RevokePersonalTokenWithResponse Revoke one of your personal tokens
+//
+// The token stops working on its next request, and the streams it holds end. Only your own: another member's token is 404, as an unknown one. No recent sign-in needed, so a leaked token is revoked at once. Revoking a revoked token changes nothing. Audited as personal_token.revoked.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/personal-tokens/{token} (the `RevokePersonalToken` operationId).
+func (c *ClientWithResponses) RevokePersonalTokenWithResponse(ctx context.Context, org OrgRef, token string, reqEditors ...RequestEditorFn) (*RevokePersonalTokenResponse, error) {
+	rsp, err := c.RevokePersonalToken(ctx, org, token, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRevokePersonalTokenResponse(rsp)
 }
 
 // GetRunWithResponse One agent run (404 for a run of another organization)
@@ -19156,6 +19946,68 @@ func ParseListItemRunsResponse(rsp *http.Response) (*ListItemRunsResponse, error
 	return response, nil
 }
 
+// ParseListMemberTokensResponse parses an HTTP response from a ListMemberTokensWithResponse call
+func ParseListMemberTokensResponse(rsp *http.Response) (*ListMemberTokensResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListMemberTokensResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PersonalTokenList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRevokeMemberTokenResponse parses an HTTP response from a RevokeMemberTokenWithResponse call
+func ParseRevokeMemberTokenResponse(rsp *http.Response) (*RevokeMemberTokenResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RevokeMemberTokenResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListMembersResponse parses an HTTP response from a ListMembersWithResponse call
 func ParseListMembersResponse(rsp *http.Response) (*ListMembersResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -19271,6 +20123,114 @@ func ParseGetFactoryOverviewResponse(rsp *http.Response) (*GetFactoryOverviewRes
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListPersonalTokensResponse parses an HTTP response from a ListPersonalTokensWithResponse call
+func ParseListPersonalTokensResponse(rsp *http.Response) (*ListPersonalTokensResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListPersonalTokensResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PersonalTokenList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreatePersonalTokenResponse parses an HTTP response from a CreatePersonalTokenWithResponse call
+func ParseCreatePersonalTokenResponse(rsp *http.Response) (*CreatePersonalTokenResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreatePersonalTokenResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest CreatedPersonalToken
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers CreatePersonalTokenResponse201Headers
+		if values := rsp.Header.Values("Cache-Control"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Cache-Control", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.CacheControl = value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseRevokePersonalTokenResponse parses an HTTP response from a RevokePersonalTokenWithResponse call
+func ParseRevokePersonalTokenResponse(rsp *http.Response) (*RevokePersonalTokenResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RevokePersonalTokenResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem
@@ -19836,6 +20796,12 @@ type ServerInterface interface {
 	// ListItemRuns An item's agent runs, oldest first (at most 200)
 	// (GET /v1/orgs/{org}/items/{item}/runs)
 	ListItemRuns(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// ListMemberTokens Every member's personal tokens in the organization
+	// (GET /v1/orgs/{org}/member-tokens)
+	ListMemberTokens(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// RevokeMemberToken Revoke a member's personal token
+	// (DELETE /v1/orgs/{org}/member-tokens/{token})
+	RevokeMemberToken(w http.ResponseWriter, r *http.Request, org OrgRef, token string)
 	// ListMembers The organization's members, by name
 	// (GET /v1/orgs/{org}/members)
 	ListMembers(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -19848,6 +20814,15 @@ type ServerInterface interface {
 	// GetFactoryOverview Every factory of the organization summarized for the Factories home, ordered by name
 	// (GET /v1/orgs/{org}/overview)
 	GetFactoryOverview(w http.ResponseWriter, r *http.Request, org OrgRef, params GetFactoryOverviewParams)
+	// ListPersonalTokens Your personal tokens in the organization
+	// (GET /v1/orgs/{org}/personal-tokens)
+	ListPersonalTokens(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// CreatePersonalToken Create a personal token
+	// (POST /v1/orgs/{org}/personal-tokens)
+	CreatePersonalToken(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// RevokePersonalToken Revoke one of your personal tokens
+	// (DELETE /v1/orgs/{org}/personal-tokens/{token})
+	RevokePersonalToken(w http.ResponseWriter, r *http.Request, org OrgRef, token string)
 	// GetRun One agent run (404 for a run of another organization)
 	// (GET /v1/orgs/{org}/runs/{run})
 	GetRun(w http.ResponseWriter, r *http.Request, org OrgRef, run string)
@@ -22754,6 +23729,67 @@ func (siw *ServerInterfaceWrapper) ListItemRuns(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// ListMemberTokens operation middleware
+func (siw *ServerInterfaceWrapper) ListMemberTokens(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListMemberTokens(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeMemberToken operation middleware
+func (siw *ServerInterfaceWrapper) RevokeMemberToken(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "token" -------------
+	var token string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "token", r.PathValue("token"), &token, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeMemberToken(w, r, org, token)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListMembers operation middleware
 func (siw *ServerInterfaceWrapper) ListMembers(w http.ResponseWriter, r *http.Request) {
 
@@ -22901,6 +23937,93 @@ func (siw *ServerInterfaceWrapper) GetFactoryOverview(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetFactoryOverview(w, r, org, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPersonalTokens operation middleware
+func (siw *ServerInterfaceWrapper) ListPersonalTokens(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPersonalTokens(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreatePersonalToken operation middleware
+func (siw *ServerInterfaceWrapper) CreatePersonalToken(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePersonalToken(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokePersonalToken operation middleware
+func (siw *ServerInterfaceWrapper) RevokePersonalToken(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "token" -------------
+	var token string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "token", r.PathValue("token"), &token, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokePersonalToken(w, r, org, token)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -23398,6 +24521,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/members/{user}/factory-roles/{factory}", wrapper.RemoveFactoryRole)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/members/{user}/factory-roles/{factory}", wrapper.SetFactoryRole)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/transfer", wrapper.TransferOwnership)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/personal-tokens", wrapper.ListPersonalTokens)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/personal-tokens", wrapper.CreatePersonalToken)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/personal-tokens/{token}", wrapper.RevokePersonalToken)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/member-tokens", wrapper.ListMemberTokens)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/member-tokens/{token}", wrapper.RevokeMemberToken)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/attention", wrapper.GetOrgAttention)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/overview", wrapper.GetFactoryOverview)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/inbox", wrapper.GetInbox)
@@ -26132,6 +27260,79 @@ func (response ListItemRunsdefaultApplicationProblemPlusJSONResponse) VisitListI
 	return err
 }
 
+type ListMemberTokensRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type ListMemberTokensResponseObject interface {
+	VisitListMemberTokensResponse(w http.ResponseWriter) error
+}
+
+type ListMemberTokens200JSONResponse PersonalTokenList
+
+func (response ListMemberTokens200JSONResponse) VisitListMemberTokensResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMemberTokensdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListMemberTokensdefaultApplicationProblemPlusJSONResponse) VisitListMemberTokensResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeMemberTokenRequestObject struct {
+	Org   OrgRef `json:"org"`
+	Token string `json:"token"`
+}
+
+type RevokeMemberTokenResponseObject interface {
+	VisitRevokeMemberTokenResponse(w http.ResponseWriter) error
+}
+
+type RevokeMemberToken204Response struct {
+}
+
+func (response RevokeMemberToken204Response) VisitRevokeMemberTokenResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RevokeMemberTokendefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RevokeMemberTokendefaultApplicationProblemPlusJSONResponse) VisitRevokeMemberTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListMembersRequestObject struct {
 	Org OrgRef `json:"org"`
 }
@@ -26277,6 +27478,127 @@ type GetFactoryOverviewdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetFactoryOverviewdefaultApplicationProblemPlusJSONResponse) VisitGetFactoryOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPersonalTokensRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type ListPersonalTokensResponseObject interface {
+	VisitListPersonalTokensResponse(w http.ResponseWriter) error
+}
+
+type ListPersonalTokens200JSONResponse PersonalTokenList
+
+func (response ListPersonalTokens200JSONResponse) VisitListPersonalTokensResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPersonalTokensdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListPersonalTokensdefaultApplicationProblemPlusJSONResponse) VisitListPersonalTokensResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePersonalTokenRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *CreatePersonalTokenJSONRequestBody
+}
+
+type CreatePersonalTokenResponseObject interface {
+	VisitCreatePersonalTokenResponse(w http.ResponseWriter) error
+}
+
+type CreatePersonalToken201ResponseHeaders struct {
+	CacheControl string
+}
+
+type CreatePersonalToken201JSONResponse struct {
+	Body    CreatedPersonalToken
+	Headers CreatePersonalToken201ResponseHeaders
+}
+
+func (response CreatePersonalToken201JSONResponse) VisitCreatePersonalTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", fmt.Sprint(response.Headers.CacheControl))
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePersonalTokendefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreatePersonalTokendefaultApplicationProblemPlusJSONResponse) VisitCreatePersonalTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokePersonalTokenRequestObject struct {
+	Org   OrgRef `json:"org"`
+	Token string `json:"token"`
+}
+
+type RevokePersonalTokenResponseObject interface {
+	VisitRevokePersonalTokenResponse(w http.ResponseWriter) error
+}
+
+type RevokePersonalToken204Response struct {
+}
+
+func (response RevokePersonalToken204Response) VisitRevokePersonalTokenResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RevokePersonalTokendefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RevokePersonalTokendefaultApplicationProblemPlusJSONResponse) VisitRevokePersonalTokenResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -26945,6 +28267,12 @@ type StrictServerInterface interface {
 	// ListItemRuns An item's agent runs, oldest first (at most 200)
 	// (GET /v1/orgs/{org}/items/{item}/runs)
 	ListItemRuns(ctx context.Context, request ListItemRunsRequestObject) (ListItemRunsResponseObject, error)
+	// ListMemberTokens Every member's personal tokens in the organization
+	// (GET /v1/orgs/{org}/member-tokens)
+	ListMemberTokens(ctx context.Context, request ListMemberTokensRequestObject) (ListMemberTokensResponseObject, error)
+	// RevokeMemberToken Revoke a member's personal token
+	// (DELETE /v1/orgs/{org}/member-tokens/{token})
+	RevokeMemberToken(ctx context.Context, request RevokeMemberTokenRequestObject) (RevokeMemberTokenResponseObject, error)
 	// ListMembers The organization's members, by name
 	// (GET /v1/orgs/{org}/members)
 	ListMembers(ctx context.Context, request ListMembersRequestObject) (ListMembersResponseObject, error)
@@ -26957,6 +28285,15 @@ type StrictServerInterface interface {
 	// GetFactoryOverview Every factory of the organization summarized for the Factories home, ordered by name
 	// (GET /v1/orgs/{org}/overview)
 	GetFactoryOverview(ctx context.Context, request GetFactoryOverviewRequestObject) (GetFactoryOverviewResponseObject, error)
+	// ListPersonalTokens Your personal tokens in the organization
+	// (GET /v1/orgs/{org}/personal-tokens)
+	ListPersonalTokens(ctx context.Context, request ListPersonalTokensRequestObject) (ListPersonalTokensResponseObject, error)
+	// CreatePersonalToken Create a personal token
+	// (POST /v1/orgs/{org}/personal-tokens)
+	CreatePersonalToken(ctx context.Context, request CreatePersonalTokenRequestObject) (CreatePersonalTokenResponseObject, error)
+	// RevokePersonalToken Revoke one of your personal tokens
+	// (DELETE /v1/orgs/{org}/personal-tokens/{token})
+	RevokePersonalToken(ctx context.Context, request RevokePersonalTokenRequestObject) (RevokePersonalTokenResponseObject, error)
 	// GetRun One agent run (404 for a run of another organization)
 	// (GET /v1/orgs/{org}/runs/{run})
 	GetRun(ctx context.Context, request GetRunRequestObject) (GetRunResponseObject, error)
@@ -28974,6 +30311,59 @@ func (sh *strictHandler) ListItemRuns(w http.ResponseWriter, r *http.Request, or
 	}
 }
 
+// ListMemberTokens operation middleware
+func (sh *strictHandler) ListMemberTokens(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request ListMemberTokensRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListMemberTokens(ctx, request.(ListMemberTokensRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListMemberTokens")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListMemberTokensResponseObject); ok {
+		if err := validResponse.VisitListMemberTokensResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeMemberToken operation middleware
+func (sh *strictHandler) RevokeMemberToken(w http.ResponseWriter, r *http.Request, org OrgRef, token string) {
+	var request RevokeMemberTokenRequestObject
+
+	request.Org = org
+	request.Token = token
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeMemberToken(ctx, request.(RevokeMemberTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeMemberToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeMemberTokenResponseObject); ok {
+		if err := validResponse.VisitRevokeMemberTokenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListMembers operation middleware
 func (sh *strictHandler) ListMembers(w http.ResponseWriter, r *http.Request, org OrgRef) {
 	var request ListMembersRequestObject
@@ -29083,6 +30473,92 @@ func (sh *strictHandler) GetFactoryOverview(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetFactoryOverviewResponseObject); ok {
 		if err := validResponse.VisitGetFactoryOverviewResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListPersonalTokens operation middleware
+func (sh *strictHandler) ListPersonalTokens(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request ListPersonalTokensRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListPersonalTokens(ctx, request.(ListPersonalTokensRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListPersonalTokens")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListPersonalTokensResponseObject); ok {
+		if err := validResponse.VisitListPersonalTokensResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreatePersonalToken operation middleware
+func (sh *strictHandler) CreatePersonalToken(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request CreatePersonalTokenRequestObject
+
+	request.Org = org
+
+	var body CreatePersonalTokenJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreatePersonalToken(ctx, request.(CreatePersonalTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreatePersonalToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreatePersonalTokenResponseObject); ok {
+		if err := validResponse.VisitCreatePersonalTokenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokePersonalToken operation middleware
+func (sh *strictHandler) RevokePersonalToken(w http.ResponseWriter, r *http.Request, org OrgRef, token string) {
+	var request RevokePersonalTokenRequestObject
+
+	request.Org = org
+	request.Token = token
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokePersonalToken(ctx, request.(RevokePersonalTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokePersonalToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokePersonalTokenResponseObject); ok {
+		if err := validResponse.VisitRevokePersonalTokenResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

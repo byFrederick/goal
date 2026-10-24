@@ -205,6 +205,15 @@ func (p *authProxy) forward(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// An API key or a personal token is Goal's own credential, for /v1 only: the identity
+	// service never sees one (spec 3 §11.1 row 45).
+	if goalBearer(r.Header.Values("Authorization")) {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="goal"`)
+		writeProblem(w, problemOf(domain.ErrUnauthenticated))
+
+		return
+	}
+
 	deadline := time.Now().Add(p.timeout)
 	// The deadline bounds a slow body too. A ResponseWriter without read deadlines (a test
 	// recorder) leaves that to the server's ReadTimeout.
@@ -237,6 +246,21 @@ func (p *authProxy) forward(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p.proxy.ServeHTTP(w, out)
+}
+
+// goalBearer reports whether an Authorization header carries a Goal API key or personal token
+// (Bearer goal_sk_… or goal_pat_…, the scheme's case ignored), whatever else it holds.
+func goalBearer(values []string) bool {
+	for _, v := range values {
+		scheme, value, _ := strings.Cut(strings.TrimSpace(v), " ")
+		value = strings.TrimSpace(value)
+
+		if strings.EqualFold(scheme, "Bearer") && (strings.HasPrefix(value, apiKeyPrefix) || strings.HasPrefix(value, personalTokenPrefix)) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // authRoute reports whether r is one of authRoutes, spelled exactly. Any percent-encoding sets

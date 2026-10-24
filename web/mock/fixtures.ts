@@ -253,6 +253,8 @@ export const orgCan = [
   'org:manage',
   'org:read',
   'org:transfer',
+  'personal_token:manage',
+  'personal_token:read',
 ];
 export const factoryCan = [
   'andon:manage',

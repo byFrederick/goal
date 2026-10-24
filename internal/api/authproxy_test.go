@@ -373,6 +373,48 @@ func TestAuthProxy_DropsSetAuthToken(t *testing.T) {
 	}
 }
 
+// Spec 3 §11.1 row 45: an API key or a personal token is Goal's own credential: the proxy answers
+// 401 and the identity service never sees it. A session token still passes (goal login's).
+func TestAuthProxy_NeverForwardsGoalCredentials(t *testing.T) {
+	t.Parallel()
+
+	svc := newIdentityService(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	proxy := proxyOf(t, api.AuthProxyConfig{Upstream: svc.url(t)})
+
+	for _, c := range []struct {
+		name, authorization string
+		want                int
+	}{
+		{"an API key", "Bearer goal_sk_" + strings.Repeat("a", 43), http.StatusUnauthorized},
+		{"a personal token", "Bearer goal_pat_" + strings.Repeat("b", 43), http.StatusUnauthorized},
+		{"a personal token, scheme in lower case", "bearer goal_pat_" + strings.Repeat("c", 43), http.StatusUnauthorized},
+		{"a malformed personal token", "Bearer goal_pat_short", http.StatusUnauthorized},
+		{"goal login's session token", "Bearer " + strings.Repeat("S", 32), http.StatusOK},
+	} {
+		r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/auth/get-session", nil)
+		r.Header.Set("Authorization", c.authorization)
+
+		rec := serve(proxy, r)
+		if rec.Code != c.want {
+			t.Errorf("%s: %d %s, want %d", c.name, rec.Code, rec.Body, c.want)
+		}
+
+		if c.want == http.StatusUnauthorized && rec.Header().Get("WWW-Authenticate") == "" {
+			t.Errorf("%s: no WWW-Authenticate", c.name)
+		}
+	}
+
+	for _, in := range svc.received() {
+		if strings.Contains(in.header.Get("Authorization"), "goal_") {
+			t.Errorf("the service received %q", in.header.Get("Authorization"))
+		}
+	}
+
+	if n := len(svc.received()); n != 1 {
+		t.Errorf("the service received %d requests, want the session's alone", n)
+	}
+}
+
 // A body of up to 64 KiB is forwarded whole; a larger one is 413 and never reaches the service.
 func TestAuthProxy_LimitsBodies(t *testing.T) {
 	t.Parallel()

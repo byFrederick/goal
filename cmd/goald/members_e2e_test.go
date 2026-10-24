@@ -17,8 +17,9 @@ import (
 // organization they created, the invitee signs in with the code Mailpit received, sees who invited
 // them (the auth service's get-invitation) and joins; goald then lists them as a member, who reads
 // the members but not the invitations; the owner makes them an admin through the identity service
-// and hands them the organization through goald, in one change.
-func (s *e2eStack) membersFlow(t *testing.T) {
+// and hands them the organization through goald, in one change. It returns the invitee, now the
+// organization's owner.
+func (s *e2eStack) membersFlow(t *testing.T) *e2eStack {
 	t.Helper()
 
 	var org struct {
@@ -72,6 +73,8 @@ func (s *e2eStack) membersFlow(t *testing.T) {
 	}
 
 	s.handOver(t, org.ID, joined, invitee)
+
+	return invitee
 }
 
 // handOver makes the member an admin (the identity service), then hands them the organization

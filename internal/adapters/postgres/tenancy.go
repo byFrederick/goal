@@ -431,12 +431,7 @@ func appendAudit(ctx context.Context, q *db.Queries, e domain.AuditEntry) error 
 		factory = &id
 	}
 
-	data := e.Data
-	if data == nil {
-		data = map[string]any{}
-	}
-
-	raw, err := json.Marshal(data)
+	raw, err := json.Marshal(withVia(ctx, e.Data))
 	if err != nil {
 		return fmt.Errorf("audit entry data: %w", err)
 	}

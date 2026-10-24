@@ -116,6 +116,10 @@ Every route but `/v1/health` and `/v1/orgs` lives under `/v1/orgs/{org}` (the or
 | `GET /v1/orgs/{org}/api-keys` | the organization's API keys (live, and revoked in the last 30 days): hint, scopes, factories (null: every one), role ceiling, creator, expiry, last use; never a secret (spec 3 §8.9) |
 | `POST /v1/orgs/{org}/api-keys` | `{name, scopes, role_ceiling, factories?, expires_in_days?}`: 201 with the key and its secret, once, `Cache-Control: no-store`; 400 `scope-not-allowed`, 409 `api-key-name-taken`; a sign-in from the last 10 minutes |
 | `DELETE /v1/orgs/{org}/api-keys/{key}` | revokes the key at once (204); its streams end |
+| `GET /v1/orgs/{org}/personal-tokens` | the caller's own personal tokens in the organization (live, and revoked in the last 30 days): hint, scopes, owner, expiry, last use; never a secret (spec 3 §4.5) |
+| `POST /v1/orgs/{org}/personal-tokens` | `{name, scopes, expires_in_days?}` (1–90, default 30): 201 with the token and its secret, once, `Cache-Control: no-store`; only with the browser's cookie session from the last 10 minutes (a CLI session is 403 `browser-session-required`); 400 `scope-not-allowed`, 409 `personal-token-name-taken` |
+| `DELETE /v1/orgs/{org}/personal-tokens/{token}` | revokes one of the caller's own tokens at once (204), no fresh sign-in needed; another member's is 404 |
+| `GET /v1/orgs/{org}/member-tokens`, `DELETE …/{token}` | every member's tokens with their owner (`api_key:read`), and revoking one (`api_key:manage`, a fresh sign-in) |
 | `GET /v1/orgs/{org}/factories` | the organization's loaded factories with their stations (and a station's `action`) and work types |
 | `POST /v1/orgs/{org}/factories/{factory}/items` | submit `{title, type, body?, lane?, priority?}`; the type must be one of the factory's work types |
 | `GET /v1/orgs/{org}/factories/{factory}/items?state=&station=&limit=&after=` | one page of item cards, newest first, and `next_after` (the last number, or null) |

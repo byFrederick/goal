@@ -293,7 +293,14 @@ var probes = map[string]probe{
 		method: http.MethodPost, path: "/v1/orgs/acme/api-keys", org: testOrg, factory: acmeID,
 		body: `{"name":"ci","scopes":["factory:read"],"role_ceiling":"viewer","factories":["acme"]}`,
 	},
-	"revokeAPIKey": {method: http.MethodDelete, path: "/v1/orgs/acme/api-keys/00000000-0000-7000-8000-ffffffffffff", org: testOrg},
+	"revokeAPIKey":       {method: http.MethodDelete, path: "/v1/orgs/acme/api-keys/00000000-0000-7000-8000-ffffffffffff", org: testOrg},
+	"listPersonalTokens": {method: http.MethodGet, path: "/v1/orgs/acme/personal-tokens", org: testOrg},
+	"createPersonalToken": {
+		method: http.MethodPost, path: "/v1/orgs/acme/personal-tokens", org: testOrg, body: `{"name":"laptop","scopes":["org:read"]}`,
+	},
+	"revokePersonalToken": {method: http.MethodDelete, path: "/v1/orgs/acme/personal-tokens/00000000-0000-7000-8000-ffffffffffff", org: testOrg},
+	"listMemberTokens":    {method: http.MethodGet, path: "/v1/orgs/acme/member-tokens", org: testOrg},
+	"revokeMemberToken":   {method: http.MethodDelete, path: "/v1/orgs/acme/member-tokens/00000000-0000-7000-8000-ffffffffffff", org: testOrg},
 
 	// Definitions: writes carry a (stale) If-Match, so the request reaches the resolver.
 	"createFactory":      {method: http.MethodPost, path: "/v1/orgs/acme/factories", body: `{"name":"probe","start":{"kind":"blank"}}`, org: testOrg},

@@ -679,9 +679,13 @@ export function createMockAuth(clock: () => number, dir: MockDirectory): MockAut
         send(res, 403, { title: 'Forbidden', status: 403, code: 'forbidden' });
         return true;
       }
-      // Managing API keys needs a sign-in from the last 10 minutes (the people routes and deleting
-      // the organization ask in api.ts, once the caller's role holds the permission).
-      const fresh = (method === 'POST' || method === 'DELETE') && /^\/v1\/orgs\/[^/]+\/api-keys(\/[^/]+)?$/.test(path);
+      // Managing API keys, creating a personal token and revoking a member's need a sign-in from
+      // the last 10 minutes; revoking one's own token does not (the people routes and deleting the
+      // organization ask in api.ts, once the caller's role holds the permission).
+      const fresh =
+        ((method === 'POST' || method === 'DELETE') && /^\/v1\/orgs\/[^/]+\/api-keys(\/[^/]+)?$/.test(path)) ||
+        (method === 'POST' && /^\/v1\/orgs\/[^/]+\/personal-tokens$/.test(path)) ||
+        (method === 'DELETE' && /^\/v1\/orgs\/[^/]+\/member-tokens\/[^/]+$/.test(path));
       if (fresh && clock() - now.session.createdAt > freshMs) {
         send(res, 403, { title: 'Sign in again', status: 403, code: 'reauth-required' });
         return true;

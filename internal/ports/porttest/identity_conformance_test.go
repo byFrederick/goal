@@ -89,6 +89,20 @@ func TestIdentity_APIKeysConformance(t *testing.T) {
 	})
 }
 
+func (s fakeSeed) ExpireToken(_ *testing.T, _ domain.OrgID, id domain.PersonalTokenID) {
+	s.id.ExpireToken(id)
+}
+
+func TestIdentity_PersonalTokensConformance(t *testing.T) {
+	t.Parallel()
+
+	identitytest.RunPersonalTokens(t, func(*testing.T) (ports.Identity, ports.Access, identitytest.TokenSeed) {
+		id := porttest.NewIdentity(time.Now)
+
+		return id, id, fakeSeed{id: id, n: new(int)}
+	})
+}
+
 func TestIdentity_Conformance(t *testing.T) {
 	t.Parallel()
 

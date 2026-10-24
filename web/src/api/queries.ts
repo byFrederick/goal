@@ -51,7 +51,7 @@ import {
   listVersions,
   validateDraft,
 } from './definitions';
-import { listApiKeys } from './keys';
+import { listApiKeys, listMemberTokens, listPersonalTokens } from './keys';
 import type { ItemEvent } from './types';
 
 /**
@@ -111,6 +111,10 @@ export const keys = {
   /** Its members (spec 3 §10.1); identity service changes invalidate members and invitations. */
   members: (org: string) => ['org', org, 'members'] as const,
   invitations: (org: string) => ['org', org, 'invitations'] as const,
+  /** The caller's own personal tokens in the organization. */
+  personalTokens: (org: string) => ['org', org, 'personal-tokens'] as const,
+  /** Every member's personal tokens (owners and admins). */
+  memberTokens: (org: string) => ['org', org, 'member-tokens'] as const,
   factories: (org: string) => ['org', org, 'factories'] as const,
   /** The prefix of every factory overview window. */
   overviews: (org: string) => ['org', org, 'overview'] as const,
@@ -190,6 +194,20 @@ export const apiKeysQuery = (org: string) =>
   queryOptions({
     queryKey: keys.apiKeys(org),
     queryFn: ({ signal }) => listApiKeys(org, signal),
+    staleTime: 30_000,
+  });
+
+export const personalTokensQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.personalTokens(org),
+    queryFn: ({ signal }) => listPersonalTokens(org, signal),
+    staleTime: 30_000,
+  });
+
+export const memberTokensQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.memberTokens(org),
+    queryFn: ({ signal }) => listMemberTokens(org, signal),
     staleTime: 30_000,
   });
 

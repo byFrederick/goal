@@ -492,7 +492,7 @@ func problemOf(err error) gen.Problem {
 	var tooLarge *http.MaxBytesError
 
 	// The answers with a code of their own, the fixed bodies first.
-	for _, answer := range []func(error) (gen.Problem, bool){fixedProblem, definitionProblem, controlProblem, agentProblem, apiKeyProblem} {
+	for _, answer := range []func(error) (gen.Problem, bool){fixedProblem, definitionProblem, controlProblem, agentProblem, apiKeyProblem, personalTokenProblem} {
 		if p, ok := answer(err); ok {
 			return p
 		}

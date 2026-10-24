@@ -15,6 +15,7 @@ import (
 const (
 	testToken  = "AbCdEfGhIjKlMnOpQrStUvWxYz012345" //nolint:gosec // a fabricated session token
 	testAPIKey = apiKeyPrefix + "abcdefghijklmnopqrstuvwxyzABCDEFGHIJ-_01234"
+	testPAT    = personalTokenPrefix + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij-_56789"
 	authHeader = "Authorization"
 )
 
@@ -33,11 +34,15 @@ func TestParseCredential_ReadsBearerValuesAndTheSessionCookie(t *testing.T) {
 		refused bool
 	}{
 		{name: "nothing", want: credential{}},
-		{name: "api key", headers: map[string][]string{authHeader: {"Bearer " + testAPIKey}}, want: credential{kind: credentialAPIKey, secret: testAPIKey}},
-		{name: "session token from goal login", headers: map[string][]string{authHeader: {"Bearer " + testToken}}, want: credential{kind: credentialSession, secret: testToken}},
-		{name: "scheme in any case", headers: map[string][]string{authHeader: {"bearer " + testToken}}, want: credential{kind: credentialSession, secret: testToken}},
+		{name: "api key", headers: map[string][]string{authHeader: {"Bearer " + testAPIKey}}, want: credential{kind: credentialAPIKey, secret: testAPIKey, bearer: true}},
+		{name: "personal token", headers: map[string][]string{authHeader: {"Bearer " + testPAT}}, want: credential{kind: credentialPersonalToken, secret: testPAT, bearer: true}},
+		{name: "session token from goal login", headers: map[string][]string{authHeader: {"Bearer " + testToken}}, want: credential{kind: credentialSession, secret: testToken, bearer: true}},
+		{name: "scheme in any case", headers: map[string][]string{authHeader: {"bearer " + testToken}}, want: credential{kind: credentialSession, secret: testToken, bearer: true}},
 		{name: "agent task token", headers: map[string][]string{authHeader: {"Bearer " + taskToken}}, refused: true},
 		{name: "api key one character short", headers: map[string][]string{authHeader: {"Bearer " + testAPIKey[:len(testAPIKey)-1]}}, refused: true},
+		{name: "personal token one character short", headers: map[string][]string{authHeader: {"Bearer " + testPAT[:len(testPAT)-1]}}, refused: true},
+		{name: "personal token one character long", headers: map[string][]string{authHeader: {"Bearer " + testPAT + "x"}}, refused: true},
+		{name: "personal token with a symbol", headers: map[string][]string{authHeader: {"Bearer " + testPAT[:len(testPAT)-1] + "!"}}, refused: true},
 		{name: "token with a symbol", headers: map[string][]string{authHeader: {"Bearer " + testToken[:31] + "!"}}, refused: true},
 		{name: "basic credentials", headers: map[string][]string{authHeader: {"Basic dXNlcjpwdw=="}}, refused: true},
 		{name: "two authorization headers", headers: map[string][]string{authHeader: {"Bearer " + testToken, "Bearer " + testAPIKey}}, refused: true},
@@ -51,7 +56,7 @@ func TestParseCredential_ReadsBearerValuesAndTheSessionCookie(t *testing.T) {
 		{
 			name:    "bearer wins over the cookie",
 			headers: map[string][]string{authHeader: {"Bearer " + testAPIKey}}, cookies: map[string]string{sessionCookie: signed},
-			want: credential{kind: credentialAPIKey, secret: testAPIKey},
+			want: credential{kind: credentialAPIKey, secret: testAPIKey, bearer: true},
 		},
 		{
 			name:    "a malformed bearer is not saved by a good cookie",
@@ -81,7 +86,7 @@ func TestParseCredential_ReadsBearerValuesAndTheSessionCookie(t *testing.T) {
 			}
 
 			// A refusal never carries the credential: errors reach logs.
-			if err != nil && (strings.Contains(err.Error(), testToken) || strings.Contains(err.Error(), testAPIKey)) {
+			if err != nil && (strings.Contains(err.Error(), testToken) || strings.Contains(err.Error(), testAPIKey) || strings.Contains(err.Error(), testPAT)) {
 				t.Errorf("error %q names the credential", err)
 			}
 		})

@@ -166,6 +166,25 @@ func TestIdentity_APIKeysConformance(t *testing.T) {
 	})
 }
 
+func (s pgSeed) ExpireToken(t *testing.T, _ domain.OrgID, id domain.PersonalTokenID) {
+	t.Helper()
+
+	s.d.exec(s.d.admin, `UPDATE personal_tokens SET created_at = now() - interval '2 days', expires_at = now() - interval '1 day' WHERE id = $1`,
+		string(id))
+}
+
+func TestIdentity_PersonalTokensConformance(t *testing.T) {
+	t.Parallel()
+
+	identitytest.RunPersonalTokens(t, func(t *testing.T) (ports.Identity, ports.Access, identitytest.TokenSeed) {
+		t.Helper()
+
+		d := newIdentityDB(t)
+
+		return NewIdentity(d.s), NewAccess(d.s), pgSeed{d: d}
+	})
+}
+
 // A new organization is owned by NewOrg.Owner, else by the install's earliest platform admin,
 // else (before anyone signed in) by nobody; each owner's membership is audited as org_created.
 func TestCreateOrg_Owner(t *testing.T) {

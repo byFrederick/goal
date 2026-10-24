@@ -7,8 +7,9 @@ import (
 )
 
 // Identity answers who a request is, per request, from the database (phase 3): Better Auth's
-// sessions and Goal's API keys, with the memberships and roles they carry right now. Nothing is
-// cached, so a removal, a role change, a revocation or a sign-out holds on the next request.
+// sessions, Goal's API keys and personal tokens, with the memberships and roles they carry right
+// now. Nothing is cached, so a removal, a role change, a revocation or a sign-out holds on the
+// next request.
 // Failures to resolve a credential wrap domain.ErrUnauthenticated.
 type Identity interface {
 	// Session resolves a Better Auth session token (the 32-character token, never the signed
@@ -18,6 +19,11 @@ type Identity interface {
 	// APIKey resolves base64url(SHA-256(key)). ErrUnauthenticated when unknown, revoked, expired
 	// or of a deleted org. Touches last_used_at at most once a minute.
 	APIKey(ctx context.Context, hash string) (domain.Principal, error)
+	// PersonalToken resolves base64url(SHA-256(token)) to its owner: a user principal with Token
+	// set, Org the token's own, and the owner's CURRENT org role and factory roles there, never
+	// platform admin and never a session. ErrUnauthenticated when unknown, revoked, expired, of a
+	// removed member or of a deleted org. Touches last_used_at at most once a minute.
+	PersonalToken(ctx context.Context, hash string) (domain.Principal, error)
 	// OrgsFor lists the live organizations the user belongs to, by name, with the user's role.
 	OrgsFor(ctx context.Context, user domain.UserID) ([]domain.OrgMembership, error)
 	// DeviceRequest describes a pending CLI sign-in by its user code; ErrNotFound when unknown
@@ -55,6 +61,19 @@ type Access interface {
 	// domain.ErrNotAnAdmin when to is not an admin, domain.ErrNotAnOwner when from is not an
 	// owner; nothing changes then. Audit: org.ownership_transferred (and both role changes).
 	TransferOwnership(ctx context.Context, by domain.Actor, from, to domain.UserID) error
+	// PersonalTokens lists the organization's live personal tokens and those revoked in the last
+	// 30 days, live ones first, newest first: owner's only, or every member's when owner is nil
+	// (the admins' listing). The owner filter is part of the statement.
+	PersonalTokens(ctx context.Context, owner *domain.UserID) ([]domain.PersonalToken, error)
+	// CreatePersonalToken stores a token of member t.Owner whose hash and hint the caller
+	// computed (personal_token.created). A live token of the owner's with the same name (case
+	// ignored) is domain.ErrPersonalTokenNameTaken; an owner who is not a member ErrNotFound.
+	CreatePersonalToken(ctx context.Context, by domain.Actor, t domain.NewPersonalToken) (domain.PersonalToken, error)
+	// RevokePersonalToken revokes a token at once (personal_token.revoked): it stops resolving on
+	// the next request. owner nil reaches any member's token, else only owner's: another's is
+	// ErrNotFound, as is an unknown one, decided in the statement. Revoking a revoked token
+	// changes nothing.
+	RevokePersonalToken(ctx context.Context, by domain.Actor, id domain.PersonalTokenID, owner *domain.UserID) error
 }
 
 // AccessNotices streams the access changes committed by anyone (PostgreSQL LISTEN goal_access):
@@ -69,13 +88,15 @@ type AccessNotices interface {
 	Listen(ctx context.Context, deliver func(AccessNotice)) error
 }
 
-// Kinds of access notices (00043's goal_notify_access, 00046's api_key).
+// Kinds of access notices (00043's goal_notify_access, 00046's api_key, 00047's personal_token).
 const (
 	AccessMember      = "member"       // OrgID, UserID: a role changed or the membership ended
 	AccessSession     = "session"      // UserID, SessionID: signed out or cleaned up
 	AccessFactoryRole = "factory_role" // OrgID, UserID, FactoryID
 	AccessOrg         = "org"          // OrgID: soft-deleted
 	AccessAPIKey      = "api_key"      // OrgID, KeyID: revoked
+	// AccessPersonalToken: OrgID, UserID, TokenID: revoked (a removal sends member).
+	AccessPersonalToken = "personal_token"
 )
 
 // AccessNotice is one access change as its notification claims it.
@@ -87,4 +108,5 @@ type AccessNotice struct {
 	SessionID string
 	FactoryID domain.FactoryID
 	KeyID     domain.APIKeyID
+	TokenID   domain.PersonalTokenID
 }

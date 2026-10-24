@@ -1,7 +1,7 @@
 // The organization's sidebar on its own pages: "Organization" as eyebrow, its name and factory
-// count, then Factories, Members and roles, API keys (with api_key:read), Connector catalog,
-// Credentials and Settings (C §10.5, canvas "Factories", "Members" and "Api-Keys"), with the
-// caller's role under the count.
+// count, then Factories, Members and roles, API keys (with api_key:read or personal_token:read),
+// Connector catalog, Credentials and Settings (C §10.5, canvas "Factories", "Members" and
+// "Api-Keys"), with the caller's role under the count.
 import { Link } from '@tanstack/react-router';
 import type { OrgSummary } from '../api/types';
 import { factoryCount, useOrgGrants } from '../shared/org';

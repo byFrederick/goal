@@ -173,6 +173,63 @@ func (d mxDatabase) seed(t *testing.T) {
 	}
 
 	d.seedKeys(t)
+	d.seedTokens(t)
+}
+
+// seedTokens writes the matrix's personal tokens and their own people, as goald and the identity
+// service would, then what happened afterwards: a demotion and a removal as goal_auth (the
+// removal deletes the token by its foreign key), an expiry, a revocation, the organization's
+// deletion. The owner's CLI session is a second session row of theirs.
+func (d mxDatabase) seedTokens(t *testing.T) {
+	t.Helper()
+
+	owner := mxPeople()[0]
+	d.exec(t, d.auth, `INSERT INTO auth.session (token, "userId", "createdAt", "updatedAt", "expiresAt") VALUES ($1, $2, $3, $3, $4)`,
+		mxBearerSession, string(owner.user), owner.session().CreatedAt, time.Now().Add(7*24*time.Hour))
+	d.inOrg(t, mxGone, "SELECT * FROM goal_provision_org($1, 'gone', 'Gone', 'Go', $2, $3, 'system:test', $4)", string(mxGone),
+		nil, nil, nil) // no owner, no request
+
+	for _, k := range mxTokens() {
+		p := k.person()
+		if k.of == "" {
+			d.exec(t, d.auth, `INSERT INTO auth."user" (id, name, email, "emailVerified") VALUES ($1, $2, $3, true)`, string(p.user), p.name, p.name+"@example.com")
+			d.exec(t, d.auth, `INSERT INTO auth.member ("organizationId", "userId", role, "createdAt") VALUES ($1, $2, $3, now())`,
+				string(p.org), string(p.user), string(p.role))
+
+			if p.platformAdmin {
+				d.exec(t, d.admin, `INSERT INTO platform_admins (user_id, added_by) VALUES ($1, 'system:test')`, string(p.user))
+			}
+
+			if p.factory != "" {
+				d.inOrg(t, p.org, "INSERT INTO factory_roles (factory_id, user_id, role, granted_by) VALUES ($1, $2, $3, 'system:test')",
+					string(mxF), string(p.user), string(p.factory))
+			}
+		}
+
+		created, expires := "now()", "now() + interval '30 days'"
+		if k.after == mxExpired {
+			created, expires = "now() - interval '2 days'", "now() - interval '1 day'"
+		}
+
+		scopes := make([]string, 0, len(k.scopes))
+		for _, s := range k.scopes {
+			scopes = append(scopes, string(s))
+		}
+
+		d.inOrg(t, p.org, `INSERT INTO personal_tokens (id, user_id, name, hint, hash, scopes, created_at, expires_at)
+			VALUES ($1, $2, $3, $4, $5, $6, `+created+`, `+expires+`)`, string(k.id), string(p.user), k.name, k.secret[:13], k.hash, scopes)
+
+		switch k.after {
+		case mxDemoted:
+			d.exec(t, d.auth, `UPDATE auth.member SET role = 'member' WHERE "organizationId" = $1 AND "userId" = $2`, string(p.org), string(p.user))
+		case mxRemoved:
+			d.exec(t, d.auth, `DELETE FROM auth.member WHERE "organizationId" = $1 AND "userId" = $2`, string(p.org), string(p.user))
+		case mxRevoked:
+			d.inOrg(t, p.org, "UPDATE personal_tokens SET revoked_at = now(), revoked_by = 'system:test' WHERE id = $1", string(k.id))
+		case mxOrgDeleted:
+			d.exec(t, d.admin, "UPDATE organizations SET deleted_at = now() WHERE id = $1", string(p.org))
+		}
+	}
 }
 
 // seedKeys writes the matrix's API keys as goald does, under row-level security, with the fake's
@@ -235,6 +292,23 @@ func TestAPI_TwoOrgMatrixOverHTTPWithPostgres(t *testing.T) {
 	for _, k := range mxKeys() {
 		principals = append(principals, mxPrincipal{name: k.key.Name, header: k.header(), resolve: func(domain.OrgID) (domain.Principal, error) {
 			return identity.APIKey(t.Context(), k.hash)
+		}})
+	}
+
+	principals = append(principals, mxPrincipal{
+		name: mxBearerName, header: fakeBy[mxBearerName].header, resolve: func(org domain.OrgID) (domain.Principal, error) {
+			p, err := identity.Session(t.Context(), mxBearerSession, org)
+			if p.Session != nil {
+				p.Session.Bearer = true
+			}
+
+			return p, err
+		},
+	})
+
+	for _, k := range mxTokens() {
+		principals = append(principals, mxPrincipal{name: k.name, header: k.header(), resolve: func(domain.OrgID) (domain.Principal, error) {
+			return identity.PersonalToken(t.Context(), k.hash)
 		}})
 	}
 

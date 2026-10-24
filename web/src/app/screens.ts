@@ -37,8 +37,11 @@ export type OrgPath = '/o/$org' | '/o/$org/members' | '/o/$org/settings' | '/o/$
 type Availability<Path> = { available: true; to: Path; exact?: boolean } | { available: false };
 
 export type FactoryScreen = Screen & { group: 'work' | 'build' | 'learn' } & Availability<FactoryPath>;
-/** An organization screen; one with `permission` is listed only for people who hold it (Org.can). */
-export type OrgScreen = Screen & Availability<OrgPath> & { permission?: string };
+/**
+ * An organization screen; one with `permissions` is listed only for people who hold at least one
+ * of them (Org.can).
+ */
+export type OrgScreen = Screen & Availability<OrgPath> & { permissions?: readonly string[] };
 
 /** The factory sidebar, top to bottom: Work, Build, Learn. */
 export const factoryScreens: readonly FactoryScreen[] = [
@@ -92,14 +95,17 @@ export const membersScreen: OrgScreen = {
   to: '/o/$org/members',
 };
 
-/** The organization's API keys (spec 3 §10.2 "Api-Keys"), for owners and admins. */
+/**
+ * The organization's API keys (spec 3 §10.2 "Api-Keys") for owners and admins, and everyone's own
+ * personal tokens (3-12b) on the same page, so every member reaches it.
+ */
 export const apiKeysScreen: OrgScreen = {
   id: 'api-keys',
   label: 'API keys',
   icon: SquareTerminal,
   available: true,
   to: '/o/$org/api-keys',
-  permission: 'api_key:read',
+  permissions: ['api_key:read', 'personal_token:read'],
 };
 // Phase 4.2: /o/:org/catalog.
 export const catalogScreen: OrgScreen = { id: 'catalog', label: 'Connector catalog', icon: Layers, available: false };
@@ -130,7 +136,7 @@ export const orgScreens: readonly OrgScreen[] = [
 
 /** The screens of `screens` a person holding `can` sees; none of the gated ones while `can` loads. */
 export function screensFor<S extends OrgScreen>(screens: readonly S[], can: readonly string[] | undefined): S[] {
-  return screens.filter((s) => !s.permission || (can?.includes(s.permission) ?? false));
+  return screens.filter((s) => !s.permissions || s.permissions.some((p) => can?.includes(p) ?? false));
 }
 
 /** The rail's dashed square: D's New factory wizard, /o/:org/new/:step (no sidebar), from Start. */

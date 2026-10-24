@@ -35,7 +35,8 @@ type Identity struct {
 	orgs     map[domain.OrgID]*identityOrg
 	users    map[domain.UserID]*IdentityUser
 	sessions map[string]identitySession
-	keys     map[string]*IdentityKey // by hash
+	keys     map[string]*IdentityKey   // by hash
+	tokens   map[string]*IdentityToken // by hash
 	devices  map[string]domain.DeviceRequest
 }
 
@@ -85,7 +86,8 @@ type identitySession struct {
 func NewIdentity(now func() time.Time) *Identity {
 	return &Identity{
 		now: now, orgs: map[domain.OrgID]*identityOrg{}, users: map[domain.UserID]*IdentityUser{},
-		sessions: map[string]identitySession{}, keys: map[string]*IdentityKey{}, devices: map[string]domain.DeviceRequest{},
+		sessions: map[string]identitySession{}, keys: map[string]*IdentityKey{}, tokens: map[string]*IdentityToken{},
+		devices: map[string]domain.DeviceRequest{},
 	}
 }
 
@@ -100,8 +102,8 @@ func (i *Identity) AddOrg(o domain.Org) {
 	}
 }
 
-// DeleteOrg soft-deletes an organization: its members lose their role there and its keys are
-// revoked (by system:org-deleted).
+// DeleteOrg soft-deletes an organization: its members lose their role there and its keys and
+// personal tokens are revoked (by system:org-deleted).
 func (i *Identity) DeleteOrg(id domain.OrgID) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -113,6 +115,12 @@ func (i *Identity) DeleteOrg(id domain.OrgID) {
 	for _, k := range i.keys {
 		if k.Org == id && k.RevokedAt.IsZero() {
 			k.RevokedAt, k.RevokedBy = i.now(), orgDeleted
+		}
+	}
+
+	for _, t := range i.tokens {
+		if t.Org == id && t.RevokedAt.IsZero() {
+			t.RevokedAt, t.RevokedBy = i.now(), orgDeleted
 		}
 	}
 }
@@ -158,7 +166,8 @@ func (i *Identity) EndSession(token string) {
 }
 
 // SetOrgRole makes user a member of org with role, or removes them ("" role) with their factory
-// roles. Leaving an organization that has owners without one is refused.
+// roles and personal tokens there (the membership's cascade). Leaving an organization that has
+// owners without one is refused.
 func (i *Identity) SetOrgRole(org domain.OrgID, user domain.UserID, role domain.OrgRole) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -176,6 +185,7 @@ func (i *Identity) SetOrgRole(org domain.OrgID, user domain.UserID, role domain.
 		delete(o.members, user)
 		delete(o.joined, user)
 		delete(o.factoryRoles, user)
+		maps.DeleteFunc(i.tokens, func(_ string, t *IdentityToken) bool { return t.Org == org && t.User == user })
 
 		return nil
 	}

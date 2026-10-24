@@ -36,6 +36,7 @@ type permission struct {
 	OrgRoles      []string            `yaml:"org_roles"`
 	FactoryRole   string              `yaml:"factory_role"`
 	Keys          bool                `yaml:"keys"`
+	PAT           bool                `yaml:"pat"`
 	Fresh         bool                `yaml:"fresh"`
 	PlatformAdmin bool                `yaml:"platform_admin"`
 	BetterAuth    map[string][]string `yaml:"better_auth"`
@@ -133,7 +134,32 @@ func (t table) check(p permission) error {
 		return errors.New("keys never hold a fresh permission: an API key has no sign-in time")
 	}
 
+	if err := checkPAT(p); err != nil {
+		return err
+	}
+
 	return checkBetterAuth(p)
+}
+
+// permAuthenticated is the one install permission personal tokens may carry: any valid principal.
+const permAuthenticated = "authenticated"
+
+// checkPAT refuses pat (personal tokens may carry it, spec 3 §4.5) where a token must never reach:
+// a fresh permission (a token has no sign-in time), a platform admin's, or any install permission
+// but authenticated (device approval, creating organizations).
+func checkPAT(p permission) error {
+	switch {
+	case !p.PAT:
+		return nil
+	case p.Fresh:
+		return errors.New("personal tokens never hold a fresh permission: a token has no sign-in time")
+	case p.PlatformAdmin:
+		return errors.New("personal tokens never hold a platform admin's permission")
+	case p.Level == levelInstall && p.Name != permAuthenticated:
+		return errors.New("personal tokens hold no install permission but authenticated")
+	default:
+		return nil
+	}
 }
 
 // checkBetterAuth refuses better_auth statements outside an org permission (Better Auth's roles

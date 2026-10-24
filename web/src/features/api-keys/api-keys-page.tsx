@@ -3,8 +3,10 @@
 // was last used; New key (with api_key:manage) and Revoke…. Revoked keys stay listed for 30 days,
 // greyed (on phones they are counted, not shown). The list loads on its own: when it fails the
 // page keeps its header and New key. The secret of a new key is shown once (created-dialog.tsx).
+// Below them, everyone's own personal tokens (personal_token:read) and, for owners and admins, the
+// members' tokens (personal-tokens.tsx); a member without api_key:read sees only their own tokens.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Clock, SquareTerminal } from 'lucide-react';
+import { SquareTerminal } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '../../api/client';
@@ -15,24 +17,24 @@ import { formatDay, plural } from '../../shared/format';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
-import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { EmptyState } from '../../ui/empty-state';
 import { CreatedKeyDialog } from './created-dialog';
 import { NewKeyDialog } from './new-key-dialog';
-import { ceilings, expiryText, lastUsedText, scopeLabel } from './scopes';
-
-/** How many scope chips a row shows before "+N more". */
-const chipsShown = 2;
+import { MemberTokensSection, PersonalTokensSection } from './personal-tokens';
+import { ceilings, expiryText, lastUsedText } from './scopes';
+import { Scopes, Soon } from './shared';
 
 const roleLabel = (role: string) => ceilings.find((c) => c.value === role)?.label ?? role;
 
 export function ApiKeysPage() {
   const org = useOrg();
   const client = useQueryClient();
+  const readKeys = useOrgHolds('api_key:read');
+  const readTokens = useOrgHolds('personal_token:read');
   const manage = useOrgHolds('api_key:manage');
-  const list = useQuery(apiKeysQuery(org.id));
+  const list = useQuery({ ...apiKeysQuery(org.id), enabled: readKeys });
   const factories = useQuery(factoriesQuery(org.id));
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState<CreatedApiKey | null>(null);
@@ -67,15 +69,17 @@ export function ApiKeysPage() {
         <div className="flex max-w-[760px] min-w-0 flex-col gap-2">
           <p className="m-0 text-[13px] text-muted md:hidden">{org.name}</p>
           <h1 className="m-0 text-[34px] leading-[1.05] font-normal tracking-display md:text-5xl">API keys</h1>
-          <p className="m-0 text-[15px] leading-normal text-muted">
-            Keys let scripts and CI act for {org.name}. A key never manages people, keys or ownership. Keys expire after
-            at most 90 days.
-          </p>
+          {readKeys ? (
+            <p className="m-0 text-[15px] leading-normal text-muted">
+              Keys let scripts and CI act for {org.name}. A key never manages people, keys or ownership. Keys expire
+              after at most 90 days.
+            </p>
+          ) : null}
         </div>
         {newKey}
       </header>
 
-      {list.isPending ? (
+      {!readKeys ? null : list.isPending ? (
         <div aria-busy="true" className="rounded-card border border-line bg-card p-5">
           <span role="status" className="sr-only">
             Loading API keys
@@ -224,38 +228,43 @@ export function ApiKeysPage() {
         </section>
       )}
 
-      <div className="grid gap-4 @[960px]:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-        <section
-          aria-labelledby="key-ci"
-          className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-card p-5"
-        >
-          <h2 id="key-ci" className="m-0 text-lg font-medium">
-            Use a key from CI
-          </h2>
-          <p className="m-0 text-sm leading-normal text-muted">
-            Put the secret in your CI’s secret store as GOAL_API_KEY. The CLI reads it from the environment and never
-            writes it anywhere.
-          </p>
-          <pre className="m-0 rounded-control border border-line bg-surface p-3.5 font-mono text-[13px] leading-relaxed break-words whitespace-pre-wrap">
-            {`export GOAL_API_KEY="$GOAL_KEY_FROM_CI"\ngoal factory list\ngoal run ${sample} "Deploy 1.4.2 to staging" --detach`}
-          </pre>
-        </section>
-        <section
-          aria-labelledby="key-never"
-          className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-card p-5"
-        >
-          <h2 id="key-never" className="m-0 text-lg font-medium">
-            What a key can never do
-          </h2>
-          <p className="m-0 text-sm leading-normal text-muted">
-            Invite or remove people, change roles, see invitations, manage keys, transfer or delete {org.name}, or
-            create organizations. Those need a person signed in.
-          </p>
-          <p className="m-0 text-sm leading-normal text-muted">
-            Creating or revoking a key needs a sign-in from the last 10 minutes. Both go into the audit log.
-          </p>
-        </section>
-      </div>
+      {readTokens ? <PersonalTokensSection org={org} /> : null}
+      {readKeys ? <MemberTokensSection org={org} /> : null}
+
+      {readKeys ? (
+        <div className="grid gap-4 @[960px]:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+          <section
+            aria-labelledby="key-ci"
+            className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-card p-5"
+          >
+            <h2 id="key-ci" className="m-0 text-lg font-medium">
+              Use a key from CI
+            </h2>
+            <p className="m-0 text-sm leading-normal text-muted">
+              Put the secret in your CI’s secret store as GOAL_API_KEY. The CLI reads it from the environment and never
+              writes it anywhere.
+            </p>
+            <pre className="m-0 rounded-control border border-line bg-surface p-3.5 font-mono text-[13px] leading-relaxed break-words whitespace-pre-wrap">
+              {`export GOAL_API_KEY="$GOAL_KEY_FROM_CI"\ngoal factory list\ngoal run ${sample} "Deploy 1.4.2 to staging" --detach`}
+            </pre>
+          </section>
+          <section
+            aria-labelledby="key-never"
+            className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-card p-5"
+          >
+            <h2 id="key-never" className="m-0 text-lg font-medium">
+              What a key can never do
+            </h2>
+            <p className="m-0 text-sm leading-normal text-muted">
+              Invite or remove people, change roles, see invitations, manage keys, transfer or delete {org.name}, or
+              create organizations. Those need a person signed in.
+            </p>
+            <p className="m-0 text-sm leading-normal text-muted">
+              Creating or revoking a key needs a sign-in from the last 10 minutes. Both go into the audit log.
+            </p>
+          </section>
+        </div>
+      ) : null}
 
       {creating ? (
         <NewKeyDialog
@@ -310,35 +319,6 @@ function KeyName({ apiKey }: { apiKey: ApiKey }) {
     <span className="flex min-w-0 flex-col">
       <span className="truncate text-[15px] font-medium">{apiKey.name}</span>
       <span className="font-mono text-xs text-muted">{apiKey.hint}…</span>
-    </span>
-  );
-}
-
-function Scopes({ scopes }: { scopes: readonly string[] }) {
-  const shown = scopes.slice(0, chipsShown);
-  const more = scopes.length - shown.length;
-  return (
-    <span className="flex flex-wrap gap-1.5">
-      {shown.map((s) => (
-        <Chip key={s} tone="quiet">
-          {scopeLabel(s)}
-        </Chip>
-      ))}
-      {more > 0 ? (
-        <Chip tone="plain">
-          <span aria-hidden="true">+{more} more</span>
-          <span className="sr-only">and {scopes.slice(chipsShown).map(scopeLabel).join(', ')}</span>
-        </Chip>
-      ) : null}
-    </span>
-  );
-}
-
-function Soon({ text }: { text: string }) {
-  return (
-    <span className="ml-1 inline-flex items-center gap-1 text-[13px] font-medium text-rework-ink md:ml-0 md:flex">
-      <Clock size={13} strokeWidth={2} aria-hidden="true" />
-      {text}
     </span>
   );
 }

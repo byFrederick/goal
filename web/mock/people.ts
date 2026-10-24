@@ -152,7 +152,7 @@ export function seedPeople(now: number, { acme, labs, factories }: SeedOrgs): Mo
 export function orgCanOf(role: OrgRole, every: readonly string[]): string[] {
   if (role === 'owner') return [...every];
   if (role === 'admin') return every.filter((p) => p !== 'org:delete' && p !== 'org:transfer');
-  return ['member:read', 'org:read'];
+  return ['member:read', 'org:read', 'personal_token:manage', 'personal_token:read'];
 }
 
 /**

@@ -1,18 +1,21 @@
 // The account (canvas "Account-Menu", "Mobile-Org-Switcher"; spec 3 §10.2): the avatar at the
 // bottom of the rail (and in the phone's top row) opens a panel naming the person, their role in
-// this organization and whether they are a platform admin, with Edit name…, Sign out and Sign out
-// everywhere…; on phones the same block sits at the bottom of the organization sheet. With
-// sign-in off (GOAL_AUTH=none) it names the local user and has no actions.
+// this organization and whether they are a platform admin, with Edit name…, Personal tokens (to
+// this organization's API keys page, 3-12b), Sign out and Sign out everywhere…; on phones the same
+// block sits at the bottom of the organization sheet. With sign-in off (GOAL_AUTH=none) it names
+// the local user and has no actions.
 //
 // AccountProvider (in AppShell) keeps the dialogs those actions open, so they outlive the panel or
 // sheet that opened them, and keeps the session alive while signed in.
 import { useQuery } from '@tanstack/react-query';
-import { CircleCheck, LogOut, Pencil } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
+import { CircleCheck, KeyRound, LogOut, Pencil } from 'lucide-react';
 import { createContext, type FormEvent, type ReactNode, use, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { meQuery } from '../api/queries';
+import { meQuery, orgQuery } from '../api/queries';
 import type { Me, OrgSummary } from '../api/types';
 import { initialsOf, keepSessionAlive, roleLine, useSignOut, useUpdateName } from '../shared/account';
+import { holds } from '../shared/permissions';
 import { Button } from '../ui/button';
 import { Callout } from '../ui/callout';
 import { Chip } from '../ui/chip';
@@ -88,7 +91,7 @@ export function AccountProvider({ org, children }: { org: OrgSummary; children: 
           setDialog(open ? 'everywhere' : null);
         }}
         title="Sign out of every browser and the CLI?"
-        description="Every session ends, this one too. API keys keep working."
+        description="Every session ends, this one too. API keys and personal tokens keep working until they are revoked."
         confirmLabel="Sign out everywhere"
         pendingLabel="Signing out…"
         tone="danger"
@@ -133,9 +136,19 @@ export function AccountMenu({ org, size }: { org: OrgSummary; size: 'rail' | 'ph
   );
 }
 
+/** The anchor of the API keys page's Personal tokens section (personal-tokens.tsx). */
+const tokensAnchor = 'personal-tokens';
+
+/** Whether the person may see their personal tokens in `org` (personal_token:read). */
+function useTokensLink(org: OrgSummary): boolean {
+  const { data } = useQuery(orgQuery(org.id));
+  return holds(data, 'personal_token:read');
+}
+
 function AccountPanel({ org, onAction }: { org: OrgSummary; onAction: () => void }) {
   const account = useAccount();
   const { person } = account;
+  const tokens = useTokensLink(org);
   if (!person) return <LocalUser />;
   const role = roleLine(org.role, org.name);
   const act = (action: () => void) => () => {
@@ -165,6 +178,20 @@ function AccountPanel({ org, onAction }: { org: OrgSummary; onAction: () => void
             Edit name…
           </button>
         </li>
+        {tokens ? (
+          <li>
+            <Link
+              to="/o/$org/api-keys"
+              params={{ org: org.slug }}
+              hash={tokensAnchor}
+              onClick={onAction}
+              className={actionRow}
+            >
+              <KeyRound {...iconProps} />
+              Personal tokens
+            </Link>
+          </li>
+        ) : null}
         <li>
           <button type="button" onClick={act(account.signOut)} className={actionRow}>
             <LogOut {...iconProps} />
@@ -210,6 +237,7 @@ function LocalUser() {
 export function AccountBlock({ org, onAction }: { org: OrgSummary; onAction: () => void }) {
   const account = useAccount();
   const { person } = account;
+  const tokens = useTokensLink(org);
   if (!person) return <LocalUser />;
   const role = roleLine(org.role, org.name);
   const act = (action: () => void) => () => {
@@ -241,6 +269,13 @@ export function AccountBlock({ org, onAction }: { org: OrgSummary; onAction: () 
         >
           Edit name…
         </Button>
+        {tokens ? (
+          <Button asChild variant="white" size="lg" className="col-span-2 justify-center">
+            <Link to="/o/$org/api-keys" params={{ org: org.slug }} hash={tokensAnchor} onClick={onAction}>
+              Personal tokens
+            </Link>
+          </Button>
+        ) : null}
         <Button variant="white" size="lg" onClick={act(account.signOut)} className="justify-center">
           Sign out
         </Button>

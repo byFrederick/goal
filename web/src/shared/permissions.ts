@@ -14,7 +14,9 @@ export type OrgPermission =
   | 'factory:create'
   | 'member:manage'
   | 'api_key:read'
-  | 'api_key:manage';
+  | 'api_key:manage'
+  | 'personal_token:read'
+  | 'personal_token:manage';
 export type FactoryPermission =
   | 'item:create'
   | 'item:decide'

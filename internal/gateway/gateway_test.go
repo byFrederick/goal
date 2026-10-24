@@ -553,6 +553,9 @@ func TestGateway_RejectsRequestsWithoutAValidToken(t *testing.T) {
 		{name: "no header", status: http.StatusUnauthorized},
 		{name: "not bearer", header: "Basic " + h.token(t, valid), status: http.StatusUnauthorized},
 		{name: "garbage", header: "Bearer not-a-token", status: http.StatusUnauthorized},
+		// Spec 3 §11.1 row 46: Goal's own credentials never reach the agents' gateway.
+		{name: "a personal token", header: "Bearer goal_pat_" + strings.Repeat("p", 43), status: http.StatusUnauthorized},
+		{name: "an API key", header: "Bearer goal_sk_" + strings.Repeat("k", 43), status: http.StatusUnauthorized},
 		{name: "other key", header: "Bearer " + other, status: http.StatusUnauthorized},
 		{name: "expired", header: "Bearer " + h.token(t, expired), status: http.StatusUnauthorized},
 		{name: "no audience", header: "Bearer " + h.tokenFor(t, valid, ""), status: http.StatusUnauthorized},

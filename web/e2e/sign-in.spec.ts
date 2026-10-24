@@ -259,7 +259,11 @@ test('edit name, sign out everywhere, sign out', async ({ page }) => {
   // Sign out everywhere asks first; Cancel has focus, so Enter never signs anyone out by accident.
   await (await openAccount('FC, Fred Cruz')).getByRole('button', { name: 'Sign out everywhere…' }).click();
   const confirm = page.getByRole('dialog', { name: 'Sign out of every browser and the CLI?' });
-  await expect(confirm.getByText('Every session ends, this one too. API keys keep working.')).toBeVisible();
+  await expect(
+    confirm.getByText(
+      'Every session ends, this one too. API keys and personal tokens keep working until they are revoked.',
+    ),
+  ).toBeVisible();
   await expect(confirm.getByRole('button', { name: 'Cancel' })).toBeFocused();
   await expectAccessible(page);
   await confirm.getByRole('button', { name: 'Sign out everywhere' }).click();

@@ -22,9 +22,10 @@ type rule struct {
 	orgRoles []string
 	// factoryRole is the lowest factory role holding a factory permission.
 	factoryRole string
-	// keys: an API key may carry it. fresh: a session signed in within domain.FreshFor.
-	// platformAdmin: only platform admins hold this install permission.
-	keys, fresh, platformAdmin bool
+	// keys: an API key may carry it. pat: a personal token may carry it. fresh: a session
+	// signed in within domain.FreshFor. platformAdmin: only platform admins hold this install
+	// permission.
+	keys, pat, fresh, platformAdmin bool
 }
 
 // The levels of api/permissions.yaml.
@@ -36,13 +37,26 @@ const (
 
 // Permissions every principal is asked about by name.
 const (
-	permPublic      domain.Permission = "public"
-	permFactoryRead domain.Permission = "factory:read"
-	permItemDecide  domain.Permission = "item:decide"
+	permPublic        domain.Permission = "public"
+	permAuthenticated domain.Permission = "authenticated"
+	permFactoryRead   domain.Permission = "factory:read"
+	permItemDecide    domain.Permission = "item:decide"
+	// permTokenCreate creates a personal token: a lasting credential, so only the browser's
+	// cookie session may (spec 3 §4.5), never a CLI session, whose device approval may have been
+	// phished.
+	permTokenCreate domain.Permission = "personal_token:manage"
 )
 
 // errDenied is a principal that sees the resource but lacks the permission (403 forbidden).
 var errDenied = errors.New("the principal does not hold the permission")
+
+// errTokenScope is a permission a personal token may not use: not pat in the table, or not
+// among the token's scopes (403 forbidden). It is decided from the token alone.
+var errTokenScope = fmt.Errorf("not a scope of the personal token: %w", errDenied)
+
+// errBrowserSessionRequired is creating a personal token with anything but the browser's cookie
+// session (403 browser-session-required).
+var errBrowserSessionRequired = errors.New("personal tokens are created in the browser, signed in there")
 
 // errHidden is a resource the principal may not see: it answers as the unknown one (404).
 var errHidden = fmt.Errorf("not visible to the principal: %w", ports.ErrNotFound)
@@ -68,7 +82,10 @@ func NewPermissions(clock ports.Clock) *Permissions { return &Permissions{clock:
 //     the key's scopes and ceiling must hold it (403). In the middleware pass (Factory "") a
 //     factory permission needs only membership;
 //  5. fresh permissions need a session signed in within domain.FreshFor
-//     (domain.ErrReauthRequired); keys never hold them.
+//     (domain.ErrReauthRequired); keys never hold them. Creating a personal token also needs
+//     the browser's cookie session (errBrowserSessionRequired).
+//
+// A personal token's principal (Token set) takes authorizeToken instead, which fails closed.
 func (p *Permissions) Authorize(_ context.Context, r AccessRequest) error {
 	name := r.Permission
 	if name == "" {
@@ -89,6 +106,10 @@ func (p *Permissions) Authorize(_ context.Context, r AccessRequest) error {
 		return domain.ErrUnauthenticated
 	}
 
+	if pr.Token != nil {
+		return authorizeToken(pr, name, ru, r)
+	}
+
 	var err error
 
 	switch ru.level {
@@ -104,7 +125,39 @@ func (p *Permissions) Authorize(_ context.Context, r AccessRequest) error {
 		return err
 	}
 
-	return p.fresh(pr, ru)
+	return p.fresh(pr, name, ru)
+}
+
+// authorizeToken decides for a person acting through a personal token (spec 3 §4.5, §8.4): the
+// permission must be pat in the table and among the token's scopes, else 403 forbidden; then the
+// owner's own rule applies with their current roles, so the token never does more than both
+// allow. It is never fresh and never a platform admin. What the owner may not see in the
+// organization asked about (another organization, a factory they have no role on) is hidden
+// first, exactly as for the person, so a refused scope says nothing about what exists.
+func authorizeToken(pr domain.Principal, name domain.Permission, ru rule, r AccessRequest) error {
+	pr.PlatformAdmin, pr.Session = false, nil
+
+	if ru.level != levelInstall {
+		if err := orgSees(pr, name, r); err != nil {
+			return err
+		}
+	}
+
+	// authenticated is any valid principal's: every token holds it, as every key does, so a
+	// token can always say whose it is (getMe) and where it acts (listOrgs).
+	scoped := name == permAuthenticated || slices.Contains(pr.Token.Scopes, name)
+	if !ru.pat || ru.fresh || ru.platformAdmin || !scoped {
+		return fmt.Errorf("permission %q: %w", name, errTokenScope)
+	}
+
+	switch ru.level {
+	case levelInstall:
+		return installGrant(pr, ru)
+	case levelOrg, levelFactory:
+		return orgGrant(pr, name, ru, r)
+	default:
+		return fmt.Errorf("permission %q: unknown level %q: %w", name, ru.level, errDenied)
+	}
 }
 
 // authenticated reports whether the principal is a user or a key the database resolved.
@@ -125,6 +178,21 @@ func installGrant(p domain.Principal, ru rule) error {
 }
 
 func orgGrant(p domain.Principal, name domain.Permission, ru rule, r AccessRequest) error {
+	if err := orgSees(p, name, r); err != nil {
+		return err
+	}
+
+	if !holds(p, name, ru, r.Factory) {
+		return fmt.Errorf("permission %q: %w", name, errDenied)
+	}
+
+	return nil
+}
+
+// orgSees refuses an org or factory permission whose organization or factory the principal does
+// not see: a user who is not a member and a key of another org do not see the organization, and
+// nobody sees a factory they have no role on (errHidden).
+func orgSees(p domain.Principal, name domain.Permission, r AccessRequest) error {
 	if r.Org == "" {
 		return fmt.Errorf("permission %q outside an organization: %w", name, errDenied)
 	}
@@ -136,10 +204,6 @@ func orgGrant(p domain.Principal, name domain.Permission, ru rule, r AccessReque
 
 	if r.Factory != "" && p.RoleOn(r.Factory) == "" {
 		return errHidden
-	}
-
-	if !holds(p, name, ru, r.Factory) {
-		return fmt.Errorf("permission %q: %w", name, errDenied)
 	}
 
 	return nil
@@ -164,8 +228,13 @@ func holds(p domain.Principal, name domain.Permission, ru rule, f domain.Factory
 }
 
 // fresh refuses a fresh permission to a session signed in longer ago than domain.FreshFor, and
-// to a principal without a session.
-func (p *Permissions) fresh(pr domain.Principal, ru rule) error {
+// to a principal without a session; creating a personal token, also to a session that is not
+// the browser's cookie, whatever its age (signing in again would not help).
+func (p *Permissions) fresh(pr domain.Principal, name domain.Permission, ru rule) error {
+	if name == permTokenCreate && (pr.Session == nil || pr.Session.Bearer) {
+		return errBrowserSessionRequired
+	}
+
 	if !ru.fresh {
 		return nil
 	}
@@ -191,11 +260,12 @@ func (s *server) ask(ctx context.Context, permission domain.Permission, f domain
 }
 
 // visible reports whether the request's principal sees factory f: lists and aggregates show only
-// the factories it sees, and every other route answers an invisible one as an unknown one.
+// the factories it sees, and every other route answers an invisible one as an unknown one. A
+// personal token without factory:read sees none.
 func (s *server) visible(ctx context.Context, f domain.FactoryID) bool {
 	err := s.ask(ctx, permFactoryRead, f)
 
-	return !errors.Is(err, ports.ErrNotFound) && !errors.Is(err, domain.ErrUnauthenticated)
+	return !errors.Is(err, ports.ErrNotFound) && !errors.Is(err, domain.ErrUnauthenticated) && !errors.Is(err, errTokenScope)
 }
 
 // visibleFactories are the factories goald runs for the request's organization that its principal

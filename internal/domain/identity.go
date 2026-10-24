@@ -97,13 +97,19 @@ type Principal struct {
 	User UserID   // user
 	Key  APIKeyID // service
 	// Name is the person's or the key's name. Email is a user's only, and never logged.
-	Name, Email   string
+	Name, Email string
+	// PlatformAdmin is never set for a personal token's principal.
 	PlatformAdmin bool
-	// Session is the user's session; nil for keys and under GOAL_AUTH=none.
+	// Session is the user's session; nil for keys, personal tokens and under GOAL_AUTH=none.
 	Session *Session
-	// Org is the organization the role fields describe ("" outside one). A key's Org is its own.
+	// Token is the personal token a user acts through (spec 3 §4.5); nil otherwise. Its scopes
+	// limit the user's current roles below.
+	Token *TokenGrant
+	// Org is the organization the role fields describe ("" outside one). A key's and a personal
+	// token's Org is their own.
 	Org OrgID
-	// OrgRole is "" when the user is not a member of Org.
+	// OrgRole is "" when the user is not a member of Org; for a personal token, the owner's
+	// current role.
 	OrgRole      OrgRole
 	FactoryRoles map[FactoryID]FactoryRole
 	// Scopes, KeyFactories and KeyCeiling are an API key's grants. KeyFactories nil is every
@@ -114,17 +120,19 @@ type Principal struct {
 	KeyExpiresAt time.Time
 }
 
-// Session is a user's sign-in.
+// Session is a user's sign-in. Bearer: the session came as an Authorization bearer value (the
+// CLI's goal login), not the browser's cookie.
 type Session struct {
 	ID                   string
 	CreatedAt, ExpiresAt time.Time
+	Bearer               bool
 }
 
 // LocalPrincipal is the one person of GOAL_AUTH=none: its Actor is LocalUser.
 var LocalPrincipal = Principal{Kind: PrincipalUser, User: UserID(LocalUser.ID), Name: LocalUser.Name}
 
-// Actor is how the principal is recorded: user:<id> with the user's name, service:<key id> as
-// "<key name> (API key)".
+// Actor is how the principal is recorded: user:<id> with the user's name (through a personal
+// token too, which Via records), service:<key id> as "<key name> (API key)".
 func (p Principal) Actor() Actor {
 	switch p.Kind {
 	case PrincipalUser:

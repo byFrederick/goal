@@ -74,6 +74,9 @@ export type Member = Schemas["Member"];
 export type FactoryRoleGrant = Schemas["FactoryRoleGrant"];
 export type Invitation = Schemas["Invitation"];
 export type TransferRequest = Schemas["TransferRequest"];
+export type PersonalToken = Schemas["PersonalToken"];
+export type NewPersonalToken = Schemas["NewPersonalToken"];
+export type CreatedPersonalToken = Schemas["CreatedPersonalToken"];
 
 // Definitions (B §8): factories' drafts, versions, validation and templates.
 export type VersionRef = Schemas["VersionRef"];

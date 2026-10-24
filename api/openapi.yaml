@@ -119,7 +119,9 @@ paths:
       summary: Who the request acts for
       description: >-
         The signed-in person (name, email, platform admin, the session's times) or the API key.
-        Under GOAL_AUTH=none, the local user. Without a valid credential, 401 unauthenticated.
+        With a personal token, the person and the token (its name, organization, scopes and
+        expiry), never a session or platform admin. Under GOAL_AUTH=none, the local user. Without
+        a valid credential, 401 unauthenticated.
       responses:
         "200":
           description: The caller
@@ -535,6 +537,119 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Org" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/personal-tokens:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listPersonalTokens
+      x-goal-scope: personal_token:read
+      tags: [identity]
+      summary: Your personal tokens in the organization
+      description: >-
+        The caller's own live tokens in the organization and those revoked in the last 30 days,
+        live ones first, newest first, each by its hint (goal_pat_ and the secret's first four
+        characters). Never another member's, and never a secret. Under GOAL_AUTH=none, none.
+      responses:
+        "200":
+          description: The tokens
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonalTokenList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createPersonalToken
+      x-goal-scope: personal_token:manage
+      tags: [identity]
+      summary: Create a personal token
+      description: >-
+        A personal token lets the CLI or a script act as you in this organization, with no more
+        than its scopes and your role at each request allow, until it expires (1 to 90 days,
+        default 30) or is revoked; removing you from the organization deletes it. Each scope must be
+        a permission tokens may carry and held by you now (an org permission by your role, a
+        factory permission on at least one factory), else 400 scope-not-allowed. A live token's
+        name is unique among yours, case ignored (409 personal-token-name-taken). Created in the
+        browser only, with a sign-in from the last 10 minutes: a CLI session, an API key or a
+        token gets 403 (browser-session-required for a CLI session). The answer carries the secret,
+        once, with Cache-Control no-store: goald keeps only its hash. Audited as
+        personal_token.created.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewPersonalToken" }
+      responses:
+        "201":
+          description: The token and its secret, shown this once
+          headers:
+            Cache-Control:
+              required: true
+              description: no-store, so no cache keeps the secret
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatedPersonalToken" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/personal-tokens/{token}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - name: token
+        in: path
+        required: true
+        description: The token's id
+        schema: { type: string }
+    delete:
+      operationId: revokePersonalToken
+      x-goal-scope: personal_token:read
+      tags: [identity]
+      summary: Revoke one of your personal tokens
+      description: >-
+        The token stops working on its next request, and the streams it holds end. Only your own:
+        another member's token is 404, as an unknown one. No recent sign-in needed, so a leaked
+        token is revoked at once. Revoking a revoked token changes nothing. Audited as
+        personal_token.revoked.
+      responses:
+        "204":
+          description: Revoked
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/member-tokens:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listMemberTokens
+      x-goal-scope: api_key:read
+      tags: [identity]
+      summary: Every member's personal tokens in the organization
+      description: >-
+        For owners and admins: every member's live tokens and those revoked in the last 30 days,
+        with their owner, live ones first, newest first. Never a secret.
+      responses:
+        "200":
+          description: The tokens
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonalTokenList" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/member-tokens/{token}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - name: token
+        in: path
+        required: true
+        description: The token's id
+        schema: { type: string }
+    delete:
+      operationId: revokeMemberToken
+      x-goal-scope: api_key:manage
+      tags: [identity]
+      summary: Revoke a member's personal token
+      description: >-
+        The token stops working on its next request, and the streams it holds end. Revoking a
+        revoked token changes nothing; an unknown one is 404. Needs a sign-in from the last 10
+        minutes. Audited as personal_token.revoked.
+      responses:
+        "204":
+          description: Revoked
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/attention:
     parameters:
@@ -1967,7 +2082,9 @@ components:
     bearer:
       type: http
       scheme: bearer
-      description: A session token from goal login (32 letters and digits), or an API key (goal_sk_...)
+      description: >-
+        A session token from goal login (32 letters and digits), an API key (goal_sk_...) or a
+        personal token (goal_pat_...)
   responses:
     Problem:
       description: An error (RFC 9457 problem details)
@@ -1997,8 +2114,12 @@ components:
             reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI
             confirms it's you and retries once. last-platform-admin (409): the install keeps at
             least one platform admin. scope-not-allowed (400): an API key scope keys may not carry,
-            or that its creator or its ceiling does not hold. api-key-name-taken (409): another live
-            key of the organization has the name. Members and roles (409): not-an-admin
+            or that its creator or its ceiling does not hold, or a personal token scope tokens may
+            not carry or that its creator does not hold. api-key-name-taken (409): another live
+            key of the organization has the name. personal-token-name-taken (409): another live
+            token of yours in the organization has the name. browser-session-required (403):
+            personal tokens are created in the browser only, never with a CLI session, an API key
+            or a token. Members and roles (409): not-an-admin
             (ownership goes to an admin only), last-owner (an organization keeps an owner),
             editor-everywhere (owners and admins hold every factory role already). An unknown
             organization, factory, item or run and one the caller may not see answer the same
@@ -2076,6 +2197,18 @@ components:
         id: { type: string }
         name: { type: string }
         org_id: { type: string }
+    MeToken:
+      type: object
+      description: The personal token a request carries
+      required: [id, name, org_id, scopes, expires_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        org_id: { type: string, description: The one organization it acts in }
+        scopes:
+          type: array
+          items: { $ref: "#/components/schemas/Permission" }
+        expires_at: { type: string, format: date-time }
     MeSession:
       type: object
       description: The browser or CLI session the request carries
@@ -2099,10 +2232,13 @@ components:
         key:
           allOf: [{ $ref: "#/components/schemas/MeKey" }]
           description: kind service only
-        platform_admin: { type: boolean }
+        token:
+          allOf: [{ $ref: "#/components/schemas/MeToken" }]
+          description: The person's personal token, when the request carries one (kind user, no session)
+        platform_admin: { type: boolean, description: Always false with a personal token }
         session:
           allOf: [{ $ref: "#/components/schemas/MeSession" }]
-          description: A signed-in person's session; absent for a key and under mode none
+          description: A signed-in person's session; absent for a key, a personal token and under mode none
     PlatformAdmin:
       type: object
       required: [user, added_by, added_at]
@@ -2218,6 +2354,54 @@ components:
         secret:
           type: string
           description: goal_sk_ and base64url of 32 random bytes. Shown this once; send it as Authorization Bearer.
+    PersonalTokenList:
+      type: object
+      required: [tokens]
+      properties:
+        tokens:
+          type: array
+          items: { $ref: "#/components/schemas/PersonalToken" }
+    PersonalToken:
+      type: object
+      description: A member's personal token in one organization, never its secret
+      required: [id, name, hint, scopes, owner, created_at, expires_at, last_used_at, revoked_at, revoked_by]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        hint: { type: string, description: "goal_pat_ and the secret's first four characters", example: goal_pat_Q7mk }
+        scopes:
+          type: array
+          items: { $ref: "#/components/schemas/Permission" }
+        owner:
+          allOf: [{ $ref: "#/components/schemas/User" }]
+          description: The member it acts as
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        last_used_at: { type: string, format: date-time, nullable: true, description: Recorded at most once a minute }
+        revoked_at: { type: string, format: date-time, nullable: true }
+        revoked_by:
+          allOf: [{ $ref: "#/components/schemas/Actor" }]
+          nullable: true
+    NewPersonalToken:
+      type: object
+      required: [name, scopes]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        scopes:
+          type: array
+          minItems: 1
+          maxItems: 64
+          description: Permissions personal tokens may carry, held by you now
+          items: { $ref: "#/components/schemas/Permission" }
+        expires_in_days: { type: integer, minimum: 1, maximum: 90, default: 30 }
+    CreatedPersonalToken:
+      type: object
+      required: [token, secret]
+      properties:
+        token: { $ref: "#/components/schemas/PersonalToken" }
+        secret:
+          type: string
+          description: goal_pat_ and base64url of 32 random bytes. Shown this once; send it as Authorization Bearer.
     OrgList:
       type: object
       required: [orgs]

@@ -56,7 +56,13 @@ func newAuthGoald(t *testing.T) *authGoald {
 				Kind: gen.MeKindUser, Mode: gen.Session, User: &gen.User{Id: "u1", Name: "F. Cruz", Email: "f.cruz@example.com"},
 				PlatformAdmin: true, Session: &gen.MeSession{ExpiresAt: time.Date(2026, 10, 31, 14, 2, 0, 0, time.Local)},
 			},
-			testPAT: {Kind: gen.MeKindUser, Mode: gen.Session, User: &gen.User{Id: "u1", Name: "F. Cruz", Email: "f.cruz@example.com"}},
+			testPAT: {
+				Kind: gen.MeKindUser, Mode: gen.Session, User: &gen.User{Id: "u1", Name: "F. Cruz", Email: "f.cruz@example.com"},
+				Token: &gen.MeToken{
+					Id: "t1", Name: "laptop", OrgId: "o1", Scopes: []string{"org:read", "item:create"},
+					ExpiresAt: time.Date(2026, 11, 23, 12, 0, 0, 0, time.Local),
+				},
+			},
 			testKey: {Kind: gen.MeKindService, Mode: gen.Session, Key: &gen.MeKey{Id: "k1", Name: "ci", OrgId: "o1"}},
 		},
 	}
@@ -505,6 +511,33 @@ func TestLogin_TokenFromStdin(t *testing.T) {
 		if me := g.sent("/v1/me"); me[len(me)-1].auth != "Bearer "+token {
 			t.Errorf("checked with %q; want the token", me[len(me)-1].auth)
 		}
+	}
+}
+
+// Spec 3 §9: with a personal token, whoami names the person and the token: its organization,
+// scopes and expiry; never a session or a platform admin.
+func TestWhoami_PersonalToken(t *testing.T) {
+	t.Parallel()
+
+	g := newAuthGoald(t)
+	getenv := withEnv(testEnv(t, g.srv.URL, nil), envAPIKey, testPAT)
+
+	var buf bytes.Buffer
+	if err := whoami(t.Context(), &printer{w: &buf}, getenv, nil, newFakeKeychain()); err != nil {
+		t.Fatalf("whoami: %v", err)
+	}
+
+	for _, want := range []string{
+		"F. Cruz (f.cruz@example.com) on " + g.origin(t), "With the personal token in " + envAPIKey,
+		"Personal token laptop in Acme Corp · expires Nov 23", "Can: org:read, item:create",
+	} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("whoami %q lacks %q", buf.String(), want)
+		}
+	}
+
+	if strings.Contains(buf.String(), "Platform admin") || strings.Contains(buf.String(), "Session expires") || strings.Contains(buf.String(), testPAT) {
+		t.Errorf("whoami %q; want no platform admin, no session and never the token", buf.String())
 	}
 }
 

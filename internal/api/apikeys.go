@@ -17,13 +17,16 @@ import (
 	"github.com/byFrederick/goal/internal/ports"
 )
 
-// Access keeps the organization's people and keys; ports.Access (the PostgreSQL adapter)
-// satisfies it.
+// Access keeps the organization's people, keys and personal tokens; ports.Access (the
+// PostgreSQL adapter) satisfies it.
 type Access interface {
 	People
 	APIKeys(ctx context.Context) ([]domain.APIKey, error)
 	CreateAPIKey(ctx context.Context, by domain.Actor, k domain.NewAPIKey) (domain.APIKey, error)
 	RevokeAPIKey(ctx context.Context, by domain.Actor, id domain.APIKeyID) error
+	PersonalTokens(ctx context.Context, owner *domain.UserID) ([]domain.PersonalToken, error)
+	CreatePersonalToken(ctx context.Context, by domain.Actor, t domain.NewPersonalToken) (domain.PersonalToken, error)
+	RevokePersonalToken(ctx context.Context, by domain.Actor, id domain.PersonalTokenID, owner *domain.UserID) error
 }
 
 var _ Access = ports.Access(nil)
@@ -142,8 +145,8 @@ func (s *server) newAPIKey(ctx context.Context, b *gen.NewApiKey) (domain.NewAPI
 
 // keyShape checks a key's name, expiry and ceiling.
 func keyShape(b *gen.NewApiKey) (domain.NewAPIKey, error) {
-	name := strings.TrimSpace(b.Name)
-	if n := utf8.RuneCountInString(name); n == 0 || n > domain.MaxAPIKeyName || strings.ContainsFunc(name, unicode.IsControl) {
+	name, ok := credentialName(b.Name)
+	if !ok {
 		return domain.NewAPIKey{}, fmt.Errorf("%w: a key's name is 1 to %d characters without control characters", errInvalid, domain.MaxAPIKeyName)
 	}
 
@@ -162,6 +165,15 @@ func keyShape(b *gen.NewApiKey) (domain.NewAPIKey, error) {
 	}
 
 	return domain.NewAPIKey{Name: name, Ceiling: ceiling, ExpiresInDays: days}, nil
+}
+
+// credentialName is a key's or a personal token's name, trimmed: 1 to domain.MaxAPIKeyName
+// characters without control characters.
+func credentialName(raw string) (string, bool) {
+	name := strings.TrimSpace(raw)
+	n := utf8.RuneCountInString(name)
+
+	return name, n > 0 && n <= domain.MaxAPIKeyName && !strings.ContainsFunc(name, unicode.IsControl)
 }
 
 // keyFactories resolves the factories a key may reach, each like a path's factory; nil (every

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
@@ -89,7 +90,13 @@ func appendEvents(ctx context.Context, q *db.Queries, events []domain.Event) err
 
 	rows := make([]db.InsertEventsParams, 0, len(events))
 
+	via := domain.ViaFrom(ctx)
+
 	for _, e := range events {
+		if via != "" {
+			e.Data = withVia(ctx, e.Data)
+		}
+
 		row, err := eventRow(e)
 		if err != nil {
 			return err
@@ -147,6 +154,20 @@ func eventRow(e domain.Event) (db.InsertEventsParams, error) {
 		FactoryID: factory, ItemID: item, RunID: run, At: e.At, Kind: string(e.Kind),
 		Station: optional(e.Station), Actor: e.Actor, Data: data,
 	}, nil
+}
+
+// withVia is a write's data, with via: pat:<id> when the request in ctx acts through a personal
+// token (spec 3 §6.7), so the audit log and item history tell its writes from the person's own.
+// data is not changed; nil is an empty object.
+func withVia(ctx context.Context, data map[string]any) map[string]any {
+	out := make(map[string]any, len(data)+1)
+	maps.Copy(out, data)
+
+	if via := domain.ViaFrom(ctx); via != "" {
+		out["via"] = via
+	}
+
+	return out
 }
 
 // optional maps "" to NULL.

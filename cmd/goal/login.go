@@ -631,13 +631,13 @@ func whoami(ctx context.Context, out *printer, getenv func(string) string, args 
 		return nil
 	}
 
-	sayWho(out, tg.origin, res.JSON200, cred)
-
 	orgs, err := listOrgs(ctx, c)
 	if err != nil {
 		return err
 	}
 
+	sayWho(out, tg.origin, res.JSON200, cred)
+	sayToken(out, res.JSON200.Token, orgs)
 	sayOrgs(out, orgs)
 
 	return nil
@@ -663,6 +663,24 @@ func sayWho(out *printer, origin string, me *gen.Me, cred *resolved) {
 	if me.Session != nil {
 		out.printf("Session expires %s\n", me.Session.ExpiresAt.Local().Format("Jan 2 15:04"))
 	}
+}
+
+// sayToken prints the personal token the CLI acts through, if any: its name, organization, scopes
+// and expiry ("Personal token laptop in Acme · expires Nov 23").
+func sayToken(out *printer, t *gen.MeToken, orgs []gen.OrgSummary) {
+	if t == nil {
+		return
+	}
+
+	org := t.OrgId
+	for _, o := range orgs {
+		if o.Id == t.OrgId {
+			org = o.Name
+		}
+	}
+
+	out.printf("Personal token %s in %s · expires %s\n", t.Name, org, t.ExpiresAt.Local().Format("Jan 2"))
+	out.printf("Can: %s\n", strings.Join(t.Scopes, ", "))
 }
 
 // sayOrgs prints the organizations the CLI may act in, with the role held in each.

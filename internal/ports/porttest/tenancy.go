@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -294,6 +295,17 @@ func (t *Tenancy) Append(ctx context.Context, e domain.AuditEntry) error {
 
 	if _, ok := t.orgs[org]; !ok {
 		return fmt.Errorf("append audit entry: org %s: %w", org, ports.ErrNotFound)
+	}
+
+	// As the database adapter does: a write made with a personal token says so (spec 3 §6.7).
+	if via := domain.ViaFrom(ctx); via != "" {
+		data := maps.Clone(e.Data)
+		if data == nil {
+			data = map[string]any{}
+		}
+
+		data["via"] = via
+		e.Data = data
 	}
 
 	t.appendLocked(org, e)

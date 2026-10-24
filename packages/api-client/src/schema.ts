@@ -70,7 +70,7 @@ export interface paths {
         };
         /**
          * Who the request acts for
-         * @description The signed-in person (name, email, platform admin, the session's times) or the API key. Under GOAL_AUTH=none, the local user. Without a valid credential, 401 unauthenticated.
+         * @description The signed-in person (name, email, platform admin, the session's times) or the API key. With a personal token, the person and the token (its name, organization, scopes and expiry), never a session or platform admin. Under GOAL_AUTH=none, the local user. Without a valid credential, 401 unauthenticated.
          */
         get: operations["getMe"];
         put?: never;
@@ -387,6 +387,106 @@ export interface paths {
          */
         post: operations["transferOwnership"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/personal-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Your personal tokens in the organization
+         * @description The caller's own live tokens in the organization and those revoked in the last 30 days, live ones first, newest first, each by its hint (goal_pat_ and the secret's first four characters). Never another member's, and never a secret. Under GOAL_AUTH=none, none.
+         */
+        get: operations["listPersonalTokens"];
+        put?: never;
+        /**
+         * Create a personal token
+         * @description A personal token lets the CLI or a script act as you in this organization, with no more than its scopes and your role at each request allow, until it expires (1 to 90 days, default 30) or is revoked; removing you from the organization deletes it. Each scope must be a permission tokens may carry and held by you now (an org permission by your role, a factory permission on at least one factory), else 400 scope-not-allowed. A live token's name is unique among yours, case ignored (409 personal-token-name-taken). Created in the browser only, with a sign-in from the last 10 minutes: a CLI session, an API key or a token gets 403 (browser-session-required for a CLI session). The answer carries the secret, once, with Cache-Control no-store: goald keeps only its hash. Audited as personal_token.created.
+         */
+        post: operations["createPersonalToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/personal-tokens/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The token's id */
+                token: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke one of your personal tokens
+         * @description The token stops working on its next request, and the streams it holds end. Only your own: another member's token is 404, as an unknown one. No recent sign-in needed, so a leaked token is revoked at once. Revoking a revoked token changes nothing. Audited as personal_token.revoked.
+         */
+        delete: operations["revokePersonalToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/member-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Every member's personal tokens in the organization
+         * @description For owners and admins: every member's live tokens and those revoked in the last 30 days, with their owner, live ones first, newest first. Never a secret.
+         */
+        get: operations["listMemberTokens"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/member-tokens/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The token's id */
+                token: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a member's personal token
+         * @description The token stops working on its next request, and the streams it holds end. Revoking a revoked token changes nothing; an unknown one is 404. Needs a sign-in from the last 10 minutes. Audited as personal_token.revoked.
+         */
+        delete: operations["revokeMemberToken"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1637,7 +1737,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold. api-key-name-taken (409): another live key of the organization has the name. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -1700,6 +1800,16 @@ export interface components {
             name: string;
             org_id: string;
         };
+        /** @description The personal token a request carries */
+        MeToken: {
+            id: string;
+            name: string;
+            /** @description The one organization it acts in */
+            org_id: string;
+            scopes: components["schemas"]["Permission"][];
+            /** Format: date-time */
+            expires_at: string;
+        };
         /** @description The browser or CLI session the request carries */
         MeSession: {
             /** Format: date-time */
@@ -1723,8 +1833,11 @@ export interface components {
             user?: components["schemas"]["User"];
             /** @description kind service only */
             key?: components["schemas"]["MeKey"];
+            /** @description The person's personal token, when the request carries one (kind user, no session) */
+            token?: components["schemas"]["MeToken"];
+            /** @description Always false with a personal token */
             platform_admin: boolean;
-            /** @description A signed-in person's session; absent for a key and under mode none */
+            /** @description A signed-in person's session; absent for a key, a personal token and under mode none */
             session?: components["schemas"]["MeSession"];
         };
         PlatformAdmin: {
@@ -1813,6 +1926,46 @@ export interface components {
         CreatedApiKey: {
             key: components["schemas"]["ApiKey"];
             /** @description goal_sk_ and base64url of 32 random bytes. Shown this once; send it as Authorization Bearer. */
+            secret: string;
+        };
+        PersonalTokenList: {
+            tokens: components["schemas"]["PersonalToken"][];
+        };
+        /** @description A member's personal token in one organization, never its secret */
+        PersonalToken: {
+            id: string;
+            name: string;
+            /**
+             * @description goal_pat_ and the secret's first four characters
+             * @example goal_pat_Q7mk
+             */
+            hint: string;
+            scopes: components["schemas"]["Permission"][];
+            /** @description The member it acts as */
+            owner: components["schemas"]["User"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at: string;
+            /**
+             * Format: date-time
+             * @description Recorded at most once a minute
+             */
+            last_used_at: string | null;
+            /** Format: date-time */
+            revoked_at: string | null;
+            revoked_by: components["schemas"]["Actor"] | null;
+        };
+        NewPersonalToken: {
+            name: string;
+            /** @description Permissions personal tokens may carry, held by you now */
+            scopes: components["schemas"]["Permission"][];
+            /** @default 30 */
+            expires_in_days?: number;
+        };
+        CreatedPersonalToken: {
+            token: components["schemas"]["PersonalToken"];
+            /** @description goal_pat_ and base64url of 32 random bytes. Shown this once; send it as Authorization Bearer. */
             secret: string;
         };
         OrgList: {
@@ -4097,6 +4250,132 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Org"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listPersonalTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The tokens */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalTokenList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createPersonalToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewPersonalToken"];
+            };
+        };
+        responses: {
+            /** @description The token and its secret, shown this once */
+            201: {
+                headers: {
+                    /** @description no-store, so no cache keeps the secret */
+                    "Cache-Control": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedPersonalToken"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    revokePersonalToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The token's id */
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listMemberTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The tokens */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalTokenList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    revokeMemberToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The token's id */
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };

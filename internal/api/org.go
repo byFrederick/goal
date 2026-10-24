@@ -69,9 +69,38 @@ func orgOf(ctx context.Context) domain.Org {
 	return o
 }
 
+// tokenOrgs is what a personal token lists: its own organization only, with the owner's role
+// there and the factories the token sees.
+func (s *server) tokenOrgs(ctx context.Context, p domain.Principal) ([]gen.OrgSummary, error) {
+	orgs, err := s.identity.OrgsFor(ctx, p.User)
+	if err != nil {
+		return nil, err
+	}
+
+	out := []gen.OrgSummary{}
+
+	for _, m := range orgs {
+		if m.Org.ID != p.Org {
+			continue
+		}
+
+		n, err := s.visibleCount(domain.WithOrg(ctx, m.Org.ID))
+		if err != nil {
+			return nil, err
+		}
+
+		o := m.Org
+		out = append(out, gen.OrgSummary{
+			Id: string(o.ID), Slug: o.Slug, Name: o.Name, Mark: o.Mark, FactoryCount: n, Role: s.orgRole(p, m.Role),
+		})
+	}
+
+	return out, nil
+}
+
 // ListOrgs lists the caller's organizations: every one of the install under GOAL_AUTH=none, a
 // person's memberships (Identity.OrgsFor) with their role and the factories they see, an API
-// key's own organization.
+// key's own organization, a personal token's own (tokenOrgs).
 func (s *server) ListOrgs(ctx context.Context, _ gen.ListOrgsRequestObject) (gen.ListOrgsResponseObject, error) {
 	p := principalOf(ctx)
 	out := gen.ListOrgs200JSONResponse{Orgs: []gen.OrgSummary{}}
@@ -102,6 +131,13 @@ func (s *server) ListOrgs(ctx context.Context, _ gen.ListOrgsRequestObject) (gen
 		}
 
 		out.Orgs = append(out.Orgs, gen.OrgSummary{Id: string(o.ID), Slug: o.Slug, Name: o.Name, Mark: o.Mark, FactoryCount: n})
+	case p.Token != nil:
+		orgs, err := s.tokenOrgs(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+
+		out.Orgs = orgs
 	default:
 		orgs, err := s.identity.OrgsFor(ctx, p.User)
 		if err != nil {

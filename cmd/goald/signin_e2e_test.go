@@ -53,7 +53,8 @@ type e2eStack struct {
 // Mailpit received, through goald's /api/auth proxy; goald then answers as them (platform admin,
 // owner of every organization), creates organizations owned by them, refuses anyone without a
 // session, lets them invite someone who joins and to whom they hand that organization (3-11,
-// members_e2e_test.go), and when they sign out ends their stream and their access at once. With
+// members_e2e_test.go), whose personal token works from the CLI until they are removed from it
+// (3-12b, tokens_e2e_test.go), and when they sign out ends their stream and their access at once. With
 // GOAL_E2E_WEB=1, task web:e2e-auth (3-10's Playwright flow) runs against the same stack.
 func TestE2E_SignInWithAnEmailedCode(t *testing.T) {
 	t.Parallel()
@@ -67,8 +68,9 @@ func TestE2E_SignInWithAnEmailedCode(t *testing.T) {
 	s.signIn(t)
 	s.checkTheOwner(t)
 	s.checkTheirOrganizations(t)
-	s.membersFlow(t)
+	newOwner := s.membersFlow(t)
 	s.checkAPIKeys(t)
+	s.personalTokens(t, newOwner)
 	s.cliLogsIn(t)
 	s.signOutEndsTheStream(t)
 

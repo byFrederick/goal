@@ -40,7 +40,7 @@ func renderGo(t table) ([]byte, error) {
 		for _, f := range []struct {
 			name string
 			on   bool
-		}{{"keys", p.Keys}, {"fresh", p.Fresh}, {"platformAdmin", p.PlatformAdmin}} {
+		}{{"keys", p.Keys}, {"pat", p.PAT}, {"fresh", p.Fresh}, {"platformAdmin", p.PlatformAdmin}} {
 			if f.on {
 				fields = append(fields, f.name+": true")
 			}

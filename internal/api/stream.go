@@ -47,27 +47,36 @@ type Feed struct {
 // subscriber is who a stream client is: its organization and, signed in, its principal.
 type subscriber struct {
 	org domain.OrgID
-	// user, session and key name the principal, for the access notices that end its stream;
-	// signedIn ends it on a resync too (access notices may have been missed). The local user of
-	// GOAL_AUTH=none is not signed in.
+	// user, session, key and token name the principal, for the access notices that end its
+	// stream; signedIn ends it on a resync too (access notices may have been missed). The local
+	// user of GOAL_AUTH=none is not signed in.
 	user     domain.UserID
 	session  string
 	key      domain.APIKeyID
+	token    domain.PersonalTokenID
 	signedIn bool
 }
 
 // subscriberOf is the subscriber of org that principal p is.
 func subscriberOf(org domain.OrgID, p domain.Principal) subscriber {
-	sub := subscriber{org: org, user: p.User, key: p.Key, signedIn: p.Session != nil || p.Kind == domain.PrincipalService}
+	sub := subscriber{
+		org: org, user: p.User, key: p.Key,
+		signedIn: p.Session != nil || p.Token != nil || p.Kind == domain.PrincipalService,
+	}
 	if p.Session != nil {
 		sub.session = p.Session.ID
+	}
+
+	if p.Token != nil {
+		sub.token = p.Token.ID
 	}
 
 	return sub
 }
 
 // endedBy reports whether access notice n ends the subscriber's stream: its session ended, its
-// key was revoked, its membership or a factory role of it changed, or its organization went.
+// key or personal token was revoked, its membership or a factory role of it changed, or its
+// organization went.
 func (sub subscriber) endedBy(n ports.AccessNotice) bool {
 	if !sub.signedIn {
 		return false
@@ -82,6 +91,8 @@ func (sub subscriber) endedBy(n ports.AccessNotice) bool {
 		return n.OrgID == sub.org
 	case ports.AccessAPIKey:
 		return n.KeyID != "" && n.KeyID == sub.key
+	case ports.AccessPersonalToken:
+		return n.TokenID != "" && n.TokenID == sub.token
 	default:
 		// A kind this goald does not know: end the stream, the safe answer to a change.
 		return true
@@ -295,6 +306,8 @@ func (s *server) StreamEvents(ctx context.Context, req gen.StreamEventsRequestOb
 	switch {
 	case p.Session != nil:
 		st.expires = p.Session.ExpiresAt
+	case p.Token != nil:
+		st.expires = p.Token.ExpiresAt
 	case p.Kind == domain.PrincipalService:
 		st.expires = p.KeyExpiresAt
 	}

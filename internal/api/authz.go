@@ -90,13 +90,13 @@ func (s *server) authorize(ctx context.Context, factory domain.FactoryID, hidden
 }
 
 // refusal is the API's answer to an Authorizer error: a hidden resource answers hidden (the
-// unknown resource's exact error), an unauthenticated principal or a stale session as they are,
-// anything else forbidden.
+// unknown resource's exact error), an unauthenticated principal, a stale session or a personal
+// token's creation outside the browser as they are, anything else forbidden.
 func refusal(err, hidden error) error {
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, domain.ErrUnauthenticated), errors.Is(err, domain.ErrReauthRequired):
+	case errors.Is(err, domain.ErrUnauthenticated), errors.Is(err, domain.ErrReauthRequired), errors.Is(err, errBrowserSessionRequired):
 		return err
 	case errors.Is(err, ports.ErrNotFound):
 		return hidden

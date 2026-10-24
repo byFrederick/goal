@@ -32,7 +32,7 @@ test('the keys are listed with what each can do, and the page fits the screen', 
   await expect(keyEntry(page, 'definitions-sync').getByText(/never/i)).toBeVisible();
 
   // Revoked keys: greyed in the table, counted on narrow screens.
-  if (await page.locator('table').isVisible()) {
+  if (await page.getByRole('table', { name: 'API keys of Acme' }).isVisible()) {
     await expect(keyEntry(page, 'support-bot').getByText(/Revoked .* by F\. Cruz/)).toBeVisible();
   } else {
     await expect(page.getByText('1 revoked key is hidden. Revoked keys stay listed for 30 days.')).toBeVisible();
@@ -49,15 +49,6 @@ test('the organization sidebar opens API keys', async ({ page }) => {
   await sidebar.getByRole('link', { name: 'API keys' }).click();
   await expect(page).toHaveURL(/\/o\/acme\/api-keys$/);
   await expect(heading(page)).toBeFocused();
-});
-
-test('people without api_key:read are not offered API keys', async ({ page, request }) => {
-  test.skip(isPhone(page), 'sidebars are the 768 px and wider navigation');
-  await request.post('/__mock/reset', { data: { role: 'editor' } });
-  await page.goto('/o/acme');
-  const sidebar = page.getByRole('navigation', { name: 'Acme organization' });
-  await expect(sidebar.getByRole('link', { name: 'Settings' })).toBeVisible();
-  await expect(sidebar.getByRole('link', { name: 'API keys' })).toHaveCount(0);
 });
 
 test('a new key shows its secret once, then lists only its hint', async ({ page }) => {
@@ -121,7 +112,7 @@ test('revoking asks first, then the key is gone at once', async ({ page }) => {
 
   await expectToast(page, 'Revoked ci-deploy');
   await expect(page.getByRole('heading', { name: '2 active keys' })).toBeVisible();
-  if (await page.locator('table').isVisible()) {
+  if (await page.getByRole('table', { name: 'API keys of Acme' }).isVisible()) {
     await expect(keyEntry(page, 'ci-deploy').getByText(/Revoked .* by Local user/)).toBeVisible();
   } else {
     await expect(page.getByText('2 revoked keys are hidden.', { exact: false })).toBeVisible();

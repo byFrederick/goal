@@ -295,6 +295,7 @@ type accessPayload struct {
 	SessionID string `json:"session_id"`
 	FactoryID string `json:"factory_id"`
 	KeyID     string `json:"key_id"`
+	TokenID   string `json:"token_id"`
 }
 
 func accessNoticeFrom(_, raw string) (ports.AccessNotice, error) {
@@ -309,6 +310,6 @@ func accessNoticeFrom(_, raw string) (ports.AccessNotice, error) {
 
 	return ports.AccessNotice{
 		Kind: p.Kind, OrgID: domain.OrgID(p.OrgID), UserID: domain.UserID(p.UserID), SessionID: p.SessionID,
-		FactoryID: domain.FactoryID(p.FactoryID), KeyID: domain.APIKeyID(p.KeyID),
+		FactoryID: domain.FactoryID(p.FactoryID), KeyID: domain.APIKeyID(p.KeyID), TokenID: domain.PersonalTokenID(p.TokenID),
 	}, nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/netip"
 	"regexp"
 
@@ -38,6 +39,7 @@ type AuthConfig struct {
 type Identity interface {
 	Session(ctx context.Context, token string, org domain.OrgID) (domain.Principal, error)
 	APIKey(ctx context.Context, hash string) (domain.Principal, error)
+	PersonalToken(ctx context.Context, hash string) (domain.Principal, error)
 	OrgsFor(ctx context.Context, user domain.UserID) ([]domain.OrgMembership, error)
 	DeviceRequest(ctx context.Context, userCode string) (domain.DeviceRequest, error)
 }
@@ -82,8 +84,15 @@ func (s *server) bindRequest(ctx context.Context, op, ref string) (context.Conte
 	switch c.kind {
 	case credentialAPIKey:
 		p, err = s.identity.APIKey(ctx, apiKeyHash(c.secret))
+		s.countVerification(ctx, "key", err)
+	case credentialPersonalToken:
+		p, err = s.personalToken(ctx, c.secret)
+		s.countVerification(ctx, "pat", err)
 	case credentialSession:
 		p, err = s.identity.Session(ctx, c.secret, prior.org.ID)
+		if err == nil && p.Session != nil {
+			p.Session.Bearer = c.bearer
+		}
 	case credentialNone:
 		err = domain.ErrUnauthenticated
 	}
@@ -95,6 +104,40 @@ func (s *server) bindRequest(ctx context.Context, op, ref string) (context.Conte
 	ctx = domain.WithActor(domain.WithPrincipal(ctx, p), p.Actor())
 
 	return s.bindOrg(ctx, ref, &prior)
+}
+
+// personalToken resolves a personal token to its owner, failing closed: whatever the Identity
+// answers, the principal carries the token's grant, no session and never platform admin.
+func (s *server) personalToken(ctx context.Context, secret string) (domain.Principal, error) {
+	p, err := s.identity.PersonalToken(ctx, apiKeyHash(secret))
+	if err != nil {
+		return domain.Principal{}, err
+	}
+
+	if p.Kind != domain.PrincipalUser || p.User == "" || p.Token == nil || p.Org == "" {
+		return domain.Principal{}, fmt.Errorf("personal token: not a member's: %w", domain.ErrUnauthenticated)
+	}
+
+	p.Session, p.PlatformAdmin = nil, false
+
+	return p, nil
+}
+
+// countVerification counts a refused API key or personal token (spec 3 §12:
+// goal_api_key_verifications_total, a log line until metrics land): failed lookups are counted,
+// never written to the security log, so nobody without a credential makes the database write.
+func (s *server) countVerification(ctx context.Context, kind string, err error) {
+	if err == nil {
+		return
+	}
+
+	result := "refused"
+	if !errors.Is(err, domain.ErrUnauthenticated) {
+		result = "error"
+	}
+
+	s.log.InfoContext(ctx, "credential refused", slog.String("metric", "goal_api_key_verifications_total"),
+		slog.String("kind", kind), slog.String("result", result))
 }
 
 // found is an organization lookup made before its answer may be given.
@@ -151,7 +194,7 @@ func (s *server) GetAuthConfig(context.Context, gen.GetAuthConfigRequestObject) 
 }
 
 // GetMe answers who the request acts for: the local user under GOAL_AUTH=none (mode none, no
-// user), a signed-in person with their session, or an API key.
+// user), a signed-in person with their session or their personal token, or an API key.
 func (s *server) GetMe(ctx context.Context, _ gen.GetMeRequestObject) (gen.GetMeResponseObject, error) {
 	p, ok := domain.PrincipalFrom(ctx)
 	if !ok {
@@ -173,6 +216,13 @@ func (s *server) GetMe(ctx context.Context, _ gen.GetMeRequestObject) (gen.GetMe
 				CreatedAt:  p.Session.CreatedAt,
 				ExpiresAt:  p.Session.ExpiresAt,
 				FreshUntil: p.Session.CreatedAt.Add(domain.FreshFor),
+			}
+		}
+
+		if t := p.Token; t != nil {
+			me.PlatformAdmin = false
+			me.Token = &gen.MeToken{
+				Id: string(t.ID), Name: t.Name, OrgId: string(p.Org), Scopes: permissionsOut(t.Scopes), ExpiresAt: t.ExpiresAt,
 			}
 		}
 
