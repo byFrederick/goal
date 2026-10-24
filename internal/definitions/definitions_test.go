@@ -204,6 +204,14 @@ func (l *loads) await(t *testing.T, what string, ok func([]domain.Line) bool) {
 	}
 }
 
+// settled waits for the reload that called onLoad to finish: onLoad is told the lines before
+// the cache serves them (LoadFunc), so right after a load is seen, Lookup and Version may still
+// answer from the reload before.
+func settled(c *Cache) {
+	c.reload.Lock()
+	defer c.reload.Unlock()
+}
+
 func versionsOf(lines []domain.Line) map[domain.FactoryID]domain.DefinitionVersionID {
 	out := map[domain.FactoryID]domain.DefinitionVersionID{}
 	for _, l := range lines {
@@ -379,6 +387,7 @@ func TestListen_ADeletedOrgStopsAtOnce(t *testing.T) {
 	})
 
 	rec.await(t, "on the first resync", func(l []domain.Line) bool { return versionsOf(l)[otherID] == v2.ID })
+	settled(c)
 
 	if f, err := c.Version(ctxOf(t, other), v1.ID); err != nil || f == nil { // a run pinned v1
 		t.Fatalf("Version(v1) = %v, %v; want it served while the organization lives", f, err)
@@ -393,6 +402,7 @@ func TestListen_ADeletedOrgStopsAtOnce(t *testing.T) {
 		v := versionsOf(l)
 		return v[otherID] == "" && v[acmeID] == mine.ID
 	})
+	settled(c)
 
 	for _, id := range []domain.DefinitionVersionID{v1.ID, v2.ID} {
 		if _, err := c.Version(ctxOf(t, other), id); !errors.Is(err, ports.ErrNotFound) {
