@@ -1,13 +1,16 @@
-// Command goal is the Goal CLI: it validates factory definitions and moves them between a
-// local working copy and the bucket where they live, starts the local platform (goal up),
-// manages organizations, and submits, follows and decides on work items through goald's HTTP
-// API, always within one organization (org.go resolves which). goal catalog skills keeps the
-// install's skills catalog in the bucket (catalog.go).
+// Command goal is the Goal CLI. Through goald's HTTP API, always within one organization
+// (org.go resolves which), it changes factory definitions (factory.go: goald keeps them as
+// drafts and published versions; a folder pulled with goal factory pull is edited and sent back
+// with goal factory push, which is the one way a definition changes outside the builder),
+// manages organizations, and submits, follows and decides on work items. It also starts the
+// local platform (goal up), validates folders offline (goal validate), and keeps the install's
+// skills and template catalogs in the bucket (catalog.go).
 //
-// Object storage comes from the environment: GOAL_S3_BUCKET, and for a local S3-compatible
-// server (RustFS) GOAL_S3_ENDPOINT, GOAL_S3_ACCESS_KEY and GOAL_S3_SECRET_KEY. On AWS the
-// standard credential chain applies. goald's API is GOAL_API_URL, else api_url in the CLI's
-// config file, else http://127.0.0.1:8080.
+// goald's API is GOAL_API_URL, else api_url in the CLI's config file, else
+// http://127.0.0.1:8080. The operator commands that use the bucket directly (goal storage init,
+// goal catalog) read object storage from the environment: GOAL_S3_BUCKET, and for a local
+// S3-compatible server (RustFS) GOAL_S3_ENDPOINT, GOAL_S3_ACCESS_KEY and GOAL_S3_SECRET_KEY. On
+// AWS the standard credential chain applies.
 package main
 
 import (
@@ -20,12 +23,7 @@ import (
 	"runtime/debug"
 	"syscall"
 
-	"github.com/byFrederick/goal/internal/adapters/postgres"
 	"github.com/byFrederick/goal/internal/adapters/s3store"
-	"github.com/byFrederick/goal/internal/config"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/factorystore"
-	"github.com/byFrederick/goal/internal/ports"
 )
 
 const usage = `usage:
@@ -42,11 +40,24 @@ const usage = `usage:
                                                   (at a station with action: merge)
   goal note <item> "<text>"                       leave a note for the agents: the item's next run
                                                   reads it
-  goal factory validate <dir> ...                 validate local factory folders (alias: goal validate)
-  goal factory push <dir>                         validate, then upload to
-                                                  orgs/<org-id>/factories/<metadata.id>/
-  goal factory pull <id|name> <dir>               download a factory into a new folder
-  goal factory list                               show and validate every factory of the organization
+  goal factory pull <factory> <dir> [--version N|current|draft]
+                                                  write a version's files (default: the current one)
+                                                  into a new folder, with .goal/pulled.json
+  goal factory validate <dir>... [--offline]      validate folders through goald (--offline: schema and
+                                                  references only, without goald; alias: goal validate)
+  goal factory push <dir> [--publish [--message M]] [--replace-draft] [--force] [--move S=T]...
+                                                  make the folder the factory's draft (creating the
+                                                  factory if its metadata.id is new); --publish then
+                                                  publishes it. Refused when an open draft has changes
+                                                  the folder was not pulled from (--replace-draft
+                                                  archives it) or a version was published after the
+                                                  pull (--force pushes over it)
+  goal factory publish <factory> [--message M] [--move S=T]...
+                                                  validate and publish the open draft
+  goal factory list [--validate]                  the factories: current version, open draft, paused
+  goal factory versions <factory>                 the published versions (* the one that runs)
+  goal factory restore <factory> <N> [--move S=T]...
+                                                  run version N again
   goal org list                                   the organizations (* the one commands act in)
   goal org use <slug>                             act in this organization from now on (config file)
   goal org create <slug> --name N [--mark M]      create an organization
@@ -61,15 +72,24 @@ const usage = `usage:
                                                   owner/repo@skill[#commit], plus the top n of each
                                                   search) into the bucket's skills catalog
   goal catalog skills list [q]                    the catalog's skills: key, commit, installs
+  goal catalog templates push <dir> --version N [--name NAME]
+                                                  add a template version (<dir>/template.yaml and the
+                                                  definition in <dir>/factory/; NAME defaults to the
+                                                  folder's name) to the bucket's template catalog
+  goal catalog templates list                     the catalog's templates, latest version of each
   goal db init                                    create the database roles goald runs as (goal_owner,
                                                   goal_app) and hand the schema to goal_owner
   goal version                                    print the module version and build info
 
 <item> is goal#2 (factory and number), the item's id, or a bare number such as 2 when one
-factory has that item (--factory F picks the factory of a bare number)
+factory has that item (--factory F picks the factory of a bare number). <factory> is a name or an id.
+--move S=T sends the open items of station S, which the new version drops, to station T.
 
-Every command that talks to goald (run, follow, item, the decisions, factory push|pull|list)
-acts in one organization: --org <slug|id>, else GOAL_ORG, else org in the config file
+Factory definitions live in goald (drafts and published versions), not in files: goal factory
+push is how a folder changes one, and goald ignores factory files written to the bucket.
+
+Every command that talks to goald (run, follow, item, note, the decisions, factory) acts in one
+organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's)`
 
@@ -131,100 +151,6 @@ func run(ctx context.Context, args []string, out *printer, getenv func(string) s
 	}
 }
 
-func factory(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
-	if len(args) == 0 {
-		return errUsage
-	}
-
-	if args[0] == "validate" {
-		return validate(out, args[1:])
-	}
-
-	cmd := args[0]
-
-	orgRef, rest, err := factoryArgs(cmd, args[1:])
-	if err != nil {
-		return err
-	}
-
-	org, err := factoryOrg(ctx, getenv, orgRef)
-	if err != nil {
-		return err
-	}
-
-	store, err := newStore(ctx, getenv)
-	if err != nil {
-		return err
-	}
-
-	if err := migrateLegacy(ctx, out, store); err != nil {
-		return err
-	}
-
-	catalog := factorystore.New(store)
-
-	switch cmd {
-	case "push":
-		return push(ctx, out, catalog, store.Bucket(), org, rest[0])
-	case "pull":
-		return pull(ctx, out, catalog, org, rest)
-	default:
-		return list(ctx, out, catalog, store.Bucket(), org)
-	}
-}
-
-// factoryArgs parses the flags and arguments of goal factory push|pull|list: the --org given
-// (empty when none) and the positional arguments.
-func factoryArgs(cmd string, args []string) (string, []string, error) {
-	want, known := map[string]int{"push": 1, "pull": 2, "list": 0}[cmd]
-	if !known {
-		return "", nil, errUsage
-	}
-
-	fs := newFlags("factory " + cmd)
-	org := addOrgFlag(fs)
-
-	rest, err := parseInterspersed(fs, args)
-	if err != nil || len(rest) != want {
-		return "", nil, errUsage
-	}
-
-	return *org, rest, nil
-}
-
-// factoryOrg resolves the organization whose bucket prefix the factory commands use, through
-// goald (GET /v1/orgs/{org}): the id always comes from the database, never from the command line.
-func factoryOrg(ctx context.Context, getenv func(string) string, orgFlag string) (domain.OrgID, error) {
-	c, err := connect(ctx, getenv, orgFlag)
-	if err != nil {
-		return "", err
-	}
-
-	o, err := getOrg(ctx, c.ClientWithResponses, c.org)
-	if err != nil {
-		return "", err
-	}
-
-	return domain.OrgID(o.Id), nil
-}
-
-// migrateLegacy moves the bucket layout before organizations into the default organization, as
-// goald does at startup. The CLI runs it before it writes or reads the new layout, so a push
-// never lands before the migration and is then overwritten by it.
-func migrateLegacy(ctx context.Context, out *printer, store ports.ObjectStore) error {
-	m, err := factorystore.MigrateLegacy(ctx, store, postgres.DefaultOrgID)
-	if err != nil {
-		return fmt.Errorf("move legacy factory definitions into the default organization: %w", err)
-	}
-
-	if m.Copied+m.Deleted > 0 {
-		out.printf("moved %d legacy objects from %s into %s (%d copied)\n", m.Deleted, factorystore.LegacyRoot,
-			factorystore.OrgPrefix(postgres.DefaultOrgID), m.Copied)
-	}
-
-	return nil
-}
-
 func newStore(ctx context.Context, getenv func(string) string) (*s3store.Store, error) {
 	cfg, err := s3store.ConfigFromEnv(getenv)
 	if err != nil {
@@ -232,115 +158,6 @@ func newStore(ctx context.Context, getenv func(string) string) (*s3store.Store, 
 	}
 
 	return s3store.New(ctx, cfg)
-}
-
-func validate(out *printer, dirs []string) error {
-	if len(dirs) == 0 {
-		return errUsage
-	}
-
-	failed := 0
-	seen := map[string]string{} // factory id → folder
-
-	for _, dir := range dirs {
-		f, err := config.LoadDir(dir)
-		if err != nil {
-			failed++
-
-			out.printf("✗ %s\n%v\n\n", dir, err)
-
-			continue
-		}
-
-		if other, dup := seen[f.Metadata.ID]; dup {
-			failed++
-
-			out.printf("✗ %s\nid %s is already used by %s; copy a factory, then give it a new id (uuidgen)\n\n",
-				dir, f.Metadata.ID, other)
-
-			continue
-		}
-
-		seen[f.Metadata.ID] = dir
-		out.printf("✓ %s (%s) — %d agents, %d stations\n",
-			f.Metadata.Name, f.Metadata.ID[:8], len(f.Spec.Agents), len(f.Spec.Board.Stations))
-
-		for _, w := range f.Warnings() {
-			out.printf("  ⚠ %s\n", w)
-		}
-	}
-
-	if failed > 0 {
-		return fmt.Errorf("%d of %d factories are invalid", failed, len(dirs))
-	}
-
-	return nil
-}
-
-func push(ctx context.Context, out *printer, catalog *factorystore.Catalog, bucket string, org domain.OrgID, dir string) error {
-	f, changes, err := catalog.Push(ctx, org, dir)
-	for _, c := range changes {
-		out.printf("  %-9s %-50s %s\n", c.Action, c.Path, c.Version)
-	}
-
-	if err != nil {
-		return err
-	}
-
-	out.printf("✓ pushed %s to s3://%s/%s\n", f.Metadata.Name, bucket, factorystore.Prefix(org, f.Metadata.ID))
-
-	for _, w := range f.Warnings() {
-		out.printf("  ⚠ %s\n", w)
-	}
-
-	return nil
-}
-
-func pull(ctx context.Context, out *printer, catalog *factorystore.Catalog, org domain.OrgID, args []string) error {
-	id, dir := args[0], args[1]
-
-	s, err := catalog.Pull(ctx, org, id, dir)
-	if err != nil {
-		return err
-	}
-
-	for _, f := range s.Files {
-		out.printf("  %-60s %s\n", f.Key, f.Version)
-	}
-
-	out.printf("✓ pulled %s (%d files) into %s\n", s.ID, len(s.Files), dir)
-
-	return nil
-}
-
-func list(ctx context.Context, out *printer, catalog *factorystore.Catalog, bucket string, org domain.OrgID) error {
-	entries, err := catalog.List(ctx, org)
-	if err != nil {
-		return err
-	}
-
-	invalid := 0
-
-	for _, e := range entries {
-		if e.Err != nil {
-			invalid++
-
-			out.printf("✗ %s\n%v\n\n", e.ID, e.Err)
-
-			continue
-		}
-
-		out.printf("✓ %-12s %s  %d agents, %d stations, %d files\n", e.Factory.Metadata.Name, e.ID,
-			len(e.Factory.Spec.Agents), len(e.Factory.Spec.Board.Stations), len(e.Snapshot.Files))
-	}
-
-	out.printf("%d factories in s3://%s/%s\n", len(entries), bucket, factorystore.OrgPrefix(org))
-
-	if invalid > 0 {
-		return fmt.Errorf("%d factories in the bucket are invalid", invalid)
-	}
-
-	return nil
 }
 
 // printer writes command output to stdout and keeps the first write error, so a closed pipe

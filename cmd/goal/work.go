@@ -531,9 +531,11 @@ func cut(s string, n int) string {
 
 func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
-func deref(p *string) string {
+// deref is what p points to, or the zero value when it is nil.
+func deref[T any](p *T) T {
+	var zero T
 	if p == nil {
-		return ""
+		return zero
 	}
 
 	return *p

@@ -144,8 +144,8 @@ func TestResolveOrg_FlagThenEnvThenConfigThenTheOnlyOrg(t *testing.T) {
 		want    string
 		wantErr string
 	}{
-		{name: "--org wins", api: two, env: map[string]string{"GOAL_ORG": "from-env"}, config: fromConfig, flag: "from-flag", want: "from-flag"},
-		{name: "then GOAL_ORG", api: two, env: map[string]string{"GOAL_ORG": "from-env"}, config: fromConfig, want: "from-env"},
+		{name: "--org wins", api: two, env: map[string]string{envOrg: "from-env"}, config: fromConfig, flag: "from-flag", want: "from-flag"},
+		{name: "then GOAL_ORG", api: two, env: map[string]string{envOrg: "from-env"}, config: fromConfig, want: "from-env"},
 		{name: "then the config file", api: two, config: fromConfig, want: fromConfig},
 		{name: "then the only org", api: one, want: orgAcme},
 		{name: "else an error listing them", api: two, wantErr: "there are acme, example-labs"},

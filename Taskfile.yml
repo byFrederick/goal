@@ -105,9 +105,9 @@ tasks:
       - pnpm --filter @goal/api-client run --silent gen
 
   validate:
-    desc: Validate factory definitions (the test fixtures by default; FACTORIES=<glob> for others)
+    desc: Validate factory definitions offline, without goald (the test fixtures by default; FACTORIES=<glob> for others)
     cmds:
-      - go run ./cmd/goal factory validate {{.FACTORIES}}
+      - go run ./cmd/goal validate {{.FACTORIES}}
 
   tf-check:
     desc: terraform fmt and validate (no AWS calls, no backend)
@@ -258,25 +258,25 @@ tasks:
       - bin/goal storage init
 
   factory:validate:
-    desc: Validate every factory in the working copy (GOAL_FACTORIES_DIR)
+    desc: Validate every factory in the working copy (GOAL_FACTORIES_DIR) through goald
     cmds:
       - go run ./cmd/goal factory validate {{.FACTORIES_DIR}}/*/
 
   factory:list:
-    desc: List and validate the factories in the bucket
+    desc: List the organization's factories in goald and validate their current versions
     deps: [build]
     cmds:
-      - bin/goal factory list
+      - bin/goal factory list --validate
 
   factory:push:
-    desc: Validate and push factories (DIR=<folder>, default every folder in GOAL_FACTORIES_DIR)
+    desc: Push factories into their drafts in goald (DIR=<folder>, default every folder in GOAL_FACTORIES_DIR; task factory:push -- --publish to publish too)
     deps: [build]
     cmds:
       - |
-        {{if .DIR}}bin/goal factory push "{{.DIR}}"{{else}}for d in {{.FACTORIES_DIR}}/*/; do bin/goal factory push "$d" || exit 1; done{{end}}
+        {{if .DIR}}bin/goal factory push "{{.DIR}}" {{.CLI_ARGS}}{{else}}for d in {{.FACTORIES_DIR}}/*/; do bin/goal factory push "$d" {{.CLI_ARGS}} || exit 1; done{{end}}
 
   factory:pull:
-    desc: Pull a factory into a new folder (task factory:pull -- <id|name> <dir>)
+    desc: Pull a factory from goald into a new folder (task factory:pull -- <id|name> <dir> [--version N|current|draft])
     deps: [build]
     cmds:
       - bin/goal factory pull {{.CLI_ARGS}}

@@ -48,7 +48,7 @@ Taskfile.yml         task check = everything the pre-push hook and CI run
 compose.yaml         local PostgreSQL 18, RustFS (S3-compatible) and, from phase 3, Mailpit (dev inbox); ports on 127.0.0.1 only
 ```
 
-Factory definitions are not in this tree. A definition is a file tree (`factory.yaml`, `agents/`, `skills/`, `contracts/`, `evals/`) whose files are stored in the bucket as content-addressed blobs (`orgs/<org-id>/blobs/<sha256>`); PostgreSQL holds each draft and published version as a manifest (path → sha256) and points each factory at the version that runs (`definition_versions`, `factories.current_version_id`). Edit them in the builder or in a working copy outside the repo: `goal factory pull` → edit → `goal factory validate` → `goal factory push` (ADR 0005 and its 2.2 amendment).
+Factory definitions are not in this tree. A definition is a file tree (`factory.yaml`, `agents/`, `skills/`, `contracts/`, `evals/`) whose files are stored in the bucket as content-addressed blobs (`orgs/<org-id>/blobs/<sha256>`); PostgreSQL holds each draft and published version as a manifest (path → sha256) and points each factory at the version that runs (`definition_versions`, `factories.current_version_id`). Edit them in the builder or in a working copy outside the repo: `goal factory pull` → edit → `goal factory validate` → `goal factory push` (the folder becomes the draft; `--publish` or `goal factory publish` makes it the version that runs). Every one of those goes through goald's API; goald ignores definition files written to the bucket directly (ADR 0005 and its 2.2 amendment).
 
 Create a package only when it has a clear single responsibility and at least one caller. No `util`, `common`, `helpers` or `misc` packages.
 

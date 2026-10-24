@@ -1,18 +1,22 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"go.yaml.in/yaml/v3"
 
 	"github.com/byFrederick/goal/internal/adapters/envsecrets"
 	"github.com/byFrederick/goal/internal/adapters/skillssh"
 	"github.com/byFrederick/goal/internal/adapters/sysclock"
+	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/ports"
 )
@@ -23,6 +27,7 @@ const (
 
 	subSync = "sync"
 	subList = "list"
+	subPush = "push"
 )
 
 // syncArgs are the flags of goal catalog skills sync.
@@ -32,14 +37,27 @@ type syncArgs struct {
 	top    int
 }
 
-// catalogCommand runs goal catalog skills sync|list, the operator's commands over the bucket's
-// skills catalog (catalog/skills/). They use the bucket directly, like goal storage init, and
-// act in no organization: the catalog is the install's.
+// catalogCommand runs goal catalog skills sync|list and goal catalog templates push|list, the
+// operator's commands over the bucket's skills catalog (catalog/skills/) and template catalog
+// (catalog/templates/). They use the bucket directly, like goal storage init, and act in no
+// organization: the catalogs are the install's.
 func catalogCommand(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
-	if len(args) < 2 || args[0] != "skills" {
+	if len(args) < 2 {
 		return errUsage
 	}
 
+	switch args[0] {
+	case "skills":
+		return skillsCommand(ctx, out, getenv, args)
+	case "templates":
+		return templatesCommand(ctx, out, getenv, args[1:])
+	default:
+		return errUsage
+	}
+}
+
+// skillsCommand runs goal catalog skills sync|list; args starts with "skills".
+func skillsCommand(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	var (
 		sync  syncArgs
 		query string
@@ -226,6 +244,124 @@ func listSkills(ctx context.Context, out *printer, catalog *builder.Service, q s
 	}
 
 	out.printf("%d skills\n", len(skills))
+
+	return nil
+}
+
+// A template folder: the catalog's layout of one version (B §7).
+const (
+	templateMetaFile = "template.yaml"
+	templateFactory  = "factory"
+)
+
+// templatesCommand runs goal catalog templates push <dir> --version N [--name NAME] | list.
+func templatesCommand(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	if len(args) == 0 {
+		return errUsage
+	}
+
+	var (
+		upload authoring.TemplateUpload
+		dir    string
+	)
+
+	switch args[0] {
+	case subPush:
+		fs := newFlags("catalog templates push")
+		name := fs.String("name", "", "the template's name (default: the folder's)")
+		version := fs.Int("version", 0, "the version to add")
+
+		pos, err := parseInterspersed(fs, args[1:])
+		if err != nil || len(pos) != 1 || *version < 1 {
+			return errUsage
+		}
+
+		dir = pos[0]
+
+		if upload, err = readTemplate(dir, cmp.Or(*name, filepath.Base(filepath.Clean(dir))), *version); err != nil {
+			return err
+		}
+	case subList:
+		if len(args) != 1 {
+			return errUsage
+		}
+	default:
+		return errUsage
+	}
+
+	objects, err := newStore(ctx, getenv)
+	if err != nil {
+		return err
+	}
+
+	catalog := authoring.NewTemplateCatalog(objects, sysclock.Clock{})
+
+	if args[0] == subList {
+		return listTemplates(ctx, out, catalog)
+	}
+
+	return pushTemplate(ctx, out, catalog, dir, upload, objects.Bucket())
+}
+
+// readTemplate reads a template folder: template.yaml and the definition under factory/.
+func readTemplate(dir, name string, version int) (authoring.TemplateUpload, error) {
+	meta, err := os.ReadFile(filepath.Join(dir, templateMetaFile)) //nolint:gosec // the folder the operator names
+	if err != nil {
+		return authoring.TemplateUpload{}, fmt.Errorf("a template folder holds %s and the definition in %s/: %w",
+			templateMetaFile, templateFactory, err)
+	}
+
+	files, err := readFolder(filepath.Join(dir, templateFactory))
+	if err != nil {
+		return authoring.TemplateUpload{}, err
+	}
+
+	return authoring.TemplateUpload{Name: name, Version: version, Meta: meta, Files: files}, nil
+}
+
+// pushTemplate adds one template version to the catalog, printing what keeps it out.
+func pushTemplate(
+	ctx context.Context, out *printer, catalog *authoring.TemplateCatalog, dir string, t authoring.TemplateUpload, bucket string,
+) error {
+	err := catalog.Push(ctx, t)
+
+	if invalid, ok := errors.AsType[*authoring.TemplateInvalidError](err); ok {
+		for _, p := range invalid.Problems {
+			out.printf("%s", problemLine(dir, p.File, p.Line, p.Column, string(p.Severity), p.Code, p.Message))
+		}
+
+		return fmt.Errorf("%s is not added to the catalog: %d problems", dir, len(invalid.Problems))
+	}
+
+	if errors.Is(err, authoring.ErrTemplateExists) {
+		return fmt.Errorf("%s v%d is in the catalog already and template versions never change; push it as a new --version",
+			t.Name, t.Version)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	out.printf("✓ added %s v%d (%d files) to s3://%s/%s%s/%d/\n", t.Name, t.Version, len(t.Files), bucket,
+		authoring.TemplatesPrefix, t.Name, t.Version)
+
+	return nil
+}
+
+// listTemplates runs goal catalog templates list: the latest version of each template.
+func listTemplates(ctx context.Context, out *printer, catalog *authoring.TemplateCatalog) error {
+	templates, err := catalog.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, t := range templates {
+		line := fmt.Sprintf("%-24s v%-3d %-32s %d stations, %d agents  %s", t.Name, t.Version, cut(t.Title, 32), t.Stations, t.Agents,
+			strings.Join(t.Connectors, ", "))
+		out.printf("%s\n", strings.TrimRight(line, " "))
+	}
+
+	out.printf("%d templates\n", len(templates))
 
 	return nil
 }

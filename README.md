@@ -2,15 +2,16 @@
 
 Goal runs AI agent factories on your machine. A factory is a definition: `factory.yaml` declares its stations, agents, skills, connections, WIP limits and knowledge base; Markdown files hold the agent prompts and skills. The engine moves work through the factory as a pull-based Kanban flow, built on the Theory of Constraints (*The Goal*) and the Three Ways (*The Phoenix Project*).
 
-Factory definitions are content, not code. They live in one versioned S3-compatible bucket, not in this repository (ADR 0005). The first factory, `goal`, builds this repository; others (`sre`, `university`) run the same engine on other work.
+Factory definitions are content, not code. goald keeps them, not this repository: file content in one versioned S3-compatible bucket, drafts and published versions in PostgreSQL (ADR 0005 and its 2.2 amendment). The first factory, `goal`, builds this repository; others (`sre`, `university`) run the same engine on other work.
 
 ```
-cmd/goal/              CLI: goal up, run, follow, item, approve, reject, retry, merge; goal factory validate|push|pull|list; goal org list|use|create; goal storage init; goal db init
+cmd/goal/              CLI: goal up, run, follow, item, approve, reject, retry, merge; goal factory pull|validate|push|publish|list|versions|restore; goal org list|use|create; goal storage init; goal catalog skills|templates; goal db init
 cmd/goald/             daemon: flow engine, HTTP API (/v1/orgs/{org}/..., with an SSE stream per organization), MCP gateway (/mcp), Docker agent runs
 api/                   openapi.yaml: the HTTP API contract (Go types in internal/api/gen, TypeScript in packages/api-client)
 internal/engine/       flow engine: pull, WIP, gates, workspaces and command checks per run
 internal/config/       loader and cross-reference validation (reads a folder or a bucket prefix)
-internal/factorystore/ bucket layout orgs/<org-id>/factories/<id>/: push, pull, list, the legacy move
+internal/authoring/    definition authoring behind the API: drafts, validation, publish, restore, the template catalog
+internal/factorystore/ the bucket layouts before versions, read once by the legacy import
 internal/adapters/     postgres (store, LISTEN/NOTIFY), s3store (S3 and RustFS), docker (runner, checker), gitworkspace, github (merges), envsecrets, sysclock
 packages/api-client/   @goal/api-client: typed TypeScript client of the API (generated types + openapi-fetch) for the UI
 schema/                factory.schema.json, evals.schema.json (editor autocompletion + validation)
@@ -52,7 +53,7 @@ task test-integration      # adapters against PostgreSQL 18 and RustFS
 #       GOAL_GATEWAY_KEY (openssl rand -hex 32)
 task worker:image-dev                              # the agent image the goal factory names (runtime.image)
 task up                                            # PostgreSQL + RustFS, bucket, then goald in the foreground
-task factory:push DIR=../goal-factories/goal       # in another terminal: the definition goald runs
+task factory:push DIR=../goal-factories/goal -- --publish  # in another terminal: the definition goald runs
 bin/goal run goal "Add a goal version subcommand"  # submit; prints the timeline until a human must act
 bin/goal item goal#2                               # read the spec the architect wrote (or: goal item 2)
 bin/goal approve goal#2                            # approve-spec → build → review → merge (you)
@@ -75,45 +76,46 @@ Read `AGENTS.md` before changing anything.
 
 ## Where factories live
 
-One bucket, versioned. Locally it is `goal-local` on RustFS (`compose.yaml`); on AWS it is `goal-<account>-<region>`.
+A definition is a file tree:
 
 ```
-s3://<bucket>/orgs/<org-id>/factories/<factory-id>/
-  factory.yaml
-  agents/*.md
-  skills/<name>/SKILL.md
-  contracts/*.schema.json
-  evals/          evals.yaml, cases/, judges/, fixtures/
-  knowledge/      reserved for the knowledge base (<collection>/<doc>.md); later, unscheduled
+factory.yaml
+agents/*.md
+skills/<name>/SKILL.md
+contracts/*.schema.json
+evals/          evals.yaml, cases/, judges/, fixtures/
 ```
 
-Every push writes new object versions, so a previous definition is restorable by version id. `goal factory push` mirrors a folder to its prefix: changed files are uploaded (`factory.yaml` last), files you removed are deleted, unchanged files keep their version, and `knowledge/` is never touched. The CLI prints the object version of every file it wrote.
+goald stores each file once per organization as a content-addressed blob in the bucket (`orgs/<org-id>/blobs/<sha256>`), and PostgreSQL holds every draft and published version as a manifest (path → sha256) with a pointer to the version each factory runs. Each factory has one shared draft (the builder and the CLI both write it); publishing makes it the next version, every goald reloads within a second, and `goal factory restore` points the factory back at an older version. The bucket is one, versioned: locally `goal-local` on RustFS (`compose.yaml`), on AWS `goal-<account>-<region>`. Files written to the bucket directly change nothing goald runs.
 
-Configuration comes from the environment (`.env.example`): `GOAL_S3_BUCKET`, plus `GOAL_S3_ENDPOINT`, `GOAL_S3_ACCESS_KEY` and `GOAL_S3_SECRET_KEY` for a local S3-compatible server. On AWS leave those three empty; the standard AWS credential chain applies.
+The CLI reaches definitions through goald's API (`GOAL_API_URL`, default `http://127.0.0.1:8080`). Only the operator commands `goal storage init` and `goal catalog skills|templates` use the bucket directly, configured from the environment (`.env.example`): `GOAL_S3_BUCKET`, plus `GOAL_S3_ENDPOINT`, `GOAL_S3_ACCESS_KEY` and `GOAL_S3_SECRET_KEY` for a local S3-compatible server. On AWS leave those three empty; the standard AWS credential chain applies.
 
 ## Edit a factory
 
-Work in a working copy outside this repository (by default `../goal-factories`, never committed):
+Edit in the builder, or in a working copy outside this repository (by default `../goal-factories`, never committed); `goal factory push` is how a folder changes a definition:
 
 ```bash
-task factory:list                                   # what the bucket holds
-task factory:pull -- sre ../goal-factories/sre      # pull by name or id into a new folder
+task factory:list                                   # the organization's factories: vN, open draft, paused
+task factory:pull -- sre ../goal-factories/sre      # pull the current version (by name or id) into a new folder
 $EDITOR ../goal-factories/sre/agents/triager.md
-task factory:validate                               # every folder in GOAL_FACTORIES_DIR
-task factory:push DIR=../goal-factories/sre         # validate, then upload; prints versions
+task factory:validate                               # every folder in GOAL_FACTORIES_DIR, through goald
+task factory:push DIR=../goal-factories/sre         # the folder becomes the draft
+bin/goal factory publish sre --message "Triage by severity"   # validate and publish it (or push with --publish)
 ```
 
-`goal factory validate` checks the schema and every cross-reference (agents, skills, connections, stations, contracts, files). A push of an invalid factory writes nothing. Pull refuses a folder that is not empty, so it never overwrites local edits.
+`goal factory validate` checks the schema and every cross-reference (agents, skills, connections, stations, contracts, files) and, through goald, secret references and the stations open items sit at; it prints each problem as `path:line:col severity code message`. `goal validate` (`--offline`) checks schema and references without goald. Pull refuses a folder that is not empty, so it never overwrites local edits, and writes `.goal/pulled.json` (hidden, never pushed) to record which version the folder came from. Push refuses an open draft with changes the folder was not pulled from (someone is editing it in the builder: pull it with `--version draft`, or `--replace-draft` archives it) and a version published after the pull (`--force` pushes over it). A publish expects the version that ran when the push read it, so two publishes never cross. `knowledge/` and hidden files are never pushed.
 
 ## Factories are keyed by UUID
 
-Every factory has an immutable `metadata.id`. Its bucket prefix (`orgs/<org-id>/factories/<id>/`), database rows and every AWS resource use it, so you can rename a factory or its folder at any time. When you copy a factory, give the copy a new id (`uuidgen | tr A-Z a-z`); `goal factory validate` rejects duplicates among the folders it checks.
+Every factory has an immutable `metadata.id`. Its database rows and every AWS resource use it, so you can rename a factory or its folder at any time. When you copy a factory, give the copy a new id (`uuidgen | tr A-Z a-z`); `goal factory validate` rejects duplicates among the folders it checks.
 
 ## Add a factory
 
-1. Copy a folder in your working copy, set a new `metadata.id` and `metadata.name`, then edit `factory.yaml`.
+1. Copy a folder in your working copy, set a new `metadata.id` and `metadata.name`, then edit `factory.yaml` (or start one in the builder from a template).
 2. `task factory:validate`
-3. `task factory:push DIR=../goal-factories/<name>`
+3. `task factory:push DIR=../goal-factories/<name> -- --publish`: a push of an id the organization lacks creates the factory with that id.
+
+Templates for the builder's New factory come from the bucket's catalog: `goal catalog templates push <dir> --version N` adds one (`<dir>/template.yaml` with a title, the definition in `<dir>/factory/` with `metadata.id` `00000000-0000-0000-0000-000000000000` and no `credential:` references); versions never change.
 
 ## Database
 

@@ -171,7 +171,7 @@ func TestFollow_PrintsEachEventOnceUntilAHumanMustAct(t *testing.T) {
 
 	srv := fakeGoald(t)
 
-	c, err := connect(t.Context(), testEnv(t, srv.URL, map[string]string{"GOAL_ORG": orgAcme}), "")
+	c, err := connect(t.Context(), testEnv(t, srv.URL, map[string]string{envOrg: orgAcme}), "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -264,8 +264,10 @@ func (s *Service) nameProblems(ctx context.Context, factory domain.FactoryID, f 
 		return nil, fmt.Errorf("list factories: %w", err)
 	}
 
+	// Files outside a draft (factory empty) are the factory their metadata.id names, if any: its
+	// name is not another factory's.
 	for _, r := range recs {
-		if r.ID != factory && strings.EqualFold(r.Name, f.Metadata.Name) {
+		if r.ID != factory && (factory != "" || string(r.ID) != f.Metadata.ID) && strings.EqualFold(r.Name, f.Metadata.Name) {
 			out = append(out, f.Locate("/metadata/name").Problem(CheckName, CodeNameTakenProblem, domain.SeverityError,
 				"another factory of the organization is named "+r.Name))
 

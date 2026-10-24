@@ -243,7 +243,7 @@ type Service struct {
 	clock       ports.Clock
 	newID       func() string
 	image       string
-	templates   *templateIndex
+	templates   *TemplateCatalog
 }
 
 // New returns the service.
@@ -256,7 +256,7 @@ func New(d Deps) *Service {
 	return &Service{
 		store: d.Store, loads: d.Loads, credentials: d.Credentials, checks: d.Checks, resolver: d.Resolver,
 		clock: d.Clock, newID: newID, image: d.DefaultImage,
-		templates: newTemplateIndex(d.Templates, d.Clock),
+		templates: NewTemplateCatalog(d.Templates, d.Clock),
 	}
 }
 

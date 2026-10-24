@@ -265,3 +265,32 @@ func TestValidate_NameAndIdentity(t *testing.T) {
 		t.Error("validating an overlay changed the draft")
 	}
 }
+
+func TestValidateFiles_AFactorysOwnFilesDoNotTakeItsName(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.imported(t, acmeFiles(acmeYAML))
+
+	// goal factory validate and goal factory list --validate check a factory's own files (its
+	// id) outside a draft: its name is its own.
+	own, err := h.svc.ValidateFiles(h.ctx, acmeFiles(acmeYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if p, taken := problem(own.Problems, authoring.CodeNameTakenProblem); taken {
+		t.Errorf("a factory's own files take its name: %+v", p)
+	}
+
+	// Another id with that name is another factory.
+	other, err := h.svc.ValidateFiles(h.ctx, acmeFiles(strings.Replace(acmeYAML,
+		"0b6f1c9e-5d0a-4c39-9a51-6f1f3f0e2a10", "0b6f1c9e-5d0a-4c39-9a51-6f1f3f0e2a99", 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, taken := problem(other.Problems, authoring.CodeNameTakenProblem); !taken {
+		t.Errorf("another id with the name is not name-taken: %v", codes(other.Problems))
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/ports/porttest"
@@ -61,11 +62,61 @@ func TestCatalogSkills_SyncPrintsEachSkillAndFailsOnAny(t *testing.T) {
 	}
 }
 
+func TestCatalogTemplates_PushAndList(t *testing.T) {
+	t.Parallel()
+
+	template := strings.Replace(factoryYAML, factoryID, "00000000-0000-0000-0000-000000000000", 1)
+	dir := filepath.Join(t.TempDir(), "acme-review")
+	writeFiles(t, dir, map[string]string{
+		"template.yaml": "title: Acme review\nsummary: Write, then approve\n", "factory/factory.yaml": template,
+		"factory/agents/writer.md": "# writer\n", "factory/.DS_Store": "junk",
+	})
+
+	catalog := authoring.NewTemplateCatalog(porttest.NewObjectStore(), porttest.NewClock(time.Now()))
+
+	var buf bytes.Buffer
+
+	up, err := readTemplate(dir, "acme-review", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := pushTemplate(t.Context(), &printer{w: &buf}, catalog, dir, up, "goal-test"); err != nil ||
+		!strings.Contains(buf.String(), "✓ added acme-review v1 (2 files) to s3://goal-test/catalog/templates/acme-review/1/") {
+		t.Fatalf("push = %v\n%s", err, buf.String())
+	}
+
+	buf.Reset()
+
+	if err := listTemplates(t.Context(), &printer{w: &buf}, catalog); err != nil ||
+		!strings.Contains(buf.String(), "acme-review              v1   Acme review") || !strings.Contains(buf.String(), "3 stations, 1 agents") {
+		t.Errorf("list = %v\n%s", err, buf.String())
+	}
+
+	if err := pushTemplate(t.Context(), &printer{w: &buf}, catalog, dir, up, "goal-test"); err == nil ||
+		!strings.Contains(err.Error(), "never change") {
+		t.Errorf("push of an existing version = %v", err)
+	}
+
+	// A template with a factory's own id is refused, the problem located in the folder.
+	writeFiles(t, dir, map[string]string{"factory/factory.yaml": factoryYAML})
+	buf.Reset()
+
+	if up, err = readTemplate(dir, "acme-review", 2); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := pushTemplate(t.Context(), &printer{w: &buf}, catalog, dir, up, "goal-test"); err == nil ||
+		!strings.Contains(buf.String(), filepath.Join(dir, "factory", "factory.yaml")+":3:") || !strings.Contains(buf.String(), "template-id") {
+		t.Errorf("push of a template with an id = %v\n%s", err, buf.String())
+	}
+}
+
 func TestCatalogSkills_RefusesBadInput(t *testing.T) {
 	t.Parallel()
 
 	for _, line := range []string{
-		"", "skills", "templates list", "skills sync", "skills sync --top 0 --search x", "skills sync --top 51 --search x",
+		"", "skills", "templates", "templates push", "templates push dir", "templates push dir --version 0", "templates list x", "templates remove", "skills sync", "skills sync --top 0 --search x", "skills sync --top 51 --search x",
 		"skills sync --file f extra", "skills list a b", "skills remove",
 	} {
 		args := strings.Fields(line)
