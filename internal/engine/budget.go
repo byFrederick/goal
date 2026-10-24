@@ -27,6 +27,7 @@ var errBudgetStop = errors.New("the weekly budget is used up")
 // activeRun is a run this instance is working on, which it can cancel.
 type activeRun struct {
 	factory domain.FactoryID
+	lease   domain.Lease
 	cancel  context.CancelCauseFunc
 }
 
@@ -118,13 +119,13 @@ func (e *Engine) forgetBudgets(lines map[domain.FactoryID]domain.Line) {
 	})
 }
 
-// track registers a run of item at factory that this instance is about to work on and returns
-// its context, which cancelRuns cancels; untrack must follow when the work ends.
-func (e *Engine) track(ctx context.Context, factory domain.FactoryID, item domain.ItemID) context.Context {
+// track registers the run this instance is about to work on under lease and returns its
+// context, which cancelRuns and stopRun cancel; untrack must follow when the work ends.
+func (e *Engine) track(ctx context.Context, lease domain.Lease) context.Context {
 	runCtx, cancel := context.WithCancelCause(ctx)
 
 	e.activeMu.Lock()
-	e.active[item] = activeRun{factory: factory, cancel: cancel}
+	e.active[lease.ItemID] = activeRun{factory: lease.FactoryID, lease: lease, cancel: cancel}
 	e.activeMu.Unlock()
 
 	return runCtx

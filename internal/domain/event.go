@@ -35,12 +35,24 @@ const (
 	// EventNote is a person's note for the agents working the item; data text and actor (ref).
 	// The next run's brief carries it.
 	EventNote EventKind = "note"
+	// EventPaused is a person stopping an open item where it is: it is blocked until a retry.
+	// Data reason (optional) and actor (ref).
+	EventPaused EventKind = "paused"
+	// EventLeaseTaken is a person's action on an item in progress (move, pause, send back) that
+	// took its lease: the instance running it stops the run. Data actor (ref) and action.
+	EventLeaseTaken EventKind = "lease_taken"
 )
 
 // Audit of items.
 const (
 	// AuditItemNoted is a note left on an item; its data is the note's length, never its text.
 	AuditItemNoted = "item.noted"
+	// AuditItemMoved is a person's move of an item to another station (from, to, reason).
+	AuditItemMoved = "item.moved"
+	// AuditItemPaused is a person pausing an item (station, reason).
+	AuditItemPaused = "item.paused"
+	// AuditItemRejected is a person sending an item back for rework (from, to, reason).
+	AuditItemRejected = "item.rejected"
 	// AuditTargetItem is the target kind of entries about an item.
 	AuditTargetItem = "item"
 )

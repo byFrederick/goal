@@ -93,6 +93,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"FlowMetrics_ByTypeWithLongWaits", testFlowMetricsByTypeWithLongWaits},
 		{"DoneByBucket_EqualBucketsEndingAtUntil", testDoneByBucket},
 		{"FlowStats_NeedAnOrgAndSeeOnlyItsItems", testFlowStatsTenancy},
+		{"Transition_TakeLeaseRemovesAnyLease", testTakeLease},
 	}
 
 	for _, tc := range tests {

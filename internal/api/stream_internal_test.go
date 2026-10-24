@@ -62,6 +62,41 @@ func TestFeed_HandsEachClientItsOrgsNotices(t *testing.T) {
 	}
 }
 
+// Every item notice reaches the feed's taps (goald's engine, to stop runs people took), whether
+// or not a client of its organization is connected.
+func TestFeed_TellsItsTapsEveryItemNotice(t *testing.T) {
+	t.Parallel()
+
+	notices := porttest.NewItemNotices()
+	tapped := make(chan ports.ItemNotice, 2)
+	feed := NewFeed(notices, porttest.NewDefinitionNotices(), nil, func(n ports.ItemNotice) { tapped <- n })
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+
+	go func() { done <- feed.Run(ctx) }()
+
+	if err := notices.AwaitListeners(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	if n := <-tapped; !n.Resync {
+		t.Errorf("tap got %+v first; want the listener's resync", n)
+	}
+
+	notices.Publish(ports.ItemNotice{OrgID: labs, EventID: 7, Kind: domain.EventLeaseTaken})
+
+	if n := <-tapped; n.EventID != 7 || n.Kind != domain.EventLeaseTaken {
+		t.Errorf("tap got %+v; want the lease_taken notice", n)
+	}
+
+	cancel()
+
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
 // One slow stream client must never hold up the listener or the other clients.
 func TestFeed_EndsTheStreamOfAClientThatFallsBehind(t *testing.T) {
 	t.Parallel()

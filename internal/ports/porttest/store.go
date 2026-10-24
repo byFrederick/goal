@@ -557,33 +557,47 @@ func (s *Store) Run(ctx context.Context, id domain.RunID) (domain.Run, error) {
 	return *r, nil
 }
 
-// Transition implements ports.Store.
+// Transition implements ports.Store. Its audit entry goes to the linked Tenancy, if any, after
+// the change: the fake has no transaction spanning both.
 func (s *Store) Transition(ctx context.Context, t ports.Transition) (domain.Item, error) {
 	org, err := orgOf(ctx)
 	if err != nil {
 		return domain.Item{}, err
 	}
 
+	it, audit, err := s.transition(org, t)
+	if err != nil || audit == nil || t.Audit == nil {
+		return it, err
+	}
+
+	if err := audit.Append(ctx, *t.Audit); err != nil {
+		return domain.Item{}, fmt.Errorf("audit transition: %w", err)
+	}
+
+	return it, nil
+}
+
+func (s *Store) transition(org domain.OrgID, t ports.Transition) (domain.Item, ports.Audit, error) {
 	s.mu.Lock()
 	defer s.changes.signal()
 	defer s.mu.Unlock()
 
 	it, ok := s.visible(t.ItemID, org)
 	if !ok {
-		return domain.Item{}, fmt.Errorf("item %s: %w", t.ItemID, ports.ErrNotFound)
+		return domain.Item{}, nil, fmt.Errorf("item %s: %w", t.ItemID, ports.ErrNotFound)
 	}
 
 	if err := s.checkLease(t); err != nil {
-		return domain.Item{}, err
+		return domain.Item{}, nil, err
 	}
 
 	if it.Position() != t.From {
-		return domain.Item{}, fmt.Errorf("item %s is %s at %s, not %s at %s: %w",
+		return domain.Item{}, nil, fmt.Errorf("item %s is %s at %s, not %s at %s: %w",
 			t.ItemID, it.State, it.Station, t.From.State, t.From.Station, ports.ErrConflict)
 	}
 
-	if t.Lease != nil {
-		s.recordLease(s.leases[t.ItemID], t.Outcome, t.At)
+	if held, ok := s.leases[t.ItemID]; ok && (t.Lease != nil || t.TakeLease) {
+		s.recordLease(held, t.Outcome, t.At)
 		delete(s.leases, t.ItemID)
 	}
 
@@ -612,18 +626,23 @@ func (s *Store) Transition(ctx context.Context, t ports.Transition) (domain.Item
 		s.append(e)
 	}
 
-	return clone(it), nil
+	return clone(it), s.audit, nil
 }
 
-// checkLease refuses a transition that releases a lease without an outcome, or one no longer held
-// (ErrLeaseLost). Callers hold s.mu.
+// checkLease refuses a transition that releases or takes a lease without an outcome, names both,
+// or releases one no longer held (ErrLeaseLost). Callers hold s.mu.
 func (s *Store) checkLease(t ports.Transition) error {
-	if t.Lease == nil {
+	if t.Lease == nil && !t.TakeLease {
 		return nil
 	}
 
-	if t.Outcome == "" {
+	switch {
+	case t.Outcome == "":
 		return fmt.Errorf("item %s: releasing its lease needs an outcome", t.ItemID)
+	case t.Lease != nil && t.TakeLease:
+		return fmt.Errorf("item %s: a transition releases its lease or takes it, not both", t.ItemID)
+	case t.TakeLease:
+		return nil
 	}
 
 	held, ok := s.leases[t.ItemID]

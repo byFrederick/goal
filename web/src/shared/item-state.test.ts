@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decisionsFor, describeState, pullRequestOf, waitingOnYou } from './item-state';
+import { controlsFor, decisionsFor, describeState, pausedNow, pullRequestOf, waitingOnYou } from './item-state';
 
 const none = { approve: false, reject: false, merge: false, retry: false };
 
@@ -25,6 +25,28 @@ describe('decisionsFor', () => {
     expect(decisionsFor({ state: 'in_progress' }, { kind: 'agent' })).toEqual(none);
     expect(decisionsFor({ state: 'waiting_human' }, { kind: 'agent' })).toEqual(none);
     expect(decisionsFor({ state: 'waiting_human' }, undefined)).toEqual(none);
+  });
+});
+
+describe('controlsFor', () => {
+  it('pauses and moves any open item, and sends back what waits, works or is blocked', () => {
+    expect(controlsFor({ state: 'in_progress' }, 'triage')).toEqual({ pause: true, sendBack: true, move: true });
+    expect(controlsFor({ state: 'waiting_human' }, 'triage')).toEqual({ pause: true, sendBack: true, move: true });
+    expect(controlsFor({ state: 'blocked' }, 'triage')).toEqual({ pause: false, sendBack: true, move: true });
+    expect(controlsFor({ state: 'queued' }, 'triage')).toEqual({ pause: true, sendBack: false, move: true });
+  });
+
+  it('sends back only where there is somewhere to send it, and controls nothing closed', () => {
+    expect(controlsFor({ state: 'in_progress' }, null).sendBack).toBe(false);
+    expect(controlsFor({ state: 'done' }, 'triage')).toEqual({ pause: false, sendBack: false, move: false });
+  });
+});
+
+describe('pausedNow', () => {
+  it('is true while the latest block is a person pausing the item', () => {
+    expect(pausedNow('blocked', [{ kind: 'blocked' }, { kind: 'retried' }, { kind: 'paused' }])).toBe(true);
+    expect(pausedNow('blocked', [{ kind: 'paused' }, { kind: 'retried' }, { kind: 'blocked' }])).toBe(false);
+    expect(pausedNow('queued', [{ kind: 'paused' }])).toBe(false);
   });
 });
 

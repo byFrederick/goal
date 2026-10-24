@@ -1035,8 +1035,61 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Reject an item waiting for a human; it goes back for rework with the reason */
+        /**
+         * Send an item back for rework with the reason
+         * @description An item waiting for a human, blocked or in progress goes to its station's rework target (Item.flow.rework_target) with rework_count + 1; in progress, its lease is taken and its run stopped (lease_taken). 409 cannot-send-back for a queued, ready, done or cancelled item, or a station with nowhere upstream to send it; item-changed when it moved meanwhile.
+         */
         post: operations["rejectItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/items/{item}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Put an item at another station of its line
+         * @description From any open state the item arrives at the station in that station's arrival state (an agent or queue station queues it, a human station waits for a decision). In progress, its lease is taken and its run stopped (lease_taken). Moving upstream counts as rework and needs a reason. 400 unknown-station or reason-required; 409 item-closed (done or cancelled), same-station, done-station (finish work by approving or merging it) or item-changed.
+         */
+        post: operations["moveItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/items/{item}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop an open item where it is until a retry resumes it
+         * @description The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+         */
+        post: operations["pauseItem"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1353,6 +1406,16 @@ export interface components {
         Rejection: {
             /** @description What the agent must change */
             reason: string;
+        };
+        MoveRequest: {
+            /** @description The id of the station to move the item to */
+            to: string;
+            /** @description Why; required when the station is upstream of the item's (the agent reads it) */
+            reason?: string;
+        };
+        PauseRequest: {
+            /** @description Why the item is paused */
+            reason?: string;
         };
         MergeRequest: {
             /**
@@ -4026,6 +4089,66 @@ export interface operations {
         };
         responses: {
             /** @description The item after the decision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    moveItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveRequest"];
+            };
+        };
+        responses: {
+            /** @description The item at its new station */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    pauseItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PauseRequest"];
+            };
+        };
+        responses: {
+            /** @description The paused (blocked) item */
             200: {
                 headers: {
                     [name: string]: unknown;

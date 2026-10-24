@@ -394,8 +394,15 @@ type Transition struct {
 	To   domain.Position
 	// Lease, when set, must still be held (same item and AcquiredAt); it is released and recorded
 	// as a lease span with Outcome, which it requires.
-	Lease   *domain.Lease
-	Outcome domain.LeaseOutcome
+	Lease *domain.Lease
+	// TakeLease releases the item's lease whatever its AcquiredAt, if it has one: a person acting
+	// on an item in progress takes it from the instance running it, which stops at its next
+	// heartbeat or when Interrupt tells it. It is recorded as a lease span with Outcome, which it
+	// requires. Lease and TakeLease are exclusive.
+	TakeLease bool
+	Outcome   domain.LeaseOutcome
+	// Audit, when set, is appended to the organization's audit log with the change.
+	Audit *domain.AuditEntry
 	// Lane, when non-empty, replaces the item's lane.
 	Lane string
 	// Output, when set, is stored as the item's output for OutputStation.

@@ -301,6 +301,8 @@ var describers = map[string]func(gen.Event) string{
 		return fmt.Sprintf("check `%s` failed (exit %v)", str(e, "command"), e.Data["exit_code"])
 	},
 	"approved":        func(e gen.Event) string { return "approved by " + e.Actor },
+	"lease_taken":     func(e gen.Event) string { return "run stopped by " + e.Actor + " (" + str(e, "action") + ")" },
+	"paused":          withReason,
 	"note":            func(e gen.Event) string { return "note from " + e.Actor + ": " + cut(oneLine(str(e, "text")), 300) },
 	"contract_failed": withReason,
 	"blocked":         withReason,
@@ -391,6 +393,9 @@ const (
 	verbMerge   = "merge"
 	// verbNote leaves a note for the agents; not a decision.
 	verbNote = "note"
+	// verbMove and verbPause are a person's controls of an item's flow.
+	verbMove  = "move"
+	verbPause = "pause"
 )
 
 // decide acts on an item: goal approve <item>; goal reject <item> --reason "..."; goal retry
@@ -461,6 +466,92 @@ func noteItem(ctx context.Context, out *printer, getenv func(string) string, arg
 	out.printf("✓ note left on %s; the next run reads it\n", ref)
 
 	return nil
+}
+
+// moveItem puts an item at another station of its line: goal move <item> <station> [--reason
+// "..."] [--factory F]. goald refuses an upstream move without a reason, and a move to a done
+// station; a run in progress is stopped.
+func moveItem(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs := newFlags(verbMove)
+	reason := fs.String("reason", "", "why (required upstream, where it counts as rework)")
+	factory := fs.String("factory", "", "the factory of a bare item number")
+	org := addOrgFlag(fs)
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 2 || strings.TrimSpace(pos[1]) == "" {
+		return errUsage
+	}
+
+	c, err := connect(ctx, getenv, *org)
+	if err != nil {
+		return err
+	}
+
+	ref, err := itemRef(ctx, c, pos[0], *factory)
+	if err != nil {
+		return err
+	}
+
+	res, err := c.MoveItemWithResponse(ctx, c.org, ref, gen.MoveRequest{To: pos[1], Reason: optional(*reason)})
+	if err != nil {
+		return apiDown(err)
+	}
+
+	it, err := answer(res.JSON200, res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	if err != nil {
+		return err
+	}
+
+	out.printf("✓ moved %s; now %s at %s\n", it.Ref, it.State, it.Station)
+
+	return nil
+}
+
+// pauseItem stops an item where it is until goal retry: goal pause <item> [--reason "..."]
+// [--factory F]. A run in progress is stopped.
+func pauseItem(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs := newFlags(verbPause)
+	reason := fs.String("reason", "", "why it is paused")
+	factory := fs.String("factory", "", "the factory of a bare item number")
+	org := addOrgFlag(fs)
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 1 {
+		return errUsage
+	}
+
+	c, err := connect(ctx, getenv, *org)
+	if err != nil {
+		return err
+	}
+
+	ref, err := itemRef(ctx, c, pos[0], *factory)
+	if err != nil {
+		return err
+	}
+
+	res, err := c.PauseItemWithResponse(ctx, c.org, ref, gen.PauseRequest{Reason: optional(*reason)})
+	if err != nil {
+		return apiDown(err)
+	}
+
+	it, err := answer(res.JSON200, res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	if err != nil {
+		return err
+	}
+
+	out.printf("✓ paused %s; now %s at %s (goal retry %s resumes it)\n", it.Ref, it.State, it.Station, it.Ref)
+
+	return nil
+}
+
+// optional is s, or nil when it is empty.
+func optional(s string) *string {
+	if s == "" {
+		return nil
+	}
+
+	return &s
 }
 
 // done is what each decision did, for the line that confirms it.

@@ -76,6 +76,57 @@ func testLeaseSpansOnRequeue(f *fixture) {
 	}
 }
 
+// A person's transition takes the item's lease whatever its AcquiredAt, recording it as taken;
+// it is refused like any transition when the item is not where From says, and needs an outcome.
+// Taking from an item without a lease records nothing.
+func testTakeLease(f *fixture) {
+	t := f.t
+	t2, t3 := t1.Add(2*time.Minute), t1.Add(3*time.Minute)
+
+	it := f.create(t, domain.NewItem{})
+	f.claim(t, work, 1, t1)
+
+	take := ports.Transition{
+		ItemID: it.ID, From: domain.Position{Station: stWork, State: domain.StateInProgress},
+		To: domain.Position{Station: stWork, State: domain.StateBlocked}, TakeLease: true, Outcome: domain.LeaseTaken, At: t2,
+	}
+
+	noOutcome := take
+	noOutcome.Outcome = ""
+
+	if _, err := f.Store.Transition(f.ctx(t), noOutcome); err == nil {
+		t.Fatal("Transition taking a lease without an outcome succeeded; want it refused")
+	}
+
+	stale := take
+	stale.From.State = domain.StateQueued
+
+	if _, err := f.Store.Transition(f.ctx(t), stale); !errors.Is(err, ports.ErrConflict) {
+		t.Fatalf("taking from the wrong position = %v; want ErrConflict", err)
+	}
+
+	if ls := f.leases(t, stWork); len(ls) != 1 {
+		t.Fatalf("after refused takes: leases %+v; want the lease still held", ls)
+	}
+
+	if got := f.move(t, take); got.Position() != take.To {
+		t.Fatalf("item at %+v after the take; want %+v", got.Position(), take.To)
+	}
+
+	if ls := f.leases(t, stWork); len(ls) != 0 {
+		t.Errorf("leases %+v after the take; want none", ls)
+	}
+
+	f.move(t, ports.Transition{ // nothing to take: a blocked item holds no lease
+		ItemID: it.ID, From: take.To, To: domain.Position{Station: stWork, State: domain.StateQueued},
+		TakeLease: true, Outcome: domain.LeaseTaken, At: t3,
+	})
+
+	sameLeaseSpans(t, f.LeaseSpans(t, f.org, it.ID), []domain.LeaseSpan{
+		{ItemID: it.ID, Station: stWork, Agent: agWorker, Slot: 1, AcquiredAt: t1, EndedAt: t2, Outcome: domain.LeaseTaken},
+	})
+}
+
 func sameLeaseSpans(t *testing.T, got, want []domain.LeaseSpan) {
 	t.Helper()
 

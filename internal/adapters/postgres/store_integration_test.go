@@ -382,3 +382,49 @@ func TestStore_NoteIsAuditedByLength(t *testing.T) {
 		t.Errorf("audit entry %+v, want the item, the local user and only the note's length (17)", e)
 	}
 }
+
+// A transition's audit entry is written with it, and not when its guard refuses it.
+func TestStore_TransitionAuditsWithTheChange(t *testing.T) {
+	t.Parallel()
+
+	s := New(newTestPool(t))
+	ctx := domain.WithOrg(t.Context(), newOrgID(t, s))
+	f := saveFactory(ctx, t, s)
+	now := time.Now()
+
+	it, err := s.CreateItem(ctx, domain.NewItem{
+		FactoryID: f, Type: "task", Title: "an item", Station: stWork, State: domain.StateQueued, Class: domain.ClassStandard,
+		CreatedAt: now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pause := ports.Transition{
+		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: stWork, State: domain.StateBlocked}, At: now,
+		Audit: &domain.AuditEntry{
+			At: now, Actor: domain.LocalUser, Action: domain.AuditItemPaused, TargetKind: domain.AuditTargetItem,
+			TargetID: string(it.ID), FactoryID: f, Data: map[string]any{"station": stWork},
+		},
+	}
+
+	stale := pause
+	stale.From.State = domain.StateBlocked
+
+	if _, err := s.Transition(ctx, stale); !errors.Is(err, ports.ErrConflict) {
+		t.Fatalf("stale transition = %v; want ErrConflict", err)
+	}
+
+	if _, err := s.Transition(ctx, pause); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := s.AuditLog(ctx, ports.AuditQuery{Action: domain.AuditItemPaused, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) != 1 || entries[0].TargetID != string(it.ID) || entries[0].Data["station"] != stWork {
+		t.Errorf("item.paused entries = %+v; want one, of the applied transition", entries)
+	}
+}

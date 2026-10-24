@@ -20,7 +20,7 @@ const MaxNoteRunes = 2000
 var (
 	// ErrBadNote means a note is blank or longer than MaxNoteRunes.
 	ErrBadNote = errors.New("bad note")
-	// ErrItemClosed means a note was left on an item that is done or cancelled.
+	// ErrItemClosed means a note, move or pause was asked for an item that is done or cancelled.
 	ErrItemClosed = errors.New("item is done or cancelled")
 )
 

@@ -39,6 +39,7 @@ var t0 = time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
 // Names the test lines use.
 const (
 	stDone       = "done"
+	stInbox      = "inbox"
 	stApprove    = "approve"
 	agReviewer   = "reviewer"
 	agBackend    = "backend-engineer"
@@ -103,9 +104,10 @@ func newHarness(t *testing.T, line domain.Line, run porttest.RunFunc) *harness {
 	t.Helper()
 
 	clock := porttest.NewClock(t0)
+	store := porttest.NewStore()
 	h := &harness{
-		store:      porttest.NewStore(),
-		tenancy:    porttest.NewTenancy(clock.Now),
+		store:      store,
+		tenancy:    porttest.NewTenancy(clock.Now).WithStore(store),
 		runner:     porttest.NewRunner(run),
 		workspaces: porttest.NewWorkspaces(),
 		checker:    porttest.NewChecker(),
@@ -313,7 +315,7 @@ func (h *harness) eventsOf(id domain.ItemID, kind domain.EventKind) []domain.Eve
 
 // lineOf builds a line inbox → stations... → done with the agents the tests use.
 func lineOf(stations ...domain.Station) domain.Line {
-	all := append([]domain.Station{{ID: "inbox", Kind: domain.KindQueue}}, stations...)
+	all := append([]domain.Station{{ID: stInbox, Kind: domain.KindQueue}}, stations...)
 	all = append(all, domain.Station{ID: stDone, Kind: domain.KindDone})
 
 	agents := []domain.AgentSpec{}
@@ -360,7 +362,7 @@ func TestSubmit_EntersFirstStationWithClassOfService(t *testing.T) {
 			h := newHarness(t, lineOf(agentStation(stWork, agWorker, 1, 1)), porttest.Succeed(`{}`))
 			it := h.submit(t, domain.NewItem{Type: tt.workType})
 
-			if it.Station != "inbox" || it.State != domain.StateQueued || it.Class != tt.want || it.Number != 1 {
+			if it.Station != stInbox || it.State != domain.StateQueued || it.Class != tt.want || it.Number != 1 {
 				t.Errorf("item = %s/%s class %s number %d; want inbox/queued class %s number 1",
 					it.Station, it.State, it.Class, it.Number, tt.want)
 			}
@@ -619,7 +621,7 @@ func TestTick_PausedLineTakesNoWork(t *testing.T) {
 	h.step(t)
 	h.step(t)
 
-	if got := h.item(t, it.ID); got.Station != "inbox" || len(h.runner.Started()) != 0 {
+	if got := h.item(t, it.ID); got.Station != stInbox || len(h.runner.Started()) != 0 {
 		t.Fatalf("paused line: item at %s, %d tasks started; want inbox and none", got.Station, len(h.runner.Started()))
 	}
 

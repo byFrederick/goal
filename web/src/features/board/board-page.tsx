@@ -1,13 +1,14 @@
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { Tabs } from 'radix-ui';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { boardQuery } from '../../api/queries';
 import type { Board, ItemCard } from '../../api/types';
-import { factoryTitle, useFactory } from '../../shared/factory';
+import { factoryTitle, itemKey, useFactory } from '../../shared/factory';
 import { humanize } from '../../shared/format';
 import { waitingOnYou } from '../../shared/item-state';
 import { LiveStatus } from '../../shared/live-status';
+import { MoveDialog } from '../../shared/move-menu';
 import { NewItemButton } from '../../shared/new-item';
 import { useOrg } from '../../shared/org';
 import { SectionCard } from '../../ui/card';
@@ -15,6 +16,7 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { Meter } from '../../ui/hatch';
 import { BoardCard, ExpediteCard, ExpediteRow } from './board-card';
+import { CardDnd, DraggableCard, DropColumn } from './board-dnd';
 import {
   budgetNote,
   columnCount,
@@ -26,6 +28,9 @@ import {
   stationStat,
   wipText,
 } from './stats';
+
+/** Opens the Move menu for a card, with the station a drop chose. */
+type OnMove = (item: ItemCard, to?: string) => void;
 
 const live = (it: ItemCard) => it.state !== 'done' && it.state !== 'cancelled';
 const isExpedite = (it: ItemCard) => it.class_of_service === 'expedite' && live(it);
@@ -87,7 +92,7 @@ function LineCard({ board }: { board: Board }) {
   );
 }
 
-function ExpediteLane({ line, items }: { line: Board['line']; items: ItemCard[] }) {
+function ExpediteLane({ line, items, onMove }: { line: Board['line']; items: ItemCard[]; onMove: OnMove }) {
   if (items.length === 0) return null;
   return (
     <section
@@ -102,52 +107,66 @@ function ExpediteLane({ line, items }: { line: Board['line']; items: ItemCard[] 
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-2 md:max-w-[680px]">
         {items.map((it) => (
-          <ExpediteCard key={it.id} item={it} />
+          <ExpediteCard key={it.id} item={it} onMove={() => onMove(it)} />
         ))}
       </div>
     </section>
   );
 }
 
-function Columns({ board }: { board: Board }) {
+function Columns({ board, onMove }: { board: Board; onMove: OnMove }) {
   return (
-    <section aria-label="Stations" className="-mx-1 hidden overflow-x-auto px-1 pb-2 md:block">
-      <div
-        className="grid items-start gap-2"
-        style={{ gridTemplateColumns: `repeat(${board.stations.length}, minmax(144px, 1fr))` }}
-      >
-        {board.stations.map((s) => {
-          const drum = s.id === board.constraint;
-          const items = s.items.filter((it) => !isExpedite(it));
-          return (
-            <section
-              key={s.id}
-              aria-label={humanize(s.id)}
-              className={cn(
-                'flex min-w-0 flex-col gap-2 rounded-card border border-line bg-card p-3',
-                drum && constraintRing,
-              )}
-            >
-              <div className="flex items-baseline justify-between gap-2 px-1 pt-0.5 pb-1">
-                <h2 className="m-0 text-[15px] font-medium">{humanize(s.id)}</h2>
-                <span className={cn('text-[13px] whitespace-nowrap text-muted', waitingOnYou(s) > 0 && 'text-you')}>
-                  {columnCount(s)}
-                </span>
-              </div>
-              {items.length === 0 ? <p className="m-0 px-1 pb-1 text-[13px] text-muted">Empty</p> : null}
-              {items.map((it) => (
-                <BoardCard key={it.id} item={it} />
-              ))}
-            </section>
-          );
-        })}
-      </div>
-    </section>
+    <CardDnd board={board} onDrop={onMove}>
+      <section aria-label="Stations" className="-mx-1 hidden overflow-x-auto px-1 pb-2 md:block">
+        <div
+          className="grid items-start gap-2"
+          style={{ gridTemplateColumns: `repeat(${board.stations.length}, minmax(144px, 1fr))` }}
+        >
+          {board.stations.map((s) => {
+            const drum = s.id === board.constraint;
+            const items = s.items.filter((it) => !isExpedite(it));
+            return (
+              <DropColumn
+                key={s.id}
+                station={s}
+                className={cn(
+                  'flex min-w-0 flex-col gap-2 rounded-card border border-line bg-card p-3',
+                  drum && constraintRing,
+                )}
+              >
+                <div className="flex items-baseline justify-between gap-2 px-1 pt-0.5 pb-1">
+                  <h2 className="m-0 text-[15px] font-medium">{humanize(s.id)}</h2>
+                  <span className={cn('text-[13px] whitespace-nowrap text-muted', waitingOnYou(s) > 0 && 'text-you')}>
+                    {columnCount(s)}
+                  </span>
+                </div>
+                {items.length === 0 ? <p className="m-0 px-1 pb-1 text-[13px] text-muted">Empty</p> : null}
+                {items.map((it) => (
+                  <DraggableCard key={it.id} item={it}>
+                    {(drag) => <BoardCard item={it} onMove={() => onMove(it)} drag={drag} />}
+                  </DraggableCard>
+                ))}
+              </DropColumn>
+            );
+          })}
+        </div>
+      </section>
+    </CardDnd>
   );
 }
 
 /** Phones: a station picker and the picked station's cards. */
-function StationTabs({ board, selected, expedite }: { board: Board; selected: string; expedite: ItemCard[] }) {
+function StationTabs({
+  board,
+  selected,
+  expedite,
+  onMove,
+}: {
+  board: Board;
+  selected: string;
+  expedite: ItemCard[];
+  onMove: OnMove;
+}) {
   const navigate = useNavigate({ from: '/o/$org/f/$factory/board' });
   const list = useRef<HTMLDivElement>(null);
 
@@ -185,7 +204,7 @@ function StationTabs({ board, selected, expedite }: { board: Board; selected: st
         })}
       </Tabs.List>
       {expedite.map((it) => (
-        <ExpediteRow key={it.id} item={it} />
+        <ExpediteRow key={it.id} item={it} onMove={() => onMove(it)} />
       ))}
       {board.stations.map((s) => {
         const drum = s.id === board.constraint;
@@ -208,7 +227,7 @@ function StationTabs({ board, selected, expedite }: { board: Board; selected: st
               {drum ? <p className="m-0 mb-1 text-[13px] text-ink-soft">{constraintNote(s)}</p> : null}
               {items.length === 0 ? <p className="m-0 text-sm text-muted">Nothing here right now.</p> : null}
               {items.map((it) => (
-                <BoardCard key={it.id} item={it} compact />
+                <BoardCard key={it.id} item={it} onMove={() => onMove(it)} compact />
               ))}
             </section>
           </Tabs.Content>
@@ -216,6 +235,15 @@ function StationTabs({ board, selected, expedite }: { board: Board; selected: st
       })}
     </Tabs.Root>
   );
+}
+
+/** Puts focus back on a card after it moved (it is rendered in its new column by then). */
+function focusCard(id: string) {
+  requestAnimationFrame(() => {
+    const cards = document.querySelectorAll<HTMLElement>(`[data-card="${CSS.escape(id)}"] a[href]`);
+    const visible = [...cards].find((a) => a.offsetParent !== null);
+    visible?.focus();
+  });
 }
 
 export function BoardPage() {
@@ -230,6 +258,8 @@ export function BoardPage() {
     board.stations.find((s) => s.items.length > 0)?.id ??
     board.stations[0]?.id ??
     '';
+  const [moving, setMoving] = useState<{ item: ItemCard; to?: string | undefined } | null>(null);
+  const onMove: OnMove = (item, to) => setMoving({ item, to });
 
   return (
     <>
@@ -256,10 +286,27 @@ export function BoardPage() {
       <div className="hidden md:block">
         <LineCard board={board} />
       </div>
-      <ExpediteLane line={board.line} items={expedite} />
-      <Columns board={board} />
-      <StationTabs board={board} selected={selected} expedite={expedite} />
-      <p className="m-0 text-[13px] text-muted">Agents pull work when they have room; nobody assigns it.</p>
+      <ExpediteLane line={board.line} items={expedite} onMove={onMove} />
+      <Columns board={board} onMove={onMove} />
+      <StationTabs board={board} selected={selected} expedite={expedite} onMove={onMove} />
+      <p className="m-0 hidden text-[13px] text-muted md:block">
+        Drag a card, or focus it and press M to choose a station. Agents pull work; nobody assigns it.
+      </p>
+      <p className="m-0 text-[13px] text-muted md:hidden">
+        Use the arrow on a card to move it; agents pull the next item themselves.
+      </p>
+      {moving ? (
+        <MoveDialog
+          item={{ ...moving.item, key: itemKey(factory.name, moving.item.ref) }}
+          factory={factory}
+          open
+          onOpenChange={(open) => {
+            if (!open) setMoving(null);
+          }}
+          initialTo={moving.to}
+          onMoved={(updated) => focusCard(updated.id)}
+        />
+      ) : null}
     </>
   );
 }

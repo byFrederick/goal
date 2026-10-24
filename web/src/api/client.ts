@@ -244,6 +244,23 @@ export function retryItem(org: string, item: string): Promise<Item> {
   return unwrap(goal.POST(orgPath('/items/{item}/retry'), { params: { path: { org, item } } }));
 }
 
+/** Puts an item at another station; upstream moves need a reason. A run in progress is stopped. */
+export function moveItem(org: string, item: string, to: string, reason?: string): Promise<Item> {
+  return unwrap(
+    goal.POST(orgPath('/items/{item}/move'), {
+      params: { path: { org, item } },
+      body: reason ? { to, reason } : { to },
+    }),
+  );
+}
+
+/** Stops an open item where it is (blocked) until a retry. A run in progress is stopped. */
+export function pauseItem(org: string, item: string, reason?: string): Promise<Item> {
+  return unwrap(
+    goal.POST(orgPath('/items/{item}/pause'), { params: { path: { org, item } }, body: reason ? { reason } : {} }),
+  );
+}
+
 /**
  * Subscribes to an organization's events (every factory's). goald does not replay: after a
  * reconnect (not the first open), and on `event: resync`, events may have been missed, so

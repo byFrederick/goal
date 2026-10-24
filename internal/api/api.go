@@ -1,7 +1,7 @@
 // Package api serves goald's HTTP API, the contract in api/openapi.yaml: health, the install's
 // organizations and, under /v1/orgs/{org}, each organization's factories, their boards and flow
 // metrics, submitting and listing work items, reading items, their history and runs, human decisions
-// (approve, reject, retry, merge), factory definition authoring (definitions.go: drafts,
+// (approve, reject, retry, merge) and controls (move, pause; control.go), factory definition authoring (definitions.go: drafts,
 // validation, publishing, versions, templates), a Server-Sent Events stream of the
 // organization's events, and the factory editor's metadata and skills catalog (builder.go).
 //
@@ -56,6 +56,8 @@ type Engine interface {
 	Approve(ctx context.Context, id domain.ItemID, by domain.Actor) (domain.Item, error)
 	Reject(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Retry(ctx context.Context, id domain.ItemID, by domain.Actor) (domain.Item, error)
+	Move(ctx context.Context, id domain.ItemID, to string, by domain.Actor, reason string) (domain.Item, error)
+	Pause(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Merge(ctx context.Context, id domain.ItemID, by domain.Actor, method string) (domain.Item, error)
 	Note(ctx context.Context, id domain.ItemID, by domain.Actor, text string) (domain.Event, error)
 }
@@ -427,6 +429,10 @@ func problemOf(err error) gen.Problem {
 	var tooLarge *http.MaxBytesError
 
 	if p, ok := definitionProblem(err); ok {
+		return p
+	}
+
+	if p, ok := controlProblem(err); ok {
 		return p
 	}
 

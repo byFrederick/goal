@@ -34,6 +34,7 @@ const (
 type Feed struct {
 	notices     ports.ItemNotices
 	definitions ports.DefinitionNotices
+	taps        []func(ports.ItemNotice)
 	log         *slog.Logger
 
 	mu      sync.Mutex
@@ -42,13 +43,15 @@ type Feed struct {
 }
 
 // NewFeed returns a feed over item notices and definition notices; Run starts it. log may be
-// nil.
-func NewFeed(notices ports.ItemNotices, definitions ports.DefinitionNotices, log *slog.Logger) *Feed {
+// nil. Each tap is told every item notice (resyncs included) before the clients, on the
+// listener's goroutine, so it must not block: goald's engine is one, to stop the runs whose lease
+// a person took (engine.Interrupt).
+func NewFeed(notices ports.ItemNotices, definitions ports.DefinitionNotices, log *slog.Logger, taps ...func(ports.ItemNotice)) *Feed {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Feed{notices: notices, definitions: definitions, log: log, clients: map[chan ports.ItemNotice]domain.OrgID{}}
+	return &Feed{notices: notices, definitions: definitions, taps: taps, log: log, clients: map[chan ports.ItemNotice]domain.OrgID{}}
 }
 
 // Run listens to both sources until ctx ends, or one of them fails, then ends every client's
@@ -59,7 +62,7 @@ func (f *Feed) Run(ctx context.Context) error {
 
 	errs := make(chan error, 2)
 
-	go func() { errs <- f.notices.Listen(ctx, f.broadcast) }()
+	go func() { errs <- f.notices.Listen(ctx, f.deliver) }()
 	go func() { errs <- f.definitions.Listen(ctx, f.broadcastDefinition) }()
 
 	// The first to return (ctx ended, or a listener failed) stops the other.
@@ -120,6 +123,15 @@ func definitionEventOf(n ports.DefinitionNotice) gen.DefinitionEvent {
 	}
 
 	return e
+}
+
+// deliver tells the taps an item notice, then broadcasts it.
+func (f *Feed) deliver(n ports.ItemNotice) {
+	for _, tap := range f.taps {
+		tap(n)
+	}
+
+	f.broadcast(n)
 }
 
 // broadcast hands a notice to every client of its organization (a resync to every client)

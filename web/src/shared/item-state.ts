@@ -79,6 +79,35 @@ export function decisionsFor(
   };
 }
 
+export interface Controls {
+  /** Stop it where it is until a retry (blocked, with a paused event). */
+  pause: boolean;
+  /** Send it back to its station's rework target with a reason. */
+  sendBack: boolean;
+  /** Put it at another station of the line. */
+  move: boolean;
+}
+
+/**
+ * A person's controls of an open item's flow (goald stops a run in progress for each): pause what
+ * is not blocked already, send back what waits, works or is blocked when its station has a rework
+ * target (Item.flow.rework_target), move anything open.
+ */
+export function controlsFor(item: { state: ItemState }, reworkTarget: string | null | undefined): Controls {
+  const open = item.state !== 'done' && item.state !== 'cancelled';
+  return {
+    pause: open && item.state !== 'blocked',
+    sendBack: Boolean(reworkTarget) && ['waiting_human', 'in_progress', 'blocked'].includes(item.state),
+    move: open,
+  };
+}
+
+/** Whether a blocked item was paused by a person (its latest block is a paused event): Resume, not Retry. */
+export function pausedNow(state: ItemState, events: readonly { kind: string }[]): boolean {
+  if (state !== 'blocked') return false;
+  return events.findLast((e) => e.kind === 'paused' || e.kind === 'blocked')?.kind === 'paused';
+}
+
 /** Items waiting on a person at a station (the board's waiting count covers queued and ready only). */
 export function waitingOnYou(station: { kind: string; items: Pick<ItemCard, 'state'>[] }): number {
   return station.kind === 'human' ? station.items.filter((it) => it.state === 'waiting_human').length : 0;

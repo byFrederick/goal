@@ -329,14 +329,14 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     }
   };
 
-  const moveTo = (it: MockItem, to: string, actor: string) => {
+  const moveTo = (it: MockItem, to: string, actor: string, data: Record<string, unknown> = {}) => {
     const from = it.station;
     it.station = to;
     const kind = findFactory(it.factory)?.stations.find((s) => s.id === to)?.kind;
     it.state = kind === 'done' ? 'done' : kind === 'human' ? 'waiting_human' : 'queued';
     it.agent = null;
     if (it.state === 'done') it.done_at = new Date().toISOString();
-    emit(it, 'moved', actor, { from, to });
+    emit(it, 'moved', actor, { from, to, ...data });
     if (it.state === 'waiting_human') emit(it, 'waiting_human', 'engine');
     if (it.state === 'done') emit(it, 'done', 'engine');
   };
@@ -753,7 +753,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return json(res, 200, run);
     }
 
-    m = rest.match(/^\/items\/([^/]+)(?:\/(events|runs|notes|approve|reject|merge|retry))?$/);
+    m = rest.match(/^\/items\/([^/]+)(?:\/(events|runs|notes|approve|reject|merge|retry|move|pause))?$/);
     if (!m) return problem(res, 404, 'Not found', path);
 
     const it = findItem(decodeURIComponent(m[1] ?? ''), org.id);
@@ -792,8 +792,62 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
 
     if (action === 'retry') {
       if (it.state !== 'blocked') return problem(res, 409, 'Item is not blocked', `${ref(it)} is ${it.state}`);
-      it.state = 'queued';
+      const kind = stations[index]?.kind;
+      it.state = kind === 'human' ? 'waiting_human' : 'queued';
       emit(it, 'retried', by);
+      return json(res, 200, full(it));
+    }
+
+    const closed = it.state === 'done' || it.state === 'cancelled';
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+    // A person acting on an item in progress takes its lease: goald stops the run.
+    const take = (verb: string) => {
+      if (it.state !== 'in_progress') return;
+      emit(it, 'lease_taken', by, { action: verb, actor: 'user:local' });
+      it.agent = null;
+    };
+
+    if (action === 'move') {
+      const to = typeof body.to === 'string' ? body.to.trim() : '';
+      const target = stations.findIndex((s) => s.id === to);
+      if (closed) return problem(res, 409, 'Conflict', `${ref(it)} is ${it.state}`, 'item-closed');
+      if (target < 0) return problem(res, 400, 'Bad Request', `station "${to}" is not on the line`, 'unknown-station');
+      if (target === index) return problem(res, 409, 'Conflict', `${ref(it)} is already at ${to}`, 'same-station');
+      if (stations[target]?.kind === 'done') {
+        return problem(res, 409, 'Conflict', 'an item reaches a done station by approval or merge', 'done-station');
+      }
+      const upstream = target < index;
+      if (upstream && !reason)
+        return problem(res, 400, 'Bad Request', 'a move upstream needs a reason', 'reason-required');
+      take('move');
+      if (upstream) it.rework_count += 1;
+      moveTo(it, to, by, { manual: true, actor: 'user:local', ...(reason ? { reason } : {}) });
+      return json(res, 200, full(it));
+    }
+
+    if (action === 'pause') {
+      if (closed) return problem(res, 409, 'Conflict', `${ref(it)} is ${it.state}`, 'item-closed');
+      if (it.state === 'blocked')
+        return problem(res, 409, 'Conflict', `${ref(it)} is already blocked`, 'already-blocked');
+      take('pause');
+      it.state = 'blocked';
+      emit(it, 'paused', by, { actor: 'user:local', ...(reason ? { reason } : {}) });
+      return json(res, 200, full(it));
+    }
+
+    if (action === 'reject') {
+      if (!reason) return problem(res, 400, 'Invalid decision', 'a rejection needs a reason');
+      const back = stations
+        .slice(0, index)
+        .reverse()
+        .find((s) => s.kind === 'agent');
+      if (!['waiting_human', 'in_progress', 'blocked'].includes(it.state) || !back) {
+        return problem(res, 409, 'Conflict', `${ref(it)} cannot be sent back now`, 'cannot-send-back');
+      }
+      take('reject');
+      emit(it, 'rejected', by, { reason });
+      it.rework_count += 1;
+      moveTo(it, back.id, by);
       return json(res, 200, full(it));
     }
 
@@ -813,19 +867,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       }
       emit(it, 'approved', by);
       moveTo(it, stations[index + 1]?.id ?? it.station, by);
-      return json(res, 200, full(it));
-    }
-
-    if (action === 'reject') {
-      const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
-      if (!reason) return problem(res, 400, 'Invalid decision', 'a rejection needs a reason');
-      const back = stations
-        .slice(0, index)
-        .reverse()
-        .find((s) => s.kind === 'agent');
-      emit(it, 'rejected', by, { reason });
-      it.rework_count += 1;
-      moveTo(it, back?.id ?? it.station, by);
       return json(res, 200, full(it));
     }
 

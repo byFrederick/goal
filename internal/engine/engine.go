@@ -108,6 +108,12 @@ type Config struct {
 // keyReason is the event data key that explains a block, rejection or escalation.
 const keyReason = "reason"
 
+// keyFrom and keyTo are the data keys of a move: the station the item left and the one it reached.
+const (
+	keyFrom = "from"
+	keyTo   = "to"
+)
+
 const (
 	defaultTickEvery    = 5 * time.Second
 	defaultLeaseTTL     = 2 * time.Minute
@@ -412,7 +418,7 @@ func (e *Engine) releaseQueue(ctx context.Context, l domain.Line, st domain.Stat
 func (e *Engine) arrive(it domain.Item, to domain.Station, actor string) (domain.Position, []domain.Event, time.Time) {
 	now := e.clock.Now()
 	pos := domain.Position{Station: to.ID, State: to.Arrival()}
-	events := []domain.Event{event(it, domain.EventMoved, now, actor, map[string]any{"from": it.Station, "to": to.ID})}
+	events := []domain.Event{event(it, domain.EventMoved, now, actor, map[string]any{keyFrom: it.Station, keyTo: to.ID})}
 
 	var doneAt time.Time
 

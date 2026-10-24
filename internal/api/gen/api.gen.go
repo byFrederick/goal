@@ -1529,6 +1529,15 @@ type MetricsSummary struct {
 	To               openapi_types.Date `json:"to"`
 }
 
+// MoveRequest defines model for MoveRequest.
+type MoveRequest struct {
+	// Reason Why; required when the station is upstream of the item's (the agent reads it)
+	Reason *string `json:"reason,omitempty"`
+
+	// To The id of the station to move the item to
+	To string `json:"to"`
+}
+
 // NewFactoryRequest defines model for NewFactoryRequest.
 type NewFactoryRequest struct {
 	// Name Required except for an import, where factory.yaml's metadata.name is used when it is absent
@@ -1686,6 +1695,12 @@ type PatchOp struct {
 
 // PatchOpOp defines model for PatchOp.Op.
 type PatchOpOp string
+
+// PauseRequest defines model for PauseRequest.
+type PauseRequest struct {
+	// Reason Why the item is paused
+	Reason *string `json:"reason,omitempty"`
+}
 
 // Problem defines model for Problem.
 type Problem struct {
@@ -2388,8 +2403,14 @@ type RestoreVersionJSONRequestBody = RestoreRequest
 // MergeItemJSONRequestBody defines body for MergeItem for application/json ContentType.
 type MergeItemJSONRequestBody = MergeRequest
 
+// MoveItemJSONRequestBody defines body for MoveItem for application/json ContentType.
+type MoveItemJSONRequestBody = MoveRequest
+
 // NoteItemJSONRequestBody defines body for NoteItem for application/json ContentType.
 type NoteItemJSONRequestBody = NewNote
+
+// PauseItemJSONRequestBody defines body for PauseItem for application/json ContentType.
+type PauseItemJSONRequestBody = PauseRequest
 
 // RejectItemJSONRequestBody defines body for RejectItem for application/json ContentType.
 type RejectItemJSONRequestBody = Rejection
@@ -3152,6 +3173,24 @@ type ClientInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/merge (the `MergeItem` operationId).
 	MergeItem(ctx context.Context, org OrgRef, item ItemRef, body MergeItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// MoveItemWithBody Put an item at another station of its line
+	//
+	// From any open state the item arrives at the station in that station's arrival state (an agent or queue station queues it, a human station waits for a decision). In progress, its lease is taken and its run stopped (lease_taken). Moving upstream counts as rework and needs a reason. 400 unknown-station or reason-required; 409 item-closed (done or cancelled), same-station, done-station (finish work by approving or merging it) or item-changed.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/move (the `MoveItem` operationId).
+	MoveItemWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// MoveItem Put an item at another station of its line
+	//
+	// From any open state the item arrives at the station in that station's arrival state (an agent or queue station queues it, a human station waits for a decision). In progress, its lease is taken and its run stopped (lease_taken). Moving upstream counts as rework and needs a reason. 400 unknown-station or reason-required; 409 item-closed (done or cancelled), same-station, done-station (finish work by approving or merging it) or item-changed.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/move (the `MoveItem` operationId).
+	MoveItem(ctx context.Context, org OrgRef, item ItemRef, body MoveItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// NoteItemWithBody Leave a note for the agents working an item
 	//
 	// The note is recorded as the item's event (kind note) and carried by the brief of the item's next run, at whatever station, under "Notes from people". A note on a done or cancelled item is refused with 409 item-closed.
@@ -3170,14 +3209,36 @@ type ClientInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/notes (the `NoteItem` operationId).
 	NoteItem(ctx context.Context, org OrgRef, item ItemRef, body NoteItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// RejectItemWithBody Reject an item waiting for a human; it goes back for rework with the reason
+	// PauseItemWithBody Stop an open item where it is until a retry resumes it
+	//
+	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/pause (the `PauseItem` operationId).
+	PauseItemWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PauseItem Stop an open item where it is until a retry resumes it
+	//
+	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/pause (the `PauseItem` operationId).
+	PauseItem(ctx context.Context, org OrgRef, item ItemRef, body PauseItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RejectItemWithBody Send an item back for rework with the reason
+	//
+	// An item waiting for a human, blocked or in progress goes to its station's rework target (Item.flow.rework_target) with rework_count + 1; in progress, its lease is taken and its run stopped (lease_taken). 409 cannot-send-back for a queued, ready, done or cancelled item, or a station with nowhere upstream to send it; item-changed when it moved meanwhile.
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/reject (the `RejectItem` operationId).
 	RejectItemWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// RejectItem Reject an item waiting for a human; it goes back for rework with the reason
+	// RejectItem Send an item back for rework with the reason
+	//
+	// An item waiting for a human, blocked or in progress goes to its station's rework target (Item.flow.rework_target) with rework_count + 1; in progress, its lease is taken and its run stopped (lease_taken). 409 cannot-send-back for a queued, ready, done or cancelled item, or a station with nowhere upstream to send it; item-changed when it moved meanwhile.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -4293,6 +4354,44 @@ func (c *Client) MergeItem(ctx context.Context, org OrgRef, item ItemRef, body M
 	return c.Client.Do(req)
 }
 
+// MoveItemWithBody Put an item at another station of its line
+//
+// From any open state the item arrives at the station in that station's arrival state (an agent or queue station queues it, a human station waits for a decision). In progress, its lease is taken and its run stopped (lease_taken). Moving upstream counts as rework and needs a reason. 400 unknown-station or reason-required; 409 item-closed (done or cancelled), same-station, done-station (finish work by approving or merging it) or item-changed.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/move (the `MoveItem` operationId).
+func (c *Client) MoveItemWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewMoveItemRequestWithBody(c.Server, org, item, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// MoveItem Put an item at another station of its line
+//
+// From any open state the item arrives at the station in that station's arrival state (an agent or queue station queues it, a human station waits for a decision). In progress, its lease is taken and its run stopped (lease_taken). Moving upstream counts as rework and needs a reason. 400 unknown-station or reason-required; 409 item-closed (done or cancelled), same-station, done-station (finish work by approving or merging it) or item-changed.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/move (the `MoveItem` operationId).
+func (c *Client) MoveItem(ctx context.Context, org OrgRef, item ItemRef, body MoveItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewMoveItemRequest(c.Server, org, item, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // NoteItemWithBody Leave a note for the agents working an item
 //
 // The note is recorded as the item's event (kind note) and carried by the brief of the item's next run, at whatever station, under "Notes from people". A note on a done or cancelled item is refused with 409 item-closed.
@@ -4331,7 +4430,47 @@ func (c *Client) NoteItem(ctx context.Context, org OrgRef, item ItemRef, body No
 	return c.Client.Do(req)
 }
 
-// RejectItemWithBody Reject an item waiting for a human; it goes back for rework with the reason
+// PauseItemWithBody Stop an open item where it is until a retry resumes it
+//
+// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/pause (the `PauseItem` operationId).
+func (c *Client) PauseItemWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPauseItemRequestWithBody(c.Server, org, item, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PauseItem Stop an open item where it is until a retry resumes it
+//
+// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/pause (the `PauseItem` operationId).
+func (c *Client) PauseItem(ctx context.Context, org OrgRef, item ItemRef, body PauseItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPauseItemRequest(c.Server, org, item, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RejectItemWithBody Send an item back for rework with the reason
+//
+// An item waiting for a human, blocked or in progress goes to its station's rework target (Item.flow.rework_target) with rework_count + 1; in progress, its lease is taken and its run stopped (lease_taken). 409 cannot-send-back for a queued, ready, done or cancelled item, or a station with nowhere upstream to send it; item-changed when it moved meanwhile.
 //
 // Takes any type of body and a specified content type.
 //
@@ -4348,7 +4487,9 @@ func (c *Client) RejectItemWithBody(ctx context.Context, org OrgRef, item ItemRe
 	return c.Client.Do(req)
 }
 
-// RejectItem Reject an item waiting for a human; it goes back for rework with the reason
+// RejectItem Send an item back for rework with the reason
+//
+// An item waiting for a human, blocked or in progress goes to its station's rework target (Item.flow.rework_target) with rework_count + 1; in progress, its lease is taken and its run stopped (lease_taken). 409 cannot-send-back for a queued, ready, done or cancelled item, or a station with nowhere upstream to send it; item-changed when it moved meanwhile.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -7188,6 +7329,60 @@ func NewMergeItemRequestWithBody(server string, org OrgRef, item ItemRef, conten
 	return req, nil
 }
 
+// NewMoveItemRequest calls the generic MoveItem builder with application/json body
+func NewMoveItemRequest(server string, org OrgRef, item ItemRef, body MoveItemJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewMoveItemRequestWithBody(server, org, item, "application/json", bodyReader)
+}
+
+// NewMoveItemRequestWithBody constructs an http.Request for the MoveItem method, with any body, and a specified content type
+func NewMoveItemRequestWithBody(server string, org OrgRef, item ItemRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/move", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewNoteItemRequest calls the generic NoteItem builder with application/json body
 func NewNoteItemRequest(server string, org OrgRef, item ItemRef, body NoteItemJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -7223,6 +7418,60 @@ func NewNoteItemRequestWithBody(server string, org OrgRef, item ItemRef, content
 	}
 
 	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/notes", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPauseItemRequest calls the generic PauseItem builder with application/json body
+func NewPauseItemRequest(server string, org OrgRef, item ItemRef, body PauseItemJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPauseItemRequestWithBody(server, org, item, "application/json", bodyReader)
+}
+
+// NewPauseItemRequestWithBody constructs an http.Request for the PauseItem method, with any body, and a specified content type
+func NewPauseItemRequestWithBody(server string, org OrgRef, item ItemRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/pause", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -8278,6 +8527,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/merge (the `MergeItem` operationId).
 	MergeItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body MergeItemJSONRequestBody, reqEditors ...RequestEditorFn) (*MergeItemResponse, error)
 
+	// MoveItemWithBodyWithResponse Put an item at another station of its line
+	//
+	// From any open state the item arrives at the station in that station's arrival state (an agent or queue station queues it, a human station waits for a decision). In progress, its lease is taken and its run stopped (lease_taken). Moving upstream counts as rework and needs a reason. 400 unknown-station or reason-required; 409 item-closed (done or cancelled), same-station, done-station (finish work by approving or merging it) or item-changed.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/move (the `MoveItem` operationId).
+	MoveItemWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*MoveItemResponse, error)
+
+	// MoveItemWithResponse Put an item at another station of its line
+	//
+	// From any open state the item arrives at the station in that station's arrival state (an agent or queue station queues it, a human station waits for a decision). In progress, its lease is taken and its run stopped (lease_taken). Moving upstream counts as rework and needs a reason. 400 unknown-station or reason-required; 409 item-closed (done or cancelled), same-station, done-station (finish work by approving or merging it) or item-changed.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/move (the `MoveItem` operationId).
+	MoveItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body MoveItemJSONRequestBody, reqEditors ...RequestEditorFn) (*MoveItemResponse, error)
+
 	// NoteItemWithBodyWithResponse Leave a note for the agents working an item
 	//
 	// The note is recorded as the item's event (kind note) and carried by the brief of the item's next run, at whatever station, under "Notes from people". A note on a done or cancelled item is refused with 409 item-closed.
@@ -8296,14 +8563,36 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/notes (the `NoteItem` operationId).
 	NoteItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body NoteItemJSONRequestBody, reqEditors ...RequestEditorFn) (*NoteItemResponse, error)
 
-	// RejectItemWithBodyWithResponse Reject an item waiting for a human; it goes back for rework with the reason
+	// PauseItemWithBodyWithResponse Stop an open item where it is until a retry resumes it
+	//
+	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/pause (the `PauseItem` operationId).
+	PauseItemWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PauseItemResponse, error)
+
+	// PauseItemWithResponse Stop an open item where it is until a retry resumes it
+	//
+	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/pause (the `PauseItem` operationId).
+	PauseItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body PauseItemJSONRequestBody, reqEditors ...RequestEditorFn) (*PauseItemResponse, error)
+
+	// RejectItemWithBodyWithResponse Send an item back for rework with the reason
+	//
+	// An item waiting for a human, blocked or in progress goes to its station's rework target (Item.flow.rework_target) with rework_count + 1; in progress, its lease is taken and its run stopped (lease_taken). 409 cannot-send-back for a queued, ready, done or cancelled item, or a station with nowhere upstream to send it; item-changed when it moved meanwhile.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/reject (the `RejectItem` operationId).
 	RejectItemWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RejectItemResponse, error)
 
-	// RejectItemWithResponse Reject an item waiting for a human; it goes back for rework with the reason
+	// RejectItemWithResponse Send an item back for rework with the reason
+	//
+	// An item waiting for a human, blocked or in progress goes to its station's rework target (Item.flow.rework_target) with rework_count + 1; in progress, its lease is taken and its run stopped (lease_taken). 409 cannot-send-back for a queued, ready, done or cancelled item, or a station with nowhere upstream to send it; item-changed when it moved meanwhile.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -10646,6 +10935,54 @@ func (r MergeItemResponse) ContentType() string {
 	return ""
 }
 
+type MoveItemResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Item
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r MoveItemResponse) GetJSON200() *Item {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r MoveItemResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r MoveItemResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r MoveItemResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r MoveItemResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r MoveItemResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type NoteItemResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -10688,6 +11025,54 @@ func (r NoteItemResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r NoteItemResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PauseItemResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Item
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PauseItemResponse) GetJSON200() *Item {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PauseItemResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PauseItemResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PauseItemResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PauseItemResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PauseItemResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -12037,6 +12422,36 @@ func (c *ClientWithResponses) MergeItemWithResponse(ctx context.Context, org Org
 	return ParseMergeItemResponse(rsp)
 }
 
+// MoveItemWithBodyWithResponse Put an item at another station of its line
+//
+// From any open state the item arrives at the station in that station's arrival state (an agent or queue station queues it, a human station waits for a decision). In progress, its lease is taken and its run stopped (lease_taken). Moving upstream counts as rework and needs a reason. 400 unknown-station or reason-required; 409 item-closed (done or cancelled), same-station, done-station (finish work by approving or merging it) or item-changed.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/move (the `MoveItem` operationId).
+func (c *ClientWithResponses) MoveItemWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*MoveItemResponse, error) {
+	rsp, err := c.MoveItemWithBody(ctx, org, item, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseMoveItemResponse(rsp)
+}
+
+// MoveItemWithResponse Put an item at another station of its line
+//
+// From any open state the item arrives at the station in that station's arrival state (an agent or queue station queues it, a human station waits for a decision). In progress, its lease is taken and its run stopped (lease_taken). Moving upstream counts as rework and needs a reason. 400 unknown-station or reason-required; 409 item-closed (done or cancelled), same-station, done-station (finish work by approving or merging it) or item-changed.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/move (the `MoveItem` operationId).
+func (c *ClientWithResponses) MoveItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body MoveItemJSONRequestBody, reqEditors ...RequestEditorFn) (*MoveItemResponse, error) {
+	rsp, err := c.MoveItem(ctx, org, item, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseMoveItemResponse(rsp)
+}
+
 // NoteItemWithBodyWithResponse Leave a note for the agents working an item
 //
 // The note is recorded as the item's event (kind note) and carried by the brief of the item's next run, at whatever station, under "Notes from people". A note on a done or cancelled item is refused with 409 item-closed.
@@ -12067,7 +12482,39 @@ func (c *ClientWithResponses) NoteItemWithResponse(ctx context.Context, org OrgR
 	return ParseNoteItemResponse(rsp)
 }
 
-// RejectItemWithBodyWithResponse Reject an item waiting for a human; it goes back for rework with the reason
+// PauseItemWithBodyWithResponse Stop an open item where it is until a retry resumes it
+//
+// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/pause (the `PauseItem` operationId).
+func (c *ClientWithResponses) PauseItemWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PauseItemResponse, error) {
+	rsp, err := c.PauseItemWithBody(ctx, org, item, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePauseItemResponse(rsp)
+}
+
+// PauseItemWithResponse Stop an open item where it is until a retry resumes it
+//
+// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/pause (the `PauseItem` operationId).
+func (c *ClientWithResponses) PauseItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body PauseItemJSONRequestBody, reqEditors ...RequestEditorFn) (*PauseItemResponse, error) {
+	rsp, err := c.PauseItem(ctx, org, item, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePauseItemResponse(rsp)
+}
+
+// RejectItemWithBodyWithResponse Send an item back for rework with the reason
+//
+// An item waiting for a human, blocked or in progress goes to its station's rework target (Item.flow.rework_target) with rework_count + 1; in progress, its lease is taken and its run stopped (lease_taken). 409 cannot-send-back for a queued, ready, done or cancelled item, or a station with nowhere upstream to send it; item-changed when it moved meanwhile.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -12080,7 +12527,9 @@ func (c *ClientWithResponses) RejectItemWithBodyWithResponse(ctx context.Context
 	return ParseRejectItemResponse(rsp)
 }
 
-// RejectItemWithResponse Reject an item waiting for a human; it goes back for rework with the reason
+// RejectItemWithResponse Send an item back for rework with the reason
+//
+// An item waiting for a human, blocked or in progress goes to its station's rework target (Item.flow.rework_target) with rework_count + 1; in progress, its lease is taken and its run stopped (lease_taken). 409 cannot-send-back for a queued, ready, done or cancelled item, or a station with nowhere upstream to send it; item-changed when it moved meanwhile.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -13819,6 +14268,39 @@ func ParseMergeItemResponse(rsp *http.Response) (*MergeItemResponse, error) {
 	return response, nil
 }
 
+// ParseMoveItemResponse parses an HTTP response from a MoveItemWithResponse call
+func ParseMoveItemResponse(rsp *http.Response) (*MoveItemResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &MoveItemResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Item
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseNoteItemResponse parses an HTTP response from a NoteItemWithResponse call
 func ParseNoteItemResponse(rsp *http.Response) (*NoteItemResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -13839,6 +14321,39 @@ func ParseNoteItemResponse(rsp *http.Response) (*NoteItemResponse, error) {
 			return nil, err
 		}
 		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePauseItemResponse parses an HTTP response from a PauseItemWithResponse call
+func ParsePauseItemResponse(rsp *http.Response) (*PauseItemResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PauseItemResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Item
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem
@@ -14318,10 +14833,16 @@ type ServerInterface interface {
 	// MergeItem Merge the item's pull request, then approve it
 	// (POST /v1/orgs/{org}/items/{item}/merge)
 	MergeItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// MoveItem Put an item at another station of its line
+	// (POST /v1/orgs/{org}/items/{item}/move)
+	MoveItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
 	// NoteItem Leave a note for the agents working an item
 	// (POST /v1/orgs/{org}/items/{item}/notes)
 	NoteItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
-	// RejectItem Reject an item waiting for a human; it goes back for rework with the reason
+	// PauseItem Stop an open item where it is until a retry resumes it
+	// (POST /v1/orgs/{org}/items/{item}/pause)
+	PauseItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// RejectItem Send an item back for rework with the reason
 	// (POST /v1/orgs/{org}/items/{item}/reject)
 	RejectItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
 	// RetryItem Send a blocked item back to its station's queue (409 if it is not blocked)
@@ -16512,6 +17033,41 @@ func (siw *ServerInterfaceWrapper) MergeItem(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// MoveItem operation middleware
+func (siw *ServerInterfaceWrapper) MoveItem(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MoveItem(w, r, org, item)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // NoteItem operation middleware
 func (siw *ServerInterfaceWrapper) NoteItem(w http.ResponseWriter, r *http.Request) {
 
@@ -16538,6 +17094,41 @@ func (siw *ServerInterfaceWrapper) NoteItem(w http.ResponseWriter, r *http.Reque
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.NoteItem(w, r, org, item)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PauseItem operation middleware
+func (siw *ServerInterfaceWrapper) PauseItem(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PauseItem(w, r, org, item)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -17073,6 +17664,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs/{run}", wrapper.GetRun)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/approve", wrapper.ApproveItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/reject", wrapper.RejectItem)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/move", wrapper.MoveItem)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/pause", wrapper.PauseItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/retry", wrapper.RetryItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/merge", wrapper.MergeItem)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/builder/meta", wrapper.GetBuilderMeta)
@@ -19022,6 +19615,47 @@ func (response MergeItemdefaultApplicationProblemPlusJSONResponse) VisitMergeIte
 	return err
 }
 
+type MoveItemRequestObject struct {
+	Org  OrgRef  `json:"org"`
+	Item ItemRef `json:"item"`
+	Body *MoveItemJSONRequestBody
+}
+
+type MoveItemResponseObject interface {
+	VisitMoveItemResponse(w http.ResponseWriter) error
+}
+
+type MoveItem200JSONResponse Item
+
+func (response MoveItem200JSONResponse) VisitMoveItemResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MoveItemdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response MoveItemdefaultApplicationProblemPlusJSONResponse) VisitMoveItemResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type NoteItemRequestObject struct {
 	Org  OrgRef  `json:"org"`
 	Item ItemRef `json:"item"`
@@ -19052,6 +19686,47 @@ type NoteItemdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response NoteItemdefaultApplicationProblemPlusJSONResponse) VisitNoteItemResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PauseItemRequestObject struct {
+	Org  OrgRef  `json:"org"`
+	Item ItemRef `json:"item"`
+	Body *PauseItemJSONRequestBody
+}
+
+type PauseItemResponseObject interface {
+	VisitPauseItemResponse(w http.ResponseWriter) error
+}
+
+type PauseItem200JSONResponse Item
+
+func (response PauseItem200JSONResponse) VisitPauseItemResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PauseItemdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response PauseItemdefaultApplicationProblemPlusJSONResponse) VisitPauseItemResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -19635,10 +20310,16 @@ type StrictServerInterface interface {
 	// MergeItem Merge the item's pull request, then approve it
 	// (POST /v1/orgs/{org}/items/{item}/merge)
 	MergeItem(ctx context.Context, request MergeItemRequestObject) (MergeItemResponseObject, error)
+	// MoveItem Put an item at another station of its line
+	// (POST /v1/orgs/{org}/items/{item}/move)
+	MoveItem(ctx context.Context, request MoveItemRequestObject) (MoveItemResponseObject, error)
 	// NoteItem Leave a note for the agents working an item
 	// (POST /v1/orgs/{org}/items/{item}/notes)
 	NoteItem(ctx context.Context, request NoteItemRequestObject) (NoteItemResponseObject, error)
-	// RejectItem Reject an item waiting for a human; it goes back for rework with the reason
+	// PauseItem Stop an open item where it is until a retry resumes it
+	// (POST /v1/orgs/{org}/items/{item}/pause)
+	PauseItem(ctx context.Context, request PauseItemRequestObject) (PauseItemResponseObject, error)
+	// RejectItem Send an item back for rework with the reason
 	// (POST /v1/orgs/{org}/items/{item}/reject)
 	RejectItem(ctx context.Context, request RejectItemRequestObject) (RejectItemResponseObject, error)
 	// RetryItem Send a blocked item back to its station's queue (409 if it is not blocked)
@@ -21089,6 +21770,40 @@ func (sh *strictHandler) MergeItem(w http.ResponseWriter, r *http.Request, org O
 	}
 }
 
+// MoveItem operation middleware
+func (sh *strictHandler) MoveItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
+	var request MoveItemRequestObject
+
+	request.Org = org
+	request.Item = item
+
+	var body MoveItemJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.MoveItem(ctx, request.(MoveItemRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "MoveItem")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(MoveItemResponseObject); ok {
+		if err := validResponse.VisitMoveItemResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // NoteItem operation middleware
 func (sh *strictHandler) NoteItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
 	var request NoteItemRequestObject
@@ -21116,6 +21831,43 @@ func (sh *strictHandler) NoteItem(w http.ResponseWriter, r *http.Request, org Or
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(NoteItemResponseObject); ok {
 		if err := validResponse.VisitNoteItemResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PauseItem operation middleware
+func (sh *strictHandler) PauseItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
+	var request PauseItemRequestObject
+
+	request.Org = org
+	request.Item = item
+
+	var body PauseItemJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PauseItem(ctx, request.(PauseItemRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PauseItem")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PauseItemResponseObject); ok {
+		if err := validResponse.VisitPauseItemResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

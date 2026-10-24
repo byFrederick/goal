@@ -68,8 +68,10 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 		var rejected *outputError
 
 		switch {
+		case errors.Is(context.Cause(ctx), errLeaseTaken):
+			return // a person moved the item; its run is finished as cancelled
 		case errors.Is(err, ports.ErrLeaseLost):
-			log.WarnContext(ctx, "lease lost; another instance owns the item now")
+			log.WarnContext(ctx, "lease lost; another instance or a person owns the item now")
 			return
 		case ctx.Err() != nil:
 			e.release(ctx, log, c)

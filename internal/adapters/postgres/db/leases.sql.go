@@ -262,3 +262,29 @@ func (q *Queries) StationLeases(ctx context.Context, arg StationLeasesParams) ([
 	}
 	return items, nil
 }
+
+const takeLease = `-- name: TakeLease :execrows
+WITH gone AS (
+  DELETE FROM leases l WHERE l.item_id = $3::uuid RETURNING l.item_id, l.factory_id, l.station, l.agent, l.slot, l.container, l.acquired_at, l.heartbeat_at, l.expires_at, l.org_id
+)
+INSERT INTO lease_spans (org_id, factory_id, item_id, station, agent, slot, rework_round, acquired_at, ended_at, outcome)
+SELECT g.org_id, g.factory_id, g.item_id, g.station, g.agent, g.slot, w.rework_count, g.acquired_at,
+       greatest($1::timestamptz, g.acquired_at), $2::text
+FROM gone g JOIN work_items w ON w.id = g.item_id
+`
+
+type TakeLeaseParams struct {
+	EndedAt time.Time
+	Outcome string
+	ItemID  uuid.UUID
+}
+
+// A person's action on an item in progress: deletes the item's lease whatever its acquired_at
+// and records it as a lease span with the outcome (taken). No row: the item holds no lease.
+func (q *Queries) TakeLease(ctx context.Context, arg TakeLeaseParams) (int64, error) {
+	result, err := q.db.Exec(ctx, takeLease, arg.EndedAt, arg.Outcome, arg.ItemID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}

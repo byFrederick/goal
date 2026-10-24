@@ -6,8 +6,8 @@ import { eventsQuery, itemQuery, runsQuery } from '../../api/queries';
 import type { Item, Station } from '../../api/types';
 import { factoryTitle, itemKey, useFactory, useFactoryParams } from '../../shared/factory';
 import { humanize } from '../../shared/format';
-import { ItemDecisions } from '../../shared/item-actions';
-import { describeState, pullRequestOf, type Tone } from '../../shared/item-state';
+import { type ItemControls, ItemDecisions } from '../../shared/item-actions';
+import { describeState, pausedNow, pullRequestOf, type Tone } from '../../shared/item-state';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
@@ -117,6 +117,13 @@ export function ItemPage() {
       factory.stations.map((s) => s.id),
     ),
   };
+  const controls = {
+    id: item.id,
+    station: item.station,
+    reworkTarget: item.flow?.rework_target ?? null,
+    paused: pausedNow(item.state, events),
+    factory,
+  };
   const board = `${factoryTitle(factory)} board`;
   // At a decision, what is being decided on comes before how it was made.
   const deciding = item.state === 'waiting_human';
@@ -162,6 +169,7 @@ export function ItemPage() {
           item={decidable}
           factory={factory.id}
           station={station}
+          controls={controls}
           size="lg"
           className="hidden @[720px]:flex"
         />
@@ -169,7 +177,14 @@ export function ItemPage() {
 
       <div className="flex flex-col gap-3 @[720px]:grid @[720px]:grid-cols-3 @[720px]:items-start @[720px]:gap-4">
         <div className="contents @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
-          <ItemDecisionsCard item={decidable} factory={factory.id} station={station} />
+          <ItemDecisionsCard
+            item={decidable}
+            factory={factory.id}
+            station={station}
+            controls={controls}
+            // A decision or a retry leads; pausing or moving work in flow comes after the trace.
+            className={deciding || item.state === 'blocked' ? 'order-1' : 'order-9'}
+          />
           <TimeCard item={item} factory={factory} trace={trace} className="order-2 @[720px]:order-none" />
           <PathCard item={item} factory={factory} className="order-7 @[720px]:order-none" />
         </div>
@@ -210,18 +225,23 @@ function ItemDecisionsCard({
   item,
   factory,
   station,
+  controls,
+  className,
 }: {
   item: Parameters<typeof ItemDecisions>[0]['item'];
   factory: string;
   station: Station | undefined;
+  controls: ItemControls;
+  className: string;
 }) {
   return (
     <ItemDecisions
       item={item}
       factory={factory}
       station={station}
+      controls={controls}
       layout="stack"
-      className="order-1 rounded-card border border-line bg-card p-3.5 @[720px]:hidden"
+      className={cn(className, 'rounded-card border border-line bg-card p-3.5 @[720px]:hidden')}
     />
   );
 }

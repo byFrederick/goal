@@ -36,6 +36,17 @@ SELECT g.org_id, g.factory_id, g.item_id, g.station, g.agent, g.slot, w.rework_c
        greatest(sqlc.arg(ended_at)::timestamptz, g.acquired_at), sqlc.arg(outcome)::text
 FROM gone g JOIN work_items w ON w.id = g.item_id;
 
+-- name: TakeLease :execrows
+-- A person's action on an item in progress: deletes the item's lease whatever its acquired_at
+-- and records it as a lease span with the outcome (taken). No row: the item holds no lease.
+WITH gone AS (
+  DELETE FROM leases l WHERE l.item_id = sqlc.arg(item_id)::uuid RETURNING l.*
+)
+INSERT INTO lease_spans (org_id, factory_id, item_id, station, agent, slot, rework_round, acquired_at, ended_at, outcome)
+SELECT g.org_id, g.factory_id, g.item_id, g.station, g.agent, g.slot, w.rework_count, g.acquired_at,
+       greatest(sqlc.arg(ended_at)::timestamptz, g.acquired_at), sqlc.arg(outcome)::text
+FROM gone g JOIN work_items w ON w.id = g.item_id;
+
 -- name: LockExpiredLeases :many
 -- Skips leases whose item another transaction holds (a transition in flight); the next sweep
 -- sees them again if they are still expired.

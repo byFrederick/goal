@@ -1141,7 +1141,12 @@ paths:
       - $ref: "#/components/parameters/ItemRef"
     post:
       operationId: rejectItem
-      summary: Reject an item waiting for a human; it goes back for rework with the reason
+      summary: Send an item back for rework with the reason
+      description: >-
+        An item waiting for a human, blocked or in progress goes to its station's rework target
+        (Item.flow.rework_target) with rework_count + 1; in progress, its lease is taken and its run
+        stopped (lease_taken). 409 cannot-send-back for a queued, ready, done or cancelled item, or a
+        station with nowhere upstream to send it; item-changed when it moved meanwhile.
       requestBody:
         required: true
         content:
@@ -1150,6 +1155,55 @@ paths:
       responses:
         "200":
           description: The item after the decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/items/{item}/move:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ItemRef"
+    post:
+      operationId: moveItem
+      tags: [work]
+      summary: Put an item at another station of its line
+      description: >-
+        From any open state the item arrives at the station in that station's arrival state (an agent
+        or queue station queues it, a human station waits for a decision). In progress, its lease is
+        taken and its run stopped (lease_taken). Moving upstream counts as rework and needs a reason.
+        400 unknown-station or reason-required; 409 item-closed (done or cancelled), same-station,
+        done-station (finish work by approving or merging it) or item-changed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MoveRequest" }
+      responses:
+        "200":
+          description: The item at its new station
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/items/{item}/pause:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ItemRef"
+    post:
+      operationId: pauseItem
+      tags: [work]
+      summary: Stop an open item where it is until a retry resumes it
+      description: >-
+        The item becomes blocked at its station with a paused event; retry resumes it. In progress,
+        its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled),
+        already-blocked or item-changed.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PauseRequest" }
+      responses:
+        "200":
+          description: The paused (blocked) item
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
@@ -1587,6 +1641,19 @@ components:
       required: [reason]
       properties:
         reason: { type: string, minLength: 1, description: What the agent must change }
+    MoveRequest:
+      type: object
+      required: [to]
+      properties:
+        to: { type: string, minLength: 1, description: The id of the station to move the item to }
+        reason:
+          type: string
+          maxLength: 500
+          description: Why; required when the station is upstream of the item's (the agent reads it)
+    PauseRequest:
+      type: object
+      properties:
+        reason: { type: string, maxLength: 500, description: Why the item is paused }
     MergeRequest:
       type: object
       properties:

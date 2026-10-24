@@ -476,21 +476,8 @@ func (s *Store) Transition(ctx context.Context, t ports.Transition) (domain.Item
 		}
 
 		// Releasing first is safe: a failed guard below rolls the release back, its lease span too.
-		if t.Lease != nil {
-			if t.Outcome == "" {
-				return fmt.Errorf("item %s: releasing its lease needs an outcome", t.ItemID)
-			}
-
-			n, err := q.ReleaseLease(ctx, db.ReleaseLeaseParams{
-				ItemID: item, AcquiredAt: t.Lease.AcquiredAt, EndedAt: t.At, Outcome: string(t.Outcome),
-			})
-			if err != nil {
-				return fmt.Errorf("release lease: %w", err)
-			}
-
-			if n == 0 {
-				return fmt.Errorf("item %s: %w", t.ItemID, ports.ErrLeaseLost)
-			}
+		if err := releaseOrTake(ctx, q, item, t); err != nil {
+			return err
 		}
 
 		if cur.Station != t.From.Station || domain.ItemState(cur.State) != t.From.State {
@@ -507,13 +494,54 @@ func (s *Store) Transition(ctx context.Context, t ports.Transition) (domain.Item
 			return err
 		}
 
-		return appendEvents(ctx, q, t.Events)
+		if err := appendEvents(ctx, q, t.Events); err != nil {
+			return err
+		}
+
+		if t.Audit == nil {
+			return nil
+		}
+
+		return appendAudit(ctx, q, *t.Audit)
 	})
 	if err != nil {
 		return domain.Item{}, fmt.Errorf("transition: %w", err)
 	}
 
 	return it, nil
+}
+
+// releaseOrTake deletes the lease t releases (fenced by its acquired_at: ErrLeaseLost when it is
+// gone) or takes (whatever its acquired_at; nothing when there is none), recording a lease span
+// with t's outcome, which either needs.
+func releaseOrTake(ctx context.Context, q *db.Queries, item uuid.UUID, t ports.Transition) error {
+	switch {
+	case t.Lease == nil && !t.TakeLease:
+		return nil
+	case t.Outcome == "":
+		return fmt.Errorf("item %s: releasing its lease needs an outcome", t.ItemID)
+	case t.Lease != nil && t.TakeLease:
+		return fmt.Errorf("item %s: a transition releases its lease or takes it, not both", t.ItemID)
+	case t.TakeLease:
+		if _, err := q.TakeLease(ctx, db.TakeLeaseParams{ItemID: item, EndedAt: t.At, Outcome: string(t.Outcome)}); err != nil {
+			return fmt.Errorf("take lease: %w", err)
+		}
+
+		return nil
+	}
+
+	n, err := q.ReleaseLease(ctx, db.ReleaseLeaseParams{
+		ItemID: item, AcquiredAt: t.Lease.AcquiredAt, EndedAt: t.At, Outcome: string(t.Outcome),
+	})
+	if err != nil {
+		return fmt.Errorf("release lease: %w", err)
+	}
+
+	if n == 0 {
+		return fmt.Errorf("item %s: %w", t.ItemID, ports.ErrLeaseLost)
+	}
+
+	return nil
 }
 
 func moveParams(item uuid.UUID, t ports.Transition) db.MoveItemParams {

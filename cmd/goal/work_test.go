@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -190,5 +191,100 @@ func TestFollow_PrintsEachEventOnceUntilAHumanMustAct(t *testing.T) {
 
 	if strings.Contains(got, "usage") {
 		t.Errorf("output shows token usage events:\n%s", got)
+	}
+}
+
+// Stations the control tests move items to; goald refuses a move to a done station.
+const (
+	stationSpec = "spec"
+	stationDone = "done"
+)
+
+// controlGoald records the move and pause requests it answers, refusing a move to a done station.
+type controlGoald struct {
+	mu     sync.Mutex
+	called []string
+	bodies []map[string]any
+}
+
+func (g *controlGoald) handler(action string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+
+		_ = json.NewDecoder(r.Body).Decode(&b)
+
+		g.mu.Lock()
+		g.called, g.bodies = append(g.called, action+" "+r.PathValue("item")), append(g.bodies, b)
+		g.mu.Unlock()
+
+		if b["to"] == stationDone {
+			detail := "an item reaches a done station by approval or merge, not by a move"
+
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(gen.Problem{Title: "Conflict", Status: http.StatusConflict, Detail: &detail})
+
+			return
+		}
+
+		it := gen.Item{Ref: notedRef, State: gen.ItemStateQueued, Station: stationSpec}
+		if action == verbPause {
+			it.State, it.Station = gen.ItemStateBlocked, "build"
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(it)
+	}
+}
+
+func TestControl_MoveAndPauseSendTheirRequests(t *testing.T) {
+	t.Parallel()
+
+	g := &controlGoald{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/orgs/acme/items/{item}/move", g.handler(verbMove))
+	mux.HandleFunc("POST /v1/orgs/acme/items/{item}/pause", g.handler(verbPause))
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	env := testEnv(t, srv.URL, map[string]string{envOrg: orgAcme})
+
+	var out bytes.Buffer
+	for _, args := range [][]string{
+		{verbMove, notedRef, stationSpec, "--reason", "needs a spec"},
+		{verbPause, notedRef},
+		{verbPause, notedRef, "--reason", "vendor outage"},
+	} {
+		if err := run(t.Context(), args, &printer{w: &out}, env, nil); err != nil {
+			t.Fatalf("goal %v: %v", args, err)
+		}
+	}
+
+	paused := "✓ paused goal#1; now blocked at build (goal retry goal#1 resumes it)\n"
+	if want := "✓ moved goal#1; now queued at spec\n" + paused + paused; out.String() != want {
+		t.Errorf("output %q; want %q", out.String(), want)
+	}
+
+	if !slices.Equal(g.called, []string{"move goal#1", "pause goal#1", "pause goal#1"}) || g.bodies[0]["to"] != stationSpec ||
+		g.bodies[0]["reason"] != "needs a spec" || g.bodies[1]["reason"] != nil || g.bodies[2]["reason"] != "vendor outage" {
+		t.Errorf("goald got %v with %v", g.called, g.bodies)
+	}
+
+	if err := run(t.Context(), []string{verbMove, notedRef, stationDone}, &printer{w: &bytes.Buffer{}}, env, nil); err == nil ||
+		!strings.Contains(err.Error(), "by approval or merge") {
+		t.Errorf("a refused move = %v; want goald's refusal", err)
+	}
+}
+
+func TestControl_UsageErrors(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv(t, "http://127.0.0.1:1", nil) // never reached
+
+	for _, args := range [][]string{{verbMove}, {verbMove, notedRef}, {verbMove, notedRef, "a", "b"}, {verbPause}, {verbPause, notedRef, "x"}} {
+		if err := run(t.Context(), args, &printer{w: &bytes.Buffer{}}, env, nil); !errors.Is(err, errUsage) {
+			t.Errorf("goal %v = %v; want a usage error", args, err)
+		}
 	}
 }
