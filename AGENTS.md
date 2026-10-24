@@ -34,6 +34,7 @@ internal/factorymodel/ the Visual editor's model of factory.yaml: read, apply se
 internal/authoring/  definition authoring: create, the shared draft (sections, files, CAS), validation, publish, restore, templates
 internal/retention/  purges deleted organizations after GOAL_ORG_RETENTION: their rows and bucket objects
 internal/builder/    the factory editor's metadata and the skills.sh skills catalog in the bucket (catalog/skills/)
+internal/jonah/      phase 5: Jonah, the continuous-learning loop in goald (retros, proposals, eval runs of a draft against the current version). Imports domain + ports only
 internal/factorystore/ legacy per-factory bucket prefixes, read once by the import into versions (2.2-B). Imports config + ports only. Deleted in phase 4 with the legacy import
 migrations/          forward-only SQL (goose); never edit an applied file
 queries/             SQL for sqlc
@@ -84,9 +85,9 @@ Skills live in `.claude/skills` (installed from skills.sh, pinned in `skills-loc
 | Go | golang-project-layout, golang-code-style, golang-design-patterns, golang-error-handling, golang-concurrency, golang-testing, golang-lint, golang-security, golang-performance, golang-observability, golang-database, golang-cli (cmd/goal; stdlib flags, no cobra, no `init()`) |
 | PostgreSQL | supabase-postgres-best-practices, postgresql-table-design, postgresql-optimization, postgresql-code-review, sql-code-review, database-migration |
 | UI | ui-ux-pro-max (strictly), frontend-design, web-design-guidelines, impeccable, shadcn, tailwind-design-system, vercel-react-best-practices, vercel-composition-patterns, accessibility, typescript-advanced-types, tanstack-query-best-practices, tanstack-router-best-practices, vite, vitest, playwright-best-practices, webapp-testing |
-| Identity (phase 3: the `auth/` Better Auth service, sessions, API keys; phase 5: OAuth provider) | better-auth-best-practices, better-auth-security-best-practices, organization-best-practices, create-auth (scaffolding reference only: migrations still go through goose), security-and-hardening, golang-security |
+| Identity (phase 3: the `auth/` Better Auth service, sessions, API keys; phase 6: OAuth provider) | better-auth-best-practices, better-auth-security-best-practices, organization-best-practices, create-auth (scaffolding reference only: migrations still go through goose), security-and-hardening, golang-security |
 | Monorepo and API contract | turborepo, pnpm, monorepo-management, openapi-spec-generation |
-| Agents and evals | claude-api, mcp-builder, skill-creator, llm-evaluation, eval-harness, eval-harness-first, error-analysis, write-judge-prompt, validate-evaluator, generate-synthetic-data, build-review-interface, agent-evaluation |
+| Agents and evals (the worker and the gateway; phase 5: Jonah's retros and the definition's `evals/` cases) | claude-api, mcp-builder, skill-creator, llm-evaluation, eval-harness, eval-harness-first, error-analysis, write-judge-prompt, validate-evaluator, generate-synthetic-data, build-review-interface, agent-evaluation |
 | Infra and delivery | terraform-style-guide, terraform-test, terraform-module-library, aws-containers, aws-iam, aws-observability, amazon-bedrock, multi-stage-dockerfile, docker-compose-patterns (compose.yaml), github-actions-templates, github-actions-hardening, ci-cd-and-automation, deploy-to-vercel |
 | Quality | testing-strategy, test-driven-development, code-review, code-review-and-quality, improve-codebase-architecture, security-and-hardening, architecture-decision-records |
 
