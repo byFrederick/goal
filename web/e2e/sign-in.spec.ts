@@ -30,6 +30,19 @@ async function signInOn(request: APIRequestContext, auth: AuthReset = {}) {
 const fail = (request: APIRequestContext, fault: Record<string, unknown>) =>
   request.post('/__mock/fail', { data: fault });
 
+/**
+ * No script on the page can read the session token: not from the cookie (httpOnly), nor from what
+ * it fetches, get-session's answer included (spec 3 §11.1 row 5, review M2).
+ */
+async function expectNoSessionTokenInScripts(page: Page) {
+  const [cookie] = (await page.context().cookies()).filter((c) => c.name === 'goal.session_token');
+  const token = decodeURIComponent(cookie?.value ?? '').split('.')[0] ?? '';
+  expect(token).toMatch(/^[A-Za-z0-9]{32}$/);
+  const answer = await page.evaluate(() => fetch('/api/auth/get-session').then((r) => r.text()));
+  expect(answer).toContain('"user"');
+  expect(answer).not.toContain(token);
+}
+
 const emailField = (page: Page) => page.getByLabel('Email');
 const codeField = (page: Page) => page.getByLabel('Code');
 const sendCode = (page: Page) => page.getByRole('button', { name: 'Email me a code' });
@@ -83,6 +96,7 @@ test('signing in by code returns to the page that asked, and the session stays o
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   await keptAlive;
   expect(await page.evaluate(() => document.cookie)).not.toContain('session_token');
+  await expectNoSessionTokenInScripts(page);
 
   // The account names the person, their role here and that they are a platform admin.
   await orgNav(page).getByRole('button', { name: 'FC, F. Cruz, account' }).click();

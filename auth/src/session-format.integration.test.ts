@@ -11,6 +11,8 @@ import { createTestDatabase, type TestDatabase } from './testing/database.js';
 import { harness } from './testing/service.js';
 
 const email = 'ada@example.com';
+// A second person, so the tests stay within one address's five codes an hour.
+const grace = 'grace@example.com';
 
 let db: TestDatabase;
 let pool: pg.Pool;
@@ -19,7 +21,10 @@ beforeAll(async () => {
   db = await createTestDatabase();
   pool = new pg.Pool({ connectionString: db.url('goal_auth') });
   // Sign-up is invite-only (spec 3 §8.7); the user exists, as after their first sign-in.
-  await pool.query(`INSERT INTO auth."user" (name, email, "emailVerified") VALUES ('Ada', $1, true)`, [email]);
+  await pool.query(
+    `INSERT INTO auth."user" (name, email, "emailVerified") VALUES ('Ada', $1, true), ('Grace', $2, true)`,
+    [email, grace],
+  );
 });
 
 afterAll(async () => {
@@ -79,6 +84,23 @@ describe('the session cookie', () => {
     expect(token).toBeDefined();
     expect(signature).not.toContain('.');
     expect(await sessionTokens()).toContain(token);
+  });
+
+  it('is the only place the token goes: not in the sign-in’s answer, nor in get-session’s (row 5, review M2)', async () => {
+    const s = service('http://127.0.0.1:8080');
+    const res = await s.signIn(grace);
+    const cookie = sessionCookie(res);
+    const token = decodeURIComponent(cookie.value).split('.')[0] as string;
+    expect(token).toMatch(/^[A-Za-z0-9]{32}$/);
+    expect(await res.text()).not.toContain(token);
+
+    const session = await s.get('/get-session', { cookie: `${cookie.name}=${cookie.value}` });
+    const body = await session.text();
+
+    expect(session.status).toBe(200);
+    expect(body).not.toContain(token);
+    expect(JSON.parse(body)).toMatchObject({ user: { email: grace }, session: { userId: expect.any(String) } });
+    expect(JSON.parse(body).session).not.toHaveProperty('token');
   });
 
   it('is __Secure-goal.session_token and Secure when GOAL_PUBLIC_URL is https', async () => {

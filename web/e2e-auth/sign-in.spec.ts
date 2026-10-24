@@ -63,6 +63,13 @@ test('the bootstrap owner signs in with an emailed code, and signing out ends ac
   expect(me.status()).toBe(200);
   expect((await me.json()).user.email).toBe(owner.toLowerCase());
   expect(await page.evaluate(() => document.cookie)).not.toContain('session_token');
+  // Nor in what a page script can fetch (spec 3 §11.1 row 5, review M2).
+  const [cookie] = (await page.context().cookies()).filter((c) => c.name.endsWith('session_token'));
+  const token = decodeURIComponent(cookie?.value ?? '').split('.')[0] ?? '';
+  expect(token).toMatch(/^[A-Za-z0-9]{32}$/);
+  const answer = await page.evaluate(() => fetch('/api/auth/get-session').then((r) => r.text()));
+  expect(answer).toContain(owner.toLowerCase());
+  expect(answer).not.toContain(token);
 
   await page
     .getByRole('navigation', { name: 'Organization and factories' })

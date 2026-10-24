@@ -177,6 +177,10 @@ export function goalHooks({ db, signIn, mailer, log, clock, publicURL }: HookDep
     const returned = ctx.context.returned;
     const failed = isAPIError(returned) || (returned instanceof Response && !returned.ok);
     const b = body(ctx);
+    if (sessionAnswers.has(ctx.path) && !failed) {
+      const stripped = withoutSessionToken(returned);
+      if (stripped) return ctx.json(stripped);
+    }
     try {
       switch (ctx.path) {
         case '/sign-in/email-otp':
@@ -269,6 +273,27 @@ export function goalHooks({ db, signIn, mailer, log, clock, publicURL }: HookDep
   } satisfies Pick<OrganizationOptions, 'sendInvitationEmail' | 'organizationHooks'>;
 
   return { before, after, organization };
+}
+
+/**
+ * The endpoints that answer a session to the page that called them. Better Auth puts the session
+ * token in the answer (get-session's session.token, a sign-in's token), where any script on the
+ * page could read what the httpOnly cookie hides, and goald accepts the token as a bearer value or
+ * an unsigned cookie: so the after-hook takes it out (spec 3 §11.1 row 5, review M2). goald's proxy
+ * strips it again. goal login's /device/token keeps its access_token: that is the CLI's credential.
+ */
+const sessionAnswers = new Set(['/get-session', '/sign-in/email-otp', '/sign-in/social']);
+
+/** withoutSessionToken is a session answer without its token(s); undefined when it holds none. */
+export function withoutSessionToken(returned: unknown): Body | undefined {
+  if (typeof returned !== 'object' || returned === null || returned instanceof Response) return undefined;
+  const { token, ...rest } = returned as Body;
+  const session = rest.session;
+  if (typeof session === 'object' && session !== null && 'token' in session) {
+    const { token: _, ...kept } = session as Body;
+    return { ...rest, session: kept };
+  }
+  return token === undefined ? undefined : rest;
 }
 
 /**

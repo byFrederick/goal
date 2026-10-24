@@ -67,6 +67,7 @@ export function authSettings(body: unknown): MockAuthSettings {
 }
 
 interface MockSession {
+  id: string;
   token: string;
   userId: string;
   createdAt: number;
@@ -192,7 +193,13 @@ export function createMockAuth(clock: () => number, dir: MockDirectory): MockAut
   const startSession = (email: string, createdAt: number) => {
     const user = userFor(email);
     const token = randomToken();
-    sessions.set(token, { token, userId: user.id, createdAt, expiresAt: createdAt + sessionLifetimeMs });
+    sessions.set(token, {
+      id: crypto.randomUUID(),
+      token,
+      userId: user.id,
+      createdAt,
+      expiresAt: createdAt + sessionLifetimeMs,
+    });
     return setCookie(token);
   };
 
@@ -255,7 +262,8 @@ export function createMockAuth(clock: () => number, dir: MockDirectory): MockAut
       codes.delete(email);
       const cookie = startSession(email, clock());
       const user = userFor(email);
-      return ok({ token: null, user: { id: user.id, email: user.email, name: user.name } }, { 'Set-Cookie': cookie });
+      // As the auth service answers (review M2): the session token is only in the httpOnly cookie.
+      return ok({ user: { id: user.id, email: user.email, name: user.name } }, { 'Set-Cookie': cookie });
     }
     if (route === '/sign-in/social' && method === 'POST') {
       if (settings.google === 'off' || body.provider !== 'google') {
@@ -296,7 +304,7 @@ export function createMockAuth(clock: () => number, dir: MockDirectory): MockAut
       session.expiresAt = clock() + sessionLifetimeMs;
       return ok({
         session: {
-          id: session.token,
+          id: session.id,
           userId: user.id,
           createdAt: iso(session.createdAt),
           expiresAt: iso(session.expiresAt),

@@ -400,6 +400,67 @@ func TestAuthProxy_DropsSetAuthToken(t *testing.T) {
 	}
 }
 
+// Spec 3 §11.1 row 5 (review M2): no response a page script reads carries the session token. The
+// auth service strips it already; the proxy strips it again from whatever answers a session
+// (get-session, the sign-ins) and refuses one it cannot read. goal login's access token passes.
+func TestAuthProxy_AnswersNoSessionToken(t *testing.T) {
+	t.Parallel()
+
+	const (
+		token      = "LeakLeakLeakLeakLeakLeakLeakLe01" //nolint:gosec // a fabricated session token
+		getSession = "/api/auth/get-session"
+	)
+
+	session := `{"session":{"id":"s1","token":"` + token + `","userId":"u1"},"user":{"id":"u1","email":"ada@example.com"},` +
+		`"token":"` + token + `","redirect":false}`
+
+	for _, c := range []struct {
+		name, method, path, answer, encoding string
+		status                               int
+		keep                                 []string
+		gone                                 bool
+	}{
+		{"get-session", http.MethodGet, getSession, session, "", http.StatusOK, []string{`"userId":"u1"`, `"email":"ada@example.com"`}, true},
+		{"no session", http.MethodGet, getSession, "null", "", http.StatusOK, []string{"null"}, true},
+		{"a code sign-in", http.MethodPost, "/api/auth/sign-in/email-otp", session, "", http.StatusOK, []string{`"user":`}, true},
+		{"a Google sign-in", http.MethodPost, "/api/auth/sign-in/social", session, "", http.StatusOK, []string{`"redirect":false`}, true},
+		{"a compressed session", http.MethodGet, getSession, session, "gzip", http.StatusServiceUnavailable, nil, true},
+		{"goal login's token", http.MethodPost, "/api/auth/device/token", `{"access_token":"` + token + `"}`, "", http.StatusOK, []string{token}, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc := newIdentityService(t, func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+
+				if c.encoding != "" {
+					w.Header().Set("Content-Encoding", c.encoding)
+				}
+
+				_, _ = w.Write([]byte(c.answer))
+			})
+
+			rec := serve(proxyOf(t, api.AuthProxyConfig{Upstream: svc.url(t)}),
+				httptest.NewRequestWithContext(t.Context(), c.method, c.path, strings.NewReader("{}")))
+
+			body := rec.Body.String()
+			if rec.Code != c.status || (c.gone && strings.Contains(body, token)) {
+				t.Fatalf("%s = %d %s; want %d without the session token", c.path, rec.Code, body, c.status)
+			}
+
+			for _, k := range c.keep {
+				if !strings.Contains(body, k) {
+					t.Errorf("%s = %s; want %s kept", c.path, body, k)
+				}
+			}
+
+			if n := rec.Header().Get("Content-Length"); n != "" && n != strconv.Itoa(len(body)) {
+				t.Errorf("Content-Length = %s for a body of %d bytes", n, len(body))
+			}
+		})
+	}
+}
+
 // Spec 3 §11.1 row 45: an API key or a personal token is Goal's own credential: the proxy answers
 // 401 and the identity service never sees it. A session token still passes (goal login's).
 func TestAuthProxy_NeverForwardsGoalCredentials(t *testing.T) {

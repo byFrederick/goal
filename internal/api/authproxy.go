@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"net/url"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,9 +40,10 @@ const proxySecretHeader = "X-Goal-Proxy-Secret" //nolint:gosec // a header name,
 const authTokenHeader = "Set-Auth-Token" //nolint:gosec // a header name, not a credential
 
 // Bounds of a proxied request: its body, reaching the service, the service's response headers and
-// the whole exchange.
+// the whole exchange; and of an answer the proxy reads (sessionAnswers).
 const (
 	maxAuthRequestBytes       = 64 << 10
+	maxSessionAnswerBytes     = 256 << 10
 	defaultAuthDialTimeout    = 2 * time.Second
 	defaultAuthHeaderTimeout  = 10 * time.Second
 	defaultAuthRequestTimeout = 15 * time.Second
@@ -166,7 +169,8 @@ func newAuthProxy(c AuthProxyConfig) *authProxy {
 		},
 		ModifyResponse: func(resp *http.Response) error {
 			resp.Header.Del(authTokenHeader)
-			return nil
+
+			return withoutSessionToken(resp)
 		},
 		ErrorHandler: p.unavailable,
 		ErrorLog:     slog.NewLogLogger(log.Handler(), slog.LevelWarn),
@@ -255,6 +259,89 @@ func (p *authProxy) forward(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p.proxy.ServeHTTP(w, out)
+}
+
+// sessionAnswers are the identity endpoints whose answer to the page holds a session: Better Auth
+// puts its token there (get-session's session.token, a sign-in's token), where any script on the
+// page could read what the httpOnly cookie hides. The auth service takes it out; the proxy does
+// again (spec 3 §11.1 row 5, review M2). /device/token keeps its access_token: goal login's
+// credential, read by the CLI, not a page.
+var sessionAnswers = map[string]bool{"/get-session": true, "/sign-in/email-otp": true, "/sign-in/social": true}
+
+// errUnreadableSessionAnswer is a session answer the proxy cannot check for a token (compressed,
+// too large or not JSON): it is refused rather than passed on. It names no part of the body.
+var errUnreadableSessionAnswer = errors.New("the identity service's session answer cannot be checked")
+
+// withoutSessionToken removes the top-level token and session.token from the JSON answer of a
+// sessionAnswers endpoint, keeping everything else; other answers pass untouched.
+func withoutSessionToken(resp *http.Response) error {
+	if resp.Request == nil || !sessionAnswers[strings.TrimPrefix(resp.Request.URL.Path, AuthPath)] {
+		return nil
+	}
+
+	if enc := resp.Header.Get("Content-Encoding"); enc != "" && !strings.EqualFold(enc, "identity") {
+		return errUnreadableSessionAnswer
+	}
+
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxSessionAnswerBytes+1))
+	_ = resp.Body.Close()
+
+	if err != nil || len(raw) > maxSessionAnswerBytes {
+		return errUnreadableSessionAnswer
+	}
+
+	out, err := stripSessionToken(raw)
+	if err != nil {
+		return err
+	}
+
+	resp.Body, resp.ContentLength = io.NopCloser(bytes.NewReader(out)), int64(len(out))
+	resp.Header.Set("Content-Length", strconv.Itoa(len(out)))
+
+	return nil
+}
+
+// stripSessionToken is raw without its top-level "token" and session's "token". An empty body,
+// null or any JSON value but an object passes as it is; anything that is not JSON is refused.
+func stripSessionToken(raw []byte) ([]byte, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return raw, nil
+	}
+
+	if !json.Valid(trimmed) {
+		return nil, errUnreadableSessionAnswer
+	}
+
+	if trimmed[0] != '{' {
+		return raw, nil // null, a list or a scalar: no token field to hold
+	}
+
+	var answer map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &answer); err != nil {
+		return nil, errors.Join(errUnreadableSessionAnswer, err)
+	}
+
+	delete(answer, "token")
+
+	var session map[string]json.RawMessage
+	if s, ok := answer["session"]; ok && json.Unmarshal(s, &session) == nil && session != nil {
+		delete(session, "token")
+
+		kept, err := json.Marshal(session)
+		if err != nil {
+			return nil, fmt.Errorf("session answer: %w", err)
+		}
+
+		answer["session"] = kept
+	}
+
+	out, err := json.Marshal(answer)
+	if err != nil {
+		return nil, fmt.Errorf("session answer: %w", err)
+	}
+
+	return out, nil
 }
 
 // goalBearer reports whether an Authorization header carries a Goal API key or personal token
