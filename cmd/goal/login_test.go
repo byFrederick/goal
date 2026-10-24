@@ -541,6 +541,28 @@ func TestWhoami_PersonalToken(t *testing.T) {
 	}
 }
 
+// A person who signed up by code has no name yet (the bootstrap owner of an upgrade, say): the CLI
+// names them by their email alone, as written, and capitalizes only its own words.
+func TestSayWho_NamesAPersonWithoutANameByEmail(t *testing.T) {
+	t.Parallel()
+
+	for _, c := range []struct {
+		me   gen.Me
+		want string
+	}{
+		{gen.Me{Mode: gen.Session, Kind: gen.MeKindUser, User: &gen.User{Email: "owner@example.com"}}, "owner@example.com on " + testOrigin},
+		{gen.Me{Mode: gen.Session, Kind: gen.MeKindUser, User: &gen.User{Name: "F. Cruz", Email: "f.cruz@example.com"}}, "F. Cruz (f.cruz@example.com) on " + testOrigin},
+		{gen.Me{Mode: gen.Session, Kind: gen.MeKindService, Key: &gen.MeKey{Name: "ci"}}, "The API key ci on " + testOrigin},
+	} {
+		var buf bytes.Buffer
+		sayWho(&printer{w: &buf}, testOrigin, &c.me, nil)
+
+		if first, _, _ := strings.Cut(buf.String(), "\n"); first != c.want {
+			t.Errorf("sayWho = %q; want %q", first, c.want)
+		}
+	}
+}
+
 // Nothing is stored for stdin that is not a token, nothing at all, or a token goald refuses.
 func TestLogin_TokenRefused(t *testing.T) {
 	t.Parallel()

@@ -508,11 +508,14 @@ func credentialNoun(c credential) string {
 	}
 }
 
-// describeMe names who a request acts for: a person by name and email, an API key by name.
+// describeMe names who a request acts for: a person by name and email (by email alone while they
+// have no name), an API key by name.
 func describeMe(me *gen.Me) string {
 	switch {
 	case me.Mode == gen.None:
 		return "the local user"
+	case me.User != nil && strings.TrimSpace(me.User.Name) == "":
+		return me.User.Email
 	case me.User != nil:
 		return fmt.Sprintf("%s (%s)", me.User.Name, me.User.Email)
 	case me.Key != nil:
@@ -646,7 +649,11 @@ func whoami(ctx context.Context, out *printer, getenv func(string) string, args 
 // sayWho prints who the CLI acts as and with which credential.
 func sayWho(out *printer, origin string, me *gen.Me, cred *resolved) {
 	who := describeMe(me)
-	out.printf("%s%s on %s\n", strings.ToUpper(who[:1]), who[1:], origin)
+	if me.User == nil { // the CLI's own words, not a person's name or email
+		who = strings.ToUpper(who[:1]) + who[1:]
+	}
+
+	out.printf("%s on %s\n", who, origin)
 
 	switch {
 	case cred == nil:
