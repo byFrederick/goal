@@ -9,13 +9,14 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/byFrederick/goal/internal/api"
 	"github.com/byFrederick/goal/internal/api/gen"
+	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
-	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/engine"
@@ -102,6 +103,47 @@ type harness struct {
 	skills      *flakyObjects
 	skillSource *porttest.SkillSource
 	builder     *builder.Service
+	// defs holds the factories' definition versions, defNotices announces their changes and
+	// objects is the bucket the template catalog is read from.
+	defs       *porttest.Definitions
+	defNotices *porttest.DefinitionNotices
+	objects    *porttest.ObjectStore
+}
+
+// acme's one prompt and its path.
+const (
+	writerPrompt = "# writer\n"
+	writerFile   = "agents/writer.md"
+	yamlFile     = "factory.yaml"
+)
+
+// The two factories' files.
+var (
+	acmeFiles = map[string]string{yamlFile: acme, writerFile: writerPrompt}
+	lineFiles = map[string]string{yamlFile: line, "agents/backend.md": "# backend\n", "agents/frontend.md": "# frontend\n"}
+)
+
+// publishImport creates a factory from files, keeping its id, and publishes it as v1.
+func (h *harness) publishImport(t *testing.T, authors *authoring.Service, files map[string]string) {
+	t.Helper()
+
+	ctx := domain.WithActor(inOrg(t), domain.LocalUser)
+	tree := map[string][]byte{}
+
+	for p, b := range files {
+		tree[p] = []byte(b)
+	}
+
+	c, err := authors.CreateFactory(ctx, authoring.NewFactoryRequest{
+		Start: authoring.Start{Kind: authoring.StartImport, Files: tree, KeepID: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := authors.Publish(ctx, c.Factory.ID, authoring.PublishRequest{Revision: c.Draft.Revision}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // seam is the harness's Authorizer: it records every question in order, together with the
@@ -221,32 +263,30 @@ func newHarness(t *testing.T) *harness {
 	t.Helper()
 
 	tenancy := newTenancy(t)
+
 	h := &harness{
 		store: porttest.NewStore(), clock: porttest.NewClock(t0), codehost: porttest.NewCodeHost(),
-		notices: porttest.NewItemNotices(),
+		notices: porttest.NewItemNotices(), defNotices: porttest.NewDefinitionNotices(), objects: porttest.NewObjectStore(),
 	}
 	tenancy.WithStore(h.store) // one database holds the organizations and their factories' rows
 
-	// Factories published here are registered in the item store, as in one database.
-	definitionStore := porttest.NewDefinitions(porttest.DefinitionsDeps{Objects: porttest.NewObjectStore(), Items: h.store})
+	// The definition store holds the factories' versions: both are published as v1, keeping their
+	// ids, by the same authoring service the API serves. Factories published here are registered
+	// in the item store, as in one database.
+	h.defs = porttest.NewDefinitions(porttest.DefinitionsDeps{
+		Objects: porttest.NewObjectStore(), Items: h.store, Notices: h.defNotices, Now: h.clock.Now,
+	})
 
-	for _, files := range []map[string]string{
-		{"factory.yaml": acme, "agents/writer.md": "# writer\n"},
-		{"factory.yaml": line, "agents/backend.md": "# backend\n", "agents/frontend.md": "# frontend\n"},
-	} {
-		tree := config.Files{}
-		for name, body := range files {
-			tree[name] = []byte(body)
-		}
+	var ids atomic.Int64
 
-		f, err := config.Load(tree)
-		if err != nil {
-			t.Fatal(err)
-		}
+	authors := authoring.New(authoring.Deps{
+		Store: h.defs, Loads: h.store, Templates: h.objects, Clock: h.clock,
+		Credentials: authoring.EnvReferences{Secrets: porttest.Secrets{"REPO_TOKEN": "a-token"}, Reserved: []string{"GOAL_DATABASE_URL"}},
+		NewID:       func() string { return fmt.Sprintf("0b6f1c9e-0000-7000-8000-%012d", ids.Add(1)) },
+	})
 
-		if _, err := porttest.Publish(inOrg(t), definitionStore, domain.FactoryID(f.Metadata.ID), f.Metadata.Name, tree); err != nil {
-			t.Fatal(err)
-		}
+	for _, files := range []map[string]string{acmeFiles, lineFiles} {
+		h.publishImport(t, authors, files)
 	}
 
 	e, err := engine.New(engine.Deps{
@@ -261,7 +301,7 @@ func newHarness(t *testing.T) *harness {
 	h.engine = e
 
 	// As goald does: the definitions cache hands every current version's line to the engine.
-	defs := definitions.New(definitionStore, tenancy, func(_ context.Context, lines []domain.Line) error {
+	defs := definitions.New(h.defs, tenancy, func(_ context.Context, lines []domain.Line) error {
 		return e.SetLines(lines)
 	}, definitions.Config{}, nil)
 
@@ -270,11 +310,16 @@ func newHarness(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 
-	feed := api.NewFeed(h.notices, nil)
+	feed := api.NewFeed(h.notices, h.defNotices, nil)
 	ctx, stop := context.WithCancel(domain.WithOrg(context.Background(), testOrg))
 	done := make(chan error, 1)
 
 	go func() { done <- feed.Run(ctx) }()
+
+	// The definition listener's first resync is past before any test subscribes.
+	if err := h.defNotices.AwaitListeners(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
 
 	h.seam, h.tenancy = &seam{}, tenancy
 	h.skills, h.skillSource = &flakyObjects{ObjectStore: porttest.NewObjectStore()}, porttest.NewSkillSource()
@@ -283,7 +328,7 @@ func newHarness(t *testing.T) *harness {
 	})
 
 	handler, err := api.New(api.Deps{
-		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Orgs: tenancy, Audit: tenancy,
+		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Orgs: tenancy, Audit: tenancy,
 		OrgRetention: retention, Authorizer: h.seam, Feed: feed, Builder: h.builder, Clock: h.clock,
 	})
 	if err != nil {

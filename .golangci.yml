@@ -210,9 +210,7 @@ linters:
             - pkg: github.com/byFrederick/goal/internal/definitions
               desc: factory definitions arrive through api.Factories; cmd/goald wires the cache
             - pkg: github.com/byFrederick/goal/internal/factorymodel
-              desc: handlers reach the factory model through api.Definitions; DTOs are generated types
-            - pkg: github.com/byFrederick/goal/internal/authoring
-              desc: handlers reach authoring through api.Definitions, which cmd/goald wires with *authoring.Service
+              desc: handlers reach the factory model through authoring's aliases and api.Definitions; DTOs are generated types
             - pkg: github.com/byFrederick/goal/internal/gateway
               desc: the gateway is a sibling HTTP component, mounted by cmd/goald
             - pkg: github.com/byFrederick/goal/internal/builder

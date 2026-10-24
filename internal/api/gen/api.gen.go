@@ -17,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	"go.yaml.in/yaml/v3"
+
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -42,6 +44,102 @@ func (e ActorKind) Valid() bool {
 	}
 }
 
+// Defines values for BlankStartKind.
+const (
+	BlankStartKindBlank BlankStartKind = "blank"
+)
+
+// Valid indicates whether the value is a known member of the BlankStartKind enum.
+func (e BlankStartKind) Valid() bool {
+	switch e {
+	case BlankStartKindBlank:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ChangeOp.
+const (
+	ChangeOpAdded   ChangeOp = "added"
+	ChangeOpChanged ChangeOp = "changed"
+	ChangeOpMoved   ChangeOp = "moved"
+	ChangeOpRemoved ChangeOp = "removed"
+)
+
+// Valid indicates whether the value is a known member of the ChangeOp enum.
+func (e ChangeOp) Valid() bool {
+	switch e {
+	case ChangeOpAdded:
+		return true
+	case ChangeOpChanged:
+		return true
+	case ChangeOpMoved:
+		return true
+	case ChangeOpRemoved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ChangeTargetKind.
+const (
+	ChangeTargetKindAgent      ChangeTargetKind = "agent"
+	ChangeTargetKindConnection ChangeTargetKind = "connection"
+	ChangeTargetKindContract   ChangeTargetKind = "contract"
+	ChangeTargetKindField      ChangeTargetKind = "field"
+	ChangeTargetKindFile       ChangeTargetKind = "file"
+	ChangeTargetKindSkill      ChangeTargetKind = "skill"
+	ChangeTargetKindStation    ChangeTargetKind = "station"
+	ChangeTargetKindTool       ChangeTargetKind = "tool"
+)
+
+// Valid indicates whether the value is a known member of the ChangeTargetKind enum.
+func (e ChangeTargetKind) Valid() bool {
+	switch e {
+	case ChangeTargetKindAgent:
+		return true
+	case ChangeTargetKindConnection:
+		return true
+	case ChangeTargetKindContract:
+		return true
+	case ChangeTargetKindField:
+		return true
+	case ChangeTargetKindFile:
+		return true
+	case ChangeTargetKindSkill:
+		return true
+	case ChangeTargetKindStation:
+		return true
+	case ChangeTargetKindTool:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CheckResultStatus.
+const (
+	CheckResultStatusFailed  CheckResultStatus = "failed"
+	CheckResultStatusPassed  CheckResultStatus = "passed"
+	CheckResultStatusWarning CheckResultStatus = "warning"
+)
+
+// Valid indicates whether the value is a known member of the CheckResultStatus enum.
+func (e CheckResultStatus) Valid() bool {
+	switch e {
+	case CheckResultStatusFailed:
+		return true
+	case CheckResultStatusPassed:
+		return true
+	case CheckResultStatusWarning:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ClassOfService.
 const (
 	Expedite ClassOfService = "expedite"
@@ -60,21 +158,102 @@ func (e ClassOfService) Valid() bool {
 	}
 }
 
+// Defines values for CloneStartKind.
+const (
+	CloneStartKindClone CloneStartKind = "clone"
+)
+
+// Valid indicates whether the value is a known member of the CloneStartKind enum.
+func (e CloneStartKind) Valid() bool {
+	switch e {
+	case CloneStartKindClone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DefinitionEventKind.
+const (
+	DefinitionEventKindCurrent DefinitionEventKind = "current"
+	DefinitionEventKindDraft   DefinitionEventKind = "draft"
+	DefinitionEventKindFactory DefinitionEventKind = "factory"
+)
+
+// Valid indicates whether the value is a known member of the DefinitionEventKind enum.
+func (e DefinitionEventKind) Valid() bool {
+	switch e {
+	case DefinitionEventKindCurrent:
+		return true
+	case DefinitionEventKindDraft:
+		return true
+	case DefinitionEventKindFactory:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DefinitionProblemSeverity.
+const (
+	DefinitionProblemSeverityError   DefinitionProblemSeverity = "error"
+	DefinitionProblemSeverityInfo    DefinitionProblemSeverity = "info"
+	DefinitionProblemSeverityWarning DefinitionProblemSeverity = "warning"
+)
+
+// Valid indicates whether the value is a known member of the DefinitionProblemSeverity enum.
+func (e DefinitionProblemSeverity) Valid() bool {
+	switch e {
+	case DefinitionProblemSeverityError:
+		return true
+	case DefinitionProblemSeverityInfo:
+		return true
+	case DefinitionProblemSeverityWarning:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for FactoryHealth.
 const (
-	Draft   FactoryHealth = "draft"
-	Running FactoryHealth = "running"
-	Stopped FactoryHealth = "stopped"
+	FactoryHealthDraft   FactoryHealth = "draft"
+	FactoryHealthRunning FactoryHealth = "running"
+	FactoryHealthStopped FactoryHealth = "stopped"
 )
 
 // Valid indicates whether the value is a known member of the FactoryHealth enum.
 func (e FactoryHealth) Valid() bool {
 	switch e {
-	case Draft:
+	case FactoryHealthDraft:
 		return true
-	case Running:
+	case FactoryHealthRunning:
 		return true
-	case Stopped:
+	case FactoryHealthStopped:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FileChangeOp.
+const (
+	FileChangeOpAdded     FileChangeOp = "added"
+	FileChangeOpModified  FileChangeOp = "modified"
+	FileChangeOpRemoved   FileChangeOp = "removed"
+	FileChangeOpUnchanged FileChangeOp = "unchanged"
+)
+
+// Valid indicates whether the value is a known member of the FileChangeOp enum.
+func (e FileChangeOp) Valid() bool {
+	switch e {
+	case FileChangeOpAdded:
+		return true
+	case FileChangeOpModified:
+		return true
+	case FileChangeOpRemoved:
+		return true
+	case FileChangeOpUnchanged:
 		return true
 	default:
 		return false
@@ -90,6 +269,21 @@ const (
 func (e HealthStatus) Valid() bool {
 	switch e {
 	case Ok:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ImportStartKind.
+const (
+	ImportStartKindImport ImportStartKind = "import"
+)
+
+// Valid indicates whether the value is a known member of the ImportStartKind enum.
+func (e ImportStartKind) Valid() bool {
+	switch e {
+	case ImportStartKindImport:
 		return true
 	default:
 		return false
@@ -159,6 +353,54 @@ func (e MergeRequestMethod) Valid() bool {
 	}
 }
 
+// Defines values for PatchOpOp.
+const (
+	Add     PatchOpOp = "add"
+	Remove  PatchOpOp = "remove"
+	Replace PatchOpOp = "replace"
+)
+
+// Valid indicates whether the value is a known member of the PatchOpOp enum.
+func (e PatchOpOp) Valid() bool {
+	switch e {
+	case Add:
+		return true
+	case Remove:
+		return true
+	case Replace:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for Section.
+const (
+	Agents      Section = "agents"
+	Basics      Section = "basics"
+	Connections Section = "connections"
+	Line        Section = "line"
+	Review      Section = "review"
+)
+
+// Valid indicates whether the value is a known member of the Section enum.
+func (e Section) Valid() bool {
+	switch e {
+	case Agents:
+		return true
+	case Basics:
+		return true
+	case Connections:
+		return true
+	case Line:
+		return true
+	case Review:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for StationAction.
 const (
 	Merge StationAction = "merge"
@@ -192,6 +434,75 @@ func (e StationKind) Valid() bool {
 	case StationKindHuman:
 		return true
 	case StationKindQueue:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TemplateStartKind.
+const (
+	TemplateStartKindTemplate TemplateStartKind = "template"
+)
+
+// Valid indicates whether the value is a known member of the TemplateStartKind enum.
+func (e TemplateStartKind) Valid() bool {
+	switch e {
+	case TemplateStartKindTemplate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VersionSourceKind.
+const (
+	VersionSourceKindBlank    VersionSourceKind = "blank"
+	VersionSourceKindCli      VersionSourceKind = "cli"
+	VersionSourceKindClone    VersionSourceKind = "clone"
+	VersionSourceKindEdit     VersionSourceKind = "edit"
+	VersionSourceKindImport   VersionSourceKind = "import"
+	VersionSourceKindLegacy   VersionSourceKind = "legacy"
+	VersionSourceKindTemplate VersionSourceKind = "template"
+)
+
+// Valid indicates whether the value is a known member of the VersionSourceKind enum.
+func (e VersionSourceKind) Valid() bool {
+	switch e {
+	case VersionSourceKindBlank:
+		return true
+	case VersionSourceKindCli:
+		return true
+	case VersionSourceKindClone:
+		return true
+	case VersionSourceKindEdit:
+		return true
+	case VersionSourceKindImport:
+		return true
+	case VersionSourceKindLegacy:
+		return true
+	case VersionSourceKindTemplate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VersionState.
+const (
+	VersionStateArchived  VersionState = "archived"
+	VersionStateDraft     VersionState = "draft"
+	VersionStatePublished VersionState = "published"
+)
+
+// Valid indicates whether the value is a known member of the VersionState enum.
+func (e VersionState) Valid() bool {
+	switch e {
+	case VersionStateArchived:
+		return true
+	case VersionStateDraft:
+		return true
+	case VersionStatePublished:
 		return true
 	default:
 		return false
@@ -256,6 +567,14 @@ type AuditTarget struct {
 type Base64File struct {
 	Base64 []byte `json:"base64"`
 }
+
+// BlankStart defines model for BlankStart.
+type BlankStart struct {
+	Kind BlankStartKind `json:"kind"`
+}
+
+// BlankStartKind defines model for BlankStart.Kind.
+type BlankStartKind string
 
 // Board defines model for Board.
 type Board struct {
@@ -329,14 +648,246 @@ type BuilderModel struct {
 	Label string `json:"label"`
 }
 
+// Change One meaningful difference, by identity (a reordered station is one moved change)
+type Change struct {
+	// Field Set when exactly one field of the target changed
+	Field *string `json:"field,omitempty"`
+
+	// From The value before
+	From interface{} `json:"from,omitempty"`
+
+	// FromLines The first and last line of factory.yaml, 1-based; [0, 0] when it is not in the file
+	FromLines LineRange `json:"from_lines"`
+	Op        ChangeOp  `json:"op"`
+
+	// Section A section
+	Section string `json:"section"`
+
+	// Summary A short sentence
+	Summary string `json:"summary"`
+	Target  struct {
+		Id   string           `json:"id"`
+		Kind ChangeTargetKind `json:"kind"`
+	} `json:"target"`
+
+	// To The value after
+	To interface{} `json:"to,omitempty"`
+
+	// ToLines The first and last line of factory.yaml, 1-based; [0, 0] when it is not in the file
+	ToLines LineRange `json:"to_lines"`
+}
+
+// ChangeOp defines model for Change.Op.
+type ChangeOp string
+
+// ChangeTargetKind defines model for Change.Target.Kind.
+type ChangeTargetKind string
+
+// CheckResult One line of Review & publish's checks; checks that did not run (after a schema failure, or of phases not wired yet) are absent, never passed
+type CheckResult struct {
+	// Id yaml
+	Id      string            `json:"id"`
+	Section string            `json:"section"`
+	Status  CheckResultStatus `json:"status"`
+	Summary string            `json:"summary"`
+}
+
+// CheckResultStatus defines model for CheckResult.Status.
+type CheckResultStatus string
+
 // ClassOfService defines model for ClassOfService.
 type ClassOfService string
+
+// CloneStart defines model for CloneStart.
+type CloneStart struct {
+	// Factory The factory to copy (its id or name)
+	Factory string         `json:"factory"`
+	Kind    CloneStartKind `json:"kind"`
+
+	// Version The version to copy (a number or current); the current one when absent, the draft of a factory never published
+	Version *string `json:"version,omitempty"`
+}
+
+// CloneStartKind defines model for CloneStart.Kind.
+type CloneStartKind string
+
+// CompareSide One side of a comparison; id, number and state are null for a starting tree no version holds
+type CompareSide struct {
+	Id *string `json:"id"`
+
+	// Number null unless published
+	Number *int `json:"number"`
+
+	// Selector The selector asked for (base
+	Selector string        `json:"selector"`
+	State    *VersionState `json:"state"`
+}
+
+// Comparison defines model for Comparison.
+type Comparison struct {
+	Changes []Change `json:"changes"`
+
+	// Counts "3 changes in 2 sections"
+	Counts struct {
+		Changes  int `json:"changes"`
+		Sections int `json:"sections"`
+	} `json:"counts"`
+	Files []FileChange `json:"files"`
+
+	// From One side of a comparison; id, number and state are null for a starting tree no version holds
+	From CompareSide `json:"from"`
+
+	// To One side of a comparison; id, number and state are null for a starting tree no version holds
+	To CompareSide `json:"to"`
+}
 
 // ConstraintSummary defines model for ConstraintSummary.
 type ConstraintSummary struct {
 	// Busy Share of the window the station was busy (0 to 1); null until it is measured over time
 	Busy    *float64 `json:"busy"`
 	Station string   `json:"station"`
+}
+
+// DefinitionCounts defines model for DefinitionCounts.
+type DefinitionCounts struct {
+	Agents int `json:"agents"`
+
+	// Changes Changes from the base or starting tree; 0 when there is none to compare with
+	Changes     int `json:"changes"`
+	Connections int `json:"connections"`
+	Contracts   int `json:"contracts"`
+	Skills      int `json:"skills"`
+	Stations    int `json:"stations"`
+}
+
+// DefinitionEvent The data of one `event: definition` on /v1/orgs/{org}/stream; it carries no content
+type DefinitionEvent struct {
+	// By draft only, who saved it, as an actor ref (user:local)
+	By        *string `json:"by,omitempty"`
+	FactoryId string  `json:"factory_id"`
+
+	// Kind current: the version that runs moved, or the factory was paused or resumed; draft: a version row changed (a draft opened, saved, discarded or published); factory: the factory was created or deleted
+	Kind DefinitionEventKind `json:"kind"`
+
+	// Number The version's number once published
+	Number *int   `json:"number,omitempty"`
+	OrgId  string `json:"org_id"`
+
+	// Revision draft only
+	Revision *int64 `json:"revision,omitempty"`
+
+	// VersionId The version concerned (current - the one that runs)
+	VersionId *string `json:"version_id,omitempty"`
+}
+
+// DefinitionEventKind current: the version that runs moved, or the factory was paused or resumed; draft: a version row changed (a draft opened, saved, discarded or published); factory: the factory was created or deleted
+type DefinitionEventKind string
+
+// DefinitionFiles defines model for DefinitionFiles.
+type DefinitionFiles struct {
+	// Files Files by slash-separated relative path
+	Files FileMap `json:"files"`
+}
+
+// DefinitionProblem One validation finding, located for both views (Visual by section and pointer, YAML by file and lines)
+type DefinitionProblem struct {
+	// Check The validation step that found it
+	Check string `json:"check"`
+
+	// Code Stable and kebab-case
+	Code      string `json:"code"`
+	Column    int    `json:"column"`
+	EndColumn int    `json:"end_column"`
+	EndLine   int    `json:"end_line"`
+
+	// File The file
+	File  *string      `json:"file,omitempty"`
+	Fixes []ProblemFix `json:"fixes"`
+
+	// Line 1-based; 0 when not in a file
+	Line    int    `json:"line"`
+	Message string `json:"message"`
+
+	// Pointer An RFC 6901 pointer into the factory model (/line/stations/3/agent)
+	Pointer *string `json:"pointer,omitempty"`
+
+	// Section basics
+	Section string `json:"section"`
+
+	// Severity errors block publishing
+	Severity DefinitionProblemSeverity `json:"severity"`
+}
+
+// DefinitionProblemSeverity errors block publishing
+type DefinitionProblemSeverity string
+
+// Draft defines model for Draft.
+type Draft struct {
+	// Base The published version it started from ("based on v8"); null for a first draft
+	Base *VersionRef `json:"base"`
+
+	// ChangeCount Changes from the base
+	ChangeCount int       `json:"change_count"`
+	CreatedAt   time.Time `json:"created_at"`
+
+	// CreatedBy Who did something; in phase 2.2 every person is the local user
+	CreatedBy Actor `json:"created_by"`
+
+	// Current The version that runs now, which differs from base after a restore; null before the first publish
+	Current *VersionRef `json:"current"`
+	Id      string      `json:"id"`
+
+	// NextNumber The number publishing gives it ("Draft of v9")
+	NextNumber   int `json:"next_number"`
+	ProblemCount int `json:"problem_count"`
+
+	// Revision Counts the draft's saves from 1
+	Revision int64            `json:"revision"`
+	Sections []SectionSummary `json:"sections"`
+
+	// Source Where a version started ("Source - Template Cost review v2")
+	Source VersionSource `json:"source"`
+
+	// UpdatedAt The last save ("Autosaved 14:32")
+	UpdatedAt time.Time `json:"updated_at"`
+
+	// UpdatedBy Who did something; in phase 2.2 every person is the local user
+	UpdatedBy Actor `json:"updated_by"`
+}
+
+// DraftModel defines model for DraftModel.
+type DraftModel struct {
+	// Edited The model pointers the draft changed against its base (or starting tree), each with the value there, null where it had none: the fields' Edited · Undo
+	Edited map[string]interface{} `json:"edited"`
+
+	// Etags Each section's concurrency token, the If-Match of its save
+	Etags SectionETags `json:"etags"`
+
+	// Model The factory model the Visual editor edits: factory.yaml's sections with snake_case keys (the YAML's camelCase keys). It mirrors the YAML leniently: a key the YAML lacks is absent, and a value the schema refuses appears as it is, with a problem.
+	Model FactoryModel `json:"model"`
+
+	// Ranges Where each model pointer (/line/stations/3) is in factory.yaml
+	Ranges   Ranges `json:"ranges"`
+	Revision int64  `json:"revision"`
+}
+
+// DraftRef An open draft as listings name it
+type DraftRef struct {
+	Id        string    `json:"id"`
+	Revision  int64     `json:"revision"`
+	UpdatedAt time.Time `json:"updated_at"`
+
+	// UpdatedBy Who did something; in phase 2.2 every person is the local user
+	UpdatedBy Actor `json:"updated_by"`
+}
+
+// DraftTree defines model for DraftTree.
+type DraftTree struct {
+	// ExpectedRevision Refuse (412) when the draft is at another revision
+	ExpectedRevision *int64 `json:"expected_revision,omitempty"`
+
+	// Files Files by slash-separated relative path
+	Files FileMap `json:"files"`
 }
 
 // Event defines model for Event.
@@ -361,15 +912,29 @@ type EventPage struct {
 
 // Factory defines model for Factory.
 type Factory struct {
-	Description *string `json:"description,omitempty"`
-	Id          string  `json:"id"`
-	Name        string  `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+
+	// Current The version that runs ("v8"); null before the first publish
+	Current     *VersionRef `json:"current"`
+	Description *string     `json:"description,omitempty"`
+
+	// Draft The open draft ("v8 + draft"); null when none is open
+	Draft *DraftRef `json:"draft"`
+	Id    string    `json:"id"`
+	Name  string    `json:"name"`
 
 	// OrgId The organization that owns the factory
-	OrgId     string    `json:"org_id"`
-	Stations  []Station `json:"stations"`
-	Title     *string   `json:"title,omitempty"`
-	WorkTypes []string  `json:"work_types"`
+	OrgId string `json:"org_id"`
+
+	// Paused A paused factory takes no work; runs in progress finish
+	Paused bool `json:"paused"`
+
+	// Stations The stations of the version goald runs; empty before the first publish
+	Stations []Station `json:"stations"`
+	Title    *string   `json:"title,omitempty"`
+
+	// WorkTypes The work types of the version goald runs; empty before the first publish
+	WorkTypes []string `json:"work_types"`
 }
 
 // FactoryAttention defines model for FactoryAttention.
@@ -393,6 +958,9 @@ type FactoryHealth string
 type FactoryList struct {
 	Factories []Factory `json:"factories"`
 }
+
+// FactoryModel The factory model the Visual editor edits: factory.yaml's sections with snake_case keys (the YAML's camelCase keys). It mirrors the YAML leniently: a key the YAML lacks is absent, and a value the schema refuses appears as it is, with a problem.
+type FactoryModel = json.RawMessage
 
 // FactoryOverview defines model for FactoryOverview.
 type FactoryOverview struct {
@@ -451,9 +1019,42 @@ type FactorySlotsPatch struct {
 	Max       *int   `json:"max"`
 }
 
+// FactoryStart Where the new factory's first draft comes from
+type FactoryStart struct {
+	union json.RawMessage
+}
+
+// FileChange defines model for FileChange.
+type FileChange struct {
+	// FromSha256 Absent for an added file
+	FromSha256 *string      `json:"from_sha256,omitempty"`
+	Op         FileChangeOp `json:"op"`
+	Path       string       `json:"path"`
+
+	// ToSha256 Absent for a removed file
+	ToSha256 *string `json:"to_sha256,omitempty"`
+}
+
+// FileChangeOp defines model for FileChange.Op.
+type FileChangeOp string
+
 // FileContent A file's content, as text when it is UTF-8 without NUL bytes, else in base64
 type FileContent struct {
 	union json.RawMessage
+}
+
+// FileInfo defines model for FileInfo.
+type FileInfo struct {
+	Path   string `json:"path"`
+	Sha256 string `json:"sha256"`
+
+	// Size Bytes
+	Size int64 `json:"size"`
+}
+
+// FileList defines model for FileList.
+type FileList struct {
+	Files []FileInfo `json:"files"`
 }
 
 // FileMap Files by slash-separated relative path
@@ -466,6 +1067,19 @@ type Health struct {
 
 // HealthStatus defines model for Health.Status.
 type HealthStatus string
+
+// ImportStart defines model for ImportStart.
+type ImportStart struct {
+	// Files Files by slash-separated relative path
+	Files FileMap `json:"files"`
+
+	// KeepId Keep factory.yaml's metadata.id (goal factory push of a factory the organization lacks)
+	KeepId *bool           `json:"keep_id,omitempty"`
+	Kind   ImportStartKind `json:"kind"`
+}
+
+// ImportStartKind defines model for ImportStart.Kind.
+type ImportStartKind string
 
 // Inbox defines model for Inbox.
 type Inbox struct {
@@ -532,6 +1146,14 @@ type Item struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+// ItemAt defines model for ItemAt.
+type ItemAt struct {
+	Id      string    `json:"id"`
+	Number  int64     `json:"number"`
+	State   ItemState `json:"state"`
+	Station string    `json:"station"`
+}
+
 // ItemCard An item as boards and lists show it
 type ItemCard struct {
 	// AgeSeconds Seconds since the item was created; for a done item, from created to done
@@ -570,6 +1192,18 @@ type ItemPage struct {
 // ItemState defines model for ItemState.
 type ItemState string
 
+// ItemsAtRemovedStations The open items that keep a publish or restore from dropping stations
+type ItemsAtRemovedStations struct {
+	// InProgress Items being worked; they must finish or be stopped first
+	InProgress []ItemAt `json:"in_progress"`
+
+	// Unmapped Open items no station move maps
+	Unmapped []ItemAt `json:"unmapped"`
+}
+
+// LineRange The first and last line of factory.yaml, 1-based; [0, 0] when it is not in the file
+type LineRange = []int
+
 // MergeRequest defines model for MergeRequest.
 type MergeRequest struct {
 	Method *MergeRequestMethod `json:"method,omitempty"`
@@ -607,6 +1241,16 @@ type Metrics struct {
 	Wip int `json:"wip"`
 }
 
+// NewFactoryRequest defines model for NewFactoryRequest.
+type NewFactoryRequest struct {
+	// Name Required except for an import, where factory.yaml's metadata.name is used when it is absent
+	Name *string `json:"name,omitempty"`
+
+	// Start Where the new factory's first draft comes from
+	Start FactoryStart `json:"start"`
+	Title *string      `json:"title,omitempty"`
+}
+
 // NewItem defines model for NewItem.
 type NewItem struct {
 	Body     *string `json:"body,omitempty"`
@@ -624,6 +1268,15 @@ type NewOrg struct {
 	Mark *string `json:"mark,omitempty"`
 	Name string  `json:"name"`
 	Slug string  `json:"slug"`
+}
+
+// OpenDraftRequest defines model for OpenDraftRequest.
+type OpenDraftRequest struct {
+	// Base A published version (a number or current); current when absent
+	Base *string `json:"base,omitempty"`
+
+	// Replace Archive the open draft first (goal factory push --replace-draft)
+	Replace *bool `json:"replace,omitempty"`
 }
 
 // Org defines model for Org.
@@ -707,19 +1360,156 @@ type OrgSummary struct {
 	Slug string `json:"slug"`
 }
 
+// ParseError Where factory.yaml stops parsing
+type ParseError struct {
+	Column int `json:"column"`
+
+	// Line 1-based; 0 when unknown
+	Line    int    `json:"line"`
+	Message string `json:"message"`
+}
+
+// PatchOp One RFC 6902 operation, its path relative to the section's value
+type PatchOp struct {
+	Op   PatchOpOp `json:"op"`
+	Path string    `json:"path"`
+
+	// Value The value of add and replace
+	Value *json.RawMessage `json:"value,omitempty"`
+}
+
+// PatchOpOp defines model for PatchOp.Op.
+type PatchOpOp string
+
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, ...)
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...)
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
+
+	// Etag draft-conflict on a section save only, the section's etag now (resend with it to overwrite)
+	Etag *string `json:"etag,omitempty"`
+
+	// Items The open items that keep a publish or restore from dropping stations
+	Items *ItemsAtRemovedStations `json:"items,omitempty"`
+
+	// ParseError Where factory.yaml stops parsing
+	ParseError *ParseError `json:"parse_error,omitempty"`
+
+	// Path draft-conflict on a file write only, the file
+	Path *string `json:"path,omitempty"`
+
+	// Problems definition-invalid only, every problem of the definition (errors block the publish)
+	Problems *[]DefinitionProblem `json:"problems,omitempty"`
+
+	// Section draft-conflict on a section save only, the section that changed
+	Section *Section `json:"section,omitempty"`
+
+	// Sha256 draft-conflict on a file write only, the file's sha256 now; absent when the file is gone
+	Sha256 *string `json:"sha256,omitempty"`
 	Status int     `json:"status"`
 	Title  string  `json:"title"`
+
+	// Value draft-conflict on a section save only, the section's value now (Keep theirs / Overwrite)
+	Value interface{} `json:"value,omitempty"`
 }
+
+// ProblemFix A machine-applicable fix: a JSON Patch on one section of the model, or (section publish) on the publish request (add /station_moves/<station>)
+type ProblemFix struct {
+	// Label As in Set WIP to 2
+	Label   string    `json:"label"`
+	Patch   []PatchOp `json:"patch"`
+	Section string    `json:"section"`
+}
+
+// PublishRequest defines model for PublishRequest.
+type PublishRequest struct {
+	// ExpectedCurrentVersionId The version the editor saw running; null for a first publish
+	ExpectedCurrentVersionId *string `json:"expected_current_version_id"`
+
+	// Message The publish note
+	Message *string `json:"message,omitempty"`
+
+	// Revision The draft revision the editor validated
+	Revision int64 `json:"revision"`
+
+	// Start First publish only; false creates the factory paused (Start the line right away)
+	Start *bool `json:"start,omitempty"`
+
+	// StationMoves Where the open items of each station the new version removes go, by station id
+	StationMoves *StationMoves `json:"station_moves,omitempty"`
+}
+
+// Ranges Where each model pointer (/line/stations/3) is in factory.yaml
+type Ranges map[string]LineRange
 
 // Rejection defines model for Rejection.
 type Rejection struct {
 	// Reason What the agent must change
 	Reason string `json:"reason"`
+}
+
+// RestoreRequest defines model for RestoreRequest.
+type RestoreRequest struct {
+	// ExpectedCurrentVersionId The version the caller saw running
+	ExpectedCurrentVersionId string `json:"expected_current_version_id"`
+
+	// StationMoves Where the open items of each station the new version removes go, by station id
+	StationMoves *StationMoves `json:"station_moves,omitempty"`
+}
+
+// RevertRequest defines model for RevertRequest.
+type RevertRequest struct {
+	Pointers []string `json:"pointers"`
+}
+
+// SaveResult The draft after a save
+type SaveResult struct {
+	ChangeCount int `json:"change_count"`
+
+	// Etag A section save's new etag
+	Etag         *string          `json:"etag,omitempty"`
+	ProblemCount int              `json:"problem_count"`
+	Revision     int64            `json:"revision"`
+	Sections     []SectionSummary `json:"sections"`
+
+	// Sha256 A file save's new sha256
+	Sha256    *string   `json:"sha256,omitempty"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// Section defines model for Section.
+type Section string
+
+// SectionETags Each section's concurrency token, the If-Match of its save
+type SectionETags struct {
+	Agents      string `json:"agents"`
+	Basics      string `json:"basics"`
+	Connections string `json:"connections"`
+	Line        string `json:"line"`
+	Review      string `json:"review"`
+}
+
+// SectionSave defines model for SectionSave.
+type SectionSave struct {
+	// Files Files by slash-separated relative path
+	Files *FileMap `json:"files,omitempty"`
+
+	// RemoveFiles Files to delete in the same revision, except a prompt another agent still uses
+	RemoveFiles *[]string `json:"remove_files,omitempty"`
+
+	// Value The section's new value, the shape of FactoryModel's property of the section
+	Value json.RawMessage `json:"value"`
+}
+
+// SectionSummary One section tab's badge ("1 change, 1 problem") and the lines of factory.yaml it spans
+type SectionSummary struct {
+	Changes int `json:"changes"`
+
+	// Lines The first and last line of factory.yaml, 1-based; [0, 0] when it is not in the file
+	Lines    LineRange `json:"lines"`
+	Problems int       `json:"problems"`
+	Section  Section   `json:"section"`
 }
 
 // SkillFiles defines model for SkillFiles.
@@ -774,6 +1564,9 @@ type StationAction string
 // StationKind defines model for StationKind.
 type StationKind string
 
+// StationMoves Where the open items of each station the new version removes go, by station id
+type StationMoves map[string]string
+
 // StreamEvent The data of one `event: item` on /v1/orgs/{org}/stream
 type StreamEvent struct {
 	At        time.Time `json:"at"`
@@ -788,6 +1581,57 @@ type StreamEvent struct {
 	Ref     string    `json:"ref"`
 	State   ItemState `json:"state"`
 	Station *string   `json:"station,omitempty"`
+}
+
+// Template defines model for Template.
+type Template struct {
+	Agents int `json:"agents"`
+
+	// Changed The day the version was made, as in 2026-10-09
+	Changed     string   `json:"changed"`
+	Connectors  []string `json:"connectors"`
+	Description string   `json:"description"`
+
+	// Model The factory model the Visual editor edits: factory.yaml's sections with snake_case keys (the YAML's camelCase keys). It mirrors the YAML leniently: a key the YAML lacks is absent, and a value the schema refuses appears as it is, with a problem.
+	Model    FactoryModel `json:"model"`
+	Name     string       `json:"name"`
+	Stations int          `json:"stations"`
+	Summary  string       `json:"summary"`
+	Title    string       `json:"title"`
+	Version  int          `json:"version"`
+}
+
+// TemplateList defines model for TemplateList.
+type TemplateList struct {
+	Templates []TemplateSummary `json:"templates"`
+}
+
+// TemplateStart defines model for TemplateStart.
+type TemplateStart struct {
+	Kind TemplateStartKind `json:"kind"`
+
+	// Template The template's name
+	Template string `json:"template"`
+
+	// Version The template's version; the latest when absent
+	Version *int `json:"version,omitempty"`
+}
+
+// TemplateStartKind defines model for TemplateStart.Kind.
+type TemplateStartKind string
+
+// TemplateSummary defines model for TemplateSummary.
+type TemplateSummary struct {
+	Agents int `json:"agents"`
+
+	// Changed The day the version was made, as in 2026-10-09
+	Changed    string   `json:"changed"`
+	Connectors []string `json:"connectors"`
+	Name       string   `json:"name"`
+	Stations   int      `json:"stations"`
+	Summary    string   `json:"summary"`
+	Title      string   `json:"title"`
+	Version    int      `json:"version"`
 }
 
 // TextFile defines model for TextFile.
@@ -810,6 +1654,114 @@ type Throughput struct {
 	PreviousPerDay float64 `json:"previous_per_day"`
 }
 
+// ValidateDraftRequest defines model for ValidateDraftRequest.
+type ValidateDraftRequest struct {
+	// Overlay Files by slash-separated relative path
+	Overlay *FileMap `json:"overlay,omitempty"`
+
+	// StationMoves Where the open items of each station the new version removes go, by station id
+	StationMoves *StationMoves `json:"station_moves,omitempty"`
+}
+
+// Validation defines model for Validation.
+type Validation struct {
+	Checks []CheckResult    `json:"checks"`
+	Counts DefinitionCounts `json:"counts"`
+
+	// Ok No problem is an error
+	Ok       bool                `json:"ok"`
+	Problems []DefinitionProblem `json:"problems"`
+
+	// Revision The draft revision validated; 0 for files outside a draft
+	Revision int64 `json:"revision"`
+}
+
+// Version defines model for Version.
+type Version struct {
+	Counts DefinitionCounts `json:"counts"`
+
+	// Current This is the version that runs
+	Current bool   `json:"current"`
+	Id      string `json:"id"`
+	Message string `json:"message"`
+
+	// Number null for a draft
+	Number      *int       `json:"number"`
+	PublishedAt *time.Time `json:"published_at"`
+	PublishedBy *Actor     `json:"published_by"`
+	Revision    int64      `json:"revision"`
+
+	// Source Where a version started ("Source - Template Cost review v2")
+	Source VersionSource `json:"source"`
+	State  VersionState  `json:"state"`
+}
+
+// VersionDetail defines model for VersionDetail.
+type VersionDetail struct {
+	Counts DefinitionCounts `json:"counts"`
+
+	// Current This is the version that runs
+	Current bool       `json:"current"`
+	Files   []FileInfo `json:"files"`
+	Id      string     `json:"id"`
+	Message string     `json:"message"`
+
+	// Number null for a draft
+	Number      *int       `json:"number"`
+	PublishedAt *time.Time `json:"published_at"`
+	PublishedBy *Actor     `json:"published_by"`
+	Revision    int64      `json:"revision"`
+
+	// Source Where a version started ("Source - Template Cost review v2")
+	Source VersionSource `json:"source"`
+	State  VersionState  `json:"state"`
+}
+
+// VersionModel defines model for VersionModel.
+type VersionModel struct {
+	// Model The factory model the Visual editor edits: factory.yaml's sections with snake_case keys (the YAML's camelCase keys). It mirrors the YAML leniently: a key the YAML lacks is absent, and a value the schema refuses appears as it is, with a problem.
+	Model FactoryModel `json:"model"`
+
+	// Ranges Where each model pointer (/line/stations/3) is in factory.yaml
+	Ranges Ranges `json:"ranges"`
+}
+
+// VersionPage defines model for VersionPage.
+type VersionPage struct {
+	// NextBefore Pass as `before` for the next page; null on the last page
+	NextBefore *int      `json:"next_before"`
+	Versions   []Version `json:"versions"`
+}
+
+// VersionRef A published version as listings name it
+type VersionRef struct {
+	Id          string    `json:"id"`
+	Number      int       `json:"number"`
+	PublishedAt time.Time `json:"published_at"`
+
+	// PublishedBy Who did something; in phase 2.2 every person is the local user
+	PublishedBy Actor `json:"published_by"`
+}
+
+// VersionSource Where a version started ("Source - Template Cost review v2")
+type VersionSource struct {
+	// Factory The factory a clone copied
+	Factory *string           `json:"factory,omitempty"`
+	Kind    VersionSourceKind `json:"kind"`
+
+	// Template The template and its version
+	Template *string `json:"template,omitempty"`
+
+	// Version The version a clone copied
+	Version *string `json:"version,omitempty"`
+}
+
+// VersionSourceKind defines model for VersionSource.Kind.
+type VersionSourceKind string
+
+// VersionState defines model for VersionState.
+type VersionState string
+
 // WaitingSummary defines model for WaitingSummary.
 type WaitingSummary struct {
 	// ItemsByType The items waiting for a decision by work type, by type
@@ -831,11 +1783,26 @@ type WaitingSummary struct {
 // FactoryRef defines model for FactoryRef.
 type FactoryRef = string
 
+// FilePath defines model for FilePath.
+type FilePath = string
+
+// IfMatch defines model for IfMatch.
+type IfMatch = string
+
+// IfNoneMatch defines model for IfNoneMatch.
+type IfNoneMatch = string
+
 // ItemRef defines model for ItemRef.
 type ItemRef = string
 
 // OrgRef defines model for OrgRef.
 type OrgRef = string
+
+// SectionRef defines model for SectionRef.
+type SectionRef = Section
+
+// VersionSelector defines model for VersionSelector.
+type VersionSelector = string
 
 // ListAuditParams defines parameters for ListAudit.
 type ListAuditParams struct {
@@ -861,6 +1828,45 @@ type SearchSkillsParams struct {
 	After *string `form:"after,omitempty" json:"after,omitempty"`
 }
 
+// CompareVersionsParams defines parameters for CompareVersions.
+type CompareVersionsParams struct {
+	From *string `form:"from,omitempty" json:"from,omitempty"`
+	To   *string `form:"to,omitempty" json:"to,omitempty"`
+}
+
+// DiscardDraftParams defines parameters for DiscardDraft.
+type DiscardDraftParams struct {
+	// IfMatch The entity tag the write is based on, quoted ("<etag>"); writes without it are 428
+	IfMatch *IfMatch `json:"If-Match,omitempty"`
+}
+
+// DeleteDraftFileParams defines parameters for DeleteDraftFile.
+type DeleteDraftFileParams struct {
+	// IfMatch The entity tag the write is based on, quoted ("<etag>"); writes without it are 428
+	IfMatch *IfMatch `json:"If-Match,omitempty"`
+}
+
+// PutDraftFileParams defines parameters for PutDraftFile.
+type PutDraftFileParams struct {
+	// IfMatch The entity tag the write is based on, quoted ("<etag>"); writes without it are 428
+	IfMatch *IfMatch `json:"If-Match,omitempty"`
+
+	// IfNoneMatch * to create a file that must not exist yet
+	IfNoneMatch *IfNoneMatch `json:"If-None-Match,omitempty"`
+}
+
+// SaveDraftSectionParams defines parameters for SaveDraftSection.
+type SaveDraftSectionParams struct {
+	// IfMatch The entity tag the write is based on, quoted ("<etag>"); writes without it are 428
+	IfMatch *IfMatch `json:"If-Match,omitempty"`
+}
+
+// RevertDraftSectionParams defines parameters for RevertDraftSection.
+type RevertDraftSectionParams struct {
+	// IfMatch The entity tag the write is based on, quoted ("<etag>"); writes without it are 428
+	IfMatch *IfMatch `json:"If-Match,omitempty"`
+}
+
 // ListItemsParams defines parameters for ListItems.
 type ListItemsParams struct {
 	// State Only items in this state
@@ -878,6 +1884,13 @@ type ListItemsParams struct {
 type GetMetricsParams struct {
 	// Window The last N UTC calendar days, today included, written Nd (1d to 90d). Items count when they reached done in the window; spend counts agent runs started in it.
 	Window *string `form:"window,omitempty" json:"window,omitempty"`
+}
+
+// ListVersionsParams defines parameters for ListVersions.
+type ListVersionsParams struct {
+	// Before The next_before of the previous page; versions numbered below it
+	Before *int `form:"before,omitempty" json:"before,omitempty"`
+	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // GetInboxParams defines parameters for GetInbox.
@@ -906,14 +1919,47 @@ type StreamEventsParams struct {
 	Factory *string `form:"factory,omitempty" json:"factory,omitempty"`
 }
 
+// GetTemplateParams defines parameters for GetTemplate.
+type GetTemplateParams struct {
+	// Version The template's version; the latest when absent
+	Version *int `form:"version,omitempty" json:"version,omitempty"`
+}
+
 // CreateOrgJSONRequestBody defines body for CreateOrg for application/json ContentType.
 type CreateOrgJSONRequestBody = NewOrg
 
 // DeleteOrgJSONRequestBody defines body for DeleteOrg for application/json ContentType.
 type DeleteOrgJSONRequestBody = OrgDeletion
 
+// ValidateDefinitionJSONRequestBody defines body for ValidateDefinition for application/json ContentType.
+type ValidateDefinitionJSONRequestBody = DefinitionFiles
+
+// CreateFactoryJSONRequestBody defines body for CreateFactory for application/json ContentType.
+type CreateFactoryJSONRequestBody = NewFactoryRequest
+
+// OpenDraftJSONRequestBody defines body for OpenDraft for application/json ContentType.
+type OpenDraftJSONRequestBody = OpenDraftRequest
+
+// SaveDraftSectionJSONRequestBody defines body for SaveDraftSection for application/json ContentType.
+type SaveDraftSectionJSONRequestBody = SectionSave
+
+// RevertDraftSectionJSONRequestBody defines body for RevertDraftSection for application/json ContentType.
+type RevertDraftSectionJSONRequestBody = RevertRequest
+
+// PublishDraftJSONRequestBody defines body for PublishDraft for application/json ContentType.
+type PublishDraftJSONRequestBody = PublishRequest
+
+// ReplaceDraftTreeJSONRequestBody defines body for ReplaceDraftTree for application/json ContentType.
+type ReplaceDraftTreeJSONRequestBody = DraftTree
+
+// ValidateDraftJSONRequestBody defines body for ValidateDraft for application/json ContentType.
+type ValidateDraftJSONRequestBody = ValidateDraftRequest
+
 // SubmitItemJSONRequestBody defines body for SubmitItem for application/json ContentType.
 type SubmitItemJSONRequestBody = NewItem
+
+// RestoreVersionJSONRequestBody defines body for RestoreVersion for application/json ContentType.
+type RestoreVersionJSONRequestBody = RestoreRequest
 
 // MergeItemJSONRequestBody defines body for MergeItem for application/json ContentType.
 type MergeItemJSONRequestBody = MergeRequest
@@ -923,6 +1969,179 @@ type RejectItemJSONRequestBody = Rejection
 
 // UpdateOrgSettingsJSONRequestBody defines body for UpdateOrgSettings for application/json ContentType.
 type UpdateOrgSettingsJSONRequestBody = OrgSettingsPatch
+
+// AsBlankStart returns the union data inside the FactoryStart as a BlankStart
+func (t FactoryStart) AsBlankStart() (BlankStart, error) {
+	var body BlankStart
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromBlankStart overwrites any union data inside the FactoryStart as the provided BlankStart
+func (t *FactoryStart) FromBlankStart(v BlankStart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"kind":"blank"}`))
+	t.union = b
+	return err
+}
+
+// MergeBlankStart performs a merge with any union data inside the FactoryStart, using the provided BlankStart
+func (t *FactoryStart) MergeBlankStart(v BlankStart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"kind":"blank"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsTemplateStart returns the union data inside the FactoryStart as a TemplateStart
+func (t FactoryStart) AsTemplateStart() (TemplateStart, error) {
+	var body TemplateStart
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromTemplateStart overwrites any union data inside the FactoryStart as the provided TemplateStart
+func (t *FactoryStart) FromTemplateStart(v TemplateStart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"kind":"template"}`))
+	t.union = b
+	return err
+}
+
+// MergeTemplateStart performs a merge with any union data inside the FactoryStart, using the provided TemplateStart
+func (t *FactoryStart) MergeTemplateStart(v TemplateStart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"kind":"template"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsCloneStart returns the union data inside the FactoryStart as a CloneStart
+func (t FactoryStart) AsCloneStart() (CloneStart, error) {
+	var body CloneStart
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromCloneStart overwrites any union data inside the FactoryStart as the provided CloneStart
+func (t *FactoryStart) FromCloneStart(v CloneStart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"kind":"clone"}`))
+	t.union = b
+	return err
+}
+
+// MergeCloneStart performs a merge with any union data inside the FactoryStart, using the provided CloneStart
+func (t *FactoryStart) MergeCloneStart(v CloneStart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"kind":"clone"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsImportStart returns the union data inside the FactoryStart as a ImportStart
+func (t FactoryStart) AsImportStart() (ImportStart, error) {
+	var body ImportStart
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromImportStart overwrites any union data inside the FactoryStart as the provided ImportStart
+func (t *FactoryStart) FromImportStart(v ImportStart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"kind":"import"}`))
+	t.union = b
+	return err
+}
+
+// MergeImportStart performs a merge with any union data inside the FactoryStart, using the provided ImportStart
+func (t *FactoryStart) MergeImportStart(v ImportStart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"kind":"import"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t FactoryStart) Discriminator() (string, error) {
+	var discriminator struct {
+		Discriminator string `json:"kind"`
+	}
+	err := json.Unmarshal(t.union, &discriminator)
+	return discriminator.Discriminator, err
+}
+
+func (t FactoryStart) ValueByDiscriminator() (interface{}, error) {
+	discriminator, err := t.Discriminator()
+	if err != nil {
+		return nil, err
+	}
+	switch discriminator {
+	case "blank":
+		return t.AsBlankStart()
+	case "clone":
+		return t.AsCloneStart()
+	case "import":
+		return t.AsImportStart()
+	case "template":
+		return t.AsTemplateStart()
+	default:
+		return nil, errors.New("unknown discriminator value: " + discriminator)
+	}
+}
+
+func (t FactoryStart) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *FactoryStart) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
 
 // AsTextFile returns the union data inside the FileContent as a TextFile
 func (t FileContent) AsTextFile() (TextFile, error) {
@@ -1144,10 +2363,69 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files (the `GetSkillFiles` operationId).
 	GetSkillFiles(ctx context.Context, org OrgRef, owner SkillName, repo SkillName, skill SkillName, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ListFactories The organization's factories goald runs, from the bucket
+	// FormatDefinitionWithBody Format a factory.yaml the way Visual saves write changed lines (Format)
+	//
+	// 422 yaml-invalid (with parse_error) when it does not parse.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/definitions/format (the `FormatDefinition` operationId).
+	FormatDefinitionWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ValidateDefinitionWithBody Validate files that belong to no factory yet (Import YAML preview, CLI validate)
+	//
+	// 413 too-large; 422 bad-path.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/definitions/validate (the `ValidateDefinition` operationId).
+	ValidateDefinitionWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ValidateDefinition Validate files that belong to no factory yet (Import YAML preview, CLI validate)
+	//
+	// 413 too-large; 422 bad-path.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/definitions/validate (the `ValidateDefinition` operationId).
+	ValidateDefinition(ctx context.Context, org OrgRef, body ValidateDefinitionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListFactories The organization's factories, published or not
+	//
+	// Every factory of the organization by name, with its current version, its open draft and whether it is paused. stations and work_types are those of the version goald runs (empty for a factory never published).
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories (the `ListFactories` operationId).
 	ListFactories(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateFactoryWithBody Create a factory with its first draft
+	//
+	// Starts blank (the catalog's blank template, or a skeleton naming no station or agent), from a catalog template, as a clone of another factory's version (same organization; items, runs and history are not copied) or from imported files. factory.yaml's metadata.id becomes a new id (kept only with keep_id), and metadata.name and title the request's, edited in place so comments survive. The factory runs nothing until its draft is published. Errors: 409 name-taken, factory-exists (an import keeping a taken id); 404 template-not-found, factory-not-found (the clone's source); 422 import-invalid (no factory.yaml that parses), bad-path; 413 too-large; 400 invalid-request (no name).
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories (the `CreateFactory` operationId).
+	CreateFactoryWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateFactory Create a factory with its first draft
+	//
+	// Starts blank (the catalog's blank template, or a skeleton naming no station or agent), from a catalog template, as a clone of another factory's version (same organization; items, runs and history are not copied) or from imported files. factory.yaml's metadata.id becomes a new id (kept only with keep_id), and metadata.name and title the request's, edited in place so comments survive. The factory runs nothing until its draft is published. Errors: 409 name-taken, factory-exists (an import keeping a taken id); 404 template-not-found, factory-not-found (the clone's source); 422 import-invalid (no factory.yaml that parses), bad-path; 413 too-large; 400 invalid-request (no name).
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories (the `CreateFactory` operationId).
+	CreateFactory(ctx context.Context, org OrgRef, body CreateFactoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteFactory Delete a factory that was never published, with its draft (the wizard's Cancel)
+	//
+	// 409 factory-published once a version was published.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/factories/{factory} (the `DeleteFactory` operationId).
+	DeleteFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetFactory One factory, published or not
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory} (the `GetFactory` operationId).
+	GetFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetBoard The factory's board, station by station in line order
 	//
@@ -1155,6 +2433,170 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/board (the `GetBoard` operationId).
 	GetBoard(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CompareVersions The semantic difference between two versions
+	//
+	// from and to are version selectors (a number, current, draft, base or source); by default the draft against its base, or its starting tree when it has none. Line-level hunks are computed by the client from the two files.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/compare (the `CompareVersions` operationId).
+	CompareVersions(ctx context.Context, org OrgRef, factory FactoryRef, params *CompareVersionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DiscardDraft Discard (archive) the open draft; the version that runs is unchanged
+	//
+	// If-Match is the draft's revision ("42"): without it 428 precondition-required, when the draft moved since 412 draft-conflict.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/draft (the `DiscardDraft` operationId).
+	DiscardDraft(ctx context.Context, org OrgRef, factory FactoryRef, params *DiscardDraftParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetDraft The factory's open draft, its changes and problems
+	//
+	// 404 no-draft when none is open.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft (the `GetDraft` operationId).
+	GetDraft(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// OpenDraftWithBody Open the factory's draft, or return the open one
+	//
+	// Opens a draft on base (a published version: a number or current; current when absent). An open draft is returned as it is (200), unless base names another version: then 409 draft-exists, or with replace the open draft is archived and a new one opened (201).
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft (the `OpenDraft` operationId).
+	OpenDraftWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// OpenDraft Open the factory's draft, or return the open one
+	//
+	// Opens a draft on base (a published version: a number or current; current when absent). An open draft is returned as it is (200), unless base names another version: then 409 draft-exists, or with replace the open draft is archived and a new one opened (201).
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft (the `OpenDraft` operationId).
+	OpenDraft(ctx context.Context, org OrgRef, factory FactoryRef, body OpenDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListDraftFiles The draft's files by path
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/files (the `ListDraftFiles` operationId).
+	ListDraftFiles(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteDraftFile Delete one file of the draft
+	//
+	// If-Match is the file's sha256 (428 without it, 412 when stale); 404 file-not-found.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `DeleteDraftFile` operationId).
+	DeleteDraftFile(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, params *DeleteDraftFileParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetDraftFile One file of the draft, as stored
+	//
+	// 404 file-not-found. The ETag is the file's sha256, the If-Match of putDraftFile and deleteDraftFile.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `GetDraftFile` operationId).
+	GetDraftFile(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutDraftFileWithBody Write one file of the draft exactly as sent (YAML mode)
+	//
+	// If-Match is the sha256 the editor read ("<sha256>"); If-None-Match * creates a file that must not exist yet. Exactly one of them: neither is 428 precondition-required, both 400. A stale hash, or If-None-Match on a file that exists, is 412 draft-conflict with the file's current sha256 (absent when it is gone). 422 bad-path; 413 too-large (over 1 MiB).
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `PutDraftFile` operationId).
+	PutDraftFileWithBody(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, params *PutDraftFileParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetDraftModel The draft's factory model for the Visual editor
+	//
+	// The model, each section's concurrency token, the fields the draft changed against its base (Edited · Undo) and where each model pointer is in factory.yaml. 409 yaml-invalid (with parse_error) while factory.yaml does not parse: Visual is read-only until it is fixed in YAML mode.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/model (the `GetDraftModel` operationId).
+	GetDraftModel(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SaveDraftSectionWithBody Save one section of the model (a Visual save)
+	//
+	// Applies the section's new value to factory.yaml, keeping everything the section does not own (comments and key order included), and writes files and deletes remove_files in the same revision (an added agent's prompt). If-Match is the section's etag ("<etag>"): without it 428 precondition-required; when the section changed meanwhile 412 draft-conflict with the section's current value and etag. Writers of other sections or files never conflict. 409 yaml-invalid while factory.yaml does not parse; 422 model-invalid for a value of the wrong shape; 404 no-draft.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/model/{section} (the `SaveDraftSection` operationId).
+	SaveDraftSectionWithBody(ctx context.Context, org OrgRef, factory FactoryRef, section SectionRef, params *SaveDraftSectionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SaveDraftSection Save one section of the model (a Visual save)
+	//
+	// Applies the section's new value to factory.yaml, keeping everything the section does not own (comments and key order included), and writes files and deletes remove_files in the same revision (an added agent's prompt). If-Match is the section's etag ("<etag>"): without it 428 precondition-required; when the section changed meanwhile 412 draft-conflict with the section's current value and etag. Writers of other sections or files never conflict. 409 yaml-invalid while factory.yaml does not parse; 422 model-invalid for a value of the wrong shape; 404 no-draft.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/model/{section} (the `SaveDraftSection` operationId).
+	SaveDraftSection(ctx context.Context, org OrgRef, factory FactoryRef, section SectionRef, params *SaveDraftSectionParams, body SaveDraftSectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RevertDraftSectionWithBody Put back the base's value at edited fields of a section (Undo)
+	//
+	// pointers are keys of DraftModel.edited in the section; one no longer edited is ignored. If-Match is the section's etag, as for a save (428, 412).
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/model/{section}/revert (the `RevertDraftSection` operationId).
+	RevertDraftSectionWithBody(ctx context.Context, org OrgRef, factory FactoryRef, section SectionRef, params *RevertDraftSectionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RevertDraftSection Put back the base's value at edited fields of a section (Undo)
+	//
+	// pointers are keys of DraftModel.edited in the section; one no longer edited is ignored. If-Match is the section's etag, as for a save (428, 412).
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/model/{section}/revert (the `RevertDraftSection` operationId).
+	RevertDraftSection(ctx context.Context, org OrgRef, factory FactoryRef, section SectionRef, params *RevertDraftSectionParams, body RevertDraftSectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PublishDraftWithBody Publish the open draft as the factory's next version
+	//
+	// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/publish (the `PublishDraft` operationId).
+	PublishDraftWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PublishDraft Publish the open draft as the factory's next version
+	//
+	// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/publish (the `PublishDraft` operationId).
+	PublishDraft(ctx context.Context, org OrgRef, factory FactoryRef, body PublishDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReplaceDraftTreeWithBody Make files the draft's whole tree (goal factory push)
+	//
+	// With expected_revision, a draft at another revision is 412 draft-conflict; without it the latest draft is replaced. 422 bad-path; 413 too-large (over 1,000 files or 16 MiB).
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/tree (the `ReplaceDraftTree` operationId).
+	ReplaceDraftTreeWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReplaceDraftTree Make files the draft's whole tree (goal factory push)
+	//
+	// With expected_revision, a draft at another revision is 412 draft-conflict; without it the latest draft is replaced. 422 bad-path; 413 too-large (over 1,000 files or 16 MiB).
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/tree (the `ReplaceDraftTree` operationId).
+	ReplaceDraftTree(ctx context.Context, org OrgRef, factory FactoryRef, body ReplaceDraftTreeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ValidateDraftWithBody Validate the draft at its revision, as publish will
+	//
+	// overlay is unsaved YAML-mode text written over the draft's files; station_moves are the moves the publish will carry, so the items they map are not reported.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
+	ValidateDraftWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ValidateDraft Validate the draft at its revision, as publish will
+	//
+	// overlay is unsaved YAML-mode text written over the draft's files; station_moves are the moves the publish will carry, so the items they map are not reported.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
+	ValidateDraft(ctx context.Context, org OrgRef, factory FactoryRef, body ValidateDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListItems One page of a factory's items, newest first
 	//
@@ -1179,6 +2621,60 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics (the `GetMetrics` operationId).
 	GetMetrics(ctx context.Context, org OrgRef, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PauseFactory Stop the factory taking work; runs in progress finish
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/pause (the `PauseFactory` operationId).
+	PauseFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ResumeFactory Start a paused factory again
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/resume (the `ResumeFactory` operationId).
+	ResumeFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListVersions One page of the factory's published versions, newest first
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/versions (the `ListVersions` operationId).
+	ListVersions(ctx context.Context, org OrgRef, factory FactoryRef, params *ListVersionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetVersion One version with its files
+	//
+	// 404 version-not-found (source too, which is a starting tree and no version).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/versions/{version} (the `GetVersion` operationId).
+	GetVersion(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetVersionFile One file of a version
+	//
+	// A published version's files never change: they are served with Cache-Control private, max-age=31536000, immutable (no-cache for a draft's). 404 file-not-found.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/versions/{version}/files/{path} (the `GetVersionFile` operationId).
+	GetVersionFile(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, path FilePath, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetVersionModel The factory model of a version, for a read-only Visual view
+	//
+	// 409 yaml-invalid (with parse_error) when its factory.yaml does not parse.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/versions/{version}/model (the `GetVersionModel` operationId).
+	GetVersionModel(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RestoreVersionWithBody Run an older published version again (rollback)
+	//
+	// Moves the factory's current pointer to the version; numbers are not reused and an open draft stays open. 409 draft-base-moved (the current version is not expected_current_version_id), items-at-removed-station, name-taken; 404 version-not-found.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/versions/{version}/restore (the `RestoreVersion` operationId).
+	RestoreVersionWithBody(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RestoreVersion Run an older published version again (rollback)
+	//
+	// Moves the factory's current pointer to the version; numbers are not reused and an open draft stays open. 409 draft-base-moved (the current version is not expected_current_version_id), items-at-removed-station, name-taken; 404 version-not-found.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/versions/{version}/restore (the `RestoreVersion` operationId).
+	RestoreVersion(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, body RestoreVersionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetInbox What waits for a person across the organization's factories
 	//
@@ -1269,10 +2765,22 @@ type ClientInterface interface {
 
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	//
-	// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+	// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
 	//
 	// Corresponds with GET /v1/orgs/{org}/stream (the `StreamEvents` operationId).
 	StreamEvents(ctx context.Context, org OrgRef, params *StreamEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListTemplates The template catalog, the latest version of each template by name
+	//
+	// Corresponds with GET /v1/orgs/{org}/templates (the `ListTemplates` operationId).
+	ListTemplates(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetTemplate One version of a template with a preview of its model
+	//
+	// 404 template-not-found.
+	//
+	// Corresponds with GET /v1/orgs/{org}/templates/{name} (the `GetTemplate` operationId).
+	GetTemplate(ctx context.Context, org OrgRef, name string, params *GetTemplateParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // GetHealth Liveness of goald
@@ -1479,11 +2987,140 @@ func (c *Client) GetSkillFiles(ctx context.Context, org OrgRef, owner SkillName,
 	return c.Client.Do(req)
 }
 
-// ListFactories The organization's factories goald runs, from the bucket
+// FormatDefinitionWithBody Format a factory.yaml the way Visual saves write changed lines (Format)
+//
+// 422 yaml-invalid (with parse_error) when it does not parse.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/definitions/format (the `FormatDefinition` operationId).
+func (c *Client) FormatDefinitionWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFormatDefinitionRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ValidateDefinitionWithBody Validate files that belong to no factory yet (Import YAML preview, CLI validate)
+//
+// 413 too-large; 422 bad-path.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/definitions/validate (the `ValidateDefinition` operationId).
+func (c *Client) ValidateDefinitionWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewValidateDefinitionRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ValidateDefinition Validate files that belong to no factory yet (Import YAML preview, CLI validate)
+//
+// 413 too-large; 422 bad-path.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/definitions/validate (the `ValidateDefinition` operationId).
+func (c *Client) ValidateDefinition(ctx context.Context, org OrgRef, body ValidateDefinitionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewValidateDefinitionRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListFactories The organization's factories, published or not
+//
+// Every factory of the organization by name, with its current version, its open draft and whether it is paused. stations and work_types are those of the version goald runs (empty for a factory never published).
 //
 // Corresponds with GET /v1/orgs/{org}/factories (the `ListFactories` operationId).
 func (c *Client) ListFactories(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListFactoriesRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateFactoryWithBody Create a factory with its first draft
+//
+// Starts blank (the catalog's blank template, or a skeleton naming no station or agent), from a catalog template, as a clone of another factory's version (same organization; items, runs and history are not copied) or from imported files. factory.yaml's metadata.id becomes a new id (kept only with keep_id), and metadata.name and title the request's, edited in place so comments survive. The factory runs nothing until its draft is published. Errors: 409 name-taken, factory-exists (an import keeping a taken id); 404 template-not-found, factory-not-found (the clone's source); 422 import-invalid (no factory.yaml that parses), bad-path; 413 too-large; 400 invalid-request (no name).
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories (the `CreateFactory` operationId).
+func (c *Client) CreateFactoryWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateFactoryRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateFactory Create a factory with its first draft
+//
+// Starts blank (the catalog's blank template, or a skeleton naming no station or agent), from a catalog template, as a clone of another factory's version (same organization; items, runs and history are not copied) or from imported files. factory.yaml's metadata.id becomes a new id (kept only with keep_id), and metadata.name and title the request's, edited in place so comments survive. The factory runs nothing until its draft is published. Errors: 409 name-taken, factory-exists (an import keeping a taken id); 404 template-not-found, factory-not-found (the clone's source); 422 import-invalid (no factory.yaml that parses), bad-path; 413 too-large; 400 invalid-request (no name).
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories (the `CreateFactory` operationId).
+func (c *Client) CreateFactory(ctx context.Context, org OrgRef, body CreateFactoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateFactoryRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteFactory Delete a factory that was never published, with its draft (the wizard's Cancel)
+//
+// 409 factory-published once a version was published.
+//
+// Corresponds with DELETE /v1/orgs/{org}/factories/{factory} (the `DeleteFactory` operationId).
+func (c *Client) DeleteFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteFactoryRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetFactory One factory, published or not
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory} (the `GetFactory` operationId).
+func (c *Client) GetFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetFactoryRequest(c.Server, org, factory)
 	if err != nil {
 		return nil, err
 	}
@@ -1501,6 +3138,370 @@ func (c *Client) ListFactories(ctx context.Context, org OrgRef, reqEditors ...Re
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/board (the `GetBoard` operationId).
 func (c *Client) GetBoard(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetBoardRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CompareVersions The semantic difference between two versions
+//
+// from and to are version selectors (a number, current, draft, base or source); by default the draft against its base, or its starting tree when it has none. Line-level hunks are computed by the client from the two files.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/compare (the `CompareVersions` operationId).
+func (c *Client) CompareVersions(ctx context.Context, org OrgRef, factory FactoryRef, params *CompareVersionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCompareVersionsRequest(c.Server, org, factory, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DiscardDraft Discard (archive) the open draft; the version that runs is unchanged
+//
+// If-Match is the draft's revision ("42"): without it 428 precondition-required, when the draft moved since 412 draft-conflict.
+//
+// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/draft (the `DiscardDraft` operationId).
+func (c *Client) DiscardDraft(ctx context.Context, org OrgRef, factory FactoryRef, params *DiscardDraftParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDiscardDraftRequest(c.Server, org, factory, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetDraft The factory's open draft, its changes and problems
+//
+// 404 no-draft when none is open.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft (the `GetDraft` operationId).
+func (c *Client) GetDraft(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDraftRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// OpenDraftWithBody Open the factory's draft, or return the open one
+//
+// Opens a draft on base (a published version: a number or current; current when absent). An open draft is returned as it is (200), unless base names another version: then 409 draft-exists, or with replace the open draft is archived and a new one opened (201).
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft (the `OpenDraft` operationId).
+func (c *Client) OpenDraftWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewOpenDraftRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// OpenDraft Open the factory's draft, or return the open one
+//
+// Opens a draft on base (a published version: a number or current; current when absent). An open draft is returned as it is (200), unless base names another version: then 409 draft-exists, or with replace the open draft is archived and a new one opened (201).
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft (the `OpenDraft` operationId).
+func (c *Client) OpenDraft(ctx context.Context, org OrgRef, factory FactoryRef, body OpenDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewOpenDraftRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListDraftFiles The draft's files by path
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/files (the `ListDraftFiles` operationId).
+func (c *Client) ListDraftFiles(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListDraftFilesRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteDraftFile Delete one file of the draft
+//
+// If-Match is the file's sha256 (428 without it, 412 when stale); 404 file-not-found.
+//
+// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `DeleteDraftFile` operationId).
+func (c *Client) DeleteDraftFile(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, params *DeleteDraftFileParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteDraftFileRequest(c.Server, org, factory, path, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetDraftFile One file of the draft, as stored
+//
+// 404 file-not-found. The ETag is the file's sha256, the If-Match of putDraftFile and deleteDraftFile.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `GetDraftFile` operationId).
+func (c *Client) GetDraftFile(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDraftFileRequest(c.Server, org, factory, path)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PutDraftFileWithBody Write one file of the draft exactly as sent (YAML mode)
+//
+// If-Match is the sha256 the editor read ("<sha256>"); If-None-Match * creates a file that must not exist yet. Exactly one of them: neither is 428 precondition-required, both 400. A stale hash, or If-None-Match on a file that exists, is 412 draft-conflict with the file's current sha256 (absent when it is gone). 422 bad-path; 413 too-large (over 1 MiB).
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `PutDraftFile` operationId).
+func (c *Client) PutDraftFileWithBody(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, params *PutDraftFileParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutDraftFileRequestWithBody(c.Server, org, factory, path, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetDraftModel The draft's factory model for the Visual editor
+//
+// The model, each section's concurrency token, the fields the draft changed against its base (Edited · Undo) and where each model pointer is in factory.yaml. 409 yaml-invalid (with parse_error) while factory.yaml does not parse: Visual is read-only until it is fixed in YAML mode.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/model (the `GetDraftModel` operationId).
+func (c *Client) GetDraftModel(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDraftModelRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SaveDraftSectionWithBody Save one section of the model (a Visual save)
+//
+// Applies the section's new value to factory.yaml, keeping everything the section does not own (comments and key order included), and writes files and deletes remove_files in the same revision (an added agent's prompt). If-Match is the section's etag ("<etag>"): without it 428 precondition-required; when the section changed meanwhile 412 draft-conflict with the section's current value and etag. Writers of other sections or files never conflict. 409 yaml-invalid while factory.yaml does not parse; 422 model-invalid for a value of the wrong shape; 404 no-draft.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/model/{section} (the `SaveDraftSection` operationId).
+func (c *Client) SaveDraftSectionWithBody(ctx context.Context, org OrgRef, factory FactoryRef, section SectionRef, params *SaveDraftSectionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSaveDraftSectionRequestWithBody(c.Server, org, factory, section, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SaveDraftSection Save one section of the model (a Visual save)
+//
+// Applies the section's new value to factory.yaml, keeping everything the section does not own (comments and key order included), and writes files and deletes remove_files in the same revision (an added agent's prompt). If-Match is the section's etag ("<etag>"): without it 428 precondition-required; when the section changed meanwhile 412 draft-conflict with the section's current value and etag. Writers of other sections or files never conflict. 409 yaml-invalid while factory.yaml does not parse; 422 model-invalid for a value of the wrong shape; 404 no-draft.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/model/{section} (the `SaveDraftSection` operationId).
+func (c *Client) SaveDraftSection(ctx context.Context, org OrgRef, factory FactoryRef, section SectionRef, params *SaveDraftSectionParams, body SaveDraftSectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSaveDraftSectionRequest(c.Server, org, factory, section, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RevertDraftSectionWithBody Put back the base's value at edited fields of a section (Undo)
+//
+// pointers are keys of DraftModel.edited in the section; one no longer edited is ignored. If-Match is the section's etag, as for a save (428, 412).
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/model/{section}/revert (the `RevertDraftSection` operationId).
+func (c *Client) RevertDraftSectionWithBody(ctx context.Context, org OrgRef, factory FactoryRef, section SectionRef, params *RevertDraftSectionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRevertDraftSectionRequestWithBody(c.Server, org, factory, section, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RevertDraftSection Put back the base's value at edited fields of a section (Undo)
+//
+// pointers are keys of DraftModel.edited in the section; one no longer edited is ignored. If-Match is the section's etag, as for a save (428, 412).
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/model/{section}/revert (the `RevertDraftSection` operationId).
+func (c *Client) RevertDraftSection(ctx context.Context, org OrgRef, factory FactoryRef, section SectionRef, params *RevertDraftSectionParams, body RevertDraftSectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRevertDraftSectionRequest(c.Server, org, factory, section, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PublishDraftWithBody Publish the open draft as the factory's next version
+//
+// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/publish (the `PublishDraft` operationId).
+func (c *Client) PublishDraftWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPublishDraftRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PublishDraft Publish the open draft as the factory's next version
+//
+// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/publish (the `PublishDraft` operationId).
+func (c *Client) PublishDraft(ctx context.Context, org OrgRef, factory FactoryRef, body PublishDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPublishDraftRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReplaceDraftTreeWithBody Make files the draft's whole tree (goal factory push)
+//
+// With expected_revision, a draft at another revision is 412 draft-conflict; without it the latest draft is replaced. 422 bad-path; 413 too-large (over 1,000 files or 16 MiB).
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/tree (the `ReplaceDraftTree` operationId).
+func (c *Client) ReplaceDraftTreeWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReplaceDraftTreeRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReplaceDraftTree Make files the draft's whole tree (goal factory push)
+//
+// With expected_revision, a draft at another revision is 412 draft-conflict; without it the latest draft is replaced. 422 bad-path; 413 too-large (over 1,000 files or 16 MiB).
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/tree (the `ReplaceDraftTree` operationId).
+func (c *Client) ReplaceDraftTree(ctx context.Context, org OrgRef, factory FactoryRef, body ReplaceDraftTreeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReplaceDraftTreeRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ValidateDraftWithBody Validate the draft at its revision, as publish will
+//
+// overlay is unsaved YAML-mode text written over the draft's files; station_moves are the moves the publish will carry, so the items they map are not reported.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
+func (c *Client) ValidateDraftWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewValidateDraftRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ValidateDraft Validate the draft at its revision, as publish will
+//
+// overlay is unsaved YAML-mode text written over the draft's files; station_moves are the moves the publish will carry, so the items they map are not reported.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
+func (c *Client) ValidateDraft(ctx context.Context, org OrgRef, factory FactoryRef, body ValidateDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewValidateDraftRequest(c.Server, org, factory, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1565,6 +3566,140 @@ func (c *Client) SubmitItem(ctx context.Context, org OrgRef, factory FactoryRef,
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics (the `GetMetrics` operationId).
 func (c *Client) GetMetrics(ctx context.Context, org OrgRef, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetMetricsRequest(c.Server, org, factory, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PauseFactory Stop the factory taking work; runs in progress finish
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/pause (the `PauseFactory` operationId).
+func (c *Client) PauseFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPauseFactoryRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ResumeFactory Start a paused factory again
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/resume (the `ResumeFactory` operationId).
+func (c *Client) ResumeFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewResumeFactoryRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListVersions One page of the factory's published versions, newest first
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/versions (the `ListVersions` operationId).
+func (c *Client) ListVersions(ctx context.Context, org OrgRef, factory FactoryRef, params *ListVersionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListVersionsRequest(c.Server, org, factory, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetVersion One version with its files
+//
+// 404 version-not-found (source too, which is a starting tree and no version).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/versions/{version} (the `GetVersion` operationId).
+func (c *Client) GetVersion(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetVersionRequest(c.Server, org, factory, version)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetVersionFile One file of a version
+//
+// A published version's files never change: they are served with Cache-Control private, max-age=31536000, immutable (no-cache for a draft's). 404 file-not-found.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/versions/{version}/files/{path} (the `GetVersionFile` operationId).
+func (c *Client) GetVersionFile(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, path FilePath, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetVersionFileRequest(c.Server, org, factory, version, path)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetVersionModel The factory model of a version, for a read-only Visual view
+//
+// 409 yaml-invalid (with parse_error) when its factory.yaml does not parse.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/versions/{version}/model (the `GetVersionModel` operationId).
+func (c *Client) GetVersionModel(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetVersionModelRequest(c.Server, org, factory, version)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RestoreVersionWithBody Run an older published version again (rollback)
+//
+// Moves the factory's current pointer to the version; numbers are not reused and an open draft stays open. 409 draft-base-moved (the current version is not expected_current_version_id), items-at-removed-station, name-taken; 404 version-not-found.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/versions/{version}/restore (the `RestoreVersion` operationId).
+func (c *Client) RestoreVersionWithBody(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRestoreVersionRequestWithBody(c.Server, org, factory, version, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RestoreVersion Run an older published version again (rollback)
+//
+// Moves the factory's current pointer to the version; numbers are not reused and an open draft stays open. 409 draft-base-moved (the current version is not expected_current_version_id), items-at-removed-station, name-taken; 404 version-not-found.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/versions/{version}/restore (the `RestoreVersion` operationId).
+func (c *Client) RestoreVersion(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, body RestoreVersionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRestoreVersionRequest(c.Server, org, factory, version, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1794,11 +3929,43 @@ func (c *Client) UpdateOrgSettings(ctx context.Context, org OrgRef, body UpdateO
 
 // StreamEvents The organization's events as they happen (Server-Sent Events)
 //
-// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
 //
 // Corresponds with GET /v1/orgs/{org}/stream (the `StreamEvents` operationId).
 func (c *Client) StreamEvents(ctx context.Context, org OrgRef, params *StreamEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewStreamEventsRequest(c.Server, org, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListTemplates The template catalog, the latest version of each template by name
+//
+// Corresponds with GET /v1/orgs/{org}/templates (the `ListTemplates` operationId).
+func (c *Client) ListTemplates(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListTemplatesRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetTemplate One version of a template with a preview of its model
+//
+// 404 template-not-found.
+//
+// Corresponds with GET /v1/orgs/{org}/templates/{name} (the `GetTemplate` operationId).
+func (c *Client) GetTemplate(ctx context.Context, org OrgRef, name string, params *GetTemplateParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetTemplateRequest(c.Server, org, name, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2313,6 +4480,89 @@ func NewGetSkillFilesRequest(server string, org OrgRef, owner SkillName, repo Sk
 	return req, nil
 }
 
+// NewFormatDefinitionRequestWithBody constructs an http.Request for the FormatDefinition method, with any body, and a specified content type
+func NewFormatDefinitionRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/definitions/format", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewValidateDefinitionRequest calls the generic ValidateDefinition builder with application/json body
+func NewValidateDefinitionRequest(server string, org OrgRef, body ValidateDefinitionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewValidateDefinitionRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewValidateDefinitionRequestWithBody constructs an http.Request for the ValidateDefinition method, with any body, and a specified content type
+func NewValidateDefinitionRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/definitions/validate", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewListFactoriesRequest constructs an http.Request for the ListFactories method
 func NewListFactoriesRequest(server string, org OrgRef) (*http.Request, error) {
 	var err error
@@ -2330,6 +4580,135 @@ func NewListFactoriesRequest(server string, org OrgRef) (*http.Request, error) {
 	}
 
 	operationPath := fmt.Sprintf("/v1/orgs/%s/factories", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateFactoryRequest calls the generic CreateFactory builder with application/json body
+func NewCreateFactoryRequest(server string, org OrgRef, body CreateFactoryJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateFactoryRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewCreateFactoryRequestWithBody constructs an http.Request for the CreateFactory method, with any body, and a specified content type
+func NewCreateFactoryRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteFactoryRequest constructs an http.Request for the DeleteFactory method
+func NewDeleteFactoryRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetFactoryRequest constructs an http.Request for the GetFactory method
+func NewGetFactoryRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2384,6 +4763,820 @@ func NewGetBoardRequest(server string, org OrgRef, factory FactoryRef) (*http.Re
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewCompareVersionsRequest constructs an http.Request for the CompareVersions method
+func NewCompareVersionsRequest(server string, org OrgRef, factory FactoryRef, params *CompareVersionsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/compare", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.From != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "from", *params.From, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.To != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "to", *params.To, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewDiscardDraftRequest constructs an http.Request for the DiscardDraft method
+func NewDiscardDraftRequest(server string, org OrgRef, factory FactoryRef, params *DiscardDraftParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IfMatch != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", *params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("If-Match", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewGetDraftRequest constructs an http.Request for the GetDraft method
+func NewGetDraftRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewOpenDraftRequest calls the generic OpenDraft builder with application/json body
+func NewOpenDraftRequest(server string, org OrgRef, factory FactoryRef, body OpenDraftJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewOpenDraftRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewOpenDraftRequestWithBody constructs an http.Request for the OpenDraft method, with any body, and a specified content type
+func NewOpenDraftRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListDraftFilesRequest constructs an http.Request for the ListDraftFiles method
+func NewListDraftFilesRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/files", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewDeleteDraftFileRequest constructs an http.Request for the DeleteDraftFile method
+func NewDeleteDraftFileRequest(server string, org OrgRef, factory FactoryRef, path FilePath, params *DeleteDraftFileParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "path", path, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/files/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IfMatch != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", *params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("If-Match", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewGetDraftFileRequest constructs an http.Request for the GetDraftFile method
+func NewGetDraftFileRequest(server string, org OrgRef, factory FactoryRef, path FilePath) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "path", path, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/files/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutDraftFileRequestWithBody constructs an http.Request for the PutDraftFile method, with any body, and a specified content type
+func NewPutDraftFileRequestWithBody(server string, org OrgRef, factory FactoryRef, path FilePath, params *PutDraftFileParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "path", path, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/files/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IfMatch != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", *params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("If-Match", headerParam0)
+		}
+
+		if params.IfNoneMatch != nil {
+			var headerParam1 string
+
+			headerParam1, err = runtime.StyleParamWithOptions("simple", false, "If-None-Match", *params.IfNoneMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("If-None-Match", headerParam1)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewGetDraftModelRequest constructs an http.Request for the GetDraftModel method
+func NewGetDraftModelRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/model", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSaveDraftSectionRequest calls the generic SaveDraftSection builder with application/json body
+func NewSaveDraftSectionRequest(server string, org OrgRef, factory FactoryRef, section SectionRef, params *SaveDraftSectionParams, body SaveDraftSectionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSaveDraftSectionRequestWithBody(server, org, factory, section, params, "application/json", bodyReader)
+}
+
+// NewSaveDraftSectionRequestWithBody constructs an http.Request for the SaveDraftSection method, with any body, and a specified content type
+func NewSaveDraftSectionRequestWithBody(server string, org OrgRef, factory FactoryRef, section SectionRef, params *SaveDraftSectionParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "section", section, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/model/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IfMatch != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", *params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("If-Match", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewRevertDraftSectionRequest calls the generic RevertDraftSection builder with application/json body
+func NewRevertDraftSectionRequest(server string, org OrgRef, factory FactoryRef, section SectionRef, params *RevertDraftSectionParams, body RevertDraftSectionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRevertDraftSectionRequestWithBody(server, org, factory, section, params, "application/json", bodyReader)
+}
+
+// NewRevertDraftSectionRequestWithBody constructs an http.Request for the RevertDraftSection method, with any body, and a specified content type
+func NewRevertDraftSectionRequestWithBody(server string, org OrgRef, factory FactoryRef, section SectionRef, params *RevertDraftSectionParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "section", section, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/model/%s/revert", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IfMatch != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", *params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("If-Match", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewPublishDraftRequest calls the generic PublishDraft builder with application/json body
+func NewPublishDraftRequest(server string, org OrgRef, factory FactoryRef, body PublishDraftJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPublishDraftRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewPublishDraftRequestWithBody constructs an http.Request for the PublishDraft method, with any body, and a specified content type
+func NewPublishDraftRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/publish", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewReplaceDraftTreeRequest calls the generic ReplaceDraftTree builder with application/json body
+func NewReplaceDraftTreeRequest(server string, org OrgRef, factory FactoryRef, body ReplaceDraftTreeJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewReplaceDraftTreeRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewReplaceDraftTreeRequestWithBody constructs an http.Request for the ReplaceDraftTree method, with any body, and a specified content type
+func NewReplaceDraftTreeRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/tree", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewValidateDraftRequest calls the generic ValidateDraft builder with application/json body
+func NewValidateDraftRequest(server string, org OrgRef, factory FactoryRef, body ValidateDraftJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewValidateDraftRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewValidateDraftRequestWithBody constructs an http.Request for the ValidateDraft method, with any body, and a specified content type
+func NewValidateDraftRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/validate", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -2610,6 +5803,380 @@ func NewGetMetricsRequest(server string, org OrgRef, factory FactoryRef, params 
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewPauseFactoryRequest constructs an http.Request for the PauseFactory method
+func NewPauseFactoryRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/pause", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewResumeFactoryRequest constructs an http.Request for the ResumeFactory method
+func NewResumeFactoryRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/resume", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListVersionsRequest constructs an http.Request for the ListVersions method
+func NewListVersionsRequest(server string, org OrgRef, factory FactoryRef, params *ListVersionsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/versions", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Before != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "before", *params.Before, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetVersionRequest constructs an http.Request for the GetVersion method
+func NewGetVersionRequest(server string, org OrgRef, factory FactoryRef, version VersionSelector) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "version", version, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/versions/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetVersionFileRequest constructs an http.Request for the GetVersionFile method
+func NewGetVersionFileRequest(server string, org OrgRef, factory FactoryRef, version VersionSelector, path FilePath) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "version", version, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam3 string
+
+	pathParam3, err = runtime.StyleParamWithOptions("simple", false, "path", path, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/versions/%s/files/%s", pathParam0, pathParam1, pathParam2, pathParam3)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetVersionModelRequest constructs an http.Request for the GetVersionModel method
+func NewGetVersionModelRequest(server string, org OrgRef, factory FactoryRef, version VersionSelector) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "version", version, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/versions/%s/model", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRestoreVersionRequest calls the generic RestoreVersion builder with application/json body
+func NewRestoreVersionRequest(server string, org OrgRef, factory FactoryRef, version VersionSelector, body RestoreVersionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRestoreVersionRequestWithBody(server, org, factory, version, "application/json", bodyReader)
+}
+
+// NewRestoreVersionRequestWithBody constructs an http.Request for the RestoreVersion method, with any body, and a specified content type
+func NewRestoreVersionRequestWithBody(server string, org OrgRef, factory FactoryRef, version VersionSelector, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "version", version, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/versions/%s/restore", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -3201,6 +6768,108 @@ func NewStreamEventsRequest(server string, org OrgRef, params *StreamEventsParam
 	return req, nil
 }
 
+// NewListTemplatesRequest constructs an http.Request for the ListTemplates method
+func NewListTemplatesRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/templates", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetTemplateRequest constructs an http.Request for the GetTemplate method
+func NewGetTemplateRequest(server string, org OrgRef, name string, params *GetTemplateParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "name", name, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/templates/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Version != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "version", *params.Version, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -3345,12 +7014,75 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files (the `GetSkillFiles` operationId).
 	GetSkillFilesWithResponse(ctx context.Context, org OrgRef, owner SkillName, repo SkillName, skill SkillName, reqEditors ...RequestEditorFn) (*GetSkillFilesResponse, error)
 
-	// ListFactoriesWithResponse The organization's factories goald runs, from the bucket
+	// FormatDefinitionWithBodyWithResponse Format a factory.yaml the way Visual saves write changed lines (Format)
+	//
+	// 422 yaml-invalid (with parse_error) when it does not parse.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/definitions/format (the `FormatDefinition` operationId).
+	FormatDefinitionWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FormatDefinitionResponse, error)
+
+	// ValidateDefinitionWithBodyWithResponse Validate files that belong to no factory yet (Import YAML preview, CLI validate)
+	//
+	// 413 too-large; 422 bad-path.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/definitions/validate (the `ValidateDefinition` operationId).
+	ValidateDefinitionWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ValidateDefinitionResponse, error)
+
+	// ValidateDefinitionWithResponse Validate files that belong to no factory yet (Import YAML preview, CLI validate)
+	//
+	// 413 too-large; 422 bad-path.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/definitions/validate (the `ValidateDefinition` operationId).
+	ValidateDefinitionWithResponse(ctx context.Context, org OrgRef, body ValidateDefinitionJSONRequestBody, reqEditors ...RequestEditorFn) (*ValidateDefinitionResponse, error)
+
+	// ListFactoriesWithResponse The organization's factories, published or not
+	//
+	// Every factory of the organization by name, with its current version, its open draft and whether it is paused. stations and work_types are those of the version goald runs (empty for a factory never published).
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories (the `ListFactories` operationId).
 	ListFactoriesWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListFactoriesResponse, error)
+
+	// CreateFactoryWithBodyWithResponse Create a factory with its first draft
+	//
+	// Starts blank (the catalog's blank template, or a skeleton naming no station or agent), from a catalog template, as a clone of another factory's version (same organization; items, runs and history are not copied) or from imported files. factory.yaml's metadata.id becomes a new id (kept only with keep_id), and metadata.name and title the request's, edited in place so comments survive. The factory runs nothing until its draft is published. Errors: 409 name-taken, factory-exists (an import keeping a taken id); 404 template-not-found, factory-not-found (the clone's source); 422 import-invalid (no factory.yaml that parses), bad-path; 413 too-large; 400 invalid-request (no name).
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories (the `CreateFactory` operationId).
+	CreateFactoryWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateFactoryResponse, error)
+
+	// CreateFactoryWithResponse Create a factory with its first draft
+	//
+	// Starts blank (the catalog's blank template, or a skeleton naming no station or agent), from a catalog template, as a clone of another factory's version (same organization; items, runs and history are not copied) or from imported files. factory.yaml's metadata.id becomes a new id (kept only with keep_id), and metadata.name and title the request's, edited in place so comments survive. The factory runs nothing until its draft is published. Errors: 409 name-taken, factory-exists (an import keeping a taken id); 404 template-not-found, factory-not-found (the clone's source); 422 import-invalid (no factory.yaml that parses), bad-path; 413 too-large; 400 invalid-request (no name).
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories (the `CreateFactory` operationId).
+	CreateFactoryWithResponse(ctx context.Context, org OrgRef, body CreateFactoryJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateFactoryResponse, error)
+
+	// DeleteFactoryWithResponse Delete a factory that was never published, with its draft (the wizard's Cancel)
+	//
+	// 409 factory-published once a version was published.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/factories/{factory} (the `DeleteFactory` operationId).
+	DeleteFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*DeleteFactoryResponse, error)
+
+	// GetFactoryWithResponse One factory, published or not
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory} (the `GetFactory` operationId).
+	GetFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetFactoryResponse, error)
 
 	// GetBoardWithResponse The factory's board, station by station in line order
 	//
@@ -3360,6 +7092,184 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/board (the `GetBoard` operationId).
 	GetBoardWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetBoardResponse, error)
+
+	// CompareVersionsWithResponse The semantic difference between two versions
+	//
+	// from and to are version selectors (a number, current, draft, base or source); by default the draft against its base, or its starting tree when it has none. Line-level hunks are computed by the client from the two files.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/compare (the `CompareVersions` operationId).
+	CompareVersionsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *CompareVersionsParams, reqEditors ...RequestEditorFn) (*CompareVersionsResponse, error)
+
+	// DiscardDraftWithResponse Discard (archive) the open draft; the version that runs is unchanged
+	//
+	// If-Match is the draft's revision ("42"): without it 428 precondition-required, when the draft moved since 412 draft-conflict.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/draft (the `DiscardDraft` operationId).
+	DiscardDraftWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *DiscardDraftParams, reqEditors ...RequestEditorFn) (*DiscardDraftResponse, error)
+
+	// GetDraftWithResponse The factory's open draft, its changes and problems
+	//
+	// 404 no-draft when none is open.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft (the `GetDraft` operationId).
+	GetDraftWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetDraftResponse, error)
+
+	// OpenDraftWithBodyWithResponse Open the factory's draft, or return the open one
+	//
+	// Opens a draft on base (a published version: a number or current; current when absent). An open draft is returned as it is (200), unless base names another version: then 409 draft-exists, or with replace the open draft is archived and a new one opened (201).
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft (the `OpenDraft` operationId).
+	OpenDraftWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*OpenDraftResponse, error)
+
+	// OpenDraftWithResponse Open the factory's draft, or return the open one
+	//
+	// Opens a draft on base (a published version: a number or current; current when absent). An open draft is returned as it is (200), unless base names another version: then 409 draft-exists, or with replace the open draft is archived and a new one opened (201).
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft (the `OpenDraft` operationId).
+	OpenDraftWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body OpenDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*OpenDraftResponse, error)
+
+	// ListDraftFilesWithResponse The draft's files by path
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/files (the `ListDraftFiles` operationId).
+	ListDraftFilesWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListDraftFilesResponse, error)
+
+	// DeleteDraftFileWithResponse Delete one file of the draft
+	//
+	// If-Match is the file's sha256 (428 without it, 412 when stale); 404 file-not-found.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `DeleteDraftFile` operationId).
+	DeleteDraftFileWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, params *DeleteDraftFileParams, reqEditors ...RequestEditorFn) (*DeleteDraftFileResponse, error)
+
+	// GetDraftFileWithResponse One file of the draft, as stored
+	//
+	// 404 file-not-found. The ETag is the file's sha256, the If-Match of putDraftFile and deleteDraftFile.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `GetDraftFile` operationId).
+	GetDraftFileWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, reqEditors ...RequestEditorFn) (*GetDraftFileResponse, error)
+
+	// PutDraftFileWithBodyWithResponse Write one file of the draft exactly as sent (YAML mode)
+	//
+	// If-Match is the sha256 the editor read ("<sha256>"); If-None-Match * creates a file that must not exist yet. Exactly one of them: neither is 428 precondition-required, both 400. A stale hash, or If-None-Match on a file that exists, is 412 draft-conflict with the file's current sha256 (absent when it is gone). 422 bad-path; 413 too-large (over 1 MiB).
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `PutDraftFile` operationId).
+	PutDraftFileWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, params *PutDraftFileParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutDraftFileResponse, error)
+
+	// GetDraftModelWithResponse The draft's factory model for the Visual editor
+	//
+	// The model, each section's concurrency token, the fields the draft changed against its base (Edited · Undo) and where each model pointer is in factory.yaml. 409 yaml-invalid (with parse_error) while factory.yaml does not parse: Visual is read-only until it is fixed in YAML mode.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/model (the `GetDraftModel` operationId).
+	GetDraftModelWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetDraftModelResponse, error)
+
+	// SaveDraftSectionWithBodyWithResponse Save one section of the model (a Visual save)
+	//
+	// Applies the section's new value to factory.yaml, keeping everything the section does not own (comments and key order included), and writes files and deletes remove_files in the same revision (an added agent's prompt). If-Match is the section's etag ("<etag>"): without it 428 precondition-required; when the section changed meanwhile 412 draft-conflict with the section's current value and etag. Writers of other sections or files never conflict. 409 yaml-invalid while factory.yaml does not parse; 422 model-invalid for a value of the wrong shape; 404 no-draft.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/model/{section} (the `SaveDraftSection` operationId).
+	SaveDraftSectionWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, section SectionRef, params *SaveDraftSectionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SaveDraftSectionResponse, error)
+
+	// SaveDraftSectionWithResponse Save one section of the model (a Visual save)
+	//
+	// Applies the section's new value to factory.yaml, keeping everything the section does not own (comments and key order included), and writes files and deletes remove_files in the same revision (an added agent's prompt). If-Match is the section's etag ("<etag>"): without it 428 precondition-required; when the section changed meanwhile 412 draft-conflict with the section's current value and etag. Writers of other sections or files never conflict. 409 yaml-invalid while factory.yaml does not parse; 422 model-invalid for a value of the wrong shape; 404 no-draft.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/model/{section} (the `SaveDraftSection` operationId).
+	SaveDraftSectionWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, section SectionRef, params *SaveDraftSectionParams, body SaveDraftSectionJSONRequestBody, reqEditors ...RequestEditorFn) (*SaveDraftSectionResponse, error)
+
+	// RevertDraftSectionWithBodyWithResponse Put back the base's value at edited fields of a section (Undo)
+	//
+	// pointers are keys of DraftModel.edited in the section; one no longer edited is ignored. If-Match is the section's etag, as for a save (428, 412).
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/model/{section}/revert (the `RevertDraftSection` operationId).
+	RevertDraftSectionWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, section SectionRef, params *RevertDraftSectionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RevertDraftSectionResponse, error)
+
+	// RevertDraftSectionWithResponse Put back the base's value at edited fields of a section (Undo)
+	//
+	// pointers are keys of DraftModel.edited in the section; one no longer edited is ignored. If-Match is the section's etag, as for a save (428, 412).
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/model/{section}/revert (the `RevertDraftSection` operationId).
+	RevertDraftSectionWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, section SectionRef, params *RevertDraftSectionParams, body RevertDraftSectionJSONRequestBody, reqEditors ...RequestEditorFn) (*RevertDraftSectionResponse, error)
+
+	// PublishDraftWithBodyWithResponse Publish the open draft as the factory's next version
+	//
+	// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/publish (the `PublishDraft` operationId).
+	PublishDraftWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PublishDraftResponse, error)
+
+	// PublishDraftWithResponse Publish the open draft as the factory's next version
+	//
+	// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/publish (the `PublishDraft` operationId).
+	PublishDraftWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body PublishDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*PublishDraftResponse, error)
+
+	// ReplaceDraftTreeWithBodyWithResponse Make files the draft's whole tree (goal factory push)
+	//
+	// With expected_revision, a draft at another revision is 412 draft-conflict; without it the latest draft is replaced. 422 bad-path; 413 too-large (over 1,000 files or 16 MiB).
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/tree (the `ReplaceDraftTree` operationId).
+	ReplaceDraftTreeWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReplaceDraftTreeResponse, error)
+
+	// ReplaceDraftTreeWithResponse Make files the draft's whole tree (goal factory push)
+	//
+	// With expected_revision, a draft at another revision is 412 draft-conflict; without it the latest draft is replaced. 422 bad-path; 413 too-large (over 1,000 files or 16 MiB).
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/tree (the `ReplaceDraftTree` operationId).
+	ReplaceDraftTreeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body ReplaceDraftTreeJSONRequestBody, reqEditors ...RequestEditorFn) (*ReplaceDraftTreeResponse, error)
+
+	// ValidateDraftWithBodyWithResponse Validate the draft at its revision, as publish will
+	//
+	// overlay is unsaved YAML-mode text written over the draft's files; station_moves are the moves the publish will carry, so the items they map are not reported.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
+	ValidateDraftWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ValidateDraftResponse, error)
+
+	// ValidateDraftWithResponse Validate the draft at its revision, as publish will
+	//
+	// overlay is unsaved YAML-mode text written over the draft's files; station_moves are the moves the publish will carry, so the items they map are not reported.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
+	ValidateDraftWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body ValidateDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*ValidateDraftResponse, error)
 
 	// ListItemsWithResponse One page of a factory's items, newest first
 	//
@@ -3388,6 +7298,72 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics (the `GetMetrics` operationId).
 	GetMetricsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*GetMetricsResponse, error)
+
+	// PauseFactoryWithResponse Stop the factory taking work; runs in progress finish
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/pause (the `PauseFactory` operationId).
+	PauseFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*PauseFactoryResponse, error)
+
+	// ResumeFactoryWithResponse Start a paused factory again
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/resume (the `ResumeFactory` operationId).
+	ResumeFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ResumeFactoryResponse, error)
+
+	// ListVersionsWithResponse One page of the factory's published versions, newest first
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/versions (the `ListVersions` operationId).
+	ListVersionsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *ListVersionsParams, reqEditors ...RequestEditorFn) (*ListVersionsResponse, error)
+
+	// GetVersionWithResponse One version with its files
+	//
+	// 404 version-not-found (source too, which is a starting tree and no version).
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/versions/{version} (the `GetVersion` operationId).
+	GetVersionWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, reqEditors ...RequestEditorFn) (*GetVersionResponse, error)
+
+	// GetVersionFileWithResponse One file of a version
+	//
+	// A published version's files never change: they are served with Cache-Control private, max-age=31536000, immutable (no-cache for a draft's). 404 file-not-found.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/versions/{version}/files/{path} (the `GetVersionFile` operationId).
+	GetVersionFileWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, path FilePath, reqEditors ...RequestEditorFn) (*GetVersionFileResponse, error)
+
+	// GetVersionModelWithResponse The factory model of a version, for a read-only Visual view
+	//
+	// 409 yaml-invalid (with parse_error) when its factory.yaml does not parse.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/versions/{version}/model (the `GetVersionModel` operationId).
+	GetVersionModelWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, reqEditors ...RequestEditorFn) (*GetVersionModelResponse, error)
+
+	// RestoreVersionWithBodyWithResponse Run an older published version again (rollback)
+	//
+	// Moves the factory's current pointer to the version; numbers are not reused and an open draft stays open. 409 draft-base-moved (the current version is not expected_current_version_id), items-at-removed-station, name-taken; 404 version-not-found.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/versions/{version}/restore (the `RestoreVersion` operationId).
+	RestoreVersionWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RestoreVersionResponse, error)
+
+	// RestoreVersionWithResponse Run an older published version again (rollback)
+	//
+	// Moves the factory's current pointer to the version; numbers are not reused and an open draft stays open. 409 draft-base-moved (the current version is not expected_current_version_id), items-at-removed-station, name-taken; 404 version-not-found.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/versions/{version}/restore (the `RestoreVersion` operationId).
+	RestoreVersionWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, body RestoreVersionJSONRequestBody, reqEditors ...RequestEditorFn) (*RestoreVersionResponse, error)
 
 	// GetInboxWithResponse What waits for a person across the organization's factories
 	//
@@ -3492,12 +7468,28 @@ type ClientWithResponsesInterface interface {
 
 	// StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
 	//
-	// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+	// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/orgs/{org}/stream (the `StreamEvents` operationId).
 	StreamEventsWithResponse(ctx context.Context, org OrgRef, params *StreamEventsParams, reqEditors ...RequestEditorFn) (*StreamEventsResponse, error)
+
+	// ListTemplatesWithResponse The template catalog, the latest version of each template by name
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/templates (the `ListTemplates` operationId).
+	ListTemplatesWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListTemplatesResponse, error)
+
+	// GetTemplateWithResponse One version of a template with a preview of its model
+	//
+	// 404 template-not-found.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/templates/{name} (the `GetTemplate` operationId).
+	GetTemplateWithResponse(ctx context.Context, org OrgRef, name string, params *GetTemplateParams, reqEditors ...RequestEditorFn) (*GetTemplateResponse, error)
 }
 
 type GetHealthResponse struct {
@@ -3973,6 +7965,102 @@ func (r GetSkillFilesResponse) ContentType() string {
 	return ""
 }
 
+type FormatDefinitionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// YAML200 the response for an HTTP 200 `text/yaml` response
+	YAML200 *string
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetYAML200 returns the response for an HTTP 200 `text/yaml` response
+func (r FormatDefinitionResponse) GetYAML200() *string {
+	return r.YAML200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r FormatDefinitionResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r FormatDefinitionResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r FormatDefinitionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r FormatDefinitionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r FormatDefinitionResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ValidateDefinitionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Validation
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ValidateDefinitionResponse) GetJSON200() *Validation {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ValidateDefinitionResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ValidateDefinitionResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ValidateDefinitionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ValidateDefinitionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ValidateDefinitionResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListFactoriesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -4021,6 +8109,150 @@ func (r ListFactoriesResponse) ContentType() string {
 	return ""
 }
 
+// CreateFactoryResponse201Headers the declared response headers of an HTTP 201 response for CreateFactory
+type CreateFactoryResponse201Headers struct {
+	Location string
+}
+
+type CreateFactoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Factory
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *CreateFactoryResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateFactoryResponse) GetJSON201() *Factory {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateFactoryResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateFactoryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateFactoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateFactoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateFactoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteFactoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r DeleteFactoryResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteFactoryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteFactoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteFactoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteFactoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetFactoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Factory
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetFactoryResponse) GetJSON200() *Factory {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetFactoryResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetFactoryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetFactoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetFactoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetFactoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetBoardResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -4063,6 +8295,685 @@ func (r GetBoardResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetBoardResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CompareVersionsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Comparison
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r CompareVersionsResponse) GetJSON200() *Comparison {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CompareVersionsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CompareVersionsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CompareVersionsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CompareVersionsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CompareVersionsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DiscardDraftResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r DiscardDraftResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r DiscardDraftResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DiscardDraftResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DiscardDraftResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DiscardDraftResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetDraftResponse200Headers the declared response headers of an HTTP 200 response for GetDraft
+type GetDraftResponse200Headers struct {
+	ETag string
+}
+
+type GetDraftResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Draft
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GetDraftResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetDraftResponse) GetJSON200() *Draft {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetDraftResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetDraftResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDraftResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDraftResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetDraftResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type OpenDraftResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Draft
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Draft
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r OpenDraftResponse) GetJSON200() *Draft {
+	return r.JSON200
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r OpenDraftResponse) GetJSON201() *Draft {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r OpenDraftResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r OpenDraftResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r OpenDraftResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r OpenDraftResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r OpenDraftResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListDraftFilesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *FileList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListDraftFilesResponse) GetJSON200() *FileList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListDraftFilesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListDraftFilesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListDraftFilesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListDraftFilesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListDraftFilesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteDraftFileResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SaveResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DeleteDraftFileResponse) GetJSON200() *SaveResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r DeleteDraftFileResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteDraftFileResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteDraftFileResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteDraftFileResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteDraftFileResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetDraftFileResponse200Headers the declared response headers of an HTTP 200 response for GetDraftFile
+type GetDraftFileResponse200Headers struct {
+	ETag string
+}
+
+type GetDraftFileResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GetDraftFileResponse200Headers
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetDraftFileResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetDraftFileResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDraftFileResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDraftFileResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetDraftFileResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PutDraftFileResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SaveResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PutDraftFileResponse) GetJSON200() *SaveResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PutDraftFileResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PutDraftFileResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PutDraftFileResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutDraftFileResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PutDraftFileResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetDraftModelResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *DraftModel
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetDraftModelResponse) GetJSON200() *DraftModel {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetDraftModelResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetDraftModelResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDraftModelResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDraftModelResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetDraftModelResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SaveDraftSectionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SaveResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SaveDraftSectionResponse) GetJSON200() *SaveResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SaveDraftSectionResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SaveDraftSectionResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SaveDraftSectionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SaveDraftSectionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SaveDraftSectionResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RevertDraftSectionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SaveResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RevertDraftSectionResponse) GetJSON200() *SaveResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RevertDraftSectionResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RevertDraftSectionResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RevertDraftSectionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RevertDraftSectionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RevertDraftSectionResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PublishDraftResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Version
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r PublishDraftResponse) GetJSON201() *Version {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PublishDraftResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PublishDraftResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PublishDraftResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PublishDraftResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PublishDraftResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReplaceDraftTreeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SaveResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReplaceDraftTreeResponse) GetJSON200() *SaveResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ReplaceDraftTreeResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ReplaceDraftTreeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReplaceDraftTreeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReplaceDraftTreeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReplaceDraftTreeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ValidateDraftResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Validation
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ValidateDraftResponse) GetJSON200() *Validation {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ValidateDraftResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ValidateDraftResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ValidateDraftResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ValidateDraftResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ValidateDraftResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -4207,6 +9118,343 @@ func (r GetMetricsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetMetricsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PauseFactoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Factory
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PauseFactoryResponse) GetJSON200() *Factory {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PauseFactoryResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PauseFactoryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PauseFactoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PauseFactoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PauseFactoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ResumeFactoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Factory
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ResumeFactoryResponse) GetJSON200() *Factory {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ResumeFactoryResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ResumeFactoryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ResumeFactoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ResumeFactoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ResumeFactoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListVersionsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *VersionPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListVersionsResponse) GetJSON200() *VersionPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListVersionsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListVersionsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListVersionsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListVersionsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListVersionsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetVersionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *VersionDetail
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetVersionResponse) GetJSON200() *VersionDetail {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetVersionResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetVersionResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetVersionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetVersionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetVersionResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetVersionFileResponse200Headers the declared response headers of an HTTP 200 response for GetVersionFile
+type GetVersionFileResponse200Headers struct {
+	CacheControl string
+	ETag         string
+}
+
+type GetVersionFileResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GetVersionFileResponse200Headers
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetVersionFileResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetVersionFileResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetVersionFileResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetVersionFileResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetVersionFileResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetVersionModelResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *VersionModel
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetVersionModelResponse) GetJSON200() *VersionModel {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetVersionModelResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetVersionModelResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetVersionModelResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetVersionModelResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetVersionModelResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RestoreVersionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Factory
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RestoreVersionResponse) GetJSON200() *Factory {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RestoreVersionResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RestoreVersionResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RestoreVersionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RestoreVersionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RestoreVersionResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -4734,6 +9982,102 @@ func (r StreamEventsResponse) ContentType() string {
 	return ""
 }
 
+type ListTemplatesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *TemplateList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListTemplatesResponse) GetJSON200() *TemplateList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListTemplatesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListTemplatesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListTemplatesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListTemplatesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListTemplatesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetTemplateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Template
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetTemplateResponse) GetJSON200() *Template {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetTemplateResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetTemplateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetTemplateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetTemplateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetTemplateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // GetHealthWithResponse Liveness of goald
 //
 // Returns a wrapper object for the known response body format(s).
@@ -4906,7 +10250,54 @@ func (c *ClientWithResponses) GetSkillFilesWithResponse(ctx context.Context, org
 	return ParseGetSkillFilesResponse(rsp)
 }
 
-// ListFactoriesWithResponse The organization's factories goald runs, from the bucket
+// FormatDefinitionWithBodyWithResponse Format a factory.yaml the way Visual saves write changed lines (Format)
+//
+// 422 yaml-invalid (with parse_error) when it does not parse.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/definitions/format (the `FormatDefinition` operationId).
+func (c *ClientWithResponses) FormatDefinitionWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FormatDefinitionResponse, error) {
+	rsp, err := c.FormatDefinitionWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFormatDefinitionResponse(rsp)
+}
+
+// ValidateDefinitionWithBodyWithResponse Validate files that belong to no factory yet (Import YAML preview, CLI validate)
+//
+// 413 too-large; 422 bad-path.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/definitions/validate (the `ValidateDefinition` operationId).
+func (c *ClientWithResponses) ValidateDefinitionWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ValidateDefinitionResponse, error) {
+	rsp, err := c.ValidateDefinitionWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseValidateDefinitionResponse(rsp)
+}
+
+// ValidateDefinitionWithResponse Validate files that belong to no factory yet (Import YAML preview, CLI validate)
+//
+// 413 too-large; 422 bad-path.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/definitions/validate (the `ValidateDefinition` operationId).
+func (c *ClientWithResponses) ValidateDefinitionWithResponse(ctx context.Context, org OrgRef, body ValidateDefinitionJSONRequestBody, reqEditors ...RequestEditorFn) (*ValidateDefinitionResponse, error) {
+	rsp, err := c.ValidateDefinition(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseValidateDefinitionResponse(rsp)
+}
+
+// ListFactoriesWithResponse The organization's factories, published or not
+//
+// Every factory of the organization by name, with its current version, its open draft and whether it is paused. stations and work_types are those of the version goald runs (empty for a factory never published).
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -4917,6 +10308,64 @@ func (c *ClientWithResponses) ListFactoriesWithResponse(ctx context.Context, org
 		return nil, err
 	}
 	return ParseListFactoriesResponse(rsp)
+}
+
+// CreateFactoryWithBodyWithResponse Create a factory with its first draft
+//
+// Starts blank (the catalog's blank template, or a skeleton naming no station or agent), from a catalog template, as a clone of another factory's version (same organization; items, runs and history are not copied) or from imported files. factory.yaml's metadata.id becomes a new id (kept only with keep_id), and metadata.name and title the request's, edited in place so comments survive. The factory runs nothing until its draft is published. Errors: 409 name-taken, factory-exists (an import keeping a taken id); 404 template-not-found, factory-not-found (the clone's source); 422 import-invalid (no factory.yaml that parses), bad-path; 413 too-large; 400 invalid-request (no name).
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories (the `CreateFactory` operationId).
+func (c *ClientWithResponses) CreateFactoryWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateFactoryResponse, error) {
+	rsp, err := c.CreateFactoryWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateFactoryResponse(rsp)
+}
+
+// CreateFactoryWithResponse Create a factory with its first draft
+//
+// Starts blank (the catalog's blank template, or a skeleton naming no station or agent), from a catalog template, as a clone of another factory's version (same organization; items, runs and history are not copied) or from imported files. factory.yaml's metadata.id becomes a new id (kept only with keep_id), and metadata.name and title the request's, edited in place so comments survive. The factory runs nothing until its draft is published. Errors: 409 name-taken, factory-exists (an import keeping a taken id); 404 template-not-found, factory-not-found (the clone's source); 422 import-invalid (no factory.yaml that parses), bad-path; 413 too-large; 400 invalid-request (no name).
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories (the `CreateFactory` operationId).
+func (c *ClientWithResponses) CreateFactoryWithResponse(ctx context.Context, org OrgRef, body CreateFactoryJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateFactoryResponse, error) {
+	rsp, err := c.CreateFactory(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateFactoryResponse(rsp)
+}
+
+// DeleteFactoryWithResponse Delete a factory that was never published, with its draft (the wizard's Cancel)
+//
+// 409 factory-published once a version was published.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/factories/{factory} (the `DeleteFactory` operationId).
+func (c *ClientWithResponses) DeleteFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*DeleteFactoryResponse, error) {
+	rsp, err := c.DeleteFactory(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteFactoryResponse(rsp)
+}
+
+// GetFactoryWithResponse One factory, published or not
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory} (the `GetFactory` operationId).
+func (c *ClientWithResponses) GetFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetFactoryResponse, error) {
+	rsp, err := c.GetFactory(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetFactoryResponse(rsp)
 }
 
 // GetBoardWithResponse The factory's board, station by station in line order
@@ -4932,6 +10381,304 @@ func (c *ClientWithResponses) GetBoardWithResponse(ctx context.Context, org OrgR
 		return nil, err
 	}
 	return ParseGetBoardResponse(rsp)
+}
+
+// CompareVersionsWithResponse The semantic difference between two versions
+//
+// from and to are version selectors (a number, current, draft, base or source); by default the draft against its base, or its starting tree when it has none. Line-level hunks are computed by the client from the two files.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/compare (the `CompareVersions` operationId).
+func (c *ClientWithResponses) CompareVersionsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *CompareVersionsParams, reqEditors ...RequestEditorFn) (*CompareVersionsResponse, error) {
+	rsp, err := c.CompareVersions(ctx, org, factory, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCompareVersionsResponse(rsp)
+}
+
+// DiscardDraftWithResponse Discard (archive) the open draft; the version that runs is unchanged
+//
+// If-Match is the draft's revision ("42"): without it 428 precondition-required, when the draft moved since 412 draft-conflict.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/draft (the `DiscardDraft` operationId).
+func (c *ClientWithResponses) DiscardDraftWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *DiscardDraftParams, reqEditors ...RequestEditorFn) (*DiscardDraftResponse, error) {
+	rsp, err := c.DiscardDraft(ctx, org, factory, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDiscardDraftResponse(rsp)
+}
+
+// GetDraftWithResponse The factory's open draft, its changes and problems
+//
+// 404 no-draft when none is open.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft (the `GetDraft` operationId).
+func (c *ClientWithResponses) GetDraftWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetDraftResponse, error) {
+	rsp, err := c.GetDraft(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDraftResponse(rsp)
+}
+
+// OpenDraftWithBodyWithResponse Open the factory's draft, or return the open one
+//
+// Opens a draft on base (a published version: a number or current; current when absent). An open draft is returned as it is (200), unless base names another version: then 409 draft-exists, or with replace the open draft is archived and a new one opened (201).
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft (the `OpenDraft` operationId).
+func (c *ClientWithResponses) OpenDraftWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*OpenDraftResponse, error) {
+	rsp, err := c.OpenDraftWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseOpenDraftResponse(rsp)
+}
+
+// OpenDraftWithResponse Open the factory's draft, or return the open one
+//
+// Opens a draft on base (a published version: a number or current; current when absent). An open draft is returned as it is (200), unless base names another version: then 409 draft-exists, or with replace the open draft is archived and a new one opened (201).
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft (the `OpenDraft` operationId).
+func (c *ClientWithResponses) OpenDraftWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body OpenDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*OpenDraftResponse, error) {
+	rsp, err := c.OpenDraft(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseOpenDraftResponse(rsp)
+}
+
+// ListDraftFilesWithResponse The draft's files by path
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/files (the `ListDraftFiles` operationId).
+func (c *ClientWithResponses) ListDraftFilesWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListDraftFilesResponse, error) {
+	rsp, err := c.ListDraftFiles(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListDraftFilesResponse(rsp)
+}
+
+// DeleteDraftFileWithResponse Delete one file of the draft
+//
+// If-Match is the file's sha256 (428 without it, 412 when stale); 404 file-not-found.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `DeleteDraftFile` operationId).
+func (c *ClientWithResponses) DeleteDraftFileWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, params *DeleteDraftFileParams, reqEditors ...RequestEditorFn) (*DeleteDraftFileResponse, error) {
+	rsp, err := c.DeleteDraftFile(ctx, org, factory, path, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteDraftFileResponse(rsp)
+}
+
+// GetDraftFileWithResponse One file of the draft, as stored
+//
+// 404 file-not-found. The ETag is the file's sha256, the If-Match of putDraftFile and deleteDraftFile.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `GetDraftFile` operationId).
+func (c *ClientWithResponses) GetDraftFileWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, reqEditors ...RequestEditorFn) (*GetDraftFileResponse, error) {
+	rsp, err := c.GetDraftFile(ctx, org, factory, path, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDraftFileResponse(rsp)
+}
+
+// PutDraftFileWithBodyWithResponse Write one file of the draft exactly as sent (YAML mode)
+//
+// If-Match is the sha256 the editor read ("<sha256>"); If-None-Match * creates a file that must not exist yet. Exactly one of them: neither is 428 precondition-required, both 400. A stale hash, or If-None-Match on a file that exists, is 412 draft-conflict with the file's current sha256 (absent when it is gone). 422 bad-path; 413 too-large (over 1 MiB).
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `PutDraftFile` operationId).
+func (c *ClientWithResponses) PutDraftFileWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, params *PutDraftFileParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutDraftFileResponse, error) {
+	rsp, err := c.PutDraftFileWithBody(ctx, org, factory, path, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutDraftFileResponse(rsp)
+}
+
+// GetDraftModelWithResponse The draft's factory model for the Visual editor
+//
+// The model, each section's concurrency token, the fields the draft changed against its base (Edited · Undo) and where each model pointer is in factory.yaml. 409 yaml-invalid (with parse_error) while factory.yaml does not parse: Visual is read-only until it is fixed in YAML mode.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/model (the `GetDraftModel` operationId).
+func (c *ClientWithResponses) GetDraftModelWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetDraftModelResponse, error) {
+	rsp, err := c.GetDraftModel(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDraftModelResponse(rsp)
+}
+
+// SaveDraftSectionWithBodyWithResponse Save one section of the model (a Visual save)
+//
+// Applies the section's new value to factory.yaml, keeping everything the section does not own (comments and key order included), and writes files and deletes remove_files in the same revision (an added agent's prompt). If-Match is the section's etag ("<etag>"): without it 428 precondition-required; when the section changed meanwhile 412 draft-conflict with the section's current value and etag. Writers of other sections or files never conflict. 409 yaml-invalid while factory.yaml does not parse; 422 model-invalid for a value of the wrong shape; 404 no-draft.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/model/{section} (the `SaveDraftSection` operationId).
+func (c *ClientWithResponses) SaveDraftSectionWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, section SectionRef, params *SaveDraftSectionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SaveDraftSectionResponse, error) {
+	rsp, err := c.SaveDraftSectionWithBody(ctx, org, factory, section, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSaveDraftSectionResponse(rsp)
+}
+
+// SaveDraftSectionWithResponse Save one section of the model (a Visual save)
+//
+// Applies the section's new value to factory.yaml, keeping everything the section does not own (comments and key order included), and writes files and deletes remove_files in the same revision (an added agent's prompt). If-Match is the section's etag ("<etag>"): without it 428 precondition-required; when the section changed meanwhile 412 draft-conflict with the section's current value and etag. Writers of other sections or files never conflict. 409 yaml-invalid while factory.yaml does not parse; 422 model-invalid for a value of the wrong shape; 404 no-draft.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/model/{section} (the `SaveDraftSection` operationId).
+func (c *ClientWithResponses) SaveDraftSectionWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, section SectionRef, params *SaveDraftSectionParams, body SaveDraftSectionJSONRequestBody, reqEditors ...RequestEditorFn) (*SaveDraftSectionResponse, error) {
+	rsp, err := c.SaveDraftSection(ctx, org, factory, section, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSaveDraftSectionResponse(rsp)
+}
+
+// RevertDraftSectionWithBodyWithResponse Put back the base's value at edited fields of a section (Undo)
+//
+// pointers are keys of DraftModel.edited in the section; one no longer edited is ignored. If-Match is the section's etag, as for a save (428, 412).
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/model/{section}/revert (the `RevertDraftSection` operationId).
+func (c *ClientWithResponses) RevertDraftSectionWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, section SectionRef, params *RevertDraftSectionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RevertDraftSectionResponse, error) {
+	rsp, err := c.RevertDraftSectionWithBody(ctx, org, factory, section, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRevertDraftSectionResponse(rsp)
+}
+
+// RevertDraftSectionWithResponse Put back the base's value at edited fields of a section (Undo)
+//
+// pointers are keys of DraftModel.edited in the section; one no longer edited is ignored. If-Match is the section's etag, as for a save (428, 412).
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/model/{section}/revert (the `RevertDraftSection` operationId).
+func (c *ClientWithResponses) RevertDraftSectionWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, section SectionRef, params *RevertDraftSectionParams, body RevertDraftSectionJSONRequestBody, reqEditors ...RequestEditorFn) (*RevertDraftSectionResponse, error) {
+	rsp, err := c.RevertDraftSection(ctx, org, factory, section, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRevertDraftSectionResponse(rsp)
+}
+
+// PublishDraftWithBodyWithResponse Publish the open draft as the factory's next version
+//
+// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/publish (the `PublishDraft` operationId).
+func (c *ClientWithResponses) PublishDraftWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PublishDraftResponse, error) {
+	rsp, err := c.PublishDraftWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePublishDraftResponse(rsp)
+}
+
+// PublishDraftWithResponse Publish the open draft as the factory's next version
+//
+// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/publish (the `PublishDraft` operationId).
+func (c *ClientWithResponses) PublishDraftWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body PublishDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*PublishDraftResponse, error) {
+	rsp, err := c.PublishDraft(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePublishDraftResponse(rsp)
+}
+
+// ReplaceDraftTreeWithBodyWithResponse Make files the draft's whole tree (goal factory push)
+//
+// With expected_revision, a draft at another revision is 412 draft-conflict; without it the latest draft is replaced. 422 bad-path; 413 too-large (over 1,000 files or 16 MiB).
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/tree (the `ReplaceDraftTree` operationId).
+func (c *ClientWithResponses) ReplaceDraftTreeWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReplaceDraftTreeResponse, error) {
+	rsp, err := c.ReplaceDraftTreeWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReplaceDraftTreeResponse(rsp)
+}
+
+// ReplaceDraftTreeWithResponse Make files the draft's whole tree (goal factory push)
+//
+// With expected_revision, a draft at another revision is 412 draft-conflict; without it the latest draft is replaced. 422 bad-path; 413 too-large (over 1,000 files or 16 MiB).
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/tree (the `ReplaceDraftTree` operationId).
+func (c *ClientWithResponses) ReplaceDraftTreeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body ReplaceDraftTreeJSONRequestBody, reqEditors ...RequestEditorFn) (*ReplaceDraftTreeResponse, error) {
+	rsp, err := c.ReplaceDraftTree(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReplaceDraftTreeResponse(rsp)
+}
+
+// ValidateDraftWithBodyWithResponse Validate the draft at its revision, as publish will
+//
+// overlay is unsaved YAML-mode text written over the draft's files; station_moves are the moves the publish will carry, so the items they map are not reported.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
+func (c *ClientWithResponses) ValidateDraftWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ValidateDraftResponse, error) {
+	rsp, err := c.ValidateDraftWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseValidateDraftResponse(rsp)
+}
+
+// ValidateDraftWithResponse Validate the draft at its revision, as publish will
+//
+// overlay is unsaved YAML-mode text written over the draft's files; station_moves are the moves the publish will carry, so the items they map are not reported.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
+func (c *ClientWithResponses) ValidateDraftWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body ValidateDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*ValidateDraftResponse, error) {
+	rsp, err := c.ValidateDraft(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseValidateDraftResponse(rsp)
 }
 
 // ListItemsWithResponse One page of a factory's items, newest first
@@ -4984,6 +10731,120 @@ func (c *ClientWithResponses) GetMetricsWithResponse(ctx context.Context, org Or
 		return nil, err
 	}
 	return ParseGetMetricsResponse(rsp)
+}
+
+// PauseFactoryWithResponse Stop the factory taking work; runs in progress finish
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/pause (the `PauseFactory` operationId).
+func (c *ClientWithResponses) PauseFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*PauseFactoryResponse, error) {
+	rsp, err := c.PauseFactory(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePauseFactoryResponse(rsp)
+}
+
+// ResumeFactoryWithResponse Start a paused factory again
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/resume (the `ResumeFactory` operationId).
+func (c *ClientWithResponses) ResumeFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ResumeFactoryResponse, error) {
+	rsp, err := c.ResumeFactory(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseResumeFactoryResponse(rsp)
+}
+
+// ListVersionsWithResponse One page of the factory's published versions, newest first
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/versions (the `ListVersions` operationId).
+func (c *ClientWithResponses) ListVersionsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *ListVersionsParams, reqEditors ...RequestEditorFn) (*ListVersionsResponse, error) {
+	rsp, err := c.ListVersions(ctx, org, factory, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListVersionsResponse(rsp)
+}
+
+// GetVersionWithResponse One version with its files
+//
+// 404 version-not-found (source too, which is a starting tree and no version).
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/versions/{version} (the `GetVersion` operationId).
+func (c *ClientWithResponses) GetVersionWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, reqEditors ...RequestEditorFn) (*GetVersionResponse, error) {
+	rsp, err := c.GetVersion(ctx, org, factory, version, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetVersionResponse(rsp)
+}
+
+// GetVersionFileWithResponse One file of a version
+//
+// A published version's files never change: they are served with Cache-Control private, max-age=31536000, immutable (no-cache for a draft's). 404 file-not-found.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/versions/{version}/files/{path} (the `GetVersionFile` operationId).
+func (c *ClientWithResponses) GetVersionFileWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, path FilePath, reqEditors ...RequestEditorFn) (*GetVersionFileResponse, error) {
+	rsp, err := c.GetVersionFile(ctx, org, factory, version, path, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetVersionFileResponse(rsp)
+}
+
+// GetVersionModelWithResponse The factory model of a version, for a read-only Visual view
+//
+// 409 yaml-invalid (with parse_error) when its factory.yaml does not parse.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/versions/{version}/model (the `GetVersionModel` operationId).
+func (c *ClientWithResponses) GetVersionModelWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, reqEditors ...RequestEditorFn) (*GetVersionModelResponse, error) {
+	rsp, err := c.GetVersionModel(ctx, org, factory, version, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetVersionModelResponse(rsp)
+}
+
+// RestoreVersionWithBodyWithResponse Run an older published version again (rollback)
+//
+// Moves the factory's current pointer to the version; numbers are not reused and an open draft stays open. 409 draft-base-moved (the current version is not expected_current_version_id), items-at-removed-station, name-taken; 404 version-not-found.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/versions/{version}/restore (the `RestoreVersion` operationId).
+func (c *ClientWithResponses) RestoreVersionWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RestoreVersionResponse, error) {
+	rsp, err := c.RestoreVersionWithBody(ctx, org, factory, version, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRestoreVersionResponse(rsp)
+}
+
+// RestoreVersionWithResponse Run an older published version again (rollback)
+//
+// Moves the factory's current pointer to the version; numbers are not reused and an open draft stays open. 409 draft-base-moved (the current version is not expected_current_version_id), items-at-removed-station, name-taken; 404 version-not-found.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/versions/{version}/restore (the `RestoreVersion` operationId).
+func (c *ClientWithResponses) RestoreVersionWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, body RestoreVersionJSONRequestBody, reqEditors ...RequestEditorFn) (*RestoreVersionResponse, error) {
+	rsp, err := c.RestoreVersion(ctx, org, factory, version, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRestoreVersionResponse(rsp)
 }
 
 // GetInboxWithResponse What waits for a person across the organization's factories
@@ -5167,7 +11028,7 @@ func (c *ClientWithResponses) UpdateOrgSettingsWithResponse(ctx context.Context,
 
 // StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
 //
-// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -5178,6 +11039,34 @@ func (c *ClientWithResponses) StreamEventsWithResponse(ctx context.Context, org 
 		return nil, err
 	}
 	return ParseStreamEventsResponse(rsp)
+}
+
+// ListTemplatesWithResponse The template catalog, the latest version of each template by name
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/templates (the `ListTemplates` operationId).
+func (c *ClientWithResponses) ListTemplatesWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListTemplatesResponse, error) {
+	rsp, err := c.ListTemplates(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListTemplatesResponse(rsp)
+}
+
+// GetTemplateWithResponse One version of a template with a preview of its model
+//
+// 404 template-not-found.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/templates/{name} (the `GetTemplate` operationId).
+func (c *ClientWithResponses) GetTemplateWithResponse(ctx context.Context, org OrgRef, name string, params *GetTemplateParams, reqEditors ...RequestEditorFn) (*GetTemplateResponse, error) {
+	rsp, err := c.GetTemplate(ctx, org, name, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetTemplateResponse(rsp)
 }
 
 // ParseGetHealthResponse parses an HTTP response from a GetHealthWithResponse call
@@ -5503,6 +11392,72 @@ func ParseGetSkillFilesResponse(rsp *http.Response) (*GetSkillFilesResponse, err
 	return response, nil
 }
 
+// ParseFormatDefinitionResponse parses an HTTP response from a FormatDefinitionWithResponse call
+func ParseFormatDefinitionResponse(rsp *http.Response) (*FormatDefinitionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &FormatDefinitionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
+		var dest string
+		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.YAML200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseValidateDefinitionResponse parses an HTTP response from a ValidateDefinitionWithResponse call
+func ParseValidateDefinitionResponse(rsp *http.Response) (*ValidateDefinitionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ValidateDefinitionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Validation
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListFactoriesResponse parses an HTTP response from a ListFactoriesWithResponse call
 func ParseListFactoriesResponse(rsp *http.Response) (*ListFactoriesResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -5536,6 +11491,114 @@ func ParseListFactoriesResponse(rsp *http.Response) (*ListFactoriesResponse, err
 	return response, nil
 }
 
+// ParseCreateFactoryResponse parses an HTTP response from a CreateFactoryWithResponse call
+func ParseCreateFactoryResponse(rsp *http.Response) (*CreateFactoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateFactoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Factory
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers CreateFactoryResponse201Headers
+		if values := rsp.Header.Values("Location"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Location", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Location = value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseDeleteFactoryResponse parses an HTTP response from a DeleteFactoryWithResponse call
+func ParseDeleteFactoryResponse(rsp *http.Response) (*DeleteFactoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteFactoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetFactoryResponse parses an HTTP response from a GetFactoryWithResponse call
+func ParseGetFactoryResponse(rsp *http.Response) (*GetFactoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetFactoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Factory
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetBoardResponse parses an HTTP response from a GetBoardWithResponse call
 func ParseGetBoardResponse(rsp *http.Response) (*GetBoardResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -5552,6 +11615,490 @@ func ParseGetBoardResponse(rsp *http.Response) (*GetBoardResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Board
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCompareVersionsResponse parses an HTTP response from a CompareVersionsWithResponse call
+func ParseCompareVersionsResponse(rsp *http.Response) (*CompareVersionsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CompareVersionsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Comparison
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDiscardDraftResponse parses an HTTP response from a DiscardDraftWithResponse call
+func ParseDiscardDraftResponse(rsp *http.Response) (*DiscardDraftResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DiscardDraftResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetDraftResponse parses an HTTP response from a GetDraftWithResponse call
+func ParseGetDraftResponse(rsp *http.Response) (*GetDraftResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDraftResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Draft
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GetDraftResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseOpenDraftResponse parses an HTTP response from a OpenDraftWithResponse call
+func ParseOpenDraftResponse(rsp *http.Response) (*OpenDraftResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &OpenDraftResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Draft
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Draft
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListDraftFilesResponse parses an HTTP response from a ListDraftFilesWithResponse call
+func ParseListDraftFilesResponse(rsp *http.Response) (*ListDraftFilesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListDraftFilesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest FileList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteDraftFileResponse parses an HTTP response from a DeleteDraftFileWithResponse call
+func ParseDeleteDraftFileResponse(rsp *http.Response) (*DeleteDraftFileResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteDraftFileResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SaveResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetDraftFileResponse parses an HTTP response from a GetDraftFileWithResponse call
+func ParseGetDraftFileResponse(rsp *http.Response) (*GetDraftFileResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDraftFileResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GetDraftFileResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePutDraftFileResponse parses an HTTP response from a PutDraftFileWithResponse call
+func ParsePutDraftFileResponse(rsp *http.Response) (*PutDraftFileResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutDraftFileResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SaveResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetDraftModelResponse parses an HTTP response from a GetDraftModelWithResponse call
+func ParseGetDraftModelResponse(rsp *http.Response) (*GetDraftModelResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDraftModelResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DraftModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSaveDraftSectionResponse parses an HTTP response from a SaveDraftSectionWithResponse call
+func ParseSaveDraftSectionResponse(rsp *http.Response) (*SaveDraftSectionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SaveDraftSectionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SaveResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRevertDraftSectionResponse parses an HTTP response from a RevertDraftSectionWithResponse call
+func ParseRevertDraftSectionResponse(rsp *http.Response) (*RevertDraftSectionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RevertDraftSectionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SaveResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePublishDraftResponse parses an HTTP response from a PublishDraftWithResponse call
+func ParsePublishDraftResponse(rsp *http.Response) (*PublishDraftResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PublishDraftResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Version
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReplaceDraftTreeResponse parses an HTTP response from a ReplaceDraftTreeWithResponse call
+func ParseReplaceDraftTreeResponse(rsp *http.Response) (*ReplaceDraftTreeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReplaceDraftTreeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SaveResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseValidateDraftResponse parses an HTTP response from a ValidateDraftWithResponse call
+func ParseValidateDraftResponse(rsp *http.Response) (*ValidateDraftResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ValidateDraftResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Validation
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -5651,6 +12198,250 @@ func ParseGetMetricsResponse(rsp *http.Response) (*GetMetricsResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Metrics
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePauseFactoryResponse parses an HTTP response from a PauseFactoryWithResponse call
+func ParsePauseFactoryResponse(rsp *http.Response) (*PauseFactoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PauseFactoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Factory
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseResumeFactoryResponse parses an HTTP response from a ResumeFactoryWithResponse call
+func ParseResumeFactoryResponse(rsp *http.Response) (*ResumeFactoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ResumeFactoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Factory
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListVersionsResponse parses an HTTP response from a ListVersionsWithResponse call
+func ParseListVersionsResponse(rsp *http.Response) (*ListVersionsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListVersionsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest VersionPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetVersionResponse parses an HTTP response from a GetVersionWithResponse call
+func ParseGetVersionResponse(rsp *http.Response) (*GetVersionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetVersionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest VersionDetail
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetVersionFileResponse parses an HTTP response from a GetVersionFileWithResponse call
+func ParseGetVersionFileResponse(rsp *http.Response) (*GetVersionFileResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetVersionFileResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GetVersionFileResponse200Headers
+		if values := rsp.Header.Values("Cache-Control"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Cache-Control", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.CacheControl = value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGetVersionModelResponse parses an HTTP response from a GetVersionModelWithResponse call
+func ParseGetVersionModelResponse(rsp *http.Response) (*GetVersionModelResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetVersionModelResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest VersionModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRestoreVersionResponse parses an HTTP response from a RestoreVersionWithResponse call
+func ParseRestoreVersionResponse(rsp *http.Response) (*RestoreVersionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RestoreVersionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Factory
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -6024,6 +12815,72 @@ func ParseStreamEventsResponse(rsp *http.Response) (*StreamEventsResponse, error
 	return response, nil
 }
 
+// ParseListTemplatesResponse parses an HTTP response from a ListTemplatesWithResponse call
+func ParseListTemplatesResponse(rsp *http.Response) (*ListTemplatesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListTemplatesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TemplateList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetTemplateResponse parses an HTTP response from a GetTemplateWithResponse call
+func ParseGetTemplateResponse(rsp *http.Response) (*GetTemplateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetTemplateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Template
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// GetHealth Liveness of goald
@@ -6056,12 +12913,69 @@ type ServerInterface interface {
 	// GetSkillFiles A catalog skill's files at its pinned commit, to vendor into a draft
 	// (GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files)
 	GetSkillFiles(w http.ResponseWriter, r *http.Request, org OrgRef, owner SkillName, repo SkillName, skill SkillName)
-	// ListFactories The organization's factories goald runs, from the bucket
+	// FormatDefinition Format a factory.yaml the way Visual saves write changed lines (Format)
+	// (POST /v1/orgs/{org}/definitions/format)
+	FormatDefinition(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// ValidateDefinition Validate files that belong to no factory yet (Import YAML preview, CLI validate)
+	// (POST /v1/orgs/{org}/definitions/validate)
+	ValidateDefinition(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// ListFactories The organization's factories, published or not
 	// (GET /v1/orgs/{org}/factories)
 	ListFactories(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// CreateFactory Create a factory with its first draft
+	// (POST /v1/orgs/{org}/factories)
+	CreateFactory(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// DeleteFactory Delete a factory that was never published, with its draft (the wizard's Cancel)
+	// (DELETE /v1/orgs/{org}/factories/{factory})
+	DeleteFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// GetFactory One factory, published or not
+	// (GET /v1/orgs/{org}/factories/{factory})
+	GetFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
 	// GetBoard The factory's board, station by station in line order
 	// (GET /v1/orgs/{org}/factories/{factory}/board)
 	GetBoard(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// CompareVersions The semantic difference between two versions
+	// (GET /v1/orgs/{org}/factories/{factory}/compare)
+	CompareVersions(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params CompareVersionsParams)
+	// DiscardDraft Discard (archive) the open draft; the version that runs is unchanged
+	// (DELETE /v1/orgs/{org}/factories/{factory}/draft)
+	DiscardDraft(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params DiscardDraftParams)
+	// GetDraft The factory's open draft, its changes and problems
+	// (GET /v1/orgs/{org}/factories/{factory}/draft)
+	GetDraft(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// OpenDraft Open the factory's draft, or return the open one
+	// (POST /v1/orgs/{org}/factories/{factory}/draft)
+	OpenDraft(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ListDraftFiles The draft's files by path
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/files)
+	ListDraftFiles(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// DeleteDraftFile Delete one file of the draft
+	// (DELETE /v1/orgs/{org}/factories/{factory}/draft/files/{path})
+	DeleteDraftFile(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, path FilePath, params DeleteDraftFileParams)
+	// GetDraftFile One file of the draft, as stored
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/files/{path})
+	GetDraftFile(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, path FilePath)
+	// PutDraftFile Write one file of the draft exactly as sent (YAML mode)
+	// (PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path})
+	PutDraftFile(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, path FilePath, params PutDraftFileParams)
+	// GetDraftModel The draft's factory model for the Visual editor
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/model)
+	GetDraftModel(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// SaveDraftSection Save one section of the model (a Visual save)
+	// (PUT /v1/orgs/{org}/factories/{factory}/draft/model/{section})
+	SaveDraftSection(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, section SectionRef, params SaveDraftSectionParams)
+	// RevertDraftSection Put back the base's value at edited fields of a section (Undo)
+	// (POST /v1/orgs/{org}/factories/{factory}/draft/model/{section}/revert)
+	RevertDraftSection(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, section SectionRef, params RevertDraftSectionParams)
+	// PublishDraft Publish the open draft as the factory's next version
+	// (POST /v1/orgs/{org}/factories/{factory}/draft/publish)
+	PublishDraft(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ReplaceDraftTree Make files the draft's whole tree (goal factory push)
+	// (PUT /v1/orgs/{org}/factories/{factory}/draft/tree)
+	ReplaceDraftTree(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ValidateDraft Validate the draft at its revision, as publish will
+	// (POST /v1/orgs/{org}/factories/{factory}/draft/validate)
+	ValidateDraft(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
 	// ListItems One page of a factory's items, newest first
 	// (GET /v1/orgs/{org}/factories/{factory}/items)
 	ListItems(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params ListItemsParams)
@@ -6071,6 +12985,27 @@ type ServerInterface interface {
 	// GetMetrics The factory's flow over the last days
 	// (GET /v1/orgs/{org}/factories/{factory}/metrics)
 	GetMetrics(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetMetricsParams)
+	// PauseFactory Stop the factory taking work; runs in progress finish
+	// (POST /v1/orgs/{org}/factories/{factory}/pause)
+	PauseFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ResumeFactory Start a paused factory again
+	// (POST /v1/orgs/{org}/factories/{factory}/resume)
+	ResumeFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ListVersions One page of the factory's published versions, newest first
+	// (GET /v1/orgs/{org}/factories/{factory}/versions)
+	ListVersions(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params ListVersionsParams)
+	// GetVersion One version with its files
+	// (GET /v1/orgs/{org}/factories/{factory}/versions/{version})
+	GetVersion(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, version VersionSelector)
+	// GetVersionFile One file of a version
+	// (GET /v1/orgs/{org}/factories/{factory}/versions/{version}/files/{path})
+	GetVersionFile(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, version VersionSelector, path FilePath)
+	// GetVersionModel The factory model of a version, for a read-only Visual view
+	// (GET /v1/orgs/{org}/factories/{factory}/versions/{version}/model)
+	GetVersionModel(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, version VersionSelector)
+	// RestoreVersion Run an older published version again (rollback)
+	// (POST /v1/orgs/{org}/factories/{factory}/versions/{version}/restore)
+	RestoreVersion(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, version VersionSelector)
 	// GetInbox What waits for a person across the organization's factories
 	// (GET /v1/orgs/{org}/inbox)
 	GetInbox(w http.ResponseWriter, r *http.Request, org OrgRef, params GetInboxParams)
@@ -6104,6 +13039,12 @@ type ServerInterface interface {
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	// (GET /v1/orgs/{org}/stream)
 	StreamEvents(w http.ResponseWriter, r *http.Request, org OrgRef, params StreamEventsParams)
+	// ListTemplates The template catalog, the latest version of each template by name
+	// (GET /v1/orgs/{org}/templates)
+	ListTemplates(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// GetTemplate One version of a template with a preview of its model
+	// (GET /v1/orgs/{org}/templates/{name})
+	GetTemplate(w http.ResponseWriter, r *http.Request, org OrgRef, name string, params GetTemplateParams)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -6489,6 +13430,58 @@ func (siw *ServerInterfaceWrapper) GetSkillFiles(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// FormatDefinition operation middleware
+func (siw *ServerInterfaceWrapper) FormatDefinition(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.FormatDefinition(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ValidateDefinition operation middleware
+func (siw *ServerInterfaceWrapper) ValidateDefinition(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ValidateDefinition(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListFactories operation middleware
 func (siw *ServerInterfaceWrapper) ListFactories(w http.ResponseWriter, r *http.Request) {
 
@@ -6506,6 +13499,102 @@ func (siw *ServerInterfaceWrapper) ListFactories(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListFactories(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateFactory operation middleware
+func (siw *ServerInterfaceWrapper) CreateFactory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateFactory(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteFactory operation middleware
+func (siw *ServerInterfaceWrapper) DeleteFactory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteFactory(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFactory operation middleware
+func (siw *ServerInterfaceWrapper) GetFactory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFactory(w, r, org, factory)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6541,6 +13630,709 @@ func (siw *ServerInterfaceWrapper) GetBoard(w http.ResponseWriter, r *http.Reque
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetBoard(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CompareVersions operation middleware
+func (siw *ServerInterfaceWrapper) CompareVersions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CompareVersionsParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompareVersions(w, r, org, factory, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DiscardDraft operation middleware
+func (siw *ServerInterfaceWrapper) DiscardDraft(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DiscardDraftParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = &IfMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DiscardDraft(w, r, org, factory, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDraft operation middleware
+func (siw *ServerInterfaceWrapper) GetDraft(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDraft(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// OpenDraft operation middleware
+func (siw *ServerInterfaceWrapper) OpenDraft(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.OpenDraft(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListDraftFiles operation middleware
+func (siw *ServerInterfaceWrapper) ListDraftFiles(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListDraftFiles(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteDraftFile operation middleware
+func (siw *ServerInterfaceWrapper) DeleteDraftFile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "path" -------------
+	var path FilePath
+
+	err = runtime.BindStyledParameterWithOptions("simple", "path", r.PathValue("path"), &path, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "path", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteDraftFileParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = &IfMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteDraftFile(w, r, org, factory, path, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDraftFile operation middleware
+func (siw *ServerInterfaceWrapper) GetDraftFile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "path" -------------
+	var path FilePath
+
+	err = runtime.BindStyledParameterWithOptions("simple", "path", r.PathValue("path"), &path, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "path", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDraftFile(w, r, org, factory, path)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutDraftFile operation middleware
+func (siw *ServerInterfaceWrapper) PutDraftFile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "path" -------------
+	var path FilePath
+
+	err = runtime.BindStyledParameterWithOptions("simple", "path", r.PathValue("path"), &path, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "path", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PutDraftFileParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = &IfMatch
+
+	}
+
+	// ------------- Optional header parameter "If-None-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-None-Match")]; found {
+		var IfNoneMatch IfNoneMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-None-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-None-Match", valueList[0], &IfNoneMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-None-Match", Err: err})
+			return
+		}
+
+		params.IfNoneMatch = &IfNoneMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutDraftFile(w, r, org, factory, path, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDraftModel operation middleware
+func (siw *ServerInterfaceWrapper) GetDraftModel(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDraftModel(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SaveDraftSection operation middleware
+func (siw *ServerInterfaceWrapper) SaveDraftSection(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "section" -------------
+	var section SectionRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "section", r.PathValue("section"), &section, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "section", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SaveDraftSectionParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = &IfMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SaveDraftSection(w, r, org, factory, section, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevertDraftSection operation middleware
+func (siw *ServerInterfaceWrapper) RevertDraftSection(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "section" -------------
+	var section SectionRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "section", r.PathValue("section"), &section, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "section", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RevertDraftSectionParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = &IfMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevertDraftSection(w, r, org, factory, section, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PublishDraft operation middleware
+func (siw *ServerInterfaceWrapper) PublishDraft(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PublishDraft(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReplaceDraftTree operation middleware
+func (siw *ServerInterfaceWrapper) ReplaceDraftTree(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReplaceDraftTree(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ValidateDraft operation middleware
+func (siw *ServerInterfaceWrapper) ValidateDraft(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ValidateDraft(w, r, org, factory)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6717,6 +14509,325 @@ func (siw *ServerInterfaceWrapper) GetMetrics(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMetrics(w, r, org, factory, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PauseFactory operation middleware
+func (siw *ServerInterfaceWrapper) PauseFactory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PauseFactory(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResumeFactory operation middleware
+func (siw *ServerInterfaceWrapper) ResumeFactory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResumeFactory(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListVersions operation middleware
+func (siw *ServerInterfaceWrapper) ListVersions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListVersionsParams
+
+	// ------------- Optional query parameter "before" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "before", r.URL.Query(), &params.Before, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "before"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "before", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListVersions(w, r, org, factory, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetVersion operation middleware
+func (siw *ServerInterfaceWrapper) GetVersion(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "version" -------------
+	var version VersionSelector
+
+	err = runtime.BindStyledParameterWithOptions("simple", "version", r.PathValue("version"), &version, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "version", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetVersion(w, r, org, factory, version)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetVersionFile operation middleware
+func (siw *ServerInterfaceWrapper) GetVersionFile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "version" -------------
+	var version VersionSelector
+
+	err = runtime.BindStyledParameterWithOptions("simple", "version", r.PathValue("version"), &version, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "version", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "path" -------------
+	var path FilePath
+
+	err = runtime.BindStyledParameterWithOptions("simple", "path", r.PathValue("path"), &path, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "path", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetVersionFile(w, r, org, factory, version, path)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetVersionModel operation middleware
+func (siw *ServerInterfaceWrapper) GetVersionModel(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "version" -------------
+	var version VersionSelector
+
+	err = runtime.BindStyledParameterWithOptions("simple", "version", r.PathValue("version"), &version, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "version", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetVersionModel(w, r, org, factory, version)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RestoreVersion operation middleware
+func (siw *ServerInterfaceWrapper) RestoreVersion(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "version" -------------
+	var version VersionSelector
+
+	err = runtime.BindStyledParameterWithOptions("simple", "version", r.PathValue("version"), &version, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "version", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RestoreVersion(w, r, org, factory, version)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -7156,6 +15267,83 @@ func (siw *ServerInterfaceWrapper) StreamEvents(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// ListTemplates operation middleware
+func (siw *ServerInterfaceWrapper) ListTemplates(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTemplates(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTemplate operation middleware
+func (siw *ServerInterfaceWrapper) GetTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "name" -------------
+	var name string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetTemplateParams
+
+	// ------------- Optional query parameter "version" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "version", r.URL.Query(), &params.Version, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "version"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "version", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTemplate(w, r, org, name, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -7288,6 +15476,34 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/overview", wrapper.GetFactoryOverview)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/inbox", wrapper.GetInbox)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories", wrapper.ListFactories)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories", wrapper.CreateFactory)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}", wrapper.DeleteFactory)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}", wrapper.GetFactory)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/pause", wrapper.PauseFactory)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/resume", wrapper.ResumeFactory)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft", wrapper.DiscardDraft)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft", wrapper.GetDraft)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft", wrapper.OpenDraft)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/model", wrapper.GetDraftModel)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/model/{section}", wrapper.SaveDraftSection)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/model/{section}/revert", wrapper.RevertDraftSection)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/files", wrapper.ListDraftFiles)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/files/{path}", wrapper.DeleteDraftFile)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/files/{path}", wrapper.GetDraftFile)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/files/{path}", wrapper.PutDraftFile)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/tree", wrapper.ReplaceDraftTree)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/validate", wrapper.ValidateDraft)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/publish", wrapper.PublishDraft)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/versions", wrapper.ListVersions)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/versions/{version}", wrapper.GetVersion)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/versions/{version}/model", wrapper.GetVersionModel)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/versions/{version}/files/{path}", wrapper.GetVersionFile)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/versions/{version}/restore", wrapper.RestoreVersion)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/compare", wrapper.CompareVersions)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/templates", wrapper.ListTemplates)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/templates/{name}", wrapper.GetTemplate)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/definitions/validate", wrapper.ValidateDefinition)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/definitions/format", wrapper.FormatDefinition)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/items", wrapper.ListItems)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/items", wrapper.SubmitItem)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/board", wrapper.GetBoard)
@@ -7685,6 +15901,92 @@ func (response GetSkillFilesdefaultApplicationProblemPlusJSONResponse) VisitGetS
 	return err
 }
 
+type FormatDefinitionRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body io.Reader
+}
+
+type FormatDefinitionResponseObject interface {
+	VisitFormatDefinitionResponse(w http.ResponseWriter) error
+}
+
+type FormatDefinition200TextyamlResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response FormatDefinition200TextyamlResponse) VisitFormatDefinitionResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "text/yaml")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type FormatDefinitiondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response FormatDefinitiondefaultApplicationProblemPlusJSONResponse) VisitFormatDefinitionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ValidateDefinitionRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *ValidateDefinitionJSONRequestBody
+}
+
+type ValidateDefinitionResponseObject interface {
+	VisitValidateDefinitionResponse(w http.ResponseWriter) error
+}
+
+type ValidateDefinition200JSONResponse Validation
+
+func (response ValidateDefinition200JSONResponse) VisitValidateDefinitionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ValidateDefinitiondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ValidateDefinitiondefaultApplicationProblemPlusJSONResponse) VisitValidateDefinitionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListFactoriesRequestObject struct {
 	Org OrgRef `json:"org"`
 }
@@ -7713,6 +16015,128 @@ type ListFactoriesdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ListFactoriesdefaultApplicationProblemPlusJSONResponse) VisitListFactoriesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateFactoryRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *CreateFactoryJSONRequestBody
+}
+
+type CreateFactoryResponseObject interface {
+	VisitCreateFactoryResponse(w http.ResponseWriter) error
+}
+
+type CreateFactory201ResponseHeaders struct {
+	Location string
+}
+
+type CreateFactory201JSONResponse struct {
+	Body    Factory
+	Headers CreateFactory201ResponseHeaders
+}
+
+func (response CreateFactory201JSONResponse) VisitCreateFactoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Location", fmt.Sprint(response.Headers.Location))
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateFactorydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateFactorydefaultApplicationProblemPlusJSONResponse) VisitCreateFactoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteFactoryRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type DeleteFactoryResponseObject interface {
+	VisitDeleteFactoryResponse(w http.ResponseWriter) error
+}
+
+type DeleteFactory204Response struct {
+}
+
+func (response DeleteFactory204Response) VisitDeleteFactoryResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteFactorydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteFactorydefaultApplicationProblemPlusJSONResponse) VisitDeleteFactoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFactoryRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type GetFactoryResponseObject interface {
+	VisitGetFactoryResponse(w http.ResponseWriter) error
+}
+
+type GetFactory200JSONResponse Factory
+
+func (response GetFactory200JSONResponse) VisitGetFactoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFactorydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetFactorydefaultApplicationProblemPlusJSONResponse) VisitGetFactoryResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -7753,6 +16177,612 @@ type GetBoarddefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetBoarddefaultApplicationProblemPlusJSONResponse) VisitGetBoardResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompareVersionsRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Params  CompareVersionsParams
+}
+
+type CompareVersionsResponseObject interface {
+	VisitCompareVersionsResponse(w http.ResponseWriter) error
+}
+
+type CompareVersions200JSONResponse Comparison
+
+func (response CompareVersions200JSONResponse) VisitCompareVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompareVersionsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CompareVersionsdefaultApplicationProblemPlusJSONResponse) VisitCompareVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DiscardDraftRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Params  DiscardDraftParams
+}
+
+type DiscardDraftResponseObject interface {
+	VisitDiscardDraftResponse(w http.ResponseWriter) error
+}
+
+type DiscardDraft204Response struct {
+}
+
+func (response DiscardDraft204Response) VisitDiscardDraftResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DiscardDraftdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DiscardDraftdefaultApplicationProblemPlusJSONResponse) VisitDiscardDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDraftRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type GetDraftResponseObject interface {
+	VisitGetDraftResponse(w http.ResponseWriter) error
+}
+
+type GetDraft200ResponseHeaders struct {
+	ETag string
+}
+
+type GetDraft200JSONResponse struct {
+	Body    Draft
+	Headers GetDraft200ResponseHeaders
+}
+
+func (response GetDraft200JSONResponse) VisitGetDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDraftdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetDraftdefaultApplicationProblemPlusJSONResponse) VisitGetDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type OpenDraftRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *OpenDraftJSONRequestBody
+}
+
+type OpenDraftResponseObject interface {
+	VisitOpenDraftResponse(w http.ResponseWriter) error
+}
+
+type OpenDraft200JSONResponse Draft
+
+func (response OpenDraft200JSONResponse) VisitOpenDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type OpenDraft201JSONResponse Draft
+
+func (response OpenDraft201JSONResponse) VisitOpenDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type OpenDraftdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response OpenDraftdefaultApplicationProblemPlusJSONResponse) VisitOpenDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListDraftFilesRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type ListDraftFilesResponseObject interface {
+	VisitListDraftFilesResponse(w http.ResponseWriter) error
+}
+
+type ListDraftFiles200JSONResponse FileList
+
+func (response ListDraftFiles200JSONResponse) VisitListDraftFilesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListDraftFilesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListDraftFilesdefaultApplicationProblemPlusJSONResponse) VisitListDraftFilesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteDraftFileRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Path    FilePath   `json:"path"`
+	Params  DeleteDraftFileParams
+}
+
+type DeleteDraftFileResponseObject interface {
+	VisitDeleteDraftFileResponse(w http.ResponseWriter) error
+}
+
+type DeleteDraftFile200JSONResponse SaveResult
+
+func (response DeleteDraftFile200JSONResponse) VisitDeleteDraftFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteDraftFiledefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteDraftFiledefaultApplicationProblemPlusJSONResponse) VisitDeleteDraftFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDraftFileRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Path    FilePath   `json:"path"`
+}
+
+type GetDraftFileResponseObject interface {
+	VisitGetDraftFileResponse(w http.ResponseWriter) error
+}
+
+type GetDraftFile200ResponseHeaders struct {
+	ETag string
+}
+
+type GetDraftFile200ApplicationoctetStreamResponse struct {
+	Body          io.Reader
+	Headers       GetDraftFile200ResponseHeaders
+	ContentLength int64
+}
+
+func (response GetDraftFile200ApplicationoctetStreamResponse) VisitGetDraftFileResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetDraftFiledefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetDraftFiledefaultApplicationProblemPlusJSONResponse) VisitGetDraftFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutDraftFileRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Path    FilePath   `json:"path"`
+	Params  PutDraftFileParams
+	Body    io.Reader
+}
+
+type PutDraftFileResponseObject interface {
+	VisitPutDraftFileResponse(w http.ResponseWriter) error
+}
+
+type PutDraftFile200JSONResponse SaveResult
+
+func (response PutDraftFile200JSONResponse) VisitPutDraftFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutDraftFiledefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response PutDraftFiledefaultApplicationProblemPlusJSONResponse) VisitPutDraftFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDraftModelRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type GetDraftModelResponseObject interface {
+	VisitGetDraftModelResponse(w http.ResponseWriter) error
+}
+
+type GetDraftModel200JSONResponse DraftModel
+
+func (response GetDraftModel200JSONResponse) VisitGetDraftModelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDraftModeldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetDraftModeldefaultApplicationProblemPlusJSONResponse) VisitGetDraftModelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SaveDraftSectionRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Section SectionRef `json:"section"`
+	Params  SaveDraftSectionParams
+	Body    *SaveDraftSectionJSONRequestBody
+}
+
+type SaveDraftSectionResponseObject interface {
+	VisitSaveDraftSectionResponse(w http.ResponseWriter) error
+}
+
+type SaveDraftSection200JSONResponse SaveResult
+
+func (response SaveDraftSection200JSONResponse) VisitSaveDraftSectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SaveDraftSectiondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response SaveDraftSectiondefaultApplicationProblemPlusJSONResponse) VisitSaveDraftSectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevertDraftSectionRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Section SectionRef `json:"section"`
+	Params  RevertDraftSectionParams
+	Body    *RevertDraftSectionJSONRequestBody
+}
+
+type RevertDraftSectionResponseObject interface {
+	VisitRevertDraftSectionResponse(w http.ResponseWriter) error
+}
+
+type RevertDraftSection200JSONResponse SaveResult
+
+func (response RevertDraftSection200JSONResponse) VisitRevertDraftSectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevertDraftSectiondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RevertDraftSectiondefaultApplicationProblemPlusJSONResponse) VisitRevertDraftSectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PublishDraftRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *PublishDraftJSONRequestBody
+}
+
+type PublishDraftResponseObject interface {
+	VisitPublishDraftResponse(w http.ResponseWriter) error
+}
+
+type PublishDraft201JSONResponse Version
+
+func (response PublishDraft201JSONResponse) VisitPublishDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PublishDraftdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response PublishDraftdefaultApplicationProblemPlusJSONResponse) VisitPublishDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceDraftTreeRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *ReplaceDraftTreeJSONRequestBody
+}
+
+type ReplaceDraftTreeResponseObject interface {
+	VisitReplaceDraftTreeResponse(w http.ResponseWriter) error
+}
+
+type ReplaceDraftTree200JSONResponse SaveResult
+
+func (response ReplaceDraftTree200JSONResponse) VisitReplaceDraftTreeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceDraftTreedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ReplaceDraftTreedefaultApplicationProblemPlusJSONResponse) VisitReplaceDraftTreeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ValidateDraftRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *ValidateDraftJSONRequestBody
+}
+
+type ValidateDraftResponseObject interface {
+	VisitValidateDraftResponse(w http.ResponseWriter) error
+}
+
+type ValidateDraft200JSONResponse Validation
+
+func (response ValidateDraft200JSONResponse) VisitValidateDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ValidateDraftdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ValidateDraftdefaultApplicationProblemPlusJSONResponse) VisitValidateDraftResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -7876,6 +16906,307 @@ type GetMetricsdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetMetricsdefaultApplicationProblemPlusJSONResponse) VisitGetMetricsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PauseFactoryRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type PauseFactoryResponseObject interface {
+	VisitPauseFactoryResponse(w http.ResponseWriter) error
+}
+
+type PauseFactory200JSONResponse Factory
+
+func (response PauseFactory200JSONResponse) VisitPauseFactoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PauseFactorydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response PauseFactorydefaultApplicationProblemPlusJSONResponse) VisitPauseFactoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ResumeFactoryRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type ResumeFactoryResponseObject interface {
+	VisitResumeFactoryResponse(w http.ResponseWriter) error
+}
+
+type ResumeFactory200JSONResponse Factory
+
+func (response ResumeFactory200JSONResponse) VisitResumeFactoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ResumeFactorydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ResumeFactorydefaultApplicationProblemPlusJSONResponse) VisitResumeFactoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListVersionsRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Params  ListVersionsParams
+}
+
+type ListVersionsResponseObject interface {
+	VisitListVersionsResponse(w http.ResponseWriter) error
+}
+
+type ListVersions200JSONResponse VersionPage
+
+func (response ListVersions200JSONResponse) VisitListVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListVersionsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListVersionsdefaultApplicationProblemPlusJSONResponse) VisitListVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVersionRequestObject struct {
+	Org     OrgRef          `json:"org"`
+	Factory FactoryRef      `json:"factory"`
+	Version VersionSelector `json:"version"`
+}
+
+type GetVersionResponseObject interface {
+	VisitGetVersionResponse(w http.ResponseWriter) error
+}
+
+type GetVersion200JSONResponse VersionDetail
+
+func (response GetVersion200JSONResponse) VisitGetVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVersiondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetVersiondefaultApplicationProblemPlusJSONResponse) VisitGetVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVersionFileRequestObject struct {
+	Org     OrgRef          `json:"org"`
+	Factory FactoryRef      `json:"factory"`
+	Version VersionSelector `json:"version"`
+	Path    FilePath        `json:"path"`
+}
+
+type GetVersionFileResponseObject interface {
+	VisitGetVersionFileResponse(w http.ResponseWriter) error
+}
+
+type GetVersionFile200ResponseHeaders struct {
+	CacheControl string
+	ETag         string
+}
+
+type GetVersionFile200ApplicationoctetStreamResponse struct {
+	Body          io.Reader
+	Headers       GetVersionFile200ResponseHeaders
+	ContentLength int64
+}
+
+func (response GetVersionFile200ApplicationoctetStreamResponse) VisitGetVersionFileResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.Header().Set("Cache-Control", fmt.Sprint(response.Headers.CacheControl))
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetVersionFiledefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetVersionFiledefaultApplicationProblemPlusJSONResponse) VisitGetVersionFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVersionModelRequestObject struct {
+	Org     OrgRef          `json:"org"`
+	Factory FactoryRef      `json:"factory"`
+	Version VersionSelector `json:"version"`
+}
+
+type GetVersionModelResponseObject interface {
+	VisitGetVersionModelResponse(w http.ResponseWriter) error
+}
+
+type GetVersionModel200JSONResponse VersionModel
+
+func (response GetVersionModel200JSONResponse) VisitGetVersionModelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVersionModeldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetVersionModeldefaultApplicationProblemPlusJSONResponse) VisitGetVersionModelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RestoreVersionRequestObject struct {
+	Org     OrgRef          `json:"org"`
+	Factory FactoryRef      `json:"factory"`
+	Version VersionSelector `json:"version"`
+	Body    *RestoreVersionJSONRequestBody
+}
+
+type RestoreVersionResponseObject interface {
+	VisitRestoreVersionResponse(w http.ResponseWriter) error
+}
+
+type RestoreVersion200JSONResponse Factory
+
+func (response RestoreVersion200JSONResponse) VisitRestoreVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RestoreVersiondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RestoreVersiondefaultApplicationProblemPlusJSONResponse) VisitRestoreVersionResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -8358,6 +17689,86 @@ func (response StreamEventsdefaultApplicationProblemPlusJSONResponse) VisitStrea
 	return err
 }
 
+type ListTemplatesRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type ListTemplatesResponseObject interface {
+	VisitListTemplatesResponse(w http.ResponseWriter) error
+}
+
+type ListTemplates200JSONResponse TemplateList
+
+func (response ListTemplates200JSONResponse) VisitListTemplatesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTemplatesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListTemplatesdefaultApplicationProblemPlusJSONResponse) VisitListTemplatesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTemplateRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Name   string `json:"name"`
+	Params GetTemplateParams
+}
+
+type GetTemplateResponseObject interface {
+	VisitGetTemplateResponse(w http.ResponseWriter) error
+}
+
+type GetTemplate200JSONResponse Template
+
+func (response GetTemplate200JSONResponse) VisitGetTemplateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTemplatedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetTemplatedefaultApplicationProblemPlusJSONResponse) VisitGetTemplateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// GetHealth Liveness of goald
@@ -8390,12 +17801,69 @@ type StrictServerInterface interface {
 	// GetSkillFiles A catalog skill's files at its pinned commit, to vendor into a draft
 	// (GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files)
 	GetSkillFiles(ctx context.Context, request GetSkillFilesRequestObject) (GetSkillFilesResponseObject, error)
-	// ListFactories The organization's factories goald runs, from the bucket
+	// FormatDefinition Format a factory.yaml the way Visual saves write changed lines (Format)
+	// (POST /v1/orgs/{org}/definitions/format)
+	FormatDefinition(ctx context.Context, request FormatDefinitionRequestObject) (FormatDefinitionResponseObject, error)
+	// ValidateDefinition Validate files that belong to no factory yet (Import YAML preview, CLI validate)
+	// (POST /v1/orgs/{org}/definitions/validate)
+	ValidateDefinition(ctx context.Context, request ValidateDefinitionRequestObject) (ValidateDefinitionResponseObject, error)
+	// ListFactories The organization's factories, published or not
 	// (GET /v1/orgs/{org}/factories)
 	ListFactories(ctx context.Context, request ListFactoriesRequestObject) (ListFactoriesResponseObject, error)
+	// CreateFactory Create a factory with its first draft
+	// (POST /v1/orgs/{org}/factories)
+	CreateFactory(ctx context.Context, request CreateFactoryRequestObject) (CreateFactoryResponseObject, error)
+	// DeleteFactory Delete a factory that was never published, with its draft (the wizard's Cancel)
+	// (DELETE /v1/orgs/{org}/factories/{factory})
+	DeleteFactory(ctx context.Context, request DeleteFactoryRequestObject) (DeleteFactoryResponseObject, error)
+	// GetFactory One factory, published or not
+	// (GET /v1/orgs/{org}/factories/{factory})
+	GetFactory(ctx context.Context, request GetFactoryRequestObject) (GetFactoryResponseObject, error)
 	// GetBoard The factory's board, station by station in line order
 	// (GET /v1/orgs/{org}/factories/{factory}/board)
 	GetBoard(ctx context.Context, request GetBoardRequestObject) (GetBoardResponseObject, error)
+	// CompareVersions The semantic difference between two versions
+	// (GET /v1/orgs/{org}/factories/{factory}/compare)
+	CompareVersions(ctx context.Context, request CompareVersionsRequestObject) (CompareVersionsResponseObject, error)
+	// DiscardDraft Discard (archive) the open draft; the version that runs is unchanged
+	// (DELETE /v1/orgs/{org}/factories/{factory}/draft)
+	DiscardDraft(ctx context.Context, request DiscardDraftRequestObject) (DiscardDraftResponseObject, error)
+	// GetDraft The factory's open draft, its changes and problems
+	// (GET /v1/orgs/{org}/factories/{factory}/draft)
+	GetDraft(ctx context.Context, request GetDraftRequestObject) (GetDraftResponseObject, error)
+	// OpenDraft Open the factory's draft, or return the open one
+	// (POST /v1/orgs/{org}/factories/{factory}/draft)
+	OpenDraft(ctx context.Context, request OpenDraftRequestObject) (OpenDraftResponseObject, error)
+	// ListDraftFiles The draft's files by path
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/files)
+	ListDraftFiles(ctx context.Context, request ListDraftFilesRequestObject) (ListDraftFilesResponseObject, error)
+	// DeleteDraftFile Delete one file of the draft
+	// (DELETE /v1/orgs/{org}/factories/{factory}/draft/files/{path})
+	DeleteDraftFile(ctx context.Context, request DeleteDraftFileRequestObject) (DeleteDraftFileResponseObject, error)
+	// GetDraftFile One file of the draft, as stored
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/files/{path})
+	GetDraftFile(ctx context.Context, request GetDraftFileRequestObject) (GetDraftFileResponseObject, error)
+	// PutDraftFile Write one file of the draft exactly as sent (YAML mode)
+	// (PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path})
+	PutDraftFile(ctx context.Context, request PutDraftFileRequestObject) (PutDraftFileResponseObject, error)
+	// GetDraftModel The draft's factory model for the Visual editor
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/model)
+	GetDraftModel(ctx context.Context, request GetDraftModelRequestObject) (GetDraftModelResponseObject, error)
+	// SaveDraftSection Save one section of the model (a Visual save)
+	// (PUT /v1/orgs/{org}/factories/{factory}/draft/model/{section})
+	SaveDraftSection(ctx context.Context, request SaveDraftSectionRequestObject) (SaveDraftSectionResponseObject, error)
+	// RevertDraftSection Put back the base's value at edited fields of a section (Undo)
+	// (POST /v1/orgs/{org}/factories/{factory}/draft/model/{section}/revert)
+	RevertDraftSection(ctx context.Context, request RevertDraftSectionRequestObject) (RevertDraftSectionResponseObject, error)
+	// PublishDraft Publish the open draft as the factory's next version
+	// (POST /v1/orgs/{org}/factories/{factory}/draft/publish)
+	PublishDraft(ctx context.Context, request PublishDraftRequestObject) (PublishDraftResponseObject, error)
+	// ReplaceDraftTree Make files the draft's whole tree (goal factory push)
+	// (PUT /v1/orgs/{org}/factories/{factory}/draft/tree)
+	ReplaceDraftTree(ctx context.Context, request ReplaceDraftTreeRequestObject) (ReplaceDraftTreeResponseObject, error)
+	// ValidateDraft Validate the draft at its revision, as publish will
+	// (POST /v1/orgs/{org}/factories/{factory}/draft/validate)
+	ValidateDraft(ctx context.Context, request ValidateDraftRequestObject) (ValidateDraftResponseObject, error)
 	// ListItems One page of a factory's items, newest first
 	// (GET /v1/orgs/{org}/factories/{factory}/items)
 	ListItems(ctx context.Context, request ListItemsRequestObject) (ListItemsResponseObject, error)
@@ -8405,6 +17873,27 @@ type StrictServerInterface interface {
 	// GetMetrics The factory's flow over the last days
 	// (GET /v1/orgs/{org}/factories/{factory}/metrics)
 	GetMetrics(ctx context.Context, request GetMetricsRequestObject) (GetMetricsResponseObject, error)
+	// PauseFactory Stop the factory taking work; runs in progress finish
+	// (POST /v1/orgs/{org}/factories/{factory}/pause)
+	PauseFactory(ctx context.Context, request PauseFactoryRequestObject) (PauseFactoryResponseObject, error)
+	// ResumeFactory Start a paused factory again
+	// (POST /v1/orgs/{org}/factories/{factory}/resume)
+	ResumeFactory(ctx context.Context, request ResumeFactoryRequestObject) (ResumeFactoryResponseObject, error)
+	// ListVersions One page of the factory's published versions, newest first
+	// (GET /v1/orgs/{org}/factories/{factory}/versions)
+	ListVersions(ctx context.Context, request ListVersionsRequestObject) (ListVersionsResponseObject, error)
+	// GetVersion One version with its files
+	// (GET /v1/orgs/{org}/factories/{factory}/versions/{version})
+	GetVersion(ctx context.Context, request GetVersionRequestObject) (GetVersionResponseObject, error)
+	// GetVersionFile One file of a version
+	// (GET /v1/orgs/{org}/factories/{factory}/versions/{version}/files/{path})
+	GetVersionFile(ctx context.Context, request GetVersionFileRequestObject) (GetVersionFileResponseObject, error)
+	// GetVersionModel The factory model of a version, for a read-only Visual view
+	// (GET /v1/orgs/{org}/factories/{factory}/versions/{version}/model)
+	GetVersionModel(ctx context.Context, request GetVersionModelRequestObject) (GetVersionModelResponseObject, error)
+	// RestoreVersion Run an older published version again (rollback)
+	// (POST /v1/orgs/{org}/factories/{factory}/versions/{version}/restore)
+	RestoreVersion(ctx context.Context, request RestoreVersionRequestObject) (RestoreVersionResponseObject, error)
 	// GetInbox What waits for a person across the organization's factories
 	// (GET /v1/orgs/{org}/inbox)
 	GetInbox(ctx context.Context, request GetInboxRequestObject) (GetInboxResponseObject, error)
@@ -8438,6 +17927,12 @@ type StrictServerInterface interface {
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	// (GET /v1/orgs/{org}/stream)
 	StreamEvents(ctx context.Context, request StreamEventsRequestObject) (StreamEventsResponseObject, error)
+	// ListTemplates The template catalog, the latest version of each template by name
+	// (GET /v1/orgs/{org}/templates)
+	ListTemplates(ctx context.Context, request ListTemplatesRequestObject) (ListTemplatesResponseObject, error)
+	// GetTemplate One version of a template with a preview of its model
+	// (GET /v1/orgs/{org}/templates/{name})
+	GetTemplate(ctx context.Context, request GetTemplateRequestObject) (GetTemplateResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -8752,6 +18247,67 @@ func (sh *strictHandler) GetSkillFiles(w http.ResponseWriter, r *http.Request, o
 	}
 }
 
+// FormatDefinition operation middleware
+func (sh *strictHandler) FormatDefinition(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request FormatDefinitionRequestObject
+
+	request.Org = org
+
+	request.Body = r.Body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.FormatDefinition(ctx, request.(FormatDefinitionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "FormatDefinition")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(FormatDefinitionResponseObject); ok {
+		if err := validResponse.VisitFormatDefinitionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ValidateDefinition operation middleware
+func (sh *strictHandler) ValidateDefinition(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request ValidateDefinitionRequestObject
+
+	request.Org = org
+
+	var body ValidateDefinitionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ValidateDefinition(ctx, request.(ValidateDefinitionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ValidateDefinition")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ValidateDefinitionResponseObject); ok {
+		if err := validResponse.VisitValidateDefinitionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListFactories operation middleware
 func (sh *strictHandler) ListFactories(w http.ResponseWriter, r *http.Request, org OrgRef) {
 	var request ListFactoriesRequestObject
@@ -8771,6 +18327,93 @@ func (sh *strictHandler) ListFactories(w http.ResponseWriter, r *http.Request, o
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListFactoriesResponseObject); ok {
 		if err := validResponse.VisitListFactoriesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateFactory operation middleware
+func (sh *strictHandler) CreateFactory(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request CreateFactoryRequestObject
+
+	request.Org = org
+
+	var body CreateFactoryJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateFactory(ctx, request.(CreateFactoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateFactory")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateFactoryResponseObject); ok {
+		if err := validResponse.VisitCreateFactoryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteFactory operation middleware
+func (sh *strictHandler) DeleteFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request DeleteFactoryRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteFactory(ctx, request.(DeleteFactoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteFactory")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteFactoryResponseObject); ok {
+		if err := validResponse.VisitDeleteFactoryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetFactory operation middleware
+func (sh *strictHandler) GetFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request GetFactoryRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetFactory(ctx, request.(GetFactoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetFactory")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetFactoryResponseObject); ok {
+		if err := validResponse.VisitGetFactoryResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -8798,6 +18441,445 @@ func (sh *strictHandler) GetBoard(w http.ResponseWriter, r *http.Request, org Or
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetBoardResponseObject); ok {
 		if err := validResponse.VisitGetBoardResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CompareVersions operation middleware
+func (sh *strictHandler) CompareVersions(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params CompareVersionsParams) {
+	var request CompareVersionsRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CompareVersions(ctx, request.(CompareVersionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CompareVersions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CompareVersionsResponseObject); ok {
+		if err := validResponse.VisitCompareVersionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DiscardDraft operation middleware
+func (sh *strictHandler) DiscardDraft(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params DiscardDraftParams) {
+	var request DiscardDraftRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DiscardDraft(ctx, request.(DiscardDraftRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DiscardDraft")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DiscardDraftResponseObject); ok {
+		if err := validResponse.VisitDiscardDraftResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetDraft operation middleware
+func (sh *strictHandler) GetDraft(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request GetDraftRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetDraft(ctx, request.(GetDraftRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetDraft")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetDraftResponseObject); ok {
+		if err := validResponse.VisitGetDraftResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// OpenDraft operation middleware
+func (sh *strictHandler) OpenDraft(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request OpenDraftRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body OpenDraftJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.OpenDraft(ctx, request.(OpenDraftRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "OpenDraft")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(OpenDraftResponseObject); ok {
+		if err := validResponse.VisitOpenDraftResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListDraftFiles operation middleware
+func (sh *strictHandler) ListDraftFiles(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request ListDraftFilesRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListDraftFiles(ctx, request.(ListDraftFilesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListDraftFiles")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListDraftFilesResponseObject); ok {
+		if err := validResponse.VisitListDraftFilesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteDraftFile operation middleware
+func (sh *strictHandler) DeleteDraftFile(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, path FilePath, params DeleteDraftFileParams) {
+	var request DeleteDraftFileRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Path = path
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteDraftFile(ctx, request.(DeleteDraftFileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteDraftFile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteDraftFileResponseObject); ok {
+		if err := validResponse.VisitDeleteDraftFileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetDraftFile operation middleware
+func (sh *strictHandler) GetDraftFile(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, path FilePath) {
+	var request GetDraftFileRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Path = path
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetDraftFile(ctx, request.(GetDraftFileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetDraftFile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetDraftFileResponseObject); ok {
+		if err := validResponse.VisitGetDraftFileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutDraftFile operation middleware
+func (sh *strictHandler) PutDraftFile(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, path FilePath, params PutDraftFileParams) {
+	var request PutDraftFileRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Path = path
+	request.Params = params
+
+	request.Body = r.Body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutDraftFile(ctx, request.(PutDraftFileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutDraftFile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutDraftFileResponseObject); ok {
+		if err := validResponse.VisitPutDraftFileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetDraftModel operation middleware
+func (sh *strictHandler) GetDraftModel(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request GetDraftModelRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetDraftModel(ctx, request.(GetDraftModelRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetDraftModel")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetDraftModelResponseObject); ok {
+		if err := validResponse.VisitGetDraftModelResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SaveDraftSection operation middleware
+func (sh *strictHandler) SaveDraftSection(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, section SectionRef, params SaveDraftSectionParams) {
+	var request SaveDraftSectionRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Section = section
+	request.Params = params
+
+	var body SaveDraftSectionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SaveDraftSection(ctx, request.(SaveDraftSectionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SaveDraftSection")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SaveDraftSectionResponseObject); ok {
+		if err := validResponse.VisitSaveDraftSectionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevertDraftSection operation middleware
+func (sh *strictHandler) RevertDraftSection(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, section SectionRef, params RevertDraftSectionParams) {
+	var request RevertDraftSectionRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Section = section
+	request.Params = params
+
+	var body RevertDraftSectionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevertDraftSection(ctx, request.(RevertDraftSectionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevertDraftSection")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevertDraftSectionResponseObject); ok {
+		if err := validResponse.VisitRevertDraftSectionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PublishDraft operation middleware
+func (sh *strictHandler) PublishDraft(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request PublishDraftRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body PublishDraftJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PublishDraft(ctx, request.(PublishDraftRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PublishDraft")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PublishDraftResponseObject); ok {
+		if err := validResponse.VisitPublishDraftResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReplaceDraftTree operation middleware
+func (sh *strictHandler) ReplaceDraftTree(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request ReplaceDraftTreeRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body ReplaceDraftTreeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReplaceDraftTree(ctx, request.(ReplaceDraftTreeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReplaceDraftTree")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReplaceDraftTreeResponseObject); ok {
+		if err := validResponse.VisitReplaceDraftTreeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ValidateDraft operation middleware
+func (sh *strictHandler) ValidateDraft(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request ValidateDraftRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body ValidateDraftJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ValidateDraft(ctx, request.(ValidateDraftRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ValidateDraft")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ValidateDraftResponseObject); ok {
+		if err := validResponse.VisitValidateDraftResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -8888,6 +18970,208 @@ func (sh *strictHandler) GetMetrics(w http.ResponseWriter, r *http.Request, org 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetMetricsResponseObject); ok {
 		if err := validResponse.VisitGetMetricsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PauseFactory operation middleware
+func (sh *strictHandler) PauseFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request PauseFactoryRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PauseFactory(ctx, request.(PauseFactoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PauseFactory")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PauseFactoryResponseObject); ok {
+		if err := validResponse.VisitPauseFactoryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ResumeFactory operation middleware
+func (sh *strictHandler) ResumeFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request ResumeFactoryRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ResumeFactory(ctx, request.(ResumeFactoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ResumeFactory")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ResumeFactoryResponseObject); ok {
+		if err := validResponse.VisitResumeFactoryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListVersions operation middleware
+func (sh *strictHandler) ListVersions(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params ListVersionsParams) {
+	var request ListVersionsRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListVersions(ctx, request.(ListVersionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListVersions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListVersionsResponseObject); ok {
+		if err := validResponse.VisitListVersionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetVersion operation middleware
+func (sh *strictHandler) GetVersion(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, version VersionSelector) {
+	var request GetVersionRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Version = version
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetVersion(ctx, request.(GetVersionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetVersion")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetVersionResponseObject); ok {
+		if err := validResponse.VisitGetVersionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetVersionFile operation middleware
+func (sh *strictHandler) GetVersionFile(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, version VersionSelector, path FilePath) {
+	var request GetVersionFileRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Version = version
+	request.Path = path
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetVersionFile(ctx, request.(GetVersionFileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetVersionFile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetVersionFileResponseObject); ok {
+		if err := validResponse.VisitGetVersionFileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetVersionModel operation middleware
+func (sh *strictHandler) GetVersionModel(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, version VersionSelector) {
+	var request GetVersionModelRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Version = version
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetVersionModel(ctx, request.(GetVersionModelRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetVersionModel")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetVersionModelResponseObject); ok {
+		if err := validResponse.VisitGetVersionModelResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RestoreVersion operation middleware
+func (sh *strictHandler) RestoreVersion(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, version VersionSelector) {
+	var request RestoreVersionRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Version = version
+
+	var body RestoreVersionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RestoreVersion(ctx, request.(RestoreVersionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RestoreVersion")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RestoreVersionResponseObject); ok {
+		if err := validResponse.VisitRestoreVersionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -9208,6 +19492,60 @@ func (sh *strictHandler) StreamEvents(w http.ResponseWriter, r *http.Request, or
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(StreamEventsResponseObject); ok {
 		if err := validResponse.VisitStreamEventsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListTemplates operation middleware
+func (sh *strictHandler) ListTemplates(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request ListTemplatesRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListTemplates(ctx, request.(ListTemplatesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListTemplates")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListTemplatesResponseObject); ok {
+		if err := validResponse.VisitListTemplatesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetTemplate operation middleware
+func (sh *strictHandler) GetTemplate(w http.ResponseWriter, r *http.Request, org OrgRef, name string, params GetTemplateParams) {
+	var request GetTemplateRequestObject
+
+	request.Org = org
+	request.Name = name
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTemplate(ctx, request.(GetTemplateRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTemplate")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetTemplateResponseObject); ok {
+		if err := validResponse.VisitGetTemplateResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

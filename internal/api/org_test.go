@@ -224,6 +224,8 @@ type probe struct {
 	org                domain.OrgID
 	// factory is the factory the operation's resolver must pass the seam with ("" for none).
 	factory domain.FactoryID
+	// header is sent with the request (a write's If-Match).
+	header http.Header
 }
 
 // probes has a request for every operation of api/openapi.yaml; the item is acme#1.
@@ -258,7 +260,48 @@ var probes = map[string]probe{
 	"getBuilderMeta":     {method: http.MethodGet, path: "/v1/orgs/acme/builder/meta", org: testOrg},
 	"searchSkills":       {method: http.MethodGet, path: "/v1/orgs/acme/builder/skills?q=lint", org: testOrg},
 	"getSkillFiles":      {method: http.MethodGet, path: "/v1/orgs/acme/builder/skills/acme/skills/lint/files", org: testOrg},
+
+	// Definitions: writes carry a (stale) If-Match, so the request reaches the resolver.
+	"createFactory":      {method: http.MethodPost, path: "/v1/orgs/acme/factories", body: `{"name":"probe","start":{"kind":"blank"}}`, org: testOrg},
+	"getFactory":         {method: http.MethodGet, path: acmeFactory, org: testOrg, factory: acmeID},
+	"deleteFactory":      {method: http.MethodDelete, path: acmeFactory, org: testOrg, factory: acmeID},
+	"pauseFactory":       {method: http.MethodPost, path: acmeFactory + "/pause", org: testOrg, factory: acmeID},
+	"resumeFactory":      {method: http.MethodPost, path: acmeFactory + "/resume", org: testOrg, factory: acmeID},
+	"getDraft":           {method: http.MethodGet, path: acmeDraft, org: testOrg, factory: acmeID},
+	"openDraft":          {method: http.MethodPost, path: acmeDraft, body: `{}`, org: testOrg, factory: acmeID},
+	"discardDraft":       {method: http.MethodDelete, path: acmeDraft, org: testOrg, factory: acmeID, header: staleMatch},
+	"getDraftModel":      {method: http.MethodGet, path: acmeDraft + "/model", org: testOrg, factory: acmeID},
+	"saveDraftSection":   {method: http.MethodPut, path: acmeDraft + "/model/basics", body: `{"value":{}}`, org: testOrg, factory: acmeID, header: staleMatch},
+	"revertDraftSection": {method: http.MethodPost, path: acmeDraft + "/model/basics/revert", body: `{"pointers":[]}`, org: testOrg, factory: acmeID, header: staleMatch},
+	"listDraftFiles":     {method: http.MethodGet, path: acmeDraft + "/files", org: testOrg, factory: acmeID},
+	"getDraftFile":       {method: http.MethodGet, path: acmeDraft + "/files/factory.yaml", org: testOrg, factory: acmeID},
+	"putDraftFile":       {method: http.MethodPut, path: acmeDraft + "/files/factory.yaml", body: "x", org: testOrg, factory: acmeID, header: staleMatch},
+	"deleteDraftFile":    {method: http.MethodDelete, path: acmeDraft + "/files/factory.yaml", org: testOrg, factory: acmeID, header: staleMatch},
+	"replaceDraftTree":   {method: http.MethodPut, path: acmeDraft + "/tree", body: `{"files":{}}`, org: testOrg, factory: acmeID},
+	"validateDraft":      {method: http.MethodPost, path: acmeDraft + "/validate", body: `{}`, org: testOrg, factory: acmeID},
+	"publishDraft":       {method: http.MethodPost, path: acmeDraft + "/publish", body: `{"revision":1,"expected_current_version_id":null}`, org: testOrg, factory: acmeID},
+	"listVersions":       {method: http.MethodGet, path: acmeFactory + "/versions", org: testOrg, factory: acmeID},
+	"getVersion":         {method: http.MethodGet, path: acmeFactory + "/versions/1", org: testOrg, factory: acmeID},
+	"getVersionModel":    {method: http.MethodGet, path: acmeFactory + "/versions/1/model", org: testOrg, factory: acmeID},
+	"getVersionFile":     {method: http.MethodGet, path: acmeFactory + "/versions/1/files/factory.yaml", org: testOrg, factory: acmeID},
+	"restoreVersion":     {method: http.MethodPost, path: acmeFactory + "/versions/1/restore", body: `{"expected_current_version_id":"x"}`, org: testOrg, factory: acmeID},
+	"compareVersions":    {method: http.MethodGet, path: acmeFactory + "/compare?from=1&to=current", org: testOrg, factory: acmeID},
+	"listTemplates":      {method: http.MethodGet, path: "/v1/orgs/acme/templates", org: testOrg},
+	"getTemplate":        {method: http.MethodGet, path: "/v1/orgs/acme/templates/blank", org: testOrg},
+	"validateDefinition": {method: http.MethodPost, path: "/v1/orgs/acme/definitions/validate", body: `{"files":{}}`, org: testOrg},
+	"formatDefinition":   {method: http.MethodPost, path: "/v1/orgs/acme/definitions/format", body: "a: b\n", org: testOrg, header: yamlBody},
 }
+
+// Paths and headers of the definitions probes.
+const (
+	acmeFactory = "/v1/orgs/acme/factories/acme"
+	acmeDraft   = acmeFactory + "/draft"
+)
+
+var (
+	staleMatch = http.Header{ifMatchHeader: {`"1"`}}
+	yamlBody   = http.Header{"Content-Type": {"text/yaml"}}
+)
 
 // operations reads every operationId of the contract.
 func operations(t *testing.T) []string {
@@ -311,7 +354,7 @@ func TestAuthorize_EveryOperationPassesTheSeam(t *testing.T) {
 		if op == "streamEvents" {
 			h.stream(t, "?factory=acme")
 		} else {
-			h.request(t, p.method, p.path, p.body, nil)
+			h.request(t, p.method, p.path, p.body, p.header)
 		}
 
 		checkSeam(t, op, p, h.seam.steps())

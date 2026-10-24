@@ -4,6 +4,7 @@
 // touches and a resync everything of one organization. Requests name the factory by id too.
 import { type QueryClient, queryOptions } from '@tanstack/react-query';
 import {
+  ApiError,
   getAttention,
   getBoard,
   getFactoryOverview,
@@ -19,6 +20,21 @@ import {
   listItems,
   listOrgs,
 } from './client';
+import {
+  compareVersions,
+  getDraft,
+  getDraftFile,
+  getDraftModel,
+  getFactory,
+  getTemplate,
+  getVersion,
+  getVersionFile,
+  getVersionModel,
+  listDraftFiles,
+  listTemplates,
+  listVersions,
+  validateDraft,
+} from './definitions';
 import type { AuditFilter, ItemEvent } from './types';
 
 export const keys = {
@@ -110,6 +126,127 @@ export const itemsQuery = (org: string, factory: string, filter: ItemFilter) =>
 
 export const itemQuery = (org: string, item: string) =>
   queryOptions({ queryKey: keys.item(org, item), queryFn: ({ signal }) => getItem(org, item, signal) });
+
+/**
+ * The definitions keys (B §10): under the factory's prefix (by id), beside its work keys, which
+ * the stream names one by one, so agents working never refetch a draft. A version file is keyed
+ * by its sha256 alone: its content never changes.
+ */
+export const defKeys = {
+  factories: (org: string) => keys.factories(org),
+  factory: (org: string, f: string) => ['org', org, 'factory', f, 'detail'] as const,
+  draft: (org: string, f: string) => ['org', org, 'factory', f, 'draft'] as const,
+  draftModel: (org: string, f: string) => ['org', org, 'factory', f, 'draft', 'model'] as const,
+  draftFiles: (org: string, f: string) => ['org', org, 'factory', f, 'draft', 'files'] as const,
+  draftFile: (org: string, f: string, path: string) => ['org', org, 'factory', f, 'draft', 'file', path] as const,
+  validation: (org: string, f: string, revision: number) =>
+    ['org', org, 'factory', f, 'draft', 'validation', revision] as const,
+  versions: (org: string, f: string) => ['org', org, 'factory', f, 'versions'] as const,
+  /** The prefix of every version of the factory and its model. */
+  versionsOf: (org: string, f: string) => ['org', org, 'factory', f, 'version'] as const,
+  version: (org: string, f: string, v: string) => ['org', org, 'factory', f, 'version', v] as const,
+  versionModel: (org: string, f: string, v: string) => ['org', org, 'factory', f, 'version', v, 'model'] as const,
+  versionFile: (org: string, sha256: string) => ['org', org, 'blob', sha256] as const,
+  /** The prefix of every comparison of the factory. */
+  compares: (org: string, f: string) => ['org', org, 'factory', f, 'compare'] as const,
+  compare: (org: string, f: string, from: string, to: string) =>
+    ['org', org, 'factory', f, 'compare', from, to] as const,
+  templates: (org: string) => ['org', org, 'templates'] as const,
+  template: (org: string, name: string, version?: number) =>
+    ['org', org, 'template', name, version ?? 'latest'] as const,
+};
+
+export const factoryQuery = (org: string, factory: string) =>
+  queryOptions({ queryKey: defKeys.factory(org, factory), queryFn: ({ signal }) => getFactory(org, factory, signal) });
+
+/** The open draft; its absence is the ApiError `no-draft` (404), which is not retried. */
+export const draftQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: defKeys.draft(org, factory),
+    queryFn: ({ signal }) => getDraft(org, factory, signal),
+    retry: retryUnlessRefused,
+  });
+
+export const draftModelQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: defKeys.draftModel(org, factory),
+    queryFn: ({ signal }) => getDraftModel(org, factory, signal),
+    retry: retryUnlessRefused,
+  });
+
+export const draftFilesQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: defKeys.draftFiles(org, factory),
+    queryFn: ({ signal }) => listDraftFiles(org, factory, signal),
+  });
+
+export const draftFileQuery = (org: string, factory: string, path: string) =>
+  queryOptions({
+    queryKey: defKeys.draftFile(org, factory, path),
+    queryFn: ({ signal }) => getDraftFile(org, factory, path, signal),
+    retry: retryUnlessRefused,
+  });
+
+/** The draft validated at one revision: a result never goes stale, the next save is a new key. */
+export const validationQuery = (org: string, factory: string, revision: number) =>
+  queryOptions({
+    queryKey: defKeys.validation(org, factory, revision),
+    queryFn: ({ signal }) => validateDraft(org, factory, {}, signal),
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+
+export const versionsQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: defKeys.versions(org, factory),
+    queryFn: ({ signal }) => listVersions(org, factory, {}, signal),
+  });
+
+export const versionQuery = (org: string, factory: string, version: string) =>
+  queryOptions({
+    queryKey: defKeys.version(org, factory, version),
+    queryFn: ({ signal }) => getVersion(org, factory, version, signal),
+  });
+
+export const versionModelQuery = (org: string, factory: string, version: string) =>
+  queryOptions({
+    queryKey: defKeys.versionModel(org, factory, version),
+    queryFn: ({ signal }) => getVersionModel(org, factory, version, signal),
+  });
+
+/** A published version's file by its sha256 (from the version's files): its content never changes. */
+export const versionFileQuery = (org: string, factory: string, version: string, path: string, sha256: string) =>
+  queryOptions({
+    queryKey: defKeys.versionFile(org, sha256),
+    queryFn: ({ signal }) => getVersionFile(org, factory, version, path, signal),
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+
+export const compareQuery = (org: string, factory: string, from = 'base', to = 'draft') =>
+  queryOptions({
+    queryKey: defKeys.compare(org, factory, from, to),
+    queryFn: ({ signal }) => compareVersions(org, factory, from, to, signal),
+  });
+
+/** The template catalog changes when an operator pushes a version: a few minutes are fresh enough. */
+export const templatesQuery = (org: string) =>
+  queryOptions({
+    queryKey: defKeys.templates(org),
+    queryFn: ({ signal }) => listTemplates(org, signal),
+    staleTime: 300_000,
+  });
+
+/** A template version never changes; the latest (no `version`) may move when a new one is pushed. */
+export const templateQuery = (org: string, name: string, version?: number) =>
+  queryOptions({
+    queryKey: defKeys.template(org, name, version),
+    queryFn: ({ signal }) => getTemplate(org, name, version, signal),
+    staleTime: version === undefined ? 300_000 : Number.POSITIVE_INFINITY,
+  });
+
+/** Retries a failed read, but not goald's refusals (4xx): asking again gets the same answer. */
+function retryUnlessRefused(failures: number, error: Error): boolean {
+  return failures < 3 && !(error instanceof ApiError && error.status >= 400 && error.status < 500);
+}
 
 const eventPage = 500;
 

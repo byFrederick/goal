@@ -14,6 +14,7 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/ports"
 )
 
 // The shell's reads (tag shell): what the app's chrome shows about an organization. Phase 2.2
@@ -101,6 +102,11 @@ func (s *server) GetFactoryOverview(ctx context.Context, req gen.GetFactoryOverv
 		return nil, err
 	}
 
+	recs, err := s.records(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	fs := s.factories.Factories(ctx)
 	out := gen.GetFactoryOverview200JSONResponse{
 		Window: w.name, Since: openapi_types.Date{Time: since}, Until: openapi_types.Date{Time: now.Truncate(day)},
@@ -108,7 +114,7 @@ func (s *server) GetFactoryOverview(ctx context.Context, req gen.GetFactoryOverv
 	}
 
 	for _, f := range fs {
-		o, err := s.overview(ctx, f, attention[domain.FactoryID(f.Metadata.ID)], w, since, now)
+		o, err := s.overview(ctx, recordOf(recs, orgOf(ctx).ID, f), f, attention[domain.FactoryID(f.Metadata.ID)], w, since, now)
 		if err != nil {
 			return nil, err
 		}
@@ -135,7 +141,7 @@ func (s *server) GetFactoryOverview(ctx context.Context, req gen.GetFactoryOverv
 // throughput against the previous window of the same length, the constraint now, the decisions
 // waiting and the spend against its budget.
 func (s *server) overview(
-	ctx context.Context, f *config.Factory, a domain.Attention, w metricsWindow, since, now time.Time,
+	ctx context.Context, rec ports.FactoryRecord, f *config.Factory, a domain.Attention, w metricsWindow, since, now time.Time,
 ) (gen.FactoryOverview, error) {
 	l := f.Line()
 
@@ -155,7 +161,7 @@ func (s *server) overview(
 	}
 
 	o := gen.FactoryOverview{
-		Factory: factoryOf(orgOf(ctx).ID, f), Health: gen.Running, Andon: andonOf(a.Andon), SpendUsd: cur.SpendUSD,
+		Factory: factoryOut(rec, f), Health: gen.FactoryHealthRunning, Andon: andonOf(a.Andon), SpendUsd: cur.SpendUSD,
 		Throughput: gen.Throughput{
 			PerDay: float64(cur.ItemsDone) / float64(w.days), PreviousPerDay: float64(prev.ItemsDone) / float64(w.days),
 			Days: donePerDay(w, since, cur),
@@ -164,7 +170,7 @@ func (s *server) overview(
 	}
 
 	if a.Andon != nil {
-		o.Health = gen.Stopped
+		o.Health = gen.FactoryHealthStopped
 	}
 
 	loads := make(map[string]domain.StationLoad, len(loadList))

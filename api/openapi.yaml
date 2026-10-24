@@ -29,6 +29,11 @@ tags:
       The factory editor's metadata (the install's models, which later phases are wired, the
       skill limits) and the skills catalog, skills.sh skills kept in the bucket at a pinned
       commit so a draft can vendor them
+  - name: definitions
+    description: >-
+      Factory definitions: creating factories, the one shared draft per factory (Visual
+      sections, single files and the whole tree, each write under an If-Match precondition),
+      validation, publishing, versions, compare, restore and the template catalog
 paths:
   /v1/health:
     get:
@@ -254,13 +259,599 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     get:
       operationId: listFactories
-      summary: The organization's factories goald runs, from the bucket
+      tags: [definitions]
+      summary: The organization's factories, published or not
+      description: >-
+        Every factory of the organization by name, with its current version, its open draft and
+        whether it is paused. stations and work_types are those of the version goald runs (empty
+        for a factory never published).
       responses:
         "200":
           description: Factories ordered by name
           content:
             application/json:
               schema: { $ref: "#/components/schemas/FactoryList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createFactory
+      tags: [definitions]
+      summary: Create a factory with its first draft
+      description: >-
+        Starts blank (the catalog's blank template, or a skeleton naming no station or agent), from
+        a catalog template, as a clone of another factory's version (same organization; items, runs
+        and history are not copied) or from imported files. factory.yaml's metadata.id becomes a
+        new id (kept only with keep_id), and metadata.name and title the request's, edited in place
+        so comments survive. The factory runs nothing until its draft is published. Errors: 409
+        name-taken, factory-exists (an import keeping a taken id); 404 template-not-found,
+        factory-not-found (the clone's source); 422 import-invalid (no factory.yaml that parses),
+        bad-path; 413 too-large; 400 invalid-request (no name).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewFactoryRequest" }
+      responses:
+        "201":
+          description: The factory, with its first draft
+          headers:
+            Location:
+              description: The factory's address (getFactory)
+              required: true
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Factory" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: getFactory
+      tags: [definitions]
+      summary: One factory, published or not
+      responses:
+        "200":
+          description: The factory
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Factory" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteFactory
+      tags: [definitions]
+      summary: Delete a factory that was never published, with its draft (the wizard's Cancel)
+      description: 409 factory-published once a version was published.
+      responses:
+        "204": { description: Deleted }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/pause:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    post:
+      operationId: pauseFactory
+      tags: [definitions]
+      summary: Stop the factory taking work; runs in progress finish
+      responses:
+        "200":
+          description: The factory, paused
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Factory" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/resume:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    post:
+      operationId: resumeFactory
+      tags: [definitions]
+      summary: Start a paused factory again
+      responses:
+        "200":
+          description: The factory, running
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Factory" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/draft:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: getDraft
+      tags: [definitions]
+      summary: The factory's open draft, its changes and problems
+      description: 404 no-draft when none is open.
+      responses:
+        "200":
+          description: The draft
+          headers:
+            ETag:
+              description: The draft's revision, quoted ("42"), the If-Match of discardDraft
+              required: true
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Draft" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: openDraft
+      tags: [definitions]
+      summary: Open the factory's draft, or return the open one
+      description: >-
+        Opens a draft on base (a published version: a number or current; current when absent).
+        An open draft is returned as it is (200), unless base names another version: then 409
+        draft-exists, or with replace the open draft is archived and a new one opened (201).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OpenDraftRequest" }
+      responses:
+        "201":
+          description: A new draft
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Draft" }
+        "200":
+          description: The draft that was open
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Draft" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: discardDraft
+      tags: [definitions]
+      summary: Discard (archive) the open draft; the version that runs is unchanged
+      description: >-
+        If-Match is the draft's revision ("42"): without it 428 precondition-required, when the
+        draft moved since 412 draft-conflict.
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "204": { description: Discarded }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/draft/model:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: getDraftModel
+      tags: [definitions]
+      summary: The draft's factory model for the Visual editor
+      description: >-
+        The model, each section's concurrency token, the fields the draft changed against its base
+        (Edited · Undo) and where each model pointer is in factory.yaml. 409 yaml-invalid (with
+        parse_error) while factory.yaml does not parse: Visual is read-only until it is fixed in
+        YAML mode.
+      responses:
+        "200":
+          description: The draft's model
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DraftModel" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/draft/model/{section}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/SectionRef"
+    put:
+      operationId: saveDraftSection
+      tags: [definitions]
+      summary: Save one section of the model (a Visual save)
+      description: >-
+        Applies the section's new value to factory.yaml, keeping everything the section does not
+        own (comments and key order included), and writes files and deletes remove_files in the
+        same revision (an added agent's prompt). If-Match is the section's etag ("<etag>"): without
+        it 428 precondition-required; when the section changed meanwhile 412 draft-conflict with
+        the section's current value and etag. Writers of other sections or files never conflict.
+        409 yaml-invalid while factory.yaml does not parse; 422 model-invalid for a value of the
+        wrong shape; 404 no-draft.
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SectionSave" }
+      responses:
+        "200":
+          description: The draft after the save
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SaveResult" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/draft/model/{section}/revert:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/SectionRef"
+    post:
+      operationId: revertDraftSection
+      tags: [definitions]
+      summary: Put back the base's value at edited fields of a section (Undo)
+      description: >-
+        pointers are keys of DraftModel.edited in the section; one no longer edited is ignored.
+        If-Match is the section's etag, as for a save (428, 412).
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RevertRequest" }
+      responses:
+        "200":
+          description: The draft after the revert
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SaveResult" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/draft/files:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: listDraftFiles
+      tags: [definitions]
+      summary: The draft's files by path
+      responses:
+        "200":
+          description: The files
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileList" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/draft/files/{path}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/FilePath"
+    get:
+      operationId: getDraftFile
+      tags: [definitions]
+      summary: One file of the draft, as stored
+      description: 404 file-not-found. The ETag is the file's sha256, the If-Match of putDraftFile and deleteDraftFile.
+      responses:
+        "200":
+          description: The file's content
+          headers:
+            ETag:
+              description: The file's sha256, quoted
+              required: true
+              schema: { type: string }
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        default: { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: putDraftFile
+      tags: [definitions]
+      summary: Write one file of the draft exactly as sent (YAML mode)
+      description: >-
+        If-Match is the sha256 the editor read ("<sha256>"); If-None-Match * creates a file that
+        must not exist yet. Exactly one of them: neither is 428 precondition-required, both 400. A
+        stale hash, or If-None-Match on a file that exists, is 412 draft-conflict with the file's
+        current sha256 (absent when it is gone). 422 bad-path; 413 too-large (over 1 MiB).
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        "200":
+          description: The draft after the save
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SaveResult" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteDraftFile
+      tags: [definitions]
+      summary: Delete one file of the draft
+      description: If-Match is the file's sha256 (428 without it, 412 when stale); 404 file-not-found.
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: The draft after the delete
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SaveResult" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/draft/tree:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    put:
+      operationId: replaceDraftTree
+      tags: [definitions]
+      summary: Make files the draft's whole tree (goal factory push)
+      description: >-
+        With expected_revision, a draft at another revision is 412 draft-conflict; without it the
+        latest draft is replaced. 422 bad-path; 413 too-large (over 1,000 files or 16 MiB).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DraftTree" }
+      responses:
+        "200":
+          description: The draft after the save
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SaveResult" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/draft/validate:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    post:
+      operationId: validateDraft
+      tags: [definitions]
+      summary: Validate the draft at its revision, as publish will
+      description: >-
+        overlay is unsaved YAML-mode text written over the draft's files; station_moves are the
+        moves the publish will carry, so the items they map are not reported.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ValidateDraftRequest" }
+      responses:
+        "200":
+          description: The validation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Validation" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/draft/publish:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    post:
+      operationId: publishDraft
+      tags: [definitions]
+      summary: Publish the open draft as the factory's next version
+      description: >-
+        One transaction: the draft becomes version N+1, the factory runs it, and the open items of
+        stations it removes move by station_moves. Runs in progress finish on the version they
+        started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no
+        longer at revision); 409 draft-base-moved (the current version is not
+        expected_current_version_id), definition-invalid (with problems), items-at-removed-station
+        (with items), name-taken.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PublishRequest" }
+      responses:
+        "201":
+          description: The new version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Version" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/versions:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: listVersions
+      tags: [definitions]
+      summary: One page of the factory's published versions, newest first
+      parameters:
+        - name: before
+          in: query
+          description: The next_before of the previous page; versions numbered below it
+          schema: { type: integer, minimum: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        "200":
+          description: Versions, highest number first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VersionPage" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/versions/{version}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/VersionSelector"
+    get:
+      operationId: getVersion
+      tags: [definitions]
+      summary: One version with its files
+      description: 404 version-not-found (source too, which is a starting tree and no version).
+      responses:
+        "200":
+          description: The version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VersionDetail" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/versions/{version}/model:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/VersionSelector"
+    get:
+      operationId: getVersionModel
+      tags: [definitions]
+      summary: The factory model of a version, for a read-only Visual view
+      description: 409 yaml-invalid (with parse_error) when its factory.yaml does not parse.
+      responses:
+        "200":
+          description: The model
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VersionModel" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/versions/{version}/files/{path}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/VersionSelector"
+      - $ref: "#/components/parameters/FilePath"
+    get:
+      operationId: getVersionFile
+      tags: [definitions]
+      summary: One file of a version
+      description: >-
+        A published version's files never change: they are served with Cache-Control private,
+        max-age=31536000, immutable (no-cache for a draft's). 404 file-not-found.
+      responses:
+        "200":
+          description: The file's content
+          headers:
+            ETag:
+              description: The file's sha256, quoted
+              required: true
+              schema: { type: string }
+            Cache-Control:
+              required: true
+              schema: { type: string }
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/versions/{version}/restore:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/VersionSelector"
+    post:
+      operationId: restoreVersion
+      tags: [definitions]
+      summary: Run an older published version again (rollback)
+      description: >-
+        Moves the factory's current pointer to the version; numbers are not reused and an open
+        draft stays open. 409 draft-base-moved (the current version is not
+        expected_current_version_id), items-at-removed-station, name-taken; 404 version-not-found.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RestoreRequest" }
+      responses:
+        "200":
+          description: The factory, running the restored version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Factory" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/compare:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: compareVersions
+      tags: [definitions]
+      summary: The semantic difference between two versions
+      description: >-
+        from and to are version selectors (a number, current, draft, base or source); by default
+        the draft against its base, or its starting tree when it has none. Line-level hunks are
+        computed by the client from the two files.
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, default: base }
+        - name: to
+          in: query
+          schema: { type: string, default: draft }
+      responses:
+        "200":
+          description: The comparison
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Comparison" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/templates:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listTemplates
+      tags: [definitions]
+      summary: The template catalog, the latest version of each template by name
+      responses:
+        "200":
+          description: The templates
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateList" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/templates/{name}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - name: name
+        in: path
+        required: true
+        description: The template's name
+        schema: { type: string }
+    get:
+      operationId: getTemplate
+      tags: [definitions]
+      summary: One version of a template with a preview of its model
+      description: 404 template-not-found.
+      parameters:
+        - name: version
+          in: query
+          description: The template's version; the latest when absent
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: The template
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Template" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/definitions/validate:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    post:
+      operationId: validateDefinition
+      tags: [definitions]
+      summary: Validate files that belong to no factory yet (Import YAML preview, CLI validate)
+      description: 413 too-large; 422 bad-path.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DefinitionFiles" }
+      responses:
+        "200":
+          description: The validation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Validation" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/definitions/format:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    post:
+      operationId: formatDefinition
+      tags: [definitions]
+      summary: Format a factory.yaml the way Visual saves write changed lines (Format)
+      description: 422 yaml-invalid (with parse_error) when it does not parse.
+      requestBody:
+        required: true
+        content:
+          text/yaml:
+            schema: { type: string }
+      responses:
+        "200":
+          description: The formatted factory.yaml
+          content:
+            text/yaml:
+              schema: { type: string }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/items:
     parameters:
@@ -358,7 +949,10 @@ paths:
         A text/event-stream of one organization's events only. Each committed item event arrives
         as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names
         (definition, factory, and later credential, approval, connection) carry their own data
-        object; clients ignore the names they do not know. `event: resync` (data `{}`) means
+        object; clients ignore the names they do not know. `event: definition` (data a
+        DefinitionEvent, no id) follows every committed change of a factory's definition: a
+        factory created or deleted, its current version moved (publish, restore, pause, resume),
+        its draft opened, saved, discarded or published. `event: resync` (data `{}`) means
         goald may have missed events (it reconnected to the database): re-read what you show. A
         comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID
         is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of
@@ -373,7 +967,11 @@ paths:
           description: The event stream
           content:
             text/event-stream:
-              schema: { $ref: "#/components/schemas/StreamEvent" }
+              schema:
+                description: The data of each event, by its name (item, definition)
+                oneOf:
+                  - $ref: "#/components/schemas/StreamEvent"
+                  - $ref: "#/components/schemas/DefinitionEvent"
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}:
     parameters:
@@ -579,6 +1177,38 @@ components:
         The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by
         metadata.name or metadata.id; percent-encode the # as %23)
       schema: { type: string }
+    SectionRef:
+      name: section
+      in: path
+      required: true
+      description: A section of the factory model, a tab of the Visual editor
+      schema: { $ref: "#/components/schemas/Section" }
+    FilePath:
+      name: path
+      in: path
+      required: true
+      description: >-
+        A file's path relative to the factory's root, as in agents/engineer.md; percent-encode
+        its slashes as %2F so it is one path segment
+      schema: { type: string }
+    VersionSelector:
+      name: version
+      in: path
+      required: true
+      description: >-
+        A version: its number (12), current (the one that runs), draft (the open draft), base
+        (the published version the draft started from) or source (the draft's starting tree)
+      schema: { type: string }
+    IfMatch:
+      name: If-Match
+      in: header
+      description: The entity tag the write is based on, quoted ("<etag>"); writes without it are 428
+      schema: { type: string }
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      description: "* to create a file that must not exist yet"
+      schema: { type: string }
   responses:
     Problem:
       description: An error (RFC 9457 problem details)
@@ -603,7 +1233,27 @@ components:
           pattern: "^[a-z]+(-[a-z]+)*$"
           description: >-
             A stable, kebab-case name of the error for clients to branch on (org-not-found,
-            forbidden, slug-taken, confirmation-mismatch, ...)
+            forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...)
+        problems:
+          type: array
+          description: definition-invalid only, every problem of the definition (errors block the publish)
+          items: { $ref: "#/components/schemas/DefinitionProblem" }
+        parse_error: { $ref: "#/components/schemas/ParseError" }
+        section:
+          allOf: [{ $ref: "#/components/schemas/Section" }]
+          description: draft-conflict on a section save only, the section that changed
+        value:
+          description: draft-conflict on a section save only, the section's value now (Keep theirs / Overwrite)
+        etag:
+          type: string
+          description: draft-conflict on a section save only, the section's etag now (resend with it to overwrite)
+        path:
+          type: string
+          description: draft-conflict on a file write only, the file
+        sha256:
+          type: string
+          description: draft-conflict on a file write only, the file's sha256 now; absent when the file is gone
+        items: { $ref: "#/components/schemas/ItemsAtRemovedStations" }
     OrgList:
       type: object
       required: [orgs]
@@ -750,7 +1400,7 @@ components:
           items: { $ref: "#/components/schemas/Factory" }
     Factory:
       type: object
-      required: [id, org_id, name, stations, work_types]
+      required: [id, org_id, name, stations, work_types, current, draft, paused, created_at]
       properties:
         id: { type: string }
         org_id: { type: string, description: The organization that owns the factory }
@@ -759,10 +1409,22 @@ components:
         description: { type: string }
         work_types:
           type: array
+          description: The work types of the version goald runs; empty before the first publish
           items: { type: string }
         stations:
           type: array
+          description: The stations of the version goald runs; empty before the first publish
           items: { $ref: "#/components/schemas/Station" }
+        current:
+          description: The version that runs ("v8"); null before the first publish
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/VersionRef" }]
+        draft:
+          description: The open draft ("v8 + draft"); null when none is open
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/DraftRef" }]
+        paused: { type: boolean, description: A paused factory takes no work; runs in progress finish }
+        created_at: { type: string, format: date-time }
     Station:
       type: object
       required: [id, kind]
@@ -1222,3 +1884,579 @@ components:
       additionalProperties: false
       properties:
         base64: { type: string, format: byte }
+    # Definitions (B §8): factories' drafts, versions, validation and templates.
+    VersionRef:
+      type: object
+      description: A published version as listings name it
+      required: [id, number, published_at, published_by]
+      properties:
+        id: { type: string }
+        number: { type: integer }
+        published_at: { type: string, format: date-time }
+        published_by: { $ref: "#/components/schemas/Actor" }
+    DraftRef:
+      type: object
+      description: An open draft as listings name it
+      required: [id, revision, updated_at, updated_by]
+      properties:
+        id: { type: string }
+        revision: { type: integer, format: int64 }
+        updated_at: { type: string, format: date-time }
+        updated_by: { $ref: "#/components/schemas/Actor" }
+    NewFactoryRequest:
+      type: object
+      required: [start]
+      properties:
+        name:
+          type: string
+          description: Required except for an import, where factory.yaml's metadata.name is used when it is absent
+        title: { type: string }
+        start: { $ref: "#/components/schemas/FactoryStart" }
+    FactoryStart:
+      description: Where the new factory's first draft comes from
+      oneOf:
+        - $ref: "#/components/schemas/BlankStart"
+        - $ref: "#/components/schemas/TemplateStart"
+        - $ref: "#/components/schemas/CloneStart"
+        - $ref: "#/components/schemas/ImportStart"
+      discriminator:
+        propertyName: kind
+        mapping:
+          blank: "#/components/schemas/BlankStart"
+          template: "#/components/schemas/TemplateStart"
+          clone: "#/components/schemas/CloneStart"
+          import: "#/components/schemas/ImportStart"
+    BlankStart:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [blank] }
+    TemplateStart:
+      type: object
+      required: [kind, template]
+      properties:
+        kind: { type: string, enum: [template] }
+        template: { type: string, description: The template's name }
+        version: { type: integer, minimum: 1, description: The template's version; the latest when absent }
+    CloneStart:
+      type: object
+      required: [kind, factory]
+      properties:
+        kind: { type: string, enum: [clone] }
+        factory: { type: string, description: The factory to copy (its id or name), of the same organization }
+        version:
+          type: string
+          description: The version to copy (a number or current); the current one when absent, the draft of a factory never published
+    ImportStart:
+      type: object
+      required: [kind, files]
+      properties:
+        kind: { type: string, enum: [import] }
+        files: { $ref: "#/components/schemas/FileMap" }
+        keep_id:
+          type: boolean
+          description: Keep factory.yaml's metadata.id (goal factory push of a factory the organization lacks)
+    FileList:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          items: { $ref: "#/components/schemas/FileInfo" }
+    FileInfo:
+      type: object
+      required: [path, sha256, size]
+      properties:
+        path: { type: string }
+        sha256: { type: string }
+        size: { type: integer, format: int64, description: Bytes }
+    DefinitionFiles:
+      type: object
+      required: [files]
+      properties:
+        files: { $ref: "#/components/schemas/FileMap" }
+    Section:
+      type: string
+      enum: [basics, line, agents, connections, review]
+    LineRange:
+      type: array
+      description: The first and last line of factory.yaml, 1-based; [0, 0] when it is not in the file
+      minItems: 2
+      maxItems: 2
+      items: { type: integer }
+    Ranges:
+      type: object
+      description: Where each model pointer (/line/stations/3) is in factory.yaml
+      additionalProperties: { $ref: "#/components/schemas/LineRange" }
+    SectionSummary:
+      type: object
+      description: One section tab's badge ("1 change, 1 problem") and the lines of factory.yaml it spans
+      required: [section, changes, problems, lines]
+      properties:
+        section: { $ref: "#/components/schemas/Section" }
+        changes: { type: integer }
+        problems: { type: integer }
+        lines: { $ref: "#/components/schemas/LineRange" }
+    VersionState:
+      type: string
+      enum: [draft, published, archived]
+    VersionSource:
+      type: object
+      description: Where a version started ("Source - Template Cost review v2")
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [blank, template, clone, import, cli, legacy, edit] }
+        template: { type: string, description: The template and its version, as in cost-review@2 }
+        factory: { type: string, description: The factory a clone copied }
+        version: { type: string, description: The version a clone copied, or the base of an edit }
+    Draft:
+      type: object
+      required: [id, revision, next_number, created_at, created_by, updated_at, updated_by, base, current, source, change_count, problem_count, sections]
+      properties:
+        id: { type: string }
+        revision: { type: integer, format: int64, description: Counts the draft's saves from 1 }
+        next_number: { type: integer, description: The number publishing gives it ("Draft of v9") }
+        created_at: { type: string, format: date-time }
+        created_by: { $ref: "#/components/schemas/Actor" }
+        updated_at: { type: string, format: date-time, description: The last save ("Autosaved 14:32") }
+        updated_by: { $ref: "#/components/schemas/Actor" }
+        base:
+          description: The published version it started from ("based on v8"); null for a first draft
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/VersionRef" }]
+        current:
+          description: The version that runs now, which differs from base after a restore; null before the first publish
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/VersionRef" }]
+        source: { $ref: "#/components/schemas/VersionSource" }
+        change_count: { type: integer, description: Changes from the base, or the starting tree }
+        problem_count: { type: integer }
+        sections:
+          type: array
+          items: { $ref: "#/components/schemas/SectionSummary" }
+    OpenDraftRequest:
+      type: object
+      properties:
+        base: { type: string, description: A published version (a number or current); current when absent }
+        replace: { type: boolean, description: Archive the open draft first (goal factory push --replace-draft) }
+    SectionETags:
+      type: object
+      description: Each section's concurrency token, the If-Match of its save
+      required: [basics, line, agents, connections, review]
+      properties:
+        basics: { type: string }
+        line: { type: string }
+        agents: { type: string }
+        connections: { type: string }
+        review: { type: string }
+    DraftModel:
+      type: object
+      required: [revision, model, etags, edited, ranges]
+      properties:
+        revision: { type: integer, format: int64 }
+        model: { $ref: "#/components/schemas/FactoryModel" }
+        etags: { $ref: "#/components/schemas/SectionETags" }
+        edited:
+          type: object
+          description: >-
+            The model pointers the draft changed against its base (or starting tree), each with the
+            value there, null where it had none: the fields' Edited · Undo
+          additionalProperties: {}
+        ranges: { $ref: "#/components/schemas/Ranges" }
+    VersionModel:
+      type: object
+      required: [model, ranges]
+      properties:
+        model: { $ref: "#/components/schemas/FactoryModel" }
+        ranges: { $ref: "#/components/schemas/Ranges" }
+    SectionSave:
+      type: object
+      required: [value]
+      properties:
+        value:
+          description: The section's new value, the shape of FactoryModel's property of the section
+          x-go-type: json.RawMessage
+        files: { $ref: "#/components/schemas/FileMap" }
+        remove_files:
+          type: array
+          description: Files to delete in the same revision, except a prompt another agent still uses
+          items: { type: string }
+    RevertRequest:
+      type: object
+      required: [pointers]
+      properties:
+        pointers:
+          type: array
+          items: { type: string }
+    SaveResult:
+      type: object
+      description: The draft after a save
+      required: [revision, updated_at, change_count, problem_count, sections]
+      properties:
+        revision: { type: integer, format: int64 }
+        etag: { type: string, description: A section save's new etag }
+        sha256: { type: string, description: A file save's new sha256 }
+        updated_at: { type: string, format: date-time }
+        change_count: { type: integer }
+        problem_count: { type: integer }
+        sections:
+          type: array
+          items: { $ref: "#/components/schemas/SectionSummary" }
+    DraftTree:
+      type: object
+      required: [files]
+      properties:
+        files: { $ref: "#/components/schemas/FileMap" }
+        expected_revision: { type: integer, format: int64, description: Refuse (412) when the draft is at another revision }
+    StationMoves:
+      type: object
+      description: Where the open items of each station the new version removes go, by station id
+      additionalProperties: { type: string }
+    ValidateDraftRequest:
+      type: object
+      properties:
+        overlay: { $ref: "#/components/schemas/FileMap" }
+        station_moves: { $ref: "#/components/schemas/StationMoves" }
+    PublishRequest:
+      type: object
+      required: [revision, expected_current_version_id]
+      properties:
+        revision: { type: integer, format: int64, description: The draft revision the editor validated }
+        expected_current_version_id:
+          type: string
+          nullable: true
+          description: The version the editor saw running; null for a first publish
+        message: { type: string, maxLength: 200, description: The publish note }
+        station_moves: { $ref: "#/components/schemas/StationMoves" }
+        start:
+          type: boolean
+          default: true
+          description: First publish only; false creates the factory paused (Start the line right away)
+    RestoreRequest:
+      type: object
+      required: [expected_current_version_id]
+      properties:
+        expected_current_version_id: { type: string, description: The version the caller saw running }
+        station_moves: { $ref: "#/components/schemas/StationMoves" }
+    DefinitionCounts:
+      type: object
+      required: [stations, agents, skills, connections, contracts, changes]
+      properties:
+        stations: { type: integer }
+        agents: { type: integer }
+        skills: { type: integer }
+        connections: { type: integer }
+        contracts: { type: integer }
+        changes: { type: integer, description: Changes from the base or starting tree; 0 when there is none to compare with }
+    CheckResult:
+      type: object
+      description: >-
+        One line of Review & publish's checks; checks that did not run (after a schema failure,
+        or of phases not wired yet) are absent, never passed
+      required: [id, section, status, summary]
+      properties:
+        id: { type: string, description: yaml, schema, line, references, images, secrets, availability, name, items, credentials, ... }
+        section: { type: string }
+        status: { type: string, enum: [passed, failed, warning] }
+        summary: { type: string }
+    Validation:
+      type: object
+      required: [ok, revision, counts, checks, problems]
+      properties:
+        ok: { type: boolean, description: No problem is an error, so the definition can be published }
+        revision: { type: integer, format: int64, description: The draft revision validated; 0 for files outside a draft }
+        counts: { $ref: "#/components/schemas/DefinitionCounts" }
+        checks:
+          type: array
+          items: { $ref: "#/components/schemas/CheckResult" }
+        problems:
+          type: array
+          items: { $ref: "#/components/schemas/DefinitionProblem" }
+    DefinitionProblem:
+      type: object
+      description: One validation finding, located for both views (Visual by section and pointer, YAML by file and lines)
+      required: [code, severity, check, section, line, column, end_line, end_column, message, fixes]
+      properties:
+        code: { type: string, description: Stable and kebab-case, as in unknown-agent }
+        severity: { type: string, enum: [error, warning, info], description: errors block publishing }
+        check: { type: string, description: The validation step that found it }
+        section: { type: string, description: basics, line, agents, connections, review or files }
+        pointer: { type: string, description: An RFC 6901 pointer into the factory model (/line/stations/3/agent) }
+        file: { type: string, description: The file, as in factory.yaml }
+        line: { type: integer, description: 1-based; 0 when not in a file }
+        column: { type: integer }
+        end_line: { type: integer }
+        end_column: { type: integer }
+        message: { type: string }
+        fixes:
+          type: array
+          items: { $ref: "#/components/schemas/ProblemFix" }
+    ProblemFix:
+      type: object
+      description: >-
+        A machine-applicable fix: a JSON Patch on one section of the model, or (section publish)
+        on the publish request (add /station_moves/<station>)
+      required: [label, section, patch]
+      properties:
+        label: { type: string, description: As in Set WIP to 2 }
+        section: { type: string }
+        patch:
+          type: array
+          items: { $ref: "#/components/schemas/PatchOp" }
+    PatchOp:
+      type: object
+      description: One RFC 6902 operation, its path relative to the section's value
+      required: [op, path]
+      properties:
+        op: { type: string, enum: [add, remove, replace] }
+        path: { type: string }
+        value:
+          description: The value of add and replace
+          x-go-type: json.RawMessage
+    ParseError:
+      type: object
+      description: Where factory.yaml stops parsing
+      required: [line, column, message]
+      properties:
+        line: { type: integer, description: 1-based; 0 when unknown }
+        column: { type: integer }
+        message: { type: string }
+    ItemsAtRemovedStations:
+      type: object
+      description: The open items that keep a publish or restore from dropping stations
+      required: [in_progress, unmapped]
+      properties:
+        in_progress:
+          type: array
+          description: Items being worked; they must finish or be stopped first
+          items: { $ref: "#/components/schemas/ItemAt" }
+        unmapped:
+          type: array
+          description: Open items no station move maps
+          items: { $ref: "#/components/schemas/ItemAt" }
+    ItemAt:
+      type: object
+      required: [id, number, station, state]
+      properties:
+        id: { type: string }
+        number: { type: integer, format: int64 }
+        station: { type: string }
+        state: { $ref: "#/components/schemas/ItemState" }
+    Version:
+      type: object
+      required: [id, number, revision, state, message, source, published_at, published_by, current, counts]
+      properties:
+        id: { type: string }
+        number: { type: integer, nullable: true, description: null for a draft }
+        revision: { type: integer, format: int64 }
+        state: { $ref: "#/components/schemas/VersionState" }
+        message: { type: string }
+        source: { $ref: "#/components/schemas/VersionSource" }
+        published_at: { type: string, format: date-time, nullable: true }
+        published_by:
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/Actor" }]
+        current: { type: boolean, description: This is the version that runs }
+        counts: { $ref: "#/components/schemas/DefinitionCounts" }
+    VersionDetail:
+      allOf:
+        - $ref: "#/components/schemas/Version"
+        - type: object
+          required: [files]
+          properties:
+            files:
+              type: array
+              items: { $ref: "#/components/schemas/FileInfo" }
+    VersionPage:
+      type: object
+      required: [versions, next_before]
+      properties:
+        versions:
+          type: array
+          items: { $ref: "#/components/schemas/Version" }
+        next_before:
+          type: integer
+          nullable: true
+          description: Pass as `before` for the next page; null on the last page
+    CompareSide:
+      type: object
+      description: One side of a comparison; id, number and state are null for a starting tree no version holds
+      required: [selector, id, number, state]
+      properties:
+        selector: { type: string, description: The selector asked for (base, draft, 8, ...) }
+        id: { type: string, nullable: true }
+        number: { type: integer, nullable: true, description: null unless published }
+        state:
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/VersionState" }]
+    Comparison:
+      type: object
+      required: [from, to, files, changes, counts]
+      properties:
+        from: { $ref: "#/components/schemas/CompareSide" }
+        to: { $ref: "#/components/schemas/CompareSide" }
+        files:
+          type: array
+          items: { $ref: "#/components/schemas/FileChange" }
+        changes:
+          type: array
+          items: { $ref: "#/components/schemas/Change" }
+        counts:
+          type: object
+          description: '"3 changes in 2 sections"'
+          required: [changes, sections]
+          properties:
+            changes: { type: integer }
+            sections: { type: integer }
+    FileChange:
+      type: object
+      required: [path, op]
+      properties:
+        path: { type: string }
+        op: { type: string, enum: [added, removed, modified, unchanged] }
+        from_sha256: { type: string, description: Absent for an added file }
+        to_sha256: { type: string, description: Absent for a removed file }
+    Change:
+      type: object
+      description: One meaningful difference, by identity (a reordered station is one moved change)
+      required: [section, op, target, summary, from_lines, to_lines]
+      properties:
+        section: { type: string, description: A section, or files }
+        op: { type: string, enum: [added, removed, changed, moved] }
+        target:
+          type: object
+          required: [kind, id]
+          properties:
+            kind: { type: string, enum: [station, agent, connection, tool, skill, contract, field, file] }
+            id: { type: string }
+        field: { type: string, description: Set when exactly one field of the target changed }
+        from: { description: The value before }
+        to: { description: The value after }
+        summary: { type: string, description: A short sentence, as in Build also runs pnpm test }
+        from_lines: { $ref: "#/components/schemas/LineRange" }
+        to_lines: { $ref: "#/components/schemas/LineRange" }
+    TemplateList:
+      type: object
+      required: [templates]
+      properties:
+        templates:
+          type: array
+          items: { $ref: "#/components/schemas/TemplateSummary" }
+    TemplateSummary:
+      type: object
+      required: [name, version, title, summary, stations, agents, connectors, changed]
+      properties:
+        name: { type: string }
+        version: { type: integer }
+        title: { type: string }
+        summary: { type: string }
+        stations: { type: integer }
+        agents: { type: integer }
+        connectors:
+          type: array
+          items: { type: string }
+        changed: { type: string, description: 'The day the version was made, as in 2026-10-09' }
+    Template:
+      allOf:
+        - $ref: "#/components/schemas/TemplateSummary"
+        - type: object
+          required: [description, model]
+          properties:
+            description: { type: string }
+            model: { $ref: "#/components/schemas/FactoryModel" }
+    FactoryModel:
+      type: object
+      description: >-
+        The factory model the Visual editor edits: factory.yaml's sections with snake_case keys
+        (the YAML's camelCase keys). It mirrors the YAML leniently: a key the YAML lacks is absent,
+        and a value the schema refuses appears as it is, with a problem.
+      x-go-type: json.RawMessage
+      required: [basics, line, agents, connections, review]
+      properties:
+        basics:
+          type: object
+          properties:
+            id: { type: string, description: metadata.id, read-only }
+            name: { type: string }
+            title: { type: string }
+            purpose: { type: string }
+            work_types:
+              type: array
+              items: { type: string }
+            repository:
+              type: object
+              nullable: true
+              description: "{url, token} (token an env: reference until phase 3) or {connection, repo}"
+              additionalProperties: {}
+        line:
+          type: object
+          properties:
+            stations:
+              type: array
+              items:
+                type: object
+                description: >-
+                  id, name, description, kind (queue, agent, human, done), agent, route (lane →
+                  agent), agents, wip, buffer, output, checks (strings or {kind, run, min}), gate
+                  ({on_reject, max_rework}), action
+                additionalProperties: {}
+            intake:
+              type: array
+              items:
+                type: object
+                additionalProperties: {}
+            flow:
+              type: object
+              description: expedite, constraint, release, andon, targets
+              additionalProperties: {}
+            librarian: { type: string, nullable: true }
+        agents:
+          type: object
+          properties:
+            default_model: { type: string }
+            agents:
+              type: array
+              items:
+                type: object
+                description: >-
+                  name, description, prompt ({path, sha256, words}), model, max_turns,
+                  per_item_usd, skills, connections, builtins ({read, edit, run: {mode, commands},
+                  web, subagents}), custom_tools
+                additionalProperties: {}
+            skills:
+              type: array
+              items:
+                type: object
+                description: name, source, origin
+                additionalProperties: {}
+        connections:
+          type: array
+          items:
+            type: object
+            description: name, connector, type, credential, agents, tools, settings, legacy
+            additionalProperties: {}
+        review:
+          type: object
+          properties:
+            budget:
+              type: object
+              description: weekly_usd, daily_usd, per_item_usd, max_turns_per_task, on_exhausted
+              additionalProperties: {}
+    DefinitionEvent:
+      type: object
+      description: "The data of one `event: definition` on /v1/orgs/{org}/stream; it carries no content"
+      required: [org_id, factory_id, kind]
+      properties:
+        org_id: { type: string }
+        factory_id: { type: string }
+        kind:
+          type: string
+          enum: [current, draft, factory]
+          description: >-
+            current: the version that runs moved, or the factory was paused or resumed; draft: a
+            version row changed (a draft opened, saved, discarded or published); factory: the
+            factory was created or deleted
+        version_id: { type: string, description: The version concerned (current - the one that runs) }
+        number: { type: integer, description: The version's number once published }
+        revision: { type: integer, format: int64, description: draft only, the draft's revision }
+        by: { type: string, description: "draft only, who saved it, as an actor ref (user:local)" }

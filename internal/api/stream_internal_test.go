@@ -21,7 +21,8 @@ func TestFeed_HandsEachClientItsOrgsNotices(t *testing.T) {
 	t.Parallel()
 
 	notices := porttest.NewItemNotices()
-	feed := NewFeed(notices, nil)
+	definitions := porttest.NewDefinitionNotices()
+	feed := NewFeed(notices, definitions, nil)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
@@ -29,6 +30,11 @@ func TestFeed_HandsEachClientItsOrgsNotices(t *testing.T) {
 	go func() { done <- feed.Run(ctx) }()
 
 	if err := notices.AwaitListeners(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	// Each listener starts with a resync; the clients subscribe after both.
+	if err := definitions.AwaitListeners(ctx, 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -61,7 +67,8 @@ func TestFeed_EndsTheStreamOfAClientThatFallsBehind(t *testing.T) {
 	t.Parallel()
 
 	notices := porttest.NewItemNotices()
-	feed := NewFeed(notices, nil)
+	definitions := porttest.NewDefinitionNotices()
+	feed := NewFeed(notices, definitions, nil)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
@@ -69,6 +76,11 @@ func TestFeed_EndsTheStreamOfAClientThatFallsBehind(t *testing.T) {
 	go func() { done <- feed.Run(ctx) }()
 
 	if err := notices.AwaitListeners(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	// Each listener starts with a resync; the clients subscribe after both.
+	if err := definitions.AwaitListeners(ctx, 1); err != nil {
 		t.Fatal(err)
 	}
 

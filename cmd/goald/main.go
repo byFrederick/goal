@@ -5,9 +5,10 @@
 // All wiring happens here, by hand: PostgreSQL (store, definition versions, item and definition
 // notices), the bucket (definition file content), environment secrets, git workspaces, GitHub
 // (merges), the Docker runner, checker and MCP sidecars, the system clock, the engine, the gateway,
-// the API and its stream feed. Configuration comes from the environment; settings.go lists every
-// variable. goald keeps nothing another instance would need: work state and definition versions
-// are in PostgreSQL, file content is in the bucket, and its workspaces and run folders are scratch. The exception is the gateway's running MCP sidecars,
+// definition authoring, the API and its stream feed. Configuration comes from the environment;
+// settings.go lists every variable. goald keeps nothing another instance would need: work state
+// and definition versions are in PostgreSQL, file content is in the bucket, and its workspaces
+// and run folders are scratch. The exception is the gateway's running MCP sidecars,
 // which serve only the runs this instance started (see internal/gateway).
 package main
 
@@ -34,6 +35,7 @@ import (
 	"github.com/byFrederick/goal/internal/adapters/s3store"
 	"github.com/byFrederick/goal/internal/adapters/sysclock"
 	"github.com/byFrederick/goal/internal/api"
+	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/domain"
@@ -181,13 +183,22 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	reap(ctx, log, runner, workspaces)
 
-	feed := api.NewFeed(postgres.NewNotices(pool.Config().ConnConfig, log), log)
+	// Definition authoring writes versions to PostgreSQL and file content to the bucket; until
+	// phase 3 a definition's secret references are checked against goald's environment.
+	authors := authoring.New(authoring.Deps{
+		Store: definitionStore, Loads: store, Templates: objects,
+		Credentials: authoring.EnvReferences{Secrets: secrets, Reserved: s.reserved()},
+		Clock:       clock, DefaultImage: s.DefaultAgentImage,
+	})
+
+	feed := api.NewFeed(postgres.NewNotices(pool.Config().ConnConfig, log),
+		postgres.NewDefinitionNotices(pool.Config().ConnConfig, log), log)
 
 	// Phase 3 sets the capabilities in its wiring PRs; until then the editor keeps their controls hidden.
 	editor := builder.New(objects, clock, builder.Config{Models: s.Models, Capabilities: builder.Capabilities{}, Logger: log})
 
 	apiHandler, err := api.New(api.Deps{
-		Engine: eng, Items: store, Factories: defs, Orgs: store, Audit: store, OrgRetention: s.OrgRetention,
+		Engine: eng, Items: store, Factories: defs, Definitions: authors, Orgs: store, Audit: store, OrgRetention: s.OrgRetention,
 		Authorizer: api.AllowAll{}, Feed: feed, Builder: editor, Clock: clock, Logger: log,
 	})
 	if err != nil {

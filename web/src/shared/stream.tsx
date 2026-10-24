@@ -5,7 +5,7 @@
 import { type QueryClient, type QueryKey, useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, use, useEffect, useState } from 'react';
 import { type StreamStatus, subscribeToOrg } from '../api/client';
-import { invalidationsFor, isOverviewKey, resyncInvalidations } from './invalidation';
+import { definitionInvalidations, invalidationsFor, isOverviewKey, resyncInvalidations } from './invalidation';
 
 const StatusContext = createContext<StreamStatus>('connecting');
 
@@ -18,7 +18,9 @@ export function useStreamStatus(): StreamStatus {
  * `definition`, E `factory`, phase 3 `credential`, `approval`, `connection`); names nobody
  * registered are ignored, so new events never break an older client.
  */
-export const streamHandlers: Readonly<Record<string, (org: string, data: unknown) => QueryKey[]>> = {};
+export const streamHandlers: Readonly<Record<string, (org: string, data: unknown) => QueryKey[]>> = {
+  definition: definitionInvalidations,
+};
 
 const batchMs = 300;
 const overviewMs = 5_000;

@@ -4,6 +4,7 @@
 // andon pull); Example Labs has one, empty. Times are relative to when the mock starts, so ages
 // read like a live floor.
 import type {
+  Actor,
   AndonPull,
   AuditEntry,
   ClassOfService,
@@ -12,6 +13,7 @@ import type {
   ItemState,
   Metrics,
   Org,
+  VersionRef,
 } from '@goal/api-client';
 
 export interface MockItem {
@@ -110,6 +112,17 @@ interface Seed {
 const model = 'claude-sonnet-5-5';
 const repo = 'https://github.com/acme/goal';
 
+/** Who publishes in phase 2.2: the local user. */
+const localUser: Actor = { kind: 'user', id: 'local', name: 'Local user' };
+
+/** A published version as a factory names it. */
+const published = (id: string, number: number, at: string): VersionRef => ({
+  id,
+  number,
+  published_at: at,
+  published_by: localUser,
+});
+
 /** The organizations' ids. */
 export const acmeOrg = '019a1c00-0000-7000-8000-0000000000aa';
 export const labsOrg = '019a1c00-0000-7000-8000-0000000000bb';
@@ -130,6 +143,15 @@ const goalFactory: Factory = {
     { id: 'merge', kind: 'human', action: 'merge' },
     { id: 'done', kind: 'done' },
   ],
+  current: published('019a1c00-0000-7000-8000-0000000000d8', 8, '2026-10-20T14:32:00Z'),
+  draft: {
+    id: '019a1c00-0000-7000-8000-0000000000d9',
+    revision: 42,
+    updated_at: '2026-10-23T14:32:00Z',
+    updated_by: localUser,
+  },
+  paused: false,
+  created_at: '2026-09-01T09:00:00Z',
 };
 
 const sreFactory: Factory = {
@@ -146,6 +168,10 @@ const sreFactory: Factory = {
     { id: 'approve', kind: 'human' },
     { id: 'done', kind: 'done' },
   ],
+  current: published('019a1c00-0000-7000-8000-0000000000e3', 3, '2026-10-12T10:00:00Z'),
+  draft: null,
+  paused: false,
+  created_at: '2026-09-15T09:00:00Z',
 };
 
 const supportFactory: Factory = {
@@ -161,6 +187,10 @@ const supportFactory: Factory = {
     { id: 'approve', kind: 'human' },
     { id: 'done', kind: 'done' },
   ],
+  current: published('019a1c00-0000-7000-8000-0000000000f1', 1, '2026-10-18T16:00:00Z'),
+  draft: null,
+  paused: false,
+  created_at: '2026-10-18T15:00:00Z',
 };
 
 const researchFactory: Factory = {
@@ -175,6 +205,10 @@ const researchFactory: Factory = {
     { id: 'read', kind: 'agent' },
     { id: 'done', kind: 'done' },
   ],
+  current: published('019a1c00-0000-7000-8000-0000000000b1', 2, '2026-10-05T11:00:00Z'),
+  draft: null,
+  paused: false,
+  created_at: '2026-10-01T09:00:00Z',
 };
 
 /** The metrics of a factory with nothing done yet. */

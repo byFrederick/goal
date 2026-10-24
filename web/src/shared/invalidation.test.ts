@@ -1,12 +1,19 @@
 import { QueryClient } from '@tanstack/react-query';
-import { describe, expect, test } from 'vitest';
-import { keys } from '../api/queries';
-import type { StreamEvent } from '../api/types';
-import { invalidationsFor, isOverviewKey, resyncInvalidations } from './invalidation';
+import { describe, expect, test, vi } from 'vitest';
+import { defKeys, keys } from '../api/queries';
+import type { DefinitionEvent, StreamEvent } from '../api/types';
+import { definitionInvalidations, invalidationsFor, isOverviewKey, resyncInvalidations } from './invalidation';
 
 const acme = '019a1c00-0000-7000-8000-0000000000aa';
 const labs = '019a1c00-0000-7000-8000-0000000000bb';
 const goal = '6f0c2a7e-3d1b-4c55-9a7e-1f2b3c4d5e60';
+
+// This tab saved the goal factory's draft up to revision 4: the stream's events of those are echoes.
+const saved = vi.hoisted(() => ({ factory: '6f0c2a7e-3d1b-4c55-9a7e-1f2b3c4d5e60', revision: 4 }));
+vi.mock(import('../api/definitions'), async (original) => ({
+  ...(await original()),
+  savedHere: (factory: string, revision: number) => factory === saved.factory && revision <= saved.revision,
+}));
 const sre = '0b7d9e21-58a4-4f0e-b6c3-2a9d8e7f6a51';
 const item12 = '00000000-0000-4000-8000-00000000040c';
 
@@ -105,5 +112,101 @@ describe('resyncInvalidations', () => {
 
     expect(stale).toHaveLength(14);
     expect(stale.every((k) => k[0] === 'org' && k[1] === acme)).toBe(true);
+  });
+});
+
+// The definitions screens' cache for acme's goal factory, beside its work.
+function definitionCache() {
+  const client = new QueryClient();
+  client.setQueryData(keys.factories(acme), []);
+  client.setQueryData(keys.attention(acme), {});
+  client.setQueryData(keys.overview(acme, '7d'), {});
+  client.setQueryData(keys.board(acme, goal), {});
+  client.setQueryData(keys.metrics(acme, goal, '7d'), {});
+  client.setQueryData(defKeys.factory(acme, goal), {});
+  client.setQueryData(defKeys.draft(acme, goal), {});
+  client.setQueryData(defKeys.draftModel(acme, goal), {});
+  client.setQueryData(defKeys.draftFile(acme, goal, 'factory.yaml'), {});
+  client.setQueryData(defKeys.validation(acme, goal, 4), {});
+  client.setQueryData(defKeys.versions(acme, goal), {});
+  client.setQueryData(defKeys.version(acme, goal, '8'), {});
+  client.setQueryData(defKeys.compare(acme, goal, 'base', 'draft'), {});
+  client.setQueryData(defKeys.versionFile(acme, 'a1b2'), '');
+  client.setQueryData(defKeys.templates(acme), []);
+  client.setQueryData(defKeys.draft(acme, sre), {});
+  return client;
+}
+
+const definition = (e: Partial<DefinitionEvent>): DefinitionEvent => ({
+  org_id: acme,
+  factory_id: goal,
+  kind: 'draft',
+  ...e,
+});
+
+describe('definitionInvalidations', () => {
+  test("a save elsewhere re-reads the factory's draft and its chip, not its work or other drafts", async () => {
+    const stale = await staleAfter(
+      definitionCache(),
+      definitionInvalidations(acme, definition({ revision: saved.revision + 1, by: 'user:local' })),
+    );
+
+    expect(stale).toEqual(
+      expect.arrayContaining([
+        defKeys.draft(acme, goal),
+        defKeys.draftModel(acme, goal),
+        defKeys.draftFile(acme, goal, 'factory.yaml'),
+        defKeys.factory(acme, goal),
+        keys.factories(acme),
+      ]),
+    );
+    expect(stale).not.toContainEqual(keys.board(acme, goal));
+    expect(stale).not.toContainEqual(defKeys.versions(acme, goal));
+    expect(stale).not.toContainEqual(defKeys.draft(acme, sre));
+    expect(stale).not.toContainEqual(defKeys.versionFile(acme, 'a1b2'));
+  });
+
+  test("the echo of this tab's own save re-reads nothing", async () => {
+    const stale = await staleAfter(
+      definitionCache(),
+      definitionInvalidations(acme, definition({ revision: saved.revision })),
+    );
+
+    expect(stale).toEqual([]);
+  });
+
+  test('a publish re-reads what runs: versions, the draft, comparisons, the board and the overviews', async () => {
+    const stale = await staleAfter(
+      definitionCache(),
+      definitionInvalidations(acme, definition({ kind: 'current', number: 9 })),
+    );
+
+    expect(stale).toEqual(
+      expect.arrayContaining([
+        defKeys.versions(acme, goal),
+        defKeys.version(acme, goal, '8'),
+        defKeys.draft(acme, goal),
+        defKeys.compare(acme, goal, 'base', 'draft'),
+        keys.board(acme, goal),
+        keys.overview(acme, '7d'),
+        keys.factories(acme),
+      ]),
+    );
+    expect(stale).not.toContainEqual(keys.metrics(acme, goal, '7d'));
+    expect(stale).not.toContainEqual(defKeys.versionFile(acme, 'a1b2'));
+  });
+
+  test('a factory created or deleted re-reads the list, attention and overviews', async () => {
+    const stale = await staleAfter(definitionCache(), definitionInvalidations(acme, definition({ kind: 'factory' })));
+
+    expect(stale).toEqual(
+      expect.arrayContaining([keys.factories(acme), keys.attention(acme), keys.overview(acme, '7d')]),
+    );
+    expect(stale).not.toContainEqual(defKeys.draft(acme, goal));
+  });
+
+  test('ignores data that is no definition event', () => {
+    expect(definitionInvalidations(acme, { kind: 'draft' })).toEqual([]);
+    expect(definitionInvalidations(acme, null)).toEqual([]);
   });
 });

@@ -74,6 +74,9 @@ type settings struct {
 	// text) shape the structured log on stdout.
 	LogLevel  slog.Level
 	LogFormat string
+	// DefaultAgentImage is the agent image a blank factory's skeleton names
+	// (GOAL_DEFAULT_AGENT_IMAGE, default the agent image this repository builds).
+	DefaultAgentImage string
 }
 
 const (
@@ -84,11 +87,38 @@ const (
 	defaultListen  = "127.0.0.1:8080"
 	defaultTaskEnv = "CLAUDE_CODE_OAUTH_TOKEN=env:CLAUDE_CODE_OAUTH_TOKEN"
 	defaultKeyRef  = "env:GOAL_GATEWAY_KEY"
+	defaultImage   = "ghcr.io/byfrederick/goal-agent:0.1.0"
 )
 
 // forbiddenTaskEnv never reaches a task: on a laptop the model is reached with the subscription
 // token, and an API key in a container would silently take over billing.
 var forbiddenTaskEnv = []string{"ANTHROPIC_API_KEY", "GOAL_GATEWAY_KEY", "GOAL_GITHUB_TOKEN"}
+
+// ownVariables are the environment variables of goald itself: every setting it reads
+// (settingsFrom, s3store.ConfigFromEnv), the database passwords, the default gateway key and the
+// AWS credentials the bucket client reads. A factory definition may not reference them
+// (authoring.EnvReferences, env-reserved), so no definition can hand them to an agent or a
+// connection.
+var ownVariables = []string{
+	"GOAL_MIGRATE_DATABASE_URL", "GOAL_DATABASE_URL", "GOAL_PG_PASSWORD", "GOAL_PG_OWNER_PASSWORD", "GOAL_PG_APP_PASSWORD",
+	"GOAL_LISTEN", "GOAL_GATEWAY_URL", "GOAL_GATEWAY_KEY_REF", "GOAL_GATEWAY_KEY", "GOAL_TASK_ENV",
+	"GOAL_WORKSPACE_ROOT", "GOAL_RUN_DIR", "GOAL_TICK_EVERY", "GOAL_REFRESH_EVERY", "GOAL_MAX_RUNS",
+	"GOAL_GITHUB_API_URL", "GOAL_LOG_LEVEL", "GOAL_LOG_FORMAT", "GOAL_DEFAULT_AGENT_IMAGE", "GOAL_ORG_RETENTION", "GOAL_MODELS",
+	"GOAL_DEFINITION_CACHE_BYTES", "GOAL_LEGACY_IMPORT",
+	"GOAL_S3_BUCKET", "GOAL_S3_ENDPOINT", "GOAL_S3_ACCESS_KEY", "GOAL_S3_SECRET_KEY",
+	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
+}
+
+// reserved is the variables definitions may not reference: goald's own, and the one its
+// gateway key reference names.
+func (s settings) reserved() []string {
+	out := slices.Clone(ownVariables)
+	if name, ok := strings.CutPrefix(s.GatewayKeyRef, "env:"); ok && !slices.Contains(out, name) {
+		out = append(out, name)
+	}
+
+	return out
+}
 
 func settingsFrom(getenv func(string) string) (settings, error) {
 	or := func(name, def string) string {
@@ -110,6 +140,8 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 		RunDir:        or("GOAL_RUN_DIR", filepath.Join(os.TempDir(), "goal-runs")),
 		LogFormat:     or("GOAL_LOG_FORMAT", "json"),
 		GitHubAPIURL:  or("GOAL_GITHUB_API_URL", "https://api.github.com"),
+
+		DefaultAgentImage: or("GOAL_DEFAULT_AGENT_IMAGE", defaultImage),
 	}
 
 	var errs []error

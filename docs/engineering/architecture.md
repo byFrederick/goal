@@ -30,7 +30,7 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object s
 | `internal/definitions` | `domain`, `ports`, `config`, `factorystore` | adapters, engine, cloud SDKs |
 | `internal/retention` | `domain`, `ports`, `factorystore` | adapters, engine, `api`, cloud SDKs |
 | `internal/builder` | `domain`, `ports`, `config`, `go.yaml.in/yaml/v3` | adapters, engine, `api`, `authoring`, `factorymodel`, `definitions`, `factorystore`, `gateway`, cloud SDKs |
-| `internal/api` (+ generated `api/gen`) | `domain`, `ports`, `config`, `engine` | adapters, `factorystore`, `definitions`, `factorymodel`, `authoring`, `builder`, `gateway`, cloud SDKs |
+| `internal/api` (+ generated `api/gen`) | `domain`, `ports`, `config`, `engine`, `authoring` (its request and result types and refusal codes; calls go through `api.Definitions`) | adapters, `factorystore`, `definitions`, `factorymodel`, `builder`, `gateway`, cloud SDKs |
 | `cmd/*` | everything | — (wiring only) |
 
 `depguard` in `.golangci.yml` enforces every row but the last. A new external system is a new adapter behind an existing or new port; it never adds an import to the engine.

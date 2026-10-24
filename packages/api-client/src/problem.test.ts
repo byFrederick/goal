@@ -42,6 +42,29 @@ describe("unwrap", () => {
     expect((err as ApiError).code).toBe("slug-taken");
   });
 
+  test("keeps the code and what a client acts on: the current value under a stale write", async () => {
+    const body = { title: "Precondition Failed", status: 412, code: "draft-conflict", section: "line", etag: "e2", value: { stations: [] } };
+    const { goal } = goaldAnswering(problemJson(412, body));
+    const err = await unwrap(
+      goal.PUT(orgPath("/factories/{factory}/draft/model/{section}"), {
+        params: { path: { org: "acme", factory: "goal", section: "line" }, header: { "If-Match": '"e1"' } },
+        body: { value: {} },
+      }),
+    ).catch((e: unknown) => e);
+
+    expect((err as ApiError).code).toBe("draft-conflict");
+    expect((err as ApiError).problem).toEqual(body);
+  });
+
+  test("percent-encodes a file path, slashes included, as one path segment", async () => {
+    const { goal, requests } = goaldAnswering(new Response("# engineer\n"));
+    await goal.GET(orgPath("/factories/{factory}/draft/files/{path}"), {
+      params: { path: { org: "acme", factory: "goal", path: "agents/engineer.md" } },
+      parseAs: "text",
+    });
+    expect(requests[0]?.url).toBe("http://goald.example.com/v1/orgs/acme/factories/goal/draft/files/agents%2Fengineer.md");
+  });
+
   test("percent-encodes an item reference in the path", async () => {
     const { goal, requests } = goaldAnswering(Response.json({}));
     await unwrap(goal.GET(orgPath("/items/{item}"), { params: { path: { org: "acme", item: "goal#2" } } }));

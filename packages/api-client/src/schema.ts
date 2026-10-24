@@ -186,10 +186,579 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** The organization's factories goald runs, from the bucket */
+        /**
+         * The organization's factories, published or not
+         * @description Every factory of the organization by name, with its current version, its open draft and whether it is paused. stations and work_types are those of the version goald runs (empty for a factory never published).
+         */
         get: operations["listFactories"];
         put?: never;
+        /**
+         * Create a factory with its first draft
+         * @description Starts blank (the catalog's blank template, or a skeleton naming no station or agent), from a catalog template, as a clone of another factory's version (same organization; items, runs and history are not copied) or from imported files. factory.yaml's metadata.id becomes a new id (kept only with keep_id), and metadata.name and title the request's, edited in place so comments survive. The factory runs nothing until its draft is published. Errors: 409 name-taken, factory-exists (an import keeping a taken id); 404 template-not-found, factory-not-found (the clone's source); 422 import-invalid (no factory.yaml that parses), bad-path; 413 too-large; 400 invalid-request (no name).
+         */
+        post: operations["createFactory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /** One factory, published or not */
+        get: operations["getFactory"];
+        put?: never;
         post?: never;
+        /**
+         * Delete a factory that was never published, with its draft (the wizard's Cancel)
+         * @description 409 factory-published once a version was published.
+         */
+        delete: operations["deleteFactory"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop the factory taking work; runs in progress finish */
+        post: operations["pauseFactory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start a paused factory again */
+        post: operations["resumeFactory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The factory's open draft, its changes and problems
+         * @description 404 no-draft when none is open.
+         */
+        get: operations["getDraft"];
+        put?: never;
+        /**
+         * Open the factory's draft, or return the open one
+         * @description Opens a draft on base (a published version: a number or current; current when absent). An open draft is returned as it is (200), unless base names another version: then 409 draft-exists, or with replace the open draft is archived and a new one opened (201).
+         */
+        post: operations["openDraft"];
+        /**
+         * Discard (archive) the open draft; the version that runs is unchanged
+         * @description If-Match is the draft's revision ("42"): without it 428 precondition-required, when the draft moved since 412 draft-conflict.
+         */
+        delete: operations["discardDraft"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/draft/model": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The draft's factory model for the Visual editor
+         * @description The model, each section's concurrency token, the fields the draft changed against its base (Edited · Undo) and where each model pointer is in factory.yaml. 409 yaml-invalid (with parse_error) while factory.yaml does not parse: Visual is read-only until it is fixed in YAML mode.
+         */
+        get: operations["getDraftModel"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/draft/model/{section}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description A section of the factory model, a tab of the Visual editor */
+                section: components["parameters"]["SectionRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save one section of the model (a Visual save)
+         * @description Applies the section's new value to factory.yaml, keeping everything the section does not own (comments and key order included), and writes files and deletes remove_files in the same revision (an added agent's prompt). If-Match is the section's etag ("<etag>"): without it 428 precondition-required; when the section changed meanwhile 412 draft-conflict with the section's current value and etag. Writers of other sections or files never conflict. 409 yaml-invalid while factory.yaml does not parse; 422 model-invalid for a value of the wrong shape; 404 no-draft.
+         */
+        put: operations["saveDraftSection"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/draft/model/{section}/revert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description A section of the factory model, a tab of the Visual editor */
+                section: components["parameters"]["SectionRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Put back the base's value at edited fields of a section (Undo)
+         * @description pointers are keys of DraftModel.edited in the section; one no longer edited is ignored. If-Match is the section's etag, as for a save (428, 412).
+         */
+        post: operations["revertDraftSection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/draft/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /** The draft's files by path */
+        get: operations["listDraftFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/draft/files/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description A file's path relative to the factory's root, as in agents/engineer.md; percent-encode its slashes as %2F so it is one path segment */
+                path: components["parameters"]["FilePath"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One file of the draft, as stored
+         * @description 404 file-not-found. The ETag is the file's sha256, the If-Match of putDraftFile and deleteDraftFile.
+         */
+        get: operations["getDraftFile"];
+        /**
+         * Write one file of the draft exactly as sent (YAML mode)
+         * @description If-Match is the sha256 the editor read ("<sha256>"); If-None-Match * creates a file that must not exist yet. Exactly one of them: neither is 428 precondition-required, both 400. A stale hash, or If-None-Match on a file that exists, is 412 draft-conflict with the file's current sha256 (absent when it is gone). 422 bad-path; 413 too-large (over 1 MiB).
+         */
+        put: operations["putDraftFile"];
+        post?: never;
+        /**
+         * Delete one file of the draft
+         * @description If-Match is the file's sha256 (428 without it, 412 when stale); 404 file-not-found.
+         */
+        delete: operations["deleteDraftFile"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/draft/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Make files the draft's whole tree (goal factory push)
+         * @description With expected_revision, a draft at another revision is 412 draft-conflict; without it the latest draft is replaced. 422 bad-path; 413 too-large (over 1,000 files or 16 MiB).
+         */
+        put: operations["replaceDraftTree"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/draft/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate the draft at its revision, as publish will
+         * @description overlay is unsaved YAML-mode text written over the draft's files; station_moves are the moves the publish will carry, so the items they map are not reported.
+         */
+        post: operations["validateDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/draft/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish the open draft as the factory's next version
+         * @description One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken.
+         */
+        post: operations["publishDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /** One page of the factory's published versions, newest first */
+        get: operations["listVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description A version: its number (12), current (the one that runs), draft (the open draft), base (the published version the draft started from) or source (the draft's starting tree) */
+                version: components["parameters"]["VersionSelector"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One version with its files
+         * @description 404 version-not-found (source too, which is a starting tree and no version).
+         */
+        get: operations["getVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/versions/{version}/model": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description A version: its number (12), current (the one that runs), draft (the open draft), base (the published version the draft started from) or source (the draft's starting tree) */
+                version: components["parameters"]["VersionSelector"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The factory model of a version, for a read-only Visual view
+         * @description 409 yaml-invalid (with parse_error) when its factory.yaml does not parse.
+         */
+        get: operations["getVersionModel"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/versions/{version}/files/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description A version: its number (12), current (the one that runs), draft (the open draft), base (the published version the draft started from) or source (the draft's starting tree) */
+                version: components["parameters"]["VersionSelector"];
+                /** @description A file's path relative to the factory's root, as in agents/engineer.md; percent-encode its slashes as %2F so it is one path segment */
+                path: components["parameters"]["FilePath"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One file of a version
+         * @description A published version's files never change: they are served with Cache-Control private, max-age=31536000, immutable (no-cache for a draft's). 404 file-not-found.
+         */
+        get: operations["getVersionFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/versions/{version}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description A version: its number (12), current (the one that runs), draft (the open draft), base (the published version the draft started from) or source (the draft's starting tree) */
+                version: components["parameters"]["VersionSelector"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run an older published version again (rollback)
+         * @description Moves the factory's current pointer to the version; numbers are not reused and an open draft stays open. 409 draft-base-moved (the current version is not expected_current_version_id), items-at-removed-station, name-taken; 404 version-not-found.
+         */
+        post: operations["restoreVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The semantic difference between two versions
+         * @description from and to are version selectors (a number, current, draft, base or source); by default the draft against its base, or its starting tree when it has none. Line-level hunks are computed by the client from the two files.
+         */
+        get: operations["compareVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /** The template catalog, the latest version of each template by name */
+        get: operations["listTemplates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/templates/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The template's name */
+                name: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One version of a template with a preview of its model
+         * @description 404 template-not-found.
+         */
+        get: operations["getTemplate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/definitions/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate files that belong to no factory yet (Import YAML preview, CLI validate)
+         * @description 413 too-large; 422 bad-path.
+         */
+        post: operations["validateDefinition"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/definitions/format": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Format a factory.yaml the way Visual saves write changed lines (Format)
+         * @description 422 yaml-invalid (with parse_error) when it does not parse.
+         */
+        post: operations["formatDefinition"];
         delete?: never;
         options?: never;
         head?: never;
@@ -278,7 +847,7 @@ export interface paths {
         };
         /**
          * The organization's events as they happen (Server-Sent Events)
-         * @description A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+         * @description A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
          */
         get: operations["streamEvents"];
         put?: never;
@@ -508,8 +1077,22 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, ...) */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...) */
             code?: string;
+            /** @description definition-invalid only, every problem of the definition (errors block the publish) */
+            problems?: components["schemas"]["DefinitionProblem"][];
+            parse_error?: components["schemas"]["ParseError"];
+            /** @description draft-conflict on a section save only, the section that changed */
+            section?: components["schemas"]["Section"];
+            /** @description draft-conflict on a section save only, the section's value now (Keep theirs / Overwrite) */
+            value?: unknown;
+            /** @description draft-conflict on a section save only, the section's etag now (resend with it to overwrite) */
+            etag?: string;
+            /** @description draft-conflict on a file write only, the file */
+            path?: string;
+            /** @description draft-conflict on a file write only, the file's sha256 now; absent when the file is gone */
+            sha256?: string;
+            items?: components["schemas"]["ItemsAtRemovedStations"];
         };
         OrgList: {
             orgs: components["schemas"]["OrgSummary"][];
@@ -630,8 +1213,18 @@ export interface components {
             name: string;
             title?: string;
             description?: string;
+            /** @description The work types of the version goald runs; empty before the first publish */
             work_types: string[];
+            /** @description The stations of the version goald runs; empty before the first publish */
             stations: components["schemas"]["Station"][];
+            /** @description The version that runs ("v8"); null before the first publish */
+            current: components["schemas"]["VersionRef"] | null;
+            /** @description The open draft ("v8 + draft"); null when none is open */
+            draft: components["schemas"]["DraftRef"] | null;
+            /** @description A paused factory takes no work; runs in progress finish */
+            paused: boolean;
+            /** Format: date-time */
+            created_at: string;
         };
         Station: {
             id: string;
@@ -1044,6 +1637,483 @@ export interface components {
             /** Format: byte */
             base64: string;
         };
+        /** @description A published version as listings name it */
+        VersionRef: {
+            id: string;
+            number: number;
+            /** Format: date-time */
+            published_at: string;
+            published_by: components["schemas"]["Actor"];
+        };
+        /** @description An open draft as listings name it */
+        DraftRef: {
+            id: string;
+            /** Format: int64 */
+            revision: number;
+            /** Format: date-time */
+            updated_at: string;
+            updated_by: components["schemas"]["Actor"];
+        };
+        NewFactoryRequest: {
+            /** @description Required except for an import, where factory.yaml's metadata.name is used when it is absent */
+            name?: string;
+            title?: string;
+            start: components["schemas"]["FactoryStart"];
+        };
+        /** @description Where the new factory's first draft comes from */
+        FactoryStart: components["schemas"]["BlankStart"] | components["schemas"]["TemplateStart"] | components["schemas"]["CloneStart"] | components["schemas"]["ImportStart"];
+        BlankStart: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "blank";
+        };
+        TemplateStart: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "template";
+            /** @description The template's name */
+            template: string;
+            /** @description The template's version; the latest when absent */
+            version?: number;
+        };
+        CloneStart: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "clone";
+            /** @description The factory to copy (its id or name) */
+            factory: string;
+            /** @description The version to copy (a number or current); the current one when absent, the draft of a factory never published */
+            version?: string;
+        };
+        ImportStart: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "import";
+            files: components["schemas"]["FileMap"];
+            /** @description Keep factory.yaml's metadata.id (goal factory push of a factory the organization lacks) */
+            keep_id?: boolean;
+        };
+        FileList: {
+            files: components["schemas"]["FileInfo"][];
+        };
+        FileInfo: {
+            path: string;
+            sha256: string;
+            /**
+             * Format: int64
+             * @description Bytes
+             */
+            size: number;
+        };
+        DefinitionFiles: {
+            files: components["schemas"]["FileMap"];
+        };
+        /** @enum {string} */
+        Section: "basics" | "line" | "agents" | "connections" | "review";
+        /** @description The first and last line of factory.yaml, 1-based; [0, 0] when it is not in the file */
+        LineRange: number[];
+        /** @description Where each model pointer (/line/stations/3) is in factory.yaml */
+        Ranges: {
+            [key: string]: components["schemas"]["LineRange"];
+        };
+        /** @description One section tab's badge ("1 change, 1 problem") and the lines of factory.yaml it spans */
+        SectionSummary: {
+            section: components["schemas"]["Section"];
+            changes: number;
+            problems: number;
+            lines: components["schemas"]["LineRange"];
+        };
+        /** @enum {string} */
+        VersionState: "draft" | "published" | "archived";
+        /** @description Where a version started ("Source - Template Cost review v2") */
+        VersionSource: {
+            /** @enum {string} */
+            kind: "blank" | "template" | "clone" | "import" | "cli" | "legacy" | "edit";
+            /** @description The template and its version */
+            template?: string;
+            /** @description The factory a clone copied */
+            factory?: string;
+            /** @description The version a clone copied */
+            version?: string;
+        };
+        Draft: {
+            id: string;
+            /**
+             * Format: int64
+             * @description Counts the draft's saves from 1
+             */
+            revision: number;
+            /** @description The number publishing gives it ("Draft of v9") */
+            next_number: number;
+            /** Format: date-time */
+            created_at: string;
+            created_by: components["schemas"]["Actor"];
+            /**
+             * Format: date-time
+             * @description The last save ("Autosaved 14:32")
+             */
+            updated_at: string;
+            updated_by: components["schemas"]["Actor"];
+            /** @description The published version it started from ("based on v8"); null for a first draft */
+            base: components["schemas"]["VersionRef"] | null;
+            /** @description The version that runs now, which differs from base after a restore; null before the first publish */
+            current: components["schemas"]["VersionRef"] | null;
+            source: components["schemas"]["VersionSource"];
+            /** @description Changes from the base */
+            change_count: number;
+            problem_count: number;
+            sections: components["schemas"]["SectionSummary"][];
+        };
+        OpenDraftRequest: {
+            /** @description A published version (a number or current); current when absent */
+            base?: string;
+            /** @description Archive the open draft first (goal factory push --replace-draft) */
+            replace?: boolean;
+        };
+        /** @description Each section's concurrency token, the If-Match of its save */
+        SectionETags: {
+            basics: string;
+            line: string;
+            agents: string;
+            connections: string;
+            review: string;
+        };
+        DraftModel: {
+            /** Format: int64 */
+            revision: number;
+            model: components["schemas"]["FactoryModel"];
+            etags: components["schemas"]["SectionETags"];
+            /** @description The model pointers the draft changed against its base (or starting tree), each with the value there, null where it had none: the fields' Edited · Undo */
+            edited: {
+                [key: string]: unknown;
+            };
+            ranges: components["schemas"]["Ranges"];
+        };
+        VersionModel: {
+            model: components["schemas"]["FactoryModel"];
+            ranges: components["schemas"]["Ranges"];
+        };
+        SectionSave: {
+            /** @description The section's new value, the shape of FactoryModel's property of the section */
+            value: unknown;
+            files?: components["schemas"]["FileMap"];
+            /** @description Files to delete in the same revision, except a prompt another agent still uses */
+            remove_files?: string[];
+        };
+        RevertRequest: {
+            pointers: string[];
+        };
+        /** @description The draft after a save */
+        SaveResult: {
+            /** Format: int64 */
+            revision: number;
+            /** @description A section save's new etag */
+            etag?: string;
+            /** @description A file save's new sha256 */
+            sha256?: string;
+            /** Format: date-time */
+            updated_at: string;
+            change_count: number;
+            problem_count: number;
+            sections: components["schemas"]["SectionSummary"][];
+        };
+        DraftTree: {
+            files: components["schemas"]["FileMap"];
+            /**
+             * Format: int64
+             * @description Refuse (412) when the draft is at another revision
+             */
+            expected_revision?: number;
+        };
+        /** @description Where the open items of each station the new version removes go, by station id */
+        StationMoves: {
+            [key: string]: string;
+        };
+        ValidateDraftRequest: {
+            overlay?: components["schemas"]["FileMap"];
+            station_moves?: components["schemas"]["StationMoves"];
+        };
+        PublishRequest: {
+            /**
+             * Format: int64
+             * @description The draft revision the editor validated
+             */
+            revision: number;
+            /** @description The version the editor saw running; null for a first publish */
+            expected_current_version_id: string | null;
+            /** @description The publish note */
+            message?: string;
+            station_moves?: components["schemas"]["StationMoves"];
+            /**
+             * @description First publish only; false creates the factory paused (Start the line right away)
+             * @default true
+             */
+            start?: boolean;
+        };
+        RestoreRequest: {
+            /** @description The version the caller saw running */
+            expected_current_version_id: string;
+            station_moves?: components["schemas"]["StationMoves"];
+        };
+        DefinitionCounts: {
+            stations: number;
+            agents: number;
+            skills: number;
+            connections: number;
+            contracts: number;
+            /** @description Changes from the base or starting tree; 0 when there is none to compare with */
+            changes: number;
+        };
+        /** @description One line of Review & publish's checks; checks that did not run (after a schema failure, or of phases not wired yet) are absent, never passed */
+        CheckResult: {
+            /** @description yaml */
+            id: string;
+            section: string;
+            /** @enum {string} */
+            status: "passed" | "failed" | "warning";
+            summary: string;
+        };
+        Validation: {
+            /** @description No problem is an error */
+            ok: boolean;
+            /**
+             * Format: int64
+             * @description The draft revision validated; 0 for files outside a draft
+             */
+            revision: number;
+            counts: components["schemas"]["DefinitionCounts"];
+            checks: components["schemas"]["CheckResult"][];
+            problems: components["schemas"]["DefinitionProblem"][];
+        };
+        /** @description One validation finding, located for both views (Visual by section and pointer, YAML by file and lines) */
+        DefinitionProblem: {
+            /** @description Stable and kebab-case */
+            code: string;
+            /**
+             * @description errors block publishing
+             * @enum {string}
+             */
+            severity: "error" | "warning" | "info";
+            /** @description The validation step that found it */
+            check: string;
+            /** @description basics */
+            section: string;
+            /** @description An RFC 6901 pointer into the factory model (/line/stations/3/agent) */
+            pointer?: string;
+            /** @description The file */
+            file?: string;
+            /** @description 1-based; 0 when not in a file */
+            line: number;
+            column: number;
+            end_line: number;
+            end_column: number;
+            message: string;
+            fixes: components["schemas"]["ProblemFix"][];
+        };
+        /** @description A machine-applicable fix: a JSON Patch on one section of the model, or (section publish) on the publish request (add /station_moves/<station>) */
+        ProblemFix: {
+            /** @description As in Set WIP to 2 */
+            label: string;
+            section: string;
+            patch: components["schemas"]["PatchOp"][];
+        };
+        /** @description One RFC 6902 operation, its path relative to the section's value */
+        PatchOp: {
+            /** @enum {string} */
+            op: "add" | "remove" | "replace";
+            path: string;
+            /** @description The value of add and replace */
+            value?: unknown;
+        };
+        /** @description Where factory.yaml stops parsing */
+        ParseError: {
+            /** @description 1-based; 0 when unknown */
+            line: number;
+            column: number;
+            message: string;
+        };
+        /** @description The open items that keep a publish or restore from dropping stations */
+        ItemsAtRemovedStations: {
+            /** @description Items being worked; they must finish or be stopped first */
+            in_progress: components["schemas"]["ItemAt"][];
+            /** @description Open items no station move maps */
+            unmapped: components["schemas"]["ItemAt"][];
+        };
+        ItemAt: {
+            id: string;
+            /** Format: int64 */
+            number: number;
+            station: string;
+            state: components["schemas"]["ItemState"];
+        };
+        Version: {
+            id: string;
+            /** @description null for a draft */
+            number: number | null;
+            /** Format: int64 */
+            revision: number;
+            state: components["schemas"]["VersionState"];
+            message: string;
+            source: components["schemas"]["VersionSource"];
+            /** Format: date-time */
+            published_at: string | null;
+            published_by: components["schemas"]["Actor"] | null;
+            /** @description This is the version that runs */
+            current: boolean;
+            counts: components["schemas"]["DefinitionCounts"];
+        };
+        VersionDetail: components["schemas"]["Version"] & {
+            files: components["schemas"]["FileInfo"][];
+        };
+        VersionPage: {
+            versions: components["schemas"]["Version"][];
+            /** @description Pass as `before` for the next page; null on the last page */
+            next_before: number | null;
+        };
+        /** @description One side of a comparison; id, number and state are null for a starting tree no version holds */
+        CompareSide: {
+            /** @description The selector asked for (base */
+            selector: string;
+            id: string | null;
+            /** @description null unless published */
+            number: number | null;
+            state: components["schemas"]["VersionState"] | null;
+        };
+        Comparison: {
+            from: components["schemas"]["CompareSide"];
+            to: components["schemas"]["CompareSide"];
+            files: components["schemas"]["FileChange"][];
+            changes: components["schemas"]["Change"][];
+            /** @description "3 changes in 2 sections" */
+            counts: {
+                changes: number;
+                sections: number;
+            };
+        };
+        FileChange: {
+            path: string;
+            /** @enum {string} */
+            op: "added" | "removed" | "modified" | "unchanged";
+            /** @description Absent for an added file */
+            from_sha256?: string;
+            /** @description Absent for a removed file */
+            to_sha256?: string;
+        };
+        /** @description One meaningful difference, by identity (a reordered station is one moved change) */
+        Change: {
+            /** @description A section */
+            section: string;
+            /** @enum {string} */
+            op: "added" | "removed" | "changed" | "moved";
+            target: {
+                /** @enum {string} */
+                kind: "station" | "agent" | "connection" | "tool" | "skill" | "contract" | "field" | "file";
+                id: string;
+            };
+            /** @description Set when exactly one field of the target changed */
+            field?: string;
+            /** @description The value before */
+            from?: unknown;
+            /** @description The value after */
+            to?: unknown;
+            /** @description A short sentence */
+            summary: string;
+            from_lines: components["schemas"]["LineRange"];
+            to_lines: components["schemas"]["LineRange"];
+        };
+        TemplateList: {
+            templates: components["schemas"]["TemplateSummary"][];
+        };
+        TemplateSummary: {
+            name: string;
+            version: number;
+            title: string;
+            summary: string;
+            stations: number;
+            agents: number;
+            connectors: string[];
+            /** @description The day the version was made, as in 2026-10-09 */
+            changed: string;
+        };
+        Template: components["schemas"]["TemplateSummary"] & {
+            description: string;
+            model: components["schemas"]["FactoryModel"];
+        };
+        /** @description The factory model the Visual editor edits: factory.yaml's sections with snake_case keys (the YAML's camelCase keys). It mirrors the YAML leniently: a key the YAML lacks is absent, and a value the schema refuses appears as it is, with a problem. */
+        FactoryModel: {
+            basics: {
+                /** @description metadata.id */
+                id?: string;
+                name?: string;
+                title?: string;
+                purpose?: string;
+                work_types?: string[];
+                /** @description {url, token} (token an env: reference until phase 3) or {connection, repo} */
+                repository?: {
+                    [key: string]: unknown;
+                } | null;
+            };
+            line: {
+                stations?: {
+                    [key: string]: unknown;
+                }[];
+                intake?: {
+                    [key: string]: unknown;
+                }[];
+                /** @description expedite, constraint, release, andon, targets */
+                flow?: {
+                    [key: string]: unknown;
+                };
+                librarian?: string | null;
+            };
+            agents: {
+                default_model?: string;
+                agents?: {
+                    [key: string]: unknown;
+                }[];
+                skills?: {
+                    [key: string]: unknown;
+                }[];
+            };
+            connections: {
+                [key: string]: unknown;
+            }[];
+            review: {
+                /** @description weekly_usd, daily_usd, per_item_usd, max_turns_per_task, on_exhausted */
+                budget?: {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        /** @description The data of one `event: definition` on /v1/orgs/{org}/stream; it carries no content */
+        DefinitionEvent: {
+            org_id: string;
+            factory_id: string;
+            /**
+             * @description current: the version that runs moved, or the factory was paused or resumed; draft: a version row changed (a draft opened, saved, discarded or published); factory: the factory was created or deleted
+             * @enum {string}
+             */
+            kind: "current" | "draft" | "factory";
+            /** @description The version concerned (current - the one that runs) */
+            version_id?: string;
+            /** @description The version's number once published */
+            number?: number;
+            /**
+             * Format: int64
+             * @description draft only
+             */
+            revision?: number;
+            /** @description draft only, who saved it, as an actor ref (user:local) */
+            by?: string;
+        };
     };
     responses: {
         /** @description An error (RFC 9457 problem details) */
@@ -1063,6 +2133,16 @@ export interface components {
         FactoryRef: string;
         /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
         ItemRef: string;
+        /** @description A section of the factory model, a tab of the Visual editor */
+        SectionRef: components["schemas"]["Section"];
+        /** @description A file's path relative to the factory's root, as in agents/engineer.md; percent-encode its slashes as %2F so it is one path segment */
+        FilePath: string;
+        /** @description A version: its number (12), current (the one that runs), draft (the open draft), base (the published version the draft started from) or source (the draft's starting tree) */
+        VersionSelector: string;
+        /** @description The entity tag the write is based on, quoted ("<etag>"); writes without it are 428 */
+        IfMatch: string;
+        /** @description * to create a file that must not exist yet */
+        IfNoneMatch: string;
     };
     requestBodies: never;
     headers: never;
@@ -1377,6 +2457,831 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    createFactory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewFactoryRequest"];
+            };
+        };
+        responses: {
+            /** @description The factory, with its first draft */
+            201: {
+                headers: {
+                    /** @description The factory's address (getFactory) */
+                    Location: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Factory"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getFactory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The factory */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Factory"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteFactory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    pauseFactory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The factory, paused */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Factory"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    resumeFactory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The factory, running */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Factory"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The draft */
+            200: {
+                headers: {
+                    /** @description The draft's revision, quoted ("42"), the If-Match of discardDraft */
+                    ETag: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Draft"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    openDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OpenDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description The draft that was open */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Draft"];
+                };
+            };
+            /** @description A new draft */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Draft"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    discardDraft: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The entity tag the write is based on, quoted ("<etag>"); writes without it are 428 */
+                "If-Match"?: components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Discarded */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getDraftModel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The draft's model */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftModel"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    saveDraftSection: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The entity tag the write is based on, quoted ("<etag>"); writes without it are 428 */
+                "If-Match"?: components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description A section of the factory model, a tab of the Visual editor */
+                section: components["parameters"]["SectionRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SectionSave"];
+            };
+        };
+        responses: {
+            /** @description The draft after the save */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaveResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    revertDraftSection: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The entity tag the write is based on, quoted ("<etag>"); writes without it are 428 */
+                "If-Match"?: components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description A section of the factory model, a tab of the Visual editor */
+                section: components["parameters"]["SectionRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevertRequest"];
+            };
+        };
+        responses: {
+            /** @description The draft after the revert */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaveResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listDraftFiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The files */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getDraftFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description A file's path relative to the factory's root, as in agents/engineer.md; percent-encode its slashes as %2F so it is one path segment */
+                path: components["parameters"]["FilePath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file's content */
+            200: {
+                headers: {
+                    /** @description The file's sha256, quoted */
+                    ETag: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    putDraftFile: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The entity tag the write is based on, quoted ("<etag>"); writes without it are 428 */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description * to create a file that must not exist yet */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description A file's path relative to the factory's root, as in agents/engineer.md; percent-encode its slashes as %2F so it is one path segment */
+                path: components["parameters"]["FilePath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description The draft after the save */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaveResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteDraftFile: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The entity tag the write is based on, quoted ("<etag>"); writes without it are 428 */
+                "If-Match"?: components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description A file's path relative to the factory's root, as in agents/engineer.md; percent-encode its slashes as %2F so it is one path segment */
+                path: components["parameters"]["FilePath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The draft after the delete */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaveResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    replaceDraftTree: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftTree"];
+            };
+        };
+        responses: {
+            /** @description The draft after the save */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaveResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    validateDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ValidateDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description The validation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Validation"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    publishDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishRequest"];
+            };
+        };
+        responses: {
+            /** @description The new version */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Version"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listVersions: {
+        parameters: {
+            query?: {
+                /** @description The next_before of the previous page; versions numbered below it */
+                before?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Versions, highest number first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description A version: its number (12), current (the one that runs), draft (the open draft), base (the published version the draft started from) or source (the draft's starting tree) */
+                version: components["parameters"]["VersionSelector"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionDetail"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getVersionModel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description A version: its number (12), current (the one that runs), draft (the open draft), base (the published version the draft started from) or source (the draft's starting tree) */
+                version: components["parameters"]["VersionSelector"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The model */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionModel"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getVersionFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description A version: its number (12), current (the one that runs), draft (the open draft), base (the published version the draft started from) or source (the draft's starting tree) */
+                version: components["parameters"]["VersionSelector"];
+                /** @description A file's path relative to the factory's root, as in agents/engineer.md; percent-encode its slashes as %2F so it is one path segment */
+                path: components["parameters"]["FilePath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file's content */
+            200: {
+                headers: {
+                    /** @description The file's sha256, quoted */
+                    ETag: string;
+                    "Cache-Control": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    restoreVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description A version: its number (12), current (the one that runs), draft (the open draft), base (the published version the draft started from) or source (the draft's starting tree) */
+                version: components["parameters"]["VersionSelector"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreRequest"];
+            };
+        };
+        responses: {
+            /** @description The factory, running the restored version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Factory"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    compareVersions: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The comparison */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comparison"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The templates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getTemplate: {
+        parameters: {
+            query?: {
+                /** @description The template's version; the latest when absent */
+                version?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The template's name */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The template */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Template"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    validateDefinition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefinitionFiles"];
+            };
+        };
+        responses: {
+            /** @description The validation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Validation"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    formatDefinition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "text/yaml": string;
+            };
+        };
+        responses: {
+            /** @description The formatted factory.yaml */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/yaml": string;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     listItems: {
         parameters: {
             query?: {
@@ -1517,7 +3422,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/event-stream": components["schemas"]["StreamEvent"];
+                    "text/event-stream": components["schemas"]["StreamEvent"] | components["schemas"]["DefinitionEvent"];
                 };
             };
             default: components["responses"]["Problem"];

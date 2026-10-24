@@ -1,28 +1,32 @@
 // Package api serves goald's HTTP API, the contract in api/openapi.yaml: health, the install's
 // organizations and, under /v1/orgs/{org}, each organization's factories, their boards and flow
 // metrics, submitting and listing work items, reading items and their history, human decisions
-// (approve, reject, retry, merge), a Server-Sent Events stream of the organization's events, and
-// the factory editor's metadata and skills catalog (builder.go).
+// (approve, reject, retry, merge), factory definition authoring (definitions.go: drafts,
+// validation, publishing, versions, templates), a Server-Sent Events stream of the
+// organization's events, and the factory editor's metadata and skills catalog (builder.go).
 //
 // The handlers implement the strict server interface generated into internal/api/gen
 // (`task api:gen`). They reach the engine, the store, the organizations and the factory
-// definitions only through the small interfaces below; cmd/goald wires the real ones.
+// definitions only through the small interfaces below and Definitions; cmd/goald wires the real
+// ones.
 //
 // Every request goes through the same layers: cross-origin protection (a browser may change
-// things only from goald's own origin), a request id (X-Request-Id), the request's actor
-// (actor.go: always the local user in phase 2.2, which has no identity), then, per operation,
-// the organization of the path (org.go: unknown or deleted is 404, and the request is bound to
-// it with domain.WithOrg so row-level security scopes every store call) and the Authorizer seam
-// (authz.go), passed again by the two resolvers of factories and items. Wherever a path takes an
-// item, it takes its id or <factory>#<number>. Errors are RFC 9457 problem details: unknown
-// organizations, items and factories are 404, invalid requests 400, a broken rule (a taken
-// slug) or an action the item's state does not allow (a decision on an item not waiting for a
-// human, a retry of an item not blocked, a merge that is not the item's step or that the pull
-// request refuses) 409, a refusal of the Authorizer 403; anything else is a 500 whose detail
-// stays in the log.
+// things only from goald's own origin), a body limit, a request id (X-Request-Id), the request's
+// actor (actor.go: always the local user in phase 2.2, which has no identity), then, per
+// operation, the organization of the path (org.go: unknown or deleted is 404, and the request is
+// bound to it with domain.WithOrg so row-level security scopes every store call) and the
+// Authorizer seam (authz.go), passed again by the three resolvers of factories, definitions and
+// items. Wherever a path takes an item, it takes its id or <factory>#<number>. Errors are RFC 9457
+// problem details: unknown organizations, items and factories are 404, invalid requests 400, a
+// broken rule (a taken slug) or an action the item's state does not allow (a decision on an item
+// not waiting for a human, a retry of an item not blocked, a merge that is not the item's step or
+// that the pull request refuses) 409, a refusal of the Authorizer 403, a body over the limit 413;
+// definition refusals carry the code and status authoring gives them (definitions.go); anything
+// else is a 500 whose detail stays in the log.
 //
-// The stream is served from a Feed: one LISTEN per goald instance, fanned out to that
-// instance's clients of each organization, so any instance serves any client.
+// The stream is served from a Feed: one LISTEN per goald instance for item and organization
+// events and one for definition changes, fanned out to that instance's clients of each
+// organization, so any instance serves any client.
 //
 // No authentication yet: goald binds the API to 127.0.0.1.
 package api
@@ -39,6 +43,7 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
+	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/engine"
@@ -82,8 +87,10 @@ type Deps struct {
 	Engine    Engine
 	Items     Items
 	Factories Factories
-	Orgs      Orgs
-	Audit     AuditLog
+	// Definitions authors factory definitions (*authoring.Service).
+	Definitions Definitions
+	Orgs        Orgs
+	Audit       AuditLog
 	// OrgRetention is how long a deleted organization is kept before the purge removes it
 	// (GOAL_ORG_RETENTION); a deletion answers when that will be.
 	OrgRetention time.Duration
@@ -103,9 +110,14 @@ type Deps struct {
 
 // Limits on requests.
 const (
-	maxRequestBytes   = 1 << 20
-	defaultEventLimit = 200
-	maxEventLimit     = 1000
+	// maxRequestBytes bounds every request body but the definitions routes'.
+	maxRequestBytes = 1 << 20
+	// maxDefinitionBytes bounds the bodies of the definitions routes: a whole tree is up to
+	// 16 MiB, which base64 in JSON makes about a third larger. authoring refuses more than 16 MiB
+	// of files, and more than 1 MiB per file.
+	maxDefinitionBytes = 24 << 20
+	defaultEventLimit  = 200
+	maxEventLimit      = 1000
 )
 
 // errInvalid marks a request the API refuses as malformed (400).
@@ -113,9 +125,10 @@ var errInvalid = errors.New("invalid request")
 
 // New returns the API's handler for the /v1/ routes.
 func New(d Deps) (http.Handler, error) {
-	if d.Engine == nil || d.Items == nil || d.Factories == nil || d.Orgs == nil || d.Audit == nil || d.Authorizer == nil ||
-		d.Feed == nil || d.Builder == nil || d.Clock == nil || d.OrgRetention <= 0 {
-		return nil, errors.New("api: Engine, Items, Factories, Orgs, Audit, Authorizer, Feed, Builder, Clock and a positive OrgRetention are required")
+	if d.Engine == nil || d.Items == nil || d.Factories == nil || d.Definitions == nil || d.Orgs == nil || d.Audit == nil ||
+		d.Authorizer == nil || d.Feed == nil || d.Builder == nil || d.Clock == nil || d.OrgRetention <= 0 {
+		return nil, errors.New("api: Engine, Items, Factories, Definitions, Orgs, Audit, Authorizer, Feed, Builder, Clock " +
+			"and a positive OrgRetention are required")
 	}
 
 	log := d.Logger
@@ -124,8 +137,8 @@ func New(d Deps) (http.Handler, error) {
 	}
 
 	s := &server{
-		engine: d.Engine, items: d.Items, factories: d.Factories, orgs: d.Orgs, audit: d.Audit, retention: d.OrgRetention,
-		authz: d.Authorizer, feed: d.Feed, builder: d.Builder, clock: d.Clock, log: log,
+		engine: d.Engine, items: d.Items, factories: d.Factories, defs: d.Definitions, orgs: d.Orgs, audit: d.Audit,
+		retention: d.OrgRetention, authz: d.Authorizer, feed: d.Feed, builder: d.Builder, clock: d.Clock, log: log,
 	}
 	s.inbox = append([]InboxSource{decisions{s: s}}, d.InboxSources...)
 
@@ -157,7 +170,46 @@ func New(d Deps) (http.Handler, error) {
 		s.problem(w, r, errCrossOrigin)
 	}))
 
-	return http.MaxBytesHandler(cop.Handler(withRequestID(withActor(h))), maxRequestBytes), nil
+	return cop.Handler(limitBodies(withRequestID(withActor(h)))), nil
+}
+
+// limitBodies refuses request bodies over the route's limit (413): the definitions routes take
+// whole trees, every other route takes small JSON objects.
+func limitBodies(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		limit := int64(maxRequestBytes)
+		if definitionRoute(r.URL.Path) {
+			limit = maxDefinitionBytes
+		}
+
+		r2 := *r
+		r2.Body = http.MaxBytesReader(w, r.Body, limit)
+		next.ServeHTTP(w, &r2)
+	})
+}
+
+// definitionRoute reports whether path is one of the definitions routes that take files:
+// /v1/orgs/{org}/definitions/…, POST /v1/orgs/{org}/factories (an import) and
+// /v1/orgs/{org}/factories/{factory}/draft/….
+func definitionRoute(path string) bool {
+	rest, ok := strings.CutPrefix(path, "/v1/orgs/")
+	if !ok {
+		return false
+	}
+
+	parts := strings.Split(rest, "/") // org, collection, …
+	if len(parts) < 2 {
+		return false
+	}
+
+	switch parts[1] {
+	case "definitions":
+		return true
+	case "factories":
+		return len(parts) == 2 || (len(parts) >= 4 && parts[3] == "draft")
+	default:
+		return false
+	}
 }
 
 // errCrossOrigin marks an unsafe request from another origin, which cross-origin protection
@@ -168,6 +220,7 @@ type server struct {
 	engine    Engine
 	items     Items
 	factories Factories
+	defs      Definitions
 	orgs      Orgs
 	audit     AuditLog
 	retention time.Duration
@@ -183,15 +236,6 @@ var _ gen.StrictServerInterface = (*server)(nil)
 
 func (s *server) GetHealth(context.Context, gen.GetHealthRequestObject) (gen.GetHealthResponseObject, error) {
 	return gen.GetHealth200JSONResponse{Status: "ok"}, nil
-}
-
-func (s *server) ListFactories(ctx context.Context, _ gen.ListFactoriesRequestObject) (gen.ListFactoriesResponseObject, error) {
-	out := gen.ListFactories200JSONResponse{Factories: []gen.Factory{}}
-	for _, f := range s.factories.Factories(ctx) {
-		out.Factories = append(out.Factories, factoryOf(orgOf(ctx).ID, f))
-	}
-
-	return out, nil
 }
 
 func (s *server) SubmitItem(ctx context.Context, req gen.SubmitItemRequestObject) (gen.SubmitItemResponseObject, error) {
@@ -354,6 +398,10 @@ func (s *server) problem(w http.ResponseWriter, r *http.Request, err error) {
 func problemOf(err error) gen.Problem {
 	var tooLarge *http.MaxBytesError
 
+	if p, ok := definitionProblem(err); ok {
+		return p
+	}
+
 	switch {
 	case errors.Is(err, errOrgNotFound):
 		return gen.Problem{Title: "Organization not found", Status: http.StatusNotFound, Code: optional("org-not-found")}
@@ -369,6 +417,11 @@ func problemOf(err error) gen.Problem {
 			Title: http.StatusText(http.StatusServiceUnavailable), Status: http.StatusServiceUnavailable, Detail: &detail,
 			Code: optional("catalog-unavailable"),
 		}
+	case errors.Is(err, errPreconditionRequired):
+		p := detailed(http.StatusPreconditionRequired, err)
+		p.Code = optional("precondition-required")
+
+		return p
 	case errors.Is(err, ports.ErrNotFound):
 		return detailed(http.StatusNotFound, err)
 	case errors.Is(err, errForbidden), errors.Is(err, errCrossOrigin):
@@ -383,7 +436,10 @@ func problemOf(err error) gen.Problem {
 
 		return p
 	case errors.As(err, &tooLarge):
-		return detailed(http.StatusRequestEntityTooLarge, err)
+		p := detailed(http.StatusRequestEntityTooLarge, err)
+		p.Code = optional(authoring.CodeTooLarge)
+
+		return p
 	case errors.Is(err, errInvalid):
 		return detailed(http.StatusBadRequest, err)
 	default:
@@ -397,23 +453,6 @@ func detailed(status int, err error) gen.Problem {
 	detail := err.Error()
 
 	return gen.Problem{Title: http.StatusText(status), Status: status, Detail: &detail}
-}
-
-func factoryOf(org domain.OrgID, f *config.Factory) gen.Factory {
-	out := gen.Factory{
-		Id: f.Metadata.ID, OrgId: string(org), Name: f.Metadata.Name, Title: optional(f.Metadata.Title),
-		Description: optional(f.Metadata.Description), WorkTypes: slices.Clone(f.Spec.Board.WorkTypes),
-		Stations: make([]gen.Station, 0, len(f.Spec.Board.Stations)),
-	}
-	if out.WorkTypes == nil {
-		out.WorkTypes = []string{}
-	}
-
-	for _, st := range f.Spec.Board.Stations {
-		out.Stations = append(out.Stations, gen.Station{Id: st.ID, Kind: gen.StationKind(st.Kind), Action: actionOf(st.Action)})
-	}
-
-	return out
 }
 
 func actionOf(a string) *gen.StationAction {

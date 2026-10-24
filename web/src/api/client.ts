@@ -1,6 +1,6 @@
-// The only module that speaks HTTP to goald, over the generated @goal/api-client. Screens call
-// these functions through TanStack Query (queries.ts). Every failure throws ApiError, which
-// carries goald's Problem. Every route but the organization list belongs to an organization:
+// The module that speaks HTTP to goald, over the generated @goal/api-client, with definitions.ts
+// (the definitions routes) over the same client. Screens call these functions through TanStack
+// Query (queries.ts). Every failure throws ApiError, which carries goald's Problem. Every route but the organization list belongs to an organization:
 // those functions take its slug or id first (`org`), and their paths are written relative to it
 // (orgPath); factories are named by id. Decisions carry no actor: goald takes the request's (the local user in phase 2.2).
 import {
@@ -40,10 +40,14 @@ export { ApiError, type StreamStatus };
 /** goald's origin; empty when the UI is served by goald itself or through the dev proxy. */
 const apiBase: string = import.meta.env.VITE_API_URL ?? '';
 
-const goal = createGoalClient(apiBase, { headers: { Accept: 'application/json' } });
+/**
+ * The one client of goald. The other request modules of api/ (definitions.ts) use it; nothing
+ * outside api/ does.
+ */
+export const goal = createGoalClient(apiBase, { headers: { Accept: 'application/json' } });
 
 /** Request options openapi-fetch takes beside the parameters; `signal` cancels a query. */
-const cancel = (signal: AbortSignal | undefined) => (signal ? { signal } : {});
+export const cancel = (signal: AbortSignal | undefined) => (signal ? { signal } : {});
 
 export async function listOrgs(signal?: AbortSignal): Promise<OrgSummary[]> {
   const body = await unwrap(goal.GET('/v1/orgs', cancel(signal)));

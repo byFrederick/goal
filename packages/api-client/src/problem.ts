@@ -27,7 +27,7 @@ export class ApiError extends Error {
     return this.problem.detail;
   }
 
-  /** The stable name of the error (slug-taken, confirmation-mismatch, …), when goald gives one. */
+  /** The stable name of the error (slug-taken, draft-conflict, …), when goald gives one. */
   get code(): string | undefined {
     return this.problem.code;
   }
@@ -37,14 +37,19 @@ function isProblem(body: unknown): body is Pick<Problem, "title"> & Partial<Prob
   return typeof body === "object" && body !== null && typeof (body as { title?: unknown }).title === "string";
 }
 
-/** problemOf reads the Problem of a failed response from its parsed body. */
+/**
+ * problemOf reads the Problem of a failed response from its parsed body, with its code and the
+ * extension members a client acts on (a refused publish's problems, the current value under a
+ * stale write); the status always comes from the response.
+ */
 export function problemOf(response: Response, body: unknown): Problem {
   if (isProblem(body)) {
+    const { detail, ...rest } = body;
     return {
+      ...rest,
       title: body.title,
       status: response.status,
-      ...(typeof body.detail === "string" && body.detail !== "" ? { detail: body.detail } : {}),
-      ...(typeof body.code === "string" && body.code !== "" ? { code: body.code } : {}),
+      ...(typeof detail === "string" && detail !== "" ? { detail } : {}),
     };
   }
   return { title: response.statusText || "Request failed", status: response.status };

@@ -1,8 +1,9 @@
 // What the organization's stream invalidates (C §10.10). Pure, so the rules are tested without an
 // EventSource.
 import type { QueryKey } from '@tanstack/react-query';
-import { keys } from '../api/queries';
-import type { StreamEvent } from '../api/types';
+import { savedHere } from '../api/definitions';
+import { defKeys, keys } from '../api/queries';
+import type { DefinitionEvent, StreamEvent } from '../api/types';
 
 /**
  * The factory's work keys an item event can change, named one by one: never the factory's bare
@@ -40,6 +41,51 @@ export function factoryWorkInvalidations(org: string, factory: string): QueryKey
 /** Overviews are the dearest read; the stream refreshes them at most every few seconds. */
 export function isOverviewKey(key: QueryKey): boolean {
   return key[0] === 'org' && key[2] === 'overview';
+}
+
+function isDefinitionEvent(data: unknown): data is DefinitionEvent {
+  const e = data as Partial<DefinitionEvent> | null;
+  return typeof e?.factory_id === 'string' && typeof e.kind === 'string';
+}
+
+/**
+ * The queries one `definition` event touches (B §10):
+ * - `draft`, a draft opened, saved, discarded or published: the draft, its model and files, the
+ *   factory (its draft chip) and the factory list; nothing when this tab saved that revision
+ *   itself (the event is its echo), and the versions too once the version is published;
+ * - `current`, the version that runs moved or the factory was paused or resumed: the factory and
+ *   the list, its versions, draft (based on, running), comparisons, board and overviews;
+ * - `factory`, a factory created or deleted: the factory and the list, attention and overviews.
+ */
+export function definitionInvalidations(org: string, data: unknown): QueryKey[] {
+  if (!isDefinitionEvent(data)) return [];
+
+  const f = data.factory_id;
+  const factory = [defKeys.factories(org), defKeys.factory(org, f)];
+
+  switch (data.kind) {
+    case 'draft':
+      if (data.revision !== undefined && savedHere(f, data.revision)) return [];
+      return [
+        ...factory,
+        defKeys.draft(org, f),
+        ...(data.number !== undefined ? [defKeys.versions(org, f), defKeys.versionsOf(org, f)] : []),
+      ];
+    case 'current':
+      return [
+        ...factory,
+        defKeys.versions(org, f),
+        defKeys.versionsOf(org, f),
+        defKeys.draft(org, f),
+        defKeys.compares(org, f),
+        keys.board(org, f),
+        keys.overviews(org),
+      ];
+    case 'factory':
+      return [...factory, keys.attention(org), keys.overviews(org)];
+    default:
+      return [];
+  }
 }
 
 /** A resync may have missed anything of the organization: everything under it is re-read. */

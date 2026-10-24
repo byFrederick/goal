@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -26,30 +27,47 @@ const (
 	reconnectMillis = 3000
 )
 
-// Feed fans the notices of one listener out to this goald instance's stream clients, each
-// client receiving only its organization's notices (and every resync). It holds only the
-// clients connected to this instance, so any instance serves any client.
+// Feed fans the notices of two listeners, item and organization events and definition changes,
+// out to this goald instance's stream clients, each client receiving only its organization's
+// notices (and every resync). It holds only the clients connected to this instance, so any
+// instance serves any client.
 type Feed struct {
-	notices ports.ItemNotices
-	log     *slog.Logger
+	notices     ports.ItemNotices
+	definitions ports.DefinitionNotices
+	log         *slog.Logger
 
 	mu      sync.Mutex
 	clients map[chan ports.ItemNotice]domain.OrgID
 	closed  bool
 }
 
-// NewFeed returns a feed over notices; Run starts it. log may be nil.
-func NewFeed(notices ports.ItemNotices, log *slog.Logger) *Feed {
+// NewFeed returns a feed over item notices and definition notices; Run starts it. log may be
+// nil.
+func NewFeed(notices ports.ItemNotices, definitions ports.DefinitionNotices, log *slog.Logger) *Feed {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Feed{notices: notices, log: log, clients: map[chan ports.ItemNotice]domain.OrgID{}}
+	return &Feed{notices: notices, definitions: definitions, log: log, clients: map[chan ports.ItemNotice]domain.OrgID{}}
 }
 
-// Run listens until ctx ends, then ends every client's stream.
+// Run listens to both sources until ctx ends, or one of them fails, then ends every client's
+// stream.
 func (f *Feed) Run(ctx context.Context) error {
-	err := f.notices.Listen(ctx, f.broadcast)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	errs := make(chan error, 2)
+
+	go func() { errs <- f.notices.Listen(ctx, f.broadcast) }()
+	go func() { errs <- f.definitions.Listen(ctx, f.broadcastDefinition) }()
+
+	// The first to return (ctx ended, or a listener failed) stops the other.
+	err := <-errs
+
+	cancel()
+
+	err = errors.Join(err, <-errs)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -61,6 +79,47 @@ func (f *Feed) Run(ctx context.Context) error {
 	}
 
 	return err
+}
+
+// definitionEvent is the stream's name for definition changes.
+const definitionEvent = "definition"
+
+// broadcastDefinition hands a definition change to the clients of its organization as an
+// organization event (event: definition); a resync of the definition listener is a resync of
+// every client.
+func (f *Feed) broadcastDefinition(n ports.DefinitionNotice) {
+	if n.Resync {
+		f.broadcast(ports.ItemNotice{Resync: true})
+		return
+	}
+
+	data, err := json.Marshal(definitionEventOf(n))
+	if err != nil {
+		f.log.Error("encode definition event", slog.Any("error", err))
+		return
+	}
+
+	f.broadcast(ports.ItemNotice{
+		OrgID: n.OrgID, FactoryID: n.FactoryID,
+		Org: &ports.OrgEvent{Name: definitionEvent, FactoryID: n.FactoryID, Data: data},
+	})
+}
+
+func definitionEventOf(n ports.DefinitionNotice) gen.DefinitionEvent {
+	e := gen.DefinitionEvent{
+		OrgId: string(n.OrgID), FactoryId: string(n.FactoryID), Kind: gen.DefinitionEventKind(n.Kind),
+		VersionId: optional(string(n.VersionID)), By: optional(n.By),
+	}
+
+	if n.Number > 0 {
+		e.Number = &n.Number
+	}
+
+	if n.Revision > 0 {
+		e.Revision = &n.Revision
+	}
+
+	return e
 }
 
 // broadcast hands a notice to every client of its organization (a resync to every client)

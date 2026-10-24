@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/byFrederick/goal/internal/adapters/s3store"
 	"github.com/byFrederick/goal/internal/builder"
 )
 
@@ -110,5 +111,48 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 				t.Errorf("settings error = %v, want one mentioning %q", err, tt.want)
 			}
 		})
+	}
+}
+
+// Every variable goald reads is one a factory definition may not reference, so no definition can
+// hand goald's own settings or secrets to an agent or a connection.
+func TestSettings_EveryVariableGoaldReadsIsReserved(t *testing.T) {
+	t.Parallel()
+
+	var read []string
+
+	getenv := func(name string) string {
+		read = append(read, name)
+
+		if name == "GOAL_S3_BUCKET" {
+			return "goal-test"
+		}
+
+		return ""
+	}
+
+	s, err := settingsFrom(getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s3store.ConfigFromEnv(getenv); err != nil {
+		t.Fatal(err)
+	}
+
+	reserved := s.reserved()
+	for _, name := range append(read, "GOAL_GATEWAY_KEY") {
+		if !slices.Contains(reserved, name) {
+			t.Errorf("goald reads %s, but definitions may reference it", name)
+		}
+	}
+
+	custom, err := settingsFrom(envOf(map[string]string{"GOAL_GATEWAY_KEY_REF": "env:ACME_SIGNING_KEY"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Contains(custom.reserved(), "ACME_SIGNING_KEY") {
+		t.Errorf("reserved %v, want the variable the gateway key reference names", custom.reserved())
 	}
 }
