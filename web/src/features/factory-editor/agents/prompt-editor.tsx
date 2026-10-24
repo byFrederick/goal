@@ -4,18 +4,19 @@
 // word count follows the text as it is typed. "Insert" placeholders are hidden in 2.2 (review
 // decision 5).
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { lazy, Suspense, useEffect, useId, useState } from 'react';
+import { Suspense, useEffect, useId, useState } from 'react';
 import { ApiError } from '../../../api/client';
 import { draftFileQuery, versionFileQuery } from '../../../api/queries';
 import type { ModelAgent } from '../../../shared/definition/model';
 import { cleanPath } from '../../../shared/definition/place';
+import { lazyRetrying } from '../../../shared/lazy';
 import { Button } from '../../../ui/button';
 import { SegmentedControl } from '../../../ui/segmented-control';
 import { useDraft, useDraftSession, useSection, useViewOnly } from '../draft/use-draft';
 import { useProblemText } from '../frame/use-editor';
 import { CodeEditor, LinedText } from '../yaml/code-editor';
 
-const MarkdownPreview = lazy(() => import('./markdown-preview'));
+const MarkdownPreview = lazyRetrying(() => import('./markdown-preview').then((m) => m.default));
 
 export interface PromptText {
   /** The prompt file's path in the draft ("agents/x.md"); undefined when the agent has none. */

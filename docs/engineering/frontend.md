@@ -185,7 +185,7 @@ The UI holds no secrets. With sign-in on it signs in through goald's `/api/auth`
 - Biome for lint and format; `tsc --noEmit` for types; dependency-cruiser for boundaries (with `packages/`).
 - Vitest for logic with real behavior (the trace built from events, which decisions an item allows); Testing Library for components when they carry such logic. No snapshot tests of markup.
 - Playwright for the critical flows at 375, 768 and 1440 px, with axe accessibility checks.
-- Budgets: initial JS under 250 KB gzipped; routes are code-split.
+- Budgets: initial JS under 250 KB gzipped; routes are code-split. Views loaded on first use go through `lazyRetrying` (`web/src/shared/lazy.ts`), not bare `React.lazy`, which keeps a chunk that failed to arrive failed until the page reloads.
 - Every UI change follows ui-ux-pro-max's pre-delivery checklist and attaches screenshots at the three widths.
 
 ## Skills

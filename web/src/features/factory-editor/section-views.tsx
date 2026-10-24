@@ -1,6 +1,7 @@
 // What each editor section renders (D §10.1): the slot D7–D11 fill. A section whose view is null
 // shows LaterSection; the YAML view (D10) replaces the section's view when `?mode=yaml`.
-import { type ComponentType, lazy } from 'react';
+import type { ComponentType } from 'react';
+import { lazyRetrying } from '../../shared/lazy';
 import { BasicsSection } from './basics/basics-section';
 import { LineSection } from './line/line-section';
 import type { DefinitionSearch, EditorSection } from './sections';
@@ -12,13 +13,14 @@ export interface SectionViewProps {
   search: DefinitionSearch;
 }
 
-// Sections with heavy editors load on first use, outside the initial bundle (D §10.9's budget).
-const AgentsSection = lazy(() => import('./agents/agents-section').then((m) => ({ default: m.AgentsSection })));
-const ConnectionsSection = lazy(() =>
-  import('./connections/connections-section').then((m) => ({ default: m.ConnectionsSection })),
+// Sections with heavy editors load on first use, outside the initial bundle (D §10.9's budget);
+// a chunk that fails to arrive is asked for again (shared/lazy.ts).
+const AgentsSection = lazyRetrying(() => import('./agents/agents-section').then((m) => m.AgentsSection));
+const ConnectionsSection = lazyRetrying(() =>
+  import('./connections/connections-section').then((m) => m.ConnectionsSection),
 );
-const ReviewSection = lazy(() => import('./review/review-section').then((m) => ({ default: m.ReviewSection })));
-const VersionsSection = lazy(() => import('./versions/versions-section').then((m) => ({ default: m.VersionsSection })));
+const ReviewSection = lazyRetrying(() => import('./review/review-section').then((m) => m.ReviewSection));
+const VersionsSection = lazyRetrying(() => import('./versions/versions-section').then((m) => m.VersionsSection));
 
 export const sectionViews: Record<EditorSection, ComponentType<SectionViewProps> | null> = {
   basics: BasicsSection,
@@ -30,6 +32,6 @@ export const sectionViews: Record<EditorSection, ComponentType<SectionViewProps>
 };
 
 /** The YAML view of the whole draft (D10), with Monaco and monaco-yaml in chunks of their own. */
-export const yamlView: ComponentType<SectionViewProps> | null = lazy(() =>
-  import('./yaml/yaml-view').then((m) => ({ default: m.YamlView })),
+export const yamlView: ComponentType<SectionViewProps> | null = lazyRetrying(() =>
+  import('./yaml/yaml-view').then((m) => m.YamlView),
 );

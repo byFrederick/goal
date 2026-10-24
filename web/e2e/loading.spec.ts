@@ -56,3 +56,18 @@ test('an organization and a factory made elsewhere open at once, not as Not foun
   await expect(page.getByRole('heading', { level: 1, name: 'Definition' })).toBeVisible();
   await expect(page.getByText('No such factory')).toHaveCount(0);
 });
+
+test('a section whose code fails to arrive once is asked for again, and its picker opens focused', async ({ page }) => {
+  // One lost response for the Agents section's chunk (a dropped connection): React.lazy alone
+  // keeps that failure for good, and the section stayed on "goald is not answering".
+  let dropped = false;
+  await page.route(/\/assets\/agents-section-[\w-]+\.js$/, (route) => {
+    if (dropped) return route.continue();
+    dropped = true;
+    return route.abort('connectionreset');
+  });
+  await page.goto('/o/acme/f/goal/definition/agents?agent=reviewer&add=skill');
+  await expect(page.getByRole('combobox', { name: 'Add a skill from the catalog' })).toBeFocused();
+  expect(dropped).toBe(true);
+  await expect(page.getByText('goald is not answering')).toHaveCount(0);
+});

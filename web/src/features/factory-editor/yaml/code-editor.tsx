@@ -10,7 +10,6 @@
 import { TriangleAlert } from 'lucide-react';
 import {
   Component,
-  lazy,
   type ReactNode,
   type Ref,
   Suspense,
@@ -19,6 +18,7 @@ import {
   useRef,
   useSyncExternalStore,
 } from 'react';
+import { lazyRetrying } from '../../../shared/lazy';
 import { cn } from '../../../ui/cn';
 
 export interface EditorMarker {
@@ -69,7 +69,7 @@ export interface CodeEditorProps {
   ref?: Ref<CodeEditorHandle>;
 }
 
-const MonacoEditor = lazy(() => import('./monaco-editor'));
+const MonacoEditor = lazyRetrying(() => import('./monaco-editor').then((m) => m.default));
 
 const phoneQuery = '(max-width: 767px) and (pointer: coarse)';
 

@@ -3,11 +3,12 @@
 // (session.ts) then asks this host, which opens the dialog; once the person signed in again by
 // code the request is sent once more. Google leaves the page: back on it, a toast says to try
 // once more (the action is not repeated on its own). The dialog's code loads only when it opens.
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { setSessionHandlers } from '../api/session';
+import { lazyRetrying } from './lazy';
 
-const ReauthDialog = lazy(() => import('./reauth-dialog'));
+const ReauthDialog = lazyRetrying(() => import('./reauth-dialog').then((m) => m.default));
 
 /** Set while the browser is away at Google to sign in again; read once back on the page. */
 export const reauthReturnKey = 'goal.reauth';
