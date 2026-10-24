@@ -133,9 +133,9 @@ var sections = map[Section][]binding{
 		{"repository", []string{keySpec, keyRuntime, "repository"}, repositoryShape},
 	},
 	Line: {
-		{"stations", []string{keySpec, keyBoard, "stations"}, stationsShape},
+		{keyStations, []string{keySpec, keyBoard, keyStations}, stationsShape},
 		{"intake", []string{keySpec, keyBoard, "intake"}, intakeShape},
-		{"flow", []string{keySpec, keyBoard, "flow"}, flowShape},
+		{keyFlow, []string{keySpec, keyBoard, keyFlow}, flowShape},
 		{keyLibrarian, []string{keySpec, keyLearning, keyLibrarian, "agent"}, renamedShape},
 	},
 	Agents: {
@@ -143,7 +143,7 @@ var sections = map[Section][]binding{
 		{keyAgents, []string{keySpec, keyAgents}, agentsShape},
 		{keySkills, []string{keySpec, keySkills}, skillsShape},
 	},
-	Connections: {{"", []string{keySpec, "connections"}, connectionsShape}},
+	Connections: {{"", []string{keySpec, keyConnections}, connectionsShape}},
 	Review:      {{"budget", []string{keySpec, keyRuntime, "budget"}, budgetShape}},
 }
 
@@ -263,7 +263,7 @@ func readMapping(n *yaml.Node, s *shape, files fs.FS) map[string]any {
 			mergeKeys(out, read(v, s, files))
 
 			continue
-		case s.kind == agentItem && k == "tools":
+		case s.kind == agentItem && k == keyTools:
 			out["custom_tools"] = true
 
 			continue

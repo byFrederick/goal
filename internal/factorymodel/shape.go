@@ -22,6 +22,9 @@ const (
 	keySkills      = "skills"
 	keyTools       = "tools"
 	keyConnector   = "connector"
+	keyStations    = "stations"
+	keyFlow        = "flow"
+	keyConnections = "connections"
 	keySettings    = "settings" // model only: a connection's connector settings
 	keyLegacy      = "legacy"   // model only: a connection in the inline type form
 
@@ -151,12 +154,12 @@ var (
 	agentShape = &shape{
 		kind: agentItem,
 		order: []string{
-			keyName, keyDescription, "prompt", "model", "maxTurns", "perItemUsd", keySkills, "connections", keyTools,
+			keyName, keyDescription, "prompt", "model", "maxTurns", "perItemUsd", keySkills, keyConnections, keyTools,
 			"builtins",
 		},
 		fields: map[string]*shape{
 			"prompt":   {kind: promptRef},
-			"tools":    verbatimShape,
+			keyTools:   verbatimShape,
 			"builtins": builtinsShape,
 		},
 	}
@@ -212,9 +215,9 @@ func connectorName(n *yaml.Node) string {
 var containerOrder = map[string][]string{
 	"":                        {"apiVersion", "kind", keyMetadata, keySpec},
 	keyMetadata:               {"id", keyName, "title", keyPurpose, keyDescription, "owner"},
-	"spec":                    {keyRuntime, "knowledgeBase", "secrets", "connections", keySkills, "contracts", keyAgents, keyBoard, keyLearning},
+	"spec":                    {keyRuntime, "knowledgeBase", "secrets", keyConnections, keySkills, "contracts", keyAgents, keyBoard, keyLearning},
 	"spec.runtime":            {"runner", "image", "auth", "model", "repository", "budget"},
-	"spec.board":              {"workTypes", "intake", "stations", "flow"},
+	"spec.board":              {"workTypes", "intake", keyStations, keyFlow},
 	"spec.learning":           {keyLibrarian, "kaizen"},
 	"spec.learning.librarian": {"agent", "after", "writes"},
 }
