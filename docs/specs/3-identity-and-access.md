@@ -227,6 +227,7 @@ The auth service refuses a non-loopback `GOAL_AUTH_LISTEN`. There is no internal
 The SPA's fallback reserves `api/` like `v1/` and `mcp/` (`web/webui.go`), so an unknown `/api/…` path is a 404, never `index.html`.
 
 **SPA headers** (`web/webui.go`, and the same in `vercel.json` later): `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`, `Cross-Origin-Opener-Policy: same-origin`, `Strict-Transport-Security: max-age=31536000` when `GOAL_PUBLIC_URL` is https, plus today's `X-Frame-Options`, `Referrer-Policy`, `X-Content-Type-Options`. `'unsafe-inline'` covers only styles (Radix positions popovers with style attributes). The UI shows initials, never Google profile images.
+The CSP itself (`web/csp.txt`, with `worker-src 'self'`) and `X-Frame-Options: DENY` landed in the 2.2 hardening; 3-7 only extends that policy (`font-src`, `object-src`, `form-action`, COOP, HSTS).
 
 ### 5.6 Settings
 

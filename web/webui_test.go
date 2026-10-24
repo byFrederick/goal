@@ -74,6 +74,33 @@ func TestSPA_ServesFilesAndFallsBackToIndexForRoutes(t *testing.T) {
 	}
 }
 
+// Every answer carries the Content-Security-Policy and frame protection: Approve, Merge and the
+// andon cord must not be clickable through a frame once goald is reachable beyond localhost.
+func TestSPA_SetsContentSecurityPolicyAndFrameProtection(t *testing.T) {
+	t.Parallel()
+
+	const want = "default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; " +
+		"img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"
+
+	h := testSPA(t)
+	for _, p := range []string{"/", "/o/acme/f/goal/board", "/assets/index-a1b2.js", "/favicon.svg", "/v1/unknown"} {
+		t.Run(p, func(t *testing.T) {
+			t.Parallel()
+
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, p, nil))
+
+			if got := rec.Header().Get("Content-Security-Policy"); got != want {
+				t.Errorf("Content-Security-Policy = %q, want %q", got, want)
+			}
+
+			if got := rec.Header().Get("X-Frame-Options"); got != "DENY" {
+				t.Errorf("X-Frame-Options = %q, want DENY", got)
+			}
+		})
+	}
+}
+
 func TestSPA_RefusesWrites(t *testing.T) {
 	t.Parallel()
 

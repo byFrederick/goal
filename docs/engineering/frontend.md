@@ -136,7 +136,7 @@ task build                       # web:build, then go build -tags webui: goald s
 
 ### Embedding in goald
 
-`web/webui.go` (Go package `web`) serves the build: files as they are (hashed `assets/` with a one-year immutable cache, the rest `no-cache`), `index.html` for every other path so client routes work on reload, and 404 for unknown `/v1`, `/mcp` and asset paths. `go build -tags webui` embeds `web/dist`; without the tag goald embeds `web/placeholder`, a page that says how to build the UI, so `go build ./...` works on a fresh clone without Node. `cmd/goald` mounts it with `mux.Handle("/", web.Handler())`.
+`web/webui.go` (Go package `web`) serves the build: files as they are (hashed `assets/` with a one-year immutable cache, the rest `no-cache`), `index.html` for every other path so client routes work on reload, and 404 for unknown `/v1`, `/mcp` and asset paths. Every answer carries the Content-Security-Policy in `web/csp.txt` (scripts, workers, fonts and requests from goald only; inline styles for Radix and Monaco; `frame-ancestors 'none'`) and `X-Frame-Options: DENY`; `vite preview` sends the same, so the e2e tests run the build under it (`e2e/csp.spec.ts`), and the build keeps fonts as files rather than `data:` URIs. `go build -tags webui` embeds `web/dist`; without the tag goald embeds `web/placeholder`, a page that says how to build the UI, so `go build ./...` works on a fresh clone without Node. `cmd/goald` mounts it with `mux.Handle("/", web.Handler())`.
 
 ## Responsive and mobile
 

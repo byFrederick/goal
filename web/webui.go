@@ -7,6 +7,7 @@ package web
 
 import (
 	"bytes"
+	_ "embed" // the Content-Security-Policy, csp.txt
 	"errors"
 	"io"
 	"io/fs"
@@ -15,6 +16,14 @@ import (
 	"strings"
 	"time"
 )
+
+// policy is the Content-Security-Policy of every answer (csp.txt, which vite preview sends too,
+// so the e2e tests run the build under it): scripts, workers, fonts and requests only from goald
+// itself, inline styles for Radix's positioning and Monaco, no framing (Approve, Merge and the
+// andon cord cannot be clickjacked) and no <base>. Phase 3's 3-7 extends it.
+//
+//go:embed csp.txt
+var policy string
 
 const (
 	// Vite names everything under assets/ by content hash, so a URL never changes meaning.
@@ -65,6 +74,8 @@ func (s *spa) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", strings.TrimSpace(policy))
+	w.Header().Set("X-Frame-Options", "DENY")
 
 	name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
 	if s.serveFile(w, r, name) {
@@ -78,7 +89,6 @@ func (s *spa) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Cache-Control", revalidate)
-	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("Referrer-Policy", "same-origin")
 	http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(s.index))
 }
