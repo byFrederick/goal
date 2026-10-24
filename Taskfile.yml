@@ -100,7 +100,7 @@ tasks:
   lint:
     desc: golangci-lint v2 with the repo's rules (.golangci.yml)
     cmds:
-      - "{{.GOLANGCI}} run --build-tags integration ./..."
+      - "{{.GOLANGCI}} run --build-tags integration,e2e ./..."
 
   fmt:
     desc: Format Go code
@@ -240,6 +240,20 @@ tasks:
     cmds:
       - pnpm exec playwright install chromium
       - pnpm run --silent e2e
+
+  e2e:auth:
+    desc: >-
+      GOAL_AUTH=session end to end (spec 3 §13): a throwaway goald on 127.0.0.1:18089 with its own
+      database and bucket, the auth service on 127.0.0.1:18091 and compose's Mailpit; the bootstrap
+      owner signs in with the code Mailpit received, then WEB=1 also runs task web:e2e-auth's
+      Playwright flow against it. Never touches the install's goald, database or bucket; needs
+      goal db init (the roles) and Docker. Not part of task check
+    deps: [build, auth:build]
+    cmds:
+      - go test -tags e2e -count=1 -run E2E -v ./cmd/goald
+    env:
+      GOAL_TEST_DATABASE_URL: postgres://goal:{{.GOAL_PG_PASSWORD | default "goal-dev-only"}}@localhost:5432/goal?sslmode=disable
+      GOAL_E2E_WEB: '{{.WEB | default ""}}'
 
   web:e2e-auth:
     desc: >-

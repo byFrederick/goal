@@ -36,7 +36,8 @@ type Tenancy struct {
 
 type orgRow struct {
 	org     domain.Org
-	deleted time.Time // zero while live
+	owner   domain.UserID // NewOrg.Owner
+	deleted time.Time     // zero while live
 }
 
 type auditRow struct {
@@ -136,10 +137,22 @@ func (t *Tenancy) CreateOrg(_ context.Context, by domain.Actor, n ports.NewOrg) 
 		ID:   domain.OrgID(fmt.Sprintf("00000000-0000-7000-8000-%012d", t.ids)),
 		Slug: n.Slug, Name: n.Name, Mark: n.Mark, CreatedAt: t.now().UTC().Truncate(time.Microsecond),
 	}
-	t.orgs[o.ID] = &orgRow{org: o}
+	t.orgs[o.ID] = &orgRow{org: o, owner: n.Owner}
 	t.appendLocked(o.ID, orgEntry(by, domain.AuditOrgCreated, o, map[string]any{"slug": o.Slug, "name": o.Name}))
 
 	return o, nil
+}
+
+// Owner is the owner the organization was created with (NewOrg.Owner).
+func (t *Tenancy) Owner(id domain.OrgID) domain.UserID {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if r, ok := t.orgs[id]; ok {
+		return r.owner
+	}
+
+	return ""
 }
 
 // UpdateOrg implements ports.Tenancy.

@@ -13,35 +13,31 @@ import (
 
 // The definitions routes' response shapes, from authoring's results.
 
-func actorOut(a domain.Actor) gen.Actor {
-	return gen.Actor{Kind: gen.ActorKind(a.Kind), Id: a.ID, Name: a.Name}
-}
-
 // publishedRef names a published version (a factory's current one); nil for none.
-func publishedRef(r *ports.VersionRef) *gen.VersionRef {
+func (s *server) publishedRef(r *ports.VersionRef) *gen.VersionRef {
 	if r == nil {
 		return nil
 	}
 
-	return &gen.VersionRef{Id: string(r.ID), Number: r.Number, PublishedAt: r.At, PublishedBy: actorOut(r.By)}
+	return &gen.VersionRef{Id: string(r.ID), Number: r.Number, PublishedAt: r.At, PublishedBy: s.actorOut(r.By)}
 }
 
 // draftRef names an open draft; nil for none.
-func draftRef(r *ports.VersionRef) *gen.DraftRef {
+func (s *server) draftRef(r *ports.VersionRef) *gen.DraftRef {
 	if r == nil {
 		return nil
 	}
 
-	return &gen.DraftRef{Id: string(r.ID), Revision: r.Revision, UpdatedAt: r.At, UpdatedBy: actorOut(r.By)}
+	return &gen.DraftRef{Id: string(r.ID), Revision: r.Revision, UpdatedAt: r.At, UpdatedBy: s.actorOut(r.By)}
 }
 
 // versionRef names a published version; nil for none.
-func versionRef(v *domain.DefinitionVersion) *gen.VersionRef {
+func (s *server) versionRef(v *domain.DefinitionVersion) *gen.VersionRef {
 	if v == nil {
 		return nil
 	}
 
-	return &gen.VersionRef{Id: string(v.ID), Number: v.Number, PublishedAt: v.PublishedAt, PublishedBy: actorOut(v.PublishedBy)}
+	return &gen.VersionRef{Id: string(v.ID), Number: v.Number, PublishedAt: v.PublishedAt, PublishedBy: s.actorOut(v.PublishedBy)}
 }
 
 func sourceOut(s domain.VersionSource) gen.VersionSource {
@@ -51,13 +47,13 @@ func sourceOut(s domain.VersionSource) gen.VersionSource {
 	}
 }
 
-func draftOut(v authoring.DraftView) gen.Draft {
+func (s *server) draftOut(v authoring.DraftView) gen.Draft {
 	d := v.Draft
 
 	return gen.Draft{
 		Id: string(d.ID), Revision: d.Revision, NextNumber: v.NextNumber,
-		CreatedAt: d.CreatedAt, CreatedBy: actorOut(d.CreatedBy), UpdatedAt: d.UpdatedAt, UpdatedBy: actorOut(d.UpdatedBy),
-		Base: versionRef(v.Base), Current: publishedRef(v.Current), Source: sourceOut(d.Source),
+		CreatedAt: d.CreatedAt, CreatedBy: s.actorOut(d.CreatedBy), UpdatedAt: d.UpdatedAt, UpdatedBy: s.actorOut(d.UpdatedBy),
+		Base: s.versionRef(v.Base), Current: s.publishedRef(v.Current), Source: sourceOut(d.Source),
 		ChangeCount: v.ChangeCount, ProblemCount: v.ProblemCount, Sections: sectionsOut(v.Sections),
 	}
 }
@@ -190,22 +186,22 @@ func filesOut(files []authoring.FileInfo) []gen.FileInfo {
 	return out
 }
 
-func versionOut(v authoring.VersionInfo) gen.Version {
+func (s *server) versionOut(v authoring.VersionInfo) gen.Version {
 	out := gen.Version{
 		Id: string(v.ID), Revision: v.Revision, State: gen.VersionState(v.State), Message: v.Message,
 		Source: sourceOut(v.Source), Current: v.Current, Counts: countsOut(v.Counts),
 	}
 
 	if v.State == domain.VersionPublished {
-		number, at, by := v.Number, v.PublishedAt, actorOut(v.PublishedBy)
+		number, at, by := v.Number, v.PublishedAt, s.actorOut(v.PublishedBy)
 		out.Number, out.PublishedAt, out.PublishedBy = &number, &at, &by
 	}
 
 	return out
 }
 
-func versionDetailOut(v authoring.VersionDetail) gen.VersionDetail {
-	o := versionOut(v.VersionInfo)
+func (s *server) versionDetailOut(v authoring.VersionDetail) gen.VersionDetail {
+	o := s.versionOut(v.VersionInfo)
 
 	return gen.VersionDetail{
 		Id: o.Id, Number: o.Number, Revision: o.Revision, State: o.State, Message: o.Message, Source: o.Source,

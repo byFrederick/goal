@@ -283,6 +283,21 @@ func newTenancy(t *testing.T) *porttest.Tenancy {
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 
+	return newHarnessWith(t, nil)
+}
+
+// signIn is the harness under GOAL_AUTH=session: people and sessions in the identity, access
+// notices the feed ends streams on, the permission table as the Authorizer.
+type signIn struct {
+	identity *porttest.Identity
+	access   *porttest.AccessNotices
+	google   bool
+}
+
+// newHarnessWith is the harness under GOAL_AUTH=none, or under session with in.
+func newHarnessWith(t *testing.T, in *signIn) *harness {
+	t.Helper()
+
 	tenancy := newTenancy(t)
 
 	h := &harness{
@@ -334,6 +349,10 @@ func newHarness(t *testing.T) *harness {
 	}
 
 	feed := api.NewFeed(h.notices, h.defNotices, nil)
+	if in != nil {
+		feed.EndOnAccessChanges(in.access)
+	}
+
 	ctx, stop := context.WithCancel(domain.WithOrg(context.Background(), testOrg))
 	done := make(chan error, 1)
 
@@ -349,16 +368,28 @@ func newHarness(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 
+	if in != nil {
+		if err := in.access.AwaitListeners(ctx, 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	h.seam, h.tenancy = &seam{}, tenancy
 	h.skills, h.skillSource = &flakyObjects{ObjectStore: porttest.NewObjectStore()}, porttest.NewSkillSource()
 	h.builder = builder.New(h.skills, h.clock, builder.Config{
 		Models: []builder.Model{{ID: "claude-opus-5-5", Label: "Claude Opus 5.5"}, {ID: "claude-haiku-5-5", Label: "Claude Haiku 5.5"}},
 	})
 
-	handler, err := api.New(api.Deps{
+	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
-		OrgRetention: retention, Authorizer: h.seam, Feed: feed, Builder: h.builder, Clock: h.clock,
-	})
+		OrgRetention: retention, Authorizer: h.seam, Auth: api.AuthConfig{Mode: api.AuthNone}, Feed: feed, Builder: h.builder, Clock: h.clock,
+	}
+	if in != nil {
+		deps.Authorizer, deps.Identity = api.NewPermissions(h.clock), in.identity
+		deps.Auth = api.AuthConfig{Mode: api.AuthSession, Google: in.google}
+	}
+
+	handler, err := api.New(deps)
 	if err != nil {
 		t.Fatal(err)
 	}

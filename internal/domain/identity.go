@@ -154,10 +154,12 @@ func (p Principal) RoleOn(f FactoryID) FactoryRole {
 	}
 }
 
-// OrgMembership is one organization a user belongs to, with the user's role there.
+// OrgMembership is one organization a user belongs to, with the user's role there and how many
+// of its factories the user sees (all of them for owners and admins).
 type OrgMembership struct {
-	Org  Org
-	Role OrgRole
+	Org          Org
+	Role         OrgRole
+	FactoryCount int
 }
 
 // DeviceRequest is a pending CLI sign-in (the device authorization flow), as the person who

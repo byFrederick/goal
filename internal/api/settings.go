@@ -196,13 +196,13 @@ func (s *server) ListAudit(ctx context.Context, req gen.ListAuditRequestObject) 
 	}
 
 	for _, e := range entries {
-		out.Entries = append(out.Entries, auditOf(e))
+		out.Entries = append(out.Entries, s.auditOf(e))
 	}
 
 	return out, nil
 }
 
-func auditOf(e domain.AuditEntry) gen.AuditEntry {
+func (s *server) auditOf(e domain.AuditEntry) gen.AuditEntry {
 	data := e.Data
 	if data == nil {
 		data = map[string]any{}
@@ -210,7 +210,7 @@ func auditOf(e domain.AuditEntry) gen.AuditEntry {
 
 	return gen.AuditEntry{
 		Id: e.ID, At: e.At, Action: e.Action, Data: data, FactoryId: optional(string(e.FactoryID)),
-		Actor:  gen.Actor{Kind: gen.ActorKind(e.Actor.Kind), Id: e.Actor.ID, Name: e.Actor.Name},
+		Actor:  s.actorOut(e.Actor),
 		Target: gen.AuditTarget{Kind: e.TargetKind, Id: e.TargetID},
 	}
 }

@@ -55,6 +55,7 @@ type IdentityKey struct {
 type identityOrg struct {
 	org          domain.Org
 	deleted      bool
+	factories    []domain.FactoryID
 	members      map[domain.UserID]domain.OrgRole
 	factoryRoles map[domain.UserID]map[domain.FactoryID]domain.FactoryRole
 }
@@ -90,6 +91,16 @@ func (i *Identity) DeleteOrg(id domain.OrgID) {
 
 	if o, ok := i.orgs[id]; ok {
 		o.deleted = true
+	}
+}
+
+// AddFactory adds a factory to an organization: owners and admins see every one (OrgsFor).
+func (i *Identity) AddFactory(org domain.OrgID, f domain.FactoryID) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	if o, ok := i.orgs[org]; ok && !slices.Contains(o.factories, f) {
+		o.factories = append(o.factories, f)
 	}
 }
 
@@ -273,7 +284,12 @@ func (i *Identity) OrgsFor(_ context.Context, user domain.UserID) ([]domain.OrgM
 
 	for _, o := range i.orgs {
 		if role := o.members[user]; role != "" && !o.deleted {
-			out = append(out, domain.OrgMembership{Org: o.org, Role: role})
+			count := len(o.factoryRoles[user])
+			if role == domain.OrgOwner || role == domain.OrgAdmin {
+				count = len(o.factories)
+			}
+
+			out = append(out, domain.OrgMembership{Org: o.org, Role: role, FactoryCount: count})
 		}
 	}
 

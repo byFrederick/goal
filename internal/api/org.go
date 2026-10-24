@@ -32,27 +32,18 @@ var errOrgNotFound = fmt.Errorf("organization not found: %w", ports.ErrNotFound)
 
 type orgKey struct{}
 
-// scope is the middleware of every operation, after routing: it records the operationId,
-// resolves the path's organization, if any, and binds the request to it (domain.WithOrg), then
-// passes the Authorizer at the organization level. An unknown or deleted organization stops the
-// request with 404 before anything else runs.
+// scope is the middleware of every operation, after routing: it records the operationId, makes
+// the request's principal and binds the request to the path's organization, if any
+// (bindRequest), then passes the Authorizer at the organization level. An unknown credential
+// stops the request with 401, then an unknown or deleted organization with 404, before anything
+// else runs.
 func (s *server) scope(next gen.StrictHandlerFunc, operation string) gen.StrictHandlerFunc {
 	op := operationID(operation)
 
 	return func(ctx context.Context, w http.ResponseWriter, r *http.Request, req any) (any, error) {
-		ctx = withOperation(ctx, op)
-
-		if ref := r.PathValue("org"); ref != "" {
-			o, err := s.orgs.Org(ctx, ref)
-			if errors.Is(err, ports.ErrNotFound) {
-				return nil, errOrgNotFound
-			}
-
-			if err != nil {
-				return nil, err
-			}
-
-			ctx = context.WithValue(domain.WithOrg(ctx, o.ID), orgKey{}, o)
+		ctx, err := s.bindRequest(withOperation(ctx, op), op, r.PathValue("org"))
+		if err != nil {
+			return nil, err
 		}
 
 		if err := s.authorize(ctx, "", errOrgNotFound); err != nil {
@@ -78,22 +69,58 @@ func orgOf(ctx context.Context) domain.Org {
 	return o
 }
 
+// ListOrgs lists the caller's organizations: every one of the install under GOAL_AUTH=none, a
+// person's memberships (Identity.OrgsFor) with their role and the factories they see, an API
+// key's own organization.
 func (s *server) ListOrgs(ctx context.Context, _ gen.ListOrgsRequestObject) (gen.ListOrgsResponseObject, error) {
-	orgs, err := s.orgs.Orgs(ctx)
-	if err != nil {
-		return nil, err
-	}
+	p := principalOf(ctx)
+	out := gen.ListOrgs200JSONResponse{Orgs: []gen.OrgSummary{}}
 
-	out := gen.ListOrgs200JSONResponse{Orgs: make([]gen.OrgSummary, 0, len(orgs))}
-	for _, o := range orgs {
-		out.Orgs = append(out.Orgs, gen.OrgSummary{
-			Id: string(o.ID), Slug: o.Slug, Name: o.Name, Mark: o.Mark, FactoryCount: o.FactoryCount,
-		})
+	switch {
+	case s.auth.Mode == AuthNone:
+		orgs, err := s.orgs.Orgs(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, o := range orgs {
+			out.Orgs = append(out.Orgs, gen.OrgSummary{Id: string(o.ID), Slug: o.Slug, Name: o.Name, Mark: o.Mark, FactoryCount: o.FactoryCount})
+		}
+	case p.Kind == domain.PrincipalService:
+		o, err := s.orgs.Org(ctx, string(p.Org))
+		if errors.Is(err, ports.ErrNotFound) {
+			return out, nil // its organization is gone; the key no longer resolves
+		}
+
+		if err != nil {
+			return nil, err
+		}
+
+		n, err := s.visibleCount(domain.WithOrg(ctx, o.ID))
+		if err != nil {
+			return nil, err
+		}
+
+		out.Orgs = append(out.Orgs, gen.OrgSummary{Id: string(o.ID), Slug: o.Slug, Name: o.Name, Mark: o.Mark, FactoryCount: n})
+	default:
+		orgs, err := s.identity.OrgsFor(ctx, p.User)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, m := range orgs {
+			o := m.Org
+			out.Orgs = append(out.Orgs, gen.OrgSummary{
+				Id: string(o.ID), Slug: o.Slug, Name: o.Name, Mark: o.Mark, FactoryCount: m.FactoryCount, Role: s.orgRole(p, m.Role),
+			})
+		}
 	}
 
 	return out, nil
 }
 
+// CreateOrg creates an organization owned by the caller (a platform admin under
+// GOAL_AUTH=session; under none, the install's earliest platform admin if anyone has signed in).
 func (s *server) CreateOrg(ctx context.Context, req gen.CreateOrgRequestObject) (gen.CreateOrgResponseObject, error) {
 	actor, ok := domain.ActorFrom(ctx)
 	if !ok {
@@ -101,36 +128,60 @@ func (s *server) CreateOrg(ctx context.Context, req gen.CreateOrgRequestObject) 
 	}
 
 	b := req.Body
+	p := principalOf(ctx)
+	n := ports.NewOrg{Slug: b.Slug, Name: strings.TrimSpace(b.Name), Mark: deref(b.Mark)}
 
-	o, err := s.orgs.CreateOrg(ctx, actor, ports.NewOrg{Slug: b.Slug, Name: strings.TrimSpace(b.Name), Mark: deref(b.Mark)})
+	if s.auth.Mode == AuthSession && p.Kind == domain.PrincipalUser {
+		n.Owner = p.User
+	}
+
+	o, err := s.orgs.CreateOrg(ctx, actor, n)
 	if err != nil {
 		return nil, err
 	}
 
-	return gen.CreateOrg201JSONResponse(orgOut(o, 0)), nil
+	// The caller is its owner now: the answer says what they may do there.
+	p.Org, p.OrgRole, p.FactoryRoles = o.ID, domain.OrgOwner, nil
+	ctx = context.WithValue(domain.WithOrg(domain.WithPrincipal(ctx, p), o.ID), orgKey{}, o)
+
+	return gen.CreateOrg201JSONResponse(s.orgOut(ctx, o, 0)), nil
 }
 
+// GetOrg is the request's organization with the caller's role, what they may do there and how
+// many of its factories they see.
 func (s *server) GetOrg(ctx context.Context, _ gen.GetOrgRequestObject) (gen.GetOrgResponseObject, error) {
-	o := orgOf(ctx)
-
-	orgs, err := s.orgs.Orgs(ctx)
+	n, err := s.visibleCount(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	count := 0
+	return gen.GetOrg200JSONResponse(s.orgOut(ctx, orgOf(ctx), n)), nil
+}
 
-	for _, sum := range orgs {
-		if sum.ID == o.ID {
-			count = sum.FactoryCount
+// visibleCount counts the factories of the organization in ctx the caller sees.
+func (s *server) visibleCount(ctx context.Context) (int, error) {
+	recs, err := s.defs.Factories(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	n := 0
+
+	for _, r := range recs {
+		if s.visible(ctx, r.ID) {
+			n++
 		}
 	}
 
-	return gen.GetOrg200JSONResponse(orgOut(o, count)), nil
+	return n, nil
 }
 
-func orgOut(o domain.Org, factories int) gen.Org {
+// orgOut is the organization in ctx's request as the caller sees it.
+func (s *server) orgOut(ctx context.Context, o domain.Org, factories int) gen.Org {
+	p := principalOf(ctx)
+
 	return gen.Org{
 		Id: string(o.ID), Slug: o.Slug, Name: o.Name, Mark: o.Mark, FactoryCount: factories, CreatedAt: o.CreatedAt,
+		Role: s.orgRole(p, p.OrgRole), Can: permissionsOut(s.can(ctx, "")),
 	}
 }

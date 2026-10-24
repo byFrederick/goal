@@ -68,12 +68,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Every organization on the install, by name */
+        /**
+         * The caller's organizations, by name
+         * @description A person's organizations with their role in each; an API key's own organization. Under GOAL_AUTH=none, every organization of the install.
+         */
         get: operations["listOrgs"];
         put?: never;
         /**
          * Create an organization
-         * @description The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409.
+         * @description The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
          */
         post: operations["createOrg"];
         delete?: never;
@@ -1484,10 +1487,22 @@ export interface components {
             slug: string;
             name: string;
             mark: string;
+            /** @description The factories the caller can see */
             factory_count: number;
             /** Format: date-time */
             created_at: string;
+            /** @description The caller's role in the organization; absent under GOAL_AUTH=none and for an API key */
+            role?: components["schemas"]["OrgRole"] | null;
+            /** @description The organization permissions the caller holds, sorted: what the UI may offer (the server checks every request again). A fresh-only permission held with an older session is listed; using it answers 403 reauth-required. Under GOAL_AUTH=none, every one. */
+            can: components["schemas"]["Permission"][];
         };
+        /**
+         * @description A ladder, each including the one before
+         * @enum {string}
+         */
+        FactoryRole: "viewer" | "approver" | "editor";
+        /** @description One permission of api/permissions.yaml, such as org:read or item:decide */
+        Permission: string;
         NewOrg: {
             name: string;
             slug: string;
@@ -1567,10 +1582,10 @@ export interface components {
             kind: string;
             id: string;
         };
-        /** @description Who did something; in phase 2.2 every person is the local user */
+        /** @description Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job */
         Actor: {
             /** @enum {string} */
-            kind: "user" | "agent" | "system";
+            kind: "user" | "service" | "agent" | "system";
             /** @description "local" for the local user, an agent's name or a job's name */
             id: string;
             name: string;
@@ -1597,6 +1612,10 @@ export interface components {
             paused: boolean;
             /** Format: date-time */
             created_at: string;
+            /** @description The caller's effective role on the factory: editor for owners and admins, an API key's ceiling; absent under GOAL_AUTH=none */
+            role?: components["schemas"]["FactoryRole"] | null;
+            /** @description The factory permissions the caller holds, sorted (as Org.can) */
+            can: components["schemas"]["Permission"][];
         };
         Station: {
             id: string;

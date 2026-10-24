@@ -2,10 +2,14 @@
 # the web UI (TypeScript client in packages/api-client). Change it first, then regenerate both
 # (`task api:gen`); the generated code is committed.
 #
-# No authentication yet (phase 2.2 has no identity): goald binds its API to 127.0.0.1 and every
-# request acts as the one local user. Every route but /v1/health and /v1/orgs belongs to an
-# organization and lives under /v1/orgs/{org}; an unknown or deleted organization is 404.
-# Requests that change something from a browser must be same-origin (cross-origin protection).
+# Authentication (phase 3): with GOAL_AUTH=session every operation but getHealth and getAuthConfig
+# needs a credential, Better Auth's session cookie (goal.session_token, __Secure- prefixed over
+# https) or a bearer value (a session token from goal login, or an API key goal_sk_...), and a
+# missing, malformed, unknown, expired or revoked one is 401. With GOAL_AUTH=none (one developer's
+# laptop, loopback only) every request acts as the one local user. Every route but the install's
+# (/v1/health, /v1/auth/config, /v1/me, /v1/orgs) belongs to an organization and lives under
+# /v1/orgs/{org}; an unknown or deleted organization, and one the caller is not a member of, is
+# 404. Requests that change something from a browser must be same-origin (cross-origin protection).
 #
 # Every operation names the permission it needs in `x-goal-scope`, one of api/permissions.yaml
 # (phase 3). cmd/permgen (`task api:gen`) generates goald's table from both files and `task
@@ -20,14 +24,17 @@ info:
     and skills catalog.
 servers:
   - url: http://127.0.0.1:8080
+security:
+  - session: []
+  - bearer: []
 tags:
   - name: orgs
     description: Organizations, the tenant boundary of every factory, item and event
   - name: shell
     description: >-
       What the app's chrome reads about an organization: attention badges, factory overviews and
-      the inbox of what waits for a person. Phase 2.2 has no identity, so "waiting on you" is
-      every decision waiting on a person.
+      the inbox of what waits for a person, over the factories the caller sees. "Waiting on you"
+      counts the decisions the caller may make (item:decide); under GOAL_AUTH=none, every one.
   - name: work
     description: >-
       Work on a factory's line: an item's agent runs and, later in phase 2.2, flow metrics, the
@@ -52,6 +59,7 @@ paths:
     get:
       operationId: getHealth
       x-goal-scope: public
+      security: []
       summary: Liveness of goald
       responses:
         "200":
@@ -63,6 +71,7 @@ paths:
     get:
       operationId: getAuthConfig
       x-goal-scope: public
+      security: []
       tags: [identity]
       summary: How this install signs people in
       description: >-
@@ -96,7 +105,10 @@ paths:
       operationId: listOrgs
       x-goal-scope: authenticated
       tags: [orgs]
-      summary: Every organization on the install, by name
+      summary: The caller's organizations, by name
+      description: >-
+        A person's organizations with their role in each; an API key's own organization. Under
+        GOAL_AUTH=none, every organization of the install.
       responses:
         "200":
           description: The organizations
@@ -113,7 +125,7 @@ paths:
         The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and
         not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default).
         The mark defaults to the name's initials. A taken or reserved slug, or a malformed field,
-        is 409.
+        is 409. Platform admins only; the caller becomes the organization's owner.
       requestBody:
         required: true
         content:
@@ -1652,6 +1664,19 @@ components:
       in: header
       description: "* to create a file that must not exist yet"
       schema: { type: string }
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: goal.session_token
+      description: >-
+        Better Auth's session cookie, set by signing in through /api/auth (named
+        __Secure-goal.session_token when the install's public URL is https). goald reads the
+        session token before the first dot and looks the session up per request.
+    bearer:
+      type: http
+      scheme: bearer
+      description: A session token from goal login (32 letters and digits), or an API key (goal_sk_...)
   responses:
     Problem:
       description: An error (RFC 9457 problem details)
@@ -1789,14 +1814,33 @@ components:
           description: The caller's role in the organization; absent under GOAL_AUTH=none, null for an API key
     Org:
       type: object
-      required: [id, slug, name, mark, factory_count, created_at]
+      required: [id, slug, name, mark, factory_count, created_at, can]
       properties:
         id: { type: string }
         slug: { type: string }
         name: { type: string }
         mark: { type: string }
-        factory_count: { type: integer }
+        factory_count: { type: integer, description: The factories the caller can see }
         created_at: { type: string, format: date-time }
+        role:
+          allOf: [{ $ref: "#/components/schemas/OrgRole" }]
+          nullable: true
+          description: The caller's role in the organization; absent under GOAL_AUTH=none and for an API key
+        can:
+          type: array
+          description: >-
+            The organization permissions the caller holds, sorted: what the UI may offer (the
+            server checks every request again). A fresh-only permission held with an older session
+            is listed; using it answers 403 reauth-required. Under GOAL_AUTH=none, every one.
+          items: { $ref: "#/components/schemas/Permission" }
+    FactoryRole:
+      type: string
+      description: A ladder, each including the one before
+      enum: [viewer, approver, editor]
+    Permission:
+      type: string
+      description: One permission of api/permissions.yaml, such as org:read or item:decide
+      pattern: "^[a-z_]+(:[a-z_]+)?$"
     NewOrg:
       type: object
       required: [name, slug]
@@ -1901,10 +1945,13 @@ components:
         id: { type: string }
     Actor:
       type: object
-      description: Who did something; in phase 2.2 every person is the local user
+      description: >-
+        Who did something: a person (kind user; id "local" is the local user, named "Local user
+        (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an
+        agent or a job
       required: [kind, id, name]
       properties:
-        kind: { type: string, enum: [user, agent, system] }
+        kind: { type: string, enum: [user, service, agent, system] }
         id: { type: string, description: '"local" for the local user, an agent''s name or a job''s name' }
         name: { type: string }
     FactoryList:
@@ -1916,7 +1963,7 @@ components:
           items: { $ref: "#/components/schemas/Factory" }
     Factory:
       type: object
-      required: [id, org_id, name, stations, work_types, current, draft, paused, created_at]
+      required: [id, org_id, name, stations, work_types, current, draft, paused, created_at, can]
       properties:
         id: { type: string }
         org_id: { type: string, description: The organization that owns the factory }
@@ -1941,6 +1988,16 @@ components:
           allOf: [{ $ref: "#/components/schemas/DraftRef" }]
         paused: { type: boolean, description: A paused factory takes no work; runs in progress finish }
         created_at: { type: string, format: date-time }
+        role:
+          allOf: [{ $ref: "#/components/schemas/FactoryRole" }]
+          nullable: true
+          description: >-
+            The caller's effective role on the factory: editor for owners and admins, an API key's
+            ceiling; absent under GOAL_AUTH=none
+        can:
+          type: array
+          description: The factory permissions the caller holds, sorted (as Org.can)
+          items: { $ref: "#/components/schemas/Permission" }
     Station:
       type: object
       required: [id, kind]

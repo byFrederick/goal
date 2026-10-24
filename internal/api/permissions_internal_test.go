@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"maps"
+	"net/http"
 	"os"
 	"reflect"
 	"slices"
@@ -205,15 +206,69 @@ const (
 
 var mxNow = time.Date(2026, 10, 24, 9, 0, 0, 0, time.UTC)
 
-// mxPrincipal is one column of principals: how a request of theirs resolves for an org.
+// mxPrincipal is one column of principals: how a request of theirs resolves for an org, and the
+// credential it carries over HTTP (nil header: none).
 type mxPrincipal struct {
 	name    string
 	resolve func(org domain.OrgID) (domain.Principal, error)
+	header  http.Header
+}
+
+// mxPerson is one person of the matrix, signed in with a session of token.
+type mxPerson struct {
+	name          string
+	user          domain.UserID
+	token         string
+	org           domain.OrgID
+	role          domain.OrgRole
+	factory       domain.FactoryRole // on mxF
+	platformAdmin bool
+	stale         bool // signed in longer ago than domain.FreshFor
+}
+
+// mxPeople are the matrix's people: every org role, every factory role on mxF, a member without
+// roles, a member of the other org only, a platform admin who is a member nowhere, and an owner
+// whose session is not fresh.
+func mxPeople() []mxPerson {
+	people := []mxPerson{
+		{name: "owner", org: mxAcme, role: domain.OrgOwner},
+		{name: "admin", org: mxAcme, role: domain.OrgAdmin},
+		{name: "viewer", org: mxAcme, role: domain.OrgMember, factory: domain.FactoryViewer},
+		{name: "approver", org: mxAcme, role: domain.OrgMember, factory: domain.FactoryApprover},
+		{name: "editor", org: mxAcme, role: domain.OrgMember, factory: domain.FactoryEditor},
+		{name: "member-no-roles", org: mxAcme, role: domain.OrgMember},
+		{name: "other-org-owner", org: mxOther, role: domain.OrgOwner},
+		{name: "platform-admin", platformAdmin: true},
+		{name: "stale-owner", org: mxAcme, role: domain.OrgOwner, stale: true},
+	}
+
+	for n := range people {
+		people[n].user = domain.UserID(fmt.Sprintf("019a1c00-0000-7000-8000-%012d", n+1))
+		people[n].token = fmt.Sprintf("mxsession%023d", n+1)
+	}
+
+	return people
+}
+
+// session is when the person signed in, and until when, by the matrix's clock.
+func (p mxPerson) session() domain.Session {
+	created := mxNow.Add(-time.Minute)
+	if p.stale {
+		created = mxNow.Add(-domain.FreshFor - time.Minute)
+	}
+
+	return domain.Session{ID: "session-" + p.name, CreatedAt: created, ExpiresAt: mxNow.Add(7 * 24 * time.Hour)}
+}
+
+// cookie is the person's session cookie as Better Auth signs it.
+func (p mxPerson) cookie() http.Header {
+	return http.Header{"Cookie": {sessionCookie + "=" + p.token + ".c2lnbmF0dXJl"}}
 }
 
 // mxIdentity fabricates the matrix's principals through the Identity fake, so unknown, expired
-// and revoked credentials fail as the port says they must.
-func mxIdentity(t *testing.T) []mxPrincipal {
+// and revoked credentials fail as the port says they must; the fake resolves their credentials
+// over HTTP too.
+func mxIdentity(t *testing.T) (*porttest.Identity, []mxPrincipal) {
 	t.Helper()
 
 	id := porttest.NewIdentity(func() time.Time { return mxNow })
@@ -228,46 +283,22 @@ func mxIdentity(t *testing.T) []mxPrincipal {
 		}
 	}
 
-	fresh := domain.Session{ID: "fresh", CreatedAt: mxNow.Add(-time.Minute), ExpiresAt: mxNow.Add(7 * 24 * time.Hour)}
-	stale := domain.Session{ID: "stale", CreatedAt: mxNow.Add(-domain.FreshFor - time.Minute), ExpiresAt: mxNow.Add(7 * 24 * time.Hour)}
-
-	people := []struct {
-		name         string
-		org          domain.OrgID
-		role         domain.OrgRole
-		factory      domain.FactoryRole // on mxF
-		platformAdmn bool
-		session      domain.Session
-	}{
-		{name: "owner", org: mxAcme, role: domain.OrgOwner, session: fresh},
-		{name: "admin", org: mxAcme, role: domain.OrgAdmin, session: fresh},
-		{name: "viewer", org: mxAcme, role: domain.OrgMember, factory: domain.FactoryViewer, session: fresh},
-		{name: "approver", org: mxAcme, role: domain.OrgMember, factory: domain.FactoryApprover, session: fresh},
-		{name: "editor", org: mxAcme, role: domain.OrgMember, factory: domain.FactoryEditor, session: fresh},
-		{name: "member-no-roles", org: mxAcme, role: domain.OrgMember, session: fresh},
-		{name: "other-org-owner", org: mxOther, role: domain.OrgOwner, session: fresh},
-		{name: "platform-admin", platformAdmn: true, session: fresh},
-		{name: "stale-owner", org: mxAcme, role: domain.OrgOwner, session: stale},
-	}
-
 	out := []mxPrincipal{{name: "anonymous", resolve: func(domain.OrgID) (domain.Principal, error) { return domain.Principal{}, nil }}}
 
-	for n, p := range people {
-		user := domain.UserID(fmt.Sprintf("019a1c00-0000-7000-8000-%012d", n+1))
-		token := fmt.Sprintf("%-32s", p.name)
-		must(id.AddUser(porttest.IdentityUser{ID: user, Name: p.name, Email: p.name + "@example.com", PlatformAdmin: p.platformAdmn}))
-		id.AddSession(token, user, p.session)
+	for _, p := range mxPeople() {
+		must(id.AddUser(porttest.IdentityUser{ID: p.user, Name: p.name, Email: p.name + "@example.com", PlatformAdmin: p.platformAdmin}))
+		id.AddSession(p.token, p.user, p.session())
 
 		if p.org != "" {
-			must(id.SetOrgRole(p.org, user, p.role))
+			must(id.SetOrgRole(p.org, p.user, p.role))
 		}
 
 		if p.factory != "" {
-			must(id.SetFactoryRole(p.org, user, mxF, p.factory))
+			must(id.SetFactoryRole(p.org, p.user, mxF, p.factory))
 		}
 
-		out = append(out, mxPrincipal{name: p.name, resolve: func(org domain.OrgID) (domain.Principal, error) {
-			return id.Session(t.Context(), token, org)
+		out = append(out, mxPrincipal{name: p.name, header: p.cookie(), resolve: func(org domain.OrgID) (domain.Principal, error) {
+			return id.Session(t.Context(), p.token, org)
 		}})
 	}
 
@@ -292,7 +323,8 @@ func mxIdentity(t *testing.T) []mxPrincipal {
 	}
 
 	for n, k := range keys {
-		hash := apiKeyHash(fmt.Sprintf("%s%043d", apiKeyPrefix, n))
+		secret := fmt.Sprintf("%s%043d", apiKeyPrefix, n)
+		hash := apiKeyHash(secret)
 		k.key.ID = domain.APIKeyID(fmt.Sprintf("019a1c00-0000-7000-8000-%012d", 100+n))
 		k.key.Name = k.name
 
@@ -306,12 +338,12 @@ func mxIdentity(t *testing.T) []mxPrincipal {
 			k.gone(k.key.ID)
 		}
 
-		out = append(out, mxPrincipal{name: k.name, resolve: func(domain.OrgID) (domain.Principal, error) {
+		out = append(out, mxPrincipal{name: k.name, header: http.Header{"Authorization": {"Bearer " + secret}}, resolve: func(domain.OrgID) (domain.Principal, error) {
 			return id.APIKey(t.Context(), hash)
 		}})
 	}
 
-	return out
+	return id, out
 }
 
 // resolverHidden is what a resolver answers for an operation's unknown or invisible resource,
@@ -377,7 +409,7 @@ func TestAuthorize_TwoOrgMatrix(t *testing.T) {
 	t.Parallel()
 
 	authz := NewPermissions(porttest.NewClock(mxNow))
-	principals := mxIdentity(t)
+	_, principals := mxIdentity(t)
 	contract := contractOps(t)
 
 	var golden bytes.Buffer

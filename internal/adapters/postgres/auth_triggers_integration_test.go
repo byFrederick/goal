@@ -130,13 +130,13 @@ func TestAuthTriggers_AuditEachPathOnce(t *testing.T) {
 
 	o, i, s := "user:"+owner, "user:"+invitee, "system:auth"
 	want := []logged{
-		{"member.added", o, nameCruz, "member:" + owner, map[string]any{fieldUser: owner, fieldRole: "owner", "via": "org_created"}},
+		{auditMemberAdded, o, nameCruz, "member:" + owner, map[string]any{fieldUser: owner, fieldRole: "owner", "via": "org_created"}},
 		{"invitation.created", o, nameCruz, "invitation:" + inv, map[string]any{
 			fieldInvitation: inv, fieldEmail: email, fieldRole: roleMember,
 			fieldFactoryRoles: []any{map[string]any{"factoryId": factory, fieldRole: "viewer"}},
 		}},
 		{"invitation.accepted", i, nameDoe, "invitation:" + inv, map[string]any{fieldInvitation: inv, fieldEmail: email}},
-		{"member.added", i, nameDoe, "member:" + invitee, map[string]any{fieldUser: invitee, fieldRole: roleMember, "via": "invitation"}},
+		{auditMemberAdded, i, nameDoe, "member:" + invitee, map[string]any{fieldUser: invitee, fieldRole: roleMember, "via": "invitation"}},
 		{"member.role_changed", o, nameCruz, "member:" + invitee, map[string]any{fieldUser: invitee, fieldFrom: roleMember, "to": "admin"}},
 		{"member.role_changed", s, "auth", "member:" + invitee, map[string]any{fieldUser: invitee, fieldFrom: "admin", "to": roleMember}},
 		{"member.removed", i, nameDoe, "member:" + invitee, map[string]any{fieldUser: invitee, fieldRole: roleMember, "left": true}},
@@ -160,7 +160,7 @@ func TestAuthTriggers_AuditEachPathOnce(t *testing.T) {
 	d.exec(d.auth, `INSERT INTO auth.member ("organizationId", "userId", role, "createdAt", "changedBy", "changedAt")
 		VALUES ($1, $2, 'owner', now(), 'system:bootstrap', now())`, string(labs.ID), owner)
 	expectLogged(t, d.logOf(labs.ID), []logged{
-		{"member.added", "system:bootstrap", "bootstrap", "member:" + owner, map[string]any{fieldUser: owner, fieldRole: "owner", "via": "bootstrap"}},
+		{auditMemberAdded, "system:bootstrap", "bootstrap", "member:" + owner, map[string]any{fieldUser: owner, fieldRole: "owner", "via": "bootstrap"}},
 	})
 }
 

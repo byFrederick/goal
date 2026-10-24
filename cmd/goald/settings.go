@@ -36,22 +36,27 @@ type settings struct {
 	MigrateDatabaseURL string
 	DatabaseURL        string
 	// Listen is the API's address, and the gateway's without GatewayListen (GOAL_LISTEN, default
-	// 127.0.0.1:8080). The API has no authentication yet, so it must be a loopback address.
+	// 127.0.0.1:8080). Under GOAL_AUTH=none it must be a loopback address; under session it may
+	// be any, with GOAL_PUBLIC_URL and a gateway listener of its own off loopback.
 	Listen string
 	// GatewayListen is the MCP gateway's own address (GOAL_GATEWAY_LISTEN, optional). When set,
 	// that listener serves only /mcp and the main one answers /mcp with 404; it is required, and
 	// different, when Listen is not loopback (phase 3, §5.5). It may be off loopback, such as the
 	// Docker bridge's address on Linux: every request there needs a task token.
 	GatewayListen string
-	// PublicURL is the origin people open goald at (GOAL_PUBLIC_URL, default http://<listen>;
-	// https unless its host is loopback), such as a reverse proxy's name. Its host is the one name
+	// PublicURL is the origin people open goald at (GOAL_PUBLIC_URL, default http://<listen> on
+	// loopback, required otherwise; https unless its host is loopback), such as a reverse proxy's
+	// name. Its host is the one name
 	// besides the loopback names and the listen host that the Host check accepts (api.CheckHost),
 	// and over https the UI is served with Strict-Transport-Security.
 	PublicURL string
-	// Auth is how requests are authenticated (GOAL_AUTH): none, everyone is the local user. Phase
-	// 3 adds session (people sign in); until goald can check sessions it refuses that value, so
-	// no request is let through under a mode that is not there.
+	// Auth is how requests are authenticated (GOAL_AUTH, default none): none, every request is
+	// the local user (one developer's laptop, loopback only); session, people sign in and every
+	// request's session or API key is checked in the database. Any other value refuses to start.
 	Auth authMode
+	// Google offers signing in with Google beside email codes (GOAL_AUTH_GOOGLE: on or off,
+	// default off); the identity service holds the client and its secret.
+	Google bool
 	// AuthUpstream is the identity service that /api/auth/* is proxied to under session
 	// (GOAL_AUTH_UPSTREAM, default http://127.0.0.1:8081; http on a loopback address only).
 	AuthUpstream *url.URL
@@ -118,12 +123,14 @@ const (
 	// capable first.
 	modelsEnv      = "GOAL_MODELS"
 	publicURLEnv   = "GOAL_PUBLIC_URL"
+	listenEnv      = "GOAL_LISTEN"
 	gatewayEnv     = "GOAL_GATEWAY_LISTEN"
 	gatewayURLEnv  = "GOAL_GATEWAY_URL"
 	authEnv        = "GOAL_AUTH"
 	upstreamEnv    = "GOAL_AUTH_UPSTREAM"
 	proxiesEnv     = "GOAL_TRUSTED_PROXIES"
 	githubWebEnv   = "GOAL_GITHUB_WEB_URL"
+	googleEnv      = "GOAL_AUTH_GOOGLE"
 	defaultAuthURL = "http://127.0.0.1:8081"
 	schemeHTTP     = "http"
 	schemeHTTPS    = "https"
@@ -155,8 +162,8 @@ const (
 // definition can hand them to an agent or a connection.
 var ownVariables = []string{
 	"GOAL_MIGRATE_DATABASE_URL", "GOAL_DATABASE_URL", "GOAL_PG_PASSWORD", "GOAL_PG_OWNER_PASSWORD", "GOAL_PG_APP_PASSWORD",
-	"GOAL_LISTEN", publicURLEnv, gatewayEnv, gatewayURLEnv, "GOAL_GATEWAY_KEY_REF", "GOAL_GATEWAY_KEY", taskEnvEnv,
-	authEnv, upstreamEnv, proxiesEnv, "GOAL_AUTH_GOOGLE",
+	listenEnv, publicURLEnv, gatewayEnv, gatewayURLEnv, "GOAL_GATEWAY_KEY_REF", "GOAL_GATEWAY_KEY", taskEnvEnv,
+	authEnv, upstreamEnv, proxiesEnv, googleEnv,
 	"GOAL_WORKSPACE_ROOT", "GOAL_RUN_DIR", "GOAL_TICK_EVERY", "GOAL_REFRESH_EVERY", "GOAL_MAX_RUNS",
 	"GOAL_GITHUB_API_URL", githubWebEnv, "GOAL_LOG_LEVEL", "GOAL_LOG_FORMAT", "GOAL_DEFAULT_AGENT_IMAGE", "GOAL_ORG_RETENTION", "GOAL_MODELS",
 	"GOAL_DEFINITION_CACHE_BYTES", "GOAL_LEGACY_IMPORT",
@@ -231,7 +238,7 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 			localDatabase(postgres.OwnerRole, or("GOAL_PG_OWNER_PASSWORD", postgres.DevOwnerPassword))),
 		DatabaseURL: or("GOAL_DATABASE_URL",
 			localDatabase(postgres.AppRole, or("GOAL_PG_APP_PASSWORD", postgres.DevAppPassword))),
-		Listen:        or("GOAL_LISTEN", defaultListen),
+		Listen:        or(listenEnv, defaultListen),
 		GatewayKeyRef: or("GOAL_GATEWAY_KEY_REF", defaultKeyRef),
 		WorkspaceRoot: or("GOAL_WORKSPACE_ROOT", filepath.Join(os.TempDir(), "goal-workspaces")),
 		RunDir:        or("GOAL_RUN_DIR", filepath.Join(os.TempDir(), "goal-runs")),
@@ -244,7 +251,8 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 	s.PublicURL = or(publicURLEnv, defaultPublicURL(s.Listen))
 	s.GatewayListen = strings.TrimSpace(getenv(gatewayEnv))
 	s.GatewayURL = or(gatewayURLEnv, defaultGatewayURL(s))
-	errs := append(listenErrors(s), authSettings(&s, or)...)
+	errs := authSettings(&s, or)
+	errs = append(errs, listenErrors(s)...)
 
 	var err error
 	if s.TaskEnv, err = taskEnv(or(taskEnvEnv, defaultTaskEnv)); err != nil {
@@ -322,17 +330,26 @@ const (
 	authSession authMode = "session"
 )
 
-// authSettings reads GOAL_AUTH, GOAL_AUTH_UPSTREAM and GOAL_TRUSTED_PROXIES.
+// defaultAuth is GOAL_AUTH's default: none until web sign-in, API keys, goal login and recovery
+// all exist (spec 3, PR 3-16 makes it session).
+const defaultAuth = authNone
+
+// authSettings reads GOAL_AUTH, GOAL_AUTH_GOOGLE, GOAL_AUTH_UPSTREAM and GOAL_TRUSTED_PROXIES.
 func authSettings(s *settings, or func(name, def string) string) []error {
 	var errs []error
 
-	switch mode := authMode(or(authEnv, string(authNone))); mode {
-	case authNone:
+	switch mode := authMode(or(authEnv, string(defaultAuth))); mode {
+	case authNone, authSession:
 		s.Auth = mode
-	case authSession:
-		errs = append(errs, errors.New("GOAL_AUTH=session: this goald cannot check sign-ins yet; use none"))
 	default:
 		errs = append(errs, fmt.Errorf("GOAL_AUTH %q is not none or session", string(mode)))
+	}
+
+	switch google := or(googleEnv, "off"); google {
+	case "on", "off":
+		s.Google = google == "on"
+	default:
+		errs = append(errs, fmt.Errorf("%s %q is not on or off", googleEnv, google))
 	}
 
 	var err error
@@ -403,28 +420,35 @@ func localDatabase(role, password string) string {
 	}).String()
 }
 
-// loopback refuses listen addresses other machines could reach: the phase 1 API has no
-// authentication.
-func loopback(listen string) error {
-	host, _, err := net.SplitHostPort(listen)
+// listenAddress refuses a GOAL_LISTEN that is not host:port, and one other machines could reach
+// unless people sign in (GOAL_AUTH=session): under none every request is the local user. Off
+// loopback, people need GOAL_PUBLIC_URL to reach goald by.
+func listenAddress(s settings) error {
+	host, _, err := net.SplitHostPort(s.Listen)
 	if err != nil {
-		return fmt.Errorf("GOAL_LISTEN %q: %w", listen, err)
+		return fmt.Errorf("GOAL_LISTEN %q: %w", s.Listen, err)
 	}
 
-	if !isLoopback(host) {
-		return fmt.Errorf("GOAL_LISTEN %q: the API has no authentication yet, so goald listens on a loopback address only", listen)
+	switch {
+	case isLoopback(host):
+		return nil
+	case s.Auth != authSession:
+		return fmt.Errorf("GOAL_LISTEN %q: under GOAL_AUTH=%s every request is the local user, so goald listens on a loopback "+
+			"address only; set GOAL_AUTH=session for sign-in", s.Listen, s.Auth)
+	case s.PublicURL == "":
+		return fmt.Errorf("%s is required when GOAL_LISTEN %q is not a loopback address: the origin people open goald at", publicURLEnv, s.Listen)
+	default:
+		return nil
 	}
-
-	return nil
 }
 
-// listenErrors refuses a listen address off loopback, a gateway listener that breaks §5.5's rule,
-// a gateway URL that names the main listener when the gateway has its own, and a public URL that
-// is not a safe origin.
+// listenErrors refuses a listen address off loopback without sign-in, a gateway listener that
+// breaks §5.5's rule, a gateway URL that names the main listener when the gateway has its own, and
+// a public URL that is not a safe origin.
 func listenErrors(s settings) []error {
 	var errs []error
 
-	for _, err := range []error{loopback(s.Listen), gatewayListen(s.Listen, s.GatewayListen), gatewayURL(s), publicURL(s.PublicURL)} {
+	for _, err := range []error{listenAddress(s), gatewayListen(s.Listen, s.GatewayListen), gatewayURL(s), publicURL(s.PublicURL)} {
 		if err != nil {
 			errs = append(errs, err)
 		}
@@ -435,10 +459,9 @@ func listenErrors(s settings) []error {
 
 // gatewayListen applies phase 3's listener rule: the gateway's own address is a host and port,
 // not the main listener's, and it is required when the main listener is off loopback (so /mcp is
-// never served beside the API off this machine). GOAL_LISTEN stays loopback-only until 3-9, so
-// for now only the first two parts can refuse a start.
+// never served beside the API off this machine).
 func gatewayListen(listen, gateway string) error {
-	host, _, _ := net.SplitHostPort(listen) // loopback reports a malformed GOAL_LISTEN
+	host, _, _ := net.SplitHostPort(listen) // listenAddress reports a malformed GOAL_LISTEN
 
 	if gateway == "" {
 		if host != "" && !isLoopback(host) {
@@ -566,7 +589,7 @@ func publicURL(raw string) error {
 }
 
 // hosts are the names goald answers to (api.CheckHost), each once: the loopback names when it
-// listens on loopback (always, until phase 3), the listen host and the public URL's host.
+// listens on loopback, the listen host and the public URL's host.
 func (s settings) hosts() []string {
 	var out []string
 

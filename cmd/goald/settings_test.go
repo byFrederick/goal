@@ -18,6 +18,12 @@ import (
 
 func envOf(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
 
+// A public origin and an off-loopback gateway listener the tests configure.
+const (
+	testPublicURL = "https://goal.example.com"
+	testGateway   = "10.0.0.5:8090"
+)
+
 func TestSettings_Defaults(t *testing.T) {
 	t.Parallel()
 
@@ -82,7 +88,7 @@ func TestSettings_AuthProxy(t *testing.T) {
 
 	s, err := settingsFrom(envOf(map[string]string{
 		upstreamEnv: "http://[::1]:9081/", proxiesEnv: " 10.1.2.3/8, 192.0.2.7 ,2001:db8::/32,::ffff:198.51.100.1",
-		publicURLEnv: "https://goal.example.com",
+		publicURLEnv: testPublicURL,
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -143,7 +149,7 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 		env  map[string]string
 		want string
 	}{
-		{name: "public listen address", env: map[string]string{"GOAL_LISTEN": "0.0.0.0:8080"}, want: "loopback"},
+		{name: "public listen address", env: map[string]string{listenEnv: "0.0.0.0:8080"}, want: "loopback"},
 		{name: "API key for tasks", env: map[string]string{taskEnvEnv: "ANTHROPIC_API_KEY=env:ANTHROPIC_API_KEY"}, want: "never reach"},
 		{name: "GitHub token for tasks", env: map[string]string{taskEnvEnv: "goal_github_token=env:X"}, want: "never reach"},
 		{name: "literal secret for tasks", env: map[string]string{taskEnvEnv: "CLAUDE_CODE_OAUTH_TOKEN=sk-literal"}, want: "NAME=env:REF"},
@@ -172,7 +178,24 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 			want: "names GOAL_LISTEN",
 		},
 		// Fail closed: no mode goald cannot enforce, and no unknown one.
-		{name: "sessions before goald checks them", env: map[string]string{authEnv: "session"}, want: "GOAL_AUTH=session"},
+		{
+			name: "the local user off loopback", env: map[string]string{listenEnv: "10.0.0.5:8080", gatewayEnv: testGateway, publicURLEnv: testPublicURL},
+			want: "GOAL_AUTH=none",
+		},
+		{
+			name: "sign-in off loopback without a public URL", env: map[string]string{authEnv: string(authSession), listenEnv: "10.0.0.5:8080", gatewayEnv: testGateway},
+			want: publicURLEnv + " is required",
+		},
+		{
+			name: "sign-in off loopback without a gateway listener", env: map[string]string{authEnv: string(authSession), listenEnv: "0.0.0.0:8080", publicURLEnv: testPublicURL},
+			want: gatewayEnv + " is required",
+		},
+		{
+			name: "sign-in off loopback in clear text",
+			env:  map[string]string{authEnv: string(authSession), listenEnv: "10.0.0.5:8080", gatewayEnv: testGateway, publicURLEnv: "http://goal.example.com"},
+			want: "must be https",
+		},
+		{name: "Google neither on nor off", env: map[string]string{googleEnv: "yes"}, want: googleEnv},
 		{name: "unknown auth mode", env: map[string]string{authEnv: "off"}, want: authEnv},
 		{name: "auth service off this machine", env: map[string]string{upstreamEnv: "http://auth.example.com:8081"}, want: upstreamEnv},
 		{name: "auth service over https", env: map[string]string{upstreamEnv: "https://127.0.0.1:8081"}, want: upstreamEnv},
@@ -204,7 +227,7 @@ func TestSettings_GatewayURLFollowsTheGatewayListener(t *testing.T) {
 		want string
 	}{
 		{name: "one listener", want: "http://127.0.0.1:8080/mcp"},
-		{name: "one listener elsewhere on loopback", env: map[string]string{"GOAL_LISTEN": "127.0.0.1:9090"}, want: "http://127.0.0.1:9090/mcp"},
+		{name: "one listener elsewhere on loopback", env: map[string]string{listenEnv: "127.0.0.1:9090"}, want: "http://127.0.0.1:9090/mcp"},
 		{name: "gateway listener on loopback", env: map[string]string{gatewayEnv: "127.0.0.1:8090"}, want: "http://127.0.0.1:8090/mcp"},
 		{name: "gateway listener on the Docker bridge", env: map[string]string{gatewayEnv: "172.17.0.1:8090"}, want: "http://172.17.0.1:8090/mcp"},
 		{name: "gateway listener on every interface", env: map[string]string{gatewayEnv: ":8090"}, want: "http://127.0.0.1:8090/mcp"},
@@ -231,8 +254,29 @@ func TestSettings_GatewayURLFollowsTheGatewayListener(t *testing.T) {
 	}
 }
 
-// Phase 3's listener rule: off loopback the gateway needs a listener of its own. GOAL_LISTEN is
-// loopback-only until 3-9, so the rule is checked on its own.
+// Under GOAL_AUTH=session goald may listen off loopback, behind its public URL, with the gateway
+// on a listener of its own; it then answers only the names it listens and is opened by.
+func TestSettings_SignInMayListenOffLoopback(t *testing.T) {
+	t.Parallel()
+
+	s, err := settingsFrom(envOf(map[string]string{
+		authEnv: string(authSession), listenEnv: "0.0.0.0:8080", gatewayEnv: "172.17.0.1:8090", publicURLEnv: testPublicURL,
+		googleEnv: "on",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if s.Auth != authSession || !s.Google || s.GatewayURL != "http://172.17.0.1:8090/mcp" || !s.strictTransport() {
+		t.Errorf("settings = %+v; want session with Google, the gateway's own URL and strict transport", s)
+	}
+
+	if got, want := s.hosts(), []string{"0.0.0.0", "goal.example.com"}; !slices.Equal(got, want) {
+		t.Errorf("hosts = %v, want %v (no loopback names off loopback)", got, want)
+	}
+}
+
+// Phase 3's listener rule: off loopback the gateway needs a listener of its own.
 func TestGatewayListen_IsRequiredOffLoopback(t *testing.T) {
 	t.Parallel()
 
@@ -245,7 +289,7 @@ func TestGatewayListen_IsRequiredOffLoopback(t *testing.T) {
 		{name: "loopback, one listener", listen: defaultListen, ok: true},
 		{name: "loopback, gateway listener", listen: defaultListen, gateway: "[::1]:8090", ok: true},
 		{name: "off loopback, one listener", listen: offLoopback},
-		{name: "off loopback, gateway listener", listen: offLoopback, gateway: "10.0.0.5:8090", ok: true},
+		{name: "off loopback, gateway listener", listen: offLoopback, gateway: testGateway, ok: true},
 		{name: "off loopback, gateway on the main listener", listen: offLoopback, gateway: offLoopback},
 	}
 
@@ -273,7 +317,7 @@ func TestSettings_Hosts(t *testing.T) {
 		{name: "defaults", want: []string{"localhost", "127.0.0.1", "::1"}},
 		{
 			name: "listen host and public URL",
-			env:  map[string]string{"GOAL_LISTEN": "127.0.0.2:9090", publicURLEnv: "https://goal.example.com"},
+			env:  map[string]string{listenEnv: "127.0.0.2:9090", publicURLEnv: testPublicURL},
 			want: []string{"localhost", "127.0.0.1", "::1", "127.0.0.2", "goal.example.com"},
 		},
 		{

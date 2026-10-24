@@ -70,7 +70,9 @@ func (s *server) ListFactories(ctx context.Context, _ gen.ListFactoriesRequestOb
 
 	out := gen.ListFactories200JSONResponse{Factories: make([]gen.Factory, 0, len(recs))}
 	for _, rec := range recs {
-		out.Factories = append(out.Factories, factoryOut(rec, loaded[rec.ID]))
+		if s.visible(ctx, rec.ID) {
+			out.Factories = append(out.Factories, s.factoryOf(ctx, rec, loaded[rec.ID]))
+		}
 	}
 
 	return out, nil
@@ -310,16 +312,18 @@ func recordOf(recs map[domain.FactoryID]ports.FactoryRecord, org domain.OrgID, f
 
 // factoryOut is a factory with what goald runs of it.
 func (s *server) factoryOut(ctx context.Context, rec ports.FactoryRecord) gen.Factory {
-	return factoryOut(rec, s.loaded(ctx)[rec.ID])
+	return s.factoryOf(ctx, rec, s.loaded(ctx)[rec.ID])
 }
 
-// factoryOut is a factory as the store keeps it, with the stations, work types and description
-// of the version goald runs (f, nil before the first publish).
-func factoryOut(rec ports.FactoryRecord, f *config.Factory) gen.Factory {
+// factoryOf is a factory as the store keeps it, with the stations, work types and description of
+// the version goald runs (f, nil before the first publish), and the caller's role and permissions
+// on it.
+func (s *server) factoryOf(ctx context.Context, rec ports.FactoryRecord, f *config.Factory) gen.Factory {
 	out := gen.Factory{
 		Id: string(rec.ID), OrgId: string(rec.OrgID), Name: rec.Name, Title: optional(rec.Title),
 		WorkTypes: []string{}, Stations: []gen.Station{},
-		Current: publishedRef(rec.Current), Draft: draftRef(rec.Draft), Paused: rec.Paused(), CreatedAt: rec.CreatedAt,
+		Current: s.publishedRef(rec.Current), Draft: s.draftRef(rec.Draft), Paused: rec.Paused(), CreatedAt: rec.CreatedAt,
+		Role: s.factoryRole(ctx, rec.ID), Can: permissionsOut(s.can(ctx, rec.ID)),
 	}
 
 	if f == nil {

@@ -234,6 +234,34 @@ const published = (id: string, number: number, at: string): VersionRef => ({
   published_by: localUser,
 });
 
+/**
+ * What the mock's caller may do (Org.can, Factory.can): every permission of api/permissions.yaml
+ * at the level, sorted, as goald answers the local user and an owner.
+ */
+export const orgCan = [
+  'api_key:manage',
+  'api_key:read',
+  'audit:read',
+  'factory:create',
+  'invitation:read',
+  'member:manage',
+  'member:read',
+  'org:delete',
+  'org:manage',
+  'org:read',
+  'org:transfer',
+];
+export const factoryCan = [
+  'andon:manage',
+  'definition:edit',
+  'definition:publish',
+  'factory:manage',
+  'factory:read',
+  'item:create',
+  'item:decide',
+  'item:operate',
+];
+
 /** The organizations' ids. */
 export const acmeOrg = '019a1c00-0000-7000-8000-0000000000aa';
 export const labsOrg = '019a1c00-0000-7000-8000-0000000000bb';
@@ -241,6 +269,7 @@ export const labsOrg = '019a1c00-0000-7000-8000-0000000000bb';
 const goalFactory: Factory = {
   id: '6f0c2a7e-3d1b-4c55-9a7e-1f2b3c4d5e60',
   org_id: acmeOrg,
+  can: factoryCan,
   name: 'goal',
   title: 'Goal',
   description: 'Builds the Goal platform from this repository: engine, UI, infrastructure and its own factories.',
@@ -268,6 +297,7 @@ const goalFactory: Factory = {
 const sreFactory: Factory = {
   id: '0b7d9e21-58a4-4f0e-b6c3-2a9d8e7f6a51',
   org_id: acmeOrg,
+  can: factoryCan,
   name: 'sre',
   title: 'SRE',
   description: 'Triage, investigate and document production issues and SRE toil.',
@@ -288,6 +318,7 @@ const sreFactory: Factory = {
 const supportFactory: Factory = {
   id: '5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a01',
   org_id: acmeOrg,
+  can: factoryCan,
   name: 'support',
   title: 'Support',
   description: 'Answers questions from the acme shop, citing runbooks.',
@@ -307,6 +338,7 @@ const supportFactory: Factory = {
 const researchFactory: Factory = {
   id: '9e8d7c6b-5a49-4382-9172-6a5b4c3d2e1f',
   org_id: labsOrg,
+  can: factoryCan,
   name: 'research',
   title: 'Research',
   description: 'Reads papers and writes short notes for the Example Labs team.',
@@ -1191,8 +1223,16 @@ export function seed(now = Date.now()): MockState {
   const created = new Date(now - 90 * 86_400_000).toISOString();
   const state: MockState = {
     orgs: [
-      { id: acmeOrg, slug: 'acme', name: 'Acme', mark: 'Ac', factory_count: 0, created_at: created },
-      { id: labsOrg, slug: 'example-labs', name: 'Example Labs', mark: 'EL', factory_count: 0, created_at: created },
+      { id: acmeOrg, slug: 'acme', name: 'Acme', mark: 'Ac', factory_count: 0, created_at: created, can: orgCan },
+      {
+        id: labsOrg,
+        slug: 'example-labs',
+        name: 'Example Labs',
+        mark: 'EL',
+        factory_count: 0,
+        created_at: created,
+        can: orgCan,
+      },
     ],
     factories: [goalFactory, sreFactory, supportFactory, researchFactory].map((f) => structuredClone(f)),
     // Acme shares 6 slots, at most 3 for goal and 2 for sre (Org-Settings board); labs has no caps.

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
@@ -116,15 +117,25 @@ func apiKeyHash(key string) string {
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
-// withLocalUser makes every request act as the local user: GOAL_AUTH=none, the only mode until
-// goald authenticates requests (spec 3, PR 3-9), resolves no credential. It is the only place a
-// request's principal and actor are made; handlers and the engine read domain.PrincipalFrom and
-// domain.ActorFrom.
+// parsed is a request's credential as withCredential read it, for scope to resolve.
+type parsed struct {
+	c   credential
+	err error
+}
+
+type credentialKey struct{}
+
+// withCredential reads every /v1 request's credential (spec 3 §8.3), by mode:
+//   - GOAL_AUTH=none: every request acts as the local user (domain.LocalPrincipal), and the
+//     principal and actor are set here; cookies are ignored;
+//   - GOAL_AUTH=session: the credential is kept for scope, which resolves it per operation (a
+//     public operation reads none at all, so a stale or broken cookie never keeps anyone from the
+//     health check or the sign-in page's configuration).
 //
-// A request carrying an Authorization header goald cannot use is 401 in every mode, never the
-// local user: one that is not a bearer API key or session token. Agent task tokens work only at
-// the gateway (/mcp), so an agent cannot present its own to the API.
-func (s *server) withLocalUser(next http.Handler) http.Handler {
+// In both modes a request carrying an Authorization header goald cannot use is 401 at once, never
+// the local user: one that is not a bearer API key or session token. Agent task tokens work only
+// at the gateway (/mcp), so an agent cannot present its own to the API.
+func (s *server) withCredential(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if auth := r.Header.Values("Authorization"); len(auth) > 0 {
 			if _, err := bearer(auth); err != nil {
@@ -134,7 +145,30 @@ func (s *server) withLocalUser(next http.Handler) http.Handler {
 			}
 		}
 
-		ctx := domain.WithPrincipal(r.Context(), domain.LocalPrincipal)
-		next.ServeHTTP(w, r.WithContext(domain.WithActor(ctx, domain.LocalPrincipal.Actor())))
+		ctx := r.Context()
+
+		if s.auth.Mode == AuthNone {
+			ctx = domain.WithActor(domain.WithPrincipal(ctx, domain.LocalPrincipal), domain.LocalPrincipal.Actor())
+		} else {
+			c, err := parseCredential(r, s.auth.SecureCookies)
+			ctx = context.WithValue(ctx, credentialKey{}, parsed{c: c, err: err})
+		}
+
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// credentialFrom is the request's credential under GOAL_AUTH=session: none, malformed or absent
+// wraps domain.ErrUnauthenticated.
+func credentialFrom(ctx context.Context) (credential, error) {
+	p, _ := ctx.Value(credentialKey{}).(parsed)
+
+	switch {
+	case p.err != nil:
+		return credential{}, p.err
+	case p.c.kind == credentialNone:
+		return credential{}, fmt.Errorf("no credential: %w", domain.ErrUnauthenticated)
+	default:
+		return p.c, nil
+	}
 }

@@ -40,7 +40,15 @@ import type {
 import { authSettings, createMockAuth } from './auth.ts';
 import { createDefinitions } from './definitions.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
-import { type MockAgentStats, type MockItem, type MockSlots, type MockState, seed, trackSpan } from './fixtures.ts';
+import {
+  type MockAgentStats,
+  type MockItem,
+  type MockSlots,
+  type MockState,
+  orgCan,
+  seed,
+  trackSpan,
+} from './fixtures.ts';
 import { constraintOf, type DayRange, type FlowInput, leadTimeOf, metricsOf, rangeOf, weeklyOf } from './flow.ts';
 
 type Next = (err?: unknown) => void;
@@ -826,7 +834,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
 
     if (path === '/v1/orgs' && method === 'GET') {
       const orgs = [...state.orgs].sort((a, b) => a.name.localeCompare(b.name)).map(withCount);
-      return json(res, 200, { orgs: auth.visible(req, orgs).map(({ created_at: _created, ...summary }) => summary) });
+      return json(res, 200, {
+        orgs: auth.visible(req, orgs).map(({ created_at: _created, can: _can, ...summary }) => summary),
+      });
     }
     if (path === '/v1/orgs' && method === 'POST') {
       const body = await readBody(req);
@@ -846,6 +856,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         mark,
         factory_count: 0,
         created_at: new Date(clock()).toISOString(),
+        can: orgCan,
       };
       state.orgs.push(org);
       return json(res, 201, org);

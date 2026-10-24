@@ -63,14 +63,15 @@ func (s *server) GetOrgAttention(ctx context.Context, _ gen.GetOrgAttentionReque
 		return nil, err
 	}
 
-	fs := s.factories.Factories(ctx)
+	fs := s.visibleFactories(ctx)
 	out := gen.GetOrgAttention200JSONResponse{Factories: make([]gen.FactoryAttention, 0, len(fs))}
 
 	for _, f := range fs {
 		a := attention[domain.FactoryID(f.Metadata.ID)]
-		out.WaitingOnYou += a.WaitingHuman
+		onYou := s.onYou(ctx, domain.FactoryID(f.Metadata.ID), a.WaitingHuman)
+		out.WaitingOnYou += onYou
 		out.Factories = append(out.Factories, gen.FactoryAttention{
-			FactoryId: f.Metadata.ID, WaitingOnYou: a.WaitingHuman, BlockedItems: a.Blocked, Andon: andonOf(a.Andon),
+			FactoryId: f.Metadata.ID, WaitingOnYou: onYou, BlockedItems: a.Blocked, Andon: andonOf(a.Andon),
 		})
 	}
 
@@ -112,7 +113,7 @@ func (s *server) GetFactoryOverview(ctx context.Context, req gen.GetFactoryOverv
 		return nil, err
 	}
 
-	fs := s.factories.Factories(ctx)
+	fs := s.visibleFactories(ctx)
 	out := gen.GetFactoryOverview200JSONResponse{
 		Window: w.name(), Since: openapi_types.Date{Time: w.from}, Until: openapi_types.Date{Time: w.to},
 		Factories: make([]gen.FactoryOverview, 0, len(fs)),
@@ -134,7 +135,7 @@ func (s *server) GetFactoryOverview(ctx context.Context, req gen.GetFactoryOverv
 		out.Factories = append(out.Factories, o)
 	}
 
-	out.Factories = append(out.Factories, drafts(recs, w)...)
+	out.Factories = append(out.Factories, s.drafts(ctx, recs, w)...)
 
 	if took := time.Since(started); took > slowOverview || len(fs) > overviewFactories {
 		s.log.WarnContext(ctx, "slow factory overview", slog.String("org_id", string(orgOf(ctx).ID)),
@@ -169,11 +170,11 @@ func (s *server) overview(
 
 	days := float64(w.days())
 	o := gen.FactoryOverview{
-		Factory: factoryOut(rec, f), Health: gen.FactoryHealthRunning, Andon: andonOf(a.Andon), SpendUsd: cur.SpendUSD,
+		Factory: s.factoryOf(ctx, rec, f), Health: gen.FactoryHealthRunning, Andon: andonOf(a.Andon), SpendUsd: cur.SpendUSD,
 		Throughput: gen.Throughput{
 			PerDay: float64(cur.ItemsDone) / days, PreviousPerDay: float64(prev.ItemsDone) / days, Days: donePerDay(w, cur),
 		},
-		Waiting: gen.WaitingSummary{OnYou: a.WaitingHuman},
+		Waiting: gen.WaitingSummary{OnYou: s.onYou(ctx, l.FactoryID, a.WaitingHuman)},
 	}
 
 	if a.Andon != nil {
@@ -212,18 +213,19 @@ func (s *server) overview(
 	return o, nil
 }
 
-// drafts are the factories never published, which goald does not run: on the Factories home as
-// drafts (the wizard resumes from there), with nothing measured, waiting or spent.
-func drafts(recs map[domain.FactoryID]ports.FactoryRecord, w dayRange) []gen.FactoryOverview {
+// drafts are the factories never published that the caller sees, which goald does not run: on the
+// Factories home as drafts (the wizard resumes from there), with nothing measured, waiting or
+// spent.
+func (s *server) drafts(ctx context.Context, recs map[domain.FactoryID]ports.FactoryRecord, w dayRange) []gen.FactoryOverview {
 	out := []gen.FactoryOverview{}
 
 	for _, rec := range recs {
-		if rec.Current != nil {
+		if rec.Current != nil || !s.visible(ctx, rec.ID) {
 			continue
 		}
 
 		out = append(out, gen.FactoryOverview{
-			Factory: factoryOut(rec, nil), Health: gen.FactoryHealthDraft,
+			Factory: s.factoryOf(ctx, rec, nil), Health: gen.FactoryHealthDraft,
 			Throughput: gen.Throughput{Days: donePerDay(w, domain.FlowMetrics{})},
 			Waiting: gen.WaitingSummary{
 				ItemsByType: []struct {
@@ -253,7 +255,7 @@ func (s *server) GetInbox(ctx context.Context, req gen.GetInboxRequestObject) (g
 		return nil, fmt.Errorf("%w: limit must be in [1, %d]", errInvalid, maxInboxLimit)
 	}
 
-	q := InboxQuery{Factories: s.factories.Factories(ctx), Limit: limit}
+	q := InboxQuery{Limit: limit}
 
 	if ref := deref(req.Params.Factory); ref != "" {
 		f, err := s.factory(ctx, ref)
@@ -262,6 +264,8 @@ func (s *server) GetInbox(ctx context.Context, req gen.GetInboxRequestObject) (g
 		}
 
 		q.Factories = []*config.Factory{f}
+	} else {
+		q.Factories = s.visibleFactories(ctx)
 	}
 
 	entries := []gen.InboxEntry{}
@@ -272,7 +276,13 @@ func (s *server) GetInbox(ctx context.Context, req gen.GetInboxRequestObject) (g
 			return nil, err
 		}
 
-		entries = append(entries, got...)
+		// A decision is the caller's only where they may decide; the rest is for whoever sees
+		// the factory.
+		for _, e := range got {
+			if e.Kind != gen.InboxEntryKindDecision || s.ask(ctx, permItemDecide, domain.FactoryID(e.Factory.Id)) == nil {
+				entries = append(entries, e)
+			}
+		}
 	}
 
 	// Keep the most recent entries, then order them by kind, oldest first.

@@ -36,7 +36,7 @@ func (s *server) ListVersions(ctx context.Context, req gen.ListVersionsRequestOb
 
 	out := gen.ListVersions200JSONResponse{Versions: make([]gen.Version, 0, len(page.Versions))}
 	for _, v := range page.Versions {
-		out.Versions = append(out.Versions, versionOut(v))
+		out.Versions = append(out.Versions, s.versionOut(v))
 	}
 
 	if page.NextBefore > 0 {
@@ -57,7 +57,7 @@ func (s *server) GetVersion(ctx context.Context, req gen.GetVersionRequestObject
 		return nil, err
 	}
 
-	return gen.GetVersion200JSONResponse(versionDetailOut(v)), nil
+	return gen.GetVersion200JSONResponse(s.versionDetailOut(v)), nil
 }
 
 func (s *server) GetVersionModel(ctx context.Context, req gen.GetVersionModelRequestObject) (gen.GetVersionModelResponseObject, error) {

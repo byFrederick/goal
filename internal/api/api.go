@@ -12,11 +12,13 @@
 //
 // Every request goes through the same layers: cross-origin protection (a browser may change
 // things only from goald's own origin), a body limit, a request id (X-Request-Id), the request's
-// principal and actor (credential.go: the local user under GOAL_AUTH=none), then, per
-// operation, the organization of the path (org.go: unknown or deleted is 404, and the request is
-// bound to it with domain.WithOrg so row-level security scopes every store call) and the
-// Authorizer seam (authz.go), passed again by the resolvers of factories, definitions, items and
-// runs. Wherever a path takes an item, it takes its id or <factory>#<number>. Errors are RFC 9457
+// credential (credential.go: the local user under GOAL_AUTH=none), then, per operation, its
+// principal and the organization of the path (identity.go: under GOAL_AUTH=session an unknown,
+// expired or revoked credential is 401 whatever the path, then an unknown or deleted organization
+// is 404, and the request is bound to it with domain.WithOrg so row-level security scopes every
+// store call) and the Authorizer (authz.go; Permissions under session), passed again by the
+// resolvers of factories, definitions, items and runs. Lists and aggregates show only the
+// factories the principal sees (permissions.go: visible). Wherever a path takes an item, it takes its id or <factory>#<number>. Errors are RFC 9457
 // problem details: unknown organizations, items and factories are 404, invalid requests 400, a
 // broken rule (a taken slug) or an action the item's state does not allow (a decision on an item
 // not waiting for a human, a retry of an item not blocked, a merge that is not the item's step or
@@ -28,8 +30,9 @@
 // events and one for definition changes, fanned out to that instance's clients of each
 // organization, so any instance serves any client.
 //
-// No authentication yet (GOAL_AUTH=none): goald binds the API to 127.0.0.1. Permissions, the
-// Authorizer of signed-in installs, and the credential parsing are ready for it (spec 3).
+// GOAL_AUTH=none, one developer's laptop, makes every request the local user's on a loopback
+// listener; GOAL_AUTH=session resolves each request's session or API key in the database
+// (spec 3, ADR 0007).
 package api
 
 import (
@@ -119,6 +122,10 @@ type Deps struct {
 	OrgRetention time.Duration
 	// Authorizer decides every request: AllowAll under GOAL_AUTH=none only, else Permissions.
 	Authorizer Authorizer
+	// Auth is how requests are authenticated (GOAL_AUTH): Mode is required.
+	Auth AuthConfig
+	// Identity resolves each request's credential under AuthSession; unused under AuthNone.
+	Identity Identity
 	// Feed serves /v1/orgs/{org}/stream; the caller runs it (Feed.Run).
 	Feed *Feed
 	// InboxSources add entries to /v1/orgs/{org}/inbox after the built-in work entries (inbox.go);
@@ -139,6 +146,23 @@ func (d Deps) complete() bool {
 	}
 
 	return !slices.Contains(missing, true)
+}
+
+// failsClosed refuses an authentication setup that could let a request through unchecked: a mode
+// other than none or session, session without an Identity or with AllowAll.
+func (d Deps) failsClosed() error {
+	switch d.Auth.Mode {
+	case AuthNone:
+		return nil
+	case AuthSession:
+		if _, all := d.Authorizer.(AllowAll); all || d.Identity == nil {
+			return errors.New("api: GOAL_AUTH=session needs an Identity and an Authorizer that is not AllowAll")
+		}
+
+		return nil
+	default:
+		return fmt.Errorf("api: auth mode %q is not none or session", d.Auth.Mode)
+	}
 }
 
 // Limits on requests.
@@ -163,6 +187,10 @@ func New(d Deps) (http.Handler, error) {
 			"and a positive OrgRetention are required")
 	}
 
+	if err := d.failsClosed(); err != nil {
+		return nil, err
+	}
+
 	log := d.Logger
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
@@ -170,7 +198,8 @@ func New(d Deps) (http.Handler, error) {
 
 	s := &server{
 		engine: d.Engine, items: d.Items, factories: d.Factories, defs: d.Definitions, versions: d.Versions, orgs: d.Orgs, audit: d.Audit,
-		retention: d.OrgRetention, authz: d.Authorizer, feed: d.Feed, builder: d.Builder, clock: d.Clock, log: log,
+		retention: d.OrgRetention, authz: d.Authorizer, auth: d.Auth, identity: d.Identity, feed: d.Feed, builder: d.Builder,
+		clock: d.Clock, log: log,
 	}
 	s.inbox = append([]InboxSource{workInbox{s: s}}, d.InboxSources...)
 
@@ -202,7 +231,7 @@ func New(d Deps) (http.Handler, error) {
 		s.problem(w, r, errCrossOrigin)
 	}))
 
-	return cop.Handler(limitBodies(withRequestID(s.withLocalUser(h)))), nil
+	return cop.Handler(limitBodies(withRequestID(s.withCredential(h)))), nil
 }
 
 // limitBodies refuses request bodies over the route's limit (413): the definitions routes take
@@ -258,6 +287,8 @@ type server struct {
 	audit     AuditLog
 	retention time.Duration
 	authz     Authorizer
+	auth      AuthConfig
+	identity  Identity
 	feed      *Feed
 	inbox     []InboxSource
 	builder   Builder
@@ -342,7 +373,7 @@ func (s *server) ListItemEvents(ctx context.Context, req gen.ListItemEventsReque
 
 	page := gen.ListItemEvents200JSONResponse{Events: make([]gen.Event, 0, len(events)), NextAfter: after}
 	for _, e := range events {
-		page.Events = append(page.Events, eventOf(e))
+		page.Events = append(page.Events, s.eventOf(e))
 		page.NextAfter = e.ID
 	}
 
@@ -587,7 +618,7 @@ func (s *server) itemOf(ctx context.Context, it domain.Item) gen.Item {
 	return out
 }
 
-func eventOf(e domain.Event) gen.Event {
+func (s *server) eventOf(e domain.Event) gen.Event {
 	data := e.Data
 	if data == nil {
 		data = map[string]any{}
@@ -595,7 +626,7 @@ func eventOf(e domain.Event) gen.Event {
 
 	return gen.Event{
 		Id: e.ID, ItemId: string(e.ItemID), RunId: optional(string(e.RunID)), At: e.At, Kind: string(e.Kind),
-		Station: optional(e.Station), Actor: e.Actor, Data: data,
+		Station: optional(e.Station), Actor: s.eventActor(e), Data: data,
 	}
 }
 

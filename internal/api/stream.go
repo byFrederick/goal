@@ -28,18 +28,68 @@ const (
 
 // Feed fans the notices of two listeners, item and organization events and definition changes,
 // out to this goald instance's stream clients, each client receiving only its organization's
-// notices (and every resync). It holds only the clients connected to this instance, so any
-// instance serves any client.
+// notices (and every resync). With access notices (EndOnAccessChanges, GOAL_AUTH=session) it also
+// ends the streams an access change names, and every signed-in client's stream on a resync, so
+// the client reconnects and is checked again (spec 3 §8.8). It holds only the clients connected to
+// this instance, so any instance serves any client.
 type Feed struct {
 	notices     ports.ItemNotices
 	definitions ports.DefinitionNotices
+	access      ports.AccessNotices
 	taps        []func(ports.ItemNotice)
 	log         *slog.Logger
 
 	mu      sync.Mutex
-	clients map[chan ports.ItemNotice]domain.OrgID
+	clients map[chan ports.ItemNotice]subscriber
 	closed  bool
 }
+
+// subscriber is who a stream client is: its organization and, signed in, its principal.
+type subscriber struct {
+	org domain.OrgID
+	// user, session and key name the principal, for the access notices that end its stream;
+	// signedIn ends it on a resync too (access notices may have been missed). The local user of
+	// GOAL_AUTH=none is not signed in.
+	user     domain.UserID
+	session  string
+	key      domain.APIKeyID
+	signedIn bool
+}
+
+// subscriberOf is the subscriber of org that principal p is.
+func subscriberOf(org domain.OrgID, p domain.Principal) subscriber {
+	sub := subscriber{org: org, user: p.User, key: p.Key, signedIn: p.Session != nil || p.Kind == domain.PrincipalService}
+	if p.Session != nil {
+		sub.session = p.Session.ID
+	}
+
+	return sub
+}
+
+// endedBy reports whether access notice n ends the subscriber's stream: its session ended, its
+// key was revoked, its membership or a factory role of it changed, or its organization went.
+func (sub subscriber) endedBy(n ports.AccessNotice) bool {
+	if !sub.signedIn {
+		return false
+	}
+
+	switch n.Kind {
+	case ports.AccessSession:
+		return n.SessionID != "" && n.SessionID == sub.session
+	case ports.AccessMember, ports.AccessFactoryRole:
+		return n.OrgID == sub.org && n.UserID != "" && n.UserID == sub.user
+	case ports.AccessOrg:
+		return n.OrgID == sub.org
+	case ports.AccessAPIKey:
+		return n.KeyID != "" && n.KeyID == sub.key
+	default:
+		// A kind this goald does not know: end the stream, the safe answer to a change.
+		return true
+	}
+}
+
+// EndOnAccessChanges makes the feed end the streams that access notices name; call it before Run.
+func (f *Feed) EndOnAccessChanges(a ports.AccessNotices) { f.access = a }
 
 // NewFeed returns a feed over item notices and definition notices; Run starts it. log may be
 // nil. Each tap is told every item notice (resyncs included) before the clients, on the
@@ -50,7 +100,7 @@ func NewFeed(notices ports.ItemNotices, definitions ports.DefinitionNotices, log
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Feed{notices: notices, definitions: definitions, taps: taps, log: log, clients: map[chan ports.ItemNotice]domain.OrgID{}}
+	return &Feed{notices: notices, definitions: definitions, taps: taps, log: log, clients: map[chan ports.ItemNotice]subscriber{}}
 }
 
 // Run listens to both sources until ctx ends, or one of them fails, then ends every client's
@@ -59,17 +109,28 @@ func (f *Feed) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	errs := make(chan error, 2)
+	listeners := 2
+	if f.access != nil {
+		listeners++
+	}
+
+	errs := make(chan error, listeners)
 
 	go func() { errs <- f.notices.Listen(ctx, f.deliver) }()
 	go func() { errs <- f.definitions.Listen(ctx, f.broadcastDefinition) }()
 
-	// The first to return (ctx ended, or a listener failed) stops the other.
+	if f.access != nil {
+		go func() { errs <- f.access.Listen(ctx, f.endStreams) }()
+	}
+
+	// The first to return (ctx ended, or a listener failed) stops the others.
 	err := <-errs
 
 	cancel()
 
-	err = errors.Join(err, <-errs)
+	for range listeners - 1 {
+		err = errors.Join(err, <-errs)
+	}
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -139,15 +200,37 @@ func (f *Feed) deliver(n ports.ItemNotice) {
 	f.broadcast(n)
 }
 
+// endStreams ends the streams an access notice names, and on a resync of the access listener
+// every signed-in client's stream: notices may have been missed meanwhile.
+func (f *Feed) endStreams(n ports.AccessNotice) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	for ch, sub := range f.clients {
+		if (n.Resync && sub.signedIn) || (!n.Resync && sub.endedBy(n)) {
+			delete(f.clients, ch)
+			close(ch)
+		}
+	}
+}
+
 // broadcast hands a notice to every client of its organization (a resync to every client)
 // without waiting: a client whose buffer is full is dropped (its channel closed), so one slow
-// client never holds up the others.
+// client never holds up the others. A resync ends a signed-in client's stream (access notices may
+// have been missed too), which reconnects and is checked again.
 func (f *Feed) broadcast(n ports.ItemNotice) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	for ch, org := range f.clients {
-		if !n.Resync && n.OrgID != org {
+	for ch, sub := range f.clients {
+		if !n.Resync && n.OrgID != sub.org {
+			continue
+		}
+
+		if n.Resync && sub.signedIn && f.access != nil {
+			delete(f.clients, ch)
+			close(ch)
+
 			continue
 		}
 
@@ -161,9 +244,9 @@ func (f *Feed) broadcast(n ports.ItemNotice) {
 	}
 }
 
-// subscribe returns a channel of org's notices, closed when the client is dropped or the feed
-// stops, and the function that unsubscribes it.
-func (f *Feed) subscribe(org domain.OrgID) (<-chan ports.ItemNotice, func()) {
+// subscribe returns a channel of the subscriber's organization's notices, closed when the client
+// is dropped or its access changes or the feed stops, and the function that unsubscribes it.
+func (f *Feed) subscribe(sub subscriber) (<-chan ports.ItemNotice, func()) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -174,7 +257,7 @@ func (f *Feed) subscribe(org domain.OrgID) (<-chan ports.ItemNotice, func()) {
 		return ch, func() {}
 	}
 
-	f.clients[ch] = org
+	f.clients[ch] = sub
 
 	return ch, func() {
 		f.mu.Lock()
@@ -204,9 +287,15 @@ func (s *server) StreamEvents(ctx context.Context, req gen.StreamEventsRequestOb
 		return nil, fmt.Errorf("stream: %w", domain.ErrNoOrg)
 	}
 
-	notices, unsubscribe := s.feed.subscribe(org)
+	p := principalOf(ctx)
+	notices, unsubscribe := s.feed.subscribe(subscriberOf(org, p))
 
-	return stream{ctx: ctx, s: s, factory: factory, notices: notices, unsubscribe: unsubscribe}, nil
+	st := stream{ctx: ctx, s: s, factory: factory, notices: notices, unsubscribe: unsubscribe}
+	if p.Session != nil {
+		st.expires = p.Session.ExpiresAt
+	}
+
+	return st, nil
 }
 
 // stream writes one client's Server-Sent Events until the client leaves, it falls behind or
@@ -217,6 +306,8 @@ type stream struct {
 	factory     domain.FactoryID
 	notices     <-chan ports.ItemNotice
 	unsubscribe func()
+	// expires is when the subscriber's session ends, and the stream with it (zero: never).
+	expires time.Time
 }
 
 func (st stream) VisitStreamEventsResponse(w http.ResponseWriter) error {
@@ -232,6 +323,10 @@ func (st stream) VisitStreamEventsResponse(w http.ResponseWriter) error {
 
 	heartbeat := st.s.clock.NewTicker(heartbeatEvery)
 	defer heartbeat.Stop()
+
+	// A signed-in stream ends when its session does, at the first heartbeat after it (the client
+	// reconnects and signs in again).
+	expired := func() bool { return !st.expires.IsZero() && !st.s.clock.Now().Before(st.expires) }
 
 	// Once the status is written, errors cannot become problem details: a failed write means
 	// the client left, so the stream just ends.
@@ -252,7 +347,7 @@ func (st stream) VisitStreamEventsResponse(w http.ResponseWriter) error {
 		case <-st.ctx.Done():
 			return nil
 		case <-heartbeat.C():
-			if !write(": heartbeat\n\n") {
+			if expired() || !write(": heartbeat\n\n") {
 				return nil
 			}
 		case n, ok := <-st.notices:
@@ -271,6 +366,11 @@ func (st stream) send(write func(string, ...any) bool, n ports.ItemNotice) bool 
 	}
 
 	if st.factory != "" && n.FactoryID != st.factory {
+		return true
+	}
+
+	// Only the factories the subscriber sees; an event of none goes to every member.
+	if n.FactoryID != "" && !st.s.visible(st.ctx, n.FactoryID) {
 		return true
 	}
 

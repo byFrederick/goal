@@ -289,6 +289,10 @@ type Tenancy interface {
 // NewOrg is an organization to create.
 type NewOrg struct {
 	Slug, Name, Mark string
+	// Owner becomes the organization's first owner: the user who creates it (GOAL_AUTH=session).
+	// Empty, as under GOAL_AUTH=none, makes the install's earliest platform admin its owner, or
+	// nobody before anyone has signed in (the bootstrap owner then owns every live organization).
+	Owner domain.UserID
 }
 
 // OrgUpdate names the fields to change; nil leaves a field as it is.

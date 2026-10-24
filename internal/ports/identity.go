@@ -24,3 +24,35 @@ type Identity interface {
 	// or expired.
 	DeviceRequest(ctx context.Context, userCode string) (domain.DeviceRequest, error)
 }
+
+// AccessNotices streams the access changes committed by anyone (PostgreSQL LISTEN goal_access):
+// a membership ended or its role changed, a session ended, a factory role granted, changed or
+// removed, an organization deleted. Any role that may connect can NOTIFY, so a notice is a claim:
+// it only ends what it names (a stream, which reconnects and is checked again) and never grants
+// anything.
+type AccessNotices interface {
+	// Listen calls deliver for every access notice until ctx ends, then returns nil. Each time
+	// it starts listening (the first time, and after a lost connection, which misses notices) it
+	// first delivers a notice with Resync set, after which listeners must check everything again.
+	Listen(ctx context.Context, deliver func(AccessNotice)) error
+}
+
+// Kinds of access notices (00043's goal_notify_access; 00046 adds api_key).
+const (
+	AccessMember      = "member"       // OrgID, UserID: a role changed or the membership ended
+	AccessSession     = "session"      // UserID, SessionID: signed out or cleaned up
+	AccessFactoryRole = "factory_role" // OrgID, UserID, FactoryID
+	AccessOrg         = "org"          // OrgID: soft-deleted
+	AccessAPIKey      = "api_key"      // OrgID, KeyID: revoked
+)
+
+// AccessNotice is one access change as its notification claims it.
+type AccessNotice struct {
+	Resync    bool
+	Kind      string
+	OrgID     domain.OrgID
+	UserID    domain.UserID
+	SessionID string
+	FactoryID domain.FactoryID
+	KeyID     domain.APIKeyID
+}

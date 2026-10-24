@@ -38,7 +38,7 @@ func TestFeed_HandsEachClientItsOrgsNotices(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ofLabs, _ := feed.subscribe(labs)
+	ofLabs, _ := feed.subscribe(subscriber{org: labs})
 
 	for i := range clientBuffer + 1 {
 		notices.Publish(ports.ItemNotice{OrgID: acme, EventID: int64(i + 1)})
@@ -121,8 +121,8 @@ func TestFeed_EndsTheStreamOfAClientThatFallsBehind(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	slow, _ := feed.subscribe(acme)
-	fast, _ := feed.subscribe(acme)
+	slow, _ := feed.subscribe(subscriber{org: acme})
+	fast, _ := feed.subscribe(subscriber{org: acme})
 
 	for i := range clientBuffer + 1 {
 		notices.Publish(ports.ItemNotice{OrgID: acme, EventID: int64(i + 1)})

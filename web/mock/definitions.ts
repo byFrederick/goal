@@ -39,7 +39,7 @@ import type {
 import { parse as parseYaml } from 'yaml';
 import { localUser, type MockDefinition, type MockSkill, type MockVersion, type Tree } from './definition-seed.ts';
 import type { MockFault } from './faults.ts';
-import type { MockState } from './fixtures.ts';
+import { factoryCan, type MockState } from './fixtures.ts';
 import {
   applySection,
   cleanPath,
@@ -1132,6 +1132,7 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
       draft: null,
       paused: false,
       created_at: at,
+      can: factoryCan,
     };
     const draft: MockVersion = {
       id: randomUUID(),

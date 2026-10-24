@@ -96,13 +96,9 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	secrets := envsecrets.New(os.LookupEnv)
 	clock := sysclock.Clock{}
 
-	key, err := secrets.Resolve(ctx, s.GatewayKeyRef)
+	key, err := gatewayKey(ctx, s, secrets)
 	if err != nil {
-		return fmt.Errorf("gateway key (%s): %w; generate one with `openssl rand -hex 32`", s.GatewayKeyRef, err)
-	}
-
-	if len(key) < minKeyBytes {
-		return fmt.Errorf("gateway key (%s) is shorter than %d bytes", s.GatewayKeyRef, minKeyBytes)
+		return err
 	}
 
 	pool, err := openDatabase(ctx, s, log)
@@ -114,6 +110,11 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// One value is the Store, Tenancy and Audit. Each binds its transactions to the organization
 	// in ctx: the engine takes it from each line, the API from the request.
 	store := postgres.New(pool)
+
+	identity, err := authentication(ctx, s, store, log)
+	if err != nil {
+		return err
+	}
 
 	s3cfg, err := s3store.ConfigFromEnv(os.Getenv)
 	if err != nil {
@@ -195,16 +196,15 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	definitionNotices := postgres.NewDefinitionNotices(store, log)
 
-	// The engine hears every item notice, so a person's move, pause or send-back of an item this
-	// instance runs stops its run at once.
-	feed := api.NewFeed(postgres.NewNotices(store, log), postgres.NewDefinitionNotices(store, log), log, eng.Interrupt)
+	feed := newFeed(s, store, eng, log)
 
 	// Phase 4 sets the capabilities in its wiring PRs; until then the editor keeps their controls hidden.
 	editor := builder.New(objects, clock, builder.Config{Models: s.Models, Capabilities: builder.Capabilities{}, Logger: log})
 
 	apiHandler, err := api.New(api.Deps{
 		Engine: eng, Items: store, Factories: defs, Definitions: authors, Versions: definitionStore, Orgs: store, Audit: store, OrgRetention: s.OrgRetention,
-		Authorizer: authorizer(s.Auth), Feed: feed, Builder: editor, Clock: clock, Logger: log,
+		Authorizer: authorizer(s.Auth, clock), Auth: api.AuthConfig{Mode: api.AuthMode(s.Auth), Google: s.Google, SecureCookies: s.strictTransport()},
+		Identity: identity, Feed: feed, Builder: editor, Clock: clock, Logger: log,
 	})
 	if err != nil {
 		return err
@@ -452,12 +452,105 @@ func refresh(ctx context.Context, log *slog.Logger, defs *definitions.Cache, eve
 }
 
 // authorizer is the API's Authorizer for the auth mode: AllowAll, everything allowed, only under
-// GOAL_AUTH=none (a loopback listen, one local user); api.Permissions joins with sign-in. Any
-// other mode has none, which api.New refuses: goald fails closed.
-func authorizer(mode authMode) api.Authorizer {
-	if mode != authNone {
+// GOAL_AUTH=none (a loopback listen, one local user); under session the permission table
+// (api.Permissions), dating sessions by clock for the fresh rule. Any other mode has none, which
+// api.New refuses: goald fails closed.
+func authorizer(mode authMode, clock ports.Clock) api.Authorizer {
+	switch mode {
+	case authNone:
+		return api.AllowAll{}
+	case authSession:
+		return api.NewPermissions(clock)
+	default:
 		return nil
 	}
+}
 
-	return api.AllowAll{}
+// gatewayKey is the secret that signs task tokens: at least minKeyBytes long.
+func gatewayKey(ctx context.Context, s settings, secrets ports.Secrets) (string, error) {
+	key, err := secrets.Resolve(ctx, s.GatewayKeyRef)
+	if err != nil {
+		return "", fmt.Errorf("gateway key (%s): %w; generate one with `openssl rand -hex 32`", s.GatewayKeyRef, err)
+	}
+
+	if len(key) < minKeyBytes {
+		return "", fmt.Errorf("gateway key (%s) is shorter than %d bytes", s.GatewayKeyRef, minKeyBytes)
+	}
+
+	return key, nil
+}
+
+// newFeed is the stream feed. The engine hears every item notice, so a person's move, pause or
+// send-back of an item this instance runs stops its run at once; under GOAL_AUTH=session a stream
+// ends when its person's access changes, and is checked again when it reconnects.
+func newFeed(s settings, store *postgres.Store, eng *engine.Engine, log *slog.Logger) *api.Feed {
+	feed := api.NewFeed(postgres.NewNotices(store, log), postgres.NewDefinitionNotices(store, log), log, eng.Interrupt)
+	if s.Auth == authSession {
+		feed.EndOnAccessChanges(postgres.NewAccessNotices(store, log))
+	}
+
+	return feed
+}
+
+// authUnreachableAfter bounds goald's startup look at the identity service.
+const authUnreachableAfter = 2 * time.Second
+
+// authentication starts the auth mode (spec 3 §8.3). Under GOAL_AUTH=none it warns that every
+// request is the local user. Under session it refuses to start unless the database passes the
+// identity self-check (postgres.CheckIdentity), returns the per-request identity lookups, and
+// warns, without stopping, when the identity service does not answer (signed-in people keep
+// working) or no one has signed in yet.
+func authentication(ctx context.Context, s settings, store *postgres.Store, log *slog.Logger) (api.Identity, error) {
+	log.InfoContext(ctx, "authentication", slog.String("mode", string(s.Auth)), slog.String("public_url", s.PublicURL))
+
+	if s.Auth == authNone {
+		log.WarnContext(ctx, "GOAL_AUTH=none: sign-in is off and every request to "+s.Listen+" acts as the local user, "+
+			"agent containers included; one developer's laptop only")
+
+		return nil, nil //nolint:nilnil // no identity lookups under none: api.New ignores Identity there
+	}
+
+	if err := postgres.CheckIdentity(ctx, store); err != nil {
+		return nil, fmt.Errorf("GOAL_AUTH=session: %w (goald migrates the database at start; check the roles with goal db init)", err)
+	}
+
+	log.InfoContext(ctx, "identity self-check passed")
+
+	if signedIn, err := postgres.AnyoneSignedIn(ctx, store); err != nil {
+		return nil, err
+	} else if !signedIn {
+		log.WarnContext(ctx, "no one can sign in yet: set GOAL_BOOTSTRAP_OWNER_EMAIL and BETTER_AUTH_SECRET and start the "+
+			"auth service (goal up does), or set GOAL_AUTH=none")
+	}
+
+	if err := authReachable(ctx, s.AuthUpstream.String()); err != nil {
+		log.WarnContext(ctx, "the identity service does not answer: signing in and out waits for it; signed-in people keep working",
+			slog.String("upstream", s.AuthUpstream.String()), slog.Any("error", err))
+	}
+
+	return postgres.NewIdentity(store), nil
+}
+
+// authReachable asks the identity service's health check (GET /api/auth/ok).
+func authReachable(ctx context.Context, upstream string) error {
+	ctx, cancel := context.WithTimeout(ctx, authUnreachableAfter)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, upstream+"/api/auth/ok", http.NoBody)
+	if err != nil {
+		return err
+	}
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	_ = res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("GET /api/auth/ok: %s", res.Status)
+	}
+
+	return nil
 }

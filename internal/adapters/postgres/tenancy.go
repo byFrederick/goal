@@ -96,9 +96,9 @@ func (s *Store) ActiveOrgs(ctx context.Context) ([]domain.OrgID, error) {
 }
 
 // CreateOrg implements ports.Tenancy. goal_provision_org writes the organization, Better Auth's
-// auth.organization row and org.created (by the actor's ref, with the name its ref gives it) in
-// one transaction, bound to the new organization's id: both rows exist or neither does. The
-// organization has no owner yet; NewOrg.Owner arrives with sign-in (3-9).
+// auth.organization row, its owner's membership and org.created (by the actor's ref, with the name
+// its ref gives it) in one transaction, bound to the new organization's id: all rows exist or none
+// does. The owner is NewOrg.Owner, else the install's earliest platform admin, else nobody.
 func (s *Store) CreateOrg(ctx context.Context, by domain.Actor, n ports.NewOrg) (domain.Org, error) {
 	if n.Mark == "" {
 		n.Mark = domain.DefaultMark(n.Name)
@@ -116,8 +116,14 @@ func (s *Store) CreateOrg(ctx context.Context, by domain.Actor, n ports.NewOrg) 
 	var o domain.Org
 
 	err = s.inTx(domain.WithOrg(ctx, domain.OrgID(id.String())), func(q *db.Queries) error {
+		owner, member, err := orgOwner(ctx, q, n.Owner)
+		if err != nil {
+			return err
+		}
+
 		row, err := q.ProvisionOrg(ctx, db.ProvisionOrgParams{
-			ID: id, Slug: n.Slug, Name: n.Name, Mark: n.Mark, By: by.Ref(), RequestID: optional(domain.RequestIDFrom(ctx)),
+			ID: id, Slug: n.Slug, Name: n.Name, Mark: n.Mark, Owner: owner, OwnerMember: member, By: by.Ref(),
+			RequestID: optional(domain.RequestIDFrom(ctx)),
 		})
 		if err != nil {
 			return ruleError(err, n.Slug)
@@ -132,6 +138,53 @@ func (s *Store) CreateOrg(ctx context.Context, by domain.Actor, n ports.NewOrg) 
 	}
 
 	return o, nil
+}
+
+// orgOwner is a new organization's owner and the id of their membership: user, else the
+// install's earliest platform admin, else nobody (nil, nil).
+func orgOwner(ctx context.Context, q *db.Queries, user domain.UserID) (*uuid.UUID, *uuid.UUID, error) {
+	if user == "" {
+		admins, err := platformAdmins(ctx, q)
+		if err != nil || len(admins) == 0 {
+			return nil, nil, err
+		}
+
+		user = admins[0]
+	}
+
+	owner, err := uuid.Parse(string(user))
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: owner %q is not a user id", domain.ErrInvalid, user)
+	}
+
+	member, err := newID()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return &owner, &member, nil
+}
+
+// platformAdmins lists the install's platform admins, earliest first (goal_platform_admins).
+func platformAdmins(ctx context.Context, q *db.Queries) ([]domain.UserID, error) {
+	raw, err := q.PlatformAdmins(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("platform admins: %w", err)
+	}
+
+	var admins []struct {
+		UserID domain.UserID `json:"user_id"`
+	}
+	if err := json.Unmarshal(raw, &admins); err != nil {
+		return nil, fmt.Errorf("platform admins: decode: %w", err)
+	}
+
+	out := make([]domain.UserID, 0, len(admins))
+	for _, a := range admins {
+		out = append(out, a.UserID)
+	}
+
+	return out, nil
 }
 
 // UpdateOrg implements ports.Tenancy. The organization's row is locked first, then its

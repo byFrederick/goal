@@ -10,6 +10,7 @@ import (
 var (
 	_ ports.ItemNotices       = (*ItemNotices)(nil)
 	_ ports.DefinitionNotices = (*DefinitionNotices)(nil)
+	_ ports.AccessNotices     = (*AccessNotices)(nil)
 )
 
 // ItemNotices delivers the notices a test publishes to every Listen call in progress, after
@@ -54,6 +55,28 @@ func (n *DefinitionNotices) Publish(notices ...ports.DefinitionNotice) { n.feed.
 
 // AwaitListeners blocks until count Listen calls are in progress or ctx ends.
 func (n *DefinitionNotices) AwaitListeners(ctx context.Context, count int) error {
+	return n.feed.awaitListeners(ctx, count)
+}
+
+// AccessNotices delivers the access notices a test publishes to every Listen call in progress,
+// after the Resync notice each Listen call starts with.
+type AccessNotices struct {
+	feed feed[ports.AccessNotice]
+}
+
+// NewAccessNotices returns a feed nobody listens to yet.
+func NewAccessNotices() *AccessNotices { return &AccessNotices{} }
+
+// Listen implements ports.AccessNotices.
+func (n *AccessNotices) Listen(ctx context.Context, deliver func(ports.AccessNotice)) error {
+	return n.feed.listen(ctx, deliver, ports.AccessNotice{Resync: true})
+}
+
+// Publish delivers notices, in order, to every current listener before it returns.
+func (n *AccessNotices) Publish(notices ...ports.AccessNotice) { n.feed.publish(notices...) }
+
+// AwaitListeners blocks until count Listen calls are in progress or ctx ends.
+func (n *AccessNotices) AwaitListeners(ctx context.Context, count int) error {
 	return n.feed.awaitListeners(ctx, count)
 }
 

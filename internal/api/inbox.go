@@ -15,8 +15,8 @@ import (
 // workInbox is the inbox's built-in source (E §8.4): the items that may need a person
 // (FlowStats.InboxItems) as decisions with their approval brief, blocked items with why, and
 // expedite items; each factory's open andon pull; and each gate one rejection away from its
-// andon policy's rework rate while the line runs. Phase 2.2 has no identity: every entry is
-// everyone's.
+// andon policy's rework rate while the line runs. GetInbox keeps the factories the caller sees,
+// and decisions only where they may decide.
 type workInbox struct {
 	s *server
 }

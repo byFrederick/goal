@@ -25,15 +25,18 @@ import (
 
 // Defines values for ActorKind.
 const (
-	ActorKindAgent  ActorKind = "agent"
-	ActorKindSystem ActorKind = "system"
-	ActorKindUser   ActorKind = "user"
+	ActorKindAgent   ActorKind = "agent"
+	ActorKindService ActorKind = "service"
+	ActorKindSystem  ActorKind = "system"
+	ActorKindUser    ActorKind = "user"
 )
 
 // Valid indicates whether the value is a known member of the ActorKind enum.
 func (e ActorKind) Valid() bool {
 	switch e {
 	case ActorKindAgent:
+		return true
+	case ActorKindService:
 		return true
 	case ActorKindSystem:
 		return true
@@ -335,6 +338,27 @@ func (e FactoryHealth) Valid() bool {
 	case FactoryHealthRunning:
 		return true
 	case FactoryHealthStopped:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FactoryRole.
+const (
+	Approver FactoryRole = "approver"
+	Editor   FactoryRole = "editor"
+	Viewer   FactoryRole = "viewer"
+)
+
+// Valid indicates whether the value is a known member of the FactoryRole enum.
+func (e FactoryRole) Valid() bool {
+	switch e {
+	case Approver:
+		return true
+	case Editor:
+		return true
+	case Viewer:
 		return true
 	default:
 		return false
@@ -803,7 +827,7 @@ func (e GetMetricsParamsCompare) Valid() bool {
 	}
 }
 
-// Actor Who did something; in phase 2.2 every person is the local user
+// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
 type Actor struct {
 	// Id "local" for the local user, an agent's name or a job's name
 	Id   string    `json:"id"`
@@ -927,7 +951,7 @@ type AuditEntry struct {
 	// Action <noun>.<past_verb>, as in org.updated
 	Action string `json:"action"`
 
-	// Actor Who did something; in phase 2.2 every person is the local user
+	// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
 	Actor Actor     `json:"actor"`
 	At    time.Time `json:"at"`
 
@@ -1378,7 +1402,7 @@ type Draft struct {
 	ChangeCount int       `json:"change_count"`
 	CreatedAt   time.Time `json:"created_at"`
 
-	// CreatedBy Who did something; in phase 2.2 every person is the local user
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
 	CreatedBy Actor `json:"created_by"`
 
 	// Current The version that runs now, which differs from base after a restore; null before the first publish
@@ -1399,7 +1423,7 @@ type Draft struct {
 	// UpdatedAt The last save ("Autosaved 14:32")
 	UpdatedAt time.Time `json:"updated_at"`
 
-	// UpdatedBy Who did something; in phase 2.2 every person is the local user
+	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
 	UpdatedBy Actor `json:"updated_by"`
 }
 
@@ -1425,7 +1449,7 @@ type DraftRef struct {
 	Revision  int64     `json:"revision"`
 	UpdatedAt time.Time `json:"updated_at"`
 
-	// UpdatedBy Who did something; in phase 2.2 every person is the local user
+	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
 	UpdatedBy Actor `json:"updated_by"`
 }
 
@@ -1460,7 +1484,9 @@ type EventPage struct {
 
 // Factory defines model for Factory.
 type Factory struct {
-	CreatedAt time.Time `json:"created_at"`
+	// Can The factory permissions the caller holds, sorted (as Org.can)
+	Can       []Permission `json:"can"`
+	CreatedAt time.Time    `json:"created_at"`
 
 	// Current The version that runs ("v8"); null before the first publish
 	Current     *VersionRef `json:"current"`
@@ -1476,6 +1502,9 @@ type Factory struct {
 
 	// Paused A paused factory takes no work; runs in progress finish
 	Paused bool `json:"paused"`
+
+	// Role The caller's effective role on the factory: editor for owners and admins, an API key's ceiling; absent under GOAL_AUTH=none
+	Role *FactoryRole `json:"role,omitempty"`
 
 	// Stations The stations of the version goald runs; empty before the first publish
 	Stations []Station `json:"stations"`
@@ -1564,6 +1593,9 @@ type FactoryOverviewList struct {
 	// Window The window asked for, as in 7d
 	Window string `json:"window"`
 }
+
+// FactoryRole A ladder, each including the one before
+type FactoryRole string
 
 // FactorySlots defines model for FactorySlots.
 type FactorySlots struct {
@@ -2122,12 +2154,19 @@ type OpenDraftRequest struct {
 
 // Org defines model for Org.
 type Org struct {
-	CreatedAt    time.Time `json:"created_at"`
-	FactoryCount int       `json:"factory_count"`
-	Id           string    `json:"id"`
-	Mark         string    `json:"mark"`
-	Name         string    `json:"name"`
-	Slug         string    `json:"slug"`
+	// Can The organization permissions the caller holds, sorted: what the UI may offer (the server checks every request again). A fresh-only permission held with an older session is listed; using it answers 403 reauth-required. Under GOAL_AUTH=none, every one.
+	Can       []Permission `json:"can"`
+	CreatedAt time.Time    `json:"created_at"`
+
+	// FactoryCount The factories the caller can see
+	FactoryCount int    `json:"factory_count"`
+	Id           string `json:"id"`
+	Mark         string `json:"mark"`
+	Name         string `json:"name"`
+
+	// Role The caller's role in the organization; absent under GOAL_AUTH=none and for an API key
+	Role *OrgRole `json:"role,omitempty"`
+	Slug string   `json:"slug"`
 }
 
 // OrgAttention defines model for OrgAttention.
@@ -2233,6 +2272,9 @@ type PauseRequest struct {
 	// Reason Why the item is paused
 	Reason *string `json:"reason,omitempty"`
 }
+
+// Permission One permission of api/permissions.yaml, such as org:read or item:decide
+type Permission = string
 
 // Problem defines model for Problem.
 type Problem struct {
@@ -2693,7 +2735,7 @@ type VersionRef struct {
 	Number      int       `json:"number"`
 	PublishedAt time.Time `json:"published_at"`
 
-	// PublishedBy Who did something; in phase 2.2 every person is the local user
+	// PublishedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
 	PublishedBy Actor `json:"published_by"`
 }
 
@@ -3367,14 +3409,16 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/me (the `GetMe` operationId).
 	GetMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ListOrgs Every organization on the install, by name
+	// ListOrgs The caller's organizations, by name
+	//
+	// A person's organizations with their role in each; an API key's own organization. Under GOAL_AUTH=none, every organization of the install.
 	//
 	// Corresponds with GET /v1/orgs (the `ListOrgs` operationId).
 	ListOrgs(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateOrgWithBody Create an organization
 	//
-	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409.
+	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -3383,7 +3427,7 @@ type ClientInterface interface {
 
 	// CreateOrg Create an organization
 	//
-	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409.
+	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -4054,7 +4098,9 @@ func (c *Client) GetMe(ctx context.Context, reqEditors ...RequestEditorFn) (*htt
 	return c.Client.Do(req)
 }
 
-// ListOrgs Every organization on the install, by name
+// ListOrgs The caller's organizations, by name
+//
+// A person's organizations with their role in each; an API key's own organization. Under GOAL_AUTH=none, every organization of the install.
 //
 // Corresponds with GET /v1/orgs (the `ListOrgs` operationId).
 func (c *Client) ListOrgs(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -4071,7 +4117,7 @@ func (c *Client) ListOrgs(ctx context.Context, reqEditors ...RequestEditorFn) (*
 
 // CreateOrgWithBody Create an organization
 //
-// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409.
+// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
 //
 // Takes any type of body and a specified content type.
 //
@@ -4090,7 +4136,7 @@ func (c *Client) CreateOrgWithBody(ctx context.Context, contentType string, body
 
 // CreateOrg Create an organization
 //
-// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409.
+// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -9404,7 +9450,9 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/me (the `GetMe` operationId).
 	GetMeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMeResponse, error)
 
-	// ListOrgsWithResponse Every organization on the install, by name
+	// ListOrgsWithResponse The caller's organizations, by name
+	//
+	// A person's organizations with their role in each; an API key's own organization. Under GOAL_AUTH=none, every organization of the install.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -9413,7 +9461,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateOrgWithBodyWithResponse Create an organization
 	//
-	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409.
+	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -9422,7 +9470,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateOrgWithResponse Create an organization
 	//
-	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409.
+	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -13415,7 +13463,9 @@ func (c *ClientWithResponses) GetMeWithResponse(ctx context.Context, reqEditors 
 	return ParseGetMeResponse(rsp)
 }
 
-// ListOrgsWithResponse Every organization on the install, by name
+// ListOrgsWithResponse The caller's organizations, by name
+//
+// A person's organizations with their role in each; an API key's own organization. Under GOAL_AUTH=none, every organization of the install.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -13430,7 +13480,7 @@ func (c *ClientWithResponses) ListOrgsWithResponse(ctx context.Context, reqEdito
 
 // CreateOrgWithBodyWithResponse Create an organization
 //
-// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409.
+// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -13445,7 +13495,7 @@ func (c *ClientWithResponses) CreateOrgWithBodyWithResponse(ctx context.Context,
 
 // CreateOrgWithResponse Create an organization
 //
-// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409.
+// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -16919,7 +16969,7 @@ type ServerInterface interface {
 	// GetMe Who the request acts for
 	// (GET /v1/me)
 	GetMe(w http.ResponseWriter, r *http.Request)
-	// ListOrgs Every organization on the install, by name
+	// ListOrgs The caller's organizations, by name
 	// (GET /v1/orgs)
 	ListOrgs(w http.ResponseWriter, r *http.Request)
 	// CreateOrg Create an organization
@@ -23080,7 +23130,7 @@ type StrictServerInterface interface {
 	// GetMe Who the request acts for
 	// (GET /v1/me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
-	// ListOrgs Every organization on the install, by name
+	// ListOrgs The caller's organizations, by name
 	// (GET /v1/orgs)
 	ListOrgs(ctx context.Context, request ListOrgsRequestObject) (ListOrgsResponseObject, error)
 	// CreateOrg Create an organization

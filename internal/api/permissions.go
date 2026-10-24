@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
 )
@@ -37,6 +38,7 @@ const (
 const (
 	permPublic      domain.Permission = "public"
 	permFactoryRead domain.Permission = "factory:read"
+	permItemDecide  domain.Permission = "item:decide"
 )
 
 // errDenied is a principal that sees the resource but lacks the permission (403 forbidden).
@@ -194,6 +196,31 @@ func (s *server) visible(ctx context.Context, f domain.FactoryID) bool {
 	err := s.ask(ctx, permFactoryRead, f)
 
 	return !errors.Is(err, ports.ErrNotFound) && !errors.Is(err, domain.ErrUnauthenticated)
+}
+
+// visibleFactories are the factories goald runs for the request's organization that its principal
+// sees: what every list and aggregate shows.
+func (s *server) visibleFactories(ctx context.Context) []*config.Factory {
+	all := s.factories.Factories(ctx)
+	out := make([]*config.Factory, 0, len(all))
+
+	for _, f := range all {
+		if s.visible(ctx, domain.FactoryID(f.Metadata.ID)) {
+			out = append(out, f)
+		}
+	}
+
+	return out
+}
+
+// onYou is how many of a factory's waiting decisions are the caller's to make: all of them where
+// they hold item:decide, none elsewhere.
+func (s *server) onYou(ctx context.Context, f domain.FactoryID, waiting int) int {
+	if s.ask(ctx, permItemDecide, f) != nil {
+		return 0
+	}
+
+	return waiting
 }
 
 // can lists, sorted, the permissions the request's principal holds on factory f, or of the

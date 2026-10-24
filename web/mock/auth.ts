@@ -15,7 +15,7 @@
 // Google refuses an account without an invitation (SIGN_UP_NOT_ALLOWED) and update-user takes a
 // name only (NAME_ONLY).
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { AuthConfig, Me, Org, OrgRole } from '@goal/api-client';
+import type { AuthConfig, Me, Org } from '@goal/api-client';
 
 type Json = Record<string, unknown>;
 
@@ -88,7 +88,7 @@ export interface MockAuth {
    */
   refuse: (req: IncomingMessage, res: ServerResponse, path: string, method: string) => boolean;
   /** The organizations the caller sees, with their role (none under sign-in off). */
-  visible: (req: IncomingMessage, orgs: Org[]) => (Org & { role?: OrgRole })[];
+  visible: (req: IncomingMessage, orgs: Org[]) => Org[];
 }
 
 const alnum = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
