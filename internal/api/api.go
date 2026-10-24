@@ -42,6 +42,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"slices"
 	"strings"
 	"time"
@@ -128,6 +129,9 @@ type Deps struct {
 	Identity Identity
 	// Platform keeps the platform admins and the security log.
 	Platform Platform
+	// TrustedProxies are the proxies in front of goald whose X-Forwarded-For names the client
+	// (GOAL_TRUSTED_PROXIES), as for the /api/auth proxy.
+	TrustedProxies []netip.Prefix
 	// Feed serves /v1/orgs/{org}/stream; the caller runs it (Feed.Run).
 	Feed *Feed
 	// InboxSources add entries to /v1/orgs/{org}/inbox after the built-in work entries (inbox.go);
@@ -233,7 +237,7 @@ func New(d Deps) (http.Handler, error) {
 		s.problem(w, r, errCrossOrigin)
 	}))
 
-	return cop.Handler(limitBodies(withRequestID(s.withCredential(h)))), nil
+	return cop.Handler(limitBodies(withRequestID(withClientAddr(d.TrustedProxies, s.withCredential(h))))), nil
 }
 
 // limitBodies refuses request bodies over the route's limit (413): the definitions routes take
@@ -559,6 +563,7 @@ func fixedProblem(err error) (gen.Problem, bool) {
 		{err: errFactoryNotFound, status: http.StatusNotFound, title: "Factory not found", code: "factory-not-found"},
 		{err: errItemNotFound, status: http.StatusNotFound, title: "Item not found", code: "item-not-found"},
 		{err: errRunNotFound, status: http.StatusNotFound, title: "Run not found", code: "run-not-found"},
+		{err: errDeviceCodeNotFound, status: http.StatusNotFound, title: "Code not valid", code: "device-code-not-found"},
 	}
 
 	for _, f := range fixed {

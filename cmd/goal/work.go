@@ -1,7 +1,6 @@
 package main
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -31,18 +30,25 @@ var stops = map[gen.ItemState]bool{
 }
 
 // newAPI opens goald's API: GOAL_API_URL, else api_url in the config file, else the local goald.
+// Requests carry the credential of the API's origin (credentials.go), from the user's keychain
+// when goal login stored it there.
 func newAPI(getenv func(string) string) (*gen.ClientWithResponses, error) {
-	base := strings.TrimSpace(getenv("GOAL_API_URL"))
-	if base == "" {
-		cfg, err := loadConfig(getenv)
-		if err != nil {
-			return nil, err
-		}
+	return newAPIWith(getenv, osKeychain{})
+}
 
-		base = cmp.Or(cfg.APIURL, defaultAPI)
+// newAPIWith is newAPI with the keychain to read a stored credential from.
+func newAPIWith(getenv func(string) string, kc keychain) (*gen.ClientWithResponses, error) {
+	tg, err := apiTarget(getenv)
+	if err != nil {
+		return nil, err
 	}
 
-	return gen.NewClientWithResponses(base, gen.WithHTTPClient(&http.Client{Timeout: 30 * time.Second}))
+	cred, err := resolveCredential(getenv, tg.cfg, tg.origin, kc)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.NewClientWithResponses(tg.base, gen.WithHTTPClient(httpClient(tg.origin, cred)))
 }
 
 // parseInterspersed parses flags wherever they appear among the positional arguments, so
@@ -615,7 +621,13 @@ func answer(it *gen.Item, res *http.Response, p *gen.Problem) (*gen.Item, error)
 	return it, nil
 }
 
+// problem is goald's refusal as the CLI says it: a refused credential or permission is an
+// accessError (exit 77), anything else the problem's text.
 func problem(res *http.Response, p *gen.Problem) error {
+	if err := refusedAccess(res, p); err != nil {
+		return err
+	}
+
 	if p != nil {
 		return errors.New(problemText(p))
 	}

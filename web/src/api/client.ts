@@ -19,6 +19,7 @@ import type {
   AuthConfig,
   Board,
   ConstraintReport,
+  DeviceRequest,
   EventPage,
   Factory,
   FactoryOverviewList,
@@ -65,6 +66,14 @@ export const cancel = (signal: AbortSignal | undefined) => (signal ? { signal } 
 /** How this install signs people in (session, with its methods) or that sign-in is off (none). */
 export function getAuthConfig(signal?: AbortSignal): Promise<AuthConfig> {
   return unwrap(goal.GET('/v1/auth/config', cancel(signal)));
+}
+
+/**
+ * A pending CLI sign-in, by the code the person typed (Device-Approve): the client, when and where
+ * it asked from. 404 device-code-not-found when the code is not pending.
+ */
+export function getDeviceRequest(userCode: string): Promise<DeviceRequest> {
+  return unwrap(goal.GET('/v1/auth/device/{user_code}', { params: { path: { user_code: userCode } } }));
 }
 
 /** Who the requests act for: the signed-in person, or the local user when sign-in is off. */

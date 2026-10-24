@@ -84,6 +84,33 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AuthConfig" }
+  /v1/auth/device/{user_code}:
+    get:
+      operationId: getDeviceRequest
+      x-goal-scope: device:read
+      tags: [identity]
+      summary: A pending CLI sign-in, by the code its terminal shows
+      description: >-
+        What the Device-Approve page shows before a signed-in person approves `goal login`: the
+        client (checked by the identity service: only the Goal CLI), when it asked and until when,
+        and the address and user agent it asked from. The page sends the code the person typed,
+        never one from a link. Dashes and case are ignored. An unknown, expired, approved or
+        denied code is 404 device-code-not-found with one fixed body; so is every code under
+        GOAL_AUTH=none, which has no CLI sign-in. Only signed-in people hold device:read, never
+        API keys or personal tokens.
+      parameters:
+        - name: user_code
+          in: path
+          required: true
+          description: The code as typed (ABCD-EFGH or abcdefgh)
+          schema: { type: string, maxLength: 32 }
+      responses:
+        "200":
+          description: The pending request
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceRequest" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/me:
     get:
       operationId: getMe
@@ -1798,7 +1825,7 @@ components:
             least one platform admin. An unknown
             organization, factory, item or run and one the caller may not see answer the same
             fixed body without detail: org-not-found, factory-not-found, item-not-found,
-            run-not-found.
+            run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found.
         problems:
           type: array
           description: definition-invalid only, every problem of the definition (errors block the publish)
@@ -1837,6 +1864,25 @@ components:
           type: array
           description: How people sign in; email_code always under session, google when GOAL_AUTH_GOOGLE=on; empty under none
           items: { $ref: "#/components/schemas/SignInMethod" }
+    DeviceRequest:
+      type: object
+      description: A pending CLI sign-in (the device authorization grant, RFC 8628), as the person who approves it sees it
+      required: [client_id, client_name, expires_at, same_ip]
+      properties:
+        client_id: { type: string, description: "The client the identity service accepted: goal-cli" }
+        client_name: { type: string, description: "Its name for people: Goal CLI" }
+        requested_at:
+          type: string
+          format: date-time
+          description: When the CLI asked; absent when the security log has no record of it
+        expires_at: { type: string, format: date-time, description: "When the code stops working (10 minutes after it was asked for)" }
+        ip: { type: string, description: The address the CLI asked from; absent when unknown }
+        user_agent: { type: string, description: "The CLI's user agent, as in goal/1.4 (darwin); absent when unknown" }
+        same_ip:
+          type: boolean
+          description: >-
+            The CLI asked from this browser's address (for IPv6, the same /64 network); false when
+            either is unknown
     User:
       type: object
       required: [id, name, email]

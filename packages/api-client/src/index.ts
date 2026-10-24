@@ -62,6 +62,7 @@ export type AuthConfig = Schemas["AuthConfig"];
 export type AuthMode = Schemas["AuthMode"];
 export type SignInMethod = Schemas["SignInMethod"];
 export type Me = Schemas["Me"];
+export type DeviceRequest = Schemas["DeviceRequest"];
 export type User = Schemas["User"];
 export type OrgRole = Schemas["OrgRole"];
 

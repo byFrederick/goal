@@ -156,6 +156,35 @@ export function googleFailure(error: string): 'not-invited' | 'unverified' | 'fa
   return error === 'unable_to_get_user_info' ? 'unverified' : 'failed';
 }
 
+/**
+ * Opens a CLI sign-in code for this browser's person (Better Auth's GET /device), which binds it
+ * to them so only they can approve or deny it. True when it is theirs to decide now; false when
+ * the service does not let this person review it (another person opened it first).
+ */
+export async function claimDeviceCode(userCode: string): Promise<boolean> {
+  const claim = await call<{ status?: string; client_id?: string } | null>((fetchOptions) =>
+    auth.$fetch<{ status?: string; client_id?: string }>('/device', {
+      method: 'GET',
+      query: { user_code: userCode },
+      ...fetchOptions,
+    }),
+  );
+  return claim?.status === 'pending' && typeof claim.client_id === 'string';
+}
+
+/**
+ * Approves the code: the CLI that shows it gets a session on its next poll. Needs a sign-in from
+ * the last 10 minutes, which the service asks for (REAUTH_REQUIRED) and call() confirms.
+ */
+export async function approveDevice(userCode: string): Promise<void> {
+  await call((fetchOptions) => auth.$fetch('/device/approve', { method: 'POST', body: { userCode }, ...fetchOptions }));
+}
+
+/** Denies the code: the CLI stops waiting and is not signed in. */
+export async function denyDevice(userCode: string): Promise<void> {
+  await call((fetchOptions) => auth.$fetch('/device/deny', { method: 'POST', body: { userCode }, ...fetchOptions }));
+}
+
 /** The calls as TanStack mutations. */
 export const authMutations = {
   sendCode: mutationOptions({ mutationKey: ['auth', 'send-code'], mutationFn: sendCode }),
@@ -174,4 +203,6 @@ export const authMutations = {
     mutationFn: signOutEverywhere,
   }),
   updateName: mutationOptions({ mutationKey: ['auth', 'update-name'], mutationFn: updateName }),
+  approveDevice: mutationOptions({ mutationKey: ['auth', 'device', 'approve'], mutationFn: approveDevice }),
+  denyDevice: mutationOptions({ mutationKey: ['auth', 'device', 'deny'], mutationFn: denyDevice }),
 };

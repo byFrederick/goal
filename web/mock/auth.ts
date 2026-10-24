@@ -1,6 +1,7 @@
 // The mock's sign-in (spec 3 §10.1): goald's /v1/auth/config and /v1/me, and the subset of the
 // identity service's /api/auth/* the SPA calls, with Better Auth's own shapes (email codes, Google
-// as a redirect round trip, get-session, sign-out, revoke-sessions, update-user).
+// as a redirect round trip, get-session, sign-out, revoke-sessions, update-user, and the device
+// grant of goal login with goald's /v1/auth/device/{user_code}).
 //
 // Sign-in is off by default (GOAL_AUTH=none, the mock's seed), so every other screen and test runs
 // as the local user. A reset turns it on: POST /__mock/reset {auth: {mode: "session",
@@ -16,7 +17,7 @@
 // Google refuses an account without an invitation (SIGN_UP_NOT_ALLOWED) and update-user takes a
 // name only (NAME_ONLY).
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { AuthConfig, Me, Org } from '@goal/api-client';
+import type { AuthConfig, DeviceRequest, Me, Org } from '@goal/api-client';
 
 type Json = Record<string, unknown>;
 
@@ -81,6 +82,30 @@ interface MockCode {
   attempts: number;
 }
 
+/** A CLI sign-in of the device grant (Better Auth's deviceCode row and its device.requested event). */
+interface MockDevice {
+  deviceCode: string;
+  userCode: string;
+  status: 'pending' | 'approved' | 'denied';
+  /** Who opened the code (GET /device); only they approve or deny it. */
+  userId: string | null;
+  ip: string;
+  userAgent: string;
+  requestedAt: number;
+  expiresAt: number;
+}
+
+/** Better Auth's user code alphabet (no 0, 1, I, O). */
+const userCodeChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const deviceLifetimeMs = 10 * 60_000;
+const normalUserCode = (code: string) => code.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+
+/** A request's address, loopback ones as one ("127.0.0.1"), as goald compares them. */
+const clientIp = (req: IncomingMessage): string => {
+  const ip = (req.socket.remoteAddress ?? '').replace(/^::ffff:/, '');
+  return ip === '::1' || ip.startsWith('127.') ? '127.0.0.1' : ip;
+};
+
 export interface MockAuth {
   /** Starts over with these settings; answers the Set-Cookie of the session it signs in, if any. */
   reset: (settings: MockAuthSettings) => string | undefined;
@@ -140,6 +165,7 @@ export function createMockAuth(clock: () => number): MockAuth {
   let sessions = new Map<string, MockSession>();
   let codes = new Map<string, MockCode>();
   let googleStates = new Map<string, { callbackURL: string; errorCallbackURL: string }>();
+  let devices = new Map<string, MockDevice>();
 
   const userFor = (email: string): MockUser => {
     let user = users.get(email);
@@ -292,8 +318,105 @@ export function createMockAuth(clock: () => number): MockAuth {
       now.user.name = name;
       return ok({ status: true });
     }
+    if (route.startsWith('/device')) return deviceGrant(req, res, route, method, body);
     // goald's proxy answers anything off its allowlist with a 404 problem.
     return send(res, 404, { title: 'Not Found', status: 404, code: 'not-found' });
+  };
+
+  /** An OAuth error of the device grant: {error, error_description}, as Better Auth answers. */
+  const oauthError = (res: ServerResponse, status: number, error: string) => {
+    res.statusCode = status;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error, error_description: error }));
+  };
+
+  /**
+   * The device authorization grant (Better Auth's device-authorization plugin, as auth/ sets it
+   * up): codes for goal-cli only, 10 minutes; GET /device binds a code to the person who opens it;
+   * approving needs a session from the last 10 minutes (Goal's hook: REAUTH_REQUIRED); the CLI's
+   * poll answers authorization_pending until then. An X-Mock-Client-Ip header on /device/code
+   * stands for a CLI on another network.
+   */
+  const deviceGrant = (req: IncomingMessage, res: ServerResponse, route: string, method: string, body: Json) => {
+    const ok = (data: unknown) => {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(data));
+    };
+    if (route === '/device/code' && method === 'POST') {
+      if (body.client_id !== 'goal-cli') return oauthError(res, 400, 'invalid_client');
+      const userCode = Array.from({ length: 8 }, () => userCodeChars[Math.floor(Math.random() * 32)]).join('');
+      const device: MockDevice = {
+        deviceCode: randomToken(),
+        userCode,
+        status: 'pending',
+        userId: null,
+        ip: String(req.headers['x-mock-client-ip'] ?? clientIp(req)),
+        userAgent: String(req.headers['user-agent'] ?? ''),
+        requestedAt: clock(),
+        expiresAt: clock() + deviceLifetimeMs,
+      };
+      devices.set(userCode, device);
+      return ok({
+        device_code: device.deviceCode,
+        user_code: userCode,
+        verification_uri: '/device',
+        verification_uri_complete: `/device?user_code=${userCode}`,
+        expires_in: deviceLifetimeMs / 1000,
+        interval: 5,
+      });
+    }
+    if (route === '/device/token' && method === 'POST') {
+      const device = [...devices.values()].find((d) => d.deviceCode === body.device_code);
+      if (!device || body.client_id !== 'goal-cli') return oauthError(res, 400, 'invalid_grant');
+      if (device.expiresAt <= clock()) return oauthError(res, 400, 'expired_token');
+      if (device.status === 'pending') return oauthError(res, 400, 'authorization_pending');
+      devices.delete(device.userCode);
+      if (device.status === 'denied') return oauthError(res, 400, 'access_denied');
+      return ok({ access_token: randomToken(), token_type: 'Bearer', expires_in: sessionLifetimeMs / 1000, scope: '' });
+    }
+
+    const now = current(req);
+    const query = new URL(req.url ?? '/', 'http://mock').searchParams;
+    const typed =
+      route === '/device' ? (query.get('user_code') ?? '') : typeof body.userCode === 'string' ? body.userCode : '';
+    const device = devices.get(normalUserCode(typed));
+    if (route === '/device' && method === 'GET') {
+      if (!device) return oauthError(res, 400, 'invalid_request');
+      if (device.expiresAt <= clock()) return oauthError(res, 400, 'expired_token');
+      if (now && device.status === 'pending' && device.userId === null) device.userId = now.user.id;
+      const reviewer = now !== undefined && device.userId === now.user.id;
+      return ok({ user_code: typed, status: device.status, ...(reviewer ? { client_id: 'goal-cli' } : {}) });
+    }
+    if ((route === '/device/approve' || route === '/device/deny') && method === 'POST') {
+      if (!now) return oauthError(res, 401, 'unauthorized');
+      if (route === '/device/approve' && clock() - now.session.createdAt > freshMs) {
+        return authError(res, 403, 'REAUTH_REQUIRED', 'Sign in again to do this');
+      }
+      if (device?.status !== 'pending' || device.userId === null) return oauthError(res, 400, 'invalid_request');
+      if (device.expiresAt <= clock()) return oauthError(res, 400, 'expired_token');
+      if (device.userId !== now.user.id) return oauthError(res, 403, 'access_denied');
+      device.status = route === '/device/approve' ? 'approved' : 'denied';
+      return ok({ success: true });
+    }
+    return send(res, 404, { title: 'Not Found', status: 404, code: 'not-found' });
+  };
+
+  /** goald's GET /v1/auth/device/{user_code}: a pending code, with whether it came from this browser's network. */
+  const deviceRequest = (req: IncomingMessage, res: ServerResponse, typed: string) => {
+    const device = devices.get(normalUserCode(typed));
+    if (device?.status !== 'pending' || device.expiresAt <= clock()) {
+      return send(res, 404, { title: 'Code not valid', status: 404, code: 'device-code-not-found' });
+    }
+    return send(res, 200, {
+      client_id: 'goal-cli',
+      client_name: 'Goal CLI',
+      requested_at: iso(device.requestedAt),
+      expires_at: iso(device.expiresAt),
+      ip: device.ip,
+      ...(device.userAgent ? { user_agent: device.userAgent } : {}),
+      same_ip: device.ip === clientIp(req),
+    } satisfies DeviceRequest);
   };
 
   return {
@@ -303,6 +426,7 @@ export function createMockAuth(clock: () => number): MockAuth {
       sessions = new Map();
       codes = new Map();
       googleStates = new Map();
+      devices = new Map();
       if (settings.mode !== 'session' || !settings.signedIn) return undefined;
       return startSession(settings.email, settings.signedIn === 'fresh' ? clock() : clock() - 60 * 60_000);
     },
@@ -334,6 +458,17 @@ export function createMockAuth(clock: () => number): MockAuth {
             fresh_until: iso(session.createdAt + freshMs),
           },
         } satisfies Me);
+        return true;
+      }
+      const device = path.match(/^\/v1\/auth\/device\/([^/]+)$/);
+      if (device && method === 'GET') {
+        if (settings.mode === 'none') {
+          send(res, 404, { title: 'Code not valid', status: 404, code: 'device-code-not-found' });
+        } else if (!current(req)) {
+          unauthenticated(res);
+        } else {
+          deviceRequest(req, res, decodeURIComponent(device[1] ?? ''));
+        }
         return true;
       }
       if (!path.startsWith('/api/auth/')) return false;

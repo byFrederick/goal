@@ -41,6 +41,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/device/{user_code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A pending CLI sign-in, by the code its terminal shows
+         * @description What the Device-Approve page shows before a signed-in person approves `goal login`: the client (checked by the identity service: only the Goal CLI), when it asked and until when, and the address and user agent it asked from. The page sends the code the person typed, never one from a link. Dashes and case are ignored. An unknown, expired, approved or denied code is 404 device-code-not-found with one fixed body; so is every code under GOAL_AUTH=none, which has no CLI sign-in. Only signed-in people hold device:read, never API keys or personal tokens.
+         */
+        get: operations["getDeviceRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me": {
         parameters: {
             query?: never;
@@ -1465,7 +1485,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found. */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -1493,6 +1513,29 @@ export interface components {
             mode: components["schemas"]["AuthMode"];
             /** @description How people sign in; email_code always under session, google when GOAL_AUTH_GOOGLE=on; empty under none */
             methods: components["schemas"]["SignInMethod"][];
+        };
+        /** @description A pending CLI sign-in (the device authorization grant, RFC 8628), as the person who approves it sees it */
+        DeviceRequest: {
+            /** @description The client the identity service accepted: goal-cli */
+            client_id: string;
+            /** @description Its name for people: Goal CLI */
+            client_name: string;
+            /**
+             * Format: date-time
+             * @description When the CLI asked; absent when the security log has no record of it
+             */
+            requested_at?: string;
+            /**
+             * Format: date-time
+             * @description When the code stops working (10 minutes after it was asked for)
+             */
+            expires_at: string;
+            /** @description The address the CLI asked from; absent when unknown */
+            ip?: string;
+            /** @description The CLI's user agent, as in goal/1.4 (darwin); absent when unknown */
+            user_agent?: string;
+            /** @description The CLI asked from this browser's address (for IPv6, the same /64 network); false when either is unknown */
+            same_ip: boolean;
         };
         User: {
             id: string;
@@ -3264,6 +3307,30 @@ export interface operations {
                     "application/json": components["schemas"]["AuthConfig"];
                 };
             };
+        };
+    };
+    getDeviceRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The code as typed (ABCD-EFGH or abcdefgh) */
+                user_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The pending request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceRequest"];
+                };
+            };
+            default: components["responses"]["Problem"];
         };
     };
     getMe: {

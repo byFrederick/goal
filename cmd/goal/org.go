@@ -18,12 +18,15 @@ import (
 )
 
 // cliConfig is the CLI's own settings file, $XDG_CONFIG_HOME/goal/config.json (default
-// ~/.config/goal/config.json, mode 0600). Both keys are optional.
+// ~/.config/goal/config.json, mode 0600). Every key is optional.
 type cliConfig struct {
 	// APIURL is goald's API when GOAL_API_URL is not set.
 	APIURL string `json:"api_url,omitempty"`
 	// Org is the organization (slug or id) commands act in when neither --org nor GOAL_ORG says.
 	Org string `json:"org,omitempty"`
+	// CredentialStore is where goal login keeps credentials: keychain (the OS keychain) or file
+	// (credentials.json beside this file). Unset until someone signs in.
+	CredentialStore string `json:"credential_store,omitempty"`
 }
 
 // configPath is where the CLI keeps its settings.
@@ -72,30 +75,37 @@ func saveConfig(getenv func(string) string, cfg cliConfig) (string, error) {
 		return "", err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return "", fmt.Errorf("create %s: %w", filepath.Dir(path), err)
-	}
-
 	raw, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return "", err
 	}
 
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".config-*.json")
-	if err != nil {
-		return "", fmt.Errorf("write %s: %w", path, err)
+	return path, writePrivateFile(path, append(raw, '\n'))
+}
+
+// writePrivateFile replaces the file at path atomically with raw, readable by its owner only, in
+// a directory only its owner may enter (created if missing).
+func writePrivateFile(path string, raw []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
 	}
 
-	_, werr := tmp.Write(append(raw, '\n'))
+	// CreateTemp makes the file with mode 0600, so the content is never readable by others.
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*")
+	if err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+
+	_, werr := tmp.Write(raw)
 	cerr := tmp.Close()
 
 	if err := errors.Join(werr, cerr, os.Chmod(tmp.Name(), 0o600), os.Rename(tmp.Name(), path)); err != nil {
 		_ = os.Remove(tmp.Name())
 
-		return "", fmt.Errorf("write %s: %w", path, err)
+		return fmt.Errorf("write %s: %w", path, err)
 	}
 
-	return path, nil
+	return nil
 }
 
 // orgClient is goald's API for the organization a command acts in.

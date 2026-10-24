@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
@@ -219,12 +221,24 @@ func (i *Identity) Key(hash string) (IdentityKey, bool) {
 	return *k, true
 }
 
-// AddDeviceRequest adds a pending CLI sign-in under its user code.
+// AddDeviceRequest adds a pending CLI sign-in under its user code (dashes and case ignored).
 func (i *Identity) AddDeviceRequest(userCode string, d domain.DeviceRequest) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	i.devices[userCode] = d
+	i.devices[normalUserCode(userCode)] = d
+}
+
+// normalUserCode is a CLI sign-in code as the database compares it: its ASCII letters and digits
+// only, upper case (ABCD-EFGH and abcdefgh are one code).
+func normalUserCode(code string) string {
+	return strings.ToUpper(strings.Map(func(r rune) rune {
+		if r < unicode.MaxASCII && (unicode.IsLetter(r) || unicode.IsDigit(r)) {
+			return r
+		}
+
+		return -1
+	}, code))
 }
 
 // Session implements ports.Identity.
@@ -305,7 +319,7 @@ func (i *Identity) DeviceRequest(_ context.Context, userCode string) (domain.Dev
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	d, ok := i.devices[userCode]
+	d, ok := i.devices[normalUserCode(userCode)]
 	if !ok || !i.now().Before(d.ExpiresAt) {
 		return domain.DeviceRequest{}, fmt.Errorf("device request: %w", ports.ErrNotFound)
 	}

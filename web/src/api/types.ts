@@ -31,6 +31,7 @@ export type {
   DefinitionCounts,
   DefinitionEvent,
   DefinitionProblem,
+  DeviceRequest,
   Draft,
   DraftModel,
   DraftRef,

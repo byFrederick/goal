@@ -50,6 +50,7 @@ var operationScopes = map[string]string{
 	"getBoard":            "factory:read",
 	"getBuilderMeta":      "org:read",
 	"getConstraintReport": "factory:read",
+	"getDeviceRequest":    "device:read",
 	"getDraft":            "factory:read",
 	"getDraftFile":        "factory:read",
 	"getDraftModel":       "factory:read",

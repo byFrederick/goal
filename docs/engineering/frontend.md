@@ -65,6 +65,7 @@ routes/       file-based route files (TanStack Router plugin; routeTree.gen.ts i
                 /f/*                            → old links: redirect to the factory's page under its organization
                 /sign-in?next=                  → Sign in (email code, Google), no rail; under GOAL_AUTH=none it opens `next` or /
                 /sign-in/code?next=             → the emailed code; the address is in the history state, never the URL
+                /device                         → Device-Approve: goal login's code, typed (never read from the URL), who asks and from where, Approve (a recent sign-in) or Deny; signed out, "Sign in to approve the Goal CLI" (back here after)
                 /invite/$invitation             → an invitation email's link: signed out, "Sign in to see your invitation" (back here after); the invitation itself is Members' (3-11)
                 /o/$org                         → layout: resolves the org (slug or id), its live stream, the rail
                   (_org)                        → pathless layout of the organization's own pages: org sidebar

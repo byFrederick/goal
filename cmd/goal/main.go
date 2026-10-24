@@ -7,7 +7,8 @@
 // skills and template catalogs in the bucket (catalog.go).
 //
 // goald's API is GOAL_API_URL, else api_url in the CLI's config file, else
-// http://127.0.0.1:8080. The operator commands that use the bucket directly (goal storage init,
+// http://127.0.0.1:8080; requests carry the credential of its origin (credentials.go), which goal
+// login stores (login.go). The operator commands that use the bucket directly (goal storage init,
 // goal catalog) read object storage from the environment: GOAL_S3_BUCKET, and for a local
 // S3-compatible server (RustFS) GOAL_S3_ENDPOINT, GOAL_S3_ACCESS_KEY and GOAL_S3_SECRET_KEY. On
 // AWS the standard credential chain applies.
@@ -100,6 +101,15 @@ const usage = `usage:
   goal admin add <email>                          make a person who has signed in a platform admin
   goal admin remove <email>                       stop them being one (the last one stays)
   goal admin events [--kind K] [--before N]       the security log, newest first
+  goal login [--store keychain|file]              sign the CLI in: approve the code it shows at
+                                                  <goald>/device in a browser; the session goes to the
+                                                  OS keychain, or with --store file (remembered) to
+                                                  credentials.json beside the config file (mode 0600)
+  goal login --token [--store keychain|file]      store a personal token (or API key) read from stdin
+                                                  instead: goal login --token < token-file
+  goal logout [--all]                             end the CLI's session (--all: every session of yours)
+                                                  and forget it here
+  goal whoami                                     who the CLI acts as, and in which organizations
   goal version                                    print the module version and build info
 
 <item> is goal#2 (factory and number), the item's id, or a bare number such as 2 when one
@@ -112,7 +122,11 @@ push is how a folder changes one, and goald ignores factory files written to the
 Every command that talks to goald (run, follow, item, note, move, pause, the decisions, andon, factory) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
-else the install's only organization (decisions are the local user's)`
+else the install's only organization (decisions are the local user's)
+
+With sign-in on (GOAL_AUTH=session), commands send GOAL_API_KEY (an API key goal_sk_… or a
+personal token goal_pat_…) when it is set, else what goal login stored for goald's origin, and
+only over https or to this machine; a refused credential or permission exits 77`
 
 // errUsage marks a command line that names no valid command; main exits 2 for it.
 var errUsage = errors.New(usage)
@@ -125,31 +139,57 @@ func main() {
 
 	stop()
 
+	var refused *accessError
+
 	switch {
 	case errors.Is(err, errUsage):
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
+	case errors.As(err, &refused):
+		fmt.Fprintln(os.Stderr, "goal:", err)
+		os.Exit(exitNoPerm)
 	case err != nil:
 		fmt.Fprintln(os.Stderr, "goal:", err)
 		os.Exit(1)
 	}
 }
 
-// itemCommand is a command on one work item.
-type itemCommand func(ctx context.Context, out *printer, getenv func(string) string, args []string) error
+// command is a command, or a group of them, given its arguments.
+type command func(ctx context.Context, out *printer, getenv func(string) string, args []string) error
 
 func run(ctx context.Context, args []string, out *printer, getenv func(string) string, readBuildInfo buildInfoFunc) error {
+	err := dispatch(ctx, args, out, getenv, readBuildInfo)
+
+	// goal login cannot help when the refused credential is GOAL_API_KEY's.
+	var refused *accessError
+	if errors.As(err, &refused) && refused.signedOut && getenv(envAPIKey) != "" {
+		return &accessError{
+			msg:       fmt.Sprintf("%s refused the key in %s: it may have expired or been revoked", refused.origin, envAPIKey),
+			signedOut: true, origin: refused.origin,
+		}
+	}
+
+	return err
+}
+
+func dispatch(ctx context.Context, args []string, out *printer, getenv func(string) string, readBuildInfo buildInfoFunc) error {
 	if len(args) == 0 {
 		return errUsage
 	}
 
 	cmd, rest := args[0], args[1:]
 
-	// The commands on one item, by name.
-	if onItem, ok := map[string]itemCommand{
+	// The commands on one item, and the command groups, by name.
+	if handler, ok := map[string]command{
 		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbMove: moveItem, verbPause: pauseItem,
+		"factory": factory, "up": up, "org": orgCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
 	}[cmd]; ok {
-		return onItem(ctx, out, getenv, rest)
+		return handler(ctx, out, getenv, rest)
+	}
+
+	// The commands on the CLI's own sign-in, with the user's OS keychain.
+	if account, ok := map[string]accountCommand{"login": login, "logout": logout, "whoami": whoami}[cmd]; ok {
+		return account(ctx, out, getenv, rest, osKeychain{})
 	}
 
 	switch cmd {
@@ -157,22 +197,10 @@ func run(ctx context.Context, args []string, out *printer, getenv func(string) s
 		return version(out, readBuildInfo, rest)
 	case "validate":
 		return factoryValidate(ctx, out, getenv, rest, validateAlias)
-	case "factory":
-		return factory(ctx, out, getenv, rest)
-	case "up":
-		return up(ctx, out, getenv, rest)
 	case verbApprove, verbReject, verbRetry, verbMerge:
 		return decide(ctx, out, getenv, cmd, rest)
-	case "org":
-		return orgCommand(ctx, out, getenv, rest)
-	case "andon":
-		return andon(ctx, out, getenv, rest)
 	case "db", "storage":
 		return setUp(ctx, out, getenv, cmd, rest)
-	case "admin":
-		return adminCommand(ctx, out, getenv, rest)
-	case "catalog":
-		return catalogCommand(ctx, out, getenv, rest)
 	default:
 		return errUsage
 	}

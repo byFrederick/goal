@@ -1421,6 +1421,30 @@ type DeniedToolCalls struct {
 	Tools []DeniedTool `json:"tools"`
 }
 
+// DeviceRequest A pending CLI sign-in (the device authorization grant, RFC 8628), as the person who approves it sees it
+type DeviceRequest struct {
+	// ClientId The client the identity service accepted: goal-cli
+	ClientId string `json:"client_id"`
+
+	// ClientName Its name for people: Goal CLI
+	ClientName string `json:"client_name"`
+
+	// ExpiresAt When the code stops working (10 minutes after it was asked for)
+	ExpiresAt time.Time `json:"expires_at"`
+
+	// Ip The address the CLI asked from; absent when unknown
+	Ip *string `json:"ip,omitempty"`
+
+	// RequestedAt When the CLI asked; absent when the security log has no record of it
+	RequestedAt *time.Time `json:"requested_at,omitempty"`
+
+	// SameIp The CLI asked from this browser's address (for IPv6, the same /64 network); false when either is unknown
+	SameIp bool `json:"same_ip"`
+
+	// UserAgent The CLI's user agent, as in goal/1.4 (darwin); absent when unknown
+	UserAgent *string `json:"user_agent,omitempty"`
+}
+
 // Draft defines model for Draft.
 type Draft struct {
 	// Base The published version it started from ("based on v8"); null for a first draft
@@ -2325,7 +2349,7 @@ type PlatformAdminList struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found.
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found.
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
@@ -3460,6 +3484,13 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/auth/config (the `GetAuthConfig` operationId).
 	GetAuthConfig(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetDeviceRequest A pending CLI sign-in, by the code its terminal shows
+	//
+	// What the Device-Approve page shows before a signed-in person approves `goal login`: the client (checked by the identity service: only the Goal CLI), when it asked and until when, and the address and user agent it asked from. The page sends the code the person typed, never one from a link. Dashes and case are ignored. An unknown, expired, approved or denied code is 404 device-code-not-found with one fixed body; so is every code under GOAL_AUTH=none, which has no CLI sign-in. Only signed-in people hold device:read, never API keys or personal tokens.
+	//
+	// Corresponds with GET /v1/auth/device/{user_code} (the `GetDeviceRequest` operationId).
+	GetDeviceRequest(ctx context.Context, userCode string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetHealth Liveness of goald
 	//
 	// Corresponds with GET /v1/health (the `GetHealth` operationId).
@@ -4158,6 +4189,23 @@ type ClientInterface interface {
 // Corresponds with GET /v1/auth/config (the `GetAuthConfig` operationId).
 func (c *Client) GetAuthConfig(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetAuthConfigRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetDeviceRequest A pending CLI sign-in, by the code its terminal shows
+//
+// What the Device-Approve page shows before a signed-in person approves `goal login`: the client (checked by the identity service: only the Goal CLI), when it asked and until when, and the address and user agent it asked from. The page sends the code the person typed, never one from a link. Dashes and case are ignored. An unknown, expired, approved or denied code is 404 device-code-not-found with one fixed body; so is every code under GOAL_AUTH=none, which has no CLI sign-in. Only signed-in people hold device:read, never API keys or personal tokens.
+//
+// Corresponds with GET /v1/auth/device/{user_code} (the `GetDeviceRequest` operationId).
+func (c *Client) GetDeviceRequest(ctx context.Context, userCode string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDeviceRequestRequest(c.Server, userCode)
 	if err != nil {
 		return nil, err
 	}
@@ -5788,6 +5836,40 @@ func NewGetAuthConfigRequest(server string) (*http.Request, error) {
 	}
 
 	operationPath := fmt.Sprintf("/v1/auth/config")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetDeviceRequestRequest constructs an http.Request for the GetDeviceRequest method
+func NewGetDeviceRequestRequest(server string, userCode string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "user_code", userCode, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/auth/device/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -9804,6 +9886,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/auth/config (the `GetAuthConfig` operationId).
 	GetAuthConfigWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAuthConfigResponse, error)
 
+	// GetDeviceRequestWithResponse A pending CLI sign-in, by the code its terminal shows
+	//
+	// What the Device-Approve page shows before a signed-in person approves `goal login`: the client (checked by the identity service: only the Goal CLI), when it asked and until when, and the address and user agent it asked from. The page sends the code the person typed, never one from a link. Dashes and case are ignored. An unknown, expired, approved or denied code is 404 device-code-not-found with one fixed body; so is every code under GOAL_AUTH=none, which has no CLI sign-in. Only signed-in people hold device:read, never API keys or personal tokens.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/auth/device/{user_code} (the `GetDeviceRequest` operationId).
+	GetDeviceRequestWithResponse(ctx context.Context, userCode string, reqEditors ...RequestEditorFn) (*GetDeviceRequestResponse, error)
+
 	// GetHealthWithResponse Liveness of goald
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -10626,6 +10717,54 @@ func (r GetAuthConfigResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetAuthConfigResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetDeviceRequestResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *DeviceRequest
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetDeviceRequestResponse) GetJSON200() *DeviceRequest {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetDeviceRequestResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetDeviceRequestResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDeviceRequestResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDeviceRequestResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetDeviceRequestResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -14035,6 +14174,21 @@ func (c *ClientWithResponses) GetAuthConfigWithResponse(ctx context.Context, req
 	return ParseGetAuthConfigResponse(rsp)
 }
 
+// GetDeviceRequestWithResponse A pending CLI sign-in, by the code its terminal shows
+//
+// What the Device-Approve page shows before a signed-in person approves `goal login`: the client (checked by the identity service: only the Goal CLI), when it asked and until when, and the address and user agent it asked from. The page sends the code the person typed, never one from a link. Dashes and case are ignored. An unknown, expired, approved or denied code is 404 device-code-not-found with one fixed body; so is every code under GOAL_AUTH=none, which has no CLI sign-in. Only signed-in people hold device:read, never API keys or personal tokens.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/auth/device/{user_code} (the `GetDeviceRequest` operationId).
+func (c *ClientWithResponses) GetDeviceRequestWithResponse(ctx context.Context, userCode string, reqEditors ...RequestEditorFn) (*GetDeviceRequestResponse, error) {
+	rsp, err := c.GetDeviceRequest(ctx, userCode, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDeviceRequestResponse(rsp)
+}
+
 // GetHealthWithResponse Liveness of goald
 //
 // Returns a wrapper object for the known response body format(s).
@@ -15393,6 +15547,39 @@ func ParseGetAuthConfigResponse(rsp *http.Response) (*GetAuthConfigResponse, err
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetDeviceRequestResponse parses an HTTP response from a GetDeviceRequestWithResponse call
+func ParseGetDeviceRequestResponse(rsp *http.Response) (*GetDeviceRequestResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDeviceRequestResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeviceRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
 
 	}
 
@@ -17766,6 +17953,9 @@ type ServerInterface interface {
 	// GetAuthConfig How this install signs people in
 	// (GET /v1/auth/config)
 	GetAuthConfig(w http.ResponseWriter, r *http.Request)
+	// GetDeviceRequest A pending CLI sign-in, by the code its terminal shows
+	// (GET /v1/auth/device/{user_code})
+	GetDeviceRequest(w http.ResponseWriter, r *http.Request, userCode string)
 	// GetHealth Liveness of goald
 	// (GET /v1/health)
 	GetHealth(w http.ResponseWriter, r *http.Request)
@@ -17995,6 +18185,32 @@ func (siw *ServerInterfaceWrapper) GetAuthConfig(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAuthConfig(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDeviceRequest operation middleware
+func (siw *ServerInterfaceWrapper) GetDeviceRequest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "user_code" -------------
+	var userCode string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "user_code", r.PathValue("user_code"), &userCode, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "user_code", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDeviceRequest(w, r, userCode)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -21196,6 +21412,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/health", wrapper.GetHealth)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/auth/config", wrapper.GetAuthConfig)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/auth/device/{user_code}", wrapper.GetDeviceRequest)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/me", wrapper.GetMe)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/platform/admins", wrapper.ListPlatformAdmins)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/platform/admins", wrapper.AddPlatformAdmin)
@@ -21289,6 +21506,45 @@ func (response GetAuthConfig200JSONResponse) VisitGetAuthConfigResponse(w http.R
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDeviceRequestRequestObject struct {
+	UserCode string `json:"user_code"`
+}
+
+type GetDeviceRequestResponseObject interface {
+	VisitGetDeviceRequestResponse(w http.ResponseWriter) error
+}
+
+type GetDeviceRequest200JSONResponse DeviceRequest
+
+func (response GetDeviceRequest200JSONResponse) VisitGetDeviceRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDeviceRequestdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetDeviceRequestdefaultApplicationProblemPlusJSONResponse) VisitGetDeviceRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -24205,6 +24461,9 @@ type StrictServerInterface interface {
 	// GetAuthConfig How this install signs people in
 	// (GET /v1/auth/config)
 	GetAuthConfig(ctx context.Context, request GetAuthConfigRequestObject) (GetAuthConfigResponseObject, error)
+	// GetDeviceRequest A pending CLI sign-in, by the code its terminal shows
+	// (GET /v1/auth/device/{user_code})
+	GetDeviceRequest(ctx context.Context, request GetDeviceRequestRequestObject) (GetDeviceRequestResponseObject, error)
 	// GetHealth Liveness of goald
 	// (GET /v1/health)
 	GetHealth(ctx context.Context, request GetHealthRequestObject) (GetHealthResponseObject, error)
@@ -24476,6 +24735,32 @@ func (sh *strictHandler) GetAuthConfig(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetAuthConfigResponseObject); ok {
 		if err := validResponse.VisitGetAuthConfigResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetDeviceRequest operation middleware
+func (sh *strictHandler) GetDeviceRequest(w http.ResponseWriter, r *http.Request, userCode string) {
+	var request GetDeviceRequestRequestObject
+
+	request.UserCode = userCode
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetDeviceRequest(ctx, request.(GetDeviceRequestRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetDeviceRequest")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetDeviceRequestResponseObject); ok {
+		if err := validResponse.VisitGetDeviceRequestResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -28,7 +28,6 @@ var updateGolden = flag.Bool("update", false, "rewrite testdata/access.golden fr
 // PRs add (spec 3, §8.2 and §15). Remove a permission here in the PR that gives it an operation;
 // the test fails while one is both listed and used.
 var awaitingOperations = map[string]string{
-	"device:read":     "3-13: getDeviceRequest",
 	"org:transfer":    "3-11: transferOwnership",
 	"member:read":     "3-11: listMembers",
 	"invitation:read": "3-11: listInvitations",

@@ -66,6 +66,7 @@ func TestE2E_SignInWithAnEmailedCode(t *testing.T) {
 	s.signIn(t)
 	s.checkTheOwner(t)
 	s.checkTheirOrganizations(t)
+	s.cliLogsIn(t)
 	s.signOutEndsTheStream(t)
 
 	if res := s.do(t, http.MethodGet, "/v1/me", ""); res.status != http.StatusUnauthorized {
@@ -124,6 +125,106 @@ func (s *e2eStack) checkTheirOrganizations(t *testing.T) {
 
 	if org.Role != "owner" || !strings.Contains(strings.Join(org.Can, ","), "org:delete") {
 		t.Errorf("the new org = %+v; want it owned by its creator", org)
+	}
+}
+
+var userCodeLine = regexp.MustCompile(`Open (\S+) and enter ([A-Z0-9]{4}-[A-Z0-9]{4})`)
+
+// cliLogsIn runs the real goal login (bin/goal, spec 3 §9 and PR 3-13) against the stack: the CLI
+// asks for a code and prints it; the owner, whose browser session is the client's cookie jar,
+// reads the request through goald and approves it through the proxy; the CLI stores its session
+// (in a 0600 file) and goal whoami answers as the owner. goal logout ends that session in Goal, so
+// whoami then exits 77, while the browser's session is untouched.
+func (s *e2eStack) cliLogsIn(t *testing.T) {
+	t.Helper()
+
+	env := []string{"PATH=" + os.Getenv("PATH"), "HOME=" + t.TempDir(), "XDG_CONFIG_HOME=" + t.TempDir(), "GOAL_API_URL=" + e2ePublicURL, "BROWSER=true"}
+	goal := func(args ...string) *osexec.Cmd {
+		cmd := osexec.CommandContext(t.Context(), "../../bin/goal", args...) //nolint:gosec // the stack's own CLI
+		cmd.Env = env
+
+		return cmd
+	}
+
+	code, done := startLogin(t, goal("login", "--store", "file"))
+	s.approveDevice(t, code)
+	done()
+
+	if out, err := goal("whoami").CombinedOutput(); err != nil || !strings.Contains(string(out), s.owner) {
+		t.Errorf("goal whoami = %v\n%s", err, out)
+	}
+
+	if out, err := goal("logout").CombinedOutput(); err != nil || !strings.Contains(string(out), "Signed out of "+e2ePublicURL) {
+		t.Errorf("goal logout = %v\n%s", err, out)
+	}
+
+	var exit *osexec.ExitError
+	if out, err := goal("whoami").CombinedOutput(); !errors.As(err, &exit) || exit.ExitCode() != 77 || !strings.Contains(string(out), "run goal login") {
+		t.Errorf("goal whoami after logout = %v\n%s; want exit 77", err, out)
+	}
+
+	if res := s.do(t, http.MethodGet, "/v1/me", ""); res.status != http.StatusOK {
+		t.Errorf("the browser's session after goal logout = %d; want it untouched", res.status)
+	}
+}
+
+// startLogin starts goal login and reads the code it prints; done waits for it to store the
+// session.
+func startLogin(t *testing.T, login *osexec.Cmd) (string, func()) {
+	t.Helper()
+
+	stdout, err := login.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var stderr bytes.Buffer
+
+	login.Stderr = &stderr
+
+	if err := login.Start(); err != nil {
+		t.Fatalf("goal login: %v", err)
+	}
+
+	lines := bufio.NewReader(stdout)
+
+	first, err := lines.ReadString('\n')
+	if m := userCodeLine.FindStringSubmatch(first); err == nil && m != nil && m[1] == e2ePublicURL+"/device" {
+		return m[2], func() {
+			rest, _ := io.ReadAll(lines)
+			if err := login.Wait(); err != nil || !strings.Contains(string(rest), "Signed in to "+e2ePublicURL) {
+				t.Fatalf("goal login = %v\n%s%s%s", err, first, rest, stderr.String())
+			}
+		}
+	}
+
+	t.Fatalf("goal login printed %q, %v (%s); want where to enter the code", first, err, stderr.String())
+
+	return "", nil
+}
+
+// approveDevice does what Device-Approve does with the typed code: read the request through goald
+// (the Goal CLI, from this machine), open the code, approve it.
+func (s *e2eStack) approveDevice(t *testing.T, code string) {
+	t.Helper()
+
+	var request struct {
+		ClientName string `json:"client_name"`
+		SameIP     bool   `json:"same_ip"`
+		UserAgent  string `json:"user_agent"`
+	}
+	s.decode(t, s.do(t, http.MethodGet, "/v1/auth/device/"+code, ""), &request)
+
+	if request.ClientName != "Goal CLI" || !request.SameIP || !strings.HasPrefix(request.UserAgent, "goal/") {
+		t.Errorf("the device request = %+v; want the Goal CLI from this machine", request)
+	}
+
+	if res := s.do(t, http.MethodGet, "/api/auth/device?user_code="+code, ""); res.status != http.StatusOK {
+		t.Fatalf("open the code = %d %s", res.status, res.body)
+	}
+
+	if res := s.do(t, http.MethodPost, "/api/auth/device/approve", fmt.Sprintf(`{"userCode":%q}`, code)); res.status != http.StatusOK {
+		t.Fatalf("approve = %d %s", res.status, res.body)
 	}
 }
 

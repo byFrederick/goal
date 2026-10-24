@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
+	"regexp"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/domain"
@@ -37,6 +39,7 @@ type Identity interface {
 	Session(ctx context.Context, token string, org domain.OrgID) (domain.Principal, error)
 	APIKey(ctx context.Context, hash string) (domain.Principal, error)
 	OrgsFor(ctx context.Context, user domain.UserID) ([]domain.OrgMembership, error)
+	DeviceRequest(ctx context.Context, userCode string) (domain.DeviceRequest, error)
 }
 
 var _ Identity = ports.Identity(nil)
@@ -183,6 +186,63 @@ func (s *server) GetMe(ctx context.Context, _ gen.GetMeRequestObject) (gen.GetMe
 	default:
 		return nil, fmt.Errorf("principal of kind %q: %w", p.Kind, domain.ErrUnauthenticated)
 	}
+}
+
+// errDeviceCodeNotFound answers a CLI sign-in code that is not pending (unknown, expired, approved
+// or denied), and every code under GOAL_AUTH=none, with one fixed body.
+var errDeviceCodeNotFound = fmt.Errorf("device code not found: %w", ports.ErrNotFound)
+
+// userCodeForm is what a typed CLI sign-in code may look like (ABCD-EFGH, any case, with dashes or
+// spaces); anything else is not a code, and is not looked up.
+var userCodeForm = regexp.MustCompile(`^[A-Za-z0-9 -]{1,32}$`)
+
+// GetDeviceRequest describes a pending CLI sign-in to the person about to approve it (canvas
+// Device-Approve): the client the identity service accepted, when it asked and until when, and
+// where from, with whether that is this browser's own network. The code is the one the person
+// typed; the identity service approves it (/api/auth/device/approve), not goald.
+func (s *server) GetDeviceRequest(ctx context.Context, req gen.GetDeviceRequestRequestObject) (gen.GetDeviceRequestResponseObject, error) {
+	if s.auth.Mode != AuthSession || !userCodeForm.MatchString(req.UserCode) {
+		return nil, errDeviceCodeNotFound
+	}
+
+	d, err := s.identity.DeviceRequest(ctx, req.UserCode)
+	if errors.Is(err, ports.ErrNotFound) {
+		return nil, errDeviceCodeNotFound
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	out := gen.GetDeviceRequest200JSONResponse{
+		ClientId: d.ClientID, ClientName: d.ClientName, ExpiresAt: d.ExpiresAt, Ip: optional(d.IP), UserAgent: optional(d.UserAgent),
+		SameIp: sameNetwork(d.IP, clientAddrFrom(ctx)),
+	}
+	if !d.RequestedAt.IsZero() {
+		out.RequestedAt = &d.RequestedAt
+	}
+
+	return out, nil
+}
+
+// sameNetwork reports whether the address a CLI asked from (as the identity service recorded it)
+// is the browser's: the same address, or for IPv6 the same /64, which is all the identity service
+// keeps of one (ipv6Subnet). Unknown on either side is false.
+func sameNetwork(recorded string, browser netip.Addr) bool {
+	cli, err := netip.ParseAddr(recorded)
+	if err != nil || !browser.IsValid() {
+		return false
+	}
+
+	cli = cli.Unmap()
+	if cli.Is6() && browser.Is6() {
+		a, errA := cli.Prefix(64)
+		b, errB := browser.Prefix(64)
+
+		return errA == nil && errB == nil && a == b
+	}
+
+	return cli == browser
 }
 
 // actorOut is an actor as the API shows it: the local user's rows from before sign-in say so once

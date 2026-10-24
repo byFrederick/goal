@@ -75,7 +75,7 @@ func TestItemRef_BareNumbersResolveToTheOneFactoryThatHasThem(t *testing.T) {
 
 	g := newRefGoald(t)
 
-	c, err := newAPI(func(string) string { return g.srv.URL })
+	c, err := newAPI(testEnv(t, g.srv.URL, nil))
 	if err != nil {
 		t.Fatal(err)
 	}

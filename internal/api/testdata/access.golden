@@ -255,6 +255,21 @@ getConstraintReport  key-restricted   404 factory-not-found    404 org-not-found
 getConstraintReport  key-other-org    404 org-not-found        200
 getConstraintReport  key-expired      401 unauthenticated      401 unauthenticated
 getConstraintReport  key-revoked      401 unauthenticated      401 unauthenticated
+getDeviceRequest     anonymous        install: 401 unauthenticated
+getDeviceRequest     owner            install: 200
+getDeviceRequest     admin            install: 200
+getDeviceRequest     viewer           install: 200
+getDeviceRequest     approver         install: 200
+getDeviceRequest     editor           install: 200
+getDeviceRequest     member-no-roles  install: 200
+getDeviceRequest     other-org-owner  install: 200
+getDeviceRequest     platform-admin   install: 200
+getDeviceRequest     stale-owner      install: 200
+getDeviceRequest     key-scoped       install: 403 forbidden
+getDeviceRequest     key-restricted   install: 403 forbidden
+getDeviceRequest     key-other-org    install: 403 forbidden
+getDeviceRequest     key-expired      install: 401 unauthenticated
+getDeviceRequest     key-revoked      install: 401 unauthenticated
 getDraft             anonymous        401 unauthenticated      401 unauthenticated
 getDraft             owner            200                      404 org-not-found
 getDraft             admin            200                      404 org-not-found

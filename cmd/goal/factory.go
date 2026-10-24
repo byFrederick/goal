@@ -540,13 +540,13 @@ func publish(
 		return res.JSON201, nil
 	}
 
-	return nil, refusal(out, root, f, revision, res.HTTPResponse.Status, res.ApplicationproblemJSONDefault)
+	return nil, refusal(out, root, f, revision, res.HTTPResponse, res.ApplicationproblemJSONDefault)
 }
 
 // refusal explains a publish or restore goald refused.
-func refusal(out *printer, root string, f *gen.Factory, revision int64, status string, p *gen.Problem) error {
-	if p == nil {
-		return fmt.Errorf("goald answered %s", status)
+func refusal(out *printer, root string, f *gen.Factory, revision int64, res *http.Response, p *gen.Problem) error {
+	if err := refusedAccess(res, p); err != nil || p == nil {
+		return problem(res, p)
 	}
 
 	switch problemCode(p) {
@@ -989,7 +989,7 @@ func factoryRestore(ctx context.Context, out *printer, getenv func(string) strin
 	}
 
 	if res.JSON200 == nil {
-		return refusal(out, "", f, 0, res.HTTPResponse.Status, res.ApplicationproblemJSONDefault)
+		return refusal(out, "", f, 0, res.HTTPResponse, res.ApplicationproblemJSONDefault)
 	}
 
 	out.printf("✓ %s runs v%d again (it ran v%d)\n", f.Name, n, f.Current.Number)
