@@ -72,6 +72,9 @@ type harness struct {
 
 	mu    sync.Mutex
 	ended []domain.RunID // runs reported to RunEnded
+	// ticking, while step's tick runs, is closed when it returns; every task waits for it
+	// before it plays, so no task ends within the tick that started it (see step).
+	ticking chan struct{}
 }
 
 func (h *harness) runEnded(_ context.Context, run domain.RunID) {
@@ -108,7 +111,6 @@ func newHarness(t *testing.T, line domain.Line, run porttest.RunFunc) *harness {
 	h := &harness{
 		store:      store,
 		tenancy:    porttest.NewTenancy(clock.Now).WithStore(store),
-		runner:     porttest.NewRunner(run),
 		workspaces: porttest.NewWorkspaces(),
 		checker:    porttest.NewChecker(),
 		clock:      clock,
@@ -117,6 +119,21 @@ func newHarness(t *testing.T, line domain.Line, run porttest.RunFunc) *harness {
 		line:       line,
 		logs:       &logBuffer{},
 	}
+
+	h.runner = porttest.NewRunner(func(ctx context.Context, spec ports.TaskSpec, events chan<- ports.RunEvent) domain.RunResult {
+		h.mu.Lock()
+		ticking := h.ticking
+		h.mu.Unlock()
+
+		if ticking != nil {
+			select {
+			case <-ticking:
+			case <-ctx.Done():
+			}
+		}
+
+		return run(ctx, spec, events)
+	})
 
 	if org := h.newOrg(t, "acme"); org != testOrg {
 		t.Fatalf("the first organization is %s, want %s", org, testOrg)
@@ -191,11 +208,27 @@ func (h *harness) submit(t *testing.T, n domain.NewItem) domain.Item {
 	return it
 }
 
-// step runs one tick and waits for every run it started.
+// step runs one tick and waits for every run it started. The tasks play only once the tick has
+// returned, so a step moves an item through one agent station whatever the scheduler does: a
+// run that ended within the tick would let the same tick claim its item again at the next
+// agent station.
 func (h *harness) step(t *testing.T) {
 	t.Helper()
 
-	if err := h.e.Tick(inOrg(t)); err != nil {
+	ticking := make(chan struct{})
+
+	h.mu.Lock()
+	h.ticking = ticking
+	h.mu.Unlock()
+
+	err := h.e.Tick(inOrg(t))
+
+	h.mu.Lock()
+	h.ticking = nil
+	h.mu.Unlock()
+	close(ticking)
+
+	if err != nil {
 		t.Fatal(err)
 	}
 
