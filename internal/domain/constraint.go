@@ -61,21 +61,29 @@ func (l Line) Candidates(times []StationTimes, window time.Duration, n int) []Ca
 	return out[:min(n, len(out))]
 }
 
+// ConstraintMinBusy is the busy share from which the busiest agent station is the line's
+// constraint. Below it no station holds the line back by being busy: a station working 8% of the
+// time is not what limits the line, whatever the others did.
+const ConstraintMinBusy = 0.5
+
 // ConstraintOf is the line's constraint and how it was found: the configured station, else the
-// busiest candidate when any was busy, else the snapshot of loads now ("" when no agent station
-// has work).
+// busiest candidate when it was busy at least ConstraintMinBusy of the time, else the snapshot
+// of loads now when work waits at the station it names. "" when no station is meaningfully
+// loaded: "No constraint right now".
 func (l Line) ConstraintOf(cands []Candidate, loads map[string]StationLoad) (string, ConstraintSource) {
 	if _, ok := l.Station(l.Flow.Constraint); ok {
 		return l.Flow.Constraint, SourceConfigured
 	}
 
-	if len(cands) > 0 && cands[0].Busy > 0 {
+	if len(cands) > 0 && cands[0].Busy >= ConstraintMinBusy {
 		return cands[0].Station, SourceDetected
 	}
 
-	station, _ := l.Constraint(loads)
+	if station, ok := l.Constraint(loads); ok && loads[station].Waiting > 0 {
+		return station, SourceSnapshot
+	}
 
-	return station, SourceSnapshot
+	return "", SourceSnapshot
 }
 
 // WaitSaved rules.

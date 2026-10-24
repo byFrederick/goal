@@ -1,7 +1,7 @@
 // How the Floor's constraint card says a candidate: its headline, the queue in front of it, what
 // one more slot would save. Agent and station names come from the factory.
-import type { ConstraintCandidate } from '../../api/types';
-import { humanize, plural } from '../../shared/format';
+import type { ConstraintCandidate, ConstraintReport } from '../../api/types';
+import { formatDay, formatPercent, humanize, plural } from '../../shared/format';
 import { daysIn } from './range';
 
 const numbers = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
@@ -42,7 +42,24 @@ export function addLabel(c: ConstraintCandidate): string {
   return `Add ${article(agentOf(c))}`;
 }
 
-/** The stretch busy shares cover: "7 days". */
-export function busyOver(from: string, to: string): string {
-  return plural(daysIn(from, to), 'day');
+/**
+ * The stretch busy shares cover, short ("7 days") and in a sentence ("over 7 days"): the range,
+ * or "since Oct 21" when the factory's first lease falls inside it, since goald measures busy
+ * shares from then.
+ */
+export function busyPeriod(r: Pick<ConstraintReport, 'from' | 'to' | 'coverage_since'>): {
+  short: string;
+  long: string;
+} {
+  if (r.coverage_since && Date.parse(r.coverage_since) > Date.parse(`${r.from}T00:00:00Z`)) {
+    const since = `since ${formatDay(r.coverage_since)}`;
+    return { short: since, long: since };
+  }
+  const days = plural(daysIn(r.from, r.to), 'day');
+  return { short: days, long: `over ${days}` };
+}
+
+/** "The busiest station, Write, was busy 8% of the time since Oct 21." */
+export function busiestSentence(c: ConstraintCandidate, period: string): string {
+  return `The busiest station, ${humanize(c.station)}, was busy ${formatPercent(c.busy_ratio)} of the time ${period}.`;
 }

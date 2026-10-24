@@ -6,7 +6,7 @@ import { useFactoryParams } from '../../shared/factory';
 import { formatDay, formatPercent, humanize, plural } from '../../shared/format';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
-import { addLabel, busyOver, estimateSentence, headline, waitingSentence } from './constraint-words';
+import { addLabel, busiestSentence, busyPeriod, estimateSentence, headline, waitingSentence } from './constraint-words';
 
 // Numbers are tabular (MASTER.md); names around them stay proportional.
 const numeral = 'm-0 font-normal tracking-numeral leading-none tabular-nums';
@@ -17,8 +17,10 @@ const pagerButton =
 /**
  * The dark card (Main and Mobile-Floor: the constraint): the busiest agent stations over the
  * range, one at a time ("1 of 3"), with how busy each was, the queue in front of it and what one
- * more slot would save, and a link to add one in the definition. Before any lease history it
- * shows the snapshot of the board and when busy shares will start.
+ * more slot would save, and a link to add one in the definition. When no station is loaded
+ * enough to hold the line back (domain.ConstraintMinBusy, or work waiting there) it says "No
+ * constraint right now" and names the busiest. Before any lease history it shows the snapshot of
+ * the board and when busy shares will start.
  */
 export function ConstraintCard({
   report,
@@ -33,6 +35,7 @@ export function ConstraintCard({
   const cands = report.candidates;
   const index = Math.min(page, Math.max(cands.length - 1, 0));
   const c = cands[index];
+  const period = busyPeriod(report);
 
   return (
     <section
@@ -50,7 +53,9 @@ export function ConstraintCard({
         aria-hidden="true"
         className="pointer-events-none absolute right-6 bottom-8 hidden h-28 w-11 rounded-l-control border-[1.5px] border-r-0 border-white/35 md:block"
       />
-      {c ? (
+      {c && report.constraint === null ? (
+        <NoConstraint detail={busiestSentence(c, period.long)} />
+      ) : c ? (
         <>
           <div className="relative flex items-center justify-between gap-2">
             <Chip tone="constraint" className="h-7 px-2.5 text-[13px] font-semibold">
@@ -87,8 +92,8 @@ export function ConstraintCard({
             <span className={cn(numeral, 'text-[44px] md:text-[58px]')}>{formatPercent(c.busy_ratio)}</span>
             <span className="pb-1 text-sm leading-snug text-white/85 md:pb-1.5">
               busy<span className="md:hidden">,</span> <br className="max-md:hidden" />
-              <span className="md:hidden">{busyOver(report.from, report.to)}</span>
-              <span className="max-md:hidden">over {busyOver(report.from, report.to)}</span>
+              <span className="md:hidden">{period.short}</span>
+              <span className="max-md:hidden">{period.long}</span>
             </span>
           </p>
           <h2
@@ -116,28 +121,8 @@ function Snapshot({ report, board }: { report: ConstraintReport; board: Board })
   const history = report.coverage_since
     ? `Not enough history yet: busy shares start on ${formatDay(report.coverage_since)}.`
     : 'Not enough history yet: busy shares start with the first agent run.';
-  const params = useFactoryParams();
 
-  if (!station) {
-    return (
-      <>
-        <h2 id="constraint-h" className="relative m-0 text-xl leading-tight font-medium md:mt-2 md:text-2xl">
-          No constraint right now
-        </h2>
-        <p className="relative m-0 max-w-[34ch] text-sm leading-normal text-white/85 md:mt-3 md:text-[15px]">
-          No station holds the line back. Work moves at the pace it arrives.
-        </p>
-        <Link
-          to="/o/$org/f/$factory/board"
-          params={params}
-          className="relative mt-2 inline-flex h-11 items-center gap-2 self-start rounded-control bg-white px-4 text-[15px] font-medium text-ink no-underline transition-colors hover:bg-shell md:mt-auto"
-        >
-          Open the board
-          <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
-        </Link>
-      </>
-    );
-  }
+  if (!station) return <NoConstraint />;
 
   return (
     <>
@@ -163,6 +148,30 @@ function Snapshot({ report, board }: { report: ConstraintReport; board: Board })
       </h2>
       <p className="relative m-0 max-w-[34ch] text-sm leading-normal text-white/85 md:mt-3 md:text-[15px]">{history}</p>
       <AddLink station={station.id} label={`See ${humanize(station.id)} on the board`} board />
+    </>
+  );
+}
+
+/** No station holds the line back: the spec's copy, and the busiest station when there is one. */
+function NoConstraint({ detail }: { detail?: string }) {
+  const params = useFactoryParams();
+  return (
+    <>
+      <h2 id="constraint-h" className="relative m-0 text-xl leading-tight font-medium md:mt-2 md:text-2xl">
+        No constraint right now
+      </h2>
+      <p className="relative m-0 max-w-[34ch] text-sm leading-normal text-white/85 md:mt-3 md:text-[15px]">
+        No station holds the line back. Work moves at the pace it arrives.
+        {detail ? ` ${detail}` : ''}
+      </p>
+      <Link
+        to="/o/$org/f/$factory/board"
+        params={params}
+        className="relative mt-2 inline-flex h-11 items-center gap-2 self-start rounded-control bg-white px-4 text-[15px] font-medium text-ink no-underline transition-colors hover:bg-shell md:mt-auto"
+      >
+        Open the board
+        <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
+      </Link>
     </>
   );
 }

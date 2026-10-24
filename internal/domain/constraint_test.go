@@ -87,6 +87,28 @@ func TestLine_ConstraintOf(t *testing.T) {
 	if got, source := constraintLine.ConstraintOf(nil, nil); got != "" || source != SourceSnapshot {
 		t.Errorf("ConstraintOf an empty line = %q (%s), want none", got, source)
 	}
+
+	// A station is the constraint only when it is meaningfully loaded: busy at least
+	// ConstraintMinBusy of the time, or with work waiting in front of it now. 8% busy with the
+	// line empty, or with one item in progress and nothing waiting, holds nothing back.
+	lightly := []Candidate{{Station: stInvestigate, Busy: 0.08}, {Station: stTriage, Busy: 0.01}}
+	for name, loads := range map[string]map[string]StationLoad{
+		"line empty":           nil,
+		"one in progress only": {stInvestigate: {InProgress: 1}},
+	} {
+		if got, _ := constraintLine.ConstraintOf(lightly, loads); got != "" {
+			t.Errorf("ConstraintOf a lightly loaded line (%s) = %q, want none", name, got)
+		}
+	}
+
+	if got, source := constraintLine.ConstraintOf(lightly, map[string]StationLoad{stInvestigate: {Waiting: 2}}); got != stInvestigate || source != SourceSnapshot {
+		t.Errorf("ConstraintOf with work waiting at a lightly busy station = %q (%s), want it from the snapshot", got, source)
+	}
+
+	half := []Candidate{{Station: stInvestigate, Busy: ConstraintMinBusy}}
+	if got, source := constraintLine.ConstraintOf(half, nil); got != stInvestigate || source != SourceDetected {
+		t.Errorf("ConstraintOf at the threshold = %q (%s), want it detected", got, source)
+	}
 }
 
 func TestWaitSaved(t *testing.T) {
