@@ -40,10 +40,17 @@ func (s *e2eStack) membersFlow(t *testing.T) *e2eStack {
 
 	var owner struct {
 		User struct {
-			Name string `json:"name"`
+			Name  string `json:"name"`
+			Email string `json:"email"`
 		} `json:"user"`
 	}
 	s.decode(t, s.do(t, http.MethodGet, "/v1/me", ""), &owner)
+
+	// The bootstrap owner signed up by code and has no name yet: the invitation names them by email.
+	inviter := owner.User.Name
+	if strings.TrimSpace(inviter) == "" {
+		inviter = owner.User.Email
+	}
 
 	var shown struct {
 		OrganizationName string  `json:"organizationName"`
@@ -51,8 +58,8 @@ func (s *e2eStack) membersFlow(t *testing.T) *e2eStack {
 	}
 	invitee.decode(t, invitee.do(t, http.MethodGet, "/api/auth/organization/get-invitation?id="+invitation.ID, ""), &shown)
 
-	if shown.OrganizationName != "E2E Labs" || shown.InviterName == nil || *shown.InviterName != owner.User.Name {
-		t.Errorf("the invitation as its recipient sees it = %+v; want E2E Labs, invited by %q", shown, owner.User.Name)
+	if shown.OrganizationName != "E2E Labs" || shown.InviterName == nil || *shown.InviterName != inviter {
+		t.Errorf("the invitation as its recipient sees it = %+v; want E2E Labs, invited by %q", shown, inviter)
 	}
 
 	if res := invitee.do(t, http.MethodPost, "/api/auth/organization/accept-invitation", fmt.Sprintf(`{"invitationId":%q}`, invitation.ID)); res.status != http.StatusOK {
