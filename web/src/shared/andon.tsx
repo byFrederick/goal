@@ -4,7 +4,7 @@
 // read the line from the board (Board.line.status and .andon).
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Hand, Play } from 'lucide-react';
-import { type FormEvent, useId, useState } from 'react';
+import { type FormEvent, type ReactNode, useId, useState } from 'react';
 import { toast } from 'sonner';
 import { clearAndon, pullAndon } from '../api/client';
 import { keys } from '../api/queries';
@@ -35,7 +35,8 @@ export function LineStatus({
 }: {
   /** The line's open pull, or null while it runs. */
   andon: AndonPull | null;
-  suffix?: string;
+  /** After the status, on the same line when it fits: ", WIP 1 of 2" (keep a phrase whole with a nowrap span). */
+  suffix?: ReactNode;
   wrap?: boolean;
   className?: string;
 }) {

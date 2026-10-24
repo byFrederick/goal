@@ -277,7 +277,16 @@ export function BoardPage() {
         </div>
       </header>
       <div className="-mt-3 flex items-center justify-between gap-2 text-sm text-muted md:hidden">
-        <LineStatus andon={board.line.andon} className="text-sm" suffix={`, ${wipText(board.line)}`} wrap />
+        <LineStatus
+          andon={board.line.andon}
+          className="text-sm"
+          suffix={
+            <>
+              , <span className="whitespace-nowrap">{wipText(board.line)}</span>
+            </>
+          }
+          wrap
+        />
         <AndonButton factory={factory} andon={board.line.andon} className="min-h-11" />
       </div>
 

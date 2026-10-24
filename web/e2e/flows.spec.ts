@@ -497,6 +497,9 @@ test('on a phone the board opens where a person is needed, then picks any statio
   // Items waiting on a person come first: the board opens on Approve, not the constraint.
   const picker = page.getByRole('tablist', { name: 'Stations' });
   await expect(picker.getByRole('tab', { name: /^Approve/ })).toHaveAttribute('aria-selected', 'true');
+  // The line's WIP stays one phrase on one line ("WIP 1 / of 2" read badly).
+  const wip = page.getByText(/^WIP \d+( of \d+)?$/).filter({ visible: true });
+  expect(await wip.evaluate((el) => el.getClientRects().length)).toBe(1);
   await picker.getByRole('tab', { name: 'Investigate 3 of 3, 2 ready' }).click();
   await expect(page).toHaveURL(/station=investigate/);
   await expect(page.getByText('The constraint: busy 94%, queue growing')).toBeVisible();
