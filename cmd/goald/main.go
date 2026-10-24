@@ -198,7 +198,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// instance runs stops its run at once.
 	feed := api.NewFeed(postgres.NewNotices(store, log), postgres.NewDefinitionNotices(store, log), log, eng.Interrupt)
 
-	// Phase 3 sets the capabilities in its wiring PRs; until then the editor keeps their controls hidden.
+	// Phase 4 sets the capabilities in its wiring PRs; until then the editor keeps their controls hidden.
 	editor := builder.New(objects, clock, builder.Config{Models: s.Models, Capabilities: builder.Capabilities{}, Logger: log})
 
 	apiHandler, err := api.New(api.Deps{

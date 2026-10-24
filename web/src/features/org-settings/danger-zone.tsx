@@ -1,6 +1,6 @@
 // Danger zone (C §10.9): Delete {Org}, confirmed by typing its name. goald answers 202 and the
 // organization 404s at once; its data is purged after purge_after. The UI then opens `/`, which
-// goes to the next organization or says there is none. Transfer ownership is phase 4 (no-auth).
+// goes to the next organization or says there is none. Transfer ownership is phase 3 (no-auth).
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';

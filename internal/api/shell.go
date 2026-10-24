@@ -18,7 +18,7 @@ import (
 )
 
 // The shell's reads (tag shell): what the app's chrome shows about an organization. Phase 2.2
-// has no identity, so "waiting on you" is every decision waiting on a person; phase 4 narrows it
+// has no identity, so "waiting on you" is every decision waiting on a person; phase 3 narrows it
 // at the Authorizer seam.
 
 // Limits of the shell's reads.

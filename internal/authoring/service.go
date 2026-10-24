@@ -218,12 +218,12 @@ type Deps struct {
 	Loads Loads
 	// Templates is the bucket the template catalog (catalog/templates/) is read from.
 	Templates ports.ObjectStore
-	// Credentials checks secret references: EnvReferences until phase 3.1 wires the vault.
+	// Credentials checks secret references: EnvReferences until phase 4.1 wires the vault.
 	// Nil leaves the credentials check out.
 	Credentials Credentials
-	// Checks are validation steps of later phases (phase 3's connector checker).
+	// Checks are validation steps of later phases (phase 4's connector checker).
 	Checks []Check
-	// Resolver is phase 3's connection resolution at publish; nil until then.
+	// Resolver is phase 4's connection resolution at publish; nil until then.
 	Resolver Resolver
 	Clock    ports.Clock
 	// NewID returns a new factory id (a UUIDv7); uuid.NewV7 when nil.

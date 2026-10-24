@@ -354,7 +354,7 @@ func (c *checker) connections() {
 
 		base := at("spec", "connections", i)
 		c.warnf(checkAvailability, codeConnectorLater, append(base, "connector"),
-			"connection %s: connectors arrive with phase 3; until then its tools are not served", conn.Name)
+			"connection %s: connectors arrive with phase 4; until then its tools are not served", conn.Name)
 
 		for j, a := range conn.Agents {
 			if !slices.Contains(c.agents, a) {
@@ -384,7 +384,7 @@ func (c *checker) connections() {
 	}
 
 	c.errorf(checkAvailability, codeRepoConnectionTodo, p,
-		"runtime.repository: a repository through a connection arrives with connectors (phase 3); use url and token until then")
+		"runtime.repository: a repository through a connection arrives with connectors (phase 4); use url and token until then")
 }
 
 func (c *checker) images() {

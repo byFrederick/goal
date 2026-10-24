@@ -2818,8 +2818,8 @@ components:
       description: Which later phases are wired; the editor hides or shows their controls read-only until then
       required: [credentials, connectors, tool_approvals]
       properties:
-        credentials: { type: boolean, description: "Phase 3.1: credential selects and factory credentials" }
-        connectors: { type: boolean, description: "Phase 3.2: the connector catalog and connector panel" }
+        credentials: { type: boolean, description: "Phase 4.1: credential selects and factory credentials" }
+        connectors: { type: boolean, description: "Phase 4.2: the connector catalog and connector panel" }
         tool_approvals: { type: boolean, description: '"Ask me" on built-in tools is enforced' }
     BuilderLimits:
       type: object
@@ -3385,7 +3385,7 @@ components:
             repository:
               type: object
               nullable: true
-              description: "{url, token} (token an env: reference until phase 3) or {connection, repo}"
+              description: "{url, token} (token an env: reference until phase 4) or {connection, repo}"
               additionalProperties: {}
         line:
           type: object

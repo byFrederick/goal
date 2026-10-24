@@ -66,7 +66,7 @@ routes/       file-based route files (TanStack Router plugin; routeTree.gen.ts i
                 /o/$org                         → layout: resolves the org (slug or id), its live stream, the rail
                   (_org)                        → pathless layout of the organization's own pages: org sidebar
                     /o/$org                     → Factories home
-                    /o/$org/settings …          → Organization settings (C7), catalog and credentials (phase 3)
+                    /o/$org/settings …          → Organization settings (C7), catalog and credentials (phase 4)
                   /o/$org/f/$factory            → layout: resolves the factory (name or id), factory sidebar,
                                                   phone crumb and tab bar; its index is the Floor
                                                   (?from&to&type: the range of UTC days and work type)
@@ -119,7 +119,7 @@ Every board card has a Move button (32 px in the columns, the 44 px arrow on pho
 
 ### Organization settings
 
-One form (`/o/$org/settings`): "Save changes" is enabled while it differs from what goald last answered and sends `PATCH …/settings` with only the changed fields (`changedFields`; slots always carry the organization's cap, which the contract requires). Fields are checked against goald's own rules first; a `slug-taken` answer is the Address field's "Taken", other refusals show the Problem's detail. After a save the organization list is refetched (rail, sidebar, route context); a new address replaces the URL with the new slug, and links with the old one stop working (review decision 2). Leaving with unsaved changes asks first (`useBlocker`). Delete takes the typed name, then `/` opens the next organization or says there is none. Model access and Vault say "Arrives with credentials" until phase 3.
+One form (`/o/$org/settings`): "Save changes" is enabled while it differs from what goald last answered and sends `PATCH …/settings` with only the changed fields (`changedFields`; slots always carry the organization's cap, which the contract requires). Fields are checked against goald's own rules first; a `slug-taken` answer is the Address field's "Taken", other refusals show the Problem's detail. After a save the organization list is refetched (rail, sidebar, route context); a new address replaces the URL with the new slug, and links with the old one stop working (review decision 2). Leaving with unsaved changes asks first (`useBlocker`). Delete takes the typed name, then `/` opens the next organization or says there is none. Model access and Vault say "Arrives with credentials" until phase 4.
 
 ### Running it
 

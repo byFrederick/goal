@@ -63,7 +63,7 @@ type Actor struct {
 }
 
 // LocalUser is the only person in phase 2.2, which has no sign-in: every request acts as it.
-// Phase 4 adds real users; refs recorded before then stay readable.
+// Phase 3 adds real users; refs recorded before then stay readable.
 var LocalUser = Actor{Kind: ActorUser, ID: "local", Name: "Local user"}
 
 // Ref is how other tables record an actor (`*_by text` columns): "user:local",
@@ -120,7 +120,7 @@ var (
 	actionPattern = regexp.MustCompile(`^[a-z_]+\.[a-z_]+$`)
 )
 
-// reservedSlugs are words of Goal's own routes; me, auth and invite stay reserved for phase 4,
+// reservedSlugs are words of Goal's own routes; me, auth and invite stay reserved for phase 3,
 // and default names the organization existing data moved into.
 var reservedSlugs = []string{"new", "settings", "api", "v1", "o", "me", "orgs", "auth", "invite", "admin", "default"}
 

@@ -2429,9 +2429,9 @@ export interface components {
         };
         /** @description Which later phases are wired; the editor hides or shows their controls read-only until then */
         BuilderCapabilities: {
-            /** @description Phase 3.1: credential selects and factory credentials */
+            /** @description Phase 4.1: credential selects and factory credentials */
             credentials: boolean;
-            /** @description Phase 3.2: the connector catalog and connector panel */
+            /** @description Phase 4.2: the connector catalog and connector panel */
             connectors: boolean;
             /** @description "Ask me" on built-in tools is enforced */
             tool_approvals: boolean;
@@ -2904,7 +2904,7 @@ export interface components {
                 title?: string;
                 purpose?: string;
                 work_types?: string[];
-                /** @description {url, token} (token an env: reference until phase 3) or {connection, repo} */
+                /** @description {url, token} (token an env: reference until phase 4) or {connection, repo} */
                 repository?: {
                     [key: string]: unknown;
                 } | null;

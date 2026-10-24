@@ -74,7 +74,7 @@ type Runtime struct {
 }
 
 // Repository is the git repository goald clones into every task's workspace: a URL and a token
-// reference, or a code-host connection and the repository's owner/name (phase 3).
+// reference, or a code-host connection and the repository's owner/name (phase 4).
 type Repository struct {
 	URL string `json:"url,omitempty"`
 	// Token is a secret reference used for the clone on the host only.
@@ -114,7 +114,7 @@ type Secrets struct {
 
 // Connection is a tool source served to agents through the gateway, in one of two forms: the
 // inline form (Type and its transport fields, served today) or the connector form (Connector
-// from the catalog, with Credential, Agents, Tools and connector Settings; phase 3).
+// from the catalog, with Credential, Agents, Tools and connector Settings; phase 4).
 type Connection struct {
 	// Name is unique in the factory. In the connector form it defaults to the connector's name,
 	// which Check fills in, so Name is always the name agents and tokens use.
@@ -133,7 +133,7 @@ type Connection struct {
 
 	// Connector is the catalog connector of the connector form: name or name@version.
 	Connector string `json:"connector,omitempty"`
-	// Credential is the organization credential the connection signs in with (phase 3).
+	// Credential is the organization credential the connection signs in with (phase 4).
 	Credential string              `json:"credential,omitempty"`
 	Agents     []string            `json:"agents,omitempty"`
 	Tools      map[string]ToolRule `json:"tools,omitempty"`

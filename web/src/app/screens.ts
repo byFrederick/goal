@@ -59,7 +59,7 @@ export const factoryScreens: readonly FactoryScreen[] = [
     available: true,
     to: '/o/$org/f/$factory/definition',
   },
-  // Phase 3.2: /connections.
+  // Phase 4.2: /connections.
   { id: 'connections', label: 'Connections', icon: Plug, group: 'build', available: false },
   // Later: /knowledge, /jonah.
   { id: 'knowledge', label: 'Knowledge', icon: BookOpen, group: 'learn', available: false },
@@ -80,9 +80,9 @@ export const factoriesScreen: OrgScreen = {
   to: '/o/$org',
   exact: true,
 };
-// Phase 3.2: /o/:org/catalog.
+// Phase 4.2: /o/:org/catalog.
 export const catalogScreen: OrgScreen = { id: 'catalog', label: 'Connector catalog', icon: Layers, available: false };
-// Phase 3.1: /o/:org/credentials.
+// Phase 4.1: /o/:org/credentials.
 export const credentialsScreen: OrgScreen = {
   id: 'credentials',
   label: 'Credentials',

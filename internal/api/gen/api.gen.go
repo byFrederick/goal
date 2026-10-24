@@ -990,10 +990,10 @@ type BridgeStepComponent string
 
 // BuilderCapabilities Which later phases are wired; the editor hides or shows their controls read-only until then
 type BuilderCapabilities struct {
-	// Connectors Phase 3.2: the connector catalog and connector panel
+	// Connectors Phase 4.2: the connector catalog and connector panel
 	Connectors bool `json:"connectors"`
 
-	// Credentials Phase 3.1: credential selects and factory credentials
+	// Credentials Phase 4.1: credential selects and factory credentials
 	Credentials bool `json:"credentials"`
 
 	// ToolApprovals "Ask me" on built-in tools is enforced

@@ -11,7 +11,7 @@ export const sections = ['basics', 'line', 'agents', 'connections', 'review'] as
 
 export interface Repository {
   url?: string;
-  /** An env: reference until phase 3 (read-only in Basics). */
+  /** An env: reference until phase 4 (read-only in Basics). */
   token?: string;
   connection?: string;
   repo?: string;

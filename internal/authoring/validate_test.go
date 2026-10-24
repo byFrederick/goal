@@ -205,7 +205,7 @@ func (failingSecrets) Resolve(context.Context, string) (string, error) {
 	return "", errors.New("secrets backend unreachable")
 }
 
-// connectorCheck stands in for phase 3's connector checker.
+// connectorCheck stands in for phase 4's connector checker.
 type connectorCheck struct{}
 
 func (connectorCheck) ID() string { return "connections" }

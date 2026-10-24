@@ -35,7 +35,7 @@ interface OrgChoice {
 
 interface OrgMenuModel {
   orgs: OrgChoice[];
-  /** The current organization's pages: catalog and credentials (phase 3), settings (C7). */
+  /** The current organization's pages: catalog and credentials (phase 4), settings (C7). */
   links: { screen: OrgScreen; label: string }[];
   /**
    * Whether going to `path` leaves the current page. Only then does the new page's heading take

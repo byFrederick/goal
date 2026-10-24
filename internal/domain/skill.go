@@ -112,9 +112,9 @@ type Model struct{ ID, Label string }
 
 // EditorCapabilities says which later phases are wired, so the editor shows their controls.
 type EditorCapabilities struct {
-	// Credentials: phase 3.1's credential selects and factory credentials.
+	// Credentials: phase 4.1's credential selects and factory credentials.
 	Credentials bool
-	// Connectors: phase 3.2's connector catalog and connector panel.
+	// Connectors: phase 4.2's connector catalog and connector panel.
 	Connectors bool
 	// ToolApprovals: "Ask me" on built-in tools is enforced.
 	ToolApprovals bool

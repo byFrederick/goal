@@ -1,6 +1,6 @@
 // The organization's sidebar on its own pages: "Organization" as eyebrow, its name and factory
 // count, then Factories, Connector catalog, Credentials and Settings (C §10.5, canvas
-// "Factories"). Members and roles arrive with phase 4 (no-auth).
+// "Factories"). Members and roles arrive with phase 3 (no-auth).
 import { Link } from '@tanstack/react-router';
 import type { OrgSummary } from '../api/types';
 import { factoryCount } from '../shared/org';

@@ -73,13 +73,13 @@
         "model": { "$ref": "#/$defs/model" },
         "repository": {
           "type": "object",
-          "description": "The git repository agent tasks work on. goald clones it on the host for every run, on the item's branch (goal/<number>-<slug>); the clone credential never reaches the agent container. Either an https URL with a token reference, or (from phase 3) a code-host connection and the repository's owner/name.",
+          "description": "The git repository agent tasks work on. goald clones it on the host for every run, on the item's branch (goal/<number>-<slug>); the clone credential never reaches the agent container. Either an https URL with a token reference, or (from phase 4) a code-host connection and the repository's owner/name.",
           "if": { "required": ["connection"] },
           "then": {
             "required": ["connection", "repo"],
             "additionalProperties": false,
             "properties": {
-              "connection": { "$ref": "#/$defs/slug", "description": "A connection of this factory whose connector is a code host; its credential clones and merges (phase 3)." },
+              "connection": { "$ref": "#/$defs/slug", "description": "A connection of this factory whose connector is a code host; its credential clones and merges (phase 4)." },
               "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "description": "owner/name on the connection's code host" }
             }
           },
@@ -126,20 +126,20 @@
     },
     "connection": {
       "type": "object",
-      "description": "A tool source agents reach through the gateway: the inline form (type and transport, served today) or the connector form (a catalog connector, phase 3).",
+      "description": "A tool source agents reach through the gateway: the inline form (type and transport, served today) or the connector form (a catalog connector, phase 4).",
       "if": { "required": ["connector"] },
       "then": { "$ref": "#/$defs/connectorConnection" },
       "else": { "$ref": "#/$defs/typedConnection" }
     },
     "connectorConnection": {
       "type": "object",
-      "description": "A connection from the connector catalog. Any key not listed here is a setting of the connector, validated against the connector's settings schema in phase 3.",
+      "description": "A connection from the connector catalog. Any key not listed here is a setting of the connector, validated against the connector's settings schema in phase 4.",
       "required": ["connector"],
       "not": { "required": ["type"] },
       "properties": {
         "connector": { "type": "string", "pattern": "^[a-z][a-z0-9-]*[a-z0-9](@[A-Za-z0-9._-]+)?$", "description": "A catalog connector, curated or org-private: name, or name@version." },
         "name": { "$ref": "#/$defs/slug", "description": "Unique in the factory; defaults to the connector's name." },
-        "credential": { "$ref": "#/$defs/slug", "description": "The organization credential the connection signs in with (phase 3); omitted when it needs none." },
+        "credential": { "$ref": "#/$defs/slug", "description": "The organization credential the connection signs in with (phase 4); omitted when it needs none." },
         "agents": { "type": "array", "items": { "type": "string" }, "description": "Agents that may use the connection; tools may narrow it further." },
         "tools": {
           "type": "object",

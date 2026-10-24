@@ -11,7 +11,7 @@ import (
 )
 
 // Authorizer decides whether the request's actor may run an operation. Phase 2.2 wires
-// AllowAll, which allows everything (there is no identity yet); phase 4 supplies the real
+// AllowAll, which allows everything (there is no identity yet); phase 3 supplies the real
 // implementation and its permission table, and nothing else in the API changes.
 //
 // Every request passes it once in the /v1 middleware, after its organization is resolved

@@ -15,10 +15,10 @@ const (
 	PurposeConnection SecretPurpose = "connection" // a connection's headers, env, command or credential
 )
 
-// CredentialPrefix starts a reference to an organization credential (phase 3).
+// CredentialPrefix starts a reference to an organization credential (phase 4).
 const CredentialPrefix = "credential:" //nolint:gosec // a reference prefix, not a credential
 
-// refPrefixes start a secret reference: env:NAME today, a vault credential from phase 3, and
+// refPrefixes start a secret reference: env:NAME today, a vault credential from phase 4, and
 // the references of other secrets providers. Anything else is a literal value.
 var refPrefixes = []string{"env:", CredentialPrefix, "op://", "arn:"}
 

@@ -17,7 +17,7 @@ import (
 )
 
 // Credentials checks a definition's secret references (the credentials check). B ships the
-// interim EnvReferences; phase 3.1 adds VaultCredentials over its vault and goald wires that
+// interim EnvReferences; phase 4.1 adds VaultCredentials over its vault and goald wires that
 // instead. Uses are config.Factory.SecretUses(); literals among them are left to config's
 // literal-secret warning.
 type Credentials interface {
@@ -47,12 +47,12 @@ const (
 
 var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
-// EnvReferences is the credentials check until phase 3 (docs/specs/README.md, "Interim rule
-// until phase 3"): model and repository access are platform secrets of the install, so every
+// EnvReferences is the credentials check until phase 4 (docs/specs/README.md, "Interim rule
+// until phase 4"): model and repository access are platform secrets of the install, so every
 // env:NAME reference must name a variable that is set and non-empty in goald's environment
 // (resolved through Secrets, the value discarded) and is not one of goald's own settings
 // (Reserved, such as GOAL_DATABASE_URL and GOAL_GATEWAY_KEY); a credential: reference is an
-// error until credentials arrive with phase 3. There is nothing to grant before phase 3, so
+// error until credentials arrive with phase 4. There is nothing to grant before phase 4, so
 // there are no grant, expiry or purpose checks.
 type EnvReferences struct {
 	Secrets ports.Secrets
@@ -134,7 +134,7 @@ func (e EnvReferences) check(ctx context.Context, ref string) (*CredentialFindin
 	}
 
 	if name, ok := strings.CutPrefix(ref, config.CredentialPrefix); ok {
-		return finding(CodeCredentialsUnavailable, "credential %q cannot be used yet: credentials arrive with phase 3", name), nil
+		return finding(CodeCredentialsUnavailable, "credential %q cannot be used yet: credentials arrive with phase 4", name), nil
 	}
 
 	for _, p := range foreignPrefixes {
@@ -168,7 +168,7 @@ func (e EnvReferences) check(ctx context.Context, ref string) (*CredentialFindin
 	return nil, nil
 }
 
-// Check is a validation step another phase registers (phase 3's connector checker). Its
+// Check is a validation step another phase registers (phase 4's connector checker). Its
 // problems carry Check = ID().
 type Check interface {
 	ID() string
@@ -185,12 +185,12 @@ type CheckInput struct {
 }
 
 // Resolver turns a definition's validated connections into what runs on the version, at
-// publish (phase 3.2). A failure refuses the publish.
+// publish (phase 4.2). A failure refuses the publish.
 type Resolver interface {
 	Resolve(ctx context.Context, f *config.Factory) (Resolution, error)
 }
 
-// Resolution is a Resolver's result. Phase 3.2 adds the connection bindings, and the
+// Resolution is a Resolver's result. Phase 4.2 adds the connection bindings, and the
 // Resolved and Bindings fields of ports.Publish that store it in the publish transaction.
 type Resolution struct {
 	Resolved json.RawMessage

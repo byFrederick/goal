@@ -1,6 +1,6 @@
 // Organization settings (C §10.9, canvas "Org-Settings"): one form for General (name, short
 // mark, address) and the slot limits, saved by "Save changes" with only what changed; Model
-// access and Vault arrive with credentials (phase 3); the Danger zone deletes the organization.
+// access and Vault arrive with credentials (phase 4); the Danger zone deletes the organization.
 // Leaving with unsaved changes asks first. A new address moves the page to it: links with the
 // old one stop working (review decision 2).
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
