@@ -32,7 +32,7 @@ function countOf(n: number, id: string): string {
 export function waitingBreakdown(waiting: FactoryOverview['waiting']): string {
   const parts = [
     ...waiting.tool_approvals.map((t) => `${countOf(t.count, `${t.connection} approval`)}`),
-    ...waiting.items_by_type.map((t) => countOf(t.count, t.type)),
+    ...waiting.items_by_type.map((t) => countOf(t.count, t.type || 'item')),
   ];
   return parts.length > 0 ? parts.join(', ') : 'Nothing right now';
 }

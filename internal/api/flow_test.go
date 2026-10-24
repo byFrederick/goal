@@ -35,7 +35,7 @@ func (h *harness) seed(t *testing.T, station string, state domain.ItemState, cre
 	t.Helper()
 
 	it, err := h.store.CreateItem(inOrg(t), domain.NewItem{
-		FactoryID: lineID, Type: "feature", Lane: "api", Title: "item at " + station, Station: station,
+		FactoryID: lineID, Type: typeFeature, Lane: "api", Title: "item at " + station, Station: station,
 		State: state, Class: domain.ClassStandard, CreatedAt: created,
 	})
 	if err != nil {

@@ -59,7 +59,7 @@ func (h *harness) seedInboxItems(t *testing.T) inboxItems {
 	var err error
 
 	s.expedite, err = h.store.CreateItem(inOrg(t), domain.NewItem{
-		FactoryID: lineID, Type: "feature", Title: "hotfix", Station: stBuild, State: domain.StateQueued,
+		FactoryID: lineID, Type: typeFeature, Title: "hotfix", Station: stBuild, State: domain.StateQueued,
 		Class: domain.ClassExpedite, CreatedAt: t0.Add(-30 * time.Minute),
 	})
 	if err != nil {

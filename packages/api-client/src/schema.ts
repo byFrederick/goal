@@ -1525,8 +1525,8 @@ export interface components {
         NewItem: {
             title: string;
             body?: string;
-            /** @description One of the factory's work types */
-            type: string;
+            /** @description One of the factory's work types; absent or empty, the first it declares, or none when it declares none */
+            type?: string;
             lane?: string;
             /** @default 0 */
             priority?: number;

@@ -92,7 +92,7 @@ export function BoardCard({
         <>
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <span className="text-xs text-muted tabular-nums">
-              {item.ref}, {humanize(item.type)}, {age}
+              {[item.ref, item.type ? humanize(item.type) : null, age].filter(Boolean).join(', ')}
             </span>
             <CardTitle item={item} compact describedBy={drag?.describedBy} />
             <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
@@ -110,7 +110,7 @@ export function BoardCard({
           </div>
           <CardTitle item={item} describedBy={drag?.describedBy} />
           <div className="flex flex-wrap items-center gap-1.5">
-            <Chip tone="quiet">{humanize(item.type)}</Chip>
+            {item.type ? <Chip tone="quiet">{humanize(item.type)}</Chip> : null}
             {item.lane ? <Chip tone="quiet">{item.lane}</Chip> : null}
           </div>
           <div className="flex items-end gap-2">
@@ -218,7 +218,8 @@ export function ExpediteCard({ item, onMove }: { item: ItemCard; onMove: () => v
           {item.title}
         </Link>
         <span className="mt-0.5 block text-[13px] text-muted">
-          {item.ref}, {item.type}
+          {item.ref}
+          {item.type ? `, ${item.type}` : ''}
           {item.lane ? ` ${item.lane}` : ''}, {expediteProgress(item)}
         </span>
       </span>

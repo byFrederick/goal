@@ -1857,11 +1857,11 @@ components:
       enum: [standard, expedite]
     NewItem:
       type: object
-      required: [title, type]
+      required: [title]
       properties:
         title: { type: string, minLength: 1, maxLength: 200 }
         body: { type: string, maxLength: 20000 }
-        type: { type: string, minLength: 1, description: "One of the factory's work types" }
+        type: { type: string, description: "One of the factory's work types; absent or empty, the first it declares, or none when it declares none" }
         lane: { type: string }
         priority: { type: integer, default: 0 }
     Rejection:

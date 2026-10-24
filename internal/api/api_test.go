@@ -88,6 +88,9 @@ spec:
 
 const lineID = "0b6f1c9e-5d0a-4c39-9a51-6f1f3f0e2a10"
 
+// typeFeature is acme's first work type.
+const typeFeature = "feature"
+
 // testOrg is the organization the tests' factories and items belong to (the first the harness
 // creates): every store call carries one.
 const testOrg domain.OrgID = "00000000-0000-7000-8000-000000000001"
@@ -470,6 +473,29 @@ func TestAPI_SubmitValidatesAgainstTheFactory(t *testing.T) {
 		if code := h.call(t, http.MethodPost, tt.path, tt.body, nil); code != tt.want {
 			t.Errorf("%s: status %d, want %d", tt.name, code, tt.want)
 		}
+	}
+}
+
+// An item submitted without a type gets its factory's first work type, and none when the
+// factory declares no work types: the default comes from the definition.
+func TestAPI_SubmitDefaultsTheTypeFromTheDefinition(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	for path, want := range map[string]string{acmeItems: typeFeature, "/v1/orgs/acme/factories/line/items": ""} {
+		var it gen.Item
+		if code := h.call(t, http.MethodPost, path, `{"title":"Add a version command"}`, &it); code != http.StatusCreated {
+			t.Fatalf("submit to %s = %d", path, code)
+		}
+
+		if it.Type != want {
+			t.Errorf("submit to %s: type %q, want %q", path, it.Type, want)
+		}
+	}
+
+	if code := h.call(t, http.MethodPost, "/v1/orgs/acme/factories/line/items", `{"title":"t","type":"chore"}`, nil); code != http.StatusCreated {
+		t.Errorf("a factory without work types takes any type: status %d", code)
 	}
 }
 

@@ -153,7 +153,7 @@ export function ItemPage() {
           </nav>
           <div className="flex flex-wrap gap-1.5 md:order-last">
             {item.class_of_service === 'expedite' ? <Chip tone="rework">Expedite</Chip> : null}
-            <Chip tone="plain">{humanize(item.type)}</Chip>
+            {item.type ? <Chip tone="plain">{humanize(item.type)}</Chip> : null}
             {item.lane ? <Chip tone="plain">{item.lane}</Chip> : null}
             <Chip tone="plain">At {humanize(item.station)}</Chip>
             <Chip tone={chipTone[state.tone]}>{state.text}</Chip>

@@ -75,7 +75,7 @@ func newFlags(name string) *flag.FlagSet {
 // The brief's first line is the title; the rest, and --body, is the body.
 func runItem(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs := newFlags("run")
-	typ := fs.String("type", "feature", "work type")
+	typ := fs.String("type", "", "work type (default: the factory's first)")
 	body := fs.String("body", "", "item body")
 	priority := fs.Int("priority", 0, "priority (higher first)")
 	detach := fs.Bool("detach", false, "submit without following the item")
@@ -95,7 +95,7 @@ func runItem(ctx context.Context, out *printer, getenv func(string) string, args
 	}
 
 	res, err := c.SubmitItemWithResponse(ctx, c.org, pos[0], gen.NewItem{
-		Title: strings.TrimSpace(title), Type: *typ, Body: &text, Priority: priority,
+		Title: strings.TrimSpace(title), Type: optional(*typ), Body: &text, Priority: priority,
 	})
 	if err != nil {
 		return apiDown(err)

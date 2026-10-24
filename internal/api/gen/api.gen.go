@@ -1956,8 +1956,8 @@ type NewItem struct {
 	Priority *int    `json:"priority,omitempty"`
 	Title    string  `json:"title"`
 
-	// Type One of the factory's work types
-	Type string `json:"type"`
+	// Type One of the factory's work types; absent or empty, the first it declares, or none when it declares none
+	Type *string `json:"type,omitempty"`
 }
 
 // NewNote defines model for NewNote.

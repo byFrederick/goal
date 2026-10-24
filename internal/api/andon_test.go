@@ -184,7 +184,7 @@ func (h *harness) verdicts(t *testing.T, at time.Time, reasons map[bool][]string
 	ctx := inOrg(t)
 
 	it, err := h.store.CreateItem(ctx, domain.NewItem{
-		FactoryID: reviewID, Type: "feature", Title: "checked", Station: stCheck, State: domain.StateQueued,
+		FactoryID: reviewID, Type: typeFeature, Title: "checked", Station: stCheck, State: domain.StateQueued,
 		Class: domain.ClassStandard, CreatedAt: at,
 	})
 	if err != nil {

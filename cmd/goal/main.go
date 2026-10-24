@@ -31,6 +31,8 @@ const usage = `usage:
                                                   and the bucket, run goald
   goal run <factory> "<brief>" [--type T] [--body B] [--priority N] [--detach]
                                                   submit a work item and follow it until a human or done
+                                                  (--type: one of the factory's work types; default its
+                                                  first, none when it declares none)
   goal follow <item>                              follow an item's events again
   goal item <item>                                show an item with its outputs
   goal approve <item>                             approve an item waiting at a human station

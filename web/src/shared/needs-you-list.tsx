@@ -118,7 +118,8 @@ export function ApprovalCard({
     >
       <div className="flex items-center gap-2 text-[13px] text-muted">
         <span>
-          {item.ref}, {humanize(item.type).toLowerCase()}
+          {item.ref}
+          {item.type ? `, ${humanize(item.type).toLowerCase()}` : ''}
         </span>
         <span className="ml-auto">{age} ago</span>
       </div>

@@ -283,12 +283,19 @@ func (s *server) SubmitItem(ctx context.Context, req gen.SubmitItemRequestObject
 		return nil, fmt.Errorf("%w: an item needs a title", errInvalid)
 	}
 
-	if types := f.Spec.Board.WorkTypes; len(types) > 0 && !slices.Contains(types, b.Type) {
-		return nil, fmt.Errorf("%w: type %q is not one of factory %s's work types %v", errInvalid, b.Type, f.Metadata.Name, types)
+	typ := deref(b.Type)
+	if types := f.Spec.Board.WorkTypes; len(types) > 0 {
+		if typ == "" {
+			typ = types[0]
+		}
+
+		if !slices.Contains(types, typ) {
+			return nil, fmt.Errorf("%w: type %q is not one of factory %s's work types %v", errInvalid, typ, f.Metadata.Name, types)
+		}
 	}
 
 	it, err := s.engine.Submit(ctx, domain.NewItem{
-		FactoryID: domain.FactoryID(f.Metadata.ID), Type: b.Type, Title: strings.TrimSpace(b.Title),
+		FactoryID: domain.FactoryID(f.Metadata.ID), Type: typ, Title: strings.TrimSpace(b.Title),
 		Body: deref(b.Body), Lane: deref(b.Lane), Priority: deref(b.Priority),
 	})
 	if err != nil {

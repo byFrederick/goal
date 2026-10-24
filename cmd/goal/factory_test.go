@@ -269,6 +269,25 @@ func TestFactoryPush_PublishThenRun(t *testing.T) {
 	}
 }
 
+// goal run names no work type of its own: without --type the item gets the factory's first.
+func TestRun_TypeDefaultsToTheFactorysFirst(t *testing.T) {
+	t.Parallel()
+
+	g := newDefGoald(t)
+	dir := newCopy(t, map[string]string{yamlPath: strings.Replace(factoryYAML, "[feature, fix]", "[fix, chore]", 1)})
+	g.mustGoal(t, "factory", "push", dir, "--publish")
+
+	if _, err := g.cache.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	g.mustGoal(t, "run", "acme", "Fix the notes", "--detach")
+
+	if out := g.mustGoal(t, "item", "acme#1"); !strings.Contains(out, `"type": "fix"`) {
+		t.Errorf("goal item acme#1 = %s", out)
+	}
+}
+
 func TestFactoryPush_DraftWithoutPublish(t *testing.T) {
 	t.Parallel()
 

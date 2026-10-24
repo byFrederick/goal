@@ -52,6 +52,10 @@ describe('waitingBreakdown', () => {
     );
   });
 
+  it('counts items of a factory without work types as items', () => {
+    expect(waitingBreakdown(waiting([{ type: '', count: 2 }]))).toBe('2 items');
+  });
+
   it('pluralizes work types as words', () => {
     expect(
       waitingBreakdown(

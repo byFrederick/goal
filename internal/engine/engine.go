@@ -359,8 +359,9 @@ func (e *Engine) Submit(ctx context.Context, n domain.NewItem) (domain.Item, err
 		return domain.Item{}, err
 	}
 
-	if n.Title == "" || n.Type == "" {
-		return domain.Item{}, errors.New("submit: an item needs a title and a type")
+	// The type is one of the line's work types, or "" when the factory declares none.
+	if n.Title == "" {
+		return domain.Item{}, errors.New("submit: an item needs a title")
 	}
 
 	first, err := l.First()

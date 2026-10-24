@@ -89,7 +89,7 @@ export function ItemsPage() {
                       {it.ref}, {humanize(it.station)}, <span className={toneText[label.tone]}>{label.text}</span>
                     </span>
                     <span className="hidden flex-wrap gap-1.5 md:flex">
-                      <Chip tone="quiet">{humanize(it.type)}</Chip>
+                      {it.type ? <Chip tone="quiet">{humanize(it.type)}</Chip> : null}
                       {it.class_of_service === 'expedite' ? <Chip tone="rework">Expedite</Chip> : null}
                     </span>
                   </span>

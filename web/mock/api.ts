@@ -1021,9 +1021,11 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       if (m[2] === 'items' && method === 'POST') {
         const body = await readBody(req);
         const title = typeof body.title === 'string' ? body.title.trim() : '';
-        const type = typeof body.type === 'string' ? body.type : '';
+        // Absent or empty: the factory's first work type, or none when it declares none.
+        const type = (typeof body.type === 'string' && body.type) || (factory.work_types[0] ?? '');
         if (!title) return problem(res, 400, 'Invalid item', 'title is required');
-        if (!factory.work_types.includes(type)) return problem(res, 400, 'Invalid item', `unknown work type "${type}"`);
+        if (factory.work_types.length > 0 && !factory.work_types.includes(type))
+          return problem(res, 400, 'Invalid item', `unknown work type "${type}"`);
         const number =
           Math.max(0, ...state.items.filter((it) => it.factory === factory.name).map((it) => it.number)) + 1;
         const now = new Date(clock()).toISOString();

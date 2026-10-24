@@ -29,7 +29,11 @@ export function NewItemButton({ factory, compact }: { factory: Factory; compact?
 
   const submit = useMutation({
     mutationFn: () =>
-      submitItem(org.id, factory.id, { title: title.trim(), type, ...(body.trim() ? { body: body.trim() } : {}) }),
+      submitItem(org.id, factory.id, {
+        title: title.trim(),
+        ...(type ? { type } : {}),
+        ...(body.trim() ? { body: body.trim() } : {}),
+      }),
     onSuccess: (item) => {
       setOpen(false);
       setTitle('');
@@ -92,23 +96,25 @@ export function NewItemButton({ factory, compact }: { factory: Factory; compact?
               </p>
             ) : null}
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor={`${id}-type`} className="text-sm text-muted">
-              Work type
-            </label>
-            <select
-              id={`${id}-type`}
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className={`${field} h-11`}
-            >
-              {factory.work_types.map((t) => (
-                <option key={t} value={t}>
-                  {humanize(t)}
-                </option>
-              ))}
-            </select>
-          </div>
+          {factory.work_types.length > 0 ? (
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor={`${id}-type`} className="text-sm text-muted">
+                Work type
+              </label>
+              <select
+                id={`${id}-type`}
+                value={type}
+                onChange={(e) => setType(e.target.value)}
+                className={`${field} h-11`}
+              >
+                {factory.work_types.map((t) => (
+                  <option key={t} value={t}>
+                    {humanize(t)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           <div className="flex flex-col gap-1.5">
             <label htmlFor={`${id}-body`} className="text-sm text-muted">
               Details <span className="text-muted">(optional)</span>

@@ -30,7 +30,7 @@ export function decisionsSentence(decisions: readonly InboxEntry[]): string {
   for (const e of decisions) {
     const station = e.station ?? e.item?.station ?? '';
     const types = byStation.get(station) ?? new Map<string, number>();
-    const type = e.item?.type ?? 'item';
+    const type = e.item?.type || 'item';
     types.set(type, (types.get(type) ?? 0) + 1);
     byStation.set(station, types);
   }
