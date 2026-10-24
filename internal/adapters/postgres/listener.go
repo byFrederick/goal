@@ -42,15 +42,16 @@ func (l *listener[N]) Listen(ctx context.Context, deliver func(N)) error {
 	retry := firstRetry
 
 	for ctx.Err() == nil {
-		if l.listen(ctx, deliver, retry) {
+		// A connection that got as far as listening starts the backoff over.
+		listened, err := l.serve(ctx, deliver)
+		if listened {
 			retry = firstRetry
 		}
 
-		t := time.NewTimer(retry)
-		select {
-		case <-ctx.Done():
-			t.Stop()
-		case <-t.C:
+		if ctx.Err() == nil {
+			l.log.WarnContext(ctx, l.name+": listening connection lost; reconnecting",
+				slog.Duration("in", retry), slog.Any("error", err))
+			l.sleep(ctx, retry)
 		}
 
 		retry = min(2*retry, maxRetry)
@@ -59,20 +60,15 @@ func (l *listener[N]) Listen(ctx context.Context, deliver func(N)) error {
 	return nil
 }
 
-// listen connects, listens and delivers notices until the connection fails or ctx ends. It
-// reports whether it got as far as listening, and logs why it stopped unless ctx ended.
-func (l *listener[N]) listen(ctx context.Context, deliver func(N), retry time.Duration) bool {
-	listened, err := l.serve(ctx, deliver)
-	if ctx.Err() == nil {
-		if listened {
-			retry = firstRetry
-		}
+// sleep waits d or until ctx ends.
+func (l *listener[N]) sleep(ctx context.Context, d time.Duration) {
+	t := time.NewTimer(d)
+	defer t.Stop()
 
-		l.log.WarnContext(ctx, l.name+": listening connection lost; reconnecting",
-			slog.Duration("in", retry), slog.Any("error", err))
+	select {
+	case <-ctx.Done():
+	case <-t.C:
 	}
-
-	return listened
 }
 
 func (l *listener[N]) serve(ctx context.Context, deliver func(N)) (bool, error) {
