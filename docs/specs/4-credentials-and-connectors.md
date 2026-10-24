@@ -1,31 +1,43 @@
-# Phase 3 — Credentials, connectors and MCP gateway
+# Phase 4 — Credentials, connectors and MCP gateway
 
-Status: draft for review, **to be redesigned before building** · follows phase 2.2 (needs 2.2 A–E) · part 3.1 Vault and credentials, part 3.2 Connectors and MCP gateway · OpenAPI tags `credentials` (3.1, was `vault`) and `connectors` (3.2) · migrations `00040–00049` (3.1 `00040–00041`, 3.2 `00042–00044`)
+Status: draft for review, **to be redesigned before building** · follows phase 2.2 (needs 2.2 A–E) · part 4.1 Vault and credentials, part 4.2 Connectors and MCP gateway · OpenAPI tags `credentials` (4.1, was `vault`) and `connectors` (4.2) · migrations `00050–00059` (4.1 `00050–00051`, 4.2 `00052–00054`)
 
-(restructure) This spec merges the former phase C (vault and credentials) and phase G (connectors and MCP gateway). Credentials exist for model access, repositories and connectors, so they are designed and built together. (phase 3) It was 2.2's last phase, F; it is now phase 3, built after 2.2 A–E (file `3-credentials-and-connectors.md`, was `2.2-f-credentials-and-connectors.md`); parts F1 and F2 became 3.1 and 3.2, PRs `F1-n`/`F2-n` became `3.1-n`/`3.2-n`, migrations stay `00040–00044`. (no-auth) It must work with 2.2's single local user: every action below is allowed to that user through A's `Authorizer` seam; access control arrives with phase 4. Part 3.1 is the old C content and part 3.2 the old G content, with their detail kept. References name the part: `3.1 §6.6`, `3.2 §4.3`; pull requests are `3.1-1…3.1-9` and `3.2-1…3.2-26`.
+(restructure) This spec merges the former phase C (vault and credentials) and phase G (connectors and MCP gateway). Credentials exist for model access, repositories and connectors, so they are designed and built together. (phase 4) It was 2.2's last phase, F, then phase 3; it is now phase 4, built after phase 3, identity and access (file `4-credentials-and-connectors.md`, was `3-credentials-and-connectors.md` and before that `2.2-f-credentials-and-connectors.md`); parts F1 and F2 became 3.1 and 3.2 and are now 4.1 and 4.2, PRs `4.1-n`/`4.2-n`, migrations `00050–00054` (were `00040–00044`; phase 3 took `00040–00049`). (identity) It builds on phase 3's people, roles and permission table: see "Identity in phase 4" below. Part 4.1 is the old C content and part 4.2 the old G content, with their detail kept. References name the part: `4.1 §6.6`, `4.2 §4.3`; pull requests are `4.1-1…4.1-9` and `4.2-1…4.2-26`.
 
 ## Design pass before building
 
-This phase comes after 2.2 so it can be designed well. Before any phase 3 pull request, a dedicated design pass re-examines the points below and may rewrite this spec; what follows is the starting point, not a decision.
+This phase comes after 2.2 so it can be designed well. Before any phase 4 pull request, a dedicated design pass re-examines the points below and may rewrite this spec; what follows is the starting point, not a decision.
 
-- **Threat model.** Who can read, use or exfiltrate a secret: people (one local user until phase 4; any of them can edit definitions, which choose what a run gets), agents (prompt injection through tool results), the gateway and its upstreams, sidecars, the database, backups and the bucket; multi-org installs; what a compromised goald may reach.
+- **Threat model.** Who can read, use or exfiltrate a secret: people (members with phase 3's org and factory roles; editors change definitions, which choose what a run gets), agents (prompt injection through tool results), the gateway and its upstreams, sidecars, the database, backups and the bucket; multi-org installs; what a compromised goald may reach.
 - **Credential lifecycle.** Create, grant, use, rotate, revoke and expire as one model: who may do each, what a running item keeps, what is audited, how a person learns of expiry. It settles the open rotation decision (erase the previous ciphertext at rotation, or keep it 24 h with an undo; review decision 4 recommends erasing).
-- **OAuth and MCP authorization.** The current MCP authorization spec revision (protected resource metadata, client ID metadata documents, dynamic registration, resource indicators) and what changed since 3.2 was written; laptop redirect URIs; refresh-token rotation; per-org clients.
-- **Secret storage options.** PostgreSQL envelope encryption with a key file or KMS (3.1 as written), AWS Secrets Manager, 1Password; one backend per org or per credential, and how an org moves between them.
+- **OAuth and MCP authorization.** The current MCP authorization spec revision (protected resource metadata, client ID metadata documents, dynamic registration, resource indicators) and what changed since 4.2 was written; laptop redirect URIs; refresh-token rotation; per-org clients.
+- **Secret storage options.** PostgreSQL envelope encryption with a key file or KMS (4.1 as written), AWS Secrets Manager, 1Password; one backend per org or per credential, and how an org moves between them.
 - **Per-run minting.** Short-lived tokens minted per run (GitHub App installation tokens, AWS STS, Bedrock), their lifetime against long tasks, and whether model access can be minted too.
 - **Approval-gated tools.** Held calls (keep the run versus suspend and resume), built-in tools ("Ask me"), what an approver sees, and expiry.
-- **Access control (phase 4).** Phase 3 has no roles: the local user creates, grants, rotates and revokes credentials, manages connectors and decides tool approvals. Who may do each, and the permissions phase 4 checks at A's `Authorizer` seam, are designed in phase 4; this pass only keeps every operation behind A's resolvers and records actors (`Actor.Ref()`) so phase 4 can add them.
+- **Access control.** Phase 3's roles and permission table apply; this pass confirms the permissions proposed in "Identity in phase 4" and settles the `claude-subscription` rule for multi-user installs.
 - **Connector packaging.** Curated versus org-private connectors, MCP Registry import, pinned images and CLI sidecars, how a connector update reaches a factory, and who operates the hosted catalog.
 
-**What 2.2 (A–E) leaves for phase 3 (the interim rule, README).** Until phase 3, model access (`GOAL_TASK_ENV`, `CLAUDE_CODE_OAUTH_TOKEN`) and repository access (`env:GOAL_GITHUB_TOKEN` in definitions) are platform secrets of the install resolved through today's `ports.Secrets` env adapter; B validates `env:` references for existence only; C shows Model access and Vault as "Arrives with credentials" and has no Credentials dot; D shows how Basics signs in read-only; E shows block reasons as plain text. Phase 3 replaces each of these: 3.1-5 wires `authoring.VaultCredentials` in place of B's `EnvReferences`, 3.1-6 adds `credentials_needing_attention` to C's `/attention`, 3.1-8 fills C's sections, the sidebar dot and D's `CredentialSelect` (setting `capabilities.credentials`), and 3.1-9 removes the interim exception.
+## Identity in phase 4 (from phase 3)
 
-## Part 3.1: Vault and credentials
+Phase 3 ([spec](3-identity-and-access.md)) ships sign-in, organization and factory roles, API keys, the permission table `api/permissions.yaml` and the fresh-session rule. Phase 4 uses them as follows; the design pass confirms the details.
+- **Permissions.** Every phase 4 operation carries an `x-goal-scope` from `api/permissions.yaml`, added in the PR that adds the operation. Proposed: `credential:read` (owners and admins; members see only what their factories' screens show), `credential:manage` and `credential:grant` (owners and admins, `fresh: true`), `vault:manage` (owners, `fresh: true`), `connector:manage` (owners and admins), `connection:test` (`factory_role: editor`), `approval:decide` (`factory_role: approver`, `fresh: true`). None of them is `keys: true` unless the design pass decides otherwise.
+- **Who approves** tool calls: the factory's approvers (and editors, owners and admins, who include the approver's rights), the same people who decide items.
+- **OAuth flows.** `oauth_states.requested_by` is the signed-in user who started the flow (`Principal.Actor().Ref()`); the callback refuses a state finished by anyone else.
+- **One public origin.** `GOAL_PUBLIC_URL` (phase 3) is the base of the OAuth redirect and the client metadata document, and equals Better Auth's `BETTER_AUTH_URL`.
+- **Platform operator.** Whoever runs `goal catalog push` or other install-level operations is a platform admin (phase 3's `platform_admins`).
+- **Fresh session.** Creating, rotating, revoking, granting and ungranting credentials, changing the vault and deciding tool approvals need a sign-in within 10 minutes (403 `reauth-required`).
+- **`claude-subscription` on a multi-user install** (for the design pass). ADR 0003's rule ("only while the install has one person") becomes: a subscription credential is owned by the user who adds it, and resolves only for runs of items that user submitted; it is never used for another person's work. Phase 4 adds the owner column and the check; `LocalMode` below is replaced by it.
+- Actors in `*_by` columns and the audit log are `Principal.Actor()` refs (`user:<id>`, `service:<key id>`); phase 4 decides which operations API keys may perform.
+
+**What 2.2 (A–E) leaves for phase 4 (the interim rule, README).** Until phase 4, model access (`GOAL_TASK_ENV`, `CLAUDE_CODE_OAUTH_TOKEN`) and repository access (`env:GOAL_GITHUB_TOKEN` in definitions) are platform secrets of the install resolved through today's `ports.Secrets` env adapter; B validates `env:` references for existence only; C shows Model access and Vault as "Arrives with credentials" and has no Credentials dot; D shows how Basics signs in read-only; E shows block reasons as plain text. Phase 4 replaces each of these: 4.1-5 wires `authoring.VaultCredentials` in place of B's `EnvReferences`, 4.1-6 adds `credentials_needing_attention` to C's `/attention`, 4.1-8 fills C's sections, the sidebar dot and D's `CredentialSelect` (setting `capabilities.credentials`), and 4.1-9 removes the interim exception.
+
+## Part 4.1: Vault and credentials
 
 (restructure) Formerly phase C, "Vault and credentials (core)". It needs A (tenancy, audit, the request actor and `Authorizer` seam) and plugs into B (validation), C (org settings, sidebar), D (Basics) and E (item block reasons), all built before it.
 
 ### 1. Summary
 
-Part 3.1 replaces factory secrets in `.env` with an organization-owned vault: credentials are stored in PostgreSQL under envelope encryption (AES-256-GCM per version, data key wrapped by a key-encryption key from a local key file; AWS KMS designed, built with the AWS deployment), granted to factories, and resolved on the host only, per run, with an audit trail. Model access (Claude subscription token, Anthropic API key; Bedrock designed), repository access (GitHub token) and generic connection secrets become credentials referenced as `credential:<name>`; `env:` stays only for platform bootstrap, and `GOAL_TASK_ENV`, `CLAUDE_CODE_OAUTH_TOKEN` and `GOAL_GITHUB_TOKEN` disappear. It ships the `Vault`, `KeyWrapper`, `ModelAuth` and `CredentialProbe` ports, the owner/admin credentials API, CLI, the Credentials and New credential screens (core subset), the Vault and Model access sections of organization settings, and the credential picker the builder's Basics section uses.
+Part 4.1 replaces factory secrets in `.env` with an organization-owned vault: credentials are stored in PostgreSQL under envelope encryption (AES-256-GCM per version, data key wrapped by a key-encryption key from a local key file; AWS KMS designed, built with the AWS deployment), granted to factories, and resolved on the host only, per run, with an audit trail. Model access (Claude subscription token, Anthropic API key; Bedrock designed), repository access (GitHub token) and generic connection secrets become credentials referenced as `credential:<name>`; `env:` stays only for platform bootstrap, and `GOAL_TASK_ENV`, `CLAUDE_CODE_OAUTH_TOKEN` and `GOAL_GITHUB_TOKEN` disappear. It ships the `Vault`, `KeyWrapper`, `ModelAuth` and `CredentialProbe` ports, the owner/admin credentials API, CLI, the Credentials and New credential screens (core subset), the Vault and Model access sections of organization settings, and the credential picker the builder's Basics section uses.
 
 ### 2. Scope
 
@@ -44,41 +56,41 @@ Part 3.1 replaces factory secrets in `.env` with an organization-owned vault: cr
 - Factory schema fields `spec.runtime.modelCredential`, `spec.runtime.repository.credential`, the `credential:` reference form; deprecation of `spec.runtime.auth`, `spec.runtime.repository.token`, `spec.secrets`.
 
 **Out**
-- Connector credentials (OAuth 2.1 with refresh, GitHub App installations, Datadog/Azure/AWS/connection-string kinds, `connector_id`, `oauth_states`, "Sign in with X"): part 3.2, fitting the same tables (section 6.6).
-- The `awskms` and `awssecrets` adapters and moving an organization between vault backends: designed here, built with the AWS deployment (not phase 3).
+- Connector credentials (OAuth 2.1 with refresh, GitHub App installations, Datadog/Azure/AWS/connection-string kinds, `connector_id`, `oauth_states`, "Sign in with X"): part 4.2, fitting the same tables (section 6.6).
+- The `awskms` and `awssecrets` adapters and moving an organization between vault backends: designed here, built with the AWS deployment (not phase 4).
 - 1Password: later (unscheduled; AGENTS.md rule 7 names it the last secrets provider).
-- Model slots ("6 slots shared by every factory", per-factory slot limits) in Org settings → Model access: not 3.1 (open question 1).
+- Model slots ("6 slots shared by every factory", per-factory slot limits) in Org settings → Model access: not 4.1 (open question 1).
 - Notifications for expiring credentials (status is shown; no email or push).
 
 ### 3. Canvas boards covered
 
 | Board | Element | Delivered by |
 | --- | --- | --- |
-| `Credentials.dc.html` | Page header, description, "New credential" | 3.1 |
-| | Table header "N credentials in Acme" and "Vault: PostgreSQL with envelope encryption" | 3.1 (`GET /credentials` + `GET /settings/vault`) |
-| | Columns Name, Connector, How it signs in, Granted to (chips), Expiry and rotation, Last used, row menu | 3.1, for core kinds: "Connector" shows the system (Claude, GitHub, Other); "How it signs in" the kind label. Rows `acme-github-app`, `jira-oauth`, `aws-readonly`, `datadog-keys` are 3.2 kinds |
-| | Expired row (warning icon, "Expired Oct 21"), selected-row accent | 3.1 (status) |
-| | Detail panel: name, expired alert, public metadata rows, "Token Hidden, set <date> by <user>", "Paste a new token", "Revoke" | 3.1 |
-| | Detail "Granted to" checkboxes with "1 connection" | 3.1 for checkboxes and model/repository use counts; "N connection(s)" counts need 3.2's `connections` table (3.1 shows references found in the factory's current definition, see 10.2) |
-| | "Factories without a grant can't see that this credential exists." | 3.1 (API returns only granted credentials to factory scope) |
-| | History ("Calls refused, expired Oct 21 to now, 37", "Granted to sre", "Created, 90 day token") | 3.1 (`credential_uses` + audit) |
-| | Org sidebar "Credentials" with expired dot, rail key icon | C renders the entry; 3.1 adds the dot (restructure: C ships without it) from `credentials_needing_attention`, which 3.1 adds to C's `/attention`, and `summary.expired` / `summary.attention` in `GET /credentials` |
-| `Credential-New.dc.html` | Breadcrumb, title, description | 3.1 |
-| | Step 1 "Connector" grid | 3.1 shows core systems: **Claude** (subscription token, API key; Bedrock disabled "Needs the AWS deployment"), **GitHub** (token; "GitHub App" disabled "Coming with connectors"), **Other secret**. 3.2 replaces the grid with catalog connectors (GitHub, Jira, Datadog, Azure, AWS, PostgreSQL) and keeps Claude |
-| | Step 2 "Sign in to X": method radios | 3.1: one method per core kind ("Paste a token/key"); "Sign in with Datadog" (OAuth) is 3.2 |
-| | Name ("How factories and logs refer to it"), kind-specific public fields (Datadog site → e.g. GitHub account filled by test) | 3.1 for core kinds |
-| | Secret inputs with Show toggle, lock note "Keys are encrypted as soon as you save…" | 3.1 |
-| | "Remind me to rotate" (30, 90 days, never) | 3.1 (`rotate_every_days`); plus "Expires on" date, 3.1 addition (needed for subscription tokens) |
-| | Step 3 "Grant to factories" with per-factory notes | 3.1: notes "Uses it for model access / its repository" or "Not used yet"; "Can use it in its Datadog connection" is 3.2 |
-| | "Granting doesn't change a running factory. Each factory picks the credential in its Connections." | 3.1 with core wording: "…Each factory picks the credential in its Definition." 3.2 restores "Connections" |
-| | Cancel, "Test calls … before saving", "Test and save" | 3.1: test for `github-token` and `anthropic-api-key`; other kinds show "Save" |
-| `Org-Settings.dc.html` | Vault section: PostgreSQL with envelope encryption (selected), AWS Secrets Manager, 1Password "Coming in a later phase", note "Changing the vault moves all N credentials…" | 3.1 (`VaultSection`, `GET/PUT /settings/vault`). AWS Secrets Manager is rendered disabled "Available on AWS deployments" until its adapter exists; the move itself is not built |
-| | Model access: radio cards per model credential ("Claude subscription, Max plan · Signed in by F. Cruz", "Anthropic API key · Billed per token…") | 3.1 (`ModelAccessSection`) |
-| | "Most slots each factory may use" | Not 3.1 (open question 1) |
-| | General, Danger zone, "Save changes" | C (page) and A (API); 3.1 replaces C's two placeholders and makes C's Save also call `PUT /settings/vault` for them (restructure) |
-| `New-Basics.dc.html`, `Define-Basics.dc.html` | Repository select "Through the GitHub connection" | D renders (read-only access line until 3.1, restructure); 3.1 supplies `CredentialSelect` and `GET /factories/{factory}/credentials`. In 3.1/D the field is repository URL + credential select; 3.2 turns it into the GitHub connection picker |
-| | Model access (not on the board) | D adds a "Model access" select under Basics ("Organization default" + granted model credentials) using 3.1's `CredentialSelect` (open question 2) |
-| `Define-YAML.dc.html` | `credential: acme-github-app` under `connections` | 3.2 (connections); 3.1 defines the name form and `credential:<name>` references |
+| `Credentials.dc.html` | Page header, description, "New credential" | 4.1 |
+| | Table header "N credentials in Acme" and "Vault: PostgreSQL with envelope encryption" | 4.1 (`GET /credentials` + `GET /settings/vault`) |
+| | Columns Name, Connector, How it signs in, Granted to (chips), Expiry and rotation, Last used, row menu | 4.1, for core kinds: "Connector" shows the system (Claude, GitHub, Other); "How it signs in" the kind label. Rows `acme-github-app`, `jira-oauth`, `aws-readonly`, `datadog-keys` are 4.2 kinds |
+| | Expired row (warning icon, "Expired Oct 21"), selected-row accent | 4.1 (status) |
+| | Detail panel: name, expired alert, public metadata rows, "Token Hidden, set <date> by <user>", "Paste a new token", "Revoke" | 4.1 |
+| | Detail "Granted to" checkboxes with "1 connection" | 4.1 for checkboxes and model/repository use counts; "N connection(s)" counts need 4.2's `connections` table (4.1 shows references found in the factory's current definition, see 10.2) |
+| | "Factories without a grant can't see that this credential exists." | 4.1 (API returns only granted credentials to factory scope) |
+| | History ("Calls refused, expired Oct 21 to now, 37", "Granted to sre", "Created, 90 day token") | 4.1 (`credential_uses` + audit) |
+| | Org sidebar "Credentials" with expired dot, rail key icon | C renders the entry; 4.1 adds the dot (restructure: C ships without it) from `credentials_needing_attention`, which 4.1 adds to C's `/attention`, and `summary.expired` / `summary.attention` in `GET /credentials` |
+| `Credential-New.dc.html` | Breadcrumb, title, description | 4.1 |
+| | Step 1 "Connector" grid | 4.1 shows core systems: **Claude** (subscription token, API key; Bedrock disabled "Needs the AWS deployment"), **GitHub** (token; "GitHub App" disabled "Coming with connectors"), **Other secret**. 4.2 replaces the grid with catalog connectors (GitHub, Jira, Datadog, Azure, AWS, PostgreSQL) and keeps Claude |
+| | Step 2 "Sign in to X": method radios | 4.1: one method per core kind ("Paste a token/key"); "Sign in with Datadog" (OAuth) is 4.2 |
+| | Name ("How factories and logs refer to it"), kind-specific public fields (Datadog site → e.g. GitHub account filled by test) | 4.1 for core kinds |
+| | Secret inputs with Show toggle, lock note "Keys are encrypted as soon as you save…" | 4.1 |
+| | "Remind me to rotate" (30, 90 days, never) | 4.1 (`rotate_every_days`); plus "Expires on" date, 4.1 addition (needed for subscription tokens) |
+| | Step 3 "Grant to factories" with per-factory notes | 4.1: notes "Uses it for model access / its repository" or "Not used yet"; "Can use it in its Datadog connection" is 4.2 |
+| | "Granting doesn't change a running factory. Each factory picks the credential in its Connections." | 4.1 with core wording: "…Each factory picks the credential in its Definition." 4.2 restores "Connections" |
+| | Cancel, "Test calls … before saving", "Test and save" | 4.1: test for `github-token` and `anthropic-api-key`; other kinds show "Save" |
+| `Org-Settings.dc.html` | Vault section: PostgreSQL with envelope encryption (selected), AWS Secrets Manager, 1Password "Coming in a later phase", note "Changing the vault moves all N credentials…" | 4.1 (`VaultSection`, `GET/PUT /settings/vault`). AWS Secrets Manager is rendered disabled "Available on AWS deployments" until its adapter exists; the move itself is not built |
+| | Model access: radio cards per model credential ("Claude subscription, Max plan · Signed in by F. Cruz", "Anthropic API key · Billed per token…") | 4.1 (`ModelAccessSection`) |
+| | "Most slots each factory may use" | Not 4.1 (open question 1) |
+| | General, Danger zone, "Save changes" | C (page) and A (API); 4.1 replaces C's two placeholders and makes C's Save also call `PUT /settings/vault` for them (restructure) |
+| `New-Basics.dc.html`, `Define-Basics.dc.html` | Repository select "Through the GitHub connection" | D renders (read-only access line until 4.1, restructure); 4.1 supplies `CredentialSelect` and `GET /factories/{factory}/credentials`. In 4.1/D the field is repository URL + credential select; 4.2 turns it into the GitHub connection picker |
+| | Model access (not on the board) | D adds a "Model access" select under Basics ("Organization default" + granted model credentials) using 4.1's `CredentialSelect` (open question 2) |
+| `Define-YAML.dc.html` | `credential: acme-github-app` under `connections` | 4.2 (connections); 4.1 defines the name form and `credential:<name>` references |
 
 ### 4. Domain and engine changes
 
@@ -94,7 +106,7 @@ type CredentialKind string
 const (
     KindClaudeSubscription CredentialKind = "claude-subscription"
     KindAnthropicAPIKey    CredentialKind = "anthropic-api-key"
-    KindBedrockRole        CredentialKind = "bedrock-role" // reserved: not creatable in phase 3
+    KindBedrockRole        CredentialKind = "bedrock-role" // reserved: not creatable in phase 4
     KindGitHubToken        CredentialKind = "github-token"
     KindSecret             CredentialKind = "secret"       // generic named fields
 )
@@ -124,7 +136,7 @@ type CredentialKindSpec struct {
     Purposes  []CredentialPurpose
     Default   string // field a bare credential:<name> resolves to
     Available bool   // false: listed, not creatable (bedrock-role)
-    LocalOnly bool   // claude-subscription: only while the install has a single person (2.2's local user; ADR 0003)
+    OwnerOnly bool   // claude-subscription: owned by one user, resolves only for that user's own items ("Identity in phase 4"; design pass)
 }
 
 func CredentialKinds() []CredentialKindSpec
@@ -167,7 +179,7 @@ Credential names: the factory slug pattern `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, uni
 
 #### 4.2 Engine
 
-- `engine.Deps` gains `ModelAuth ports.ModelAuth` (required). `engine.Config.TaskEnv` is removed at cutover (3.1-9); until then it is the fallback when `ModelAuth` returns `ErrNoModelAccess` (logged as deprecated once per factory).
+- `engine.Deps` gains `ModelAuth ports.ModelAuth` (required). `engine.Config.TaskEnv` is removed at cutover (4.1-9); until then it is the fallback when `ModelAuth` returns `ErrNoModelAccess` (logged as deprecated once per factory).
 - Per run, **before** `Workspaces.Prepare`: `env, err := ModelAuth.TaskEnv(ctx, scope{Org, Factory, Run, PurposeModel}, line.Runtime.ModelCredential)`. An error wrapping `ports.ErrCredentialUnavailable` blocks the item (existing `block` path, no retry, rework count unchanged) with event data `{reason: "model access: credential claude-acme expired", reason_code: "credential_unavailable", credential: "claude-acme"}`; any other error blocks as today.
 - `TaskSpec.Env` carries exactly `ModelEnv` output; nothing else secret.
 - `Workspaces.Prepare` receives `WorkspaceSpec.OrgID` (scope built by the adapter from the spec with `PurposeRepository`).
@@ -343,7 +355,7 @@ type CredentialHistoryEntry struct {
 }
 
 type VaultSettings struct {
-    Backend         string               // postgres (only accepted value in phase 3)
+    Backend         string               // postgres (only accepted value in phase 4)
     ModelCredential *domain.CredentialID // the organization's model access
     UpdatedAt       time.Time
     UpdatedBy       domain.Actor
@@ -375,7 +387,7 @@ type WrappedKey struct {
 var ErrUnknownKey = errors.New("unknown key-encryption key")
 ```
 
-**`internal/adapters/keyfile`** (built in 3.1).
+**`internal/adapters/keyfile`** (built in 4.1).
 - `keyfile.Load(path string) (*Wrapper, error)`, `keyfile.Generate(path string) error`, `keyfile.AddKey(path string) (id string, err error)`, `keyfile.RemoveKey(path, id string) error`.
 - File: UTF-8 text, `#` comments, one base64 (std) 32-byte key per line; the first key is active, the others unwrap only. Written atomically (temp file + rename) with mode `0600`.
 - `Load` refuses a file that is not a regular file, has any group/other permission bit (`mode&0o077 != 0`), is a symlink, or holds a key that is not 32 bytes, naming the path and never the content.
@@ -429,16 +441,16 @@ func NewRouter(v ports.Vault, platform ports.Secrets, cfg RouterConfig, log *slo
 
 type RouterConfig struct {
     // AllowFactoryEnv keeps env: references working in factory scope during the migration
-    // (logged once per factory and reference). Removed in 3.1-9 with the field itself.
+    // (logged once per factory and reference). Removed in 4.1-9 with the field itself.
     AllowFactoryEnv bool
-    // LocalMode: the install has one person (2.2's local user, until phase 4); claude-subscription credentials resolve only then.
-    LocalMode bool
+    // (identity) 2.2's LocalMode is gone: a claude-subscription credential resolves only for runs
+    // of items its owner submitted ("Identity in phase 4"; design pass).
 }
 ```
 
 - Literal → returned as is. `env:` → platform resolver when `scope.FactoryID == ""`, else allowed only with `AllowFactoryEnv`, otherwise a `CredentialError{Reason: wrong_purpose}` with detail "env: references are for platform settings; use credential:<name>".
 - `credential:` → `Vault.Resolve`, then `Secret.Value(field)`.
-- `TaskEnv`: name → `Vault.Resolve(PurposeModel)`; empty name → `Vault.Settings(org).ModelCredential` → resolve; none → `ErrNoModelAccess`; then `domain.ModelEnv`. `claude-subscription` outside local mode → `CredentialError{not_available}`.
+- `TaskEnv`: name → `Vault.Resolve(PurposeModel)`; empty name → `Vault.Settings(org).ModelCredential` → resolve; none → `ErrNoModelAccess`; then `domain.ModelEnv`. `claude-subscription` for an item its owner did not submit → `CredentialError{not_available}` (identity; design pass).
 
 #### 5.7 Other adapter changes
 
@@ -474,7 +486,7 @@ The existing `adapters` rule already keeps `keyfile`, `anthropic` and `awskms` a
 
 ### 6. Data model
 
-Migrations `00040` and `00041` (range 00040–00049). They assume A's `organizations(id)`, `factories.org_id` with `UNIQUE (org_id, id)`, `agent_runs.org_id`, `audit_log`, roles `goal_owner`/`goal_app`.
+Migrations `00050` and `00051` (range 00050–00059). They assume A's `organizations(id)`, `factories.org_id` with `UNIQUE (org_id, id)`, `agent_runs.org_id`, `audit_log`, roles `goal_owner`/`goal_app`.
 
 #### 6.1 `00040_vault.sql`
 
@@ -638,17 +650,17 @@ Binding org, credential, version and kind into both AADs means a row copied to a
 
 `CreateCredential`, `CreateCredentialVersion`, `CredentialByID`, `CredentialByName`, `ListCredentials` (with grant arrays and model-access flag, keyset by name), `LockCredential`, `SetCurrentVersion`, `DestroyVersion`, `DestroyAllVersions`, `RevokeCredential`, `UpdateCredentialMeta`, `InsertGrant` (`ON CONFLICT DO NOTHING`), `DeleteGrant`, `ResolveCredential` (join for 6.4), `UpsertCredentialUse` (returns `inserted bool`), `TouchLastUsed`, `CredentialUses` (history page), `VaultSettings`, `UpsertVaultSettings`, `LiveVersionsNotUnder` (rewrap batch), `RewrapVersion`, `VaultKeys`, `InsertVaultKey`, `RetireVaultKey`, `CountLiveVersionsUnder`.
 
-#### 6.6 How part 3.2 fits the same tables
+#### 6.6 How part 4.2 fits the same tables
 
-| 3.2 needs | Fits as |
+| 4.2 needs | Fits as |
 | --- | --- |
-| the connector a credential signs in to | 3.2's migration adds `credentials.connector text` and `method text` (by name, so a credential spans connector versions; 3.2 §16), not a `connector_id` FK; core kinds keep NULL (review) |
-| "needs reconnect" (OAuth `invalid_grant`) | 3.2's migration adds `credentials.needs_reconnect_at timestamptz`; `CredentialStatus` gains `needs_reconnect` (after `revoked`, before `expired`); 3.2 adds `Vault.MarkNeedsReconnect(ctx, id, by)` (review) |
-| OAuth 2.1 (access + refresh token, expiry) | kind `oauth2`; secret fields `access_token`, `refresh_token`; public `scopes`, `consented_at`; refresh = `Vault.Rotate` by actor `system` under 3.2's advisory-lock job; `expires_at` = refresh token expiry ("Renews itself, consent Oct 2") |
+| the connector a credential signs in to | 4.2's migration adds `credentials.connector text` and `method text` (by name, so a credential spans connector versions; 4.2 §16), not a `connector_id` FK; core kinds keep NULL (review) |
+| "needs reconnect" (OAuth `invalid_grant`) | 4.2's migration adds `credentials.needs_reconnect_at timestamptz`; `CredentialStatus` gains `needs_reconnect` (after `revoked`, before `expired`); 4.2 adds `Vault.MarkNeedsReconnect(ctx, id, by)` (review) |
+| OAuth 2.1 (access + refresh token, expiry) | kind `oauth2`; secret fields `access_token`, `refresh_token`; public `scopes`, `consented_at`; refresh = `Vault.Rotate` by actor `system` under 4.2's advisory-lock job; `expires_at` = refresh token expiry ("Renews itself, consent Oct 2") |
 | GitHub App ("Tokens last 1 h, minted per run") | kind `github-app`: secret `private_key`; public `app_id`, `installation_id`; the minted installation token is never stored |
 | Datadog keys, Azure SP, AWS role, connection string | connector-declared kinds (fields from the connector spec), stored exactly like `secret` |
-| `oauth_states` with encrypted PKCE verifier | 3.2's table; the postgres adapter seals it with `envelope.go` (AAD `goal/oauth-state/v1|…`) inside `ConnectorCatalog.SaveOAuthState`, so `Vault` needs no `Seal`/`Open` (review) |
-| 3.2's material for the gateway | `Vault.Resolve(ctx, SecretScope{…, PurposeConnection}, SecretRef)` → `Secret.Fields`; it records the use, so no `MarkUsed`. OAuth refresh = `Vault.Rotate` with `By` = system actor (3.2's `AddVersion`) (review) |
+| `oauth_states` with encrypted PKCE verifier | 4.2's table; the postgres adapter seals it with `envelope.go` (AAD `goal/oauth-state/v1|…`) inside `ConnectorCatalog.SaveOAuthState`, so `Vault` needs no `Seal`/`Open` (review) |
+| 4.2's material for the gateway | `Vault.Resolve(ctx, SecretScope{…, PurposeConnection}, SecretRef)` → `Secret.Fields`; it records the use, so no `MarkUsed`. OAuth refresh = `Vault.Rotate` with `By` = system actor (4.2's `AddVersion`) (review) |
 | Probes for connector kinds | more `CredentialProbe` entries |
 
 `kind` is a validated text column, so new kinds need no schema change.
@@ -675,7 +687,7 @@ None. No credential, wrapped key or key-encryption key ever goes to the bucket.
 
 ### 8. API
 
-Tag `credentials` (was `vault`; 3.2's endpoints are tagged `connectors`, restructure). Every path is under `/v1/orgs/{org}`. Problems are RFC 9457 with an added `code` (shared `Problem` schema; see contracts); codes below are written in kebab-case in the contract (`credential-name-taken`, `probe-failed`) (review). (no-auth) No roles: every operation is allowed to the local user and passes A's `Authorizer` seam; Phase 4 decides who may read, manage and grant. Secret values appear only in request bodies; no response, problem, log or event contains one. Request bodies with secrets are capped at 128 KiB and never logged.
+Tag `credentials` (was `vault`; 4.2's endpoints are tagged `connectors`, restructure). Every path is under `/v1/orgs/{org}`. Problems are RFC 9457 with an added `code` (shared `Problem` schema; see contracts); codes below are written in kebab-case in the contract (`credential-name-taken`, `probe-failed`) (review). (identity) Each operation names its permission in `x-goal-scope` ("Identity in phase 4"); create, rotate, revoke, grant and ungrant need a fresh session. Secret values appear only in request bodies; no response, problem, log or event contains one. Request bodies with secrets are capped at 128 KiB and never logged.
 
 | Method and path | Request | Response | Errors |
 | --- | --- | --- | --- |
@@ -691,7 +703,7 @@ Tag `credentials` (was `vault`; 3.2's endpoints are tagged `connectors`, restruc
 | `GET /credentials/{credential}/history?after=&limit=` | — | `200 {entries: CredentialHistoryEntry[], next_after}` newest first, limit ≤ 100 | 404 |
 | `GET /credential-kinds` | — | `200 {kinds: CredentialKindSpec[]}` (labels, fields with `secret`/`required`, purposes, `available`, `testable`, `local_only`) | — |
 | `GET /settings/vault` | — | `200 VaultSettings {backend, model_credential: Credential?, backends: [{id, label, available, note}]}` | — |
-| `PUT /settings/vault` | `{backend, model_credential: id or name or null}` | `200 VaultSettings` | 422 `backend_not_available` (anything but postgres in phase 3), 422 `wrong_purpose` (not a model kind), 404 |
+| `PUT /settings/vault` | `{backend, model_credential: id or name or null}` | `200 VaultSettings` | 422 `backend_not_available` (anything but postgres in phase 4), 422 `wrong_purpose` (not a model kind), 404 |
 | `GET /factories/{factory}/credentials?purpose=` | — | `200 {credentials: FactoryCredential[], model_access: FactoryCredential?}`; `FactoryCredential = {id, name, kind, label, system, status, expires_at}`; only credentials granted to the factory plus the org's model access | 404 (also when the caller has no role: the factory's existence is not revealed) |
 
 `{credential}` is the id or the live name. Schemas: `Credential`, `CredentialDetail`, `CredentialList`, `NewCredential`, `CredentialRotation`, `CredentialPatch`, `CredentialHistoryEntry`, `CredentialKindSpec`, `ProbeResult`, `VaultSettings`, `FactoryCredential`. `secret` properties are `writeOnly: true` with `format: password`.
@@ -729,7 +741,7 @@ goald vault rewrap          re-wrap every live version under the active key, org
 goald vault remove-key <id> drop a retired key from the file (refuses while any live version uses it)
 ```
 
-`goald` (daemon) start: load the key file; when it is missing and `vault_keys` is empty, generate it (log `vault key created at <path>; back it up`); when missing and keys exist, exit 2. `GOAL_TASK_ENV` set after 3.1-9 → exit 2 with "GOAL_TASK_ENV was removed: model access is a credential (goal credential import-env)".
+`goald` (daemon) start: load the key file; when it is missing and `vault_keys` is empty, generate it (log `vault key created at <path>; back it up`); when missing and keys exist, exit 2. `GOAL_TASK_ENV` set after 4.1-9 → exit 2 with "GOAL_TASK_ENV was removed: model access is a credential (goal credential import-env)".
 
 ### 10. Web UI
 
@@ -739,13 +751,13 @@ goald vault remove-key <id> drop a retired key from the file (refuses while any 
 | --- | --- | --- |
 | `/o/:org/credentials` (`?c=<name>` selects the detail panel, `?revoked=1`) | Credentials | `Credentials.dc.html` |
 | `/o/:org/credentials/new` (`?kind=&grant=<factory>` preselect) | New credential | `Credential-New.dc.html` |
-| `/o/:org/settings` | C's page; 3.1's `VaultSection`, `ModelAccessSection` | `Org-Settings.dc.html` |
+| `/o/:org/settings` | C's page; 4.1's `VaultSection`, `ModelAccessSection` | `Org-Settings.dc.html` |
 
 New route `/o/:org/credentials/new` is added to the registry (contracts). Files: `web/src/routes/o.$org._org.credentials.index.tsx`, `o.$org._org.credentials.new.tsx` (under C's org-sidebar layout, review); screens in `web/src/features/credentials/` (`list.tsx`, `detail-panel.tsx`, `new-credential.tsx`, `rotate-dialog.tsx`, `revoke-dialog.tsx`, `secret-input.tsx`); shared pieces other features use in `web/src/shared/`: `credential-select.tsx` (`CredentialSelect`), `vault-settings.tsx` (`VaultSection`, `ModelAccessSection`, controlled: `value`/`onChange`, C's page saves).
 
 #### 10.2 Behaviour
 
-**Credentials** (no-auth: the local user sees and manages everything).
+**Credentials** (identity: owners and admins manage; controls follow `can`).
 - Table per board; Connector column shows `system`, "How it signs in" the kind `label`; Granted to as chips (factory names); "Expiry and rotation" text: "Expires Oct 1", "Expired Oct 21" (warning icon, `--rust` per MASTER.md), "Rotate every 90 days, next Nov 4", "No expiry"; Last used relative (`Intl.RelativeTimeFormat`); row menu: Rotate, Test (testable kinds), Copy reference (`credential:<name>`), Revoke.
 - Detail panel under the table: name (mono), status alert when expired ("Expired on Oct 21. sre's model access is blocked until you paste a new token." built from `uses`), public metadata rows, "Token Hidden, set <version_at> by <version_by>" with a lock icon, "Paste a new token" (rotate dialog) and "Revoke"; Granted to: one checkbox per factory of the org (PUT/DELETE grant on toggle, optimistic, rolled back on error) with the use note ("model access", "repository", "2 references" from `uses`), the "can't see" note; History list from `/history` with "Show more".
 - States: loading skeleton rows; empty ("No credentials yet. Add model access and a GitHub token so factories can run." + New credential); error with retry.
@@ -785,11 +797,11 @@ Below 768 px the table becomes a list of cards (name, system · kind, status lin
 
 - **Isolation.** Every vault query runs inside a transaction with `SET LOCAL goal.org_id`; RLS on all org tables; composite FKs `(org_id, credential_id)` and `(org_id, factory_id)` prevent cross-org grants even from code bugs; AADs bind ciphertext to org, credential, version and kind.
 - **Who may use a credential.** Resolution requires the scope's factory to hold a grant (or, for `PurposeModel`, the credential to be the org's model access), the kind to serve the purpose, and the credential to be live and unexpired. The factory-scoped API lists only those, so "factories without a grant can't see that this credential exists".
-- **Access.** (no-auth) The local user manages credentials and reads history; Phase 4 adds roles. Nobody reads secret values through any API (write-only).
+- **Access.** (identity) Owners and admins manage credentials and read history, with a fresh session for every change. Nobody reads secret values through any API (write-only).
 - **Values.** Secret only in: the request body (TLS once hosted; loopback today), goald memory during create/rotate/resolve, the agent container's env (model credential only), git's environment for the clone, the `Authorization` header to GitHub/Anthropic, gateway upstream headers and sidecar env. Never in: responses, problems, logs, events, audit, `credential_uses`, the bucket, TanStack caches, URLs. `gosec` and a test assert the API's JSON never contains a created value.
 - **Keys.** The KEK never enters PostgreSQL; `vault_keys` stores ids only. A database dump without the key file (or KMS access) reveals no secret. Key file mode `0600` enforced at load. Losing the key file loses every credential (documented; `goald vault status` shows the path to back up).
 - **Erasure.** Rotation and revocation erase ciphertext and wrapped keys in the same transaction (crypto-shredding of that version).
-- **Subscription tokens.** `claude-subscription` is created and resolved only while the install has a single person, 2.2's local user (ADR 0003, decision 7); Phase 4 revisits it.
+- **Subscription tokens.** `claude-subscription` is owned by the user who adds it and resolves only for runs of items that user submitted, never for another person's work (ADR 0003's one-person rule restated for multi-user installs; settled in the design pass).
 - **Audit** (A's `audit_log`, same transaction, actor = user, `system` or the run's agent): `credential.created` {name, kind, version, grants, expires_at, rotate_every_days}, `credential.rotated` {version}, `credential.updated` {fields changed, never values}, `credential.granted` / `credential.ungranted` {factory}, `credential.revoked`, `credential.used` {factory, run, purpose, version} (first per run), `credential.refused` {factory, run, purpose, reason} (first per run and reason), `credential.imported` {from: "env", variable name}, `vault.settings_changed` {backend, model_credential}, `vault.rewrapped` {org, versions, to_key} and `vault.key_added` / `vault.key_retired` {key id} (system).
 
 ### 12. Observability
@@ -807,14 +819,14 @@ Below 768 px the table becomes a list of cards (name, system · kind, status lin
 | `internal/adapters/keyfile` | load refuses group/other-readable files, symlinks and bad lengths; first key wraps, others unwrap; ids are stable and differ per key; add/remove keep the file atomic and `0600` |
 | `porttest/vaulttest` | section 6.7, against the fake (unit) and PostgreSQL (integration) |
 | `internal/adapters/postgres` (integration) | RLS: as `goal_app` with org B set, org A's credentials, versions, grants and uses are invisible and inserts with org A fail; no column of any table contains a created plaintext (scan `bytea`/`text`/`jsonb`); rewrap moves every live version to the new key and resolution still works; `EnsureKeys` refuses a missing key; concurrent rotations of one credential end with consecutive versions |
-| `internal/secrets` | env refused in factory scope (allowed in platform scope; allowed with `AllowFactoryEnv`); `TaskEnv` uses the factory's credential over the org default; `ErrNoModelAccess` when neither; subscription refused outside local mode |
+| `internal/secrets` | env refused in factory scope (allowed in platform scope; allowed with `AllowFactoryEnv`); `TaskEnv` uses the factory's credential over the org default; `ErrNoModelAccess` when neither; subscription refused for an item its owner did not submit |
 | `internal/engine` | unavailable model credential blocks the item before a workspace is prepared, with `reason_code`; task env is exactly the model env; merge uses repository scope with the approver as actor |
 | `internal/adapters/docker` | model variables kept only for `GOAL_MODEL_AUTH`'s kind |
 | `internal/adapters/gitworkspace`, `github` | existing tests on the new signatures; probe reads the expiry header; token absent from errors |
 | `internal/gateway` | `credential:` header words resolve with the claims' scope; a refused credential makes the connection unavailable and its reason reaches `_meta` without values |
 | `internal/api` | factory credential lists show only granted credentials; unknown org → 404; create/rotate validation; 409 name taken; probe failure saves nothing; no response body contains the secret; revoke confirm |
 | `cmd/goal` | `import-env` plan from a fixture definition (names, kinds, rewrite table); secrets never accepted as flag values |
-| `cmd/goald` | `GOAL_TASK_ENV` refused after 3.1-9; key file missing with keys recorded → exit 2 |
+| `cmd/goald` | `GOAL_TASK_ENV` refused after 4.1-9; key file missing with keys recorded → exit 2 |
 | Worker (Vitest) | `hiddenEnv` per `GOAL_MODEL_AUTH` |
 | Playwright (mock, 375/768/1440, axe) | create a GitHub token credential with a grant and see it in the list; rotate it; revoke with typed confirmation; an expired credential shows its alert; choose model access in settings |
 
@@ -824,9 +836,9 @@ From today (single tenant; secrets in `.env`; `GOAL_TASK_ENV`; `env:` in definit
 
 (restructure) "Today" here is the state phases A–E leave: organizations, versioned definitions and the interim rule's platform secrets.
 
-1. 3.1-1–3.1-5 land with no behaviour change for existing factories: `AllowFactoryEnv = true`, engine falls back to `TaskEnv` while the org has no model access; B's `EnvReferences` check stays wired until 3.1-5 swaps in `VaultCredentials`, which still accepts `env:` references while `AllowFactoryEnv` is on.
-2. goald's first start after 3.1-3 creates `vault.key` (logged with its path) and records its id.
-3. Migrate the goal factory (runbook in `docs/engineering/vault.md`, written in 3.1-6):
+1. 4.1-1–4.1-5 land with no behaviour change for existing factories: `AllowFactoryEnv = true`, engine falls back to `TaskEnv` while the org has no model access; B's `EnvReferences` check stays wired until 4.1-5 swaps in `VaultCredentials`, which still accepts `env:` references while `AllowFactoryEnv` is on.
+2. goald's first start after 4.1-3 creates `vault.key` (logged with its path) and records its id.
+3. Migrate the goal factory (runbook in `docs/engineering/vault.md`, written in 4.1-6):
    ```
    task up                                          # goald with the vault
    goal credential import-env --factory goal --dry-run
@@ -836,59 +848,59 @@ From today (single tenant; secrets in `.env`; `GOAL_TASK_ENV`; `env:` in definit
    ```
    Then rewrite the definition's references (`spec.runtime.repository.credential: github-goal`, GitHub MCP header `Bearer credential:github-goal`, `credential:postgres-dev`) through B's draft and publish (or `goal factory pull/push`), run one item end to end, and check `goal credential list` shows Last used for each.
    The same for sre and university when they are in use.
-4. 3.1-9 (cutover): remove `engine.Config.TaskEnv`, `GOAL_TASK_ENV` (exit 2 when set), `AllowFactoryEnv`; `env:` in a factory definition becomes a validation error ("use credential:<name>"); remove `CLAUDE_CODE_OAUTH_TOKEN`, `GOAL_GITHUB_TOKEN`, `GOAL_DEV_DATABASE_URL`, `GOAL_SRE_*`, `GOAL_UNIVERSITY_*` from `.env.example`; add `GOAL_VAULT_KEY_FILE`. The person deletes those lines from their `.env` after step 3 succeeded. Platform variables stay: database URL, bucket, listen, gateway key, `GOAL_GITHUB_API_URL`, vault key file.
+4. 4.1-9 (cutover): remove `engine.Config.TaskEnv`, `GOAL_TASK_ENV` (exit 2 when set), `AllowFactoryEnv`; `env:` in a factory definition becomes a validation error ("use credential:<name>"); remove `CLAUDE_CODE_OAUTH_TOKEN`, `GOAL_GITHUB_TOKEN`, `GOAL_DEV_DATABASE_URL`, `GOAL_SRE_*`, `GOAL_UNIVERSITY_*` from `.env.example`; add `GOAL_VAULT_KEY_FILE`. The person deletes those lines from their `.env` after step 3 succeeded. Platform variables stay: database URL, bucket, listen, gateway key, `GOAL_GITHUB_API_URL`, vault key file.
 
 Import naming: `CLAUDE_CODE_OAUTH_TOKEN` → `claude-<org slug>`; a variable used as a repository token or GitHub header → `github-<factory>`; others → the variable lowercased without `GOAL_` and the factory prefix (`GOAL_DEV_DATABASE_URL` → `dev-database-url`, `GOAL_SRE_GRAFANA_TOKEN` → `grafana-token`); collisions get `-<factory>`. Names can be overridden with `--name VAR=name`.
 
-Nothing is lost: values move from `.env` into the vault before any variable is removed, and until 3.1-9 every `env:` reference still resolves, so reverting a definition is a rollback. Migrations 00040/00041 only add tables.
+Nothing is lost: values move from `.env` into the vault before any variable is removed, and until 4.1-9 every `env:` reference still resolves, so reverting a definition is a rollback. Migrations 00050/00051 only add tables.
 
 ### 15. Work breakdown
 
 | PR | Content | Acceptance criteria and verification |
 | --- | --- | --- |
-| 3.1-1 refactor: secret scope | `ports.SecretScope`; `Secrets.Resolve(ctx, scope, ref)`; `CodeHost` takes `RepoRef`; `WorkspaceSpec.OrgID`; callers build scopes; ADR "Vault and credentials" (next free number) | No behaviour change: all existing tests pass on new signatures; `task check` |
-| 3.1-2 domain and keys | `domain/credential.go` (kinds, purposes, status, `SecretRef`, `ModelEnv`); `ports.Vault`, `KeyWrapper`, `ModelAuth`, `CredentialProbe`; `porttest.Vault`, `porttest.KeyWrapper`, `vaulttest` against the fake; `internal/adapters/keyfile`; `envelope.go` | Domain, keyfile and envelope tests (section 13) pass; `task check` |
-| 3.1-3 PostgreSQL vault | migrations 00040, 00041; `queries/vault.sql`; `postgres.Vault` incl. uses, audit, `Rewrap`, `EnsureKeys` | `vaulttest` + RLS + plaintext-scan + rewrap integration tests pass (`task test-integration`); `task migrate-check` |
-| 3.1-4 schema and config | `factory.schema.json`: `runtime.modelCredential`, `runtime.repository.credential`, `credential:` in `secretRef`; `auth`, `repository.token`, `secrets` deprecated (warnings); B's `config.Factory.SecretUses()` gains the credential fields and purpose `model` (restructure: was `CredentialUses()`); `FactoryModel` `basics.repository.credential`, `basics.model_credential`; `domain.Runtime.ModelCredential` | Config tests: uses listed with paths and purposes; deprecated fields warn, still load; fixtures in `internal/config/testdata` updated |
-| 3.1-5 resolution | `internal/secrets.Router`; engine `ModelAuth` with `TaskEnv` fallback; docker and worker `GOAL_MODEL_AUTH`; gateway `credential:` words; `authoring.VaultCredentials` replacing B's `EnvReferences` in goald's wiring (restructure); goald wiring (key file load/generate, `EnsureKeys`); depguard rule | Engine, router, docker, gateway, worker tests; manual: an item of the goal factory runs with a vault model credential and a vault GitHub token on a laptop |
-| 3.1-6 API and probes | OpenAPI `credentials` tag, regenerated clients; handlers; `credentials_needing_attention` on C's `/attention` (restructure); `anthropic` adapter; github probe; org-event publication; `docs/engineering/vault.md` | API tests (section 13); `task api:gen` clean; probe tests against `httptest` |
-| 3.1-7 CLI | `goal credential …`, `import-env`, `goald vault …` | CLI tests; manual import of the goal factory's `.env` in `--dry-run` |
-| 3.1-8 web | Credentials, New credential, dialogs, `CredentialSelect`, `VaultSection`, `ModelAccessSection`, mock fixtures; (restructure) the sections replace C's placeholders, the Credentials dot and the delete text's credential count go into C's shell, `CredentialSelect` replaces D's read-only Basics lines (`capabilities.credentials` on), E's Item header links a `credential_unavailable` block to the credential; flips Credentials in `screens.ts` | Playwright flows at three widths with axe; screenshots attached; ui-ux-pro-max checklist |
-| 3.1-9 cutover | remove `TaskEnv`, `GOAL_TASK_ENV`, `AllowFactoryEnv`; `env:` in factory scope is an error; `.env.example`, architecture.md (ports, wiring, deployment table), AGENTS.md rule 7 wording | After the goal factory migration (section 14): goald starts without the removed variables, an item runs to done, `grep -r CLAUDE_CODE_OAUTH_TOKEN .env.example cmd internal` finds only the worker/runner model mapping; `task check` |
+| 4.1-1 refactor: secret scope | `ports.SecretScope`; `Secrets.Resolve(ctx, scope, ref)`; `CodeHost` takes `RepoRef`; `WorkspaceSpec.OrgID`; callers build scopes; ADR "Vault and credentials" (next free number) | No behaviour change: all existing tests pass on new signatures; `task check` |
+| 4.1-2 domain and keys | `domain/credential.go` (kinds, purposes, status, `SecretRef`, `ModelEnv`); `ports.Vault`, `KeyWrapper`, `ModelAuth`, `CredentialProbe`; `porttest.Vault`, `porttest.KeyWrapper`, `vaulttest` against the fake; `internal/adapters/keyfile`; `envelope.go` | Domain, keyfile and envelope tests (section 13) pass; `task check` |
+| 4.1-3 PostgreSQL vault | migrations 00050, 00051; `queries/vault.sql`; `postgres.Vault` incl. uses, audit, `Rewrap`, `EnsureKeys` | `vaulttest` + RLS + plaintext-scan + rewrap integration tests pass (`task test-integration`); `task migrate-check` |
+| 4.1-4 schema and config | `factory.schema.json`: `runtime.modelCredential`, `runtime.repository.credential`, `credential:` in `secretRef`; `auth`, `repository.token`, `secrets` deprecated (warnings); B's `config.Factory.SecretUses()` gains the credential fields and purpose `model` (restructure: was `CredentialUses()`); `FactoryModel` `basics.repository.credential`, `basics.model_credential`; `domain.Runtime.ModelCredential` | Config tests: uses listed with paths and purposes; deprecated fields warn, still load; fixtures in `internal/config/testdata` updated |
+| 4.1-5 resolution | `internal/secrets.Router`; engine `ModelAuth` with `TaskEnv` fallback; docker and worker `GOAL_MODEL_AUTH`; gateway `credential:` words; `authoring.VaultCredentials` replacing B's `EnvReferences` in goald's wiring (restructure); goald wiring (key file load/generate, `EnsureKeys`); depguard rule | Engine, router, docker, gateway, worker tests; manual: an item of the goal factory runs with a vault model credential and a vault GitHub token on a laptop |
+| 4.1-6 API and probes | OpenAPI `credentials` tag, regenerated clients; handlers; `credentials_needing_attention` on C's `/attention` (restructure); `anthropic` adapter; github probe; org-event publication; `docs/engineering/vault.md` | API tests (section 13); `task api:gen` clean; probe tests against `httptest` |
+| 4.1-7 CLI | `goal credential …`, `import-env`, `goald vault …` | CLI tests; manual import of the goal factory's `.env` in `--dry-run` |
+| 4.1-8 web | Credentials, New credential, dialogs, `CredentialSelect`, `VaultSection`, `ModelAccessSection`, mock fixtures; (restructure) the sections replace C's placeholders, the Credentials dot and the delete text's credential count go into C's shell, `CredentialSelect` replaces D's read-only Basics lines (`capabilities.credentials` on), E's Item header links a `credential_unavailable` block to the credential; flips Credentials in `screens.ts` | Playwright flows at three widths with axe; screenshots attached; ui-ux-pro-max checklist |
+| 4.1-9 cutover | remove `TaskEnv`, `GOAL_TASK_ENV`, `AllowFactoryEnv`; `env:` in factory scope is an error; `.env.example`, architecture.md (ports, wiring, deployment table), AGENTS.md rule 7 wording | After the goal factory migration (section 14): goald starts without the removed variables, an item runs to done, `grep -r CLAUDE_CODE_OAUTH_TOKEN .env.example cmd internal` finds only the worker/runner model mapping; `task check` |
 
 ### 16. Cross-spec contracts
 
-**3.1 provides**
+**4.1 provides**
 - Ports `Vault`, `KeyWrapper`, `ModelAuth`, `CredentialProbe` (new names: `ModelAuth` was already planned in architecture.md; `KeyWrapper` and `CredentialProbe` are needed for the key file/KMS split and "Test and save"); changed `Secrets.Resolve(ctx, SecretScope, ref)`; `ports.RepoRef`; errors `ErrCredentialUnavailable`, `CredentialError`, `ErrNoModelAccess`, `ErrCredentialNameTaken`.
-- `authoring.VaultCredentials` over `Vault.Check(org, factory, []CredentialUse)` and the credential fields of `config.Factory.SecretUses()` (3.1-4) → plugs into **B**'s `authoring.Credentials` extension point, replacing B's interim `EnvReferences` ("every connection's credential granted to this factory") (restructure).
-- Tables `credentials`, `credential_versions`, `credential_grants`, `credential_uses`, `vault_settings`, `vault_keys` (migrations 00040, 00041).
+- `authoring.VaultCredentials` over `Vault.Check(org, factory, []CredentialUse)` and the credential fields of `config.Factory.SecretUses()` (4.1-4) → plugs into **B**'s `authoring.Credentials` extension point, replacing B's interim `EnvReferences` ("every connection's credential granted to this factory") (restructure).
+- Tables `credentials`, `credential_versions`, `credential_grants`, `credential_uses`, `vault_settings`, `vault_keys` (migrations 00050, 00051).
 - Endpoints under `/v1/orgs/{org}`: `/credentials…`, `/credential-kinds`, `/settings/vault`, `/factories/{factory}/credentials`; SSE `event: credential`.
 - Web: route `/o/:org/credentials/new` (registry addition); `CredentialSelect`, `VaultSection`, `ModelAccessSection` in `web/src/shared/`; query keys in 10.3. `credentials_needing_attention` on **C**'s `/attention` and the sidebar dot, the Model access and Vault sections in C's settings page (restructure).
-- Factory schema: `spec.runtime.modelCredential`, `spec.runtime.repository.credential`, `credential:<name>[#field]` references → **D**'s Basics writes them once 3.1 sets `capabilities.credentials` and adds the `FactoryModel` fields (restructure); **3.2** reuses the reference form and the name rules.
-- Engine block event `reason_code: credential_unavailable` + `credential` → 3.1 links it from **E**'s Item header and `blocked` inbox entries (restructure).
-- For **3.2**: the extension table in 6.6 (`connector_id`, `oauth2`, `github-app`, connector kinds, `envelope.go` reuse, `Rotate` by `system` for refresh).
+- Factory schema: `spec.runtime.modelCredential`, `spec.runtime.repository.credential`, `credential:<name>[#field]` references → **D**'s Basics writes them once 4.1 sets `capabilities.credentials` and adds the `FactoryModel` fields (restructure); **4.2** reuses the reference form and the name rules.
+- Engine block event `reason_code: credential_unavailable` + `credential` → 4.1 links it from **E**'s Item header and `blocked` inbox entries (restructure).
+- For **4.2**: the extension table in 6.6 (`connector_id`, `oauth2`, `github-app`, connector kinds, `envelope.go` reuse, `Rotate` by `system` for refresh).
 
-**3.1 needs**
-- **A**: `domain.OrgID`, `domain.Actor` (actor refs in `*_by` columns); `organizations(id)`, `factories.org_id` with `UNIQUE (org_id, id)`, `agent_runs.org_id`; the `SET LOCAL goal.org_id` transaction helper in the postgres adapter; `audit_log` insertable in the caller's transaction; the request actor and `Authorizer` seam (no roles until phase 4); `OrgID` in `domain.Line`, `TaskClaims` and engine scope; a way for platform jobs (`goald vault rewrap`) to list every organization id as `goal_app`; the single local user (2.2 has no other); org-event NOTIFY for the org stream; the shared `Problem` schema gaining `code`; role grants convention for `goal_app`.
+**4.1 needs**
+- **A**: `domain.OrgID`, `domain.Actor` (actor refs in `*_by` columns); `organizations(id)`, `factories.org_id` with `UNIQUE (org_id, id)`, `agent_runs.org_id`; the `SET LOCAL goal.org_id` transaction helper in the postgres adapter; `audit_log` insertable in the caller's transaction; the request actor and `Authorizer` seam, filled by phase 3 (principal, permission table, fresh-session rule); `OrgID` in `domain.Line`, `TaskClaims` and engine scope; a way for platform jobs (`goald vault rewrap`) to list every organization id as `goal_app`; org-event NOTIFY for the org stream; the shared `Problem` schema gaining `code`; role grants convention for `goal_app`.
 - **B**: draft/publish API to rewrite the goal factory's references during the migration (fallback: `goal factory pull/push`); the `authoring.Credentials` extension point and `config.Factory.SecretUses()` (restructure); and the "used by" map for `CredentialDetail.uses` (which granted factories' current definitions reference a credential, from `config.Factory.SecretUses()` over current versions).
-- **C**: Org settings page with the Model access and Vault placeholders 3.1 replaces (its Save gains `PUT /settings/vault`); org sidebar entry, to which 3.1 adds the dot; `/attention`; shell around 3.1's pages (restructure).
-- **D**: Basics' read-only access lines and `capabilities.credentials`, which 3.1 turns into `CredentialSelect` for model access and the repository credential (restructure).
+- **C**: Org settings page with the Model access and Vault placeholders 4.1 replaces (its Save gains `PUT /settings/vault`); org sidebar entry, to which 4.1 adds the dot; `/attention`; shell around 4.1's pages (restructure).
+- **D**: Basics' read-only access lines and `capabilities.credentials`, which 4.1 turns into `CredentialSelect` for model access and the repository credential (restructure).
 - **E**: the Item header and `blocked` inbox entries that show the block reason (restructure).
-- **3.2**: adds connector kinds and `connector_id` without changing 3.1's tables otherwise; Credential-New's connector grid replaces 3.1's core grid.
+- **4.2**: adds connector kinds and `connector_id` without changing 4.1's tables otherwise; Credential-New's connector grid replaces 4.1's core grid.
 
 ### 17. Open questions
 
-1. **Model slots.** Org settings → Model access shows "6 slots shared by every factory" and per-factory slot limits. That is engine concurrency, not vault; which phase owns it (A's org settings or E's flow work)? 3.1 stores only which credential is the model access. (Answered in review: A7 owns slot caps.)
-2. **Model access per factory.** The canvas puts model access in Org settings only; ADR 0003 says per factory. 3.1 supports both (org default, optional `runtime.modelCredential`). Should D show the per-factory override in Basics, or keep it YAML-only?
-3. **Repository via the GitHub connection.** Basics on the canvas says "Through the GitHub connection". After 3.2, should `runtime.repository.credential` be dropped in favour of the GitHub connection's credential (one source), or kept for repositories without a GitHub connection?
+1. **Model slots.** Org settings → Model access shows "6 slots shared by every factory" and per-factory slot limits. That is engine concurrency, not vault; which phase owns it (A's org settings or E's flow work)? 4.1 stores only which credential is the model access. (Answered in review: A7 owns slot caps.)
+2. **Model access per factory.** The canvas puts model access in Org settings only; ADR 0003 says per factory. 4.1 supports both (org default, optional `runtime.modelCredential`). Should D show the per-factory override in Basics, or keep it YAML-only?
+3. **Repository via the GitHub connection.** Basics on the canvas says "Through the GitHub connection". After 4.2, should `runtime.repository.credential` be dropped in favour of the GitHub connection's credential (one source), or kept for repositories without a GitHub connection?
 4. **Previous versions.** The architecture page says rotation keeps old versions "until no run uses them"; this spec erases the previous ciphertext at rotation because nothing re-reads an old version (runs hold what they resolved). Confirm, or keep a 24-hour undo window with a rollback endpoint. (restructure: decided in the design pass, credential lifecycle.)
 5. **Bedrock.** Model access through Bedrock needs goald to mint AWS session credentials per run (`sts:AssumeRole`, at most 1 hour under role chaining, shorter than the 2-hour task timeout). Defer to the AWS deployment with the KMS adapter, or design a refresh path for long runs now?
-6. **`GOAL_GITHUB_API_URL`.** Stays a platform setting; GitHub Enterprise per credential (`metadata.api_url`) is reserved but unused. Enough for phase 3?
-7. **Default vault backend move.** Org settings promises "Changing the vault moves all N credentials". With only PostgreSQL available in phase 3 the option is disabled; confirm that showing AWS Secrets Manager as disabled (not hidden) is the intended state.
+6. **`GOAL_GITHUB_API_URL`.** Stays a platform setting; GitHub Enterprise per credential (`metadata.api_url`) is reserved but unused. Enough for phase 4?
+7. **Default vault backend move.** Org settings promises "Changing the vault moves all N credentials". With only PostgreSQL available in phase 4 the option is disabled; confirm that showing AWS Secrets Manager as disabled (not hidden) is the intended state.
 
-## Part 3.2: Connectors and MCP gateway
+## Part 4.2: Connectors and MCP gateway
 
-(restructure) Formerly phase G. It needs 3.1 (vault), D (factory builder), E (work screens) and, through them, A, B, C.
+(restructure) Formerly phase G. It needs 4.1 (vault), D (factory builder), E (work screens) and, through them, A, B, C.
 
 ### 1. Summary
 
@@ -900,7 +912,7 @@ Organizations connect their factories to outside systems through a **connector c
 - Connector file format (`kind: Connector`), its JSON Schema `schema/connector.schema.json`, the `internal/connectors` package (parse, validate, effective tool policy, injection templates, scopes, CLI command grammar).
 - Curated catalog in the bucket (`catalog/connectors/<name>/<version>.yaml`), org-private connectors (blobs under the org), the `connectors` table as index, catalog sync, import from the official MCP Registry.
 - Connector-form connections in `factory.yaml`, their validation problems and quick fixes inside B's validate/publish, the `connections` table (binding + health), connection tests.
-- OAuth client in goald: discovery, client ID metadata documents and dynamic client registration, authorization code + PKCE, callback, refresh job, revocation; tokens stored through 3.1's `Vault`.
+- OAuth client in goald: discovery, client ID metadata documents and dynamic client registration, authorization code + PKCE, callback, refresh job, revocation; tokens stored through 4.1's `Vault`.
 - Connector credential methods and their fields; credential test before save; GitHub App installation tokens and AWS STS sessions minted per run (`Minter`).
 - CLI tools as exec sidecars exposed as one MCP tool `<connection>__run`.
 - Approval-gated tools: `tool_approvals`, gateway hold/release, expiry, sweeper, API, SSE, CLI, audit.
@@ -909,24 +921,24 @@ Organizations connect their factories to outside systems through a **connector c
 
 **Out** (later or other phases)
 - ECS sidecars (an ECS `Sidecars` adapter), egress filtering for sidecars, kubectl and other CLIs beyond `aws` and `az`.
-- Gateway multi-instance routing (the `g` owner-instance claim, `GOAL_PEER_URL`, forwarding; old 3.2-16): Goal runs one goald until the AWS deployment, no board needs it, and architecture.md already documents that sidecar and held-approval traffic must reach the instance that owns the run. It comes with the AWS deployment (review).
+- Gateway multi-instance routing (the `g` owner-instance claim, `GOAL_PEER_URL`, forwarding; old 4.2-16): Goal runs one goald until the AWS deployment, no board needs it, and architecture.md already documents that sidecar and held-approval traffic must reach the instance that owns the run. It comes with the AWS deployment (review).
 - The `knowledge` builtin connection (later, with the knowledge base); it keeps being reported unavailable and shows as "Not served yet" in the UI.
 - Editing a held call's arguments, auto-approve rules, approval delegation, push notifications for approvals.
 - Suspending an agent run across a long approval (the run stays alive while it waits; see 4.6).
-- The vault itself, credential list/rotation/grants/revoke (3.1), definition drafts/versions/publish (B), wizard and editor shells (D), Waiting-on-you inbox and item trace (E), sidebar and org shell (C).
+- The vault itself, credential list/rotation/grants/revoke (4.1), definition drafts/versions/publish (B), wizard and editor shells (D), Waiting-on-you inbox and item trace (E), sidebar and org shell (C).
 
 ### 3. Canvas boards covered
 
-| Board (`project/canvas.json`) | 3.2 delivers | Not 3.2 |
+| Board (`project/canvas.json`) | 4.2 delivers | Not 4.2 |
 | --- | --- | --- |
 | `Catalog.dc.html` Connector catalog | All content: Import from MCP Registry, Add connector, search, kind filter with counts, cards (tile, name, kind, endpoint/image/allowlist line, sign-in chips, policy line, used by) | Org sidebar, rail (C) |
-| `Connections.dc.html` Connections: sre | All content: blocked-connection banner with "Renew the token", Browse catalog, Add in Definition, table with All/Connected/Blocked filter, row menu, tools panel (access, agents, needs approval, this week), CLI allowlist panel, Edit in Definition / Edit allowlist links | Factory sidebar and its Connections dot (C, from 3.2's `summary.blocked`) |
-| `Credentials.dc.html` | Connector column, "How it signs in", expiry/rotation text for OAuth, GitHub App and STS, non-secret fields in the detail panel, "1 connection" per grant, "Calls refused, expired" history row | List, grants, paste new value, revoke, vault label (3.1) |
-| `Credential-New.dc.html` | Step 1 connector picker, step 2 sign-in methods (OAuth button, connector-defined fields such as Datadog site), per-factory grant hints, "Test and save" | Grant checkboxes, rotate reminder, the save itself (3.1) |
-| `Approval.dc.html` | Whole page: exact call, connection, signed-in-as, why it waits, args viewer, rendered preview, decision panel with keyboard A/R, why the agent asked | "SRE-149 so far" timeline component (E, 3.2 adds the "Paused for this approval" entry kind), Items badge (E) |
+| `Connections.dc.html` Connections: sre | All content: blocked-connection banner with "Renew the token", Browse catalog, Add in Definition, table with All/Connected/Blocked filter, row menu, tools panel (access, agents, needs approval, this week), CLI allowlist panel, Edit in Definition / Edit allowlist links | Factory sidebar and its Connections dot (C, from 4.2's `summary.blocked`) |
+| `Credentials.dc.html` | Connector column, "How it signs in", expiry/rotation text for OAuth, GitHub App and STS, non-secret fields in the detail panel, "1 connection" per grant, "Calls refused, expired" history row | List, grants, paste new value, revoke, vault label (4.1) |
+| `Credential-New.dc.html` | Step 1 connector picker, step 2 sign-in methods (OAuth button, connector-defined fields such as Datadog site), per-factory grant hints, "Test and save" | Grant checkboxes, rotate reminder, the save itself (4.1) |
+| `Approval.dc.html` | Whole page: exact call, connection, signed-in-as, why it waits, args viewer, rendered preview, decision panel with keyboard A/R, why the agent asked | "SRE-149 so far" timeline component (E, 4.2 adds the "Paused for this approval" entry kind), Items badge (E) |
 | `New-Connections.dc.html` wizard step 5 | "Added to …" list with Tested/Blocked, connector panel (credential select, status/test, tools table with agents and needs-approval switches, "Show all"), Remove…, Add from the catalog | Step bar, Visual/YAML toggle, draft saving, Back/Continue (D, B) |
-| `Define-Connections.dc.html` | Same panel in the editor plus "New" tool badge, "Preview only" scope note, inline problem with quick fixes (Require approval, Limit to the preview build), Health link | Section tabs and change counts (D/B; 3.2 supplies problem counts) |
-| `Define-YAML.dc.html` | Connection schema for Monaco, 3.2's problems and their quick fixes ("Add approval: required", "Add scope: preview") | Editor, diff gutter (D/B) |
+| `Define-Connections.dc.html` | Same panel in the editor plus "New" tool badge, "Preview only" scope note, inline problem with quick fixes (Require approval, Limit to the preview build), Health link | Section tabs and change counts (D/B; 4.2 supplies problem counts) |
+| `Define-YAML.dc.html` | Connection schema for Monaco, 4.2's problems and their quick fixes ("Add approval: required", "Add scope: preview") | Editor, diff gutter (D/B) |
 | `Define-Publish.dc.html`, `New-Review.dc.html` | Checks: connections resolve, every connection uses a vault credential or needs none, every write tool is scoped to named agents / needs approval, no credentials reach an agent, blocked connection warning with "Add a credential" | Versions, diff, publish (B/D) |
 | `Define.dc.html` (Line) | Line check "Merge uses the GitHub connection, which allows merges only through Goal" | Line editor (D) |
 | `Agent.dc.html`, `Mobile-Agent.dc.html` | Connections card (name, kind and credential line, Ready/Blocked) | Stats, skills, tool policy, review reasons (D/E) |
@@ -1000,7 +1012,7 @@ spec:
   summary: Comments and transitions need approval.
 ```
 
-Curated v1 set (content work item 3.2-25): `github` (remote, `github_app` + `token`, scope `repos` always on, `merge_pull_request` blocked "Merges only through Goal"), `jira`, `datadog` (URL by `site`, `oauth` + `api_keys` with `DD-API-KEY`/`DD-APPLICATION-KEY` and an `http` test against `https://api.{{site}}/api/v1/validate`), `grafana` (image, `GRAFANA_URL` + service account token), `azure-mcp` (image, `service_principal` → `AZURE_TENANT_ID/CLIENT_ID/CLIENT_SECRET/SUBSCRIPTION_ID`, `--read-only`), `az-cli` (cli, `setup: az login --service-principal …; az account set`), `aws-cli` (cli, `aws_role` minted 1 h or `access_keys`, `denyArgs: [--endpoint-url, --profile, --ca-bundle, --no-verify-ssl]`), `postgres` (image, `connection_string` → `DATABASE_URI`, scope `read` → `--access-mode=restricted`, `execute_sql` write/approval), `playwright` (image, sign-in `none`, scope `preview` → `--allowed-origins {{join settings.origins ;}}`, form and click tools write), `aws-docs` (image, `none`). Endpoints and tool names are verified by the smoke tests before an entry ships.
+Curated v1 set (content work item 4.2-25): `github` (remote, `github_app` + `token`, scope `repos` always on, `merge_pull_request` blocked "Merges only through Goal"), `jira`, `datadog` (URL by `site`, `oauth` + `api_keys` with `DD-API-KEY`/`DD-APPLICATION-KEY` and an `http` test against `https://api.{{site}}/api/v1/validate`), `grafana` (image, `GRAFANA_URL` + service account token), `azure-mcp` (image, `service_principal` → `AZURE_TENANT_ID/CLIENT_ID/CLIENT_SECRET/SUBSCRIPTION_ID`, `--read-only`), `az-cli` (cli, `setup: az login --service-principal …; az account set`), `aws-cli` (cli, `aws_role` minted 1 h or `access_keys`, `denyArgs: [--endpoint-url, --profile, --ca-bundle, --no-verify-ssl]`), `postgres` (image, `connection_string` → `DATABASE_URI`, scope `read` → `--access-mode=restricted`, `execute_sql` write/approval), `playwright` (image, sign-in `none`, scope `preview` → `--allowed-origins {{join settings.origins ;}}`, form and click tools write), `aws-docs` (image, `none`). Endpoints and tool names are verified by the smoke tests before an entry ships.
 
 #### 4.2 Connections in `factory.yaml`
 
@@ -1050,7 +1062,7 @@ Agents of a connection = `C.agents` ∪ agents whose legacy `connections` list n
 
 #### 4.3 Validation (hooks in B's pipeline)
 
-`connectors.Checker` implements B's `authoring.Check` (problems) and `authoring.Resolver` (the `Resolution`) and runs in B's validate and publish (review). Problems carry B's shape (severity `error|warning|info`, section `connections`, JSON pointer, message, quick fixes as RFC 6902 patches). Codes are kebab-case in the contract (README): `connector-unknown`, …; three codes merge with B's names: `credential_not_granted` → `credential-not-granted` (emitted once, by B's `credentials` check over 3.1), `credential_missing` → `connection-blocked`, `write_tool_no_rule` → `write-tool-unruled` (review).
+`connectors.Checker` implements B's `authoring.Check` (problems) and `authoring.Resolver` (the `Resolution`) and runs in B's validate and publish (review). Problems carry B's shape (severity `error|warning|info`, section `connections`, JSON pointer, message, quick fixes as RFC 6902 patches). Codes are kebab-case in the contract (README): `connector-unknown`, …; three codes merge with B's names: `credential_not_granted` → `credential-not-granted` (emitted once, by B's `credentials` check over 4.1), `credential_missing` → `connection-blocked`, `write_tool_no_rule` → `write-tool-unruled` (review).
 
 | Code | Severity | Rule |
 | --- | --- | --- |
@@ -1184,7 +1196,7 @@ agent ─tools/call jira__addCommentToJiraIssue─▶ gateway (owner instance)
 // (review) Per the README convention the org comes from ctx; the explicit org parameters below
 // (here and in ToolApprovals) are dropped. Curated writes run with goal.scope = 'platform'.
 // SaveOAuthState/SaveOAuthClient take plaintext verifier and secrets and seal them inside the
-// adapter with 3.1's envelope.go.
+// adapter with 4.1's envelope.go.
 type ConnectorCatalog interface {
 	// Connector returns org's connector by name: the org-private one when it exists (it shadows a
 	// curated one of the same name), else the curated one. version 0 = latest active.
@@ -1299,7 +1311,7 @@ type ExecResult struct {
 ```
 Exec wraps argv as `timeout --signal=KILL <n>s argv…` when the connector says the image has `timeout` (default true); otherwise a timed-out exec closes the sidecar, which restarts lazily.
 
-Needed from 3.1: `Vault` as 3.1 §5.2 defines it (section 16) (review).
+Needed from 4.1: `Vault` as 4.1 §5.2 defines it (section 16) (review).
 
 #### 5.2 New package `internal/connectors`
 
@@ -1330,7 +1342,7 @@ Needed from 3.1: `Vault` as 3.1 §5.2 defines it (section 16) (review).
 | `mcpregistry` (new) | `MCPRegistry` | `GOAL_MCP_REGISTRY_URL` (default `https://registry.modelcontextprotocol.io`), `/v0/servers`; digest via OCI distribution `HEAD /v2/<repo>/manifests/<tag>` with anonymous bearer tokens |
 | `docker` | `Sidecars.StartExec` | same hardening as sidecars; entrypoint override; exec with `AttachStdout/Stderr`, no TTY, user = sidecar user, `WorkingDir /tmp` |
 
-`gitworkspace` and `github` (`CodeHost`) accept a repository credential of method `github_app`: the token is minted per use through `Minter` for that one repository (3.1 moves `Repository.AuthRef` to a credential reference; 3.2 adds the minting path).
+`gitworkspace` and `github` (`CodeHost`) accept a repository credential of method `github_app`: the token is minted per use through `Minter` for that one repository (4.1 moves `Repository.AuthRef` to a credential reference; 4.2 adds the minting path).
 
 #### 5.5 depguard
 
@@ -1341,7 +1353,7 @@ Needed from 3.1: `Vault` as 3.1 §5.2 defines it (section 16) (review).
 
 ### 6. Data model
 
-Migrations `00042`–`00044` (goose, forward-only). (review) A's `goal_org()` stays strict. `00042` adds `goal_org_or_null()` = `nullif(current_setting('goal.org_id', true), '')::uuid` and uses it only in the `connectors` policies, so curated reads work without an org. Every other table below follows A's kit: `org_id NOT NULL DEFAULT goal_org()` with `ON DELETE CASCADE`, a policy named `org_isolation` using `(SELECT goal_org())`, and composite parent keys (`(org_id, factory_id) REFERENCES factories (org_id, id)`, likewise for items, runs and credentials). `00042` also adds `credentials.connector text`, `credentials.method text` and `credentials.needs_reconnect_at timestamptz` (3.1 §6.6). The binding columns of `connections` are the projection of the current version's `definition_versions.resolved` (B), written by B's publish transaction.
+Migrations `00052`–`00054` (goose, forward-only). (review) A's `goal_org()` stays strict. `00052` adds `goal_org_or_null()` = `nullif(current_setting('goal.org_id', true), '')::uuid` and uses it only in the `connectors` policies, so curated reads work without an org. Every other table below follows A's kit: `org_id NOT NULL DEFAULT goal_org()` with `ON DELETE CASCADE`, a policy named `org_isolation` using `(SELECT goal_org())`, and composite parent keys (`(org_id, factory_id) REFERENCES factories (org_id, id)`, likewise for items, runs and credentials). `00052` also adds `credentials.connector text`, `credentials.method text` and `credentials.needs_reconnect_at timestamptz` (4.1 §6.6). The binding columns of `connections` are the projection of the current version's `definition_versions.resolved` (B), written by B's publish transaction.
 
 #### 00042_connectors.sql
 
@@ -1542,7 +1554,7 @@ Nothing else. The sync job (`goal.catalog.sync`, every `GOAL_REFRESH_EVERY`, adv
 
 ### 8. API
 
-Tag `connectors`. Errors are RFC 9457 problems; an unknown org is 404 (A). (no-auth) No roles: every operation is allowed to the local user and passes A's `Authorizer` seam; Phase 4 decides who manages connectors, tests connections and decides approvals. Lists use `?cursor=&limit=` (default 50, max 200) and return `next_cursor`.
+Tag `connectors`. Errors are RFC 9457 problems; an unknown org is 404 (A). (identity) Each operation names its permission: managing connectors `connector:manage` (owners and admins), testing a connection `connection:test` (editors), deciding approvals `approval:decide` (approvers, fresh session). Lists use `?cursor=&limit=` (default 50, max 200) and return `next_cursor`.
 
 #### Catalog
 
@@ -1568,7 +1580,7 @@ Tag `connectors`. Errors are RFC 9457 problems; an unknown org is 404 (A). (no-a
 
 `Connection`: `{name, connector: {name, version, title, tile, kind}, kind_label, subtitle, credential: {id, name, method_label, detail} | null, agents[], status, status_reason, last_used_at, definition_version}`; `ConnectionDetail` adds `tools: [{name, access, agents, approval, scope, off, known, calls_7d, approved_7d, rejected_7d}]`, `commands: {allowed: [pattern], connector_total}` for CLI, `latest_test`. Test errors: 400 invalid draft, 404, 422 credential not granted; the test itself failing is `ok: false`, not an error. Timeout 60 s (sidecar pulls continue in the background; result says "image still pulling, try again").
 
-#### Credentials (connector part; 3.1 owns `/credentials` CRUD)
+#### Credentials (connector part; 4.1 owns `/credentials` CRUD)
 
 | Method, path | Request → response |
 | --- | --- |
@@ -1577,7 +1589,7 @@ Tag `connectors`. Errors are RFC 9457 problems; an unknown org is 404 (A). (no-a
 | `GET /v1/oauth/callback?code=&state=&iss=` / `?error=&state=` | → 303 to `return_to` with `?connected=<credential>` or `?oauth_error=<code>` |
 | `GET /oauth/client-metadata.json` | the client ID metadata document (only served when `GOAL_PUBLIC_URL` is https) |
 
-3.1's `POST /credentials` and rotation call 3.2's hook to validate `fields` against the connector method (unknown or missing fields → 400 with field names). 3.1's revoke calls `Service.Revoked` (OAuth revocation, best effort; audit).
+4.1's `POST /credentials` and rotation call 4.2's hook to validate `fields` against the connector method (unknown or missing fields → 400 with field names). 4.1's revoke calls `Service.Revoked` (OAuth revocation, best effort; audit).
 
 #### Approvals
 
@@ -1613,18 +1625,18 @@ Data in `web/src/api` (client functions + `queries.ts`); features `features/cata
 | `/o/:org/catalog` | Catalog | grid of `ConnectorCard`; `?kind=&q=` in the URL |
 | `/o/:org/catalog/new` | (Add connector) | YAML editor (Monaco + `connector.schema.json`) with server problems; "Import from MCP Registry" opens a search dialog that fills it via import-preview |
 | `/o/:org/catalog/:connector` | (card click) | detail: versions, sign-in methods, tools with access/default, used by |
-| `/o/:org/credentials/new?connector=` | Credential-New | steps 1–2 by 3.2, step 3 and save by 3.1 |
+| `/o/:org/credentials/new?connector=` | Credential-New | steps 1–2 by 4.2, step 3 and save by 4.1 |
 | `/o/:org/f/:factory/connections?connection=&status=` | Connections | read-only operational page |
 | `/o/:org/f/:factory/items/:ref/approvals/:approval` | Approval | decision page |
-| `/o/:org/f/:factory/definition/connections?connection=` and `/o/:org/new/connections?connection=` | Define-Connections, New-Connections | 3.2's panel inside D's section shell |
-| `/o/:org/f/:factory/agents/:agent` | Agent | 3.2's Connections card |
+| `/o/:org/f/:factory/definition/connections?connection=` and `/o/:org/new/connections?connection=` | Define-Connections, New-Connections | 4.2's panel inside D's section shell |
+| `/o/:org/f/:factory/agents/:agent` | Agent | 4.2's Connections card |
 
 TanStack Query keys (under C's `['org', <org id>]` root, review): `['connectors', {kind, q}]`, `['connector', name, version]`, `['registry', q]`, `['factory', factory, 'connections', {agent}]`, `['factory', factory, 'connection', name]`, `['approvals', {state, factory, item}]`, `['approval', id]`. SSE: `approval` → invalidate `approvals*`, `approval(id)`, the item's queries; `connection` → the factory's connections queries; `resync` → all of them.
 
 Screen behaviour:
-- **Catalog**: kind segmented control with counts; search filters client-side over the loaded list; card "Used by" "No factory yet" in muted text; Add/Import always visible (no-auth). Empty search → "No connector matches …" with a clear button.
-- **Connections** (read-only; edits go to Definition): banner for the first blocked connection with its reason and a button to its credential (3.1's detail, "Paste a new token" / reconnect for OAuth via `oauth/start` with `credential`); row menu: Open credential, Edit in Definition, Test now (shows the result inline, does not change the definition). Selecting a row shows its tools panel (`?connection=`); a CLI connection shows the allowlist panel ("N of M shown", "No write commands" when none is write, Edit allowlist → Definition). Status uses icon + text, never colour alone. Phone: rows become cards; the tools table becomes a list per tool with agent chips.
-- **Credential-New**: connectors with at least one sign-in method other than `none`; methods as radio cards; OAuth method shows "Sign in with <vendor>" and starts `oauth/start` (grants and name are collected first, carried in the state); field kinds render as inputs with Show toggles for secrets (`autocomplete=off`, never prefilled, cleared on unmount); "Test and save" runs `credential-tests` then 3.1's create; a failed test shows the detail and offers "Save anyway". Grant hints per factory from its connections ("Can use it in its Datadog connection" / "No Datadog connection yet").
+- **Catalog**: kind segmented control with counts; search filters client-side over the loaded list; card "Used by" "No factory yet" in muted text; Add/Import shown with `connector:manage` (identity). Empty search → "No connector matches …" with a clear button.
+- **Connections** (read-only; edits go to Definition): banner for the first blocked connection with its reason and a button to its credential (4.1's detail, "Paste a new token" / reconnect for OAuth via `oauth/start` with `credential`); row menu: Open credential, Edit in Definition, Test now (shows the result inline, does not change the definition). Selecting a row shows its tools panel (`?connection=`); a CLI connection shows the allowlist panel ("N of M shown", "No write commands" when none is write, Edit allowlist → Definition). Status uses icon + text, never colour alone. Phone: rows become cards; the tools table becomes a list per tool with agent chips.
+- **Credential-New**: connectors with at least one sign-in method other than `none`; methods as radio cards; OAuth method shows "Sign in with <vendor>" and starts `oauth/start` (grants and name are collected first, carried in the state); field kinds render as inputs with Show toggles for secrets (`autocomplete=off`, never prefilled, cleared on unmount); "Test and save" runs `credential-tests` then 4.1's create; a failed test shows the detail and offers "Save anyway". Grant hints per factory from its connections ("Can use it in its Datadog connection" / "No Datadog connection yet").
 - **Connections panel** (wizard and Definition): left list of the draft's connections with derived status (Tested, Connected, Blocked, N problems) and "Add from the catalog" (search + Add appends a connector-form connection with defaults to the draft via D's draft patch); right panel: title, description, Remove… (confirm dialog naming agents that lose tools), credential select (only credentials for this connector granted to this factory; "Add a credential" link to Credential-New with `connector=` and return), status line from the latest test with "Test" button, tools table (Access chip, agent checkboxes in a group labelled "Agents allowed to use <tool>", needs-approval `role=switch` labelled "<tool> needs approval", "New" badge for tools a test listed that the catalog and the previous version do not know, "Preview only" under a tool whose scope applies), problems inline under their row with quick-fix buttons applying the problem's patch, "N more read tools are off. Show all". Every change is a draft patch; the YAML view reflects it.
 - **Approval**: "Approve and run" primary; reason textarea; "Reject with this reason" disabled until a reason is typed; keys A (approve) and R (focus reason) when focus is not in a text field; after a decision the page shows the outcome and links back to the item; a decided, expired or abandoned approval renders read-only with who/when. Arguments in a read-only code viewer (Fira Code, line numbers, `aria-label="Call arguments, JSON"`); the markdown preview is rendered without raw HTML. Phone: decision panel as a sticky bottom area with 44 px buttons.
 - **Agent Connections card**: `connections?agent=` rows with subtitle "<kind label>, credential: <name>[, read only][. Comments need approval]" and Ready/Blocked status; builtin `knowledge` shows "Not served yet".
@@ -1633,12 +1645,12 @@ States: skeletons for loading; errors as inline problems with retry; empty catal
 
 ### 11. Security and tenancy
 
-- Every table has `org_id` and RLS; every request and job transaction sets the org. The OAuth callback derives the org from the state and redeems the one-time state (no-auth: Phase 4 adds the check that the person finishing the flow is `requested_by`); `return_to` must be an `/o/<this org>/…` path (open-redirect guard).
+- Every table has `org_id` and RLS; every request and job transaction sets the org. The OAuth callback derives the org from the state and redeems the one-time state (identity: the person finishing the flow must be `requested_by`, the signed-in user who started it, or the state is refused); `return_to` must be an `/o/<this org>/…` path (open-redirect guard).
 - Credentials reach only the goald host: headers on upstream requests, a sidecar's environment/arguments, an exec's environment. Never the agent's container, item events, logs, API responses or the audit log. Resolved values (≥ 6 chars), minted tokens and their JSON-escaped forms are scrubbed from results, errors and logs (existing mechanism), plus CLI `scrub` regexes and generic patterns (AWS key ids, PEM blocks, JWT-shaped tokens).
 - The gateway checks on every call: token, agent still declared in the run's definition version, connection granted to the agent, tool permitted by the effective policy, credential granted to the factory and live, scope arguments, CLI command grammar and allowlist, then approval.
 - CLI commands never pass through a shell: unquoted `; & | < > $ \` ( ) { }` and newlines are refused; `denyArgs` refused in either `--flag value` or `--flag=value` form; command ≤ 4 KiB; output capped; per-call timeout ≤ 5 min.
 - OAuth: PKCE S256 only; state 32 random bytes, 10-minute expiry, one-time; verifier sealed; `iss` checked when advertised; token endpoints over https (loopback http for tests); no redirects on credentialed requests; refresh-token rotation honoured; `invalid_grant` marks the credential needs-reconnect.
-- Approvals: the local user decides (no-auth; Phase 4 restricts who may); the stored arguments are what runs; arguments are capped at 64 KiB and shown verbatim (escaped) to the approver.
+- Approvals: the factory's approvers decide (`approval:decide`, fresh session; identity); the stored arguments are what runs; arguments are capped at 64 KiB and shown verbatim (escaped) to the approver.
 - Forwarding between instances carries the original task token; the target verifies it; `Goal-Forwarded` stops loops; peer URLs come only from signed claims.
 - Audit (A's `Audit`): `connector.created`, `connector.version_added`, `connector.deprecated`, `credential.oauth_connected`, `credential.oauth_reconnect_needed`, `credential.oauth_revoked`, `connection.tested`, `tool_approval.decided` (approval id, tool, decision, by, reason length only), `tool_call.approved_executed` (approval id, outcome). Never values or arguments.
 
@@ -1662,14 +1674,14 @@ States: skeletons for loading; errors as inline problems with retry; empty catal
 
 ### 14. Rollout and migration
 
-1. Ship tables, ports and the catalog sync with an empty catalog; nothing changes for existing factories (legacy inline connections keep working through the gateway and 3.1's credential references).
+1. Ship tables, ports and the catalog sync with an empty catalog; nothing changes for existing factories (legacy inline connections keep working through the gateway and 4.1's credential references).
 2. Operator pushes the curated v1 catalog (`goal catalog push`); goald indexes it.
-3. The goal factory's inline connections (GitHub remote MCP with a token reference, sidecars) get the `inline_connection` warning with a quick fix to the connector form; the editor applies it as a draft; publishing resolves credentials (3.1 has moved the GitHub token into the vault as a `github` `token` credential). Switching the repository and the GitHub connection to a GitHub App credential is a separate draft.
+3. The goal factory's inline connections (GitHub remote MCP with a token reference, sidecars) get the `inline_connection` warning with a quick fix to the connector form; the editor applies it as a draft; publishing resolves credentials (4.1 has moved the GitHub token into the vault as a `github` `token` credential). Switching the repository and the GitHub connection to a GitHub App credential is a separate draft.
 4. Approvals, OAuth and CLI connections are opt-in by definition; nothing is gated until a published version asks for it.
 5. Multi-instance forwarding is deferred; one goald runs until the AWS deployment (review).
-6. Docs: `docs/engineering/architecture.md` gateway section and ports table updated with each PR that changes them; ADR 0007 "Connectors, connections and approval-gated tools" with 3.2-1.
+6. Docs: `docs/engineering/architecture.md` gateway section and ports table updated with each PR that changes them; ADR 0008 "Connectors, connections and approval-gated tools" with 4.2-1.
 
-New platform settings (`cmd/goald/settings.go`): `GOAL_PUBLIC_URL` (OAuth redirect and client metadata base; default `http://<GOAL_LISTEN>`; Phase 4's sign-in will share it), `GOAL_APPROVAL_TIMEOUT` (30m) (review), `GOAL_MCP_REGISTRY_URL`, `GOAL_OAUTH_HTTP_TIMEOUT` (15s). No factory value is an environment variable.
+New platform settings (`cmd/goald/settings.go`): `GOAL_PUBLIC_URL` (defined by phase 3 and shared with `BETTER_AUTH_URL`; here also the OAuth redirect and client metadata base), `GOAL_APPROVAL_TIMEOUT` (30m) (review), `GOAL_MCP_REGISTRY_URL`, `GOAL_OAUTH_HTTP_TIMEOUT` (15s). No factory value is an environment variable.
 
 ### 15. Work breakdown
 
@@ -1677,58 +1689,58 @@ Each PR: tests named in it pass, `task check` (and `task test-integration` when 
 
 | # | PR | Acceptance criteria · verification |
 | --- | --- | --- |
-| 3.2-1 | `schema/connector.schema.json`, `internal/connectors` parse/validate, templates, testdata, `goal catalog validate`, ADR 0007 | Example connectors parse; each invalid fixture reports its field · unit tests |
-| 3.2-2 | Migration 00042, `ConnectorCatalog` (connector + connection methods), postgres, `catalogtest`, RLS tests | Suites pass on fake and postgres; isolation tests · integration |
-| 3.2-3 | Catalog sync job, `goal catalog push`, bucket key | Pushed file indexed once; changed content refused; bad file skipped · unit (in-memory bucket) + integration |
-| 3.2-4 | Catalog API (list, detail, create private, versions, deprecate) + OpenAPI + `goal connectors` | Handler tests incl. 409 name taken · unit |
-| 3.2-5 | Connector-form connections in `factory.schema.json`, effective policy, `Checker` problems + fixes, `Resolution` into B's publish (bindings row write), `Line()` agent connections | Each problem in 4.3 raised and fixed; publish writes `connections` rows in the same transaction · unit + integration |
-| 3.2-6 | Gateway: connector connections with Vault material, scopes, policy, health, audit fields, value-free unavailability | Gateway tests listed in 13 for remote and image connections · unit |
-| 3.2-7 | `Minter` port, GitHub App minting (github adapter), gateway per-run cache, workspaces/CodeHost minting | Token restricted to repos; minted once per run · unit (httptest) |
-| 3.2-8 | `awssts` minter | AssumeRole called with external id and session name · unit (stub endpoint) |
-| 3.2-9 | `Sidecars.StartExec`, docker exec, CLI `run` tool, grammar | Allowed/refused/timeout/truncation/scrub · unit + docker integration |
-| 3.2-10 | `OAuth` port, `oauthclient` adapter, client metadata document route | Fake AS tests in 13 · unit |
-| 3.2-11 | Migration 00043, OAuth service (start, callback, refresh job, revocation hook), endpoints | One-time state, wrong org, refresh lock, needs-reconnect · unit + integration |
-| 3.2-12 | Credential tests endpoint, field validation hook for 3.1's create/rotate | Datadog `http` test against fake; missing field → 400 · unit |
-| 3.2-13 | Migration 00044, `ToolApprovals` port, postgres, `approvaltest`, NOTIFY | Conformance on fake and postgres · integration |
-| 3.2-14 | Gateway hold/release/expiry, approval feed, sweeper job, worker `MCP_TOOL_TIMEOUT` | Approval tests in 13; worker Vitest on the timeout env · unit |
-| 3.2-15 | Approvals API, SSE `approval`/`connection`, CLI approvals, `follow` line | Handler tests (409), stream test · unit |
-| 3.2-16 | Deferred to the AWS deployment (review): `Gateway` claim, `GOAL_PEER_URL`, forwarding | — |
-| 3.2-17 | `MCPRegistry` port, `mcpregistry` adapter, import-preview | Remote and OCI servers map to specs; npm-only → 422 · unit |
-| 3.2-18 | Connection tests endpoint (gateway Tester), `ToolCallStats` | Draft and published tests; stats over 7 days · unit + integration |
-| 3.2-19 | Web: Catalog, connector detail, Add/Import | Playwright catalog flows, axe · e2e at 3 widths |
-| 3.2-20 | Web: Credential-New steps 1–2, OAuth connect, Credentials connector columns/detail rows | Playwright credential flows · e2e |
-| 3.2-21 | Web: Connections page | Expired banner, filter, tools and allowlist panels · e2e |
-| 3.2-22 | Web: Connections panel for wizard and Definition, YAML quick fixes | Wizard flow with publish blocked then fixed · e2e |
-| 3.2-23 | Web: Approval page (+ phone), item hooks for E | Approve with A, reject with reason · e2e |
-| 3.2-24 | Web: Agent Connections card | Statuses per connection · e2e |
-| 3.2-25 | Curated catalog v1 content + smoke tests (one PR per family: remote, images, CLI) | Smoke results in the PR; drift none · `task test-smoke` |
-| 3.2-26 | Legacy-to-connector quick fix, architecture.md gateway section | Goal factory converts with no runtime change · unit + manual run |
+| 4.2-1 | `schema/connector.schema.json`, `internal/connectors` parse/validate, templates, testdata, `goal catalog validate`, ADR 0008 | Example connectors parse; each invalid fixture reports its field · unit tests |
+| 4.2-2 | Migration 00052, `ConnectorCatalog` (connector + connection methods), postgres, `catalogtest`, RLS tests | Suites pass on fake and postgres; isolation tests · integration |
+| 4.2-3 | Catalog sync job, `goal catalog push`, bucket key | Pushed file indexed once; changed content refused; bad file skipped · unit (in-memory bucket) + integration |
+| 4.2-4 | Catalog API (list, detail, create private, versions, deprecate) + OpenAPI + `goal connectors` | Handler tests incl. 409 name taken · unit |
+| 4.2-5 | Connector-form connections in `factory.schema.json`, effective policy, `Checker` problems + fixes, `Resolution` into B's publish (bindings row write), `Line()` agent connections | Each problem in 4.3 raised and fixed; publish writes `connections` rows in the same transaction · unit + integration |
+| 4.2-6 | Gateway: connector connections with Vault material, scopes, policy, health, audit fields, value-free unavailability | Gateway tests listed in 13 for remote and image connections · unit |
+| 4.2-7 | `Minter` port, GitHub App minting (github adapter), gateway per-run cache, workspaces/CodeHost minting | Token restricted to repos; minted once per run · unit (httptest) |
+| 4.2-8 | `awssts` minter | AssumeRole called with external id and session name · unit (stub endpoint) |
+| 4.2-9 | `Sidecars.StartExec`, docker exec, CLI `run` tool, grammar | Allowed/refused/timeout/truncation/scrub · unit + docker integration |
+| 4.2-10 | `OAuth` port, `oauthclient` adapter, client metadata document route | Fake AS tests in 13 · unit |
+| 4.2-11 | Migration 00053, OAuth service (start, callback, refresh job, revocation hook), endpoints | One-time state, wrong org, refresh lock, needs-reconnect · unit + integration |
+| 4.2-12 | Credential tests endpoint, field validation hook for 4.1's create/rotate | Datadog `http` test against fake; missing field → 400 · unit |
+| 4.2-13 | Migration 00054, `ToolApprovals` port, postgres, `approvaltest`, NOTIFY | Conformance on fake and postgres · integration |
+| 4.2-14 | Gateway hold/release/expiry, approval feed, sweeper job, worker `MCP_TOOL_TIMEOUT` | Approval tests in 13; worker Vitest on the timeout env · unit |
+| 4.2-15 | Approvals API, SSE `approval`/`connection`, CLI approvals, `follow` line | Handler tests (409), stream test · unit |
+| 4.2-16 | Deferred to the AWS deployment (review): `Gateway` claim, `GOAL_PEER_URL`, forwarding | — |
+| 4.2-17 | `MCPRegistry` port, `mcpregistry` adapter, import-preview | Remote and OCI servers map to specs; npm-only → 422 · unit |
+| 4.2-18 | Connection tests endpoint (gateway Tester), `ToolCallStats` | Draft and published tests; stats over 7 days · unit + integration |
+| 4.2-19 | Web: Catalog, connector detail, Add/Import | Playwright catalog flows, axe · e2e at 3 widths |
+| 4.2-20 | Web: Credential-New steps 1–2, OAuth connect, Credentials connector columns/detail rows | Playwright credential flows · e2e |
+| 4.2-21 | Web: Connections page | Expired banner, filter, tools and allowlist panels · e2e |
+| 4.2-22 | Web: Connections panel for wizard and Definition, YAML quick fixes | Wizard flow with publish blocked then fixed · e2e |
+| 4.2-23 | Web: Approval page (+ phone), item hooks for E | Approve with A, reject with reason · e2e |
+| 4.2-24 | Web: Agent Connections card | Statuses per connection · e2e |
+| 4.2-25 | Curated catalog v1 content + smoke tests (one PR per family: remote, images, CLI) | Smoke results in the PR; drift none · `task test-smoke` |
+| 4.2-26 | Legacy-to-connector quick fix, architecture.md gateway section | Goal factory converts with no runtime change · unit + manual run |
 
 ### 16. Cross-spec contracts
 
-**3.2 provides**
+**4.2 provides**
 - Ports `ConnectorCatalog`, `OAuth`, `ToolApprovals` (registry names) and two new ones, `Minter` and `MCPRegistry` (the registry did not foresee per-run minting or the registry import; both are outbound systems, so each needs its own port). `Sidecars` gains `StartExec`/`ExecSidecar`, `SidecarSpec.Entrypoint`.
 - Package `internal/connectors` (`Checker`, `Policy`, `Service`).
 - Tables `connectors`, `connections`, `connection_tests`, `oauth_clients`, `oauth_states`, `tool_approvals`; NOTIFY channel `goal_approvals`; `connection` events go on A's `goal_org_events` (review).
 - To **B**: `connectors.Checker` as `authoring.Check` (problems in B's shape, severities `error|warning|info`, fixes as RFC 6902 patches) and `authoring.Resolver` (`resolved` + `Bindings`); `factory.schema.json` connector form (review).
-- To **3.1**: credential field validation hook (`connectors.ValidateFields(connector, method, fields)`), `Service.Revoked` hook, OAuth-created credentials through `Vault`, Credential-New steps 1–2 and the connector columns.
+- To **4.1**: credential field validation hook (`connectors.ValidateFields(connector, method, fields)`), `Service.Revoked` hook, OAuth-created credentials through `Vault`, Credential-New steps 1–2 and the connector columns.
 - To **C**: `GET …/connections` `summary.blocked` for the sidebar dot and Floor/Board/Item "Connections, 1 blocked"; routes `/o/:org/catalog`, `/o/:org/f/:factory/connections`.
 - To **D**: the connections panel component (`shared/connections-editor`) taking the draft and a patch callback; "Connects to" chips from template connections; problems with fixes for the YAML view and Review checks.
 - To **C/E**: a `tool_approval` `InboxSource` on C's `/inbox` and `waiting_on_you` counts on C's `/attention`; `GET /v1/orgs/{org}/approvals?state=pending` and SSE `event: approval`; item event kinds `tool_approval_requested|decided|settled` for the timeline ("Paused for this approval"); `ItemCard.pending_approval: {id, tool, requested_at} | null` (accepted by E) (review).
 
-**3.2 needs**
-- **A**: `domain.OrgID`, `domain.Actor`, the org transaction helper (`SET LOCAL goal.org_id`; 3.2's curated policies use 3.2's own `goal_org_or_null()`), the request actor and `Authorizer` seam (no roles until phase 4), `Audit`, `TaskClaims.OrgID`, `Tenancy.ActiveOrgs` for cross-org jobs, and the `goal_org_events` channel. No `JobLocks` port: each job's store method takes its own `pg_try_advisory_xact_lock`, as 3.1's `Rewrap` does (review).
+**4.2 needs**
+- **A**: `domain.OrgID`, `domain.Actor`, the org transaction helper (`SET LOCAL goal.org_id`; 4.2's curated policies use 4.2's own `goal_org_or_null()`), the request actor and `Authorizer` seam (filled by phase 3), `Audit`, `TaskClaims.OrgID`, `Tenancy.ActiveOrgs` for cross-org jobs, and the `goal_org_events` channel. No `JobLocks` port: each job's store method takes its own `pg_try_advisory_xact_lock`, as 4.1's `Rewrap` does (review).
 - **B**: `definition_versions` (FK target) with `resolved jsonb` (B §6.1, accepted); validation pipeline that runs the `Checker` and blocks publish on errors but not on warnings; publish transaction that writes the `connections` rows from `Publish.Bindings` (delete removed names, upsert present) and stores `resolved`; the definitions cache returns a run's version (`v` claim) so the gateway resolves bindings of the version the run started on (review).
-- **3.1** (mapped onto 3.1 §5.2, review): `Vault.Credential(ctx, ref)` (metadata incl. `connector`, `method`, status); `Vault.Resolve(ctx, SecretScope{…, PurposeConnection}, SecretRef)` → `Secret.Fields` with `CredentialError` reasons (records the use, so no `MarkUsed`); `Vault.Rotate` with `By` = system actor for OAuth refresh (no `AddVersion`); `NewCredential` gains `Connector`, `Method` (field secrecy from the connector's sign-in fields); `Vault.MarkNeedsReconnect` and status `needs_reconnect` (added by 3.2, 3.1 §6.6); no `Seal`/`Open` (the postgres adapter seals OAuth state with `envelope.go`); `credentials.connector`/`method` text columns (3.2's migration); repository credentials usable by `Minter` (`github_app`).
-- **D**: the Connections section shell in the wizard and editor with draft patching and the Visual/YAML toggle; Review and publish rendering 3.2's checks.
+- **4.1** (mapped onto 4.1 §5.2, review): `Vault.Credential(ctx, ref)` (metadata incl. `connector`, `method`, status); `Vault.Resolve(ctx, SecretScope{…, PurposeConnection}, SecretRef)` → `Secret.Fields` with `CredentialError` reasons (records the use, so no `MarkUsed`); `Vault.Rotate` with `By` = system actor for OAuth refresh (no `AddVersion`); `NewCredential` gains `Connector`, `Method` (field secrecy from the connector's sign-in fields); `Vault.MarkNeedsReconnect` and status `needs_reconnect` (added by 4.2, 4.1 §6.6); no `Seal`/`Open` (the postgres adapter seals OAuth state with `envelope.go`); `credentials.connector`/`method` text columns (4.2's migration); repository credentials usable by `Minter` (`github_app`).
+- **D**: the Connections section shell in the wizard and editor with draft patching and the Visual/YAML toggle; Review and publish rendering 4.2's checks.
 - **C/E**: C's stream union carrying `event: approval` and `event: connection` (A's feed reads `goal_approvals` and `goal_org_events`); C's `InboxSource` registry; E's item timeline component for the Approval page (review).
 
 ### 17. Open questions
 
-1. Held calls keep the agent container and WIP slot for up to 30 minutes. Is that the right default, or should long approvals suspend the run (checkpoint the session and requeue the item on decision)? That needs a worker resume and an engine state; out of 3.2 as written.
+1. Held calls keep the agent container and WIP slot for up to 30 minutes. Is that the right default, or should long approvals suspend the run (checkpoint the session and requeue the item on decision)? That needs a worker resume and an engine state; out of 4.2 as written.
 2. Laptop OAuth: `GOAL_PUBLIC_URL` is `http://127.0.0.1:8080`, so client ID metadata documents are unavailable and DCR must accept a loopback http redirect. Do Atlassian's and Datadog's servers accept that? If not, laptops need a static client per org (an `oauth` method field set) or a tunnel; the smoke tests will tell.
-3. The canvas shows Atlassian at `/v1/sse` (legacy SSE transport). 3.2 supports `sse` through the SDK, but the curated entry targets `/v1/mcp`; confirm by smoke test.
+3. The canvas shows Atlassian at `/v1/sse` (legacy SSE transport). 4.2 supports `sse` through the SDK, but the curated entry targets `/v1/mcp`; confirm by smoke test.
 4. Should curated connector updates ever reach a factory without a publish (security fixes to an image digest)? As written, never; an operator would deprecate and factories would see a warning.
-5. `connections` holds only the current version's bindings. Runs still on an older version resolve from B's stored `Resolution`; is B willing to own `definition_versions.resolved`, or should 3.2 keep a `connection_bindings(definition_version_id, …)` table instead?
+5. `connections` holds only the current version's bindings. Runs still on an older version resolve from B's stored `Resolution`; is B willing to own `definition_versions.resolved`, or should 4.2 keep a `connection_bindings(definition_version_id, …)` table instead?
 6. Exec sidecars use `timeout` and `sleep` from the vendor image. For distroless CLI images we would need a Goal-built image; acceptable to limit v1 to images that ship coreutils (aws-cli, azure-cli do)?
-7. Who is the platform operator that runs `goal catalog push` in a hosted deployment, and does that need an API with a platform role instead of bucket credentials?
+7. **Decided (phase 3):** the platform operator who runs `goal catalog push` is a platform admin. Whether the push goes through an API with `platform:manage` instead of bucket credentials stays for the design pass.

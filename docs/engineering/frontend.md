@@ -135,7 +135,7 @@ One app, not two, filling the viewport with no outer frame. From 768 px: a 72 px
 | --- | --- |
 | Laptop | `web/dist` is embedded into `goald` with `go:embed`; one binary serves UI and API |
 | AWS | `goald` serves it, or S3 + CloudFront with `/v1/*` routed to the ALB |
-| Vercel | Static deploy of `web/`; `VITE_API_URL` points at goald on AWS; preview deployments per pull request |
+| Vercel | Static deploy of `web/`, same-origin: rewrites send `/v1/*` and `/api/auth/*` to goald on AWS (phase 3, ADR 0007; no cross-site deployment); preview deployments per pull request run on the mock API and never sign in |
 
 The UI holds no secrets. In the cloud it signs in through goald (OIDC); on a laptop goald runs in single-user mode.
 
