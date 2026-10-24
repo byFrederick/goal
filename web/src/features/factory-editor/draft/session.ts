@@ -181,6 +181,11 @@ export class DraftSession {
   private undoStack: UndoEntry[] = [];
   private redoStack: UndoEntry[] = [];
   private disposed = false;
+  /**
+   * The draft revision each section's server value is from (adopted or saved): a model read
+   * before a later save of a section, answering late, must not put the older value back.
+   */
+  private readonly heldAt = new Map<Section, number>();
 
   constructor(private readonly opts: SessionOptions) {
     this.api = opts.api ?? definitions;
@@ -269,11 +274,14 @@ export class DraftSession {
   adopt(model: DraftModel): void {
     const m = modelOf(model.model);
     const before = this.state;
+    if (!before.hasDraft) this.heldAt.clear();
     const next = { ...before.sections } as Record<Section, SectionState>;
     for (const s of sections) {
       const cur = before.sections[s];
       if (cur.dirty || cur.inFlight) continue;
+      if (model.revision < (this.heldAt.get(s) ?? 0)) continue;
       next[s] = { server: m[s], serverEtag: model.etags[s], local: m[s], dirty: false, inFlight: false };
+      this.heldAt.set(s, model.revision);
     }
     const newer = model.revision >= before.revision;
     const elsewhere =
@@ -507,9 +515,11 @@ export class DraftSession {
       const fresh = await this.api.getDraftModel(this.opts.org, this.opts.factory);
       const m = modelOf(fresh.model);
       // A draft this session opens is not the one it saved before (a discard restarts revisions at 1).
+      this.heldAt.clear();
       this.set({ hasDraft: true, revision: fresh.revision, lastSaved: 0, edited: fresh.edited, ranges: fresh.ranges });
       for (const s of sections) {
         const cur = this.state.sections[s];
+        this.heldAt.set(s, fresh.revision);
         if (cur.dirty && !equal(cur.server, m[s])) this.rebase(s, m[s], fresh.etags[s]);
         else this.setSection(s, { serverEtag: fresh.etags[s], ...(cur.dirty ? {} : { server: m[s], local: m[s] }) });
       }
@@ -552,6 +562,7 @@ export class DraftSession {
         inFlight: false,
         dirty: !equal(now.local, sent) || this.pendingFiles.has(section),
       });
+      this.heldAt.set(section, result.revision);
       this.saved(result);
       if (this.state.sections[section].dirty) this.schedule(section);
     } catch (err) {
@@ -739,6 +750,7 @@ export class DraftSession {
     this.failed.clear();
     this.undoStack = [];
     this.redoStack = [];
+    this.heldAt.clear();
     const sectionsNext = {} as Record<Section, SectionState>;
     for (const s of sections) {
       const cur = this.state.sections[s];

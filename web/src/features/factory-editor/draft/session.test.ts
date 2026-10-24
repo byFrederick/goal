@@ -181,6 +181,39 @@ describe('autosave', () => {
   });
 });
 
+describe('stale reads', () => {
+  it('keeps a section this tab saved over a model read before the save committed', async () => {
+    session.edit(setStationField(line(session), 'build', 'wip', 7));
+    void session.flush();
+    await flushPromises();
+    await fake.ok('l43');
+
+    // A refetch that started before the save (another tab's event, a focus refetch) answers late.
+    session.adopt(draftModel(model(), 42));
+
+    const snap = session.getSnapshot();
+    expect(wipOf(line(session), 'build')).toBe(7);
+    expect(snap.sections.line).toMatchObject({ serverEtag: 'l43', dirty: false });
+    expect(snap.revision).toBe(43);
+    expect(fake.api.saveDraftSection).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a section adopted at a later revision over an older read of it', () => {
+    const later = model();
+    later.basics.title = 'Renamed at 45';
+    session.adopt(draftModel(later, 45, { basics: 'b45' }));
+
+    const earlier = model();
+    earlier.basics.title = 'Renamed at 44';
+    session.adopt(draftModel(earlier, 44, { basics: 'b44' }));
+
+    expect(session.getSnapshot().sections.basics).toMatchObject({
+      local: { title: 'Renamed at 45' },
+      serverEtag: 'b45',
+    });
+  });
+});
+
 describe('conflicts', () => {
   it('merges a disjoint change made elsewhere and sends again', async () => {
     session.edit(setStationField(line(session), 'build', 'wip', 3));
