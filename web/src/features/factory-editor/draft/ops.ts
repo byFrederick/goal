@@ -17,6 +17,7 @@ import type {
   LineSection,
   Model,
   ModelAgent,
+  ModelSkill,
   ModelStation,
   ReviewSection,
   Section,
@@ -292,6 +293,59 @@ export function duplicateAgent(agents: AgentsSection, name: string, promptText: 
     { ...agents, agents: [...agentsOf(agents), agent] },
     { [cleanPath(path)]: { text: promptText } },
   );
+}
+
+/** A skill copied with an agent from another factory: its entry there and its folder's files. */
+export interface CopiedSkill {
+  skill: ModelSkill;
+  /** Paths relative to the skill's folder; none for a skill that is not a local folder. */
+  files: FileMap;
+}
+
+/**
+ * Copies an agent from another factory ("Copy from another factory"), under its name or a free
+ * one, with its prompt (`promptText`) and the skills it uses: one this factory already has by
+ * that name is used as it is; another local folder is copied to skills/<name>/ with its origin.
+ * Connections are not copied, nor a legacy tools block (the model cannot carry its rules).
+ */
+export function copyAgent(
+  agents: AgentsSection,
+  source: ModelAgent,
+  promptText: string,
+  skills: CopiedSkill[],
+): { edit: Edit<'agents'>; name: string } {
+  const name = uniqueName(
+    source.name,
+    agentsOf(agents).map((a) => a.name),
+  );
+  const path = promptPathFor(name);
+  const { connections: _c, custom_tools: _t, prompt: _p, ...rest } = structuredClone(source);
+  const files: FileMap = { [cleanPath(path)]: { text: promptText } };
+  const have = new Set((agents.skills ?? []).map((s) => s.name));
+  const added: ModelSkill[] = [];
+  for (const { skill, files: folder } of skills) {
+    if (have.has(skill.name) || !(source.skills ?? []).includes(skill.name)) continue;
+    const local = skill.source.startsWith('./');
+    added.push({
+      name: skill.name,
+      source: local ? `./skills/${skill.name}` : skill.source,
+      ...(skill.origin ? { origin: skill.origin } : {}),
+    });
+    if (local) for (const [p, c] of Object.entries(folder)) files[`skills/${skill.name}/${p}`] = c;
+  }
+  const agent: ModelAgent = { ...rest, name, prompt: { path } };
+  return {
+    name,
+    edit: edit(
+      'agents',
+      {
+        ...agents,
+        agents: [...agentsOf(agents), agent],
+        ...(added.length > 0 ? { skills: [...(agents.skills ?? []), ...added] } : {}),
+      },
+      files,
+    ),
+  };
 }
 
 /** Sets (or, with undefined, removes) one field of an agent. */

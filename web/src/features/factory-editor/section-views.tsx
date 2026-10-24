@@ -1,7 +1,7 @@
 // What each editor section renders (D §10.1): the slot D7–D11 fill. A section whose view is null
 // shows LaterSection; the YAML view (D10) replaces the section's view when `?mode=yaml` and, until
 // it lands, the Visual | YAML toggle shows YAML as Later.
-import type { ComponentType } from 'react';
+import { type ComponentType, lazy } from 'react';
 import { BasicsSection } from './basics/basics-section';
 import type { DefinitionSearch, EditorSection } from './sections';
 
@@ -12,10 +12,13 @@ export interface SectionViewProps {
   search: DefinitionSearch;
 }
 
+// Sections with heavy editors load on first use, outside the initial bundle (D §10.9's budget).
+const AgentsSection = lazy(() => import('./agents/agents-section').then((m) => ({ default: m.AgentsSection })));
+
 export const sectionViews: Record<EditorSection, ComponentType<SectionViewProps> | null> = {
   basics: BasicsSection,
   line: null,
-  agents: null,
+  agents: AgentsSection,
   connections: null,
   review: null,
   versions: null,

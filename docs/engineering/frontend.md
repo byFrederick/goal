@@ -89,7 +89,7 @@ shared/       code more than one feature uses: decisions (approve, send back, me
               the andon cord (andon.tsx: the line status and the pull and clear dialogs, from Board.line),
               definition/ (typed views of B's FactoryModel, where an agent works, slots at full WIP, pointer ↔ line),
               the organization's live stream, org and factory helpers, marks, formatting (Intl), state labels, the address rule (org-rules.ts)
-ui/           design-system primitives on Radix: button, dialog, confirm-dialog (typed confirmation), field and input, sheet, menu, tooltip,
+ui/           design-system primitives on Radix: button, dialog, confirm-dialog (typed confirmation), field and input, segmented-control, sheet, menu, tooltip,
               card (SectionCard, StatGrid), chip, count, mark, hatch (Meter, HatchBars), target-bar, bars (weekly bars with a target line and a hidden table), bridge (the lead-time waterfall, `bridgeGeometry`, with a hidden table), date-range, page-header, list-row, empty-state, logo
 ```
 

@@ -4,7 +4,7 @@
 // running version) has loaded and an error with Try again when it can't.
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useSearch } from '@tanstack/react-router';
-import type { ReactNode } from 'react';
+import { type ReactNode, Suspense } from 'react';
 import { ApiError } from '../../api/client';
 import { defKeys, draftModelQuery } from '../../api/queries';
 import { useFactory } from '../../shared/factory';
@@ -72,21 +72,30 @@ export function SectionView({
       </div>
     );
   }
-  if (!ready) {
-    return (
-      <div aria-busy="true" className="flex flex-col gap-4 rounded-card border border-line bg-card p-5">
-        <span className="sr-only">Loading the draft</span>
-        <div className="h-6 w-40 rounded-chip bg-control" />
-        <div className="h-4 w-full max-w-[520px] rounded-chip bg-control/70" />
-        <div className="grid gap-4 @[640px]:grid-cols-2">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-16 rounded-control bg-control/60" />
-          ))}
-        </div>
-      </div>
-    );
-  }
+  if (!ready) return <SectionSkeleton />;
 
   const View = (search.mode === 'yaml' ? yamlView : null) ?? sectionViews[section];
-  return View ? <View place={place} search={search} /> : <LaterSection section={section} />;
+  return View ? (
+    <Suspense fallback={<SectionSkeleton />}>
+      <View place={place} search={search} />
+    </Suspense>
+  ) : (
+    <LaterSection section={section} />
+  );
+}
+
+/** A section while the draft (or the section's code) loads. */
+function SectionSkeleton() {
+  return (
+    <div aria-busy="true" className="flex flex-col gap-4 rounded-card border border-line bg-card p-5">
+      <span className="sr-only">Loading the draft</span>
+      <div className="h-6 w-40 rounded-chip bg-control" />
+      <div className="h-4 w-full max-w-[520px] rounded-chip bg-control/70" />
+      <div className="grid gap-4 @[640px]:grid-cols-2">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="h-16 rounded-control bg-control/60" />
+        ))}
+      </div>
+    </div>
+  );
 }

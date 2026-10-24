@@ -10,13 +10,14 @@ import {
   type ReactNode,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
 } from 'react';
 import { ApiError } from '../../../api/client';
 import { defKeys, draftModelQuery, versionModelQuery } from '../../../api/queries';
-import type { Section, SectionValues } from '../../../shared/definition/model';
+import type { Model, Section, SectionValues } from '../../../shared/definition/model';
 import { DraftSession, type SessionState } from './session';
 
 const DraftSessionContext = createContext<DraftSession | null>(null);
@@ -93,4 +94,19 @@ export function useDraft<T>(select: (state: SessionState) => T): T {
 /** One section's value as the editor shows it (server plus unsaved edits). */
 export function useSection<S extends Section>(section: S): SectionValues[S] {
   return useDraft((s) => s.sections[section].local) as SectionValues[S];
+}
+
+/** The whole model as the editor shows it: what edits touching several sections start from. */
+export function useModel(): Model {
+  const sections = useDraft((s) => s.sections);
+  return useMemo(
+    () => ({
+      basics: sections.basics.local,
+      line: sections.line.local,
+      agents: sections.agents.local,
+      connections: sections.connections.local,
+      review: sections.review.local,
+    }),
+    [sections],
+  );
 }

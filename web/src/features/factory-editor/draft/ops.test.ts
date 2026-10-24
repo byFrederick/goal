@@ -8,6 +8,7 @@ import {
   addSkillFromCatalog,
   addStation,
   applyFix,
+  copyAgent,
   duplicateAgent,
   moveStation,
   removeAgent,
@@ -128,6 +129,45 @@ describe('agents', () => {
       skills: ['conventions'],
     });
     expect(edit.files).toEqual({ 'agents/engineer-copy.md': { text: 'Build it.\n' } });
+  });
+
+  it('copies an agent from another factory with its prompt and new skill folders, not its connections', () => {
+    const source = {
+      name: 'engineer',
+      description: 'Builds it.',
+      model: 'claude-opus-5-5',
+      prompt: { path: './agents/eng.md', sha256: 'abc', words: 2 },
+      skills: ['conventions', 'terraform'],
+      connections: ['github'],
+    };
+    const { edit, name } = copyAgent(model().agents, source, 'Build it.\n', [
+      { skill: { name: 'conventions', source: './skills/conventions' }, files: { 'SKILL.md': { text: 'other' } } },
+      {
+        skill: {
+          name: 'terraform',
+          source: './skills/tf',
+          origin: `skills.sh:acme/skills@terraform#${'a'.repeat(40)}`,
+        },
+        files: { 'SKILL.md': { text: '# terraform' }, 'refs/x.md': { text: 'x' } },
+      },
+    ]);
+    expect(name).toBe('engineer-2');
+    expect(edit.value.agents?.at(-1)).toEqual({
+      name: 'engineer-2',
+      description: 'Builds it.',
+      model: 'claude-opus-5-5',
+      prompt: { path: './agents/engineer-2.md' },
+      skills: ['conventions', 'terraform'],
+    });
+    expect(edit.value.skills).toEqual([
+      { name: 'conventions', source: './skills/conventions' },
+      { name: 'terraform', source: './skills/terraform', origin: `skills.sh:acme/skills@terraform#${'a'.repeat(40)}` },
+    ]);
+    expect(edit.files).toEqual({
+      'agents/engineer-2.md': { text: 'Build it.\n' },
+      'skills/terraform/SKILL.md': { text: '# terraform' },
+      'skills/terraform/refs/x.md': { text: 'x' },
+    });
   });
 
   it('renames every reference: stations, lanes, the librarian, connections and the prompt file', () => {

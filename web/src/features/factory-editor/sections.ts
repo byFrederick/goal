@@ -24,7 +24,11 @@ export const sectionInfo: Record<EditorSection, SectionInfo> = {
     description: 'What this factory is for and where its work lives. Agents see the purpose in every prompt.',
   },
   line: { label: 'Line', description: 'Stations in the order work moves through them.' },
-  agents: { label: 'Agents', description: 'Who works at the agent stations: role, model, prompt, skills and tools.' },
+  agents: {
+    label: 'Agents',
+    description:
+      'Who works on the line. Each agent gets a role, a model, a prompt, skills and the built-in tools it may use.',
+  },
   connections: { label: 'Connections', description: 'The services agents can reach, and which agents may use each.' },
   review: { label: 'Review and publish', description: 'Checks, the changes from the running version, and publish.' },
   versions: { label: 'Versions', description: 'Every published version, the one that runs, compare and restore.' },
