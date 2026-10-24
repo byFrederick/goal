@@ -90,7 +90,9 @@ func run(t *testing.T, dir string, args ...string) {
 	cmd := exec.CommandContext(t.Context(), "git", args...) //nolint:gosec // the test's own git commands
 	cmd.Dir = dir
 
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com",
+	// baseEnv, not os.Environ: under a git hook (the pre-push hook runs these tests) GIT_DIR names
+	// the pushing repository, and inheriting it would make these commands rewrite that repository.
+	cmd.Env = append(baseEnv(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com",
 		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com")
 
 	if out, err := cmd.CombinedOutput(); err != nil {
