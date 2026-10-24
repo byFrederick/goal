@@ -488,7 +488,7 @@ The existing `adapters` rule already keeps `keyfile`, `anthropic` and `awskms` a
 
 Migrations `00050` and `00051` (range 00050–00059). They assume A's `organizations(id)`, `factories.org_id` with `UNIQUE (org_id, id)`, `agent_runs.org_id`, `audit_log`, roles `goal_owner`/`goal_app`.
 
-#### 6.1 `00040_vault.sql`
+#### 6.1 `00050_vault.sql`
 
 ```sql
 -- +goose Up
@@ -602,7 +602,7 @@ REVOKE DELETE ON credentials, credential_versions, credential_uses, vault_keys F
 
 (`REVOKE` guards against default privileges A may set; harmless otherwise.)
 
-#### 6.2 `00041_vault_settings.sql`
+#### 6.2 `00051_vault_settings.sql`
 
 ```sql
 -- +goose Up
@@ -1355,7 +1355,7 @@ Needed from 4.1: `Vault` as 4.1 §5.2 defines it (section 16) (review).
 
 Migrations `00052`–`00054` (goose, forward-only). (review) A's `goal_org()` stays strict. `00052` adds `goal_org_or_null()` = `nullif(current_setting('goal.org_id', true), '')::uuid` and uses it only in the `connectors` policies, so curated reads work without an org. Every other table below follows A's kit: `org_id NOT NULL DEFAULT goal_org()` with `ON DELETE CASCADE`, a policy named `org_isolation` using `(SELECT goal_org())`, and composite parent keys (`(org_id, factory_id) REFERENCES factories (org_id, id)`, likewise for items, runs and credentials). `00052` also adds `credentials.connector text`, `credentials.method text` and `credentials.needs_reconnect_at timestamptz` (4.1 §6.6). The binding columns of `connections` are the projection of the current version's `definition_versions.resolved` (B), written by B's publish transaction.
 
-#### 00042_connectors.sql
+#### 00052_connectors.sql
 
 ```sql
 CREATE TABLE connectors (
@@ -1437,7 +1437,7 @@ CREATE INDEX item_events_tool_calls_idx ON item_events (factory_id, at) WHERE ki
 ```
 Status is derived at read time, never stored: `blocked` (connector needs sign-in and no credential; credential expired, needs reconnect, revoked or no longer granted), `failing` (last_error_at > last_ok_at within 15 min), `connected` (a call or test succeeded), `untested`.
 
-#### 00043_oauth.sql
+#### 00053_oauth.sql
 
 ```sql
 CREATE TABLE oauth_clients (
@@ -1480,7 +1480,7 @@ CREATE POLICY oauth_states_org ON oauth_states USING (org_id = goal_org()) WITH 
 ```
 The state string is `<org id, base64url>.<32 random bytes, base64url>`: the callback reads the org from it, sets `goal.org_id`, then takes the row by hash under RLS, so a state cannot be redeemed in another org and the database never holds a usable state.
 
-#### 00044_tool_approvals.sql
+#### 00054_tool_approvals.sql
 
 ```sql
 CREATE TABLE tool_approvals (

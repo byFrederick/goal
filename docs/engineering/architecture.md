@@ -163,7 +163,7 @@ Definitions are content, not code ([ADR 0005](../adr/0005-factory-definitions-in
 ```
 s3://<bucket>/
   orgs/<org-id>/blobs/<sha256>          every definition file (factory.yaml, agents/, skills/, contracts/, evals/), once per org, never overwritten
-  catalog/templates/<name>/<version>/   curated starting points; catalog/skills/ (D) and catalog/connectors/ (phase 3) beside it
+  catalog/templates/<name>/<version>/   curated starting points; catalog/skills/ (D) and catalog/connectors/ (phase 4) beside it
 
 PostgreSQL
   definition_versions   one row per draft or published version: manifest {path → sha256}, number, revision, author, publisher
@@ -253,7 +253,7 @@ goal merge goal#N         POST /v1/orgs/default/items/goal%23N/merge → squash-
 - **Sessions checked in PostgreSQL, per request.** goald reads Better Auth's session token (the httpOnly cookie, or `Authorization: Bearer` from the CLI) or a Goal API key (`goal_sk_…`, hashed), and resolves it with a `SECURITY DEFINER` function for the path's organization: user, session times, org role, factory roles. No JWT and no cache, so removal and revocation apply on the next request; streams end on `goal_access` notices.
 - **Authorization from one table.** `api/permissions.yaml` defines every permission (who holds it, whether keys may, whether it needs a sign-in within 10 minutes); it generates goald's table and Better Auth's roles, and each OpenAPI operation names its permission in `x-goal-scope`. Owners and admins hold every factory permission; members only what their factory roles (viewer ⊂ approver ⊂ editor) give. Unknown or invisible organizations, factories and items are 404; missing credentials 401; missing permissions 403.
 - **Ownership of data.** Better Auth's tables live in schema `auth` (generated SQL committed as goose migrations), written only by the role `goal_auth`; `goal_app` reads them only through definer functions. goald alone creates, renames, deletes and purges organizations (both rows in one transaction); platform admins (a Goal table) create them. Factory roles and API keys are Goal tables under RLS. Membership changes reach `audit_log` through triggers; sign-ins and codes go to the install's `auth_events`.
-- **Fail closed.** `GOAL_AUTH=none` (the single local user, everything allowed) is only for a loopback listen; a non-loopback listen needs https and a separate listener for the agents' `/mcp` gateway, whose task tokens carry `aud: goal-gateway` and are accepted nowhere else.
+- **Fail closed.** `GOAL_AUTH=none` (the single local user, everything allowed) is only for a loopback listen and stops being the default when phase 3 completes; a non-loopback listen needs an https `GOAL_PUBLIC_URL` and a separate listener that serves only the agents' `/mcp` gateway, whose task tokens carry `aud: goal-gateway` and are accepted nowhere else. A `Host` other than the public URL's is refused (DNS rebinding). goald and the auth service each get only their own variables, and goald's reserved list keeps the auth service's out of factory definitions.
 
 ### Roadmap
 
