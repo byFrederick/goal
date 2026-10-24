@@ -7,7 +7,8 @@ const tones = {
   run: 'border-run-hatch bg-run-tint text-run',
   you: 'border-you-line bg-you-tint text-you',
   rework: 'border-rework-line bg-rework-tint text-rework-ink',
-  constraint: 'border-amber bg-amber text-ink',
+  /** The constraint (the drum) only: amber with ink text at 600. */
+  constraint: 'border-amber bg-amber font-semibold text-ink',
   ok: 'border-line bg-surface text-ok',
 } as const;
 

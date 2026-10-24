@@ -34,23 +34,38 @@ export function Hatch({ tone = 'run', className }: { tone?: HatchTone; className
   );
 }
 
-/** A horizontal meter: a hatched fill to `value` of `max`, with an optional target tick. */
+/**
+ * A horizontal meter: a hatched fill to `value` of `max`, with an optional target tick. Without
+ * `label` it is decorative (the caller states the value in text); with one it is a `meter` named
+ * by it ("$18.40 of $60 weekly budget, 31%").
+ */
 export function Meter({
   value,
   max,
   target,
   tone = 'run',
+  label,
   className,
 }: {
   value: number;
   max: number;
   target?: number;
   tone?: HatchTone;
+  label?: string;
   className?: string;
 }) {
   const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
+  const meter = label
+    ? {
+        role: 'meter',
+        'aria-label': label,
+        'aria-valuemin': 0,
+        'aria-valuemax': max,
+        'aria-valuenow': Math.min(Math.max(0, value), max),
+      }
+    : { 'aria-hidden': true };
   return (
-    <div aria-hidden="true" className={cn('relative h-2.5 rounded-[3px] bg-surface', className)}>
+    <div {...meter} className={cn('relative h-2.5 rounded-[3px] bg-surface', className)}>
       {pct > 0 ? (
         <div className="h-full overflow-hidden rounded-[3px]" style={{ width: `${pct}%` }}>
           <Hatch tone={tone} />
@@ -63,5 +78,41 @@ export function Meter({
         />
       ) : null}
     </div>
+  );
+}
+
+/**
+ * A bar sparkline: one thin hatched teal bar per value on a shared baseline, the last one (the
+ * latest) solid; a zero is a flat stub, never a bar. `label` gives screen readers the values.
+ */
+export function HatchBars({
+  bars,
+  label,
+  height = 28,
+  className,
+}: {
+  bars: readonly { key: string; value: number }[];
+  label: string;
+  /** The tallest bar, in px. */
+  height?: number;
+  className?: string;
+}) {
+  const max = Math.max(0, ...bars.map((b) => b.value));
+  return (
+    <span role="img" aria-label={label} className={cn('flex shrink-0 items-end gap-0.5', className)} style={{ height }}>
+      {bars.map((b, i) => {
+        if (b.value <= 0 || max === 0) return <span key={b.key} className="h-0.5 w-[5px] rounded-[1px] bg-line" />;
+        const latest = i === bars.length - 1;
+        return (
+          <span
+            key={b.key}
+            className={cn('w-[5px] overflow-hidden rounded-[1px]', latest && 'bg-run')}
+            style={{ height: Math.max(3, Math.round((b.value / max) * height)) }}
+          >
+            {latest ? null : <Hatch tone="run" />}
+          </span>
+        );
+      })}
+    </span>
   );
 }

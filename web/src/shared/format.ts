@@ -1,6 +1,7 @@
 // Plain-language formatting for numbers, durations and names. Intl only; no locale data shipped.
 
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
+const usdWhole = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const clock = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' });
 const dayMonth = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
 const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' });
@@ -29,6 +30,12 @@ export function formatDuration(ms: number): string {
 
 export function formatUsd(n: number): string {
   return usd.format(n);
+}
+
+/** Whole dollars without cents, as budgets are set: "$60", "$60.50". */
+export function formatUsdCompact(n: number): string {
+  const cents = Math.round(n * 100);
+  return cents % 100 === 0 ? usdWhole.format(cents / 100) : usd.format(n);
 }
 
 export function formatHours(h: number): string {

@@ -40,6 +40,33 @@ export function SectionCard({
   );
 }
 
+/**
+ * Stats on a white panel with hairlines between the cells (a `dl` of `Stat`s): two columns by
+ * default, as a card's 2×2 grid; pass `grid-cols-3` for a row of three.
+ */
+export function StatGrid({ className, children }: { className?: string; children: ReactNode }) {
+  return (
+    <dl
+      className={cn(
+        'm-0 grid grid-cols-2 gap-px overflow-hidden rounded-control border border-line bg-line',
+        className,
+      )}
+    >
+      {children}
+    </dl>
+  );
+}
+
+/** One cell of a `StatGrid`: its label (`dt`) and the `dd`s the caller passes. */
+export function Stat({ label, className, children }: { label: ReactNode; className?: string; children: ReactNode }) {
+  return (
+    <div className={cn('flex min-w-0 flex-col gap-1 bg-surface px-3.5 py-3', className)}>
+      <dt className="text-[13px] text-muted">{label}</dt>
+      {children}
+    </div>
+  );
+}
+
 /** A label/value row with a top rule, as in the mockups' stat lists. */
 export function StatRow({ label, children, className }: { label: ReactNode; children: ReactNode; className?: string }) {
   return (

@@ -45,6 +45,83 @@ test('the root returns to the organization used last', async ({ page }) => {
   await expect(orgNav(page).getByRole('link', { name: /factory/ })).toHaveCount(1);
 });
 
+test('the factories home shows each factory’s week and what waits on you', async ({ page, request }) => {
+  await page.goto('/o/acme');
+  const card = (name: string) => page.getByRole('article', { name, exact: true });
+  await expect(card('goal').getByText('Running')).toBeVisible();
+  await expect(card('support').getByText('Andon pulled')).toBeVisible();
+
+  if (!isPhone(page)) {
+    await expect(
+      page.getByText(
+        /^Acme’s factories\. 5 items are waiting on you, and \$\d+\.\d\d of the \$80 weekly budget is spent\.$/,
+      ),
+    ).toBeVisible();
+    await expect(card('goal').getByRole('meter', { name: /^\$\d+\.\d\d of \$60 weekly budget, \d+%$/ })).toBeVisible();
+    await expect(card('goal').getByRole('img', { name: /^Items done per day, .+: (\d+, ){6}\d+$/ })).toBeVisible();
+    await expect(card('goal').getByText(/^[+−]\d\.\d vs last week$|^Same as last week$/)).toBeVisible();
+    await expect(card('support').getByText('No budget set')).toBeVisible();
+    // The wizard and the definition editor arrive with D: said, not linked.
+    await expect(card('goal').getByRole('button', { name: 'Definition Later' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await expect(page.getByRole('button', { name: 'New factory Later' })).toHaveAttribute('aria-disabled', 'true');
+  }
+
+  const waiting = page.getByRole('region', { name: 'Waiting on you', exact: true });
+  await expect(waiting.getByRole('listitem')).toHaveCount(5);
+  const newest = waiting.getByRole('link', { name: /^Open \S+#\d+$/ });
+  const ref = (await newest.textContent())?.replace('Open ', '') ?? '';
+  await expect(waiting.getByRole('listitem').first()).toContainText(ref);
+
+  // Someone else approves (the CLI, another tab): the stream brings the change.
+  await request.post('/v1/orgs/acme/items/goal%2312/approve');
+  await expect(waiting.getByRole('listitem')).toHaveCount(4);
+
+  await waiting.getByRole('listitem').filter({ hasText: 'goal#6' }).getByRole('link').click();
+  await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/items\/6$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor: throughput bars per day' })).toBeVisible();
+});
+
+test('on a phone: the banner leads to what waits, a card to its floor', async ({ page }) => {
+  test.skip(!isPhone(page), 'the phone layout of the factories home');
+  await page.goto('/o/acme');
+  const banner = page.getByRole('link', { name: /^5 waiting on you/ });
+  await expect(banner).toContainText('goal 2, sre 3');
+  await expect(page.getByText(/^\$\d+\.\d\d of Acme’s \$80 weekly budget spent$/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'New factory Later' })).toHaveAttribute('aria-disabled', 'true');
+
+  await banner.click();
+  await expect(page).toHaveURL(/\/o\/acme#waiting$/);
+  await expect(page.getByRole('region', { name: 'Waiting on you', exact: true })).toBeInViewport();
+
+  // The whole card is the link: a tap on its stats opens the factory.
+  await page.getByRole('article', { name: 'sre', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'SRE floor' })).toBeVisible();
+});
+
+test('an organization without budgets or factories says so', async ({ page, request }) => {
+  await page.goto('/o/example-labs');
+  await expect(
+    page.getByText(
+      isPhone(page)
+        ? /^\$\d+\.\d\d spent this week, no budget set$/
+        : /^Example Labs’ factories\. Nothing is waiting on you, and \$\d+\.\d\d was spent this week\.$/,
+    ),
+  ).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Waiting on you', exact: true })).toContainText(
+    'Nothing is waiting on you.',
+  );
+
+  await request.post('/v1/orgs', { data: { name: 'Empty Co', slug: 'empty-co' } });
+  await page.goto('/o/empty-co');
+  await expect(page.getByRole('heading', { level: 2, name: 'No factories in Empty Co yet' })).toBeVisible();
+  await expect(page.getByText('goal factory push <dir>')).toBeVisible();
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+});
+
 test('old /f/ links move under their organization, keeping search params', async ({ page }) => {
   await page.goto('/f/goal/items/12');
   await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/items\/12$/);

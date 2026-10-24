@@ -81,7 +81,8 @@ features/
   factories/  floor/  board/  items/  org-settings/   one folder per screen: page, cards, feature-only logic (items/timeline.ts, org-settings/form.ts)
 shared/       code more than one feature uses: decisions (approve, send back, merge, retry), new item,
               the organization's live stream, org and factory helpers, marks, formatting (Intl), state labels, the address rule (org-rules.ts)
-ui/           design-system primitives on Radix: button, dialog, confirm-dialog (typed confirmation), field and input, sheet, tooltip, card, chip, count, mark, hatch, logo
+ui/           design-system primitives on Radix: button, dialog, confirm-dialog (typed confirmation), field and input, sheet, tooltip,
+              card (SectionCard, StatGrid), chip, count, mark, hatch (Meter, HatchBars), page-header, list-row, empty-state, logo
 ```
 
 Route files stay thin (loader + component); screens live in `features/`. Features never import each other; shared code goes to `shared/` or `ui/`. Boundaries are kept in review for now; `dependency-cruiser` arrives with `packages/`, the same way depguard guards the Go engine. `ui/` moves to `packages/ui` when a second app needs it.
