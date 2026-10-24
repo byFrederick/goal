@@ -31,8 +31,17 @@ type Store struct {
 	leases    map[domain.ItemID]domain.Lease
 	runs      map[domain.RunID]*domain.Run
 	events    []domain.Event
+	andon     []andonRecord
 	ids       int
 	changes   changes
+}
+
+// andonRecord is one andon pull of a factory of an organization.
+type andonRecord struct {
+	org     domain.OrgID
+	factory domain.FactoryID
+	pull    domain.AndonPull
+	cleared bool
 }
 
 // NewStore returns an empty store.
@@ -80,6 +89,16 @@ func (s *Store) factorySlots(org domain.OrgID) map[domain.FactoryID]int {
 	}
 
 	return out
+}
+
+// RecordAndon records an andon pull on a factory of org, already cleared when cleared is set,
+// until the Store pulls and clears the cord itself (phase 2.2-E).
+func (s *Store) RecordAndon(org domain.OrgID, factory domain.FactoryID, p domain.AndonPull, cleared bool) {
+	s.mu.Lock()
+	defer s.changes.signal()
+	defer s.mu.Unlock()
+
+	s.andon = append(s.andon, andonRecord{org: org, factory: factory, pull: p, cleared: cleared})
 }
 
 // orgOf returns the organization in ctx, as row-level security requires.

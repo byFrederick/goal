@@ -1,8 +1,8 @@
 // Illustrative data for the mock API: two organizations, as the Org-Switcher board shows them.
 // Acme has three factories (a "goal" factory building itself, a small SRE factory and an empty
-// support factory); Example Labs has one, empty. Times are relative to when the mock starts, so
+// support factory whose line is stopped by an andon pull); Example Labs has one, empty. Times are relative to when the mock starts, so
 // ages read like a live floor.
-import type { ClassOfService, Factory, ItemEvent, ItemState, Metrics, Org } from '@goal/api-client';
+import type { AndonPull, ClassOfService, Factory, ItemEvent, ItemState, Metrics, Org } from '@goal/api-client';
 
 export interface MockItem {
   id: string;
@@ -38,6 +38,12 @@ export interface MockState {
   stations: Record<string, Record<string, MockStationConfig>>;
   constraint: Record<string, string | null>;
   metrics: Record<string, Metrics>;
+  /** The open andon pull of each factory, by name; absent or null while its line runs. */
+  andon: Record<string, AndonPull | null>;
+  /** Each factory's runtime.budget.weeklyUsd, by name; absent or null without one. */
+  weeklyBudget: Record<string, number | null>;
+  /** Items done per day over the 7 days before the metrics window, by name. */
+  previousPerDay: Record<string, number>;
   items: MockItem[];
   events: ItemEvent[];
   nextEventId: number;
@@ -835,6 +841,15 @@ export function seed(now = Date.now()): MockState {
     },
     constraint: { goal: 'build', sre: null, support: null, research: null },
     metrics: {},
+    andon: {
+      support: {
+        reason: 'Answers sent back 4 of the last 10 times',
+        pulled_by: 'user:local',
+        pulled_at: new Date(now - 35 * 60_000).toISOString(),
+      },
+    },
+    weeklyBudget: { goal: 60, sre: 20 },
+    previousPerDay: { goal: 1.6, sre: 0.4 },
     items: [],
     events: [],
     nextEventId: 1,

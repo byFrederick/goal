@@ -4,7 +4,10 @@
 // of one organization.
 import { type QueryClient, queryOptions } from '@tanstack/react-query';
 import {
+  getAttention,
   getBoard,
+  getFactoryOverview,
+  getInbox,
   getItem,
   getMetrics,
   getOrg,
@@ -21,6 +24,10 @@ export const keys = {
   /** The prefix of everything of one organization. */
   org: (org: string) => ['org', org] as const,
   orgDetail: (org: string) => ['org', org, 'detail'] as const,
+  attention: (org: string) => ['org', org, 'attention'] as const,
+  overview: (org: string, window: string) => ['org', org, 'overview', window] as const,
+  /** One factory's inbox (by the id or name the query was made with), or the organization's ('all'). */
+  inbox: (org: string, factory?: string) => ['org', org, 'inbox', factory ?? 'all'] as const,
   factories: (org: string) => ['org', org, 'factories'] as const,
   factory: (org: string, factory: string) => ['org', org, 'factory', factory] as const,
   board: (org: string, factory: string) => ['org', org, 'factory', factory, 'board'] as const,
@@ -40,6 +47,25 @@ export const orgsQuery = queryOptions({
 
 export const orgQuery = (org: string) =>
   queryOptions({ queryKey: keys.orgDetail(org), queryFn: ({ signal }) => getOrg(org, signal), staleTime: 60_000 });
+
+/** The rail's badges: cheap enough to refetch on every stream event. */
+export const attentionQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.attention(org),
+    queryFn: ({ signal }) => getAttention(org, signal),
+    staleTime: 10_000,
+  });
+
+export const overviewQuery = (org: string, window = '7d') =>
+  queryOptions({
+    queryKey: keys.overview(org, window),
+    queryFn: ({ signal }) => getFactoryOverview(org, window, signal),
+    staleTime: 30_000,
+  });
+
+/** The inbox at goald's default limit; `factory` narrows it to one factory. */
+export const inboxQuery = (org: string, factory?: string) =>
+  queryOptions({ queryKey: keys.inbox(org, factory), queryFn: ({ signal }) => getInbox(org, { factory }, signal) });
 
 export const factoriesQuery = (org: string) =>
   queryOptions({

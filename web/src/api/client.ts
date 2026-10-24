@@ -16,6 +16,8 @@ import type {
   Board,
   EventPage,
   Factory,
+  FactoryOverviewList,
+  Inbox,
   Item,
   ItemList,
   ItemState,
@@ -24,6 +26,7 @@ import type {
   NewItem,
   NewOrg,
   Org,
+  OrgAttention,
   OrgSummary,
 } from './types';
 
@@ -48,6 +51,36 @@ export function getOrg(org: string, signal?: AbortSignal): Promise<Org> {
 
 export function createOrg(org: NewOrg): Promise<Org> {
   return unwrap(goal.POST('/v1/orgs', { body: org }));
+}
+
+/** What each factory needs from people now: the rail's badges and dots. */
+export function getAttention(org: string, signal?: AbortSignal): Promise<OrgAttention> {
+  return unwrap(goal.GET(orgPath('/attention'), { params: { path: { org } }, ...cancel(signal) }));
+}
+
+/** Every factory summarized over `window` (Nd, 1d to 90d) for the Factories home. */
+export function getFactoryOverview(org: string, window: string, signal?: AbortSignal): Promise<FactoryOverviewList> {
+  return unwrap(goal.GET(orgPath('/overview'), { params: { path: { org }, query: { window } }, ...cancel(signal) }));
+}
+
+export interface InboxFilter {
+  /** Only this factory's entries (id or name). */
+  factory?: string | undefined;
+  /** 1 to 500; goald's default is 20. */
+  limit?: number | undefined;
+}
+
+/** What waits for a person across the organization, or in one factory. */
+export function getInbox(org: string, { factory, limit }: InboxFilter = {}, signal?: AbortSignal): Promise<Inbox> {
+  return unwrap(
+    goal.GET(orgPath('/inbox'), {
+      params: {
+        path: { org },
+        query: { ...(factory ? { factory } : {}), ...(limit !== undefined ? { limit } : {}) },
+      },
+      ...cancel(signal),
+    }),
+  );
 }
 
 export async function listFactories(org: string, signal?: AbortSignal): Promise<Factory[]> {

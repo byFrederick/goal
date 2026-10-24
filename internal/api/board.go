@@ -197,18 +197,9 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, it
 }
 
 func (s *server) GetMetrics(ctx context.Context, req gen.GetMetricsRequestObject) (gen.GetMetricsResponseObject, error) {
-	w := "7d"
-	if req.Params.Window != nil {
-		w = *req.Params.Window
-	}
-
-	var days int
-	if m := window.FindStringSubmatch(w); m != nil {
-		days, _ = strconv.Atoi(m[1])
-	}
-
-	if days < 1 || days > maxWindowDays {
-		return nil, fmt.Errorf("%w: window %q is not 1d to %dd", errInvalid, w, maxWindowDays)
+	w, err := windowOf(req.Params.Window)
+	if err != nil {
+		return nil, err
 	}
 
 	f, err := s.factory(ctx, req.Factory)
@@ -217,32 +208,75 @@ func (s *server) GetMetrics(ctx context.Context, req gen.GetMetricsRequestObject
 	}
 
 	now := s.clock.Now().UTC()
-	since := now.Truncate(day).Add(-time.Duration(days-1) * day)
+	since := w.since(now)
 
 	fm, err := s.items.FlowMetrics(ctx, domain.FactoryID(f.Metadata.ID), since, now)
 	if err != nil {
 		return nil, err
 	}
 
-	return metricsOf(w, days, since, fm), nil
+	return metricsOf(w, since, fm), nil
 }
 
-func metricsOf(w string, days int, since time.Time, fm domain.FlowMetrics) gen.GetMetrics200JSONResponse {
-	out := gen.GetMetrics200JSONResponse{
-		Window: w, Wip: fm.WIP, SpendUsd: fm.SpendUSD, ItemsDone: fm.ItemsDone,
+// metricsWindow is a valid window parameter: the last days UTC days, today included.
+type metricsWindow struct {
+	name string
+	days int
+}
+
+// windowOf checks a window parameter, 7d when absent.
+func windowOf(param *string) (metricsWindow, error) {
+	w := metricsWindow{name: "7d"}
+	if param != nil {
+		w.name = *param
 	}
 
+	if m := window.FindStringSubmatch(w.name); m != nil {
+		w.days, _ = strconv.Atoi(m[1])
+	}
+
+	if w.days < 1 || w.days > maxWindowDays {
+		return metricsWindow{}, fmt.Errorf("%w: window %q is not 1d to %dd", errInvalid, w.name, maxWindowDays)
+	}
+
+	return w, nil
+}
+
+// since is the window's first instant when it ends at now: midnight UTC, days-1 days before
+// today's.
+func (w metricsWindow) since(now time.Time) time.Time {
+	return now.Truncate(day).Add(-time.Duration(w.days-1) * day)
+}
+
+// donePerDay pads fm's items done per day to one entry for every day of the window from since.
+func donePerDay(w metricsWindow, since time.Time, fm domain.FlowMetrics) []struct {
+	Day  openapi_types.Date `json:"day"`
+	Done int                `json:"done"`
+} {
 	done := make(map[time.Time]int, len(fm.DonePerDay))
 	for _, d := range fm.DonePerDay {
 		done[d.Day.UTC()] = d.Count
 	}
 
-	for i := range days {
+	out := make([]struct {
+		Day  openapi_types.Date `json:"day"`
+		Done int                `json:"done"`
+	}, 0, w.days)
+
+	for i := range w.days {
 		d := since.Add(time.Duration(i) * day)
-		out.Throughput = append(out.Throughput, struct {
+		out = append(out, struct {
 			Day  openapi_types.Date `json:"day"`
 			Done int                `json:"done"`
 		}{Day: openapi_types.Date{Time: d}, Done: done[d]})
+	}
+
+	return out
+}
+
+func metricsOf(w metricsWindow, since time.Time, fm domain.FlowMetrics) gen.GetMetrics200JSONResponse {
+	out := gen.GetMetrics200JSONResponse{
+		Window: w.name, Wip: fm.WIP, SpendUsd: fm.SpendUSD, ItemsDone: fm.ItemsDone, Throughput: donePerDay(w, since, fm),
 	}
 
 	if fm.ItemsDone > 0 {

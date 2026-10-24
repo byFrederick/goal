@@ -29,6 +29,9 @@ type Harness struct {
 	Runs func(t *testing.T, org domain.OrgID, id domain.ItemID) []domain.Run
 	// SetSlotCaps sets org's slot cap and those of the named factories of org; 0 clears a cap.
 	SetSlotCaps func(t *testing.T, org domain.OrgID, maxSlots int, factories map[domain.FactoryID]int)
+	// RecordAndon records an andon pull on a factory of org, already cleared when cleared is
+	// set; the port pulls none itself until phase 2.2-E.
+	RecordAndon func(t *testing.T, org domain.OrgID, factory domain.FactoryID, p domain.AndonPull, cleared bool)
 }
 
 // Run runs the suite. Tests run in parallel and call newHarness once each; every harness must
@@ -61,6 +64,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"ListItems_NewestFirstFilteredAndPaged", testListItems},
 		{"StationLoads_CountWaitingAndInProgress", testStationLoads},
 		{"FlowMetrics_DoneLeadTimeReworkWIPAndSpend", testFlowMetrics},
+		{"Attention_CountsWaitingBlockedAndTheOpenAndon", testAttention},
+		{"WaitingHuman_NewestChangeFirstInTheGivenFactories", testWaitingHuman},
 		{"Concurrent_CreateItemNumbersAreUnique", testConcurrentCreate},
 		{"Concurrent_ClaimsNeverShareASlotOrAnItem", testConcurrentClaims},
 		{"Concurrent_RequeueOrTransitionWinsNeverBoth", testRequeueRace},

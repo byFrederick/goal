@@ -114,6 +114,16 @@ type Store interface {
 	// FlowMetrics measures a factory's flow: items done and spend in [since, until), and the
 	// work in the line now.
 	FlowMetrics(ctx context.Context, factory domain.FactoryID, since, until time.Time) (domain.FlowMetrics, error)
+
+	// Attention returns, for every factory of the organization, the items waiting for a person
+	// (with their split by work type), the blocked items and the open andon pull, ordered by
+	// factory id. Factories with nothing pending are included with zeros.
+	Attention(ctx context.Context) ([]domain.Attention, error)
+
+	// WaitingHuman returns up to limit items in state waiting_human in the given factories, most
+	// recently changed first (updated_at descending, then id). Interim: phase 2.2-E (E11)
+	// replaces it with FlowStats.InboxItems.
+	WaitingHuman(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.Item, error)
 }
 
 // Tenancy keeps the install's organizations. Methods marked (org) act on the organization in

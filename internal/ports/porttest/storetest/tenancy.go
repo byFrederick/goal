@@ -3,6 +3,7 @@ package storetest
 import (
 	"errors"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -85,6 +86,12 @@ func testNoOrg(f *fixture) {
 	_, err = f.Store.FlowMetrics(ctx, f.factory, t0, t1)
 	expect(t, "FlowMetrics", err, domain.ErrNoOrg)
 
+	_, err = f.Store.Attention(ctx)
+	expect(t, "Attention", err, domain.ErrNoOrg)
+
+	_, err = f.Store.WaitingHuman(ctx, []domain.FactoryID{f.factory}, 10)
+	expect(t, "WaitingHuman", err, domain.ErrNoOrg)
+
 	if got := f.item(t, it.ID); got.State != domain.StateInProgress || got.OrgID != f.org {
 		t.Errorf("item = %+v; want it unchanged, in progress in org %s", got, f.org)
 	}
@@ -156,6 +163,16 @@ func (f *fixture) seesNoItemsOf(t *testing.T, factory domain.FactoryID) {
 	items, err := f.Store.ListItems(ctx, ports.ItemQuery{FactoryID: factory, Limit: 10})
 	if err != nil || len(items) != 0 {
 		t.Errorf("ListItems = %+v, %v; want nothing", items, err)
+	}
+
+	waitingHuman, err := f.Store.WaitingHuman(ctx, []domain.FactoryID{factory}, 10)
+	if err != nil || len(waitingHuman) != 0 {
+		t.Errorf("WaitingHuman = %+v, %v; want nothing", waitingHuman, err)
+	}
+
+	attention, err := f.Store.Attention(ctx)
+	if err != nil || slices.ContainsFunc(attention, func(a domain.Attention) bool { return a.Factory == factory }) {
+		t.Errorf("Attention = %+v, %v; want nothing of factory %s", attention, err, factory)
 	}
 }
 

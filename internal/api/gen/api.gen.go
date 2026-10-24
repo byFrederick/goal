@@ -39,6 +39,27 @@ func (e ClassOfService) Valid() bool {
 	}
 }
 
+// Defines values for FactoryHealth.
+const (
+	Draft   FactoryHealth = "draft"
+	Running FactoryHealth = "running"
+	Stopped FactoryHealth = "stopped"
+)
+
+// Valid indicates whether the value is a known member of the FactoryHealth enum.
+func (e FactoryHealth) Valid() bool {
+	switch e {
+	case Draft:
+		return true
+	case Running:
+		return true
+	case Stopped:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HealthStatus.
 const (
 	Ok HealthStatus = "ok"
@@ -48,6 +69,21 @@ const (
 func (e HealthStatus) Valid() bool {
 	switch e {
 	case Ok:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InboxEntryKind.
+const (
+	Decision InboxEntryKind = "decision"
+)
+
+// Valid indicates whether the value is a known member of the InboxEntryKind enum.
+func (e InboxEntryKind) Valid() bool {
+	switch e {
+	case Decision:
 		return true
 	default:
 		return false
@@ -141,6 +177,15 @@ func (e StationKind) Valid() bool {
 	}
 }
 
+// AndonPull An open stop of a factory's line
+type AndonPull struct {
+	PulledAt time.Time `json:"pulled_at"`
+
+	// PulledBy Who pulled the cord, as an actor ref: "system:engine" or "user:local"
+	PulledBy string `json:"pulled_by"`
+	Reason   string `json:"reason"`
+}
+
 // Board defines model for Board.
 type Board struct {
 	// Constraint The id of the agent station with the most work per slot now, or null
@@ -177,6 +222,13 @@ type BoardStation struct {
 // ClassOfService defines model for ClassOfService.
 type ClassOfService string
 
+// ConstraintSummary defines model for ConstraintSummary.
+type ConstraintSummary struct {
+	// Busy Share of the window the station was busy (0 to 1); null until it is measured over time
+	Busy    *float64 `json:"busy"`
+	Station string   `json:"station"`
+}
+
 // Event defines model for Event.
 type Event struct {
 	Actor   string                 `json:"actor"`
@@ -210,9 +262,69 @@ type Factory struct {
 	WorkTypes []string  `json:"work_types"`
 }
 
+// FactoryAttention defines model for FactoryAttention.
+type FactoryAttention struct {
+	// Andon The open andon pull, or null while the line runs
+	Andon        *AndonPull `json:"andon"`
+	BlockedItems int        `json:"blocked_items"`
+
+	// ConnectionsBlocked Connections that stop work; always 0 until connections exist
+	ConnectionsBlocked int    `json:"connections_blocked"`
+	FactoryId          string `json:"factory_id"`
+
+	// WaitingOnYou Items waiting for a human decision (every decision; phase 2.2 has no identity)
+	WaitingOnYou int `json:"waiting_on_you"`
+}
+
+// FactoryHealth running; stopped while an andon pull is open; draft when the factory has no published version yet
+type FactoryHealth string
+
 // FactoryList defines model for FactoryList.
 type FactoryList struct {
 	Factories []Factory `json:"factories"`
+}
+
+// FactoryOverview defines model for FactoryOverview.
+type FactoryOverview struct {
+	// Andon The open andon pull, or null while the line runs
+	Andon *AndonPull `json:"andon"`
+
+	// BudgetUsd The factory's runtime.budget.weeklyUsd scaled to the window (× days / 7), or null without one
+	BudgetUsd *float64 `json:"budget_usd"`
+
+	// Constraint The agent station with the most work per slot now, or null when no agent station has any work
+	Constraint *ConstraintSummary `json:"constraint"`
+	Factory    Factory            `json:"factory"`
+
+	// Health running; stopped while an andon pull is open; draft when the factory has no published version yet
+	Health FactoryHealth `json:"health"`
+
+	// SpendUsd Cost of the agent runs started in the window
+	SpendUsd   float64        `json:"spend_usd"`
+	Throughput Throughput     `json:"throughput"`
+	Waiting    WaitingSummary `json:"waiting"`
+}
+
+// FactoryOverviewList defines model for FactoryOverviewList.
+type FactoryOverviewList struct {
+	// BudgetUsd The sum of the factories' budget_usd, or null when none has a budget
+	BudgetUsd *float64          `json:"budget_usd"`
+	Factories []FactoryOverview `json:"factories"`
+
+	// Since The window's first UTC day
+	Since openapi_types.Date `json:"since"`
+
+	// SpendUsd The sum of factories[].spend_usd
+	SpendUsd float64 `json:"spend_usd"`
+
+	// Until The window's last UTC day (today)
+	Until openapi_types.Date `json:"until"`
+
+	// WaitingOnYou The sum of factories[].waiting.on_you
+	WaitingOnYou int `json:"waiting_on_you"`
+
+	// Window The window asked for, as in 7d
+	Window string `json:"window"`
 }
 
 // Health defines model for Health.
@@ -222,6 +334,44 @@ type Health struct {
 
 // HealthStatus defines model for Health.Status.
 type HealthStatus string
+
+// Inbox defines model for Inbox.
+type Inbox struct {
+	// Entries Ordered by kind, then oldest first
+	Entries []InboxEntry `json:"entries"`
+
+	// Truncated More entries exist than limit; the most recent were kept
+	Truncated bool `json:"truncated"`
+}
+
+// InboxEntry defines model for InboxEntry.
+type InboxEntry struct {
+	// Action merge for a decision at a merge station (POST /v1/orgs/{org}/items/{item}/merge), else null
+	Action  *StationAction `json:"action"`
+	Factory struct {
+		Id    string  `json:"id"`
+		Name  string  `json:"name"`
+		Title *string `json:"title"`
+	} `json:"factory"`
+
+	// Id "<kind>:<id of what waits>", as in decision:<item id>
+	Id string `json:"id"`
+
+	// Item The item it is about, or null for an entry that is about no item
+	Item *ItemCard `json:"item"`
+
+	// Kind What waits; later phases add kinds, which clients that do not know them show as a generic row
+	Kind InboxEntryKind `json:"kind"`
+
+	// Since Since when it waits (the item's last change)
+	Since time.Time `json:"since"`
+
+	// Station The station where it waits
+	Station *string `json:"station"`
+}
+
+// InboxEntryKind What waits; later phases add kinds, which clients that do not know them show as a generic row
+type InboxEntryKind string
 
 // Item defines model for Item.
 type Item struct {
@@ -354,6 +504,14 @@ type Org struct {
 	Slug         string    `json:"slug"`
 }
 
+// OrgAttention defines model for OrgAttention.
+type OrgAttention struct {
+	Factories []FactoryAttention `json:"factories"`
+
+	// WaitingOnYou Every decision waiting on a person across the organization (the sum of factories[].waiting_on_you)
+	WaitingOnYou int `json:"waiting_on_you"`
+}
+
 // OrgList defines model for OrgList.
 type OrgList struct {
 	Orgs []OrgSummary `json:"orgs"`
@@ -417,6 +575,39 @@ type StreamEvent struct {
 	Station *string   `json:"station,omitempty"`
 }
 
+// Throughput defines model for Throughput.
+type Throughput struct {
+	// Days Items done per UTC day, one entry for every day of the window, oldest first
+	Days []struct {
+		Day  openapi_types.Date `json:"day"`
+		Done int                `json:"done"`
+	} `json:"days"`
+
+	// PerDay Items done in the window per day
+	PerDay float64 `json:"per_day"`
+
+	// PreviousPerDay The same over the previous window
+	PreviousPerDay float64 `json:"previous_per_day"`
+}
+
+// WaitingSummary defines model for WaitingSummary.
+type WaitingSummary struct {
+	// ItemsByType The items waiting for a decision by work type, by type
+	ItemsByType []struct {
+		Count int    `json:"count"`
+		Type  string `json:"type"`
+	} `json:"items_by_type"`
+
+	// OnYou Every decision waiting on a person, plus tool approvals once connections exist
+	OnYou int `json:"on_you"`
+
+	// ToolApprovals Tool calls waiting for approval by connection; always empty until connections exist
+	ToolApprovals []struct {
+		Connection string `json:"connection"`
+		Count      int    `json:"count"`
+	} `json:"tool_approvals"`
+}
+
 // FactoryRef defines model for FactoryRef.
 type FactoryRef = string
 
@@ -445,11 +636,24 @@ type GetMetricsParams struct {
 	Window *string `form:"window,omitempty" json:"window,omitempty"`
 }
 
+// GetInboxParams defines parameters for GetInbox.
+type GetInboxParams struct {
+	// Factory Only this factory's entries (its metadata.id or metadata.name); unknown is 404
+	Factory *string `form:"factory,omitempty" json:"factory,omitempty"`
+	Limit   *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // ListItemEventsParams defines parameters for ListItemEvents.
 type ListItemEventsParams struct {
 	// After Return events with an id greater than this (0 for the start)
 	After *int64 `form:"after,omitempty" json:"after,omitempty"`
 	Limit *int   `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetFactoryOverviewParams defines parameters for GetFactoryOverview.
+type GetFactoryOverviewParams struct {
+	// Window The last N UTC calendar days, today included, written Nd (1d to 90d), as for metrics. The previous window, which deltas compare against, has the same length and ends where this one starts.
+	Window *string `form:"window,omitempty" json:"window,omitempty"`
 }
 
 // StreamEventsParams defines parameters for StreamEvents.
@@ -577,6 +781,13 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org} (the `GetOrg` operationId).
 	GetOrg(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetOrgAttention What each factory of the organization needs from people now, for the rail's badges
+	//
+	// One cheap read, meant to be refetched on every stream event: per factory, the items waiting for a person, the blocked items and the open andon pull, ordered by factory name. Factories with nothing pending are listed with zeros.
+	//
+	// Corresponds with GET /v1/orgs/{org}/attention (the `GetOrgAttention` operationId).
+	GetOrgAttention(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListFactories The organization's factories goald runs, from the bucket
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories (the `ListFactories` operationId).
@@ -612,6 +823,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics (the `GetMetrics` operationId).
 	GetMetrics(ctx context.Context, org OrgRef, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetInbox What waits for a person across the organization's factories
+	//
+	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. Kind decision is an item waiting for a human decision at a human station; later phases add other kinds, and clients render kinds they do not know as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind, then oldest first.
+	//
+	// Corresponds with GET /v1/orgs/{org}/inbox (the `GetInbox` operationId).
+	GetInbox(ctx context.Context, org OrgRef, params *GetInboxParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetItem One work item
 	//
@@ -664,6 +882,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/retry (the `RetryItem` operationId).
 	RetryItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetFactoryOverview Every factory of the organization summarized for the Factories home, ordered by name
+	//
+	// Corresponds with GET /v1/orgs/{org}/overview (the `GetFactoryOverview` operationId).
+	GetFactoryOverview(ctx context.Context, org OrgRef, params *GetFactoryOverviewParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	//
@@ -746,6 +969,23 @@ func (c *Client) CreateOrg(ctx context.Context, body CreateOrgJSONRequestBody, r
 // Corresponds with GET /v1/orgs/{org} (the `GetOrg` operationId).
 func (c *Client) GetOrg(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetOrgRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetOrgAttention What each factory of the organization needs from people now, for the rail's badges
+//
+// One cheap read, meant to be refetched on every stream event: per factory, the items waiting for a person, the blocked items and the open andon pull, ordered by factory name. Factories with nothing pending are listed with zeros.
+//
+// Corresponds with GET /v1/orgs/{org}/attention (the `GetOrgAttention` operationId).
+func (c *Client) GetOrgAttention(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetOrgAttentionRequest(c.Server, org)
 	if err != nil {
 		return nil, err
 	}
@@ -842,6 +1082,23 @@ func (c *Client) SubmitItem(ctx context.Context, org OrgRef, factory FactoryRef,
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics (the `GetMetrics` operationId).
 func (c *Client) GetMetrics(ctx context.Context, org OrgRef, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetMetricsRequest(c.Server, org, factory, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetInbox What waits for a person across the organization's factories
+//
+// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. Kind decision is an item waiting for a human decision at a human station; later phases add other kinds, and clients render kinds they do not know as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind, then oldest first.
+//
+// Corresponds with GET /v1/orgs/{org}/inbox (the `GetInbox` operationId).
+func (c *Client) GetInbox(ctx context.Context, org OrgRef, params *GetInboxParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetInboxRequest(c.Server, org, params)
 	if err != nil {
 		return nil, err
 	}
@@ -984,6 +1241,21 @@ func (c *Client) RetryItem(ctx context.Context, org OrgRef, item ItemRef, reqEdi
 	return c.Client.Do(req)
 }
 
+// GetFactoryOverview Every factory of the organization summarized for the Factories home, ordered by name
+//
+// Corresponds with GET /v1/orgs/{org}/overview (the `GetFactoryOverview` operationId).
+func (c *Client) GetFactoryOverview(ctx context.Context, org OrgRef, params *GetFactoryOverviewParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetFactoryOverviewRequest(c.Server, org, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // StreamEvents The organization's events as they happen (Server-Sent Events)
 //
 // A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
@@ -1112,6 +1384,40 @@ func NewGetOrgRequest(server string, org OrgRef) (*http.Request, error) {
 	}
 
 	operationPath := fmt.Sprintf("/v1/orgs/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetOrgAttentionRequest constructs an http.Request for the GetOrgAttention method
+func NewGetOrgAttentionRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/attention", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1407,6 +1713,79 @@ func NewGetMetricsRequest(server string, org OrgRef, factory FactoryRef, params 
 		if params.Window != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "window", *params.Window, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetInboxRequest constructs an http.Request for the GetInbox method
+func NewGetInboxRequest(server string, org OrgRef, params *GetInboxParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/inbox", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Factory != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "factory", *params.Factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -1741,6 +2120,67 @@ func NewRetryItemRequest(server string, org OrgRef, item ItemRef) (*http.Request
 	return req, nil
 }
 
+// NewGetFactoryOverviewRequest constructs an http.Request for the GetFactoryOverview method
+func NewGetFactoryOverviewRequest(server string, org OrgRef, params *GetFactoryOverviewParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/overview", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Window != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "window", *params.Window, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewStreamEventsRequest constructs an http.Request for the StreamEvents method
 func NewStreamEventsRequest(server string, org OrgRef, params *StreamEventsParams) (*http.Request, error) {
 	var err error
@@ -1885,6 +2325,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org} (the `GetOrg` operationId).
 	GetOrgWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetOrgResponse, error)
 
+	// GetOrgAttentionWithResponse What each factory of the organization needs from people now, for the rail's badges
+	//
+	// One cheap read, meant to be refetched on every stream event: per factory, the items waiting for a person, the blocked items and the open andon pull, ordered by factory name. Factories with nothing pending are listed with zeros.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/attention (the `GetOrgAttention` operationId).
+	GetOrgAttentionWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetOrgAttentionResponse, error)
+
 	// ListFactoriesWithResponse The organization's factories goald runs, from the bucket
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -1928,6 +2377,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics (the `GetMetrics` operationId).
 	GetMetricsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*GetMetricsResponse, error)
+
+	// GetInboxWithResponse What waits for a person across the organization's factories
+	//
+	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. Kind decision is an item waiting for a human decision at a human station; later phases add other kinds, and clients render kinds they do not know as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind, then oldest first.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/inbox (the `GetInbox` operationId).
+	GetInboxWithResponse(ctx context.Context, org OrgRef, params *GetInboxParams, reqEditors ...RequestEditorFn) (*GetInboxResponse, error)
 
 	// GetItemWithResponse One work item
 	//
@@ -1988,6 +2446,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/retry (the `RetryItem` operationId).
 	RetryItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*RetryItemResponse, error)
+
+	// GetFactoryOverviewWithResponse Every factory of the organization summarized for the Factories home, ordered by name
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/overview (the `GetFactoryOverview` operationId).
+	GetFactoryOverviewWithResponse(ctx context.Context, org OrgRef, params *GetFactoryOverviewParams, reqEditors ...RequestEditorFn) (*GetFactoryOverviewResponse, error)
 
 	// StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
 	//
@@ -2178,6 +2643,54 @@ func (r GetOrgResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetOrgResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetOrgAttentionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *OrgAttention
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetOrgAttentionResponse) GetJSON200() *OrgAttention {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetOrgAttentionResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetOrgAttentionResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetOrgAttentionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetOrgAttentionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetOrgAttentionResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -2418,6 +2931,54 @@ func (r GetMetricsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetMetricsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetInboxResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Inbox
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetInboxResponse) GetJSON200() *Inbox {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetInboxResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetInboxResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetInboxResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetInboxResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetInboxResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -2712,6 +3273,54 @@ func (r RetryItemResponse) ContentType() string {
 	return ""
 }
 
+type GetFactoryOverviewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *FactoryOverviewList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetFactoryOverviewResponse) GetJSON200() *FactoryOverviewList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetFactoryOverviewResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetFactoryOverviewResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetFactoryOverviewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetFactoryOverviewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetFactoryOverviewResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type StreamEventsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -2822,6 +3431,21 @@ func (c *ClientWithResponses) GetOrgWithResponse(ctx context.Context, org OrgRef
 	return ParseGetOrgResponse(rsp)
 }
 
+// GetOrgAttentionWithResponse What each factory of the organization needs from people now, for the rail's badges
+//
+// One cheap read, meant to be refetched on every stream event: per factory, the items waiting for a person, the blocked items and the open andon pull, ordered by factory name. Factories with nothing pending are listed with zeros.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/attention (the `GetOrgAttention` operationId).
+func (c *ClientWithResponses) GetOrgAttentionWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetOrgAttentionResponse, error) {
+	rsp, err := c.GetOrgAttention(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetOrgAttentionResponse(rsp)
+}
+
 // ListFactoriesWithResponse The organization's factories goald runs, from the bucket
 //
 // Returns a wrapper object for the known response body format(s).
@@ -2900,6 +3524,21 @@ func (c *ClientWithResponses) GetMetricsWithResponse(ctx context.Context, org Or
 		return nil, err
 	}
 	return ParseGetMetricsResponse(rsp)
+}
+
+// GetInboxWithResponse What waits for a person across the organization's factories
+//
+// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. Kind decision is an item waiting for a human decision at a human station; later phases add other kinds, and clients render kinds they do not know as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind, then oldest first.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/inbox (the `GetInbox` operationId).
+func (c *ClientWithResponses) GetInboxWithResponse(ctx context.Context, org OrgRef, params *GetInboxParams, reqEditors ...RequestEditorFn) (*GetInboxResponse, error) {
+	rsp, err := c.GetInbox(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetInboxResponse(rsp)
 }
 
 // GetItemWithResponse One work item
@@ -3008,6 +3647,19 @@ func (c *ClientWithResponses) RetryItemWithResponse(ctx context.Context, org Org
 		return nil, err
 	}
 	return ParseRetryItemResponse(rsp)
+}
+
+// GetFactoryOverviewWithResponse Every factory of the organization summarized for the Factories home, ordered by name
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/overview (the `GetFactoryOverview` operationId).
+func (c *ClientWithResponses) GetFactoryOverviewWithResponse(ctx context.Context, org OrgRef, params *GetFactoryOverviewParams, reqEditors ...RequestEditorFn) (*GetFactoryOverviewResponse, error) {
+	rsp, err := c.GetFactoryOverview(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetFactoryOverviewResponse(rsp)
 }
 
 // StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
@@ -3133,6 +3785,39 @@ func ParseGetOrgResponse(rsp *http.Response) (*GetOrgResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Org
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetOrgAttentionResponse parses an HTTP response from a GetOrgAttentionWithResponse call
+func ParseGetOrgAttentionResponse(rsp *http.Response) (*GetOrgAttentionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetOrgAttentionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OrgAttention
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -3298,6 +3983,39 @@ func ParseGetMetricsResponse(rsp *http.Response) (*GetMetricsResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Metrics
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetInboxResponse parses an HTTP response from a GetInboxWithResponse call
+func ParseGetInboxResponse(rsp *http.Response) (*GetInboxResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetInboxResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Inbox
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -3513,6 +4231,39 @@ func ParseRetryItemResponse(rsp *http.Response) (*RetryItemResponse, error) {
 	return response, nil
 }
 
+// ParseGetFactoryOverviewResponse parses an HTTP response from a GetFactoryOverviewWithResponse call
+func ParseGetFactoryOverviewResponse(rsp *http.Response) (*GetFactoryOverviewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetFactoryOverviewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest FactoryOverviewList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseStreamEventsResponse parses an HTTP response from a StreamEventsWithResponse call
 func ParseStreamEventsResponse(rsp *http.Response) (*StreamEventsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -3553,6 +4304,9 @@ type ServerInterface interface {
 	// GetOrg One organization
 	// (GET /v1/orgs/{org})
 	GetOrg(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// GetOrgAttention What each factory of the organization needs from people now, for the rail's badges
+	// (GET /v1/orgs/{org}/attention)
+	GetOrgAttention(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// ListFactories The organization's factories goald runs, from the bucket
 	// (GET /v1/orgs/{org}/factories)
 	ListFactories(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -3568,6 +4322,9 @@ type ServerInterface interface {
 	// GetMetrics The factory's flow over the last days
 	// (GET /v1/orgs/{org}/factories/{factory}/metrics)
 	GetMetrics(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetMetricsParams)
+	// GetInbox What waits for a person across the organization's factories
+	// (GET /v1/orgs/{org}/inbox)
+	GetInbox(w http.ResponseWriter, r *http.Request, org OrgRef, params GetInboxParams)
 	// GetItem One work item
 	// (GET /v1/orgs/{org}/items/{item})
 	GetItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
@@ -3586,6 +4343,9 @@ type ServerInterface interface {
 	// RetryItem Send a blocked item back to its station's queue (409 if it is not blocked)
 	// (POST /v1/orgs/{org}/items/{item}/retry)
 	RetryItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// GetFactoryOverview Every factory of the organization summarized for the Factories home, ordered by name
+	// (GET /v1/orgs/{org}/overview)
+	GetFactoryOverview(w http.ResponseWriter, r *http.Request, org OrgRef, params GetFactoryOverviewParams)
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	// (GET /v1/orgs/{org}/stream)
 	StreamEvents(w http.ResponseWriter, r *http.Request, org OrgRef, params StreamEventsParams)
@@ -3659,6 +4419,32 @@ func (siw *ServerInterfaceWrapper) GetOrg(w http.ResponseWriter, r *http.Request
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetOrg(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOrgAttention operation middleware
+func (siw *ServerInterfaceWrapper) GetOrgAttention(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOrgAttention(w, r, org)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3896,6 +4682,61 @@ func (siw *ServerInterfaceWrapper) GetMetrics(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMetrics(w, r, org, factory, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetInbox operation middleware
+func (siw *ServerInterfaceWrapper) GetInbox(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetInboxParams
+
+	// ------------- Optional query parameter "factory" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "factory", r.URL.Query(), &params.Factory, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "factory"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetInbox(w, r, org, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4144,6 +4985,48 @@ func (siw *ServerInterfaceWrapper) RetryItem(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// GetFactoryOverview operation middleware
+func (siw *ServerInterfaceWrapper) GetFactoryOverview(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetFactoryOverviewParams
+
+	// ------------- Optional query parameter "window" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "window", r.URL.Query(), &params.Window, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "window"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "window", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFactoryOverview(w, r, org, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // StreamEvents operation middleware
 func (siw *ServerInterfaceWrapper) StreamEvents(w http.ResponseWriter, r *http.Request) {
 
@@ -4310,6 +5193,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs", wrapper.ListOrgs)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs", wrapper.CreateOrg)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}", wrapper.GetOrg)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/attention", wrapper.GetOrgAttention)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/overview", wrapper.GetFactoryOverview)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/inbox", wrapper.GetInbox)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories", wrapper.ListFactories)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/items", wrapper.ListItems)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/items", wrapper.SubmitItem)
@@ -4454,6 +5340,45 @@ type GetOrgdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetOrgdefaultApplicationProblemPlusJSONResponse) VisitGetOrgResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOrgAttentionRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type GetOrgAttentionResponseObject interface {
+	VisitGetOrgAttentionResponse(w http.ResponseWriter) error
+}
+
+type GetOrgAttention200JSONResponse OrgAttention
+
+func (response GetOrgAttention200JSONResponse) VisitGetOrgAttentionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOrgAttentiondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetOrgAttentiondefaultApplicationProblemPlusJSONResponse) VisitGetOrgAttentionResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -4656,6 +5581,46 @@ type GetMetricsdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetMetricsdefaultApplicationProblemPlusJSONResponse) VisitGetMetricsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInboxRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params GetInboxParams
+}
+
+type GetInboxResponseObject interface {
+	VisitGetInboxResponse(w http.ResponseWriter) error
+}
+
+type GetInbox200JSONResponse Inbox
+
+func (response GetInbox200JSONResponse) VisitGetInboxResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInboxdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetInboxdefaultApplicationProblemPlusJSONResponse) VisitGetInboxResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -4910,6 +5875,46 @@ func (response RetryItemdefaultApplicationProblemPlusJSONResponse) VisitRetryIte
 	return err
 }
 
+type GetFactoryOverviewRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params GetFactoryOverviewParams
+}
+
+type GetFactoryOverviewResponseObject interface {
+	VisitGetFactoryOverviewResponse(w http.ResponseWriter) error
+}
+
+type GetFactoryOverview200JSONResponse FactoryOverviewList
+
+func (response GetFactoryOverview200JSONResponse) VisitGetFactoryOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFactoryOverviewdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetFactoryOverviewdefaultApplicationProblemPlusJSONResponse) VisitGetFactoryOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type StreamEventsRequestObject struct {
 	Org    OrgRef `json:"org"`
 	Params StreamEventsParams
@@ -4993,6 +5998,9 @@ type StrictServerInterface interface {
 	// GetOrg One organization
 	// (GET /v1/orgs/{org})
 	GetOrg(ctx context.Context, request GetOrgRequestObject) (GetOrgResponseObject, error)
+	// GetOrgAttention What each factory of the organization needs from people now, for the rail's badges
+	// (GET /v1/orgs/{org}/attention)
+	GetOrgAttention(ctx context.Context, request GetOrgAttentionRequestObject) (GetOrgAttentionResponseObject, error)
 	// ListFactories The organization's factories goald runs, from the bucket
 	// (GET /v1/orgs/{org}/factories)
 	ListFactories(ctx context.Context, request ListFactoriesRequestObject) (ListFactoriesResponseObject, error)
@@ -5008,6 +6016,9 @@ type StrictServerInterface interface {
 	// GetMetrics The factory's flow over the last days
 	// (GET /v1/orgs/{org}/factories/{factory}/metrics)
 	GetMetrics(ctx context.Context, request GetMetricsRequestObject) (GetMetricsResponseObject, error)
+	// GetInbox What waits for a person across the organization's factories
+	// (GET /v1/orgs/{org}/inbox)
+	GetInbox(ctx context.Context, request GetInboxRequestObject) (GetInboxResponseObject, error)
 	// GetItem One work item
 	// (GET /v1/orgs/{org}/items/{item})
 	GetItem(ctx context.Context, request GetItemRequestObject) (GetItemResponseObject, error)
@@ -5026,6 +6037,9 @@ type StrictServerInterface interface {
 	// RetryItem Send a blocked item back to its station's queue (409 if it is not blocked)
 	// (POST /v1/orgs/{org}/items/{item}/retry)
 	RetryItem(ctx context.Context, request RetryItemRequestObject) (RetryItemResponseObject, error)
+	// GetFactoryOverview Every factory of the organization summarized for the Factories home, ordered by name
+	// (GET /v1/orgs/{org}/overview)
+	GetFactoryOverview(ctx context.Context, request GetFactoryOverviewRequestObject) (GetFactoryOverviewResponseObject, error)
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	// (GET /v1/orgs/{org}/stream)
 	StreamEvents(ctx context.Context, request StreamEventsRequestObject) (StreamEventsResponseObject, error)
@@ -5175,6 +6189,32 @@ func (sh *strictHandler) GetOrg(w http.ResponseWriter, r *http.Request, org OrgR
 	}
 }
 
+// GetOrgAttention operation middleware
+func (sh *strictHandler) GetOrgAttention(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request GetOrgAttentionRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetOrgAttention(ctx, request.(GetOrgAttentionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetOrgAttention")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetOrgAttentionResponseObject); ok {
+		if err := validResponse.VisitGetOrgAttentionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListFactories operation middleware
 func (sh *strictHandler) ListFactories(w http.ResponseWriter, r *http.Request, org OrgRef) {
 	var request ListFactoriesRequestObject
@@ -5311,6 +6351,33 @@ func (sh *strictHandler) GetMetrics(w http.ResponseWriter, r *http.Request, org 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetMetricsResponseObject); ok {
 		if err := validResponse.VisitGetMetricsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetInbox operation middleware
+func (sh *strictHandler) GetInbox(w http.ResponseWriter, r *http.Request, org OrgRef, params GetInboxParams) {
+	var request GetInboxRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetInbox(ctx, request.(GetInboxRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetInbox")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetInboxResponseObject); ok {
+		if err := validResponse.VisitGetInboxResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -5491,6 +6558,33 @@ func (sh *strictHandler) RetryItem(w http.ResponseWriter, r *http.Request, org O
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RetryItemResponseObject); ok {
 		if err := validResponse.VisitRetryItemResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetFactoryOverview operation middleware
+func (sh *strictHandler) GetFactoryOverview(w http.ResponseWriter, r *http.Request, org OrgRef, params GetFactoryOverviewParams) {
+	var request GetFactoryOverviewRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetFactoryOverview(ctx, request.(GetFactoryOverviewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetFactoryOverview")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetFactoryOverviewResponseObject); ok {
+		if err := validResponse.VisitGetFactoryOverviewResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

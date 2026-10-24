@@ -47,7 +47,7 @@ spec:
 `
 
 // line is inbox → build (agents, routed by lane) → merge (human, action merge) → done, on a
-// repository: enough for boards, metrics, retries and merges. Tests seed its items straight
+// repository with a weekly budget: enough for boards, metrics, overviews, retries and merges. Tests seed its items straight
 // into the store.
 const line = `apiVersion: goal/v1
 kind: Factory
@@ -58,6 +58,7 @@ spec:
     image: ghcr.io/acme/agent:1.0.0
     auth: anthropic-api-key
     repository: { url: "https://github.com/acme/app.git", token: env:REPO_TOKEN }
+    budget: { weeklyUsd: 70 }
   knowledgeBase: { collections: [notes] }
   agents:
     - { name: backend, prompt: ./agents/backend.md }
@@ -178,6 +179,16 @@ func (r reads) ListItems(ctx context.Context, q ports.ItemQuery) ([]domain.Item,
 func (r reads) StationLoads(ctx context.Context, f domain.FactoryID) ([]domain.StationLoad, error) {
 	r.seam.record("StationLoads")
 	return r.Store.StationLoads(ctx, f)
+}
+
+func (r reads) Attention(ctx context.Context) ([]domain.Attention, error) {
+	r.seam.record("Attention")
+	return r.Store.Attention(ctx)
+}
+
+func (r reads) WaitingHuman(ctx context.Context, fs []domain.FactoryID, limit int) ([]domain.Item, error) {
+	r.seam.record("WaitingHuman")
+	return r.Store.WaitingHuman(ctx, fs, limit)
 }
 
 func (r reads) FlowMetrics(ctx context.Context, f domain.FactoryID, since, until time.Time) (domain.FlowMetrics, error) {

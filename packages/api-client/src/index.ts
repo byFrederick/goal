@@ -43,6 +43,15 @@ export type BoardStation = Schemas["BoardStation"];
 export type Metrics = Schemas["Metrics"];
 export type ItemEvent = Schemas["Event"];
 export type EventPage = Schemas["EventPage"];
+export type AndonPull = Schemas["AndonPull"];
+export type OrgAttention = Schemas["OrgAttention"];
+export type FactoryAttention = Schemas["FactoryAttention"];
+export type FactoryOverviewList = Schemas["FactoryOverviewList"];
+export type FactoryOverview = Schemas["FactoryOverview"];
+export type FactoryHealth = Schemas["FactoryHealth"];
+export type Inbox = Schemas["Inbox"];
+export type InboxEntry = Schemas["InboxEntry"];
+export type InboxEntryKind = Schemas["InboxEntryKind"];
 
 /** createGoalClient returns a typed fetch client for goald at baseUrl ("" for the same origin). */
 export function createGoalClient(baseUrl: string, options: Omit<ClientOptions, "baseUrl"> = {}) {

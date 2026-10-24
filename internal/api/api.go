@@ -53,8 +53,8 @@ type Engine interface {
 	Merge(ctx context.Context, id domain.ItemID, by domain.Actor, method string) (domain.Item, error)
 }
 
-// Items reads items, their history, the leases on them and a factory's flow; ports.Store
-// satisfies it.
+// Items reads items, their history, the leases on them, a factory's flow and what the
+// organization's factories need from people; ports.Store satisfies it.
 type Items interface {
 	Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
 	ItemByNumber(ctx context.Context, factory domain.FactoryID, number int64) (domain.Item, error)
@@ -63,6 +63,8 @@ type Items interface {
 	Leases(ctx context.Context, factory domain.FactoryID, station string) ([]domain.Lease, error)
 	StationLoads(ctx context.Context, factory domain.FactoryID) ([]domain.StationLoad, error)
 	FlowMetrics(ctx context.Context, factory domain.FactoryID, since, until time.Time) (domain.FlowMetrics, error)
+	Attention(ctx context.Context) ([]domain.Attention, error)
+	WaitingHuman(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.Item, error)
 }
 
 // Factories are the definitions goald runs; *definitions.Cache satisfies it.
@@ -84,6 +86,9 @@ type Deps struct {
 	Authorizer Authorizer
 	// Feed serves /v1/orgs/{org}/stream; the caller runs it (Feed.Run).
 	Feed *Feed
+	// InboxSources add entries to /v1/orgs/{org}/inbox after the built-in decisions (shell.go);
+	// later phases register theirs here.
+	InboxSources []InboxSource
 	// Clock dates ages and metric windows and paces stream heartbeats.
 	Clock  ports.Clock
 	Logger *slog.Logger
@@ -115,6 +120,7 @@ func New(d Deps) (http.Handler, error) {
 		engine: d.Engine, items: d.Items, factories: d.Factories, orgs: d.Orgs, authz: d.Authorizer, feed: d.Feed,
 		clock: d.Clock, log: log,
 	}
+	s.inbox = append([]InboxSource{decisions{s: s}}, d.InboxSources...)
 
 	strict := gen.NewStrictHandlerWithOptions(s, []gen.StrictMiddlewareFunc{s.scope}, gen.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
@@ -158,6 +164,7 @@ type server struct {
 	orgs      Orgs
 	authz     Authorizer
 	feed      *Feed
+	inbox     []InboxSource
 	clock     ports.Clock
 	log       *slog.Logger
 }

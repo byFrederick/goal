@@ -181,3 +181,88 @@ func percentile(sorted []float64, p float64) time.Duration {
 
 	return time.Duration(math.Round(v * float64(time.Second)))
 }
+
+// Attention implements ports.Store.
+func (s *Store) Attention(ctx context.Context) ([]domain.Attention, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := []domain.Attention{}
+
+	for _, id := range slices.Sorted(maps.Keys(s.factories)) {
+		if s.factories[id] == org {
+			out = append(out, s.attention(org, id))
+		}
+	}
+
+	return out, nil
+}
+
+// attention counts one factory's decisions, blocked items and open andon pull. Callers hold s.mu.
+func (s *Store) attention(org domain.OrgID, factory domain.FactoryID) domain.Attention {
+	a := domain.Attention{Factory: factory}
+	byType := map[string]int{}
+
+	for _, it := range s.items {
+		if it.OrgID != org || it.FactoryID != factory {
+			continue
+		}
+
+		if it.State == domain.StateWaitingHuman {
+			a.WaitingHuman++
+			byType[it.Type]++
+		}
+
+		if it.State == domain.StateBlocked {
+			a.Blocked++
+		}
+	}
+
+	for _, typ := range slices.Sorted(maps.Keys(byType)) {
+		a.WaitingByType = append(a.WaitingByType, domain.TypeCount{Type: typ, Count: byType[typ]})
+	}
+
+	for _, r := range s.andon {
+		if r.org == org && r.factory == factory && !r.cleared {
+			p := r.pull
+			a.Andon = &p
+		}
+	}
+
+	return a
+}
+
+// WaitingHuman implements ports.Store.
+func (s *Store) WaitingHuman(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.Item, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var match []*domain.Item
+
+	for _, it := range s.items {
+		if it.OrgID == org && it.State == domain.StateWaitingHuman && slices.Contains(factories, it.FactoryID) {
+			match = append(match, it)
+		}
+	}
+
+	slices.SortFunc(match, func(a, b *domain.Item) int {
+		return cmp.Or(b.UpdatedAt.Compare(a.UpdatedAt), cmp.Compare(a.ID, b.ID))
+	})
+
+	out := make([]domain.Item, 0, min(limit, len(match)))
+	for _, it := range match[:min(limit, len(match))] {
+		out = append(out, clone(it))
+	}
+
+	return out, nil
+}

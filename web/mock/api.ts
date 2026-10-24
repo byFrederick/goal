@@ -1,11 +1,28 @@
 // An in-memory stand-in for goald's /v1 API, typed with the contract's shapes from
 // @goal/api-client, mounted into the Vite dev and preview servers when GOAL_API=mock
 // (mock/plugin.ts). Like goald it serves /v1/orgs and every other route under
-// /v1/orgs/{org} (slug or id; unknown is 404), keeps state per process and broadcasts each
-// organization's item events on its /v1/orgs/{org}/stream. Decisions are the local user's.
+// /v1/orgs/{org} (slug or id; unknown is 404), among them the shell's attention, overview and
+// inbox, keeps state per process and broadcasts each organization's item events on its
+// /v1/orgs/{org}/stream. Decisions are the local user's: every decision waits on you.
 // POST /__mock/reset restores the seed.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { Board, BoardStation, Item, ItemCard, ItemEvent, ItemPage, Org, StreamEvent } from '@goal/api-client';
+import type {
+  Board,
+  BoardStation,
+  Factory,
+  FactoryAttention,
+  FactoryOverview,
+  FactoryOverviewList,
+  Inbox,
+  InboxEntry,
+  Item,
+  ItemCard,
+  ItemEvent,
+  ItemPage,
+  Org,
+  OrgAttention,
+  StreamEvent,
+} from '@goal/api-client';
 import { type MockItem, type MockState, seed } from './fixtures.ts';
 
 type Next = (err?: unknown) => void;
@@ -22,6 +39,15 @@ const localUser = 'Local user';
 /** The slug rule and reserved words of POST /v1/orgs. */
 const slugRule = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
 const reserved = ['new', 'settings', 'api', 'v1', 'o', 'me', 'orgs', 'auth', 'invite', 'admin', 'default'];
+
+/** The metrics window parameter: the last N UTC days, today included (1d to 90d). */
+const windowRule = /^([1-9][0-9]?)d$/;
+const dayMs = 86_400_000;
+
+/** The UTC date `offset` days before today. */
+const utcDay = (offset: number) => new Date(Date.now() - offset * dayMs).toISOString().slice(0, 10);
+
+const cents = (usd: number) => Math.round(usd * 100) / 100;
 
 export interface MockApi {
   handle: (req: IncomingMessage, res: ServerResponse, next: Next) => void;
@@ -138,6 +164,62 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
 
   const stationsOf = (it: MockItem) => findFactory(it.factory)?.stations ?? [];
 
+  /** The organization's factories by name, as goald lists them. */
+  const factoriesOf = (org: string) =>
+    state.factories.filter((f) => f.org_id === org).sort((a, b) => a.name.localeCompare(b.name));
+
+  const inState = (f: Factory, st: string) => state.items.filter((it) => it.factory === f.name && it.state === st);
+
+  const attentionOf = (f: Factory): FactoryAttention => ({
+    factory_id: f.id,
+    waiting_on_you: inState(f, 'waiting_human').length,
+    blocked_items: inState(f, 'blocked').length,
+    andon: state.andon[f.name] ?? null,
+    connections_blocked: 0,
+  });
+
+  const overviewOf = (f: Factory, days: number): FactoryOverview => {
+    const metrics = state.metrics[f.name];
+    const done = new Map((metrics?.throughput ?? []).map((d) => [d.day, d.done]));
+    const throughput = Array.from({ length: days }, (_, i) => {
+      const day = utcDay(days - 1 - i);
+      return { day, done: done.get(day) ?? 0 };
+    });
+    const waiting = inState(f, 'waiting_human');
+    const types = [...new Set(waiting.map((it) => it.type))].sort();
+    const andon = state.andon[f.name] ?? null;
+    const constraint = state.constraint[f.name] ?? null;
+    const weekly = state.weeklyBudget[f.name] ?? null;
+    return {
+      factory: f,
+      health: andon ? 'stopped' : 'running',
+      andon,
+      throughput: {
+        per_day: throughput.reduce((n, d) => n + d.done, 0) / days,
+        previous_per_day: state.previousPerDay[f.name] ?? 0,
+        days: throughput,
+      },
+      constraint: constraint ? { station: constraint, busy: null } : null,
+      waiting: {
+        on_you: waiting.length,
+        items_by_type: types.map((type) => ({ type, count: waiting.filter((it) => it.type === type).length })),
+        tool_approvals: [],
+      },
+      spend_usd: cents(((metrics?.spend_usd ?? 0) * days) / 7),
+      budget_usd: weekly === null ? null : cents((weekly * days) / 7),
+    };
+  };
+
+  const decision = (it: MockItem, f: Factory): InboxEntry => ({
+    id: `decision:${it.id}`,
+    kind: 'decision',
+    factory: { id: f.id, name: f.name, title: f.title ?? null },
+    since: it.updated_at,
+    item: card(it),
+    station: it.station,
+    action: f.stations.find((s) => s.id === it.station)?.action ?? null,
+  });
+
   const board = (name: string): Board | undefined => {
     const factory = findFactory(name);
     if (!factory) return undefined;
@@ -215,6 +297,46 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (rest === '' && method === 'GET') return json(res, 200, withCount(org));
     if (rest === '/factories') {
       return json(res, 200, { factories: state.factories.filter((f) => f.org_id === org.id) });
+    }
+
+    if (rest === '/attention' && method === 'GET') {
+      const factories = factoriesOf(org.id).map(attentionOf);
+      const body: OrgAttention = { waiting_on_you: factories.reduce((n, a) => n + a.waiting_on_you, 0), factories };
+      return json(res, 200, body);
+    }
+
+    if (rest === '/overview' && method === 'GET') {
+      const window = url.searchParams.get('window') ?? '7d';
+      const days = Number(windowRule.exec(window)?.[1] ?? 0);
+      if (days < 1 || days > 90) return problem(res, 400, 'Bad Request', `window "${window}" is not 1d to 90d`);
+      const factories = factoriesOf(org.id).map((f) => overviewOf(f, days));
+      const budgets = factories.flatMap((o) => (o.budget_usd === null ? [] : [o.budget_usd]));
+      const body: FactoryOverviewList = {
+        window,
+        since: utcDay(days - 1),
+        until: utcDay(0),
+        waiting_on_you: factories.reduce((n, o) => n + o.waiting.on_you, 0),
+        spend_usd: cents(factories.reduce((n, o) => n + o.spend_usd, 0)),
+        budget_usd: budgets.length > 0 ? cents(budgets.reduce((n, b) => n + b, 0)) : null,
+        factories,
+      };
+      return json(res, 200, body);
+    }
+
+    if (rest === '/inbox' && method === 'GET') {
+      const limit = Number(url.searchParams.get('limit') ?? 20);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+        return problem(res, 400, 'Bad Request', 'limit must be in [1, 500]');
+      }
+      const key = url.searchParams.get('factory') ?? '';
+      const only = key ? findFactory(key, org.id) : undefined;
+      if (key && !only) return problem(res, 404, 'Factory not found', key);
+      const entries = (only ? [only] : factoriesOf(org.id))
+        .flatMap((f) => inState(f, 'waiting_human').map((it) => decision(it, f)))
+        .sort((a, b) => b.since.localeCompare(a.since));
+      // The most recent entries, oldest first, as goald orders them.
+      const body: Inbox = { entries: entries.slice(0, limit).reverse(), truncated: entries.length > limit };
+      return json(res, 200, body);
     }
 
     if (rest === '/stream') {

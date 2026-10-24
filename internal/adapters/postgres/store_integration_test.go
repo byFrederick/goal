@@ -56,6 +56,11 @@ func TestStore_Conformance(t *testing.T) {
 					t.Fatalf("UpdateOrg slot caps: %v", err)
 				}
 			},
+			RecordAndon: func(t *testing.T, org domain.OrgID, f domain.FactoryID, p domain.AndonPull, cleared bool) {
+				t.Helper()
+
+				s.recordAndon(domain.WithOrg(t.Context(), org), t, f, p, cleared)
+			},
 		}
 	})
 }
@@ -291,6 +296,33 @@ func saveFactory(ctx context.Context, t *testing.T, s *Store) domain.FactoryID {
 	}
 
 	return domain.FactoryID(id)
+}
+
+// recordAndon inserts an andon pull straight into andon_pulls in the organization of ctx, as
+// goal_app under row-level security; the port pulls none itself until phase 2.2-E.
+func (s *Store) recordAndon(ctx context.Context, t *testing.T, f domain.FactoryID, p domain.AndonPull, cleared bool) {
+	t.Helper()
+
+	org, _ := domain.OrgFrom(ctx)
+
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, "SELECT set_config('goal.org_id', $1, true)", string(org)); err != nil {
+			return err
+		}
+
+		var clearedAt *time.Time
+		if cleared {
+			clearedAt = &p.PulledAt
+		}
+
+		_, err := tx.Exec(ctx, "INSERT INTO andon_pulls (factory_id, reason, pulled_by, pulled_at, cleared_at) VALUES ($1, $2, $3, $4, $5)",
+			string(f), p.Reason, p.PulledBy, p.PulledAt, clearedAt)
+
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 // runs reads an item's runs straight from agent_runs in the organization of ctx; the port has

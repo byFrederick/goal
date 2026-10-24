@@ -241,3 +241,115 @@ func (f *fixture) finish(t *testing.T, it domain.Item, doneAt time.Time, rework 
 		t.Fatal(err)
 	}
 }
+
+func testAttention(f *fixture) {
+	t := f.t
+
+	busy, idle := f.newFactory(t), f.newFactory(t)
+
+	// The fixture's factory: three decisions of two types, one blocked item, an open andon pull,
+	// and items in other states, which count for nothing.
+	f.create(t, domain.NewItem{State: domain.StateWaitingHuman, Type: "fix"})
+	f.create(t, domain.NewItem{State: domain.StateWaitingHuman, Type: "change"})
+	f.create(t, domain.NewItem{State: domain.StateWaitingHuman, Type: "fix"})
+	f.create(t, domain.NewItem{State: domain.StateBlocked})
+	f.create(t, domain.NewItem{State: domain.StateInProgress})
+	f.create(t, domain.NewItem{})
+	f.finish(t, f.create(t, domain.NewItem{State: domain.StateWaitingHuman}), t1, false)
+
+	pull := domain.AndonPull{Reason: "rework rate over 40%", PulledBy: "user:local", PulledAt: t1}
+	f.RecordAndon(t, f.org, f.factory, pull, false)
+
+	// busy: one blocked item and only a cleared pull; idle: nothing at all.
+	f.create(t, domain.NewItem{FactoryID: busy, State: domain.StateBlocked})
+	f.RecordAndon(t, f.org, busy, domain.AndonPull{Reason: "cleared", PulledBy: "system:engine", PulledAt: t0}, true)
+
+	// Another organization's factory with work and an open pull is never counted.
+	other := f.otherOrg(t)
+	other.create(t, domain.NewItem{State: domain.StateWaitingHuman})
+	f.RecordAndon(t, other.org, other.factory, pull, false)
+
+	got, err := f.Store.Attention(f.ctx(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.IsSortedFunc(got, func(a, b domain.Attention) int { return cmp.Compare(a.Factory, b.Factory) }) {
+		t.Errorf("Attention = %+v; want it ordered by factory id", got)
+	}
+
+	want := map[domain.FactoryID]domain.Attention{
+		f.factory: {
+			Factory: f.factory, WaitingHuman: 3, Blocked: 1, Andon: &pull,
+			WaitingByType: []domain.TypeCount{{Type: "change", Count: 1}, {Type: "fix", Count: 2}},
+		},
+		busy: {Factory: busy, Blocked: 1},
+		idle: {Factory: idle},
+	}
+
+	if len(got) != len(want) {
+		t.Fatalf("Attention = %+v; want one entry for each of the org's %d factories", got, len(want))
+	}
+
+	for _, a := range got {
+		w := want[a.Factory]
+		if !reflect.DeepEqual(a, w) {
+			t.Errorf("Attention of %s = %+v (andon %+v); want %+v (andon %+v)", a.Factory, a, a.Andon, w, w.Andon)
+		}
+	}
+}
+
+func testWaitingHuman(f *fixture) {
+	t := f.t
+
+	const secondTitle = "in the second factory"
+
+	at := func(n int) time.Time { return t0.Add(time.Duration(n) * time.Minute) }
+	second, third := f.newFactory(t), f.newFactory(t)
+
+	f.create(t, domain.NewItem{Title: "oldest", State: domain.StateWaitingHuman, CreatedAt: at(0)})
+	f.create(t, domain.NewItem{Title: "tie-a", State: domain.StateWaitingHuman, CreatedAt: at(1)})
+	f.create(t, domain.NewItem{Title: "tie-b", State: domain.StateWaitingHuman, CreatedAt: at(1)})
+	f.create(t, domain.NewItem{FactoryID: second, Title: secondTitle, State: domain.StateWaitingHuman, CreatedAt: at(2)})
+	// Not waiting for a person, or not in the factories asked for.
+	f.create(t, domain.NewItem{Title: "queued", CreatedAt: at(9)})
+	f.create(t, domain.NewItem{Title: "blocked", State: domain.StateBlocked, CreatedAt: at(9)})
+	f.create(t, domain.NewItem{FactoryID: third, Title: "third", State: domain.StateWaitingHuman, CreatedAt: at(9)})
+
+	// A decision that changed last comes first, though it was created first.
+	moved := f.create(t, domain.NewItem{Title: "moved", State: domain.StateWaitingHuman, CreatedAt: at(0)})
+	if _, err := f.Store.Transition(f.ctx(t), ports.Transition{
+		ItemID: moved.ID, From: moved.Position(), To: domain.Position{Station: stNext, State: domain.StateWaitingHuman}, At: at(5),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Another organization's decision is unreachable even when its factory is asked for.
+	other := f.otherOrg(t)
+	other.create(t, domain.NewItem{Title: "other org", State: domain.StateWaitingHuman, CreatedAt: at(9)})
+
+	factories := []domain.FactoryID{f.factory, second, other.factory}
+
+	tests := []struct {
+		name      string
+		factories []domain.FactoryID
+		limit     int
+		want      []string
+	}{
+		{name: "newest change first, ties by id", factories: factories, limit: 10, want: []string{"moved", secondTitle, "tie-a", "tie-b", "oldest"}},
+		{name: "up to limit", factories: factories, limit: 2, want: []string{"moved", secondTitle}},
+		{name: "one factory", factories: []domain.FactoryID{second}, limit: 10, want: []string{secondTitle}},
+		{name: "no factories", factories: nil, limit: 10, want: []string{}},
+	}
+
+	for _, tt := range tests {
+		got, err := f.Store.WaitingHuman(f.ctx(t), tt.factories, tt.limit)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if titles := titlesOf(got); !reflect.DeepEqual(titles, tt.want) {
+			t.Errorf("%s: WaitingHuman = %v; want %v", tt.name, titles, tt.want)
+		}
+	}
+}

@@ -3,12 +3,20 @@
 import type { ItemPage, MergeRequest } from '@goal/api-client';
 
 export type {
+  AndonPull,
   Board,
   BoardStation,
   ClassOfService,
   EventPage,
   Factory,
+  FactoryAttention,
+  FactoryHealth,
   FactoryList,
+  FactoryOverview,
+  FactoryOverviewList,
+  Inbox,
+  InboxEntry,
+  InboxEntryKind,
   Item,
   ItemCard,
   ItemEvent,
@@ -17,6 +25,7 @@ export type {
   NewItem,
   NewOrg,
   Org,
+  OrgAttention,
   OrgSummary,
   Problem,
   Station,

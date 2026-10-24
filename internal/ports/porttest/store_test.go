@@ -34,6 +34,9 @@ func TestStore_Conformance(t *testing.T) {
 			SetSlotCaps: func(_ *testing.T, org domain.OrgID, maxSlots int, factories map[domain.FactoryID]int) {
 				s.SetSlotCaps(org, maxSlots, factories)
 			},
+			RecordAndon: func(_ *testing.T, org domain.OrgID, f domain.FactoryID, p domain.AndonPull, cleared bool) {
+				s.RecordAndon(org, f, p, cleared)
+			},
 		}
 	})
 }

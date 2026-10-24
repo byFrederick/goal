@@ -62,6 +62,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * What each factory of the organization needs from people now, for the rail's badges
+         * @description One cheap read, meant to be refetched on every stream event: per factory, the items waiting for a person, the blocked items and the open andon pull, ordered by factory name. Factories with nothing pending are listed with zeros.
+         */
+        get: operations["getOrgAttention"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /** Every factory of the organization summarized for the Factories home, ordered by name */
+        get: operations["getFactoryOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * What waits for a person across the organization's factories
+         * @description The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. Kind decision is an item waiting for a human decision at a human station; later phases add other kinds, and clients render kinds they do not know as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind, then oldest first.
+         */
+        get: operations["getInbox"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories": {
         parameters: {
             query?: never;
@@ -568,6 +634,153 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** @description An open stop of a factory's line */
+        AndonPull: {
+            reason: string;
+            /** @description Who pulled the cord, as an actor ref: "system:engine" or "user:local" */
+            pulled_by: string;
+            /** Format: date-time */
+            pulled_at: string;
+        };
+        OrgAttention: {
+            /** @description Every decision waiting on a person across the organization (the sum of factories[].waiting_on_you) */
+            waiting_on_you: number;
+            factories: components["schemas"]["FactoryAttention"][];
+        };
+        FactoryAttention: {
+            factory_id: string;
+            /** @description Items waiting for a human decision (every decision; phase 2.2 has no identity) */
+            waiting_on_you: number;
+            blocked_items: number;
+            /** @description The open andon pull, or null while the line runs */
+            andon: components["schemas"]["AndonPull"] | null;
+            /** @description Connections that stop work; always 0 until connections exist */
+            connections_blocked: number;
+        };
+        FactoryOverviewList: {
+            /** @description The window asked for, as in 7d */
+            window: string;
+            /**
+             * Format: date
+             * @description The window's first UTC day
+             */
+            since: string;
+            /**
+             * Format: date
+             * @description The window's last UTC day (today)
+             */
+            until: string;
+            /** @description The sum of factories[].waiting.on_you */
+            waiting_on_you: number;
+            /**
+             * Format: double
+             * @description The sum of factories[].spend_usd
+             */
+            spend_usd: number;
+            /**
+             * Format: double
+             * @description The sum of the factories' budget_usd, or null when none has a budget
+             */
+            budget_usd: number | null;
+            factories: components["schemas"]["FactoryOverview"][];
+        };
+        FactoryOverview: {
+            factory: components["schemas"]["Factory"];
+            health: components["schemas"]["FactoryHealth"];
+            /** @description The open andon pull, or null while the line runs */
+            andon: components["schemas"]["AndonPull"] | null;
+            throughput: components["schemas"]["Throughput"];
+            /** @description The agent station with the most work per slot now, or null when no agent station has any work */
+            constraint: components["schemas"]["ConstraintSummary"] | null;
+            waiting: components["schemas"]["WaitingSummary"];
+            /**
+             * Format: double
+             * @description Cost of the agent runs started in the window
+             */
+            spend_usd: number;
+            /**
+             * Format: double
+             * @description The factory's runtime.budget.weeklyUsd scaled to the window (× days / 7), or null without one
+             */
+            budget_usd: number | null;
+        };
+        /**
+         * @description running; stopped while an andon pull is open; draft when the factory has no published version yet
+         * @enum {string}
+         */
+        FactoryHealth: "running" | "stopped" | "draft";
+        Throughput: {
+            /**
+             * Format: double
+             * @description Items done in the window per day
+             */
+            per_day: number;
+            /**
+             * Format: double
+             * @description The same over the previous window
+             */
+            previous_per_day: number;
+            /** @description Items done per UTC day, one entry for every day of the window, oldest first */
+            days: {
+                /** Format: date */
+                day: string;
+                done: number;
+            }[];
+        };
+        ConstraintSummary: {
+            station: string;
+            /**
+             * Format: double
+             * @description Share of the window the station was busy (0 to 1); null until it is measured over time
+             */
+            busy: number | null;
+        };
+        WaitingSummary: {
+            /** @description Every decision waiting on a person, plus tool approvals once connections exist */
+            on_you: number;
+            /** @description The items waiting for a decision by work type, by type */
+            items_by_type: {
+                type: string;
+                count: number;
+            }[];
+            /** @description Tool calls waiting for approval by connection; always empty until connections exist */
+            tool_approvals: {
+                connection: string;
+                count: number;
+            }[];
+        };
+        Inbox: {
+            /** @description Ordered by kind, then oldest first */
+            entries: components["schemas"]["InboxEntry"][];
+            /** @description More entries exist than limit; the most recent were kept */
+            truncated: boolean;
+        };
+        /**
+         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row
+         * @enum {string}
+         */
+        InboxEntryKind: "decision";
+        InboxEntry: {
+            /** @description "<kind>:<id of what waits>", as in decision:<item id> */
+            id: string;
+            kind: components["schemas"]["InboxEntryKind"];
+            factory: {
+                id: string;
+                name: string;
+                title: string | null;
+            };
+            /**
+             * Format: date-time
+             * @description Since when it waits (the item's last change)
+             */
+            since: string;
+            /** @description The item it is about, or null for an entry that is about no item */
+            item: components["schemas"]["ItemCard"] | null;
+            /** @description The station where it waits */
+            station: string | null;
+            /** @description merge for a decision at a merge station (POST /v1/orgs/{org}/items/{item}/merge), else null */
+            action: components["schemas"]["StationAction"] | null;
+        };
     };
     responses: {
         /** @description An error (RFC 9457 problem details) */
@@ -679,6 +892,85 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Org"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getOrgAttention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The organization's attention counts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgAttention"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getFactoryOverview: {
+        parameters: {
+            query?: {
+                /** @description The last N UTC calendar days, today included, written Nd (1d to 90d), as for metrics. The previous window, which deltas compare against, has the same length and ends where this one starts. */
+                window?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The factories' overviews and the organization's totals */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactoryOverviewList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getInbox: {
+        parameters: {
+            query?: {
+                /** @description Only this factory's entries (its metadata.id or metadata.name); unknown is 404 */
+                factory?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The inbox */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Inbox"];
                 };
             };
             default: components["responses"]["Problem"];

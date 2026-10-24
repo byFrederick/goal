@@ -6,6 +6,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/byFrederick/goal/internal/adapters/postgres/db"
@@ -128,3 +129,66 @@ func (s *Store) FlowMetrics(ctx context.Context, factory domain.FactoryID, since
 }
 
 func seconds(s float64) time.Duration { return time.Duration(math.Round(s * float64(time.Second))) }
+
+// Attention implements ports.Store. Its reads share one snapshot.
+func (s *Store) Attention(ctx context.Context) ([]domain.Attention, error) {
+	var out []domain.Attention
+
+	err := s.orgTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(q *db.Queries) error {
+		rows, err := q.FactoryAttention(ctx)
+		if err != nil {
+			return fmt.Errorf("factories: %w", err)
+		}
+
+		byType, err := q.WaitingByType(ctx)
+		if err != nil {
+			return fmt.Errorf("waiting by type: %w", err)
+		}
+
+		types := map[uuid.UUID][]domain.TypeCount{}
+		for _, r := range byType {
+			types[r.FactoryID] = append(types[r.FactoryID], domain.TypeCount{Type: r.Type, Count: int(r.Waiting)})
+		}
+
+		out = make([]domain.Attention, 0, len(rows))
+		for _, r := range rows {
+			a := domain.Attention{
+				Factory: domain.FactoryID(r.FactoryID.String()), WaitingHuman: int(r.WaitingHuman),
+				WaitingByType: types[r.FactoryID], Blocked: int(r.Blocked),
+			}
+
+			if r.AndonPulledAt != nil {
+				a.Andon = &domain.AndonPull{Reason: deref(r.AndonReason), PulledBy: deref(r.AndonPulledBy), PulledAt: r.AndonPulledAt.UTC()}
+			}
+
+			out = append(out, a)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("attention: %w", err)
+	}
+
+	return out, nil
+}
+
+// WaitingHuman implements ports.Store. A factory id that is not a UUID names no factory.
+func (s *Store) WaitingHuman(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.Item, error) {
+	ids := make([]uuid.UUID, 0, len(factories))
+
+	for _, f := range factories {
+		if id, err := uuid.Parse(string(f)); err == nil {
+			ids = append(ids, id)
+		}
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.WorkItem, error) {
+		return q.WaitingHumanItems(ctx, db.WaitingHumanItemsParams{Factories: ids, MaxItems: int64(limit)})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("items waiting for a person: %w", err)
+	}
+
+	return convertAll(rows, itemFrom)
+}
