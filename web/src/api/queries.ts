@@ -67,6 +67,27 @@ export async function ensureLoaded<T, K extends QueryKey>(
   }
 }
 
+/**
+ * A loader's lookup in a cached list (the organizations, a factory's list) by what the URL names:
+ * when the cached list lacks it, the list is read again once before the route says Not found, so
+ * an organization or factory made in another tab or with the CLI opens at once.
+ */
+export async function ensureFound<T, K extends QueryKey, R>(
+  client: QueryClient,
+  options: EnsureQueryDataOptions<T, Error, T, K>,
+  find: (data: T) => R | undefined,
+): Promise<R | undefined> {
+  const found = find(await ensureLoaded(client, options));
+  if (found !== undefined) return found;
+  const again = { ...options, staleTime: 0 };
+  try {
+    return find(await client.fetchQuery(again));
+  } catch (err) {
+    if (isCancelledError(err)) return find(await client.fetchQuery(again));
+    throw err;
+  }
+}
+
 export const keys = {
   orgs: ['orgs'] as const,
   /** The prefix of everything of one organization. */
