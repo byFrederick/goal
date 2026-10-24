@@ -201,6 +201,50 @@ func TestSettings_EveryVariableGoaldReadsIsReserved(t *testing.T) {
 	}
 }
 
+// The platform's secrets are reserved too: those that never reach a task and the variables the
+// tasks' model access is read from (GOAL_TASK_ENV's references). The repository token is not
+// reserved but kept to the repository and GitHub's MCP server.
+func TestSettings_ReservesPlatformSecrets(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		env      map[string]string
+		reserved []string
+	}{
+		{name: "defaults", reserved: []string{"ANTHROPIC_API_KEY", "GOAL_GATEWAY_KEY", "CLAUDE_CODE_OAUTH_TOKEN"}},
+		{
+			name:     "custom task env",
+			env:      map[string]string{taskEnvEnv: "CLAUDE_CODE_OAUTH_TOKEN=env:ACME_MODEL_TOKEN,ACME_FLAG=env:ACME_FLAG_SOURCE"},
+			reserved: []string{"ANTHROPIC_API_KEY", "ACME_MODEL_TOKEN", "ACME_FLAG_SOURCE"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s, err := settingsFrom(envOf(tt.env))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			got := s.credentials(envsecrets.New(func(string) (string, bool) { return "", false }))
+			for _, name := range tt.reserved {
+				if !slices.Contains(got.Reserved, name) {
+					t.Errorf("reserved %v, want %s among them", got.Reserved, name)
+				}
+			}
+
+			if slices.Contains(got.Reserved, repositoryToken) || !slices.Equal(got.RepositoryOnly, []string{repositoryToken}) ||
+				!slices.Equal(got.RepositoryHosts, []string{githubMCPHost}) {
+				t.Errorf("reserved %v, repository only %v to %v; want %s kept to the repository and %s",
+					got.Reserved, got.RepositoryOnly, got.RepositoryHosts, repositoryToken, githubMCPHost)
+			}
+		})
+	}
+}
+
 // The credentials check goald authors definitions with refuses a reference to one of its own
 // settings with env-reserved, even though the variable is set, and passes another set variable.
 func TestSettings_CredentialsRefuseGoaldsOwnVariables(t *testing.T) {

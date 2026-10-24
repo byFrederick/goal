@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -55,8 +56,15 @@ var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 // there are no grant, expiry or purpose checks.
 type EnvReferences struct {
 	Secrets ports.Secrets
-	// Reserved are the variables of goald's own settings, which definitions may not read.
+	// Reserved are the variables definitions may not read: goald's own settings and the
+	// platform's secrets (the model's access, keys that never reach a task).
 	Reserved []string
+	// RepositoryOnly are variables holding the install's repository token: a definition may use
+	// them for runtime.repository and, in a connection, only in the headers of an https
+	// connection to one of RepositoryHosts (host names, matched exactly). Phase 4's connectors
+	// replace this with a credential per connection.
+	RepositoryOnly  []string
+	RepositoryHosts []string
 }
 
 var _ Credentials = EnvReferences{}
@@ -72,6 +80,11 @@ func (e EnvReferences) Check(ctx context.Context, _ domain.FactoryID, uses []con
 
 	for _, u := range uses {
 		if u.Literal() {
+			continue
+		}
+
+		if f := e.misplaced(u); f != nil {
+			out = append(out, *f)
 			continue
 		}
 
@@ -93,6 +106,25 @@ func (e EnvReferences) Check(ctx context.Context, _ domain.FactoryID, uses []con
 	}
 
 	return out, nil
+}
+
+// misplaced refuses (env-reserved) a repository token used anywhere but the repository and the
+// https headers of a connection to one of RepositoryHosts; nil when u may use its reference.
+func (e EnvReferences) misplaced(u config.SecretUse) *CredentialFinding {
+	name, ok := strings.CutPrefix(u.Ref, "env:")
+	if !ok || !slices.Contains(e.RepositoryOnly, name) || u.Purpose == config.PurposeRepository {
+		return nil
+	}
+
+	if target, err := url.Parse(u.URL); err == nil && target.Scheme == "https" && slices.Contains(e.RepositoryHosts, target.Hostname()) {
+		return nil
+	}
+
+	return &CredentialFinding{
+		Use: u, Code: CodeEnvReserved, Severity: domain.SeverityError,
+		Message: fmt.Sprintf("env:%s is the repository's token: a connection may send it only in the headers of https://%s",
+			name, strings.Join(e.RepositoryHosts, " or https://")),
+	}
 }
 
 // check returns the finding of one reference, nil when it resolves.

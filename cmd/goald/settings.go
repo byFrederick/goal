@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net"
 	"net/url"
 	"os"
@@ -101,7 +102,16 @@ const (
 
 // forbiddenTaskEnv never reaches a task: on a laptop the model is reached with the subscription
 // token, and an API key in a container would silently take over billing.
-var forbiddenTaskEnv = []string{"ANTHROPIC_API_KEY", "GOAL_GATEWAY_KEY", "GOAL_GITHUB_TOKEN"}
+var forbiddenTaskEnv = []string{"ANTHROPIC_API_KEY", "GOAL_GATEWAY_KEY", repositoryToken}
+
+// repositoryToken is the install's GitHub token, for the factory's runtime.repository (clones,
+// merges). Until phase 4's connectors give each connection its own credential, a definition may
+// also send it to GitHub's remote MCP server (githubMCPHost) in an https connection's headers,
+// and nowhere else (authoring.EnvReferences.RepositoryOnly).
+const (
+	repositoryToken = "GOAL_GITHUB_TOKEN" //nolint:gosec // a variable name, not a credential
+	githubMCPHost   = "api.githubcopilot.com"
+)
 
 // ownVariables are the environment variables of goald itself: every setting it reads
 // (settingsFrom, s3store.ConfigFromEnv), the database passwords, the default gateway key and the
@@ -118,21 +128,40 @@ var ownVariables = []string{
 	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
 }
 
-// reserved is the variables definitions may not reference: goald's own, and the one its
-// gateway key reference names.
+// reserved is the variables definitions may not reference: goald's own, the one its gateway key
+// reference names, the platform secrets that never reach a task (forbiddenTaskEnv, but the
+// repository token, which serves the repository) and the variables GOAL_TASK_ENV hands every
+// task (the model's access, such as CLAUDE_CODE_OAUTH_TOKEN).
 func (s settings) reserved() []string {
 	out := slices.Clone(ownVariables)
-	if name, ok := strings.CutPrefix(s.GatewayKeyRef, "env:"); ok && !slices.Contains(out, name) {
-		out = append(out, name)
+
+	add := func(ref string) {
+		if name, ok := strings.CutPrefix(ref, "env:"); ok && name != repositoryToken && !slices.Contains(out, name) {
+			out = append(out, name)
+		}
+	}
+
+	add(s.GatewayKeyRef)
+
+	for _, name := range forbiddenTaskEnv {
+		add("env:" + name)
+	}
+
+	for _, name := range slices.Sorted(maps.Keys(s.TaskEnv)) {
+		add(s.TaskEnv[name])
 	}
 
 	return out
 }
 
 // credentials is the check of a definition's secret references until phase 4: env:NAME
-// references resolve through secrets, and goald's own variables are refused (env-reserved).
+// references resolve through secrets, the reserved variables are refused (env-reserved), and
+// the repository token serves only the repository and GitHub's MCP server.
 func (s settings) credentials(secrets ports.Secrets) authoring.EnvReferences {
-	return authoring.EnvReferences{Secrets: secrets, Reserved: s.reserved()}
+	return authoring.EnvReferences{
+		Secrets: secrets, Reserved: s.reserved(),
+		RepositoryOnly: []string{repositoryToken}, RepositoryHosts: []string{githubMCPHost},
+	}
 }
 
 func settingsFrom(getenv func(string) string) (settings, error) {

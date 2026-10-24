@@ -10,6 +10,7 @@ import (
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/ports/porttest"
 )
 
 func checkIDs(v authoring.Validation) []string {
@@ -126,6 +127,58 @@ func TestEnvReferences_ResolvesEachReferenceOnce(t *testing.T) {
 
 	if calls != 1 || len(findings) != 1 || findings[0].Use.Path != "d" || findings[0].Code != authoring.CodeSecretEnvUnset {
 		t.Errorf("calls %d, findings %+v", calls, findings)
+	}
+}
+
+// The repository's token serves the repository, and a connection only in the headers of an
+// https connection to one of the hosts it may reach (GitHub's MCP server); anywhere else, such
+// as a sidecar's environment or another server's headers, it is refused like goald's own
+// settings, so a definition cannot hand it to an agent or an arbitrary upstream.
+func TestEnvReferences_RepositoryTokenServesOnlyTheRepositoryAndItsHosts(t *testing.T) {
+	t.Parallel()
+
+	e := authoring.EnvReferences{
+		Secrets: porttest.Secrets{"ACME_REPO_TOKEN": "t0ken", "ACME_TICKETS_TOKEN": "t1cket"}, Reserved: []string{"ACME_MODEL_TOKEN"},
+		RepositoryOnly: []string{"ACME_REPO_TOKEN"}, RepositoryHosts: []string{"code.example.com"},
+	}
+	header := func(url, ref string) config.SecretUse {
+		return config.SecretUse{Path: "header " + url, Purpose: config.PurposeConnection, Connection: "c", URL: url, Ref: ref}
+	}
+
+	tests := []struct {
+		name   string
+		use    config.SecretUse
+		reject bool
+	}{
+		{name: "the repository's token", use: config.SecretUse{Path: "repo", Purpose: config.PurposeRepository, Ref: "env:ACME_REPO_TOKEN"}},
+		{name: "a header to the code host's MCP server", use: header("https://code.example.com/mcp/", "env:ACME_REPO_TOKEN")},
+		{name: "a header to another server", use: header("https://tickets.example.com/mcp", "env:ACME_REPO_TOKEN"), reject: true},
+		{name: "a header to the code host in clear text", use: header("http://code.example.com/mcp", "env:ACME_REPO_TOKEN"), reject: true},
+		{name: "a host ending in the code host's", use: header("https://evilcode.example.com/mcp", "env:ACME_REPO_TOKEN"), reject: true},
+		{
+			name: "a sidecar's environment", reject: true,
+			use: config.SecretUse{Path: "env", Purpose: config.PurposeConnection, Connection: "c", Ref: "env:ACME_REPO_TOKEN"},
+		},
+		{name: "a reserved variable for the repository", use: config.SecretUse{Path: "repo", Purpose: config.PurposeRepository, Ref: "env:ACME_MODEL_TOKEN"}, reject: true},
+		{name: "another token in a header", use: header("https://tickets.example.com/mcp", "env:ACME_TICKETS_TOKEN")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			findings, err := e.Check(t.Context(), "", []config.SecretUse{tt.use})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			switch {
+			case !tt.reject && len(findings) != 0:
+				t.Errorf("findings %+v, want none", findings)
+			case tt.reject && (len(findings) != 1 || findings[0].Code != authoring.CodeEnvReserved || findings[0].Severity != domain.SeverityError):
+				t.Errorf("findings %+v, want one %s error", findings, authoring.CodeEnvReserved)
+			}
+		})
 	}
 }
 

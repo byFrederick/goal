@@ -35,9 +35,12 @@ func TestSecretUses_ListsEveryReferenceAndLiteral(t *testing.T) {
 		{Path: "spec.runtime.repository.token", Doc: "/spec/runtime/repository/token", Purpose: PurposeRepository, Ref: "env:ACME_REPO_TOKEN"},
 		{
 			Path: "spec.connections[0].headers.Authorization", Doc: "/spec/connections/0/headers/Authorization",
-			Purpose: PurposeConnection, Connection: "tickets", Ref: "env:ACME_TICKETS_TOKEN",
+			Purpose: PurposeConnection, Connection: "tickets", URL: "https://tickets.example.com/mcp", Ref: "env:ACME_TICKETS_TOKEN",
 		},
-		{Path: "spec.connections[0].headers.X-Team", Doc: "/spec/connections/0/headers/X-Team", Purpose: PurposeConnection, Connection: "tickets"},
+		{
+			Path: "spec.connections[0].headers.X-Team", Doc: "/spec/connections/0/headers/X-Team", Purpose: PurposeConnection, Connection: "tickets",
+			URL: "https://tickets.example.com/mcp",
+		},
 		{
 			Path: "spec.connections[1].env.DATABASE_URL", Doc: "/spec/connections/1/env/DATABASE_URL",
 			Purpose: PurposeConnection, Connection: "shop-db", Ref: "env:ACME_DB_URL",
