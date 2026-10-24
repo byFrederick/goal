@@ -6,7 +6,7 @@ import { toneText } from '../../shared/item-state';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
-import type { CheckEntry, Entry, NoteEntry, RunEntry, ToolCall } from './timeline';
+import { type CheckEntry, type Entry, type NoteEntry, type RunEntry, runLabel, type ToolCall } from './timeline';
 
 const shownTools = 6;
 
@@ -43,22 +43,24 @@ function RunBlock({ run, itemState }: { run: RunEntry; itemState: ItemState }) {
   const tools = all ? run.tools : run.tools.slice(-shownTools);
   const meta = [
     run.model,
-    run.turns !== undefined ? `${run.turns} turns` : undefined,
+    run.turns !== undefined ? `${run.turns} ${run.turns === 1 ? 'turn' : 'turns'}` : undefined,
     run.costUsd !== undefined ? formatUsd(run.costUsd) : undefined,
     run.endedAt ? formatDuration(Date.parse(run.endedAt) - Date.parse(run.at)) : undefined,
+    run.version !== undefined ? `ran on v${run.version}` : undefined,
   ].filter(Boolean);
+  const label = runLabel(run);
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <p className="m-0 text-[15px] leading-snug">
-          <strong className="font-medium">{run.agent}</strong> worked at {humanize(run.station)}
+          <strong className="font-medium">{label}</strong> worked at {humanize(run.station)}
         </p>
         {chip}
       </div>
       {meta.length > 0 ? <p className="m-0 text-[13px] text-muted">{meta.join(', ')}</p> : null}
       {run.tools.length > 0 ? (
-        <ol className="m-0 flex list-none flex-col gap-1.5 p-0" aria-label={`Tool calls by ${run.agent}`}>
+        <ol className="m-0 flex list-none flex-col gap-1.5 p-0" aria-label={`Tool calls by ${label}`}>
           {tools.map((t) => (
             <ToolRow key={`${t.at}-${t.id}`} call={t} />
           ))}

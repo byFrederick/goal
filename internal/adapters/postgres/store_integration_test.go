@@ -42,11 +42,6 @@ func TestStore_Conformance(t *testing.T) {
 
 				return saveFactory(domain.WithOrg(t.Context(), org), t, s)
 			},
-			Runs: func(t *testing.T, org domain.OrgID, id domain.ItemID) []domain.Run {
-				t.Helper()
-
-				return s.runs(domain.WithOrg(t.Context(), org), t, id)
-			},
 			SetSlotCaps: func(t *testing.T, org domain.OrgID, maxSlots int, factories map[domain.FactoryID]int) {
 				t.Helper()
 
@@ -306,54 +301,4 @@ func (s *Store) recordAndon(ctx context.Context, t *testing.T, f domain.FactoryI
 	if err != nil {
 		t.Fatal(err)
 	}
-}
-
-// runs reads an item's runs straight from agent_runs in the organization of ctx; the port has
-// no reader yet.
-func (s *Store) runs(ctx context.Context, t *testing.T, id domain.ItemID) []domain.Run {
-	t.Helper()
-
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	org, _ := domain.OrgFrom(ctx)
-	if _, err := tx.Exec(ctx, "SELECT set_config('goal.org_id', $1, true)", string(org)); err != nil {
-		t.Fatal(err)
-	}
-
-	rows, err := tx.Query(ctx, `
-		SELECT id::text, factory_id::text, coalesce(definition_version_id::text, ''), item_id::text, station, agent, model,
-		       status, coalesce(session_id, ''),
-		       turns, input_tokens, output_tokens, cost_usd, coalesce(error, ''), started_at, ended_at
-		FROM agent_runs WHERE item_id = $1 ORDER BY id`, string(id))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	runs, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.Run, error) {
-		var (
-			r     domain.Run
-			ended *time.Time
-		)
-
-		err := row.Scan(&r.ID, &r.FactoryID, &r.DefinitionVersionID, &r.ItemID, &r.Station, &r.Agent, &r.Model, &r.Result.Status,
-			&r.Result.SessionID, &r.Result.Turns, &r.Result.InputTokens, &r.Result.OutputTokens, &r.Result.CostUSD,
-			&r.Result.Error, &r.StartedAt, &ended)
-
-		r.StartedAt = r.StartedAt.UTC()
-		if ended != nil {
-			r.EndedAt = ended.UTC()
-		}
-
-		return r, err
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return runs
 }

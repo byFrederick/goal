@@ -17,6 +17,7 @@ import {
   listAudit,
   listFactories,
   listItemEvents,
+  listItemRuns,
   listItems,
   listOrgs,
 } from './client';
@@ -61,6 +62,7 @@ export const keys = {
     ['org', org, 'factory', factory, 'items', filter] as const,
   item: (org: string, item: string) => ['org', org, 'item', item] as const,
   events: (org: string, item: string) => ['org', org, 'item', item, 'events'] as const,
+  runs: (org: string, item: string) => ['org', org, 'item', item, 'runs'] as const,
 };
 
 export const orgsQuery = queryOptions({
@@ -247,6 +249,10 @@ export const templateQuery = (org: string, name: string, version?: number) =>
 function retryUnlessRefused(failures: number, error: Error): boolean {
   return failures < 3 && !(error instanceof ApiError && error.status >= 400 && error.status < 500);
 }
+
+/** An item's runs: under the item's key, so every event of the item refreshes them. */
+export const runsQuery = (org: string, item: string) =>
+  queryOptions({ queryKey: keys.runs(org, item), queryFn: ({ signal }) => listItemRuns(org, item, signal) });
 
 const eventPage = 500;
 

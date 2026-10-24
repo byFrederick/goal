@@ -1,8 +1,8 @@
-import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 import { ChevronLeft, ExternalLink } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { eventsQuery, itemQuery } from '../../api/queries';
+import { eventsQuery, itemQuery, runsQuery } from '../../api/queries';
 import type { Factory, Item, Station, StationKind } from '../../api/types';
 import { factoryTitle, itemKey, stationKind, useFactory, useFactoryParams } from '../../shared/factory';
 import { formatClock, formatDuration, formatUsd, humanize } from '../../shared/format';
@@ -15,8 +15,14 @@ import { Chip, type ChipTone } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { Hatch, type HatchTone } from '../../ui/hatch';
 import { OutputsCard } from './outputs';
-import { activeRun, buildTrace, latestToolCalls, type StationVisit, type Trace } from './timeline';
+import { activeRun, buildTrace, latestToolCalls, runLabel, type StationVisit, type Trace } from './timeline';
 import { ToolRow, TraceList } from './trace-view';
+
+/** The agent copy working the item now, as the trace names it. */
+function agentOf(trace: Trace): string | null {
+  const run = activeRun(trace);
+  return run ? runLabel(run) : null;
+}
 
 const chipTone: Record<Tone, ChipTone> = { run: 'run', you: 'you', rework: 'rework', muted: 'plain', ok: 'ok' };
 
@@ -142,7 +148,7 @@ function PathCard({
   const now = useNow();
   const state = describeState({
     state: item.state,
-    agent: activeRun(trace)?.agent ?? null,
+    agent: agentOf(trace),
     rework_count: item.rework_count,
   });
 
@@ -210,7 +216,7 @@ function TraceCard({ item, trace, className }: { item: Item; trace: Trace; class
                 aria-hidden="true"
                 className="size-2 rounded-full bg-run shadow-[0_0_0_4px_var(--color-run-tint)]"
               />
-              {run.agent} working, {run.tools.length} tool calls
+              {runLabel(run)} working, {run.tools.length} tool calls
             </>
           ) : null}
         </span>
@@ -254,12 +260,14 @@ export function ItemPage() {
   const org = useOrg();
   const { data: item } = useSuspenseQuery(itemQuery(org.id, key));
   const { data: events } = useSuspenseQuery(eventsQuery(client, org.id, key));
-  const trace = useMemo(() => buildTrace(events), [events]);
+  // The run records refine the trace when they arrive; the events alone already draw it.
+  const { data: runs } = useQuery(runsQuery(org.id, key));
+  const trace = useMemo(() => buildTrace(events, runs?.runs), [events, runs]);
   const [fullTrace, setFullTrace] = useState(false);
   const station = factory.stations.find((s) => s.id === item.station);
   const state = describeState({
     state: item.state,
-    agent: activeRun(trace)?.agent ?? null,
+    agent: agentOf(trace),
     rework_count: item.rework_count,
   });
   const decidable = {

@@ -291,6 +291,24 @@ test('retry a blocked item', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Retry' })).toHaveCount(0);
 });
 
+test('the trace heads each run with its agent copy, model, turns, cost and version', async ({ page }) => {
+  await page.goto('/o/acme/f/goal/items/8');
+  await expect(page.getByRole('heading', { level: 1, name: 'Worker: report usage per message' })).toBeVisible();
+  await showTrace(page);
+  const trace = page.getByRole('region', { name: 'Trace' });
+
+  const spec = trace.getByRole('listitem').filter({ hasText: 'spec-writer-1 worked at Spec' });
+  await expect(spec.getByText('Finished', { exact: true })).toBeVisible();
+  await expect(spec.getByText(/^claude-sonnet-5-5, 6 turns, \$0\.24, .+, ran on v9$/)).toBeVisible();
+
+  const build = trace.getByRole('listitem').filter({ hasText: 'builder-2 worked at Build' });
+  await expect(build.getByText('Running', { exact: true })).toBeVisible();
+  await expect(build.getByText(/ran on v9$/)).toBeVisible();
+  await expect(build.getByRole('list', { name: 'Tool calls by builder-2' })).toBeVisible();
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+});
+
 test('the board updates live when an item moves elsewhere', async ({ page, request }) => {
   test.skip(isPhone(page), 'the columns are the desktop board');
   await page.goto('/o/acme/f/goal/board');

@@ -52,6 +52,27 @@ func itemFrom(w db.WorkItem) (domain.Item, error) {
 	return it, nil
 }
 
+func runFrom(r db.AgentRun) domain.Run {
+	run := domain.Run{
+		ID: domain.RunID(r.ID.String()), FactoryID: domain.FactoryID(r.FactoryID.String()), ItemID: domain.ItemID(r.ItemID.String()),
+		Station: r.Station, Agent: r.Agent, Model: r.Model, StartedAt: r.StartedAt.UTC(),
+		Result: domain.RunResult{
+			Status: domain.RunStatus(r.Status), CostUSD: r.CostUsd, Turns: int(r.Turns), InputTokens: r.InputTokens,
+			OutputTokens: r.OutputTokens, SessionID: deref(r.SessionID), Error: deref(r.Error),
+		},
+	}
+
+	if r.DefinitionVersionID != nil {
+		run.DefinitionVersionID = domain.DefinitionVersionID(r.DefinitionVersionID.String())
+	}
+
+	if r.EndedAt != nil {
+		run.EndedAt = r.EndedAt.UTC()
+	}
+
+	return run
+}
+
 func leaseFrom(l db.Lease) domain.Lease {
 	return domain.Lease{
 		ItemID: domain.ItemID(l.ItemID.String()), FactoryID: domain.FactoryID(l.FactoryID.String()),

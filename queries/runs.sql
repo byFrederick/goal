@@ -32,3 +32,14 @@ WHERE factory_id = sqlc.arg(factory_id) AND started_at >= sqlc.arg(since) AND st
 SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd
 FROM agent_runs
 WHERE factory_id = sqlc.arg(factory_id) AND started_at >= sqlc.arg(since);
+
+-- name: ItemRuns :many
+-- An item's runs, oldest first, on agent_runs_item_id_idx; row-level security scopes it to the
+-- organization.
+SELECT * FROM agent_runs
+WHERE item_id = sqlc.arg(item_id)
+ORDER BY started_at, id
+LIMIT sqlc.arg(max_runs)::bigint;
+
+-- name: GetRun :one
+SELECT * FROM agent_runs WHERE id = $1;

@@ -374,6 +374,30 @@ func (e PatchOpOp) Valid() bool {
 	}
 }
 
+// Defines values for RunStatus.
+const (
+	RunStatusCancelled RunStatus = "cancelled"
+	RunStatusFailed    RunStatus = "failed"
+	RunStatusRunning   RunStatus = "running"
+	RunStatusSucceeded RunStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the RunStatus enum.
+func (e RunStatus) Valid() bool {
+	switch e {
+	case RunStatusCancelled:
+		return true
+	case RunStatusFailed:
+		return true
+	case RunStatusRunning:
+		return true
+	case RunStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for Section.
 const (
 	Agents      Section = "agents"
@@ -1462,6 +1486,44 @@ type RestoreRequest struct {
 type RevertRequest struct {
 	Pointers []string `json:"pointers"`
 }
+
+// Run One agent run: one container working one item at one station. Its full transcript is not kept (phase 2.2); the item's events carry the trace.
+type Run struct {
+	Agent   string  `json:"agent"`
+	CostUsd float64 `json:"cost_usd"`
+
+	// DefinitionVersion That version's number ("ran on v9"); null when the run has no version
+	DefinitionVersion *int `json:"definition_version"`
+
+	// DefinitionVersionId The definition version the run started and finished on; null for runs from before versions
+	DefinitionVersionId *string `json:"definition_version_id"`
+
+	// EndedAt Null while the run is running
+	EndedAt *time.Time `json:"ended_at"`
+
+	// Error Why a failed or cancelled run ended, else null
+	Error        *string   `json:"error"`
+	Id           string    `json:"id"`
+	InputTokens  int64     `json:"input_tokens"`
+	ItemId       string    `json:"item_id"`
+	Model        string    `json:"model"`
+	OutputTokens int64     `json:"output_tokens"`
+	StartedAt    time.Time `json:"started_at"`
+	Station      string    `json:"station"`
+	Status       RunStatus `json:"status"`
+	Turns        int       `json:"turns"`
+}
+
+// RunList defines model for RunList.
+type RunList struct {
+	Runs []Run `json:"runs"`
+
+	// Truncated True when the item has more runs than the list holds (the oldest 200 are listed)
+	Truncated bool `json:"truncated"`
+}
+
+// RunStatus defines model for RunStatus.
+type RunStatus string
 
 // SaveResult The draft after a save
 type SaveResult struct {
@@ -2735,10 +2797,20 @@ type ClientInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/retry (the `RetryItem` operationId).
 	RetryItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListItemRuns An item's agent runs, oldest first (at most 200)
+	//
+	// Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
+	ListItemRuns(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetFactoryOverview Every factory of the organization summarized for the Factories home, ordered by name
 	//
 	// Corresponds with GET /v1/orgs/{org}/overview (the `GetFactoryOverview` operationId).
 	GetFactoryOverview(ctx context.Context, org OrgRef, params *GetFactoryOverviewParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetRun One agent run (404 for a run of another organization)
+	//
+	// Corresponds with GET /v1/orgs/{org}/runs/{run} (the `GetRun` operationId).
+	GetRun(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetOrgSettings The organization's settings, slot caps included
 	//
@@ -3859,11 +3931,41 @@ func (c *Client) RetryItem(ctx context.Context, org OrgRef, item ItemRef, reqEdi
 	return c.Client.Do(req)
 }
 
+// ListItemRuns An item's agent runs, oldest first (at most 200)
+//
+// Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
+func (c *Client) ListItemRuns(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListItemRunsRequest(c.Server, org, item)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetFactoryOverview Every factory of the organization summarized for the Factories home, ordered by name
 //
 // Corresponds with GET /v1/orgs/{org}/overview (the `GetFactoryOverview` operationId).
 func (c *Client) GetFactoryOverview(ctx context.Context, org OrgRef, params *GetFactoryOverviewParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetFactoryOverviewRequest(c.Server, org, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetRun One agent run (404 for a run of another organization)
+//
+// Corresponds with GET /v1/orgs/{org}/runs/{run} (the `GetRun` operationId).
+func (c *Client) GetRun(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetRunRequest(c.Server, org, run)
 	if err != nil {
 		return nil, err
 	}
@@ -6565,6 +6667,47 @@ func NewRetryItemRequest(server string, org OrgRef, item ItemRef) (*http.Request
 	return req, nil
 }
 
+// NewListItemRunsRequest constructs an http.Request for the ListItemRuns method
+func NewListItemRunsRequest(server string, org OrgRef, item ItemRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/runs", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetFactoryOverviewRequest constructs an http.Request for the GetFactoryOverview method
 func NewGetFactoryOverviewRequest(server string, org OrgRef, params *GetFactoryOverviewParams) (*http.Request, error) {
 	var err error
@@ -6616,6 +6759,47 @@ func NewGetFactoryOverviewRequest(server string, org OrgRef, params *GetFactoryO
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
 		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetRunRequest constructs an http.Request for the GetRun method
+func NewGetRunRequest(server string, org OrgRef, run string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "run", run, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/runs/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
@@ -7434,12 +7618,26 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/retry (the `RetryItem` operationId).
 	RetryItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*RetryItemResponse, error)
 
+	// ListItemRunsWithResponse An item's agent runs, oldest first (at most 200)
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
+	ListItemRunsWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*ListItemRunsResponse, error)
+
 	// GetFactoryOverviewWithResponse Every factory of the organization summarized for the Factories home, ordered by name
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/orgs/{org}/overview (the `GetFactoryOverview` operationId).
 	GetFactoryOverviewWithResponse(ctx context.Context, org OrgRef, params *GetFactoryOverviewParams, reqEditors ...RequestEditorFn) (*GetFactoryOverviewResponse, error)
+
+	// GetRunWithResponse One agent run (404 for a run of another organization)
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/runs/{run} (the `GetRun` operationId).
+	GetRunWithResponse(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*GetRunResponse, error)
 
 	// GetOrgSettingsWithResponse The organization's settings, slot caps included
 	//
@@ -9797,6 +9995,54 @@ func (r RetryItemResponse) ContentType() string {
 	return ""
 }
 
+type ListItemRunsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RunList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListItemRunsResponse) GetJSON200() *RunList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListItemRunsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListItemRunsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListItemRunsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListItemRunsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListItemRunsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetFactoryOverviewResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -9839,6 +10085,54 @@ func (r GetFactoryOverviewResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetFactoryOverviewResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetRunResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Run
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetRunResponse) GetJSON200() *Run {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetRunResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetRunResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetRunResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetRunResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetRunResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -10970,6 +11264,19 @@ func (c *ClientWithResponses) RetryItemWithResponse(ctx context.Context, org Org
 	return ParseRetryItemResponse(rsp)
 }
 
+// ListItemRunsWithResponse An item's agent runs, oldest first (at most 200)
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
+func (c *ClientWithResponses) ListItemRunsWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*ListItemRunsResponse, error) {
+	rsp, err := c.ListItemRuns(ctx, org, item, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListItemRunsResponse(rsp)
+}
+
 // GetFactoryOverviewWithResponse Every factory of the organization summarized for the Factories home, ordered by name
 //
 // Returns a wrapper object for the known response body format(s).
@@ -10981,6 +11288,19 @@ func (c *ClientWithResponses) GetFactoryOverviewWithResponse(ctx context.Context
 		return nil, err
 	}
 	return ParseGetFactoryOverviewResponse(rsp)
+}
+
+// GetRunWithResponse One agent run (404 for a run of another organization)
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/runs/{run} (the `GetRun` operationId).
+func (c *ClientWithResponses) GetRunWithResponse(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*GetRunResponse, error) {
+	rsp, err := c.GetRun(ctx, org, run, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetRunResponse(rsp)
 }
 
 // GetOrgSettingsWithResponse The organization's settings, slot caps included
@@ -12690,6 +13010,39 @@ func ParseRetryItemResponse(rsp *http.Response) (*RetryItemResponse, error) {
 	return response, nil
 }
 
+// ParseListItemRunsResponse parses an HTTP response from a ListItemRunsWithResponse call
+func ParseListItemRunsResponse(rsp *http.Response) (*ListItemRunsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListItemRunsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RunList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetFactoryOverviewResponse parses an HTTP response from a GetFactoryOverviewWithResponse call
 func ParseGetFactoryOverviewResponse(rsp *http.Response) (*GetFactoryOverviewResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -12706,6 +13059,39 @@ func ParseGetFactoryOverviewResponse(rsp *http.Response) (*GetFactoryOverviewRes
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest FactoryOverviewList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetRunResponse parses an HTTP response from a GetRunWithResponse call
+func ParseGetRunResponse(rsp *http.Response) (*GetRunResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetRunResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Run
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -13027,9 +13413,15 @@ type ServerInterface interface {
 	// RetryItem Send a blocked item back to its station's queue (409 if it is not blocked)
 	// (POST /v1/orgs/{org}/items/{item}/retry)
 	RetryItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// ListItemRuns An item's agent runs, oldest first (at most 200)
+	// (GET /v1/orgs/{org}/items/{item}/runs)
+	ListItemRuns(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
 	// GetFactoryOverview Every factory of the organization summarized for the Factories home, ordered by name
 	// (GET /v1/orgs/{org}/overview)
 	GetFactoryOverview(w http.ResponseWriter, r *http.Request, org OrgRef, params GetFactoryOverviewParams)
+	// GetRun One agent run (404 for a run of another organization)
+	// (GET /v1/orgs/{org}/runs/{run})
+	GetRun(w http.ResponseWriter, r *http.Request, org OrgRef, run string)
 	// GetOrgSettings The organization's settings, slot caps included
 	// (GET /v1/orgs/{org}/settings)
 	GetOrgSettings(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -15131,6 +15523,41 @@ func (siw *ServerInterfaceWrapper) RetryItem(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// ListItemRuns operation middleware
+func (siw *ServerInterfaceWrapper) ListItemRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListItemRuns(w, r, org, item)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetFactoryOverview operation middleware
 func (siw *ServerInterfaceWrapper) GetFactoryOverview(w http.ResponseWriter, r *http.Request) {
 
@@ -15164,6 +15591,41 @@ func (siw *ServerInterfaceWrapper) GetFactoryOverview(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetFactoryOverview(w, r, org, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRun operation middleware
+func (siw *ServerInterfaceWrapper) GetRun(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "run" -------------
+	var run string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "run", r.PathValue("run"), &run, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "run", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRun(w, r, org, run)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -15511,6 +15973,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/stream", wrapper.StreamEvents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}", wrapper.GetItem)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/events", wrapper.ListItemEvents)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/runs", wrapper.ListItemRuns)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs/{run}", wrapper.GetRun)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/approve", wrapper.ApproveItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/reject", wrapper.RejectItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/retry", wrapper.RetryItem)
@@ -17501,6 +17965,46 @@ func (response RetryItemdefaultApplicationProblemPlusJSONResponse) VisitRetryIte
 	return err
 }
 
+type ListItemRunsRequestObject struct {
+	Org  OrgRef  `json:"org"`
+	Item ItemRef `json:"item"`
+}
+
+type ListItemRunsResponseObject interface {
+	VisitListItemRunsResponse(w http.ResponseWriter) error
+}
+
+type ListItemRuns200JSONResponse RunList
+
+func (response ListItemRuns200JSONResponse) VisitListItemRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListItemRunsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListItemRunsdefaultApplicationProblemPlusJSONResponse) VisitListItemRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetFactoryOverviewRequestObject struct {
 	Org    OrgRef `json:"org"`
 	Params GetFactoryOverviewParams
@@ -17530,6 +18034,46 @@ type GetFactoryOverviewdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetFactoryOverviewdefaultApplicationProblemPlusJSONResponse) VisitGetFactoryOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRunRequestObject struct {
+	Org OrgRef `json:"org"`
+	Run string `json:"run"`
+}
+
+type GetRunResponseObject interface {
+	VisitGetRunResponse(w http.ResponseWriter) error
+}
+
+type GetRun200JSONResponse Run
+
+func (response GetRun200JSONResponse) VisitGetRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRundefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetRundefaultApplicationProblemPlusJSONResponse) VisitGetRunResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -17915,9 +18459,15 @@ type StrictServerInterface interface {
 	// RetryItem Send a blocked item back to its station's queue (409 if it is not blocked)
 	// (POST /v1/orgs/{org}/items/{item}/retry)
 	RetryItem(ctx context.Context, request RetryItemRequestObject) (RetryItemResponseObject, error)
+	// ListItemRuns An item's agent runs, oldest first (at most 200)
+	// (GET /v1/orgs/{org}/items/{item}/runs)
+	ListItemRuns(ctx context.Context, request ListItemRunsRequestObject) (ListItemRunsResponseObject, error)
 	// GetFactoryOverview Every factory of the organization summarized for the Factories home, ordered by name
 	// (GET /v1/orgs/{org}/overview)
 	GetFactoryOverview(ctx context.Context, request GetFactoryOverviewRequestObject) (GetFactoryOverviewResponseObject, error)
+	// GetRun One agent run (404 for a run of another organization)
+	// (GET /v1/orgs/{org}/runs/{run})
+	GetRun(ctx context.Context, request GetRunRequestObject) (GetRunResponseObject, error)
 	// GetOrgSettings The organization's settings, slot caps included
 	// (GET /v1/orgs/{org}/settings)
 	GetOrgSettings(ctx context.Context, request GetOrgSettingsRequestObject) (GetOrgSettingsResponseObject, error)
@@ -19386,6 +19936,33 @@ func (sh *strictHandler) RetryItem(w http.ResponseWriter, r *http.Request, org O
 	}
 }
 
+// ListItemRuns operation middleware
+func (sh *strictHandler) ListItemRuns(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
+	var request ListItemRunsRequestObject
+
+	request.Org = org
+	request.Item = item
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListItemRuns(ctx, request.(ListItemRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListItemRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListItemRunsResponseObject); ok {
+		if err := validResponse.VisitListItemRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetFactoryOverview operation middleware
 func (sh *strictHandler) GetFactoryOverview(w http.ResponseWriter, r *http.Request, org OrgRef, params GetFactoryOverviewParams) {
 	var request GetFactoryOverviewRequestObject
@@ -19406,6 +19983,33 @@ func (sh *strictHandler) GetFactoryOverview(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetFactoryOverviewResponseObject); ok {
 		if err := validResponse.VisitGetFactoryOverviewResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetRun operation middleware
+func (sh *strictHandler) GetRun(w http.ResponseWriter, r *http.Request, org OrgRef, run string) {
+	var request GetRunRequestObject
+
+	request.Org = org
+	request.Run = run
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetRun(ctx, request.(GetRunRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetRun")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetRunResponseObject); ok {
+		if err := validResponse.VisitGetRunResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

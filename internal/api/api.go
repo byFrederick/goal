@@ -1,6 +1,6 @@
 // Package api serves goald's HTTP API, the contract in api/openapi.yaml: health, the install's
 // organizations and, under /v1/orgs/{org}, each organization's factories, their boards and flow
-// metrics, submitting and listing work items, reading items and their history, human decisions
+// metrics, submitting and listing work items, reading items, their history and runs, human decisions
 // (approve, reject, retry, merge), factory definition authoring (definitions.go: drafts,
 // validation, publishing, versions, templates), a Server-Sent Events stream of the
 // organization's events, and the factory editor's metadata and skills catalog (builder.go).
@@ -15,8 +15,8 @@
 // actor (actor.go: always the local user in phase 2.2, which has no identity), then, per
 // operation, the organization of the path (org.go: unknown or deleted is 404, and the request is
 // bound to it with domain.WithOrg so row-level security scopes every store call) and the
-// Authorizer seam (authz.go), passed again by the three resolvers of factories, definitions and
-// items. Wherever a path takes an item, it takes its id or <factory>#<number>. Errors are RFC 9457
+// Authorizer seam (authz.go), passed again by the resolvers of factories, definitions, items and
+// runs. Wherever a path takes an item, it takes its id or <factory>#<number>. Errors are RFC 9457
 // problem details: unknown organizations, items and factories are 404, invalid requests 400, a
 // broken rule (a taken slug) or an action the item's state does not allow (a decision on an item
 // not waiting for a human, a retry of an item not blocked, a merge that is not the item's step or
@@ -59,12 +59,14 @@ type Engine interface {
 	Merge(ctx context.Context, id domain.ItemID, by domain.Actor, method string) (domain.Item, error)
 }
 
-// Items reads items, their history, the leases on them, a factory's flow and what the
+// Items reads items, their history and runs, the leases on them, a factory's flow and what the
 // organization's factories need from people; ports.Store satisfies it.
 type Items interface {
 	Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
 	ItemByNumber(ctx context.Context, factory domain.FactoryID, number int64) (domain.Item, error)
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
+	Runs(ctx context.Context, item domain.ItemID, limit int) ([]domain.Run, error)
+	Run(ctx context.Context, id domain.RunID) (domain.Run, error)
 	ListItems(ctx context.Context, q ports.ItemQuery) ([]domain.Item, error)
 	Leases(ctx context.Context, factory domain.FactoryID, station string) ([]domain.Lease, error)
 	StationLoads(ctx context.Context, factory domain.FactoryID) ([]domain.StationLoad, error)
@@ -89,8 +91,10 @@ type Deps struct {
 	Factories Factories
 	// Definitions authors factory definitions (*authoring.Service).
 	Definitions Definitions
-	Orgs        Orgs
-	Audit       AuditLog
+	// Versions numbers the definition versions runs ran on.
+	Versions Versions
+	Orgs     Orgs
+	Audit    AuditLog
 	// OrgRetention is how long a deleted organization is kept before the purge removes it
 	// (GOAL_ORG_RETENTION); a deletion answers when that will be.
 	OrgRetention time.Duration
@@ -106,6 +110,16 @@ type Deps struct {
 	// Clock dates ages and metric windows and paces stream heartbeats.
 	Clock  ports.Clock
 	Logger *slog.Logger
+}
+
+// complete reports whether every required collaborator is set.
+func (d Deps) complete() bool {
+	missing := []bool{
+		d.Engine == nil, d.Items == nil, d.Factories == nil, d.Definitions == nil, d.Versions == nil, d.Orgs == nil,
+		d.Audit == nil, d.Authorizer == nil, d.Feed == nil, d.Builder == nil, d.Clock == nil, d.OrgRetention <= 0,
+	}
+
+	return !slices.Contains(missing, true)
 }
 
 // Limits on requests.
@@ -125,9 +139,8 @@ var errInvalid = errors.New("invalid request")
 
 // New returns the API's handler for the /v1/ routes.
 func New(d Deps) (http.Handler, error) {
-	if d.Engine == nil || d.Items == nil || d.Factories == nil || d.Definitions == nil || d.Orgs == nil || d.Audit == nil ||
-		d.Authorizer == nil || d.Feed == nil || d.Builder == nil || d.Clock == nil || d.OrgRetention <= 0 {
-		return nil, errors.New("api: Engine, Items, Factories, Definitions, Orgs, Audit, Authorizer, Feed, Builder, Clock " +
+	if !d.complete() {
+		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Authorizer, Feed, Builder, Clock " +
 			"and a positive OrgRetention are required")
 	}
 
@@ -137,7 +150,7 @@ func New(d Deps) (http.Handler, error) {
 	}
 
 	s := &server{
-		engine: d.Engine, items: d.Items, factories: d.Factories, defs: d.Definitions, orgs: d.Orgs, audit: d.Audit,
+		engine: d.Engine, items: d.Items, factories: d.Factories, defs: d.Definitions, versions: d.Versions, orgs: d.Orgs, audit: d.Audit,
 		retention: d.OrgRetention, authz: d.Authorizer, feed: d.Feed, builder: d.Builder, clock: d.Clock, log: log,
 	}
 	s.inbox = append([]InboxSource{decisions{s: s}}, d.InboxSources...)
@@ -221,6 +234,7 @@ type server struct {
 	items     Items
 	factories Factories
 	defs      Definitions
+	versions  Versions
 	orgs      Orgs
 	audit     AuditLog
 	retention time.Duration

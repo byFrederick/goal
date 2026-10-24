@@ -250,7 +250,7 @@ func TestStartRun_RecordsTheDefinitionVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if runs := f.s.runs(ctx, t, it.ID); len(runs) != 1 || runs[0].DefinitionVersionID != f.v1.ID {
+	if runs, err := f.s.Runs(ctx, it.ID, 10); err != nil || len(runs) != 1 || runs[0].DefinitionVersionID != f.v1.ID {
 		t.Fatalf("runs = %+v, want one on %s", runs, f.v1.ID)
 	}
 

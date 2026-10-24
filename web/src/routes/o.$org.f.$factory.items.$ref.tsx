@@ -1,6 +1,6 @@
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import { ApiError } from '../api/client';
-import { eventsQuery, itemQuery } from '../api/queries';
+import { eventsQuery, itemQuery, runsQuery } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
 import { NotFoundScreen } from '../app/states';
 import { ItemPage } from '../features/items/item-page';
@@ -10,6 +10,8 @@ import { itemKey } from '../shared/factory';
 export const Route = createFileRoute('/o/$org/f/$factory/items/$ref')({
   loader: async ({ context: { queryClient, org, factory }, params }) => {
     const key = itemKey(factory.name, params.ref);
+    // The run records only refine the trace: fetched alongside, never waited for.
+    void queryClient.prefetchQuery(runsQuery(org.id, key));
     try {
       await Promise.all([
         queryClient.ensureQueryData(itemQuery(org.id, key)),

@@ -15,9 +15,9 @@ import (
 // implementation and its permission table, and nothing else in the API changes.
 //
 // Every request passes it once in the /v1 middleware, after its organization is resolved
-// (Factory ""), and again in the only two resolvers that turn a path into a factory or an item,
-// server.factory and server.item, with that factory. A non-nil error stops the request before
-// the handler acts: one wrapping ports.ErrNotFound answers 404, any other 403.
+// (Factory ""), and again in the only resolvers that turn a path into a factory, an item or a
+// run, server.factory, server.item and server.run, with that factory. A non-nil error stops
+// the request before the handler acts: one wrapping ports.ErrNotFound answers 404, any other 403.
 type Authorizer interface {
 	Authorize(ctx context.Context, r AccessRequest) error
 }
@@ -99,6 +99,21 @@ func (s *server) item(ctx context.Context, ref string) (domain.Item, error) {
 	}
 
 	return it, nil
+}
+
+// run resolves a path's run within the request's organization and passes the Authorizer with
+// its factory. Handlers reach a run only through here.
+func (s *server) run(ctx context.Context, id string) (domain.Run, error) {
+	r, err := s.items.Run(ctx, domain.RunID(id))
+	if err != nil {
+		return domain.Run{}, err
+	}
+
+	if err := s.authorize(ctx, r.FactoryID); err != nil {
+		return domain.Run{}, err
+	}
+
+	return r, nil
 }
 
 func (s *server) findItem(ctx context.Context, ref string) (domain.Item, error) {

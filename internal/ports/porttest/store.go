@@ -185,28 +185,6 @@ func (s *Store) Lease(id domain.ItemID) (domain.Lease, bool) {
 	return l, ok
 }
 
-// Runs returns the runs of an item of org, oldest first.
-func (s *Store) Runs(org domain.OrgID, id domain.ItemID) []domain.Run {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var out []domain.Run
-
-	if _, ok := s.visible(id, org); !ok {
-		return out
-	}
-
-	for _, r := range s.runs {
-		if r.ItemID == id {
-			out = append(out, *r)
-		}
-	}
-
-	slices.SortFunc(out, func(a, b domain.Run) int { return cmp.Compare(a.ID, b.ID) })
-
-	return out
-}
-
 // CreateItem implements ports.Store.
 func (s *Store) CreateItem(ctx context.Context, n domain.NewItem) (domain.Item, error) {
 	org, err := orgOf(ctx)
@@ -503,6 +481,57 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 	})
 
 	return nil
+}
+
+// Runs implements ports.Store.
+func (s *Store) Runs(ctx context.Context, item domain.ItemID, limit int) ([]domain.Run, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := []domain.Run{}
+
+	if _, ok := s.visible(item, org); !ok {
+		return out, nil
+	}
+
+	for _, r := range s.runs {
+		if r.ItemID == item {
+			out = append(out, *r)
+		}
+	}
+
+	slices.SortFunc(out, func(a, b domain.Run) int {
+		return cmp.Or(a.StartedAt.Compare(b.StartedAt), cmp.Compare(a.ID, b.ID))
+	})
+
+	return out[:min(limit, len(out))], nil
+}
+
+// Run implements ports.Store.
+func (s *Store) Run(ctx context.Context, id domain.RunID) (domain.Run, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.Run{}, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, ok := s.runs[id]
+	if ok {
+		_, ok = s.visible(r.ItemID, org)
+	}
+
+	if !ok {
+		return domain.Run{}, fmt.Errorf("run %s: %w", id, ports.ErrNotFound)
+	}
+
+	return *r, nil
 }
 
 // Transition implements ports.Store.

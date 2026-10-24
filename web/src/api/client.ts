@@ -33,6 +33,7 @@ import type {
   OrgSettings,
   OrgSettingsPatch,
   OrgSummary,
+  RunList,
 } from './types';
 
 export { ApiError, type StreamStatus };
@@ -176,6 +177,11 @@ export function listItemEvents(
       ...cancel(signal),
     }),
   );
+}
+
+/** An item's agent runs, oldest first (at most 200; `truncated` says there are more). */
+export function listItemRuns(org: string, item: string, signal?: AbortSignal): Promise<RunList> {
+  return unwrap(goal.GET(orgPath('/items/{item}/runs'), { params: { path: { org, item } }, ...cancel(signal) }));
 }
 
 export function submitItem(org: string, factory: string, item: NewItem): Promise<Item> {

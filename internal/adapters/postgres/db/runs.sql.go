@@ -99,6 +99,35 @@ func (q *Queries) FinishRun(ctx context.Context, arg FinishRunParams) (FinishRun
 	return i, err
 }
 
+const getRun = `-- name: GetRun :one
+SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id FROM agent_runs WHERE id = $1
+`
+
+func (q *Queries) GetRun(ctx context.Context, id uuid.UUID) (AgentRun, error) {
+	row := q.db.QueryRow(ctx, getRun, id)
+	var i AgentRun
+	err := row.Scan(
+		&i.ID,
+		&i.FactoryID,
+		&i.ItemID,
+		&i.Station,
+		&i.Agent,
+		&i.Model,
+		&i.SessionID,
+		&i.Status,
+		&i.Turns,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.CostUsd,
+		&i.Error,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.OrgID,
+		&i.DefinitionVersionID,
+	)
+	return i, err
+}
+
 const insertRun = `-- name: InsertRun :exec
 INSERT INTO agent_runs (id, factory_id, definition_version_id, item_id, station, agent, model, status, started_at)
 VALUES ($1, $2, $3, $4, $5,
@@ -129,6 +158,58 @@ func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) error {
 		arg.StartedAt,
 	)
 	return err
+}
+
+const itemRuns = `-- name: ItemRuns :many
+SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id FROM agent_runs
+WHERE item_id = $1
+ORDER BY started_at, id
+LIMIT $2::bigint
+`
+
+type ItemRunsParams struct {
+	ItemID  uuid.UUID
+	MaxRuns int64
+}
+
+// An item's runs, oldest first, on agent_runs_item_id_idx; row-level security scopes it to the
+// organization.
+func (q *Queries) ItemRuns(ctx context.Context, arg ItemRunsParams) ([]AgentRun, error) {
+	rows, err := q.db.Query(ctx, itemRuns, arg.ItemID, arg.MaxRuns)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AgentRun
+	for rows.Next() {
+		var i AgentRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.FactoryID,
+			&i.ItemID,
+			&i.Station,
+			&i.Agent,
+			&i.Model,
+			&i.SessionID,
+			&i.Status,
+			&i.Turns,
+			&i.InputTokens,
+			&i.OutputTokens,
+			&i.CostUsd,
+			&i.Error,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.OrgID,
+			&i.DefinitionVersionID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const runItem = `-- name: RunItem :one

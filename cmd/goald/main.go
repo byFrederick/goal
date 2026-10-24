@@ -198,7 +198,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	editor := builder.New(objects, clock, builder.Config{Models: s.Models, Capabilities: builder.Capabilities{}, Logger: log})
 
 	apiHandler, err := api.New(api.Deps{
-		Engine: eng, Items: store, Factories: defs, Definitions: authors, Orgs: store, Audit: store, OrgRetention: s.OrgRetention,
+		Engine: eng, Items: store, Factories: defs, Definitions: authors, Versions: definitionStore, Orgs: store, Audit: store, OrgRetention: s.OrgRetention,
 		Authorizer: api.AllowAll{}, Feed: feed, Builder: editor, Clock: clock, Logger: log,
 	})
 	if err != nil {

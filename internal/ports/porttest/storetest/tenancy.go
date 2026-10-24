@@ -65,6 +65,12 @@ func testNoOrg(f *fixture) {
 	expect(t, "StartRun", err, domain.ErrNoOrg)
 	expect(t, "FinishRun", f.Store.FinishRun(ctx, run, domain.RunResult{Status: domain.RunSucceeded}, t1), domain.ErrNoOrg)
 
+	_, err = f.Store.Runs(ctx, it.ID, 10)
+	expect(t, "Runs", err, domain.ErrNoOrg)
+
+	_, err = f.Store.Run(ctx, run)
+	expect(t, "Run", err, domain.ErrNoOrg)
+
 	_, err = f.Store.Transition(ctx, next(it, l, t1))
 	expect(t, "Transition", err, domain.ErrNoOrg)
 	expect(t, "AppendEvents", f.Store.AppendEvents(ctx, domain.Event{
@@ -133,9 +139,12 @@ func testOtherOrg(f *fixture) {
 	expect(t, "HeartbeatLease from another org", err, ports.ErrLeaseLost)
 	expect(t, "FinishRun from another org", f.Store.FinishRun(ctx, run, domain.RunResult{Status: domain.RunSucceeded}, t1), ports.ErrNotFound)
 
+	_, err = other.Store.Run(ctx, run)
+	expect(t, "Run from another org", err, ports.ErrNotFound)
+
 	other.seesNothingOf(t, f.factory, it.ID)
 
-	if got := f.item(t, it.ID); got.State != domain.StateInProgress || len(f.Runs(t, f.org, it.ID)) != 1 {
+	if got := f.item(t, it.ID); got.State != domain.StateInProgress || len(f.runs(t, it.ID)) != 1 {
 		t.Errorf("item = %+v; want it untouched by the other org", got)
 	}
 }
@@ -199,7 +208,7 @@ func (f *fixture) seesNoFlowOf(t *testing.T, factory domain.FactoryID, item doma
 		t.Errorf("FlowMetrics = %+v, %v; want zero", m, err)
 	}
 
-	if runs := f.Runs(t, f.org, item); len(runs) != 0 {
+	if runs := f.runs(t, item); len(runs) != 0 {
 		t.Errorf("runs = %+v; want nothing", runs)
 	}
 }

@@ -328,7 +328,7 @@ func newHarness(t *testing.T) *harness {
 	})
 
 	handler, err := api.New(api.Deps{
-		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Orgs: tenancy, Audit: tenancy,
+		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
 		OrgRetention: retention, Authorizer: h.seam, Feed: feed, Builder: h.builder, Clock: h.clock,
 	})
 	if err != nil {

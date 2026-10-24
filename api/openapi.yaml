@@ -24,6 +24,10 @@ tags:
       What the app's chrome reads about an organization: attention badges, factory overviews and
       the inbox of what waits for a person. Phase 2.2 has no identity, so "waiting on you" is
       every decision waiting on a person.
+  - name: work
+    description: >-
+      Work on a factory's line: an item's agent runs and, later in phase 2.2, flow metrics, the
+      andon and the human controls of items
   - name: builder
     description: >-
       The factory editor's metadata (the install's models, which later phases are wired, the
@@ -1009,6 +1013,40 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EventPage" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/items/{item}/runs:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ItemRef"
+    get:
+      operationId: listItemRuns
+      tags: [work]
+      summary: An item's agent runs, oldest first (at most 200)
+      responses:
+        "200":
+          description: The item's runs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RunList" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/runs/{run}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - name: run
+        in: path
+        required: true
+        description: The run's id
+        schema: { type: string }
+    get:
+      operationId: getRun
+      tags: [work]
+      summary: One agent run (404 for a run of another organization)
+      responses:
+        "200":
+          description: The run
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/approve:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -1636,6 +1674,50 @@ components:
         data:
           type: object
           additionalProperties: {}
+    RunList:
+      type: object
+      required: [runs, truncated]
+      properties:
+        runs:
+          type: array
+          items: { $ref: "#/components/schemas/Run" }
+        truncated:
+          type: boolean
+          description: True when the item has more runs than the list holds (the oldest 200 are listed)
+    RunStatus:
+      type: string
+      enum: [running, succeeded, failed, cancelled]
+    Run:
+      type: object
+      description: >-
+        One agent run: one container working one item at one station. Its full transcript is not
+        kept (phase 2.2); the item's events carry the trace.
+      required: [id, item_id, station, agent, model, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, definition_version_id, definition_version]
+      properties:
+        id: { type: string }
+        item_id: { type: string }
+        station: { type: string }
+        agent: { type: string }
+        model: { type: string }
+        status: { $ref: "#/components/schemas/RunStatus" }
+        turns: { type: integer }
+        input_tokens: { type: integer, format: int64 }
+        output_tokens: { type: integer, format: int64 }
+        cost_usd: { type: number, format: double }
+        error:
+          type: string
+          nullable: true
+          description: Why a failed or cancelled run ended, else null
+        started_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time, nullable: true, description: Null while the run is running }
+        definition_version_id:
+          type: string
+          nullable: true
+          description: The definition version the run started and finished on; null for runs from before versions
+        definition_version:
+          type: integer
+          nullable: true
+          description: That version's number ("ran on v9"); null when the run has no version
     AndonPull:
       type: object
       description: An open stop of a factory's line

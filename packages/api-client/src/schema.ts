@@ -902,6 +902,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/items/{item}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        /** An item's agent runs, oldest first (at most 200) */
+        get: operations["listItemRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/runs/{run}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The run's id */
+                run: string;
+            };
+            cookie?: never;
+        };
+        /** One agent run (404 for a run of another organization) */
+        get: operations["getRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/items/{item}/approve": {
         parameters: {
             query?: never;
@@ -1419,6 +1463,42 @@ export interface components {
             data: {
                 [key: string]: unknown;
             };
+        };
+        RunList: {
+            runs: components["schemas"]["Run"][];
+            /** @description True when the item has more runs than the list holds (the oldest 200 are listed) */
+            truncated: boolean;
+        };
+        /** @enum {string} */
+        RunStatus: "running" | "succeeded" | "failed" | "cancelled";
+        /** @description One agent run: one container working one item at one station. Its full transcript is not kept (phase 2.2); the item's events carry the trace. */
+        Run: {
+            id: string;
+            item_id: string;
+            station: string;
+            agent: string;
+            model: string;
+            status: components["schemas"]["RunStatus"];
+            turns: number;
+            /** Format: int64 */
+            input_tokens: number;
+            /** Format: int64 */
+            output_tokens: number;
+            /** Format: double */
+            cost_usd: number;
+            /** @description Why a failed or cancelled run ended, else null */
+            error: string | null;
+            /** Format: date-time */
+            started_at: string;
+            /**
+             * Format: date-time
+             * @description Null while the run is running
+             */
+            ended_at: string | null;
+            /** @description The definition version the run started and finished on; null for runs from before versions */
+            definition_version_id: string | null;
+            /** @description That version's number ("ran on v9"); null when the run has no version */
+            definition_version: number | null;
         };
         /** @description An open stop of a factory's line */
         AndonPull: {
@@ -3479,6 +3559,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EventPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listItemRuns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The item's runs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The run's id */
+                run: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
                 };
             };
             default: components["responses"]["Problem"];

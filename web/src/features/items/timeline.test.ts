@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ItemEvent } from '../../api/types';
-import { activeRun, buildTrace, latestToolCalls, toolArgument } from './timeline';
+import { activeRun, buildTrace, latestToolCalls, type RunEntry, runLabel, toolArgument } from './timeline';
 
 let nextId = 1;
 const ev = (kind: string, data: Record<string, unknown> = {}, extra: Partial<ItemEvent> = {}): ItemEvent => ({
@@ -100,6 +100,96 @@ describe('buildTrace', () => {
     expect(activeRun(trace)?.key).toBe('run-b');
     expect(latestToolCalls(trace, 2).map((t) => t.tool)).toEqual(['Edit', 'Bash']);
     expect(trace.entries[0]).toMatchObject({ status: 'failed', error: 'max turns' });
+  });
+
+  it('names each run by its agent copy: the slot of the claim it ran in', () => {
+    const a = { run_id: 'a', actor: 'investigator' };
+    const retry = { run_id: 'b', actor: 'investigator' };
+    const c = { run_id: 'c', actor: 'investigator' };
+    const trace = buildTrace([
+      ev('claimed', { slot: 1, agent: 'investigator' }),
+      ev('run_started', {}, a),
+      ev('run_finished', { status: 'succeeded' }, a),
+      ev('contract_failed', { error: 'missing evidence' }),
+      ev('run_started', {}, retry),
+      ev('released', { reason: 'shutdown' }),
+      ev('claimed', { slot: 0, agent: 'investigator' }),
+      ev('run_started', {}, c),
+    ]);
+    const runs = trace.entries.filter((e) => e.kind === 'run');
+    expect(runs.map(runLabel)).toEqual(['investigator-2', 'investigator-2', 'investigator-1']);
+  });
+
+  it('takes status, turns, cost, model and the version a run ran on from goald’s record of it', () => {
+    const a = { run_id: 'a', actor: 'builder' };
+    const trace = buildTrace(
+      [
+        ev('claimed', { slot: 0, agent: 'builder' }),
+        ev('run_started', {}, a),
+        ev('tool_call', { id: '1', tool: 'Read', input: '{}' }, a),
+      ],
+      [
+        {
+          id: 'a',
+          item_id: 'item-1',
+          station: 'build',
+          agent: 'builder',
+          model: 'claude-opus-5-5',
+          status: 'failed',
+          turns: 14,
+          input_tokens: 900,
+          output_tokens: 300,
+          cost_usd: 1.12,
+          error: 'max turns',
+          started_at: '2026-10-23T14:02:00Z',
+          ended_at: '2026-10-23T14:40:00Z',
+          definition_version_id: 'v-9',
+          definition_version: 9,
+        },
+      ],
+    );
+    expect(trace.entries[0]).toMatchObject({
+      kind: 'run',
+      status: 'failed',
+      turns: 14,
+      costUsd: 1.12,
+      model: 'claude-opus-5-5',
+      error: 'max turns',
+      endedAt: '2026-10-23T14:40:00Z',
+      version: 9,
+    });
+    expect(trace).toMatchObject({ costUsd: 1.12, turns: 14, model: 'claude-opus-5-5' });
+    expect(activeRun(trace)).toBeUndefined();
+  });
+
+  it('leaves runs from before versions without one', () => {
+    const a = { run_id: 'a', actor: 'builder' };
+    const trace = buildTrace(
+      [ev('run_started', {}, a)],
+      [
+        {
+          id: 'a',
+          item_id: 'item-1',
+          station: 'build',
+          agent: 'builder',
+          model: 'claude-opus-5-5',
+          status: 'running',
+          turns: 0,
+          input_tokens: 0,
+          output_tokens: 0,
+          cost_usd: 0,
+          error: null,
+          started_at: '2026-10-23T14:02:00Z',
+          ended_at: null,
+          definition_version_id: null,
+          definition_version: null,
+        },
+      ],
+    );
+    expect(trace.entries[0]).toMatchObject({ kind: 'run', status: 'running' });
+    expect(trace.entries[0]).not.toHaveProperty('version');
+    expect(trace.entries[0]).not.toHaveProperty('turns');
+    expect(runLabel(trace.entries[0] as RunEntry)).toBe('builder');
   });
 });
 

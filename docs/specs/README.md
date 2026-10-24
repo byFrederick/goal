@@ -38,7 +38,7 @@ Cross-spec review, build order and open decisions: [review-2.2.md](review-2.2.md
 
 **Interim rule: a single local user, every action allowed.** Every request is `domain.LocalUser` (`Actor{user, "local", "Local user"}`), and every action is allowed to it. Organizations separate data (RLS), not people. goald keeps listening on loopback only. Tables that record who did something store `Actor.Ref()` (`user:local`, `agent:<name>`, `system:<job>`) in `<x>_by text` columns, and the audit log stores the actor's kind, id and name; nothing references a `users` table.
 
-**The seam phase 3 builds on** (A §5.3): the request-actor middleware (`internal/api/actor.go`, the only place a request's actor is set) and the `api.Authorizer` interface (`Authorize(ctx, AccessRequest{Actor, Operation, Org, Factory}) error`), wired as `AllowAll` in 2.2 and called from one helper in the `/v1` middleware and in the two resolvers `s.factory`/`s.item`. Specs mark these changes "(no-auth)".
+**The seam phase 3 builds on** (A §5.3): the request-actor middleware (`internal/api/actor.go`, the only place a request's actor is set) and the `api.Authorizer` interface (`Authorize(ctx, AccessRequest{Actor, Operation, Org, Factory}) error`), wired as `AllowAll` in 2.2 and called from one helper in the `/v1` middleware and in the resolvers `s.factory`/`s.item` (and `s.run`, E13). Specs mark these changes "(no-auth)".
 
 ## Shared conventions every spec follows
 

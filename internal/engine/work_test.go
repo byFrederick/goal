@@ -387,7 +387,7 @@ func TestRun_GatewayTokenIsScopedToTheTask(t *testing.T) {
 	}
 
 	want := domain.TaskClaims{
-		OrgID: testOrg, FactoryID: factoryID, VersionID: v1, ItemID: it.ID, Station: stWork, Agent: agWorker, RunID: h.store.Runs(testOrg, it.ID)[0].ID,
+		OrgID: testOrg, FactoryID: factoryID, VersionID: v1, ItemID: it.ID, Station: stWork, Agent: agWorker, RunID: h.runs(t, testOrg, it.ID)[0].ID,
 		Connections: []string{"github"}, ExpiresAt: claims.ExpiresAt,
 	}
 	if !reflect.DeepEqual(claims, want) {
@@ -404,7 +404,7 @@ func TestRun_EndedRunsAreReported(t *testing.T) {
 
 	h.step(t)
 
-	if got, want := h.endedRuns(), []domain.RunID{h.store.Runs(testOrg, it.ID)[0].ID}; !slices.Equal(got, want) {
+	if got, want := h.endedRuns(), []domain.RunID{h.runs(t, testOrg, it.ID)[0].ID}; !slices.Equal(got, want) {
 		t.Fatalf("ended runs = %v, want %v: the gateway would keep the run's sidecars", got, want)
 	}
 }
@@ -573,7 +573,7 @@ func TestRun_KeepsItsVersionAndTheNextMoveUsesTheCurrentLine(t *testing.T) {
 		t.Errorf("task version = %q, want %q", spec.DefinitionVersionID, v1)
 	}
 
-	if runs := h.store.Runs(testOrg, it.ID); len(runs) != 1 || runs[0].DefinitionVersionID != v1 {
+	if runs := h.runs(t, testOrg, it.ID); len(runs) != 1 || runs[0].DefinitionVersionID != v1 {
 		t.Errorf("runs = %+v, want one recorded on %s", runs, v1)
 	}
 

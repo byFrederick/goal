@@ -88,6 +88,13 @@ type Store interface {
 	// event with its status, error, cost and turns. Finishing a run twice is a no-op.
 	FinishRun(ctx context.Context, id domain.RunID, res domain.RunResult, endedAt time.Time) error
 
+	// Runs returns up to limit of an item's runs, oldest first (by start, then id). An unknown
+	// item has none.
+	Runs(ctx context.Context, item domain.ItemID, limit int) ([]domain.Run, error)
+
+	// Run returns one run, or ErrNotFound.
+	Run(ctx context.Context, id domain.RunID) (domain.Run, error)
+
 	// Transition moves an item as described by t, compare-and-set on t.From (and on t.Lease
 	// when set). It returns ErrConflict or ErrLeaseLost when the guard fails; nothing changes.
 	Transition(ctx context.Context, t Transition) (domain.Item, error)

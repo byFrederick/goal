@@ -25,8 +25,6 @@ type Harness struct {
 	NewOrg func(t *testing.T) domain.OrgID
 	// NewFactory returns a factory of org the store accepts items for.
 	NewFactory func(t *testing.T, org domain.OrgID) domain.FactoryID
-	// Runs returns an item's runs in org, oldest first.
-	Runs func(t *testing.T, org domain.OrgID, id domain.ItemID) []domain.Run
 	// SetSlotCaps sets org's slot cap and those of the named factories of org; 0 clears a cap.
 	SetSlotCaps func(t *testing.T, org domain.OrgID, maxSlots int, factories map[domain.FactoryID]int)
 	// RecordAndon records an andon pull on a factory of org, already cleared when cleared is
@@ -58,6 +56,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"RequeueExpiredLeases_FencesTheOldHolder", testRequeueFences},
 		{"RequeueExpiredLeases_OldestFirstUpToLimit", testRequeueLimit},
 		{"Runs_FinishOnceAndAddCost", testRuns},
+		{"Runs_OldestFirstUpToLimitAndOneByID", testRunReads},
 		{"AppendEvents_InOrder", testAppendEvents},
 		{"ItemEvents_PagesInAppendOrder", testItemEvents},
 		{"ItemByNumber_PerFactory", testItemByNumber},
@@ -149,6 +148,18 @@ func (f *fixture) Events(t *testing.T, id domain.ItemID) []domain.Event {
 	}
 
 	return events
+}
+
+// runs returns an item's runs through the port, oldest first.
+func (f *fixture) runs(t *testing.T, id domain.ItemID) []domain.Run {
+	t.Helper()
+
+	runs, err := f.Store.Runs(f.ctx(t), id, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return runs
 }
 
 // create adds a queued standard item at the work station unless n says otherwise.
@@ -595,12 +606,12 @@ func testRequeue(f *fixture) {
 		t.Errorf("Leases = %+v; want only b's", ls)
 	}
 
-	sameRuns(t, f.Runs(t, f.org, a.ID), []domain.Run{{
+	sameRuns(t, f.runs(t, a.ID), []domain.Run{{
 		ID: runA, FactoryID: f.factory, ItemID: a.ID, Station: stWork, Agent: agWorker, Model: model,
 		Result: domain.RunResult{Status: domain.RunFailed, Error: "lease expired"}, StartedAt: t1, EndedAt: now,
 	}})
 
-	if runs := f.Runs(t, f.org, b.ID); len(runs) != 1 || runs[0].Result.Status != domain.RunRunning {
+	if runs := f.runs(t, b.ID); len(runs) != 1 || runs[0].Result.Status != domain.RunRunning {
 		t.Errorf("b's runs = %+v; want still running", runs)
 	}
 
@@ -695,7 +706,7 @@ func testRuns(f *fixture) {
 		ID: id, FactoryID: f.factory, ItemID: it.ID, Station: stWork, Agent: agWorker, Model: model,
 		Result: domain.RunResult{Status: domain.RunRunning}, StartedAt: t1,
 	}
-	sameRuns(t, f.Runs(t, f.org, it.ID), []domain.Run{want})
+	sameRuns(t, f.runs(t, it.ID), []domain.Run{want})
 
 	res := domain.RunResult{Status: domain.RunSucceeded, CostUSD: 0.25, Turns: 3, InputTokens: 100, OutputTokens: 50, SessionID: "s-1"}
 	if err := f.Store.FinishRun(f.ctx(t), id, res, t2); err != nil {
@@ -703,7 +714,7 @@ func testRuns(f *fixture) {
 	}
 
 	want.Result, want.EndedAt = res, t2
-	sameRuns(t, f.Runs(t, f.org, it.ID), []domain.Run{want})
+	sameRuns(t, f.runs(t, it.ID), []domain.Run{want})
 
 	events := f.Events(t, it.ID)
 	sameEvents(t, events[len(events)-2:], []domain.Event{
@@ -719,7 +730,7 @@ func testRuns(f *fixture) {
 		t.Fatal(err)
 	}
 
-	sameRuns(t, f.Runs(t, f.org, it.ID), []domain.Run{want})
+	sameRuns(t, f.runs(t, it.ID), []domain.Run{want})
 
 	if n := len(f.Events(t, it.ID)); n != len(events) {
 		t.Errorf("events after a second finish = %d; want %d", n, len(events))
@@ -733,6 +744,60 @@ func testRuns(f *fixture) {
 	if got := f.item(t, it.ID).CostUSD; got != 0.75 {
 		t.Errorf("item cost = %v; want 0.75, the sum of its finished runs", got)
 	}
+}
+
+func testRunReads(f *fixture) {
+	t := f.t
+
+	it := f.create(t, domain.NewItem{})
+	other := f.create(t, domain.NewItem{Title: "other"})
+	t2 := t1.Add(time.Minute)
+
+	// Started out of order: the later start is recorded first.
+	late := f.startRun(t, it.ID, t2)
+	early := f.startRun(t, it.ID, t1)
+	f.startRun(t, other.ID, t1)
+
+	res := domain.RunResult{Status: domain.RunSucceeded, CostUSD: 0.5, Turns: 4, InputTokens: 10, OutputTokens: 20, SessionID: "s-2"}
+	if err := f.Store.FinishRun(f.ctx(t), early, res, t2); err != nil {
+		t.Fatal(err)
+	}
+
+	first := domain.Run{
+		ID: early, FactoryID: f.factory, ItemID: it.ID, Station: stWork, Agent: agWorker, Model: model,
+		Result: res, StartedAt: t1, EndedAt: t2,
+	}
+	second := domain.Run{
+		ID: late, FactoryID: f.factory, ItemID: it.ID, Station: stWork, Agent: agWorker, Model: model,
+		Result: domain.RunResult{Status: domain.RunRunning}, StartedAt: t2,
+	}
+
+	got, err := f.Store.Runs(f.ctx(t), it.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sameRuns(t, got, []domain.Run{first, second})
+
+	if got, err = f.Store.Runs(f.ctx(t), it.ID, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	sameRuns(t, got, []domain.Run{first})
+
+	if got, err = f.Store.Runs(f.ctx(t), missingItem, 10); err != nil || len(got) != 0 {
+		t.Errorf("Runs of an unknown item = %+v, %v; want none", got, err)
+	}
+
+	run, err := f.Store.Run(f.ctx(t), late)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sameRuns(t, []domain.Run{run}, []domain.Run{second})
+
+	_, err = f.Store.Run(f.ctx(t), missingRun)
+	expect(t, "Run unknown", err, ports.ErrNotFound)
 }
 
 func testAppendEvents(f *fixture) {

@@ -62,6 +62,8 @@ export type {
   PublishRequest,
   Ranges,
   RestoreRequest,
+  Run,
+  RunList,
   SaveResult,
   Section,
   SectionETags,

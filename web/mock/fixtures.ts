@@ -13,6 +13,7 @@ import type {
   ItemState,
   Metrics,
   Org,
+  Run,
   VersionRef,
 } from '@goal/api-client';
 
@@ -69,6 +70,8 @@ export interface MockState {
   items: MockItem[];
   events: ItemEvent[];
   nextEventId: number;
+  /** Every agent run, in start order; goald's agent_runs. */
+  runs: Run[];
 }
 
 type Tool = [name: string, input: string, summary: string, isError?: boolean];
@@ -110,6 +113,18 @@ interface Seed {
 }
 
 const model = 'claude-sonnet-5-5';
+
+/** The published definition version each factory's runs ran on, by name. */
+const versions: Record<string, { id: string; number: number }> = {
+  goal: { id: '019a1c00-0000-7000-8000-00000000a009', number: 9 },
+  sre: { id: '019a1c00-0000-7000-8000-00000000b004', number: 4 },
+};
+
+/** A step's run name is the agent copy, "builder-2": the agent and its slot from 0. */
+function agentCopy(name: string): { agent: string; slot: number } {
+  const m = /^(.+)-(\d+)$/.exec(name);
+  return m ? { agent: m[1] ?? name, slot: Number(m[2]) - 1 } : { agent: name, slot: 0 };
+}
 const repo = 'https://github.com/acme/goal';
 
 /** Who publishes in phase 2.2: the local user. */
@@ -850,22 +865,38 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
         push('moved', step.by ?? 'engine', { from, to: step.move });
       } else if ('run' in step) {
         const run = `${id.slice(-6)}-run-${++runs}`;
-        push('claimed', 'engine', { slot: 0, agent: step.run });
-        push('run_started', step.run, {}, run);
-        push('agent_started', step.run, { model, session_id: run }, run);
+        const { agent, slot } = agentCopy(step.run);
+        push('claimed', 'engine', { slot, agent });
+        const startedAt = new Date(Math.round(at)).toISOString();
+        push('run_started', agent, {}, run);
+        push('agent_started', agent, { model, session_id: run }, run);
         step.tools.forEach(([tool, input, summary, isError], i) => {
-          push('tool_call', step.run, { id: `t${i}`, tool, input: JSON.stringify({ arg: input }) }, run);
-          push('tool_result', step.run, { id: `t${i}`, is_error: Boolean(isError), summary }, run);
+          push('tool_call', agent, { id: `t${i}`, tool, input: JSON.stringify({ arg: input }) }, run);
+          push('tool_result', agent, { id: `t${i}`, is_error: Boolean(isError), summary }, run);
         });
-        if (step.message) push('agent_message', step.run, { text: step.message }, run);
+        if (step.message) push('agent_message', agent, { text: step.message }, run);
         item.cost_usd += step.cost;
-        if (step.status !== 'running') {
-          push(
-            'run_finished',
-            step.run,
-            { status: step.status ?? 'succeeded', error: step.error ?? '', cost_usd: step.cost, turns: step.turns },
-            run,
-          );
+        const status = step.status ?? 'succeeded';
+        const version = versions[factory.name] ?? null;
+        state.runs.push({
+          id: run,
+          item_id: id,
+          station,
+          agent,
+          model,
+          status,
+          turns: status === 'running' ? 0 : step.turns,
+          input_tokens: step.turns * 4_000,
+          output_tokens: step.turns * 600,
+          cost_usd: status === 'running' ? 0 : step.cost,
+          error: step.error ?? null,
+          started_at: startedAt,
+          ended_at: status === 'running' ? null : new Date(Math.round(at)).toISOString(),
+          definition_version_id: version?.id ?? null,
+          definition_version: version?.number ?? null,
+        });
+        if (status !== 'running') {
+          push('run_finished', agent, { status, error: step.error ?? '', cost_usd: step.cost, turns: step.turns }, run);
         }
       } else if ('check' in step) {
         push(step.exit === 0 ? 'check_passed' : 'check_failed', 'engine', {
@@ -952,6 +983,7 @@ export function seed(now = Date.now()): MockState {
     items: [],
     events: [],
     nextEventId: 1,
+    runs: [],
   };
 
   const localUser = { kind: 'user', id: 'local', name: 'Local user' } as const;

@@ -30,7 +30,6 @@ func TestStore_Conformance(t *testing.T) {
 
 				return id
 			},
-			Runs: func(_ *testing.T, org domain.OrgID, id domain.ItemID) []domain.Run { return s.Runs(org, id) },
 			SetSlotCaps: func(_ *testing.T, org domain.OrgID, maxSlots int, factories map[domain.FactoryID]int) {
 				s.SetSlotCaps(org, maxSlots, factories)
 			},

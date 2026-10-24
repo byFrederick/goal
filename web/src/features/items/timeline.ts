@@ -1,6 +1,8 @@
 // Turns an item's raw event history into the trace the Item screen shows: one block per agent
-// run (its tool calls paired with their results, cost and turns), checks, and decisions.
-import type { ItemEvent } from '../../api/types';
+// run (its tool calls paired with their results, cost and turns), checks, and decisions. goald's
+// record of each run (GET …/items/{item}/runs), when at hand, is the authority on its status,
+// turns, cost and the definition version it ran on.
+import type { ItemEvent, Run } from '../../api/types';
 import { humanize } from '../../shared/format';
 import type { Tone } from '../../shared/item-state';
 
@@ -17,11 +19,17 @@ export interface ToolCall {
 export interface RunEntry {
   kind: 'run';
   key: string;
+  /** The run's id. */
+  id: string;
   at: string;
   endedAt?: string;
   station: string;
   agent: string;
+  /** The station slot of the claim the run worked in, from 0: the agent copy. */
+  slot?: number;
   model?: string;
+  /** The number of the definition version the run ran on. */
+  version?: number;
   status: 'running' | 'succeeded' | 'failed' | 'cancelled';
   costUsd?: number;
   turns?: number;
@@ -140,13 +148,30 @@ function note(e: ItemEvent): Omit<NoteEntry, 'kind' | 'key' | 'at' | 'station' |
   }
 }
 
-export function buildTrace(events: readonly ItemEvent[]): Trace {
+/** A run's agent copy as boards name it: "investigator-2" for slot 1; the agent when unknown. */
+export function runLabel(run: Pick<RunEntry, 'agent' | 'slot'>): string {
+  return run.slot === undefined ? run.agent : `${run.agent}-${run.slot + 1}`;
+}
+
+/** goald's record of a run over what its events said; turns and cost count once it ended. */
+function applyRecord(run: RunEntry, record: Run) {
+  run.status = record.status;
+  run.model = record.model;
+  if (record.status !== 'running') {
+    run.turns = record.turns;
+    run.costUsd = record.cost_usd;
+  }
+  if (record.ended_at) run.endedAt = record.ended_at;
+  if (record.error) run.error = record.error;
+  if (record.definition_version !== null) run.version = record.definition_version;
+}
+
+export function buildTrace(events: readonly ItemEvent[], records: readonly Run[] = []): Trace {
   const entries: Entry[] = [];
   const runs = new Map<string, RunEntry>();
   const visits: StationVisit[] = [];
-  let costUsd = 0;
-  let turns = 0;
-  let model: string | undefined;
+  // The slot of the latest claim: every run until the next claim works in it.
+  let slot: number | undefined;
 
   const enter = (station: string, at: string) => {
     const last = visits.at(-1);
@@ -158,6 +183,7 @@ export function buildTrace(events: readonly ItemEvent[]): Trace {
   for (const e of events) {
     const station = e.station ?? '';
 
+    if (e.kind === 'claimed') slot = num(e.data.slot);
     if (e.kind === 'created' && station) enter(station, e.at);
     if (e.kind === 'moved') {
       const to = str(e.data.to);
@@ -167,7 +193,17 @@ export function buildTrace(events: readonly ItemEvent[]): Trace {
     if (e.run_id) {
       let run = runs.get(e.run_id);
       if (!run) {
-        run = { kind: 'run', key: `run-${e.run_id}`, at: e.at, station, agent: e.actor, status: 'running', tools: [] };
+        run = {
+          kind: 'run',
+          key: `run-${e.run_id}`,
+          id: e.run_id,
+          at: e.at,
+          station,
+          agent: e.actor,
+          ...(slot !== undefined ? { slot } : {}),
+          status: 'running',
+          tools: [],
+        };
         runs.set(e.run_id, run);
         entries.push(run);
       }
@@ -175,10 +211,7 @@ export function buildTrace(events: readonly ItemEvent[]): Trace {
       switch (e.kind) {
         case 'agent_started': {
           const m = str(e.data.model);
-          if (m) {
-            run.model = m;
-            model = m;
-          }
+          if (m) run.model = m;
           break;
         }
         case 'tool_call':
@@ -212,14 +245,8 @@ export function buildTrace(events: readonly ItemEvent[]): Trace {
           const cost = num(e.data.cost_usd);
           const t = num(e.data.turns);
           const error = str(e.data.error);
-          if (cost !== undefined) {
-            run.costUsd = cost;
-            costUsd += cost;
-          }
-          if (t !== undefined) {
-            run.turns = t;
-            turns += t;
-          }
+          if (cost !== undefined) run.costUsd = cost;
+          if (t !== undefined) run.turns = t;
           if (error) run.error = error;
           break;
         }
@@ -245,6 +272,20 @@ export function buildTrace(events: readonly ItemEvent[]): Trace {
 
     const n = note(e);
     if (n) entries.push({ kind: 'note', key: `ev-${e.id}`, at: e.at, station, actor: e.actor, ...n });
+  }
+
+  for (const record of records) {
+    const run = runs.get(record.id);
+    if (run) applyRecord(run, record);
+  }
+
+  let costUsd = 0;
+  let turns = 0;
+  let model: string | undefined;
+  for (const run of runs.values()) {
+    costUsd += run.costUsd ?? 0;
+    turns += run.turns ?? 0;
+    model = run.model ?? model;
   }
 
   return { entries, visits, costUsd, turns, ...(model ? { model } : {}) };

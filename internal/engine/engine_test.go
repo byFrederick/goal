@@ -87,6 +87,18 @@ func (h *harness) endedRuns() []domain.RunID {
 	return slices.Clone(h.ended)
 }
 
+// runs returns an item's runs in org, oldest first.
+func (h *harness) runs(t *testing.T, org domain.OrgID, id domain.ItemID) []domain.Run {
+	t.Helper()
+
+	runs, err := h.store.Runs(domain.WithOrg(t.Context(), org), id, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return runs
+}
+
 func newHarness(t *testing.T, line domain.Line, run porttest.RunFunc) *harness {
 	t.Helper()
 

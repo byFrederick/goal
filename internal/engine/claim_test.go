@@ -145,7 +145,7 @@ func TestTick_TakesTheOrgOfEachLineNotOfItsContext(t *testing.T) {
 		}
 
 		for _, it := range items {
-			if runs := h.store.Runs(f.org, it.ID); len(runs) != 1 || runs[0].Result.Status != domain.RunSucceeded {
+			if runs := h.runs(t, f.org, it.ID); len(runs) != 1 || runs[0].Result.Status != domain.RunSucceeded {
 				t.Errorf("runs of %s = %v, want one that succeeded", it.ID, runs)
 			}
 		}

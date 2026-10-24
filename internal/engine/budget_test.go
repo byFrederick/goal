@@ -202,7 +202,7 @@ func TestWeeklyBudget_StopCancelsRunningAndRequeues(t *testing.T) {
 		t.Errorf("agent_cancelled events = %+v; want one at %s with reason budget", cancelled, stWork)
 	}
 
-	if runs := h.store.Runs(testOrg, running.ID); len(runs) != 1 || runs[0].Result.Status != domain.RunCancelled {
+	if runs := h.runs(t, testOrg, running.ID); len(runs) != 1 || runs[0].Result.Status != domain.RunCancelled {
 		t.Errorf("runs = %+v; want the one run cancelled", runs)
 	}
 

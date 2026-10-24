@@ -23,6 +23,7 @@ import type {
   Org,
   OrgAttention,
   OrgSettings,
+  RunList,
   StreamEvent,
 } from '@goal/api-client';
 import { type MockItem, type MockSlots, type MockState, seed } from './fixtures.ts';
@@ -540,7 +541,15 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return problem(res, 405, 'Method not allowed');
     }
 
-    m = rest.match(/^\/items\/([^/]+)(?:\/(events|approve|reject|merge|retry))?$/);
+    m = rest.match(/^\/runs\/([^/]+)$/);
+    if (m && method === 'GET') {
+      const run = state.runs.find((r) => r.id === decodeURIComponent(m?.[1] ?? ''));
+      const of = run && state.items.find((it) => it.id === run.item_id);
+      if (!run || !of || findFactory(of.factory)?.org_id !== org.id) return problem(res, 404, 'Run not found', path);
+      return json(res, 200, run);
+    }
+
+    m = rest.match(/^\/items\/([^/]+)(?:\/(events|runs|approve|reject|merge|retry))?$/);
     if (!m) return problem(res, 404, 'Not found', path);
 
     const it = findItem(decodeURIComponent(m[1] ?? ''), org.id);
@@ -553,6 +562,11 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       const limit = Math.min(1000, Number(url.searchParams.get('limit') ?? 200));
       const events = state.events.filter((e) => e.item_id === it.id && e.id > after).slice(0, limit);
       return json(res, 200, { events, next_after: events.at(-1)?.id ?? after });
+    }
+    if (action === 'runs' && method === 'GET') {
+      const runs = state.runs.filter((r) => r.item_id === it.id);
+      const body: RunList = { runs: runs.slice(0, 200), truncated: runs.length > 200 };
+      return json(res, 200, body);
     }
     if (method !== 'POST') return problem(res, 405, 'Method not allowed');
 

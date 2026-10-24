@@ -367,6 +367,42 @@ func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, err
 	return runID, nil
 }
 
+// Runs implements ports.Store.
+func (s *Store) Runs(ctx context.Context, item domain.ItemID, limit int) ([]domain.Run, error) {
+	uid, err := parseID("item", string(item))
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.AgentRun, error) {
+		return q.ItemRuns(ctx, db.ItemRunsParams{ItemID: uid, MaxRuns: int64(limit)})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("runs of item %s: %w", item, err)
+	}
+
+	return convertAll(rows, func(r db.AgentRun) (domain.Run, error) { return runFrom(r), nil })
+}
+
+// Run implements ports.Store.
+func (s *Store) Run(ctx context.Context, id domain.RunID) (domain.Run, error) {
+	uid, err := parseID("run", string(id))
+	if err != nil {
+		return domain.Run{}, err
+	}
+
+	row, err := fetch(ctx, s.read, func(q *db.Queries) (db.AgentRun, error) { return q.GetRun(ctx, uid) })
+	if notFound(err) {
+		return domain.Run{}, fmt.Errorf("run %s: %w", id, ports.ErrNotFound)
+	}
+
+	if err != nil {
+		return domain.Run{}, fmt.Errorf("run %s: %w", id, err)
+	}
+
+	return runFrom(row), nil
+}
+
 // FinishRun implements ports.Store.
 func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunResult, endedAt time.Time) error {
 	run, err := parseID("run", string(id))

@@ -257,9 +257,12 @@ var probes = map[string]probe{
 	"rejectItem":         {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/reject", body: `{"reason":"no"}`, org: testOrg, factory: acmeID},
 	"retryItem":          {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/retry", org: testOrg, factory: acmeID},
 	"mergeItem":          {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/merge", org: testOrg, factory: acmeID},
-	"getBuilderMeta":     {method: http.MethodGet, path: "/v1/orgs/acme/builder/meta", org: testOrg},
-	"searchSkills":       {method: http.MethodGet, path: "/v1/orgs/acme/builder/skills?q=lint", org: testOrg},
-	"getSkillFiles":      {method: http.MethodGet, path: "/v1/orgs/acme/builder/skills/acme/skills/lint/files", org: testOrg},
+	"listItemRuns":       {method: http.MethodGet, path: "/v1/orgs/acme/items/acme%231/runs", org: testOrg, factory: acmeID},
+	// No run exists here; TestAPI_RunsOfAnItem checks that the run resolver passes the seam with its factory.
+	"getRun":         {method: http.MethodGet, path: "/v1/orgs/acme/runs/00000000-0000-7000-8000-ffffffffffff", org: testOrg},
+	"getBuilderMeta": {method: http.MethodGet, path: "/v1/orgs/acme/builder/meta", org: testOrg},
+	"searchSkills":   {method: http.MethodGet, path: "/v1/orgs/acme/builder/skills?q=lint", org: testOrg},
+	"getSkillFiles":  {method: http.MethodGet, path: "/v1/orgs/acme/builder/skills/acme/skills/lint/files", org: testOrg},
 
 	// Definitions: writes carry a (stale) If-Match, so the request reaches the resolver.
 	"createFactory":      {method: http.MethodPost, path: "/v1/orgs/acme/factories", body: `{"name":"probe","start":{"kind":"blank"}}`, org: testOrg},
