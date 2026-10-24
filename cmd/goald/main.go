@@ -23,6 +23,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/moby/moby/client"
 
 	"github.com/byFrederick/goal/internal/adapters/docker"
@@ -95,15 +96,11 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return fmt.Errorf("gateway key (%s) is shorter than %d bytes", s.GatewayKeyRef, minKeyBytes)
 	}
 
-	pool, err := postgres.Open(ctx, s.DatabaseURL)
+	pool, err := openDatabase(ctx, s, log)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
-
-	if err := postgres.Migrate(ctx, pool); err != nil {
-		return err
-	}
 
 	store := postgres.New(pool)
 
@@ -241,6 +238,38 @@ func serve(ctx context.Context, log *slog.Logger, s settings, srv *http.Server, 
 	wg.Wait()
 
 	return srvErr
+}
+
+// openDatabase applies pending migrations as goal_owner on a pool of its own, closed before goald
+// serves anything, then opens goald's pool as goal_app and refuses a role that row-level security
+// would not bind. The caller closes the pool.
+func openDatabase(ctx context.Context, s settings, log *slog.Logger) (*pgxpool.Pool, error) {
+	owner, err := postgres.Open(ctx, s.MigrateDatabaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("GOAL_MIGRATE_DATABASE_URL: %w (goal db init creates the roles)", err)
+	}
+
+	err = postgres.Migrate(ctx, owner)
+	owner.Close()
+
+	if err != nil {
+		return nil, err
+	}
+
+	pool, err := postgres.Open(ctx, s.DatabaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("GOAL_DATABASE_URL: %w", err)
+	}
+
+	if err := postgres.CheckAppRole(ctx, pool); err != nil {
+		pool.Close()
+
+		return nil, fmt.Errorf("GOAL_DATABASE_URL: %w", err)
+	}
+
+	log.InfoContext(ctx, "database ready", slog.String("role_check", "passed"))
+
+	return pool, nil
 }
 
 // refresh re-reads factory definitions from the bucket until ctx ends.

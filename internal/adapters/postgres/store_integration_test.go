@@ -8,8 +8,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net/url"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,6 +24,7 @@ import (
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/ports/porttest/storetest"
+	"github.com/byFrederick/goal/migrations"
 )
 
 func TestStore_Conformance(t *testing.T) {
@@ -42,7 +46,9 @@ func TestStore_Conformance(t *testing.T) {
 func TestMigrate_RepeatableAndSafeToRunConcurrently(t *testing.T) {
 	t.Parallel()
 
-	pool := newTestPool(t) // already migrated once
+	db := newTestDB(t, OwnerRole)
+	migrate(t, db.owner)
+	pool := openPool(t, db.owner)
 
 	var wg sync.WaitGroup
 
@@ -61,9 +67,26 @@ func TestMigrate_RepeatableAndSafeToRunConcurrently(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if version != 3 {
-		t.Errorf("schema version = %d; want 3", version)
+	if want := latestMigration(t); version != want {
+		t.Errorf("schema version = %d; want %d", version, want)
 	}
+}
+
+// latestMigration is the number of the newest file in migrations/.
+func latestMigration(t *testing.T) int64 {
+	t.Helper()
+
+	files, err := fs.Glob(migrations.FS, "*.sql")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("migrations: %v, %d files", err, len(files))
+	}
+
+	v, err := strconv.ParseInt(strings.SplitN(files[len(files)-1], "_", 2)[0], 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return v
 }
 
 func TestCreateItem_UnsavedFactoryNotFound(t *testing.T) {
@@ -72,7 +95,7 @@ func TestCreateItem_UnsavedFactoryNotFound(t *testing.T) {
 	s := New(newTestPool(t))
 
 	_, err := s.CreateItem(t.Context(), domain.NewItem{
-		FactoryID: domain.FactoryID(uuid.NewString()), Type: "task", Title: "x", Station: "work",
+		FactoryID: domain.FactoryID(uuid.NewString()), Type: typeTask, Title: "x", Station: "work",
 		State: domain.StateQueued, Class: domain.ClassStandard, CreatedAt: time.Now(),
 	})
 	if !errors.Is(err, ports.ErrNotFound) {
@@ -106,10 +129,28 @@ func TestSaveFactory_UpdatesTheDefinition(t *testing.T) {
 	}
 }
 
-// newTestPool returns a pool on a fresh schema of the database at GOAL_TEST_DATABASE_URL
-// (PostgreSQL 18 from compose.yaml; `task test-integration` sets it up), migrated from zero,
-// and drops the schema when the test ends.
+// newTestPool returns a goal_app pool on a fresh schema, migrated from zero as goal_owner: the
+// roles goald runs with.
 func newTestPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+
+	db := newTestDB(t, OwnerRole)
+	migrate(t, db.owner)
+
+	return openPool(t, db.app)
+}
+
+// testDB is a fresh schema of the database at GOAL_TEST_DATABASE_URL (PostgreSQL 18 from
+// compose.yaml; `task test-integration` sets it up), dropped when the test ends. Its URLs connect
+// as the bootstrap superuser of that URL (admin) or switch to goal_owner or goal_app with the
+// role startup parameter, so the tests never need, set or change the roles' passwords.
+type testDB struct {
+	schema, admin, owner, app string
+}
+
+// newTestDB creates the roles (roles.sql: idempotent, without LOGIN) and a schema owned by
+// schemaOwner (OwnerRole as after `goal db init`, or "" for the bootstrap user as before it).
+func newTestDB(t *testing.T, schemaOwner string) testDB {
 	t.Helper()
 
 	base := os.Getenv("GOAL_TEST_DATABASE_URL")
@@ -117,9 +158,28 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 		t.Fatal("GOAL_TEST_DATABASE_URL is not set; run `task test-integration`")
 	}
 
+	execSQL(t, base, "BEGIN; SELECT pg_advisory_xact_lock(hashtext('goal.roles')); "+rolesSQL+"; COMMIT")
+
 	schema := "goal_test_" + randomHex(t)
-	execSQL(t, base, "CREATE SCHEMA "+schema)
+	create := "CREATE SCHEMA " + schema
+
+	if schemaOwner != "" {
+		create += " AUTHORIZATION " + schemaOwner + "; GRANT USAGE ON SCHEMA " + schema + " TO " + AppRole
+	}
+
+	execSQL(t, base, create)
 	t.Cleanup(func() { execSQL(t, base, "DROP SCHEMA "+schema+" CASCADE") })
+
+	return testDB{
+		schema: schema,
+		admin:  withParams(t, base, map[string]string{"search_path": schema}),
+		owner:  withParams(t, base, map[string]string{"search_path": schema, "role": OwnerRole}),
+		app:    withParams(t, base, map[string]string{"search_path": schema, "role": AppRole}),
+	}
+}
+
+func withParams(t *testing.T, base string, params map[string]string) string {
+	t.Helper()
 
 	u, err := url.Parse(base)
 	if err != nil {
@@ -127,21 +187,35 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 	}
 
 	q := u.Query()
-	q.Set("search_path", schema)
+	for k, v := range params {
+		q.Set(k, v)
+	}
+
 	u.RawQuery = q.Encode()
 
-	pool, err := Open(t.Context(), u.String())
+	return u.String()
+}
+
+func openPool(t *testing.T, url string) *pgxpool.Pool {
+	t.Helper()
+
+	pool, err := Open(t.Context(), url)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	t.Cleanup(pool.Close)
 
-	if err := Migrate(t.Context(), pool); err != nil {
+	return pool
+}
+
+// migrate applies every migration as goal_owner, as goald does.
+func migrate(t *testing.T, ownerURL string) {
+	t.Helper()
+
+	if err := Migrate(t.Context(), openPool(t, ownerURL)); err != nil {
 		t.Fatal(err)
 	}
-
-	return pool
 }
 
 // execSQL runs one statement on its own connection, which outlives the test's context.

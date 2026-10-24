@@ -10,14 +10,20 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/byFrederick/goal/internal/adapters/postgres"
 )
 
 // settings is goald's configuration, read from the environment (12-factor). Secrets appear here
 // only as references (env:NAME), resolved through the Secrets port.
 type settings struct {
-	// DatabaseURL is the PostgreSQL connection string (GOAL_DATABASE_URL). It defaults to the
-	// compose.yaml database with GOAL_PG_PASSWORD.
-	DatabaseURL string
+	// MigrateDatabaseURL connects as goal_owner, which owns the schema, to apply migrations at
+	// startup (GOAL_MIGRATE_DATABASE_URL). DatabaseURL connects as goal_app for everything else
+	// (GOAL_DATABASE_URL); goald refuses a role that bypasses row-level security. Both default to
+	// the compose.yaml database with GOAL_PG_OWNER_PASSWORD and GOAL_PG_APP_PASSWORD, the
+	// passwords `goal db init` gives the roles.
+	MigrateDatabaseURL string
+	DatabaseURL        string
 	// Listen is the API and gateway address (GOAL_LISTEN, default 127.0.0.1:8080). Phase 1 has no
 	// API authentication, so it must be a loopback address.
 	Listen string
@@ -49,10 +55,9 @@ type settings struct {
 }
 
 const (
-	defaultListen   = "127.0.0.1:8080"
-	defaultTaskEnv  = "CLAUDE_CODE_OAUTH_TOKEN=env:CLAUDE_CODE_OAUTH_TOKEN"
-	defaultKeyRef   = "env:GOAL_GATEWAY_KEY"
-	defaultPassword = "goal-dev-only" //nolint:gosec // compose.yaml's dev-only default, as in .env.example
+	defaultListen  = "127.0.0.1:8080"
+	defaultTaskEnv = "CLAUDE_CODE_OAUTH_TOKEN=env:CLAUDE_CODE_OAUTH_TOKEN"
+	defaultKeyRef  = "env:GOAL_GATEWAY_KEY"
 )
 
 // forbiddenTaskEnv never reaches a task: on a laptop the model is reached with the subscription
@@ -69,10 +74,10 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 	}
 
 	s := settings{
-		DatabaseURL: or("GOAL_DATABASE_URL", (&url.URL{
-			Scheme: "postgres", User: url.UserPassword("goal", or("GOAL_PG_PASSWORD", defaultPassword)),
-			Host: "127.0.0.1:5432", Path: "goal", RawQuery: "sslmode=disable",
-		}).String()),
+		MigrateDatabaseURL: or("GOAL_MIGRATE_DATABASE_URL",
+			localDatabase(postgres.OwnerRole, or("GOAL_PG_OWNER_PASSWORD", postgres.DevOwnerPassword))),
+		DatabaseURL: or("GOAL_DATABASE_URL",
+			localDatabase(postgres.AppRole, or("GOAL_PG_APP_PASSWORD", postgres.DevAppPassword))),
 		Listen:        or("GOAL_LISTEN", defaultListen),
 		GatewayKeyRef: or("GOAL_GATEWAY_KEY_REF", defaultKeyRef),
 		WorkspaceRoot: or("GOAL_WORKSPACE_ROOT", filepath.Join(os.TempDir(), "goal-workspaces")),
@@ -115,6 +120,14 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 	}
 
 	return s, errors.Join(errs...)
+}
+
+// localDatabase is compose.yaml's database as role.
+func localDatabase(role, password string) string {
+	return (&url.URL{
+		Scheme: "postgres", User: url.UserPassword(role, password),
+		Host: "127.0.0.1:5432", Path: "goal", RawQuery: "sslmode=disable",
+	}).String()
 }
 
 // loopback refuses listen addresses other machines could reach: the phase 1 API has no

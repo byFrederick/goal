@@ -12,7 +12,7 @@ The user decided that 2.2 implements no identity, authentication or authorizatio
 - **What moved to phase 4, "Identity and access":** the precise list is the README's "Out of 2.2". In short: `users`, `memberships`, `factory_roles`, `invitations`, `sessions`, `api_tokens`; OIDC, sessions, logout, CSRF, API tokens; ports `Identity` and `SignIn` and `internal/adapters/oidc`; the permission table, role checks, 404-for-non-members, `x-goal-permission`, `role`/`can` fields; `/v1/me`, `/v1/auth/*`, members, invitations and transfer endpoints; `goal_access`; Members, Who approves, read-only mode, role-filtered counts, Transfer ownership.
 - **Interim rule:** a single local user (`domain.LocalUser`), every action allowed; goald stays on loopback; "who did it" columns hold `Actor.Ref()` text.
 - **Seam:** A's request-actor middleware and `api.Authorizer` (`AllowAll` in 2.2), called once in the `/v1` middleware and in the resolvers `s.factory`/`s.item` (A §5.3). Two tests keep every operation on the seam (A §11.3).
-- **A is now "Organizations and tenancy":** PRs A1–A7 (database roles, tenancy tables `00004`, org scope `00005`, org-aware engine and bucket, route move and seams, organization management, slot caps `00006`). A8a, A8b and A9 moved to phase 4; `00007–00009` stay unused because phase 4 numbers its migrations from `00050` (a lower number merged after B's `00010` would break goose).
+- **A is now "Organizations and tenancy":** PRs A1–A7 (database roles with goal_app's grants `00004`, tenancy tables `00005`, org scope `00006`, org-aware engine and bucket, route move and seams, organization management, slot caps `00007`; renumbered by A1). A8a, A8b and A9 moved to phase 4; `00008–00009` stay unused because phase 4 numbers its migrations from `00050` (a lower number merged after B's `00010` would break goose).
 - **B:** no role checks; `created_by`, `updated_by`, `published_by`, `paused_by` are actor-ref text; `board.stations[].approvers`, `authoring.Members` and `UserRef` removed (`Actor` instead). **C:** no Members screen or route (C6 moved), the org menu lists every organization with no role and no Members link, the account menu shows the local user, Org settings keep General, slots and Delete, nothing is hidden by role. **D:** no Who approves, human stations are decided by the local user, no read-only mode, no creator-becomes-editor. **E:** move, pause, send back, notes, andon pull and clear are allowed to the local user; "waiting on you" means waiting on a person (every decision); `InboxSource.Inbox(ctx)` keeps the actor in `ctx`. **Phase 3:** no credential or connector roles; its design pass notes that access control arrives with phase 4.
 
 ### Credentials, connectors and MCP gateway become phase 3; identity and access is phase 4 (phase 3)
@@ -238,16 +238,16 @@ Fixes: 48 rows in the table below, made as 182 marked edits across the README an
 
 ## Build sequence
 
-(restructure, phase 3, no-auth) Rewritten for 2.2 A–E with the slimmer A. Rule: a PR with a migration merges only after every lower-numbered migration has merged: 00004 A2 → 00005 A3 → 00006 A7 → 00010–11 B3 → 00030 E2 → 00031 E3 → 00032 E9 → 00033 E11. PRs without migrations follow only their own dependencies. Nothing in A–E waits for phase 3 or phase 4.
+(restructure, phase 3, no-auth) Rewritten for 2.2 A–E with the slimmer A. Rule: a PR with a migration merges only after every lower-numbered migration has merged: 00004 A1 → 00005 A2 → 00006 A3 → 00007 A7 → 00010–11 B3 → 00030 E2 → 00031 E3 → 00032 E9 → 00033 E11. PRs without migrations follow only their own dependencies. Nothing in A–E waits for phase 3 or phase 4.
 
 | Step | Lane 1 | Lane 2 | Lane 3 | Lane 4 | Blocks |
 | --- | --- | --- | --- | --- | --- |
-| 1 | A1 database roles | C1 api-client (on today's routes) | B4 config problems + schema + `SecretUses`, B5 factorymodel, B6 diff (pure) | B1 ADR amendment | — |
-| 2 | A2 tenancy tables (00004) | | | | A3 |
-| 3 | A3 org scope (00005) | B2 ports + fakes | E1 flow targets (after B4) | D2 purpose (after B4) | A4, B3 |
+| 1 | A1 database roles (00004) | C1 api-client (on today's routes) | B4 config problems + schema + `SecretUses`, B5 factorymodel, B6 diff (pure) | B1 ADR amendment | — |
+| 2 | A2 tenancy tables (00005) | | | | A3 |
+| 3 | A3 org scope (00006) | B2 ports + fakes | E1 flow targets (after B4) | D2 purpose (after B4) | A4, B3 |
 | 4 | A4 org-aware engine + bucket | | | | A5, B7 |
 | 5 | A5 route move + seams (request actor, `Authorizer`) | | | | everything with API or web |
-| 6 | A6 organization management, A7 slots (00006) | C2 shell API (`/attention`, `/overview`, `/inbox`) | C3 org routes + shell | B8 authoring (interim `EnvReferences` check) | B3 (after A7), C4, C5, C7, B9 |
+| 6 | A6 organization management, A7 slots (00007) | C2 shell API (`/attention`, `/overview`, `/inbox`) | C3 org routes + shell | B8 authoring (interim `EnvReferences` check) | B3 (after A7), C4, C5, C7, B9 |
 | 7 | B3 definitions store (00010–11) | C4 org menu, C5 factories home | B9 definitions API | D3 skills catalog | B7, D4 |
 | 8 | B7 engine pins versions + legacy import | C7 org settings (after A6; Model access and Vault placeholders) | B10 CLI on the API | D4 draft session, D5 mock (after B9) | E2, D6 |
 | 9 | E2 item spans (00030) → E3 lease spans (00031) | D1 weekly budget | D6 frame + Basics (after C3, D4, D5) | | E4–E13, D7–D11 |

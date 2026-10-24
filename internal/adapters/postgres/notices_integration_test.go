@@ -14,6 +14,9 @@ import (
 // stWork is where the notices tests create items.
 const stWork = "work"
 
+// typeTask is the work type of the items the tests create.
+const typeTask = "task"
+
 // noticeTimeout bounds waiting for a notification that should arrive at once.
 const noticeTimeout = 10 * time.Second
 
@@ -74,7 +77,7 @@ func TestNotices_EveryCommittedEventWithTheItemsStateAfterIt(t *testing.T) {
 	at := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
 
 	it, err := s.CreateItem(t.Context(), domain.NewItem{
-		FactoryID: factory, Type: "task", Title: "x", Station: stWork, State: domain.StateQueued,
+		FactoryID: factory, Type: typeTask, Title: "x", Station: stWork, State: domain.StateQueued,
 		Class: domain.ClassStandard, CreatedAt: at,
 	})
 	if err != nil {
@@ -118,7 +121,10 @@ func TestNotices_EveryCommittedEventWithTheItemsStateAfterIt(t *testing.T) {
 func TestNotices_ReconnectsAndResyncsAfterTheConnectionIsLost(t *testing.T) {
 	t.Parallel()
 
-	pool := newTestPool(t)
+	db := newTestDB(t, OwnerRole)
+	migrate(t, db.owner)
+
+	pool := openPool(t, db.app)
 	s := New(pool)
 	factory := saveFactory(t, s)
 
@@ -132,8 +138,9 @@ func TestNotices_ReconnectsAndResyncsAfterTheConnectionIsLost(t *testing.T) {
 		t.Fatalf("first notice = %+v; want Resync", n)
 	}
 
+	// Only the bootstrap superuser may end a session that logged in as it.
 	var killed int
-	if err := pool.QueryRow(t.Context(),
+	if err := openPool(t, db.admin).QueryRow(t.Context(),
 		"SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity WHERE application_name = $1", app).Scan(&killed); err != nil || killed != 1 {
 		t.Fatalf("terminate the listener's connection: %d killed, %v", killed, err)
 	}
@@ -143,7 +150,7 @@ func TestNotices_ReconnectsAndResyncsAfterTheConnectionIsLost(t *testing.T) {
 	}
 
 	it, err := s.CreateItem(t.Context(), domain.NewItem{
-		FactoryID: factory, Type: "task", Title: "x", Station: stWork, State: domain.StateQueued,
+		FactoryID: factory, Type: typeTask, Title: "x", Station: stWork, State: domain.StateQueued,
 		Class: domain.ClassStandard, CreatedAt: time.Now(),
 	})
 	if err != nil {

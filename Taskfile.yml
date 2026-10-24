@@ -20,6 +20,8 @@ vars:
   # no Docker (the dev agent image, in which station checks run, ships the server).
   MIGRATE_WITH:
     sh: command -v docker >/dev/null 2>&1 && echo docker || echo local
+  # What goal db init grants before goald migrates (postgres.InitRoles), for migrate-check.
+  MIGRATE_GRANTS: GRANT USAGE, CREATE ON SCHEMA public TO goal_owner; GRANT USAGE ON SCHEMA public TO goal_app
 
 # The storage tasks talk to the local RustFS from compose.yaml unless .env or the shell says
 # otherwise. For an AWS bucket run bin/goal directly with GOAL_S3_BUCKET and AWS credentials.
@@ -46,16 +48,23 @@ tasks:
       - go build -trimpath -tags webui -o bin/ ./cmd/...
 
   up:
-    desc: Start PostgreSQL and RustFS, ensure the bucket and run goald in the foreground (goal up)
+    desc: Start PostgreSQL and RustFS, prepare the database roles and the bucket, run goald in the foreground (goal up)
     deps: [build]
     cmds:
       - bin/goal up
 
   goald:
-    desc: Run goald in the foreground against already running compose services
+    desc: Run goald in the foreground against already running compose services (after goal db init)
     deps: [build]
     cmds:
+      - bin/goal db init
       - bin/goald
+
+  db:init:
+    desc: Create the database roles goald runs as and hand the schema to goal_owner (goal db init; goal up runs it)
+    deps: [build]
+    cmds:
+      - bin/goal db init
 
   test:
     desc: Unit tests with the race detector
@@ -63,6 +72,8 @@ tasks:
       - go test -race ./...
 
   test-integration:
+    # The tests connect as compose's superuser and switch to goal_owner and goal_app per
+    # connection (internal/adapters/postgres), so they never touch the roles' passwords.
     desc: Integration tests against PostgreSQL 18 and RustFS from compose.yaml
     cmds:
       - docker compose up -d --wait postgres rustfs
@@ -118,9 +129,12 @@ tasks:
       - docker run -d --rm --name goal-migrate-check -e POSTGRES_PASSWORD=check -e POSTGRES_DB=goal {{.PG_IMAGE}} >/dev/null
       - defer: docker stop goal-migrate-check >/dev/null
       - until docker exec goal-migrate-check pg_isready -h 127.0.0.1 -U postgres -d goal >/dev/null 2>&1; do sleep 1; done
+      # The roles first (as goal db init does), then every migration as goal_owner, as goald runs them.
+      - docker exec -i goal-migrate-check psql -U postgres -d goal -v ON_ERROR_STOP=1 -q < internal/adapters/postgres/roles.sql
+      - docker exec goal-migrate-check psql -U postgres -d goal -v ON_ERROR_STOP=1 -qc "{{.MIGRATE_GRANTS}}"
       - |
         for f in migrations/*.sql; do
-          docker exec -i goal-migrate-check psql -U postgres -d goal -v ON_ERROR_STOP=1 -q < "$f" || exit 1
+          docker exec -i -e PGOPTIONS='-c role=goal_owner' goal-migrate-check psql -U postgres -d goal -v ON_ERROR_STOP=1 -q < "$f" || exit 1
           echo "applied $f"
         done
 
@@ -135,9 +149,11 @@ tasks:
       - initdb -D "{{.PGTMP}}/data" -U postgres --auth=trust >/dev/null
       - pg_ctl -D "{{.PGTMP}}/data" -l "{{.PGTMP}}/server.log" -o "-k {{.PGTMP}} -c listen_addresses=''" -w start >/dev/null
       - createdb -h "{{.PGTMP}}" -U postgres goal
+      - psql -h "{{.PGTMP}}" -U postgres -d goal -v ON_ERROR_STOP=1 -q < internal/adapters/postgres/roles.sql
+      - psql -h "{{.PGTMP}}" -U postgres -d goal -v ON_ERROR_STOP=1 -qc "{{.MIGRATE_GRANTS}}"
       - |
         for f in migrations/*.sql; do
-          psql -h "{{.PGTMP}}" -U postgres -d goal -v ON_ERROR_STOP=1 -q < "$f" || exit 1
+          PGOPTIONS='-c role=goal_owner' psql -h "{{.PGTMP}}" -U postgres -d goal -v ON_ERROR_STOP=1 -q < "$f" || exit 1
           echo "applied $f"
         done
 

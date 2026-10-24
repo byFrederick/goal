@@ -11,7 +11,9 @@ func envOf(m map[string]string) func(string) string { return func(k string) stri
 func TestSettings_Defaults(t *testing.T) {
 	t.Parallel()
 
-	s, err := settingsFrom(envOf(map[string]string{"GOAL_PG_PASSWORD": "pw"}))
+	s, err := settingsFrom(envOf(map[string]string{
+		"GOAL_PG_PASSWORD": "superuser-pw", "GOAL_PG_OWNER_PASSWORD": "owner-pw", "GOAL_PG_APP_PASSWORD": "app-pw",
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,8 +22,13 @@ func TestSettings_Defaults(t *testing.T) {
 		t.Errorf("listen %s, gateway %s, key %s; want the loopback defaults", s.Listen, s.GatewayURL, s.GatewayKeyRef)
 	}
 
-	if s.DatabaseURL != "postgres://goal:pw@127.0.0.1:5432/goal?sslmode=disable" { //nolint:gosec // a test password
-		t.Errorf("database url = %s, want the compose database with GOAL_PG_PASSWORD", s.DatabaseURL)
+	// goald never connects as compose's superuser: migrations run as goal_owner, the rest as goal_app.
+	if s.MigrateDatabaseURL != "postgres://goal_owner:owner-pw@127.0.0.1:5432/goal?sslmode=disable" { //nolint:gosec // a test password
+		t.Errorf("migrate database url = %s, want the compose database as goal_owner", s.MigrateDatabaseURL)
+	}
+
+	if s.DatabaseURL != "postgres://goal_app:app-pw@127.0.0.1:5432/goal?sslmode=disable" { //nolint:gosec // a test password
+		t.Errorf("database url = %s, want the compose database as goal_app", s.DatabaseURL)
 	}
 
 	want := map[string]string{"CLAUDE_CODE_OAUTH_TOKEN": "env:CLAUDE_CODE_OAUTH_TOKEN"} //nolint:gosec // a reference, not a secret

@@ -24,7 +24,8 @@ import (
 )
 
 const usage = `usage:
-  goal up                                         start PostgreSQL and RustFS, ensure the bucket, run goald
+  goal up                                         start PostgreSQL and RustFS, prepare the database roles
+                                                  and the bucket, run goald
   goal run <factory> "<brief>" [--type T] [--body B] [--priority N] [--detach]
                                                   submit a work item and follow it until a human or done
   goal follow <item>                              follow an item's events again
@@ -39,6 +40,8 @@ const usage = `usage:
   goal factory pull <id|name> <dir>               download a factory into a new folder
   goal factory list                               show and validate every factory in the bucket
   goal storage init                               create the bucket if missing and enable versioning
+  goal db init                                    create the database roles goald runs as (goal_owner,
+                                                  goal_app) and hand the schema to goal_owner
   goal version                                    print the module version and build info
 
 <item> is goal#2 (factory and number), the item's id, or a bare number such as 2 when one
@@ -87,12 +90,8 @@ func run(ctx context.Context, args []string, out *printer, getenv func(string) s
 		return showItem(ctx, out, getenv, rest)
 	case verbApprove, verbReject, verbRetry, verbMerge:
 		return decide(ctx, out, getenv, cmd, rest)
-	case "storage":
-		if len(rest) != 1 || rest[0] != "init" {
-			return errUsage
-		}
-
-		return storageInit(ctx, out, getenv)
+	case "db", "storage":
+		return setUp(ctx, out, getenv, cmd, rest)
 	default:
 		return errUsage
 	}

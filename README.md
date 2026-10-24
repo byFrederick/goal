@@ -5,7 +5,7 @@ Goal runs AI agent factories on your machine. A factory is a definition: `factor
 Factory definitions are content, not code. They live in one versioned S3-compatible bucket, not in this repository (ADR 0005). The first factory, `goal`, builds this repository; others (`sre`, `university`) run the same engine on other work.
 
 ```
-cmd/goal/              CLI: goal up, run, follow, item, approve, reject, retry, merge; goal factory validate|push|pull|list; goal storage init
+cmd/goal/              CLI: goal up, run, follow, item, approve, reject, retry, merge; goal factory validate|push|pull|list; goal storage init; goal db init
 cmd/goald/             daemon: flow engine, HTTP API (/v1/, with an SSE stream), MCP gateway (/mcp), Docker agent runs
 api/                   openapi.yaml: the HTTP API contract (Go types in internal/api/gen, TypeScript in packages/api-client)
 internal/engine/       flow engine: pull, WIP, gates, workspaces and command checks per run
@@ -39,7 +39,7 @@ Tools: Go, [Task](https://taskfile.dev), Docker, Terraform and golangci-lint v2 
 task hooks:install         # once per clone: pushes run task check first
 cp .env.example .env       # optional; defaults already point at the local RustFS
 task check                 # lint, race tests, factory validation, terraform
-task migrate-check         # migrations apply from zero on PostgreSQL 18
+task migrate-check         # migrations apply from zero on PostgreSQL 18, as goal_owner
 task storage:up            # RustFS on 127.0.0.1:9000 (console on :9001)
 task storage:init          # bucket goal-local with versioning
 task test-integration      # adapters against PostgreSQL 18 and RustFS
@@ -62,6 +62,8 @@ bin/goal retry goal#2                              # a blocked item goes back to
 ```
 
 An item is `<factory>#<number>` (`goal#2`), its id, or a bare number when only one factory has an item with it (`--factory` picks one otherwise). `goal merge` works at a human station marked `action: merge` in `factory.yaml`: goald squash-merges the pull request named by the item's latest `pull_request` output on `runtime.repository`, with that repository's token, only if GitHub reports it open and mergeable; it never forces, and deletes only the pull request's head branch afterwards.
+
+`goal up` first runs `goal db init`: it creates the database roles goald uses (`goal_owner` runs migrations, `goal_app` everything else, under row-level security) and hands the existing tables to `goal_owner`, so a database from an earlier version upgrades on the next `goal up` with nothing to do by hand. Running `bin/goald` directly needs `bin/goal db init` once first (`task goald` does it). `GOAL_DATABASE_URL` must not name the superuser: goald refuses a role that bypasses row-level security.
 
 `goal up` does not push factories: goald runs what the bucket holds and picks up pushes within `GOAL_REFRESH_EVERY` (or at once when `goal run` names a new factory). Ctrl-C stops goald and returns in-flight items to their queue; `docker compose down` stops PostgreSQL and RustFS (volumes stay). Each agent run works in a fresh clone of the factory's `runtime.repository` on the item's branch (`goal/<number>-<slug>`); the GitHub token is used on the host only, for the clone and inside the MCP gateway, and never reaches a container. Station command checks (`task check`, `task migrate-check`) run in a separate hardened container of the same image ([ADR 0006](docs/adr/0006-workspaces-and-command-checks.md)).
 

@@ -15,8 +15,9 @@ import (
 const goaldStopGrace = 30 * time.Second
 
 // up starts the local platform: PostgreSQL and RustFS from compose.yaml (waiting until they are
-// healthy), the bucket, then goald in the foreground until Ctrl-C. It pushes no factory: the
-// bucket's definitions are what goald runs. The compose services keep running afterwards;
+// healthy), the database roles (goal db init, so an existing database is handed to goal_owner
+// before goald migrates it), the bucket, then goald in the foreground until Ctrl-C. It pushes no
+// factory: the bucket's definitions are what goald runs. The compose services keep running afterwards;
 // `docker compose down` stops them.
 func up(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	if len(args) != 0 {
@@ -30,6 +31,10 @@ func up(ctx context.Context, out *printer, getenv func(string) string, args []st
 
 	if err := compose.Run(); err != nil {
 		return fmt.Errorf("docker compose up: %w (run goal up from the repository root)", err)
+	}
+
+	if err := dbInit(ctx, out, getenv); err != nil {
+		return err
 	}
 
 	if err := storageInit(ctx, out, getenv); err != nil {
