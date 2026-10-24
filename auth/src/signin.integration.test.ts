@@ -292,6 +292,14 @@ describe('sign-up', () => {
         await fx.invitation(org, email, inviter, { expiresAt: new Date(Date.now() - 1000) });
       },
     ],
+    [
+      'a pending invitation of a deleted organization (review L1)',
+      async (email: string) => {
+        const gone = await fx.org(`gone-${randomUUID().slice(0, 8)}`, 'Gone');
+        await admin.query(`UPDATE organizations SET deleted_at = now() WHERE id = $1`, [gone]);
+        await fx.invitationAsBefore00049(gone, email, inviter);
+      },
+    ],
   ])('refuses %s, even with the right code', async (_, setup) => {
     const email = address('refused');
     await setup(email);

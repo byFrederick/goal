@@ -17,15 +17,17 @@ import (
 var betterAuthTables = []string{"account", "deviceCode", "invitation", "member", "organization", "rateLimit", "session", "user", "verification"}
 
 // authFunctions are the definer functions of Goal's schema the identity service may run (spec 3
-// §6.5 "auth"), from 00044, by name. goal_app runs the "app" ones.
+// §6.5 "auth"), from 00044 and 00049, by name. goal_app runs the "app" ones.
 var authFunctions = []string{
-	"goal_apply_invitation_roles", "goal_auth_count", "goal_auth_event", "goal_claim_bootstrap", "goal_org_factories",
+	"goal_apply_invitation_roles", "goal_auth_count", "goal_auth_event", "goal_claim_bootstrap", "goal_is_invitee",
+	"goal_org_factories", "goal_org_live",
 }
 
 // authTriggers are the triggers on Better Auth's tables, by table: the owner rule (00042), the
-// audit and the access notices (00043). A regenerated table that lost one fails here.
+// audit and the access notices (00043), invitations to live organizations only (00049). A
+// regenerated table that lost one fails here.
 var authTriggers = map[string][]string{
-	"invitation": {"invitation_audit_answered", "invitation_audit_created"},
+	"invitation": {"invitation_audit_answered", "invitation_audit_created", "invitation_live_org"},
 	"member": {
 		"member_access_removed", "member_access_role_changed", "member_audit_added", "member_audit_removed",
 		"member_audit_role_changed", "member_keeps_an_owner",

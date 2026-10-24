@@ -164,6 +164,37 @@ func TestAuthTriggers_AuditEachPathOnce(t *testing.T) {
 	})
 }
 
+// Review L1: an invitation belongs to a live organization. Once one is deleted, its lingering
+// members' invitations are refused in the database, whatever the auth service's hooks say, and
+// none of its invitations makes an invitee.
+func TestAuthTriggers_InvitationsOnlyToALiveOrg(t *testing.T) {
+	t.Parallel()
+
+	d := newIdentityDB(t)
+	owner := d.user(nameCruz)
+	acme := d.provision("acme", owner)
+
+	var live bool
+	if err := d.auth.QueryRow(t.Context(), `SELECT goal_org_live($1)`, string(acme)).Scan(&live); err != nil || !live {
+		t.Fatalf("goal_org_live(acme) = %v, %v; want true", live, err)
+	}
+
+	if err := d.s.DeleteOrg(domain.WithOrg(t.Context(), acme), domain.LocalUser, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := d.auth.Exec(t.Context(), `INSERT INTO auth.invitation ("organizationId", email, role, status, "expiresAt", "inviterId")
+		VALUES ($1, 'late@example.com', 'member', 'pending', now() + interval '3 days', $2)`, string(acme), owner)
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); !ok || pgErr.Code != "23514" || pgErr.ConstraintName != "goal_invitation_live_org" {
+		t.Fatalf("inviting to a deleted organization = %v; want check_violation goal_invitation_live_org", err)
+	}
+
+	var invitee bool
+	if err := d.auth.QueryRow(t.Context(), `SELECT goal_org_live($1) OR goal_is_invitee('late@example.com', now())`, string(acme)).Scan(&invitee); err != nil || invitee {
+		t.Errorf("after the deletion: live or invitee = %v, %v; want neither", invitee, err)
+	}
+}
+
 func expectLogged(t *testing.T, got, want []logged) {
 	t.Helper()
 

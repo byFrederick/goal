@@ -94,13 +94,19 @@ export class GoalDatabase {
     await this.pool.query('SELECT goal_apply_invitation_roles($1)', [invitation]);
   }
 
-  /** isInvitee is true when email has a pending invitation that has not expired at now. */
+  /**
+   * isInvitee is true when email has a pending invitation, unexpired at now, to a live organization
+   * (goal_is_invitee, 00049): a deleted organization's invitations open no sign-up (review L1).
+   */
   async isInvitee(email: string, now: Date): Promise<boolean> {
-    const { rows } = await this.pool.query(
-      `SELECT 1 FROM auth.invitation WHERE lower(email) = lower($1) AND status = 'pending' AND "expiresAt" > $2 LIMIT 1`,
-      [email.trim(), now],
-    );
-    return rows.length > 0;
+    const { rows } = await this.pool.query<{ ok: boolean }>('SELECT goal_is_invitee($1, $2) AS ok', [email, now]);
+    return rows[0]?.ok === true;
+  }
+
+  /** orgIsLive is true when org is an organization that has not been deleted (goal_org_live). */
+  async orgIsLive(org: string): Promise<boolean> {
+    const { rows } = await this.pool.query<{ ok: boolean }>('SELECT goal_org_live($1) AS ok', [org]);
+    return rows[0]?.ok === true;
   }
 
   /** userName is the name of the user with this id; null for none. */

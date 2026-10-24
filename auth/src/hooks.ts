@@ -239,9 +239,12 @@ export function goalHooks({ db, signIn, mailer, log, clock, publicURL }: HookDep
       );
     },
     organizationHooks: {
-      // One role, factory roles of the organization's factories only (members only), and the
-      // inviter as the invitation's author for the audit trigger.
+      // A live organization, one role, factory roles of the organization's factories only (members
+      // only), and the inviter as the invitation's author for the audit trigger.
       beforeCreateInvitation: async ({ invitation, inviter, organization }) => {
+        // A deleted organization's members linger until the purge: they invite no one (review L1;
+        // 00049's trigger refuses the row too). The same answer as for an unknown organization.
+        if (!(await db.orgIsLive(organization.id))) throw refuse('ORGANIZATION_NOT_FOUND', 'Organization not found');
         const role = oneRole(invitation.role);
         const grants = parseFactoryRoles(invitation.factoryRoles);
         if (grants.length > 0 && role !== 'member') {

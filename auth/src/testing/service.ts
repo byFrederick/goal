@@ -155,6 +155,26 @@ export class Fixtures {
     return rows[0]?.id as string;
   }
 
+  /**
+   * invitationAsBefore00049 writes a pending invitation with the database's triggers off, as one a
+   * lingering owner of a deleted organization could make before migration 00049 refused it.
+   */
+  async invitationAsBefore00049(org: string, email: string, inviter: string): Promise<void> {
+    const c = await this.pool.connect();
+    try {
+      await c.query('BEGIN');
+      await c.query(`SET LOCAL session_replication_role = replica`);
+      await c.query(
+        `INSERT INTO auth.invitation ("organizationId", email, role, status, "expiresAt", "inviterId")
+         VALUES ($1, $2, 'member', 'pending', now() + interval '72 hours', $3)`,
+        [org, email, inviter],
+      );
+      await c.query('COMMIT');
+    } finally {
+      c.release();
+    }
+  }
+
   /** age makes every session of user look signed in that many milliseconds ago. */
   async age(user: string, ms: number): Promise<void> {
     await this.pool.query(

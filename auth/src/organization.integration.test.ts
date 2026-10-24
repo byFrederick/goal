@@ -273,6 +273,19 @@ describe('an invitation', () => {
     );
   }
 
+  it('is never sent for a deleted organization, by its lingering owner either (review L1)', async () => {
+    await admin.query(`UPDATE organizations SET deleted_at = now() WHERE id = $1`, [o.id]);
+    const email = `late-${o.id}@example.com`;
+
+    const res = await invite({ email });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'ORGANIZATION_NOT_FOUND' });
+    const { rows } = await admin.query(`SELECT 1 FROM auth.invitation WHERE email = $1`, [email]);
+    expect(rows).toEqual([]);
+    expect(o.mailer.to(email)).toEqual([]);
+  });
+
   it('links to GOAL_PUBLIC_URL whatever Host the request names, stamped with the inviter', async () => {
     const email = `new-${o.id}@example.com`;
     const res = await invite(
