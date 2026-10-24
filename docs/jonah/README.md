@@ -1,6 +1,6 @@
 # Jonah — evaluation and self-remediation for Goal
 
-Status: design, ready for implementation (phase J0 done) · 2026-10-23 · Decision records: [ADR 0002](../adr/0002-jonah-evals.md), [ADR 0005](../adr/0005-factory-definitions-in-object-storage.md) (definitions and visible cases in the bucket)
+Status: background design (2026-10-23); **phase 5 builds a smaller loop, specified in [spec 5](../specs/5-continuous-learning.md) and the [phase 5 amendment of ADR 0002](../adr/0002-jonah-evals.md#amendment--phase-5-the-minimal-loop), which win where they differ** · Decision records: [ADR 0002](../adr/0002-jonah-evals.md), [ADR 0005](../adr/0005-factory-definitions-in-object-storage.md) (definitions and visible cases in the bucket)
 
 In *The Goal*, Jonah never fixes the plant. He asks Alex Rogo questions until Alex can see the constraint himself, then lets him change it. This subsystem works the same way. It measures every agent, station and factory, finds where quality is lost (first at the constraint), and proposes one change at a time with evidence. A human decides. Jonah never edits the measuring stick.
 

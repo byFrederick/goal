@@ -1,6 +1,6 @@
 # ADR 0002 — Jonah: evaluation and self-remediation
 
-Status: proposed · 2026-10-23 · amended by [ADR 0005](0005-factory-definitions-in-object-storage.md) (definitions and visible cases live in the bucket) · Plan: [docs/jonah/README.md](../jonah/README.md)
+Status: accepted as amended for phase 5 (2026-10-24; [amendment](#amendment--phase-5-the-minimal-loop)) · first proposed 2026-10-23 · amended by [ADR 0005](0005-factory-definitions-in-object-storage.md) (definitions and visible cases live in the bucket) · Plan: [docs/jonah/README.md](../jonah/README.md)
 
 ## Context
 
@@ -45,3 +45,19 @@ The design follows Anthropic's *Demystifying evals for AI agents* (tasks, trials
 - Humans carry real work: writing seed cases, labeling for calibration, curating the holdout, approving proposals. The phases in the plan keep that load bounded and deliver value before any self-remediation exists.
 - `schema/evals.schema.json` is a second public schema; `goal validate`, the UI editor and generated TypeScript types all use it.
 - The engine gains two general features: items created at a given station with pre-filled outputs, and configuration pins.
+
+## Amendment — phase 5: the minimal loop
+
+Status: accepted · 2026-10-24 · replaces decisions 1–9 and 11 where they differ; decision 10 stands. Specified in [phase 5, continuous learning](../specs/5-continuous-learning.md); follows [ADR 0008](0008-portable-runs-connections-and-knowledge.md). The plan in `docs/jonah/README.md` stays as background; where it differs, spec 5 wins.
+
+**Context.** The original decisions assumed a heavy optimizer: a sealed holdout, calibrated gating judges, paired statistics, autonomy levels and a separate eval lane. The owner runs a personal platform and wants the smallest loop that turns human touches (phase 4's headline metric) into knowledge, standard work and tests, proves a change before it ships, and shows afterwards whether it helped.
+
+**Decision.**
+
+1. **Jonah is a goald loop** (`internal/jonah`, domain and ports only) that runs ordinary agent runs through the engine's run lifecycle (`engine.RunTask`) in sandboxes pinned to a definition version. There is no `Judge` port: a judge is a short run in the same box with the factory's model connection.
+2. **Retros** on items that finished with touches propose three things: facts for the organization's Learned knowledge source, edits to `factory.yaml`, `agents/`, `skills/` or `contracts/`, and regression eval cases.
+3. **Cases live in the definition's `evals/cases/`** as one `EvalCase` kind (`schema/evals.schema.json` is replaced by it; the `Evals` kind goes). Expectations are deterministic first (contract, checks, output and file assertions); a judge rubric is advisory until calibrated. No sealed holdout in this phase.
+4. **An eval run** compares a candidate version with a baseline on the same cases; a case passes when all its trials pass; a regression is a case that passed on the baseline and fails on the candidate. Eval runs get the model connection and a repository clone only, so they act on nothing outside their box. A weekly learning budget per factory caps retros and evals together.
+5. **People decide** through one review list. Two opt-in switches replace the autonomy levels: auto-accept facts, and auto-publish an edit only when it touches `agents/` or `skills/` alone, the eval set has at least five cases, nothing errored and nothing regressed. Jonah never changes `evals/` without a person. Restore is the undo, and touches per definition version are the check after publish.
+
+**Consequences.** Much less to build and to explain; the measuring stick (cases) still changes only by review. Overfitting to retro-made cases and judge errors are accepted risks while judges stay advisory; calibration, the holdout and online sampling can return later on the same tables.
