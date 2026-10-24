@@ -282,6 +282,13 @@ var probes = map[string]probe{
 	"getBuilderMeta": {method: http.MethodGet, path: "/v1/orgs/acme/builder/meta", org: testOrg},
 	"searchSkills":   {method: http.MethodGet, path: "/v1/orgs/acme/builder/skills?q=lint", org: testOrg},
 	"getSkillFiles":  {method: http.MethodGet, path: "/v1/orgs/acme/builder/skills/acme/skills/lint/files", org: testOrg},
+	"listAPIKeys":    {method: http.MethodGet, path: "/v1/orgs/acme/api-keys", org: testOrg},
+	// The key's factory passes the resolver; no key has this id.
+	"createAPIKey": {
+		method: http.MethodPost, path: "/v1/orgs/acme/api-keys", org: testOrg, factory: acmeID,
+		body: `{"name":"ci","scopes":["factory:read"],"role_ceiling":"viewer","factories":["acme"]}`,
+	},
+	"revokeAPIKey": {method: http.MethodDelete, path: "/v1/orgs/acme/api-keys/00000000-0000-7000-8000-ffffffffffff", org: testOrg},
 
 	// Definitions: writes carry a (stale) If-Match, so the request reaches the resolver.
 	"createFactory":      {method: http.MethodPost, path: "/v1/orgs/acme/factories", body: `{"name":"probe","start":{"kind":"blank"}}`, org: testOrg},

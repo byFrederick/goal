@@ -80,7 +80,7 @@ func TestAPI_DeviceRequest_Refusals(t *testing.T) {
 		Ceiling: domain.FactoryViewer, ExpiresAt: t0.Add(24 * time.Hour),
 	})
 
-	res := h.request(t, http.MethodGet, "/v1/auth/device/ABCD-EFGH", "", http.Header{"Authorization": {"Bearer " + key}})
+	res := h.request(t, http.MethodGet, "/v1/auth/device/ABCD-EFGH", "", bearer(key))
 	if res.status != http.StatusForbidden {
 		t.Errorf("an API key = %d %s; want 403", res.status, res.body)
 	}

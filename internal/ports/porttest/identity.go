@@ -46,11 +46,14 @@ type IdentityUser struct {
 type IdentityKey struct {
 	ID                   domain.APIKeyID
 	Org                  domain.OrgID
-	Name                 string
+	Name, Hint           string
 	Scopes               []domain.Permission
 	Factories            []domain.FactoryID // nil: every factory of Org
 	Ceiling              domain.FactoryRole
+	CreatedBy            domain.Actor
+	CreatedAt            time.Time
 	ExpiresAt, RevokedAt time.Time // RevokedAt zero while live
+	RevokedBy            domain.Actor
 	LastUsedAt           time.Time
 }
 
@@ -85,14 +88,20 @@ func (i *Identity) AddOrg(o domain.Org) {
 	}
 }
 
-// DeleteOrg soft-deletes an organization: its members lose their role there and its keys stop
-// resolving.
+// DeleteOrg soft-deletes an organization: its members lose their role there and its keys are
+// revoked (by system:org-deleted).
 func (i *Identity) DeleteOrg(id domain.OrgID) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
 	if o, ok := i.orgs[id]; ok {
 		o.deleted = true
+	}
+
+	for _, k := range i.keys {
+		if k.Org == id && k.RevokedAt.IsZero() {
+			k.RevokedAt, k.RevokedBy = i.now(), orgDeleted
+		}
 	}
 }
 
@@ -285,7 +294,7 @@ func (i *Identity) APIKey(_ context.Context, hash string) (domain.Principal, err
 
 	return domain.Principal{
 		Kind: domain.PrincipalService, Key: k.ID, Name: k.Name, Org: k.Org,
-		Scopes: slices.Clone(k.Scopes), KeyFactories: slices.Clone(k.Factories), KeyCeiling: k.Ceiling,
+		Scopes: slices.Clone(k.Scopes), KeyFactories: slices.Clone(k.Factories), KeyCeiling: k.Ceiling, KeyExpiresAt: k.ExpiresAt,
 	}, nil
 }
 

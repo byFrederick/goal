@@ -291,8 +291,12 @@ func (s *server) StreamEvents(ctx context.Context, req gen.StreamEventsRequestOb
 	notices, unsubscribe := s.feed.subscribe(subscriberOf(org, p))
 
 	st := stream{ctx: ctx, s: s, factory: factory, notices: notices, unsubscribe: unsubscribe}
-	if p.Session != nil {
+
+	switch {
+	case p.Session != nil:
 		st.expires = p.Session.ExpiresAt
+	case p.Kind == domain.PrincipalService:
+		st.expires = p.KeyExpiresAt
 	}
 
 	return st, nil
@@ -306,7 +310,7 @@ type stream struct {
 	factory     domain.FactoryID
 	notices     <-chan ports.ItemNotice
 	unsubscribe func()
-	// expires is when the subscriber's session ends, and the stream with it (zero: never).
+	// expires is when the subscriber's session or key ends, and the stream with it (zero: never).
 	expires time.Time
 }
 
@@ -324,8 +328,8 @@ func (st stream) VisitStreamEventsResponse(w http.ResponseWriter) error {
 	heartbeat := st.s.clock.NewTicker(heartbeatEvery)
 	defer heartbeat.Stop()
 
-	// A signed-in stream ends when its session does, at the first heartbeat after it (the client
-	// reconnects and signs in again).
+	// A signed-in stream ends when its session or key does, at the first heartbeat after it (the
+	// client reconnects and signs in again, or is refused).
 	expired := func() bool { return !st.expires.IsZero() && !st.s.clock.Now().Before(st.expires) }
 
 	// Once the status is written, errors cannot become problem details: a failed write means

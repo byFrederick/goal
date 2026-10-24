@@ -80,6 +80,15 @@ const usage = `usage:
                                                   across its factories (--max-slots 0: no cap)
   goal org delete <slug> [--yes]                  delete it after typing its name (--yes: no prompt);
                                                   it is purged after GOAL_ORG_RETENTION
+  goal key list                                   the organization's API keys: hint, scopes, factories,
+                                                  ceiling, expiry, last use
+  goal key create <name> --scope S [--scope S]... [--factory F]... [--role viewer|approver|editor] [--expires 90d]
+                                                  create an API key for scripts and CI (scopes: permissions
+                                                  such as org:read, factory:read, item:create; --role is
+                                                  the most it acts as on a factory, default viewer;
+                                                  --expires 1d to 90d, default 90d). The secret is printed
+                                                  once, alone on stdout: store it as GOAL_API_KEY
+  goal key revoke <name|id>                       revoke a key: anything using it stops working at once
   goal storage init                               create the bucket if missing and enable versioning
   goal catalog skills sync --file <sources.yaml> [--search <q>]... [--top <n>]
                                                   fetch skills.sh skills (a YAML list of
@@ -122,7 +131,8 @@ push is how a folder changes one, and goald ignores factory files written to the
 Every command that talks to goald (run, follow, item, note, move, pause, the decisions, andon, factory) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
-else the install's only organization (decisions are the local user's)
+else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, commands
+act in the key's own organization
 
 With sign-in on (GOAL_AUTH=session), commands send GOAL_API_KEY (an API key goal_sk_… or a
 personal token goal_pat_…) when it is set, else what goal login stored for goald's origin, and
@@ -134,7 +144,7 @@ var errUsage = errors.New(usage)
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
-	out := &printer{w: os.Stdout, in: os.Stdin}
+	out := &printer{w: os.Stdout, e: os.Stderr, in: os.Stdin}
 	err := errors.Join(run(ctx, os.Args[1:], out, os.Getenv, debug.ReadBuildInfo), out.err)
 
 	stop()
@@ -182,7 +192,7 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 	// The commands on one item, and the command groups, by name.
 	if handler, ok := map[string]command{
 		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbMove: moveItem, verbPause: pauseItem,
-		"factory": factory, "up": up, "org": orgCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
+		"factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
 	}[cmd]; ok {
 		return handler(ctx, out, getenv, rest)
 	}
@@ -219,6 +229,8 @@ func newStore(ctx context.Context, getenv func(string) string) (*s3store.Store, 
 // fails the command once instead of being ignored.
 type printer struct {
 	w io.Writer
+	// e is stderr, for what must stay out of stdout when stdout is piped (nil: discarded).
+	e io.Writer
 	// in is the terminal's input, read for confirmations.
 	in  io.Reader
 	err error
@@ -227,6 +239,13 @@ type printer struct {
 func (p *printer) printf(format string, a ...any) {
 	if p.err == nil {
 		_, p.err = fmt.Fprintf(p.w, format, a...)
+	}
+}
+
+// noticef writes to stderr: what a person reads beside output a script consumes.
+func (p *printer) noticef(format string, a ...any) {
+	if p.e != nil {
+		_, _ = fmt.Fprintf(p.e, format, a...)
 	}
 }
 

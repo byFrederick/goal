@@ -60,6 +60,21 @@ compareVersions      key-restricted   404 factory-not-found    404 org-not-found
 compareVersions      key-other-org    404 org-not-found        200
 compareVersions      key-expired      401 unauthenticated      401 unauthenticated
 compareVersions      key-revoked      401 unauthenticated      401 unauthenticated
+createAPIKey         anonymous        401 unauthenticated      401 unauthenticated
+createAPIKey         owner            200                      404 org-not-found
+createAPIKey         admin            200                      404 org-not-found
+createAPIKey         viewer           403 forbidden            404 org-not-found
+createAPIKey         approver         403 forbidden            404 org-not-found
+createAPIKey         editor           403 forbidden            404 org-not-found
+createAPIKey         member-no-roles  403 forbidden            404 org-not-found
+createAPIKey         other-org-owner  404 org-not-found        200
+createAPIKey         platform-admin   404 org-not-found        404 org-not-found
+createAPIKey         stale-owner      403 reauth-required      404 org-not-found
+createAPIKey         key-scoped       403 forbidden            404 org-not-found
+createAPIKey         key-restricted   403 forbidden            404 org-not-found
+createAPIKey         key-other-org    404 org-not-found        403 forbidden
+createAPIKey         key-expired      401 unauthenticated      401 unauthenticated
+createAPIKey         key-revoked      401 unauthenticated      401 unauthenticated
 createFactory        anonymous        401 unauthenticated      401 unauthenticated
 createFactory        owner            200                      404 org-not-found
 createFactory        admin            200                      404 org-not-found
@@ -585,6 +600,21 @@ getWeeklyThroughput  key-restricted   404 factory-not-found    404 org-not-found
 getWeeklyThroughput  key-other-org    404 org-not-found        200
 getWeeklyThroughput  key-expired      401 unauthenticated      401 unauthenticated
 getWeeklyThroughput  key-revoked      401 unauthenticated      401 unauthenticated
+listAPIKeys          anonymous        401 unauthenticated      401 unauthenticated
+listAPIKeys          owner            200                      404 org-not-found
+listAPIKeys          admin            200                      404 org-not-found
+listAPIKeys          viewer           403 forbidden            404 org-not-found
+listAPIKeys          approver         403 forbidden            404 org-not-found
+listAPIKeys          editor           403 forbidden            404 org-not-found
+listAPIKeys          member-no-roles  403 forbidden            404 org-not-found
+listAPIKeys          other-org-owner  404 org-not-found        200
+listAPIKeys          platform-admin   404 org-not-found        404 org-not-found
+listAPIKeys          stale-owner      200                      404 org-not-found
+listAPIKeys          key-scoped       403 forbidden            404 org-not-found
+listAPIKeys          key-restricted   403 forbidden            404 org-not-found
+listAPIKeys          key-other-org    404 org-not-found        403 forbidden
+listAPIKeys          key-expired      401 unauthenticated      401 unauthenticated
+listAPIKeys          key-revoked      401 unauthenticated      401 unauthenticated
 listAudit            anonymous        401 unauthenticated      401 unauthenticated
 listAudit            owner            200                      404 org-not-found
 listAudit            admin            200                      404 org-not-found
@@ -990,6 +1020,21 @@ revertDraftSection   key-restricted   404 factory-not-found    404 org-not-found
 revertDraftSection   key-other-org    404 org-not-found        200
 revertDraftSection   key-expired      401 unauthenticated      401 unauthenticated
 revertDraftSection   key-revoked      401 unauthenticated      401 unauthenticated
+revokeAPIKey         anonymous        401 unauthenticated      401 unauthenticated
+revokeAPIKey         owner            200                      404 org-not-found
+revokeAPIKey         admin            200                      404 org-not-found
+revokeAPIKey         viewer           403 forbidden            404 org-not-found
+revokeAPIKey         approver         403 forbidden            404 org-not-found
+revokeAPIKey         editor           403 forbidden            404 org-not-found
+revokeAPIKey         member-no-roles  403 forbidden            404 org-not-found
+revokeAPIKey         other-org-owner  404 org-not-found        200
+revokeAPIKey         platform-admin   404 org-not-found        404 org-not-found
+revokeAPIKey         stale-owner      403 reauth-required      404 org-not-found
+revokeAPIKey         key-scoped       403 forbidden            404 org-not-found
+revokeAPIKey         key-restricted   403 forbidden            404 org-not-found
+revokeAPIKey         key-other-org    404 org-not-found        403 forbidden
+revokeAPIKey         key-expired      401 unauthenticated      401 unauthenticated
+revokeAPIKey         key-revoked      401 unauthenticated      401 unauthenticated
 saveDraftSection     anonymous        401 unauthenticated      401 unauthenticated
 saveDraftSection     owner            200                      404 org-not-found
 saveDraftSection     admin            200                      404 org-not-found

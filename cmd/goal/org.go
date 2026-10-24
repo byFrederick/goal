@@ -140,7 +140,8 @@ func connect(ctx context.Context, getenv func(string) string, orgFlag string) (o
 const envOrg = "GOAL_ORG"
 
 // resolveOrg finds the organization a command acts in: --org, then GOAL_ORG, then org in the
-// config file, then the install's only organization. Otherwise it fails, listing them.
+// config file (not with GOAL_API_KEY: a key acts in its own organization, the only one it lists),
+// then the install's only organization. Otherwise it fails, listing them.
 func resolveOrg(ctx context.Context, c *gen.ClientWithResponses, getenv func(string) string, orgFlag string) (string, error) {
 	if org := strings.TrimSpace(orgFlag); org != "" {
 		return org, nil
@@ -155,7 +156,7 @@ func resolveOrg(ctx context.Context, c *gen.ClientWithResponses, getenv func(str
 		return "", err
 	}
 
-	if cfg.Org != "" {
+	if cfg.Org != "" && strings.TrimSpace(getenv(envAPIKey)) == "" {
 		return cfg.Org, nil
 	}
 

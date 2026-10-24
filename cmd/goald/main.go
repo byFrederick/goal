@@ -207,7 +207,8 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	apiHandler, err := api.New(api.Deps{
 		Engine: eng, Items: store, Factories: defs, Definitions: authors, Versions: definitionStore, Orgs: store, Audit: store, OrgRetention: s.OrgRetention,
 		Authorizer: authorizer(s.Auth, clock), Auth: api.AuthConfig{Mode: api.AuthMode(s.Auth), Google: s.Google, SecureCookies: s.strictTransport()},
-		Identity: identity, Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor, Clock: clock, Logger: log,
+		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
+		Clock: clock, Logger: log,
 	})
 	if err != nil {
 		return err

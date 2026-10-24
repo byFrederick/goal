@@ -12,7 +12,7 @@ import { type ReactNode, type RefObject, useId, useRef } from 'react';
 import { meQuery, orgsQuery } from '../api/queries';
 import type { OrgSummary } from '../api/types';
 import { orgMark } from '../shared/marks';
-import { factoryCount } from '../shared/org';
+import { factoryCount, useOrgGrants } from '../shared/org';
 import { cn } from '../ui/cn';
 import {
   MenuContent,
@@ -26,7 +26,15 @@ import {
 } from '../ui/menu';
 import { SheetContent, SheetLabel } from '../ui/sheet';
 import { AccountBlock } from './account-menu';
-import { catalogScreen, credentialsScreen, laterText, type OrgScreen, settingsScreen } from './screens';
+import {
+  apiKeysScreen,
+  catalogScreen,
+  credentialsScreen,
+  laterText,
+  type OrgScreen,
+  screensFor,
+  settingsScreen,
+} from './screens';
 
 interface OrgChoice {
   org: OrgSummary;
@@ -38,7 +46,7 @@ interface OrgChoice {
 
 interface OrgMenuModel {
   orgs: OrgChoice[];
-  /** The current organization's pages: catalog and credentials (phase 4), settings (C7). */
+  /** The current organization's pages: API keys (with api_key:read), catalog and credentials (phase 4), settings (C7). */
   links: { screen: OrgScreen; label: string }[];
   /** Create organization is offered: to platform admins, or to the local user with sign-in off. */
   canCreate: boolean;
@@ -58,6 +66,9 @@ function useOrgMenuModel(current: OrgSummary): OrgMenuModel {
   const pathname = useLocation({ select: (l) => l.pathname });
   // Hidden until goald says who this is: only platform admins create organizations.
   const { data: canCreate = false } = useQuery({ ...meQuery, select: (me) => me.mode === 'none' || me.platform_admin });
+  const can = useOrgGrants()?.can;
+  const shown = screensFor([apiKeysScreen, catalogScreen, credentialsScreen, settingsScreen], can);
+  const labels: Record<string, string> = { [settingsScreen.id]: 'Organization settings' };
   return {
     orgs: data.map((org) => ({
       org,
@@ -65,11 +76,7 @@ function useOrgMenuModel(current: OrgSummary): OrgMenuModel {
       detail: factoryCount(org.factory_count),
       current: org.id === current.id,
     })),
-    links: [
-      { screen: catalogScreen, label: catalogScreen.label },
-      { screen: credentialsScreen, label: credentialsScreen.label },
-      { screen: settingsScreen, label: 'Organization settings' },
-    ],
+    links: shown.map((screen) => ({ screen, label: labels[screen.id] ?? screen.label })),
     canCreate,
     leaves: (path) => path !== pathname,
   };

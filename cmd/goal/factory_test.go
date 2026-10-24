@@ -65,6 +65,8 @@ type defGoald struct {
 	authors *authoring.Service
 	cache   *definitions.Cache
 	orgID   domain.OrgID
+	// keys holds the organization's API keys.
+	keys *porttest.Identity
 
 	mu sync.Mutex
 	// beforeTree runs once before the next PUT …/draft/tree is served.
@@ -101,17 +103,20 @@ func newDefGoald(t *testing.T) *defGoald {
 	cache := definitions.New(defs, tenancy, func(_ context.Context, lines []domain.Line) error { return e.SetLines(lines) },
 		definitions.Config{}, nil)
 
+	keys := porttest.NewIdentity(clock.Now)
+	keys.AddOrg(o)
+
 	handler, err := api.New(api.Deps{
 		Engine: e, Items: store, Factories: cache, Definitions: authors, Versions: defs, Orgs: tenancy, Audit: tenancy,
-		OrgRetention: time.Hour, Authorizer: api.AllowAll{}, Auth: api.AuthConfig{Mode: api.AuthNone}, Platform: porttest.NewPlatform(porttest.NewIdentity(clock.Now)),
-		Feed:    api.NewFeed(porttest.NewItemNotices(), defNotices, nil),
+		Access: keys, OrgRetention: time.Hour, Authorizer: api.AllowAll{}, Auth: api.AuthConfig{Mode: api.AuthNone},
+		Platform: porttest.NewPlatform(porttest.NewIdentity(clock.Now)), Feed: api.NewFeed(porttest.NewItemNotices(), defNotices, nil),
 		Builder: builder.New(objects, clock, builder.Config{}), Clock: clock,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	g := &defGoald{authors: authors, cache: cache, orgID: o.ID}
+	g := &defGoald{authors: authors, cache: cache, orgID: o.ID, keys: keys}
 	g.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPut && strings.HasSuffix(r.URL.Path, "/draft/tree") {
 			g.mu.Lock()

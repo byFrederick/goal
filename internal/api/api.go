@@ -127,6 +127,8 @@ type Deps struct {
 	Auth AuthConfig
 	// Identity resolves each request's credential under AuthSession; unused under AuthNone.
 	Identity Identity
+	// Access keeps the organization's people and keys.
+	Access Access
 	// Platform keeps the platform admins and the security log.
 	Platform Platform
 	// TrustedProxies are the proxies in front of goald whose X-Forwarded-For names the client
@@ -148,7 +150,8 @@ type Deps struct {
 func (d Deps) complete() bool {
 	missing := []bool{
 		d.Engine == nil, d.Items == nil, d.Factories == nil, d.Definitions == nil, d.Versions == nil, d.Orgs == nil,
-		d.Audit == nil, d.Authorizer == nil, d.Platform == nil, d.Feed == nil, d.Builder == nil, d.Clock == nil, d.OrgRetention <= 0,
+		d.Audit == nil, d.Access == nil, d.Authorizer == nil, d.Platform == nil, d.Feed == nil, d.Builder == nil, d.Clock == nil,
+		d.OrgRetention <= 0,
 	}
 
 	return !slices.Contains(missing, true)
@@ -189,7 +192,7 @@ var errInvalid = errors.New("invalid request")
 // New returns the API's handler for the /v1/ routes.
 func New(d Deps) (http.Handler, error) {
 	if !d.complete() {
-		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Authorizer, Platform, Feed, Builder, Clock " +
+		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Access, Authorizer, Platform, Feed, Builder, Clock " +
 			"and a positive OrgRetention are required")
 	}
 
@@ -204,8 +207,9 @@ func New(d Deps) (http.Handler, error) {
 
 	s := &server{
 		engine: d.Engine, items: d.Items, factories: d.Factories, defs: d.Definitions, versions: d.Versions, orgs: d.Orgs, audit: d.Audit,
-		retention: d.OrgRetention, authz: d.Authorizer, auth: d.Auth, identity: d.Identity, platform: d.Platform, feed: d.Feed, builder: d.Builder,
-		clock: d.Clock, log: log,
+		retention: d.OrgRetention, authz: d.Authorizer, auth: d.Auth, identity: d.Identity, access: d.Access, platform: d.Platform, feed: d.Feed,
+		builder: d.Builder,
+		clock:   d.Clock, log: log,
 	}
 	s.inbox = append([]InboxSource{workInbox{s: s}}, d.InboxSources...)
 
@@ -295,6 +299,7 @@ type server struct {
 	authz     Authorizer
 	auth      AuthConfig
 	identity  Identity
+	access    Access
 	platform  Platform
 	feed      *Feed
 	inbox     []InboxSource
@@ -486,20 +491,11 @@ func (s *server) problem(w http.ResponseWriter, r *http.Request, err error) {
 func problemOf(err error) gen.Problem {
 	var tooLarge *http.MaxBytesError
 
-	if p, ok := fixedProblem(err); ok {
-		return p
-	}
-
-	if p, ok := definitionProblem(err); ok {
-		return p
-	}
-
-	if p, ok := controlProblem(err); ok {
-		return p
-	}
-
-	if p, ok := agentProblem(err); ok {
-		return p
+	// The answers with a code of their own, the fixed bodies first.
+	for _, answer := range []func(error) (gen.Problem, bool){fixedProblem, definitionProblem, controlProblem, agentProblem, apiKeyProblem} {
+		if p, ok := answer(err); ok {
+			return p
+		}
 	}
 
 	switch {

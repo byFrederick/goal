@@ -932,6 +932,41 @@ type AndonState struct {
 	Recent []AndonPull `json:"recent"`
 }
 
+// ApiKey An organization's API key, never its secret
+type ApiKey struct {
+	CreatedAt time.Time `json:"created_at"`
+
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	CreatedBy Actor     `json:"created_by"`
+	ExpiresAt time.Time `json:"expires_at"`
+
+	// Factories The ids of the factories it may reach; null for every factory, now and later
+	Factories *[]string `json:"factories"`
+
+	// Hint goal_sk_ and the secret's first four characters
+	//
+	// Example: goal_sk_Ab3x
+	Hint string `json:"hint"`
+	Id   string `json:"id"`
+
+	// LastUsedAt Recorded at most once a minute
+	LastUsedAt *time.Time `json:"last_used_at"`
+
+	// Name The audit log names its actions "<name> (API key)"
+	Name      string     `json:"name"`
+	RevokedAt *time.Time `json:"revoked_at"`
+	RevokedBy *Actor     `json:"revoked_by"`
+
+	// RoleCeiling A ladder, each including the one before
+	RoleCeiling FactoryRole  `json:"role_ceiling"`
+	Scopes      []Permission `json:"scopes"`
+}
+
+// ApiKeyList defines model for ApiKeyList.
+type ApiKeyList struct {
+	Keys []ApiKey `json:"keys"`
+}
+
 // ApprovalBrief From the output of the latest station that has one: its summary field, up to four of its other short top-level fields (strings of at most 120 characters, numbers, booleans; by key; never summary, pull_request, lane, decision, reason or category), the pull request the outputs name, and what the item has cost
 type ApprovalBrief struct {
 	Facts []struct {
@@ -1312,6 +1347,15 @@ type ConstraintSummary struct {
 	// Busy Share of the window the station was busy (0 to 1); null until it is measured over time
 	Busy    *float64 `json:"busy"`
 	Station string   `json:"station"`
+}
+
+// CreatedApiKey defines model for CreatedApiKey.
+type CreatedApiKey struct {
+	// Key An organization's API key, never its secret
+	Key ApiKey `json:"key"`
+
+	// Secret goal_sk_ and base64url of 32 random bytes. Shown this once; send it as Authorization Bearer.
+	Secret string `json:"secret"`
 }
 
 // CurrentRun defines model for CurrentRun.
@@ -2148,6 +2192,21 @@ type NewAndonPull struct {
 	Reason string `json:"reason"`
 }
 
+// NewApiKey defines model for NewApiKey.
+type NewApiKey struct {
+	ExpiresInDays *int `json:"expires_in_days,omitempty"`
+
+	// Factories The factories it may reach (ids or names); absent for every factory, now and later
+	Factories *[]string `json:"factories,omitempty"`
+	Name      string    `json:"name"`
+
+	// RoleCeiling A ladder, each including the one before
+	RoleCeiling FactoryRole `json:"role_ceiling"`
+
+	// Scopes Permissions keys may carry, held by the creator
+	Scopes []Permission `json:"scopes"`
+}
+
 // NewFactoryRequest defines model for NewFactoryRequest.
 type NewFactoryRequest struct {
 	// Name Required except for an import, where factory.yaml's metadata.name is used when it is absent
@@ -2349,7 +2408,7 @@ type PlatformAdminList struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found.
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold. api-key-name-taken (409): another live key of the organization has the name. An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found.
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
@@ -3111,6 +3170,9 @@ type CreateOrgJSONRequestBody = NewOrg
 // DeleteOrgJSONRequestBody defines body for DeleteOrg for application/json ContentType.
 type DeleteOrgJSONRequestBody = OrgDeletion
 
+// CreateAPIKeyJSONRequestBody defines body for CreateAPIKey for application/json ContentType.
+type CreateAPIKeyJSONRequestBody = NewApiKey
+
 // ValidateDefinitionJSONRequestBody defines body for ValidateDefinition for application/json ContentType.
 type ValidateDefinitionJSONRequestBody = DefinitionFiles
 
@@ -3550,6 +3612,38 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org} (the `GetOrg` operationId).
 	GetOrg(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListAPIKeys The organization's API keys
+	//
+	// Live keys and those revoked in the last 30 days, live ones first, newest first. A key is shown by its hint (goal_sk_ and the secret's first four characters); its secret is never shown again after it was created.
+	//
+	// Corresponds with GET /v1/orgs/{org}/api-keys (the `ListAPIKeys` operationId).
+	ListAPIKeys(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateAPIKeyWithBody Create an API key
+	//
+	// An API key is the organization's service account for scripts and CI: it acts with its scopes, at most as its role ceiling on each factory it reaches (all of them, or the ones named), until it expires (1 to 90 days, default 90) or is revoked. Each scope must be a permission keys may carry (never people, keys, ownership, the organization's settings or deletion, or the platform) and held by the creator now, and a factory scope must be held by the ceiling; otherwise 400 scope-not-allowed. A live key's name is unique in the organization, case ignored (409 api-key-name-taken). The answer carries the secret, once, with Cache-Control no-store: goald keeps only its hash. Needs a sign-in from the last 10 minutes. Audited as api_key.created.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/api-keys (the `CreateAPIKey` operationId).
+	CreateAPIKeyWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateAPIKey Create an API key
+	//
+	// An API key is the organization's service account for scripts and CI: it acts with its scopes, at most as its role ceiling on each factory it reaches (all of them, or the ones named), until it expires (1 to 90 days, default 90) or is revoked. Each scope must be a permission keys may carry (never people, keys, ownership, the organization's settings or deletion, or the platform) and held by the creator now, and a factory scope must be held by the ceiling; otherwise 400 scope-not-allowed. A live key's name is unique in the organization, case ignored (409 api-key-name-taken). The answer carries the secret, once, with Cache-Control no-store: goald keeps only its hash. Needs a sign-in from the last 10 minutes. Audited as api_key.created.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/api-keys (the `CreateAPIKey` operationId).
+	CreateAPIKey(ctx context.Context, org OrgRef, body CreateAPIKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RevokeAPIKey Revoke an API key
+	//
+	// The key stops working on its next request, and the streams it holds end. Revoking a revoked key changes nothing; an unknown key is 404. Needs a sign-in from the last 10 minutes. Audited as api_key.revoked.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/api-keys/{key} (the `RevokeAPIKey` operationId).
+	RevokeAPIKey(ctx context.Context, org OrgRef, key string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetOrgAttention What each factory of the organization needs from people now, for the rail's badges
 	//
@@ -4346,6 +4440,78 @@ func (c *Client) DeleteOrg(ctx context.Context, org OrgRef, body DeleteOrgJSONRe
 // Corresponds with GET /v1/orgs/{org} (the `GetOrg` operationId).
 func (c *Client) GetOrg(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetOrgRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListAPIKeys The organization's API keys
+//
+// Live keys and those revoked in the last 30 days, live ones first, newest first. A key is shown by its hint (goal_sk_ and the secret's first four characters); its secret is never shown again after it was created.
+//
+// Corresponds with GET /v1/orgs/{org}/api-keys (the `ListAPIKeys` operationId).
+func (c *Client) ListAPIKeys(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListAPIKeysRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateAPIKeyWithBody Create an API key
+//
+// An API key is the organization's service account for scripts and CI: it acts with its scopes, at most as its role ceiling on each factory it reaches (all of them, or the ones named), until it expires (1 to 90 days, default 90) or is revoked. Each scope must be a permission keys may carry (never people, keys, ownership, the organization's settings or deletion, or the platform) and held by the creator now, and a factory scope must be held by the ceiling; otherwise 400 scope-not-allowed. A live key's name is unique in the organization, case ignored (409 api-key-name-taken). The answer carries the secret, once, with Cache-Control no-store: goald keeps only its hash. Needs a sign-in from the last 10 minutes. Audited as api_key.created.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/api-keys (the `CreateAPIKey` operationId).
+func (c *Client) CreateAPIKeyWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateAPIKeyRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateAPIKey Create an API key
+//
+// An API key is the organization's service account for scripts and CI: it acts with its scopes, at most as its role ceiling on each factory it reaches (all of them, or the ones named), until it expires (1 to 90 days, default 90) or is revoked. Each scope must be a permission keys may carry (never people, keys, ownership, the organization's settings or deletion, or the platform) and held by the creator now, and a factory scope must be held by the ceiling; otherwise 400 scope-not-allowed. A live key's name is unique in the organization, case ignored (409 api-key-name-taken). The answer carries the secret, once, with Cache-Control no-store: goald keeps only its hash. Needs a sign-in from the last 10 minutes. Audited as api_key.created.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/api-keys (the `CreateAPIKey` operationId).
+func (c *Client) CreateAPIKey(ctx context.Context, org OrgRef, body CreateAPIKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateAPIKeyRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RevokeAPIKey Revoke an API key
+//
+// The key stops working on its next request, and the streams it holds end. Revoking a revoked key changes nothing; an unknown key is 404. Needs a sign-in from the last 10 minutes. Audited as api_key.revoked.
+//
+// Corresponds with DELETE /v1/orgs/{org}/api-keys/{key} (the `RevokeAPIKey` operationId).
+func (c *Client) RevokeAPIKey(ctx context.Context, org OrgRef, key string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRevokeAPIKeyRequest(c.Server, org, key)
 	if err != nil {
 		return nil, err
 	}
@@ -6082,6 +6248,128 @@ func NewGetOrgRequest(server string, org OrgRef) (*http.Request, error) {
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListAPIKeysRequest constructs an http.Request for the ListAPIKeys method
+func NewListAPIKeysRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/api-keys", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateAPIKeyRequest calls the generic CreateAPIKey builder with application/json body
+func NewCreateAPIKeyRequest(server string, org OrgRef, body CreateAPIKeyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateAPIKeyRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewCreateAPIKeyRequestWithBody constructs an http.Request for the CreateAPIKey method, with any body, and a specified content type
+func NewCreateAPIKeyRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/api-keys", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewRevokeAPIKeyRequest constructs an http.Request for the RevokeAPIKey method
+func NewRevokeAPIKeyRequest(server string, org OrgRef, key string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "key", key, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/api-keys/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -9963,6 +10251,42 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org} (the `GetOrg` operationId).
 	GetOrgWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetOrgResponse, error)
 
+	// ListAPIKeysWithResponse The organization's API keys
+	//
+	// Live keys and those revoked in the last 30 days, live ones first, newest first. A key is shown by its hint (goal_sk_ and the secret's first four characters); its secret is never shown again after it was created.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/api-keys (the `ListAPIKeys` operationId).
+	ListAPIKeysWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListAPIKeysResponse, error)
+
+	// CreateAPIKeyWithBodyWithResponse Create an API key
+	//
+	// An API key is the organization's service account for scripts and CI: it acts with its scopes, at most as its role ceiling on each factory it reaches (all of them, or the ones named), until it expires (1 to 90 days, default 90) or is revoked. Each scope must be a permission keys may carry (never people, keys, ownership, the organization's settings or deletion, or the platform) and held by the creator now, and a factory scope must be held by the ceiling; otherwise 400 scope-not-allowed. A live key's name is unique in the organization, case ignored (409 api-key-name-taken). The answer carries the secret, once, with Cache-Control no-store: goald keeps only its hash. Needs a sign-in from the last 10 minutes. Audited as api_key.created.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/api-keys (the `CreateAPIKey` operationId).
+	CreateAPIKeyWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateAPIKeyResponse, error)
+
+	// CreateAPIKeyWithResponse Create an API key
+	//
+	// An API key is the organization's service account for scripts and CI: it acts with its scopes, at most as its role ceiling on each factory it reaches (all of them, or the ones named), until it expires (1 to 90 days, default 90) or is revoked. Each scope must be a permission keys may carry (never people, keys, ownership, the organization's settings or deletion, or the platform) and held by the creator now, and a factory scope must be held by the ceiling; otherwise 400 scope-not-allowed. A live key's name is unique in the organization, case ignored (409 api-key-name-taken). The answer carries the secret, once, with Cache-Control no-store: goald keeps only its hash. Needs a sign-in from the last 10 minutes. Audited as api_key.created.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/api-keys (the `CreateAPIKey` operationId).
+	CreateAPIKeyWithResponse(ctx context.Context, org OrgRef, body CreateAPIKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateAPIKeyResponse, error)
+
+	// RevokeAPIKeyWithResponse Revoke an API key
+	//
+	// The key stops working on its next request, and the streams it holds end. Revoking a revoked key changes nothing; an unknown key is 404. Needs a sign-in from the last 10 minutes. Audited as api_key.revoked.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/api-keys/{key} (the `RevokeAPIKey` operationId).
+	RevokeAPIKeyWithResponse(ctx context.Context, org OrgRef, key string, reqEditors ...RequestEditorFn) (*RevokeAPIKeyResponse, error)
+
 	// GetOrgAttentionWithResponse What each factory of the organization needs from people now, for the rail's badges
 	//
 	// One cheap read, meant to be refetched on every stream event: per factory, the items waiting for a person, the blocked items and the open andon pull, ordered by factory name. Factories with nothing pending are listed with zeros.
@@ -11046,6 +11370,150 @@ func (r GetOrgResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetOrgResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListAPIKeysResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ApiKeyList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListAPIKeysResponse) GetJSON200() *ApiKeyList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListAPIKeysResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListAPIKeysResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListAPIKeysResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListAPIKeysResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListAPIKeysResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// CreateAPIKeyResponse201Headers the declared response headers of an HTTP 201 response for CreateAPIKey
+type CreateAPIKeyResponse201Headers struct {
+	CacheControl string
+}
+
+type CreateAPIKeyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *CreatedApiKey
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *CreateAPIKeyResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateAPIKeyResponse) GetJSON201() *CreatedApiKey {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateAPIKeyResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateAPIKeyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateAPIKeyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateAPIKeyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateAPIKeyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RevokeAPIKeyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RevokeAPIKeyResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RevokeAPIKeyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RevokeAPIKeyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RevokeAPIKeyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RevokeAPIKeyResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -14305,6 +14773,66 @@ func (c *ClientWithResponses) GetOrgWithResponse(ctx context.Context, org OrgRef
 	return ParseGetOrgResponse(rsp)
 }
 
+// ListAPIKeysWithResponse The organization's API keys
+//
+// Live keys and those revoked in the last 30 days, live ones first, newest first. A key is shown by its hint (goal_sk_ and the secret's first four characters); its secret is never shown again after it was created.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/api-keys (the `ListAPIKeys` operationId).
+func (c *ClientWithResponses) ListAPIKeysWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListAPIKeysResponse, error) {
+	rsp, err := c.ListAPIKeys(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListAPIKeysResponse(rsp)
+}
+
+// CreateAPIKeyWithBodyWithResponse Create an API key
+//
+// An API key is the organization's service account for scripts and CI: it acts with its scopes, at most as its role ceiling on each factory it reaches (all of them, or the ones named), until it expires (1 to 90 days, default 90) or is revoked. Each scope must be a permission keys may carry (never people, keys, ownership, the organization's settings or deletion, or the platform) and held by the creator now, and a factory scope must be held by the ceiling; otherwise 400 scope-not-allowed. A live key's name is unique in the organization, case ignored (409 api-key-name-taken). The answer carries the secret, once, with Cache-Control no-store: goald keeps only its hash. Needs a sign-in from the last 10 minutes. Audited as api_key.created.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/api-keys (the `CreateAPIKey` operationId).
+func (c *ClientWithResponses) CreateAPIKeyWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateAPIKeyResponse, error) {
+	rsp, err := c.CreateAPIKeyWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateAPIKeyResponse(rsp)
+}
+
+// CreateAPIKeyWithResponse Create an API key
+//
+// An API key is the organization's service account for scripts and CI: it acts with its scopes, at most as its role ceiling on each factory it reaches (all of them, or the ones named), until it expires (1 to 90 days, default 90) or is revoked. Each scope must be a permission keys may carry (never people, keys, ownership, the organization's settings or deletion, or the platform) and held by the creator now, and a factory scope must be held by the ceiling; otherwise 400 scope-not-allowed. A live key's name is unique in the organization, case ignored (409 api-key-name-taken). The answer carries the secret, once, with Cache-Control no-store: goald keeps only its hash. Needs a sign-in from the last 10 minutes. Audited as api_key.created.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/api-keys (the `CreateAPIKey` operationId).
+func (c *ClientWithResponses) CreateAPIKeyWithResponse(ctx context.Context, org OrgRef, body CreateAPIKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateAPIKeyResponse, error) {
+	rsp, err := c.CreateAPIKey(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateAPIKeyResponse(rsp)
+}
+
+// RevokeAPIKeyWithResponse Revoke an API key
+//
+// The key stops working on its next request, and the streams it holds end. Revoking a revoked key changes nothing; an unknown key is 404. Needs a sign-in from the last 10 minutes. Audited as api_key.revoked.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/api-keys/{key} (the `RevokeAPIKey` operationId).
+func (c *ClientWithResponses) RevokeAPIKeyWithResponse(ctx context.Context, org OrgRef, key string, reqEditors ...RequestEditorFn) (*RevokeAPIKeyResponse, error) {
+	rsp, err := c.RevokeAPIKey(ctx, org, key, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRevokeAPIKeyResponse(rsp)
+}
+
 // GetOrgAttentionWithResponse What each factory of the organization needs from people now, for the rail's badges
 //
 // One cheap read, meant to be refetched on every stream event: per factory, the items waiting for a person, the blocked items and the open andon pull, ordered by factory name. Factories with nothing pending are listed with zeros.
@@ -15764,6 +16292,114 @@ func ParseGetOrgResponse(rsp *http.Response) (*GetOrgResponse, error) {
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListAPIKeysResponse parses an HTTP response from a ListAPIKeysWithResponse call
+func ParseListAPIKeysResponse(rsp *http.Response) (*ListAPIKeysResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListAPIKeysResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ApiKeyList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateAPIKeyResponse parses an HTTP response from a CreateAPIKeyWithResponse call
+func ParseCreateAPIKeyResponse(rsp *http.Response) (*CreateAPIKeyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateAPIKeyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest CreatedApiKey
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers CreateAPIKeyResponse201Headers
+		if values := rsp.Header.Values("Cache-Control"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Cache-Control", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.CacheControl = value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseRevokeAPIKeyResponse parses an HTTP response from a RevokeAPIKeyWithResponse call
+func ParseRevokeAPIKeyResponse(rsp *http.Response) (*RevokeAPIKeyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RevokeAPIKeyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem
@@ -17974,6 +18610,15 @@ type ServerInterface interface {
 	// GetOrg One organization
 	// (GET /v1/orgs/{org})
 	GetOrg(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// ListAPIKeys The organization's API keys
+	// (GET /v1/orgs/{org}/api-keys)
+	ListAPIKeys(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// CreateAPIKey Create an API key
+	// (POST /v1/orgs/{org}/api-keys)
+	CreateAPIKey(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// RevokeAPIKey Revoke an API key
+	// (DELETE /v1/orgs/{org}/api-keys/{key})
+	RevokeAPIKey(w http.ResponseWriter, r *http.Request, org OrgRef, key string)
 	// GetOrgAttention What each factory of the organization needs from people now, for the rail's badges
 	// (GET /v1/orgs/{org}/attention)
 	GetOrgAttention(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -18319,6 +18964,93 @@ func (siw *ServerInterfaceWrapper) GetOrg(w http.ResponseWriter, r *http.Request
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetOrg(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAPIKeys operation middleware
+func (siw *ServerInterfaceWrapper) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAPIKeys(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateAPIKey operation middleware
+func (siw *ServerInterfaceWrapper) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAPIKey(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeAPIKey operation middleware
+func (siw *ServerInterfaceWrapper) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "key" -------------
+	var key string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "key", r.PathValue("key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeAPIKey(w, r, org, key)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -21425,6 +22157,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/settings", wrapper.GetOrgSettings)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/settings", wrapper.UpdateOrgSettings)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/audit", wrapper.ListAudit)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/api-keys", wrapper.ListAPIKeys)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/api-keys", wrapper.CreateAPIKey)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/api-keys/{key}", wrapper.RevokeAPIKey)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/attention", wrapper.GetOrgAttention)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/overview", wrapper.GetFactoryOverview)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/inbox", wrapper.GetInbox)
@@ -21753,6 +22488,127 @@ type GetOrgdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetOrgdefaultApplicationProblemPlusJSONResponse) VisitGetOrgResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAPIKeysRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type ListAPIKeysResponseObject interface {
+	VisitListAPIKeysResponse(w http.ResponseWriter) error
+}
+
+type ListAPIKeys200JSONResponse ApiKeyList
+
+func (response ListAPIKeys200JSONResponse) VisitListAPIKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAPIKeysdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListAPIKeysdefaultApplicationProblemPlusJSONResponse) VisitListAPIKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAPIKeyRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *CreateAPIKeyJSONRequestBody
+}
+
+type CreateAPIKeyResponseObject interface {
+	VisitCreateAPIKeyResponse(w http.ResponseWriter) error
+}
+
+type CreateAPIKey201ResponseHeaders struct {
+	CacheControl string
+}
+
+type CreateAPIKey201JSONResponse struct {
+	Body    CreatedApiKey
+	Headers CreateAPIKey201ResponseHeaders
+}
+
+func (response CreateAPIKey201JSONResponse) VisitCreateAPIKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", fmt.Sprint(response.Headers.CacheControl))
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAPIKeydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateAPIKeydefaultApplicationProblemPlusJSONResponse) VisitCreateAPIKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeAPIKeyRequestObject struct {
+	Org OrgRef `json:"org"`
+	Key string `json:"key"`
+}
+
+type RevokeAPIKeyResponseObject interface {
+	VisitRevokeAPIKeyResponse(w http.ResponseWriter) error
+}
+
+type RevokeAPIKey204Response struct {
+}
+
+func (response RevokeAPIKey204Response) VisitRevokeAPIKeyResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RevokeAPIKeydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RevokeAPIKeydefaultApplicationProblemPlusJSONResponse) VisitRevokeAPIKeyResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -24482,6 +25338,15 @@ type StrictServerInterface interface {
 	// GetOrg One organization
 	// (GET /v1/orgs/{org})
 	GetOrg(ctx context.Context, request GetOrgRequestObject) (GetOrgResponseObject, error)
+	// ListAPIKeys The organization's API keys
+	// (GET /v1/orgs/{org}/api-keys)
+	ListAPIKeys(ctx context.Context, request ListAPIKeysRequestObject) (ListAPIKeysResponseObject, error)
+	// CreateAPIKey Create an API key
+	// (POST /v1/orgs/{org}/api-keys)
+	CreateAPIKey(ctx context.Context, request CreateAPIKeyRequestObject) (CreateAPIKeyResponseObject, error)
+	// RevokeAPIKey Revoke an API key
+	// (DELETE /v1/orgs/{org}/api-keys/{key})
+	RevokeAPIKey(ctx context.Context, request RevokeAPIKeyRequestObject) (RevokeAPIKeyResponseObject, error)
 	// GetOrgAttention What each factory of the organization needs from people now, for the rail's badges
 	// (GET /v1/orgs/{org}/attention)
 	GetOrgAttention(ctx context.Context, request GetOrgAttentionRequestObject) (GetOrgAttentionResponseObject, error)
@@ -24923,6 +25788,92 @@ func (sh *strictHandler) GetOrg(w http.ResponseWriter, r *http.Request, org OrgR
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetOrgResponseObject); ok {
 		if err := validResponse.VisitGetOrgResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAPIKeys operation middleware
+func (sh *strictHandler) ListAPIKeys(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request ListAPIKeysRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAPIKeys(ctx, request.(ListAPIKeysRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAPIKeys")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAPIKeysResponseObject); ok {
+		if err := validResponse.VisitListAPIKeysResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateAPIKey operation middleware
+func (sh *strictHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request CreateAPIKeyRequestObject
+
+	request.Org = org
+
+	var body CreateAPIKeyJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateAPIKey(ctx, request.(CreateAPIKeyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateAPIKey")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateAPIKeyResponseObject); ok {
+		if err := validResponse.VisitCreateAPIKeyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeAPIKey operation middleware
+func (sh *strictHandler) RevokeAPIKey(w http.ResponseWriter, r *http.Request, org OrgRef, key string) {
+	var request RevokeAPIKeyRequestObject
+
+	request.Org = org
+	request.Key = key
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeAPIKey(ctx, request.(RevokeAPIKeyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeAPIKey")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeAPIKeyResponseObject); ok {
+		if err := validResponse.VisitRevokeAPIKeyResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

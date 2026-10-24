@@ -16,6 +16,11 @@ interface ContentProps {
   initialFocus?: RefObject<HTMLElement | null>;
   /** Called as the dialog closes; preventDefault keeps focus from returning to what opened it. */
   onCloseAutoFocus?: (e: Event) => void;
+  /**
+   * false: only the dialog's own buttons close it (no close button, Escape or click outside), for
+   * a dialog whose content is lost on closing, such as a secret shown once.
+   */
+  dismissible?: boolean;
 }
 
 /**
@@ -30,7 +35,11 @@ export function DialogContent({
   className,
   initialFocus,
   onCloseAutoFocus,
+  dismissible = true,
 }: ContentProps) {
+  const keep = (e: Event) => {
+    if (!dismissible) e.preventDefault();
+  };
   const opener = useRef<HTMLElement | null>(null);
   return (
     <D.Portal>
@@ -49,6 +58,8 @@ export function DialogContent({
           'top-1/2 left-1/2 max-h-[calc(100dvh-32px)] w-[calc(100vw-32px)] max-w-[480px] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-contain rounded-card',
           className,
         )}
+        onEscapeKeyDown={keep}
+        onPointerDownOutside={keep}
         onOpenAutoFocus={(e) => {
           // Focus is still where the dialog was opened from.
           opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -64,12 +75,14 @@ export function DialogContent({
             <D.Title className="m-0 text-lg font-medium">{title}</D.Title>
             {description ? <D.Description className="m-0 text-sm text-muted">{description}</D.Description> : null}
           </div>
-          <D.Close
-            className="-mt-1 -mr-1 inline-flex size-10 shrink-0 items-center justify-center rounded-control text-ink transition-colors hover:bg-nav-hover"
-            aria-label="Close"
-          >
-            <X size={18} strokeWidth={1.5} aria-hidden="true" />
-          </D.Close>
+          {dismissible ? (
+            <D.Close
+              className="-mt-1 -mr-1 inline-flex size-10 shrink-0 items-center justify-center rounded-control text-ink transition-colors hover:bg-nav-hover"
+              aria-label="Close"
+            >
+              <X size={18} strokeWidth={1.5} aria-hidden="true" />
+            </D.Close>
+          ) : null}
         </div>
         {children}
       </D.Content>

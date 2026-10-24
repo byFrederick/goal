@@ -23,6 +23,7 @@ const (
 	ownerID    domain.UserID = "019a4000-0000-7000-8000-000000000001"
 	viewerID   domain.UserID = "019a4000-0000-7000-8000-000000000002"
 	strangerID domain.UserID = "019a4000-0000-7000-8000-000000000003"
+	ownerName                = "F. Cruz"
 
 	ownerToken    = "OwnerOwnerOwnerOwnerOwnerOwner01"
 	viewerToken   = "ViewerViewerViewerViewerViewer02"
@@ -48,12 +49,7 @@ func newSignedIn(t *testing.T) signedIn {
 
 	id := porttest.NewIdentity(func() time.Time { return h.clock.Now() })
 	in := &signIn{identity: id, access: porttest.NewAccessNotices(), google: true}
-	h = newHarnessWith(t, in)
-
-	id.AddOrg(domain.Org{ID: testOrg, Slug: acmeSlug, Name: "Acme"})
-	id.AddOrg(domain.Org{ID: otherOrg, Slug: labsSlug, Name: "Example Labs"})
-	id.AddFactory(testOrg, acmeID)
-	id.AddFactory(testOrg, lineID)
+	h = newHarnessWith(t, in) // adds acme and example-labs, with acme's factories, to id
 
 	people := []struct {
 		user          domain.UserID
@@ -62,7 +58,7 @@ func newSignedIn(t *testing.T) signedIn {
 		org           domain.OrgID
 		role          domain.OrgRole
 	}{
-		{ownerID, "F. Cruz", ownerToken, true, testOrg, domain.OrgOwner},
+		{ownerID, ownerName, ownerToken, true, testOrg, domain.OrgOwner},
 		{viewerID, "M. Okafor", viewerToken, false, testOrg, domain.OrgMember},
 		{strangerID, "J. Doe", strangerToken, false, otherOrg, domain.OrgOwner},
 	}
@@ -93,10 +89,15 @@ func (h signedIn) as(t *testing.T, token, method, path, body string) response {
 
 	var header http.Header
 	if token != "" {
-		header = http.Header{"Cookie": {"goal.session_token=" + token + ".c2lnbmF0dXJl"}}
+		header = cookie(token)
 	}
 
 	return h.request(t, method, path, body, header)
+}
+
+// cookie is token's session cookie as Better Auth signs it.
+func cookie(token string) http.Header {
+	return http.Header{"Cookie": {"goal.session_token=" + token + ".c2lnbmF0dXJl"}}
 }
 
 // problem decodes a problem response.
@@ -295,8 +296,15 @@ func TestAPI_SignIn_LocalUserBeforeSignIn(t *testing.T) {
 	}
 }
 
-// signedInStream opens acme's stream with token's cookie and reads its opening line.
+// stream opens acme's stream with token's cookie and reads its opening line.
 func (h signedIn) stream(t *testing.T, token string) sse {
+	t.Helper()
+
+	return h.streamWith(t, cookie(token))
+}
+
+// streamWith opens acme's stream with header's credential and reads its opening line.
+func (h signedIn) streamWith(t *testing.T, header http.Header) sse {
 	t.Helper()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, h.srv.URL+"/v1/orgs/acme/stream", nil)
@@ -304,7 +312,7 @@ func (h signedIn) stream(t *testing.T, token string) sse {
 		t.Fatal(err)
 	}
 
-	req.Header.Set("Cookie", "goal.session_token="+token+".c2ln")
+	req.Header = header
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil || res.StatusCode != http.StatusOK {

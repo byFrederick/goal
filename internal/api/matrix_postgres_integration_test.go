@@ -171,12 +171,45 @@ func (d mxDatabase) seed(t *testing.T) {
 				string(mxF), string(p.user), string(p.factory))
 		}
 	}
+
+	d.seedKeys(t)
+}
+
+// seedKeys writes the matrix's API keys as goald does, under row-level security, with the fake's
+// ids, hashes and grants: the expired one created two days ago and expired yesterday, the revoked
+// one revoked now.
+func (d mxDatabase) seedKeys(t *testing.T) {
+	t.Helper()
+
+	for _, k := range mxKeys() {
+		created, expires := "now()", "now() + interval '90 days'"
+		if k.expired {
+			created, expires = "now() - interval '2 days'", "now() - interval '1 day'"
+		}
+
+		scopes := make([]string, 0, len(k.key.Scopes))
+		for _, s := range k.key.Scopes {
+			scopes = append(scopes, string(s))
+		}
+
+		d.inOrg(t, k.key.Org, `INSERT INTO api_keys (id, name, hint, hash, scopes, role_ceiling, all_factories, created_by, created_at, expires_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, 'system:test', `+created+`, `+expires+`)`,
+			string(k.key.ID), k.key.Name, k.secret[:12], k.hash, scopes, string(k.key.Ceiling), k.key.Factories == nil)
+
+		for _, f := range k.key.Factories {
+			d.inOrg(t, k.key.Org, "INSERT INTO api_key_factories (key_id, factory_id) VALUES ($1, $2)", string(k.key.ID), string(f))
+		}
+
+		if k.revoked {
+			d.inOrg(t, k.key.Org, "UPDATE api_keys SET revoked_at = now(), revoked_by = 'system:test' WHERE id = $1", string(k.key.ID))
+		}
+	}
 }
 
 // Spec 3 §13: the two-org matrix over HTTP with the PostgreSQL Identity. Every person of the
 // matrix is resolved from Better Auth's and Goal's rows, through goal_principal, and must be
-// authorized exactly as the fake's same person is, then answered so over HTTP. API keys arrive
-// with 00046 (PR 3-12), so the key columns are the fake's alone for now.
+// authorized exactly as the fake's same person is, then answered so over HTTP; so is every API key
+// of the matrix, resolved through goal_api_key (00046).
 func TestAPI_TwoOrgMatrixOverHTTPWithPostgres(t *testing.T) {
 	t.Parallel()
 
@@ -196,6 +229,12 @@ func TestAPI_TwoOrgMatrixOverHTTPWithPostgres(t *testing.T) {
 	for _, p := range mxPeople() {
 		principals = append(principals, mxPrincipal{name: p.name, header: p.cookie(), resolve: func(org domain.OrgID) (domain.Principal, error) {
 			return identity.Session(t.Context(), p.token, org)
+		}})
+	}
+
+	for _, k := range mxKeys() {
+		principals = append(principals, mxPrincipal{name: k.key.Name, header: k.header(), resolve: func(domain.OrgID) (domain.Principal, error) {
+			return identity.APIKey(t.Context(), k.hash)
 		}})
 	}
 

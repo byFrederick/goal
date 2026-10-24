@@ -362,6 +362,78 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AuditPage" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/api-keys:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listAPIKeys
+      x-goal-scope: api_key:read
+      tags: [identity]
+      summary: The organization's API keys
+      description: >-
+        Live keys and those revoked in the last 30 days, live ones first, newest first. A key is
+        shown by its hint (goal_sk_ and the secret's first four characters); its secret is never
+        shown again after it was created.
+      responses:
+        "200":
+          description: The keys
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiKeyList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createAPIKey
+      x-goal-scope: api_key:manage
+      tags: [identity]
+      summary: Create an API key
+      description: >-
+        An API key is the organization's service account for scripts and CI: it acts with its
+        scopes, at most as its role ceiling on each factory it reaches (all of them, or the ones
+        named), until it expires (1 to 90 days, default 90) or is revoked. Each scope must be a
+        permission keys may carry (never people, keys, ownership, the organization's settings or
+        deletion, or the platform) and held by the creator now, and a factory scope must be held by
+        the ceiling; otherwise 400 scope-not-allowed. A live key's name is unique in the
+        organization, case ignored (409 api-key-name-taken). The answer carries the secret, once,
+        with Cache-Control no-store: goald keeps only its hash. Needs a sign-in from the last 10
+        minutes. Audited as api_key.created.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewApiKey" }
+      responses:
+        "201":
+          description: The key and its secret, shown this once
+          headers:
+            Cache-Control:
+              required: true
+              description: no-store, so no cache keeps the secret
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatedApiKey" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/api-keys/{key}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - name: key
+        in: path
+        required: true
+        description: The key's id
+        schema: { type: string }
+    delete:
+      operationId: revokeAPIKey
+      x-goal-scope: api_key:manage
+      tags: [identity]
+      summary: Revoke an API key
+      description: >-
+        The key stops working on its next request, and the streams it holds end. Revoking a revoked
+        key changes nothing; an unknown key is 404. Needs a sign-in from the last 10 minutes.
+        Audited as api_key.revoked.
+      responses:
+        "204":
+          description: Revoked
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/attention:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -1822,7 +1894,9 @@ components:
             (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again.
             reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI
             confirms it's you and retries once. last-platform-admin (409): the install keeps at
-            least one platform admin. An unknown
+            least one platform admin. scope-not-allowed (400): an API key scope keys may not carry,
+            or that its creator or its ceiling does not hold. api-key-name-taken (409): another live
+            key of the organization has the name. An unknown
             organization, factory, item or run and one the caller may not see answer the same
             fixed body without detail: org-not-found, factory-not-found, item-not-found,
             run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found.
@@ -1982,6 +2056,64 @@ components:
     OrgRole:
       type: string
       enum: [owner, admin, member]
+    ApiKeyList:
+      type: object
+      required: [keys]
+      properties:
+        keys:
+          type: array
+          items: { $ref: "#/components/schemas/ApiKey" }
+    ApiKey:
+      type: object
+      description: An organization's API key, never its secret
+      required: [id, name, hint, scopes, role_ceiling, factories, created_by, created_at, expires_at, last_used_at, revoked_at, revoked_by]
+      properties:
+        id: { type: string }
+        name: { type: string, description: 'The audit log names its actions "<name> (API key)"' }
+        hint: { type: string, description: "goal_sk_ and the secret's first four characters", example: goal_sk_Ab3x }
+        scopes:
+          type: array
+          items: { $ref: "#/components/schemas/Permission" }
+        role_ceiling: { $ref: "#/components/schemas/FactoryRole" }
+        factories:
+          type: array
+          nullable: true
+          description: The ids of the factories it may reach; null for every factory, now and later
+          items: { type: string }
+        created_by: { $ref: "#/components/schemas/Actor" }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        last_used_at: { type: string, format: date-time, nullable: true, description: Recorded at most once a minute }
+        revoked_at: { type: string, format: date-time, nullable: true }
+        revoked_by:
+          allOf: [{ $ref: "#/components/schemas/Actor" }]
+          nullable: true
+    NewApiKey:
+      type: object
+      required: [name, scopes, role_ceiling]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        scopes:
+          type: array
+          minItems: 1
+          maxItems: 64
+          description: Permissions keys may carry, held by the creator
+          items: { $ref: "#/components/schemas/Permission" }
+        role_ceiling: { $ref: "#/components/schemas/FactoryRole" }
+        factories:
+          type: array
+          minItems: 1
+          description: The factories it may reach (ids or names); absent for every factory, now and later
+          items: { type: string }
+        expires_in_days: { type: integer, minimum: 1, maximum: 90, default: 90 }
+    CreatedApiKey:
+      type: object
+      required: [key, secret]
+      properties:
+        key: { $ref: "#/components/schemas/ApiKey" }
+        secret:
+          type: string
+          description: goal_sk_ and base64url of 32 random bytes. Shown this once; send it as Authorization Bearer.
     OrgList:
       type: object
       required: [orgs]

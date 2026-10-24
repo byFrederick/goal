@@ -66,6 +66,10 @@ export type DeviceRequest = Schemas["DeviceRequest"];
 export type User = Schemas["User"];
 export type OrgRole = Schemas["OrgRole"];
 export type FactoryRole = Schemas["FactoryRole"];
+export type Permission = Schemas["Permission"];
+export type ApiKey = Schemas["ApiKey"];
+export type NewApiKey = Schemas["NewApiKey"];
+export type CreatedApiKey = Schemas["CreatedApiKey"];
 
 // Definitions (B §8): factories' drafts, versions, validation and templates.
 export type VersionRef = Schemas["VersionRef"];

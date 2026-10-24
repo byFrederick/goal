@@ -240,6 +240,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/api-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's API keys
+         * @description Live keys and those revoked in the last 30 days, live ones first, newest first. A key is shown by its hint (goal_sk_ and the secret's first four characters); its secret is never shown again after it was created.
+         */
+        get: operations["listAPIKeys"];
+        put?: never;
+        /**
+         * Create an API key
+         * @description An API key is the organization's service account for scripts and CI: it acts with its scopes, at most as its role ceiling on each factory it reaches (all of them, or the ones named), until it expires (1 to 90 days, default 90) or is revoked. Each scope must be a permission keys may carry (never people, keys, ownership, the organization's settings or deletion, or the platform) and held by the creator now, and a factory scope must be held by the ceiling; otherwise 400 scope-not-allowed. A live key's name is unique in the organization, case ignored (409 api-key-name-taken). The answer carries the secret, once, with Cache-Control no-store: goald keeps only its hash. Needs a sign-in from the last 10 minutes. Audited as api_key.created.
+         */
+        post: operations["createAPIKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/api-keys/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The key's id */
+                key: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke an API key
+         * @description The key stops working on its next request, and the streams it holds end. Revoking a revoked key changes nothing; an unknown key is 404. Needs a sign-in from the last 10 minutes. Audited as api_key.revoked.
+         */
+        delete: operations["revokeAPIKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/attention": {
         parameters: {
             query?: never;
@@ -1485,7 +1537,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold. api-key-name-taken (409): another live key of the organization has the name. An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -1617,6 +1669,52 @@ export interface components {
         };
         /** @enum {string} */
         OrgRole: "owner" | "admin" | "member";
+        ApiKeyList: {
+            keys: components["schemas"]["ApiKey"][];
+        };
+        /** @description An organization's API key, never its secret */
+        ApiKey: {
+            id: string;
+            /** @description The audit log names its actions "<name> (API key)" */
+            name: string;
+            /**
+             * @description goal_sk_ and the secret's first four characters
+             * @example goal_sk_Ab3x
+             */
+            hint: string;
+            scopes: components["schemas"]["Permission"][];
+            role_ceiling: components["schemas"]["FactoryRole"];
+            /** @description The ids of the factories it may reach; null for every factory, now and later */
+            factories: string[] | null;
+            created_by: components["schemas"]["Actor"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at: string;
+            /**
+             * Format: date-time
+             * @description Recorded at most once a minute
+             */
+            last_used_at: string | null;
+            /** Format: date-time */
+            revoked_at: string | null;
+            revoked_by: components["schemas"]["Actor"] | null;
+        };
+        NewApiKey: {
+            name: string;
+            /** @description Permissions keys may carry, held by the creator */
+            scopes: components["schemas"]["Permission"][];
+            role_ceiling: components["schemas"]["FactoryRole"];
+            /** @description The factories it may reach (ids or names); absent for every factory, now and later */
+            factories?: string[];
+            /** @default 90 */
+            expires_in_days?: number;
+        };
+        CreatedApiKey: {
+            key: components["schemas"]["ApiKey"];
+            /** @description goal_sk_ and base64url of 32 random bytes. Shown this once; send it as Authorization Bearer. */
+            secret: string;
+        };
         OrgList: {
             orgs: components["schemas"]["OrgSummary"][];
         };
@@ -3629,6 +3727,84 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AuditPage"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAPIKeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The keys */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKeyList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createAPIKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewApiKey"];
+            };
+        };
+        responses: {
+            /** @description The key and its secret, shown this once */
+            201: {
+                headers: {
+                    /** @description no-store, so no cache keeps the secret */
+                    "Cache-Control": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedApiKey"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    revokeAPIKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The key's id */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };

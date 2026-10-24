@@ -7,7 +7,13 @@
 import type { FactoryRole } from '../api/types';
 
 /** The permissions the screens ask about (api/permissions.yaml). */
-export type OrgPermission = 'org:manage' | 'org:delete' | 'factory:create' | 'member:manage';
+export type OrgPermission =
+  | 'org:manage'
+  | 'org:delete'
+  | 'factory:create'
+  | 'member:manage'
+  | 'api_key:read'
+  | 'api_key:manage';
 export type FactoryPermission =
   | 'item:create'
   | 'item:decide'

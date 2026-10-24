@@ -32,8 +32,6 @@ var awaitingOperations = map[string]string{
 	"member:read":     "3-11: listMembers",
 	"invitation:read": "3-11: listInvitations",
 	"member:manage":   "3-11: setFactoryRole, removeFactoryRole",
-	"api_key:read":    "3-12: listApiKeys",
-	"api_key:manage":  "3-12: createApiKey, revokeApiKey",
 }
 
 // contractOp is one operation of api/openapi.yaml as the permission tests see it.
@@ -299,48 +297,65 @@ func mxIdentity(t *testing.T) (*porttest.Identity, []mxPrincipal) {
 		}})
 	}
 
-	keyScopes := []domain.Permission{}
-
-	for _, name := range slices.Sorted(maps.Keys(permissionRules)) {
-		if permissionRules[name].keys {
-			keyScopes = append(keyScopes, domain.Permission(name))
-		}
-	}
-
-	keys := []struct {
-		name string
-		key  porttest.IdentityKey
-		gone func(domain.APIKeyID)
-	}{
-		{name: "key-scoped", key: porttest.IdentityKey{Org: mxAcme, Scopes: []domain.Permission{"org:read", "factory:read", "item:decide"}, Ceiling: domain.FactoryApprover}},
-		{name: "key-restricted", key: porttest.IdentityKey{Org: mxAcme, Scopes: keyScopes, Factories: []domain.FactoryID{mxG}, Ceiling: domain.FactoryEditor}},
-		{name: "key-other-org", key: porttest.IdentityKey{Org: mxOther, Scopes: keyScopes, Ceiling: domain.FactoryEditor}},
-		{name: "key-expired", key: porttest.IdentityKey{Org: mxAcme, Scopes: keyScopes, Ceiling: domain.FactoryEditor, ExpiresAt: mxNow}},
-		{name: "key-revoked", key: porttest.IdentityKey{Org: mxAcme, Scopes: keyScopes, Ceiling: domain.FactoryEditor}, gone: id.RevokeKey},
-	}
-
-	for n, k := range keys {
-		secret := fmt.Sprintf("%s%043d", apiKeyPrefix, n)
-		hash := apiKeyHash(secret)
-		k.key.ID = domain.APIKeyID(fmt.Sprintf("019a1c00-0000-7000-8000-%012d", 100+n))
-		k.key.Name = k.name
-
-		if k.key.ExpiresAt.IsZero() {
-			k.key.ExpiresAt = mxNow.Add(90 * 24 * time.Hour)
+	for _, k := range mxKeys() {
+		key := k.key
+		if k.expired {
+			key.ExpiresAt = mxNow
 		}
 
-		id.AddKey(hash, k.key)
+		id.AddKey(k.hash, key)
 
-		if k.gone != nil {
-			k.gone(k.key.ID)
+		if k.revoked {
+			id.RevokeKey(key.ID)
 		}
 
-		out = append(out, mxPrincipal{name: k.name, header: http.Header{"Authorization": {"Bearer " + secret}}, resolve: func(domain.OrgID) (domain.Principal, error) {
-			return id.APIKey(t.Context(), hash)
+		out = append(out, mxPrincipal{name: key.Name, header: k.header(), resolve: func(domain.OrgID) (domain.Principal, error) {
+			return id.APIKey(t.Context(), k.hash)
 		}})
 	}
 
 	return id, out
+}
+
+// mxKey is one API key of the matrix, with its secret and hash.
+type mxKey struct {
+	secret, hash     string
+	key              porttest.IdentityKey
+	expired, revoked bool
+}
+
+func (k mxKey) header() http.Header {
+	return http.Header{"Authorization": {"Bearer " + k.secret}}
+}
+
+// mxKeys are the matrix's API keys: one of acme with a few scopes, one restricted to acme's
+// other factory with every scope keys may carry, one of the other org, an expired and a revoked
+// one. Live keys expire 90 days after the matrix's clock.
+func mxKeys() []mxKey {
+	all := []domain.Permission{}
+
+	for _, name := range slices.Sorted(maps.Keys(permissionRules)) {
+		if permissionRules[name].keys {
+			all = append(all, domain.Permission(name))
+		}
+	}
+
+	keys := []mxKey{
+		{key: porttest.IdentityKey{Name: "key-scoped", Org: mxAcme, Scopes: []domain.Permission{"org:read", "factory:read", "item:decide"}, Ceiling: domain.FactoryApprover}},
+		{key: porttest.IdentityKey{Name: "key-restricted", Org: mxAcme, Scopes: all, Factories: []domain.FactoryID{mxG}, Ceiling: domain.FactoryEditor}},
+		{key: porttest.IdentityKey{Name: "key-other-org", Org: mxOther, Scopes: all, Ceiling: domain.FactoryEditor}},
+		{key: porttest.IdentityKey{Name: "key-expired", Org: mxAcme, Scopes: all, Ceiling: domain.FactoryEditor}, expired: true},
+		{key: porttest.IdentityKey{Name: "key-revoked", Org: mxAcme, Scopes: all, Ceiling: domain.FactoryEditor}, revoked: true},
+	}
+
+	for n := range keys {
+		keys[n].secret = fmt.Sprintf("%s%043d", apiKeyPrefix, n)
+		keys[n].hash = apiKeyHash(keys[n].secret)
+		keys[n].key.ID = domain.APIKeyID(fmt.Sprintf("019a1c00-0000-7000-8000-%012d", 100+n))
+		keys[n].key.ExpiresAt = mxNow.Add(90 * 24 * time.Hour)
+	}
+
+	return keys
 }
 
 // resolverHidden is what a resolver answers for an operation's unknown or invisible resource,

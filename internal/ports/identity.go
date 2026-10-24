@@ -25,6 +25,21 @@ type Identity interface {
 	DeviceRequest(ctx context.Context, userCode string) (domain.DeviceRequest, error)
 }
 
+// Access keeps the people and keys of the organization in ctx (spec 3 §5.1). Every change
+// appends its audit entry in its transaction.
+type Access interface {
+	// APIKeys lists the organization's live keys and those revoked in the last 30 days, live
+	// ones first, newest first.
+	APIKeys(ctx context.Context) ([]domain.APIKey, error)
+	// CreateAPIKey stores a key whose hash and hint the caller computed (api_key.created). A live
+	// key of the same name (case ignored) is domain.ErrAPIKeyNameTaken; a factory not of the
+	// organization ErrNotFound.
+	CreateAPIKey(ctx context.Context, by domain.Actor, k domain.NewAPIKey) (domain.APIKey, error)
+	// RevokeAPIKey revokes a key at once (api_key.revoked): it stops resolving on the next
+	// request. Revoking a revoked key changes nothing; an unknown one is ErrNotFound.
+	RevokeAPIKey(ctx context.Context, by domain.Actor, id domain.APIKeyID) error
+}
+
 // AccessNotices streams the access changes committed by anyone (PostgreSQL LISTEN goal_access):
 // a membership ended or its role changed, a session ended, a factory role granted, changed or
 // removed, an organization deleted. Any role that may connect can NOTIFY, so a notice is a claim:
@@ -37,7 +52,7 @@ type AccessNotices interface {
 	Listen(ctx context.Context, deliver func(AccessNotice)) error
 }
 
-// Kinds of access notices (00043's goal_notify_access; 00046 adds api_key).
+// Kinds of access notices (00043's goal_notify_access, 00046's api_key).
 const (
 	AccessMember      = "member"       // OrgID, UserID: a role changed or the membership ended
 	AccessSession     = "session"      // UserID, SessionID: signed out or cleaned up

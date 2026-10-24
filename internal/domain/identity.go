@@ -91,10 +91,11 @@ type Principal struct {
 	OrgRole      OrgRole
 	FactoryRoles map[FactoryID]FactoryRole
 	// Scopes, KeyFactories and KeyCeiling are an API key's grants. KeyFactories nil is every
-	// factory of Org.
+	// factory of Org. KeyExpiresAt is when the key stops working (its streams end then).
 	Scopes       []Permission
 	KeyFactories []FactoryID
 	KeyCeiling   FactoryRole
+	KeyExpiresAt time.Time
 }
 
 // Session is a user's sign-in.

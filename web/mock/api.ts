@@ -10,6 +10,7 @@
 // (auth.ts: /v1/auth/config, /v1/me and the identity service's /api/auth/*), and its {role} makes
 // the caller an owner, admin, member, editor, approver or viewer (roles.ts): Org.can and
 // Factory.can follow, and an operation the role lacks is refused 403 forbidden, as goald does.
+// The organizations' API keys are keys.ts's.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
   AgentStats,
@@ -43,6 +44,7 @@ import { authSettings, createMockAuth } from './auth.ts';
 import { createDefinitions } from './definitions.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
 import {
+  acmeOrg,
   type MockAgentStats,
   type MockItem,
   type MockSlots,
@@ -52,6 +54,7 @@ import {
   trackSpan,
 } from './fixtures.ts';
 import { constraintOf, type DayRange, type FlowInput, leadTimeOf, metricsOf, rangeOf, weeklyOf } from './flow.ts';
+import { createKeys } from './keys.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
 
 type Next = (err?: unknown) => void;
@@ -140,6 +143,13 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         if (sub.org === org) sub.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       }
     },
+  });
+
+  const apiKeys = createKeys({
+    clock,
+    actor: (req) => auth.actor(req),
+    factories: (org) => state.factories.filter((f) => f.org_id === org),
+    acme: acmeOrg,
   });
 
   const ref = (it: MockItem) => `${it.factory}#${it.number}`;
@@ -838,6 +848,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       const role = roleSetting(body.role);
       grants = role ? grantsOf(sources.table, role) : undefined;
       if (grants) withRole(state, grants);
+      apiKeys.reset(clock());
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
       const cookie = auth.reset(authSettings(body.auth));
       if (cookie) res.setHeader('Set-Cookie', cookie);
@@ -920,6 +931,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return json(res, 403, { title: 'Forbidden', status: 403, code: 'forbidden' });
     }
     if (await definitions.handle(org, rest, method, url, req, res)) return;
+    if (await apiKeys.handle(org, rest, method, req, res, () => readBody(req))) return;
 
     if (rest === '' && method === 'GET') return json(res, 200, withCount(org));
     if (rest === '' && method === 'DELETE') {

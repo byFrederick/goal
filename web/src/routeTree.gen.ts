@@ -18,6 +18,7 @@ import { Route as OOrgRouteImport } from './routes/o.$org'
 import { Route as SignInCodeRouteImport } from './routes/sign-in_.code'
 import { Route as OOrgOrgRouteImport } from './routes/o.$org._org'
 import { Route as OOrgOrgIndexRouteImport } from './routes/o.$org._org.index'
+import { Route as OOrgOrgApiKeysRouteImport } from './routes/o.$org._org.api-keys'
 import { Route as OOrgOrgSettingsRouteImport } from './routes/o.$org._org.settings'
 import { Route as OOrgFFactoryRouteImport } from './routes/o.$org.f.$factory'
 import { Route as OOrgNewStepRouteImport } from './routes/o.$org.new.$step'
@@ -72,6 +73,11 @@ const OOrgOrgRoute = OOrgOrgRouteImport.update({
 const OOrgOrgIndexRoute = OOrgOrgIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
+const OOrgOrgApiKeysRoute = OOrgOrgApiKeysRouteImport.update({
+  id: '/api-keys',
+  path: '/api-keys',
   getParentRoute: () => OOrgOrgRoute,
 } as any)
 const OOrgOrgSettingsRoute = OOrgOrgSettingsRouteImport.update({
@@ -140,6 +146,7 @@ export interface FileRoutesByFullPath {
   '/invite/$invitation': typeof InviteInvitationRoute
   '/o/$org': typeof OOrgRouteWithChildren
   '/sign-in/code': typeof SignInCodeRoute
+  '/o/$org/api-keys': typeof OOrgOrgApiKeysRoute
   '/o/$org/settings': typeof OOrgOrgSettingsRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
   '/o/$org/new/$step': typeof OOrgNewStepRoute
@@ -161,6 +168,7 @@ export interface FileRoutesByTo {
   '/invite/$invitation': typeof InviteInvitationRoute
   '/o/$org': typeof OOrgOrgIndexRoute
   '/sign-in/code': typeof SignInCodeRoute
+  '/o/$org/api-keys': typeof OOrgOrgApiKeysRoute
   '/o/$org/settings': typeof OOrgOrgSettingsRoute
   '/o/$org/new/$step': typeof OOrgNewStepRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
@@ -181,6 +189,7 @@ export interface FileRoutesById {
   '/o/$org': typeof OOrgRouteWithChildren
   '/sign-in_/code': typeof SignInCodeRoute
   '/o/$org/_org': typeof OOrgOrgRouteWithChildren
+  '/o/$org/_org/api-keys': typeof OOrgOrgApiKeysRoute
   '/o/$org/_org/settings': typeof OOrgOrgSettingsRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
   '/o/$org/new/$step': typeof OOrgNewStepRoute
@@ -204,6 +213,7 @@ export interface FileRouteTypes {
     | '/invite/$invitation'
     | '/o/$org'
     | '/sign-in/code'
+    | '/o/$org/api-keys'
     | '/o/$org/settings'
     | '/o/$org/f/$factory'
     | '/o/$org/new/$step'
@@ -225,6 +235,7 @@ export interface FileRouteTypes {
     | '/invite/$invitation'
     | '/o/$org'
     | '/sign-in/code'
+    | '/o/$org/api-keys'
     | '/o/$org/settings'
     | '/o/$org/new/$step'
     | '/o/$org/f/$factory/board'
@@ -244,6 +255,7 @@ export interface FileRouteTypes {
     | '/o/$org'
     | '/sign-in_/code'
     | '/o/$org/_org'
+    | '/o/$org/_org/api-keys'
     | '/o/$org/_org/settings'
     | '/o/$org/f/$factory'
     | '/o/$org/new/$step'
@@ -333,6 +345,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OOrgOrgIndexRouteImport
       parentRoute: typeof OOrgOrgRoute
     }
+    '/o/$org/_org/api-keys': {
+      id: '/o/$org/_org/api-keys'
+      path: '/api-keys'
+      fullPath: '/o/$org/api-keys'
+      preLoaderRoute: typeof OOrgOrgApiKeysRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
     '/o/$org/_org/settings': {
       id: '/o/$org/_org/settings'
       path: '/settings'
@@ -414,11 +433,13 @@ declare module '@tanstack/react-router' {
 }
 
 interface OOrgOrgRouteChildren {
+  OOrgOrgApiKeysRoute: typeof OOrgOrgApiKeysRoute
   OOrgOrgSettingsRoute: typeof OOrgOrgSettingsRoute
   OOrgOrgIndexRoute: typeof OOrgOrgIndexRoute
 }
 
 const OOrgOrgRouteChildren: OOrgOrgRouteChildren = {
+  OOrgOrgApiKeysRoute: OOrgOrgApiKeysRoute,
   OOrgOrgSettingsRoute: OOrgOrgSettingsRoute,
   OOrgOrgIndexRoute: OOrgOrgIndexRoute,
 }

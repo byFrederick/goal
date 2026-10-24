@@ -275,7 +275,7 @@ func mxServer(t *testing.T, identity Identity) *httptest.Server {
 
 	h, err := New(Deps{
 		Engine: struct{ Engine }{}, Items: mxItems{}, Factories: mxFactories{}, Definitions: mxDefinitions{}, Versions: struct{ Versions }{},
-		Orgs: mxOrgs{}, Audit: mxAudit{}, OrgRetention: time.Hour, Authorizer: NewPermissions(clock),
+		Orgs: mxOrgs{}, Audit: mxAudit{}, Access: struct{ Access }{}, OrgRetention: time.Hour, Authorizer: NewPermissions(clock),
 		Auth: AuthConfig{Mode: AuthSession}, Identity: identity, Platform: mxPlatform{}, Feed: NewFeed(porttest.NewItemNotices(), porttest.NewDefinitionNotices(), nil),
 		Builder: struct{ Builder }{}, Clock: clock,
 	})

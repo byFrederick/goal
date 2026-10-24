@@ -17,7 +17,7 @@
 // Google refuses an account without an invitation (SIGN_UP_NOT_ALLOWED) and update-user takes a
 // name only (NAME_ONLY).
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { AuthConfig, DeviceRequest, Me, Org } from '@goal/api-client';
+import type { Actor, AuthConfig, DeviceRequest, Me, Org } from '@goal/api-client';
 
 type Json = Record<string, unknown>;
 
@@ -118,6 +118,8 @@ export interface MockAuth {
   refuse: (req: IncomingMessage, res: ServerResponse, path: string, method: string) => boolean;
   /** The organizations the caller sees, with their role (none under sign-in off). */
   visible: (req: IncomingMessage, orgs: Org[]) => Org[];
+  /** Who the request acts for, as goald records it: the signed-in person, else the local user. */
+  actor: (req: IncomingMessage) => Actor;
 }
 
 const alnum = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -497,12 +499,22 @@ export function createMockAuth(clock: () => number): MockAuth {
         send(res, 403, { title: 'Forbidden', status: 403, code: 'forbidden' });
         return true;
       }
-      const org = path.match(/^\/v1\/orgs\/([^/]+)$/);
-      if (org && method === 'DELETE' && clock() - now.session.createdAt > freshMs) {
+      // Deleting the organization and managing its API keys need a sign-in from the last 10 minutes.
+      const fresh =
+        (method === 'DELETE' && /^\/v1\/orgs\/[^/]+$/.test(path)) ||
+        ((method === 'POST' || method === 'DELETE') && /^\/v1\/orgs\/[^/]+\/api-keys(\/[^/]+)?$/.test(path));
+      if (fresh && clock() - now.session.createdAt > freshMs) {
         send(res, 403, { title: 'Sign in again', status: 403, code: 'reauth-required' });
         return true;
       }
       return false;
+    },
+
+    actor(req) {
+      const now = settings.mode === 'none' ? undefined : current(req);
+      return now
+        ? { kind: 'user', id: now.user.id, name: now.user.name }
+        : { kind: 'user', id: 'local', name: 'Local user' };
     },
 
     visible(req, orgs) {

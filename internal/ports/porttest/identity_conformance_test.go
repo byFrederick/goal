@@ -77,6 +77,18 @@ func (s fakeSeed) SetFactoryRole(t *testing.T, org domain.OrgID, user domain.Use
 
 func (s fakeSeed) DeleteOrg(_ *testing.T, org domain.OrgID) { s.id.DeleteOrg(org) }
 
+func (s fakeSeed) ExpireKey(_ *testing.T, _ domain.OrgID, id domain.APIKeyID) { s.id.ExpireKey(id) }
+
+func TestIdentity_APIKeysConformance(t *testing.T) {
+	t.Parallel()
+
+	identitytest.RunAPIKeys(t, func(*testing.T) (ports.Identity, ports.Access, identitytest.KeySeed) {
+		id := porttest.NewIdentity(time.Now)
+
+		return id, id, fakeSeed{id: id, n: new(int)}
+	})
+}
+
 func TestIdentity_Conformance(t *testing.T) {
 	t.Parallel()
 

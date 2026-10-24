@@ -90,10 +90,47 @@ func (i *Identity) Session(ctx context.Context, token string, org domain.OrgID) 
 	return p, nil
 }
 
-// APIKey implements ports.Identity. Goal's API keys and their lookup arrive with 00046 (spec 3,
-// PR 3-12); until then no key exists, so none resolves.
-func (i *Identity) APIKey(context.Context, string) (domain.Principal, error) {
-	return domain.Principal{}, fmt.Errorf("api key: %w", domain.ErrUnauthenticated)
+// apiKeyRow is goal_api_key's jsonb.
+type apiKeyRow struct {
+	ID          string    `json:"id"`
+	OrgID       string    `json:"org_id"`
+	Name        string    `json:"name"`
+	Scopes      []string  `json:"scopes"`
+	RoleCeiling string    `json:"role_ceiling"`
+	Factories   *[]string `json:"factories"`
+	ExpiresAt   time.Time `json:"expires_at"`
+}
+
+// APIKey implements ports.Identity through 00046's goal_api_key: a service principal of the key's
+// own organization with its scopes, factories (nil: every one), ceiling and expiry.
+func (i *Identity) APIKey(ctx context.Context, hash string) (domain.Principal, error) {
+	raw, err := i.q.APIKey(ctx, hash)
+	if err != nil {
+		return domain.Principal{}, fmt.Errorf("api key: %w", err)
+	}
+
+	if raw == nil {
+		return domain.Principal{}, fmt.Errorf("api key: %w", domain.ErrUnauthenticated)
+	}
+
+	var r apiKeyRow
+	if err := json.Unmarshal(raw, &r); err != nil {
+		return domain.Principal{}, fmt.Errorf("api key: decode: %w", err)
+	}
+
+	p := domain.Principal{
+		Kind: domain.PrincipalService, Key: domain.APIKeyID(r.ID), Name: r.Name, Org: domain.OrgID(r.OrgID),
+		Scopes: permissions(r.Scopes), KeyCeiling: domain.FactoryRole(r.RoleCeiling), KeyExpiresAt: r.ExpiresAt.UTC(),
+	}
+
+	if r.Factories != nil {
+		p.KeyFactories = make([]domain.FactoryID, 0, len(*r.Factories))
+		for _, f := range *r.Factories {
+			p.KeyFactories = append(p.KeyFactories, domain.FactoryID(f))
+		}
+	}
+
+	return p, nil
 }
 
 // orgsForRow is one entry of goal_orgs_for's jsonb.

@@ -14,6 +14,7 @@ import {
   Plus,
   SearchCheck,
   Settings,
+  SquareTerminal,
   TextAlignStart,
 } from 'lucide-react';
 
@@ -30,12 +31,13 @@ export type FactoryPath =
   | '/o/$org/f/$factory/items'
   | '/o/$org/f/$factory/definition';
 /** Paths of the organization's screens; their only param is its slug. */
-export type OrgPath = '/o/$org' | '/o/$org/settings';
+export type OrgPath = '/o/$org' | '/o/$org/settings' | '/o/$org/api-keys';
 
 type Availability<Path> = { available: true; to: Path; exact?: boolean } | { available: false };
 
 export type FactoryScreen = Screen & { group: 'work' | 'build' | 'learn' } & Availability<FactoryPath>;
-export type OrgScreen = Screen & Availability<OrgPath>;
+/** An organization screen; one with `permission` is listed only for people who hold it (Org.can). */
+export type OrgScreen = Screen & Availability<OrgPath> & { permission?: string };
 
 /** The factory sidebar, top to bottom: Work, Build, Learn. */
 export const factoryScreens: readonly FactoryScreen[] = [
@@ -80,6 +82,15 @@ export const factoriesScreen: OrgScreen = {
   to: '/o/$org',
   exact: true,
 };
+/** The organization's API keys (spec 3 §10.2 "Api-Keys"), for owners and admins. */
+export const apiKeysScreen: OrgScreen = {
+  id: 'api-keys',
+  label: 'API keys',
+  icon: SquareTerminal,
+  available: true,
+  to: '/o/$org/api-keys',
+  permission: 'api_key:read',
+};
 // Phase 4.2: /o/:org/catalog.
 export const catalogScreen: OrgScreen = { id: 'catalog', label: 'Connector catalog', icon: Layers, available: false };
 // Phase 4.1: /o/:org/credentials.
@@ -98,7 +109,18 @@ export const settingsScreen: OrgScreen = {
 };
 
 /** The organization sidebar, top to bottom. */
-export const orgScreens: readonly OrgScreen[] = [factoriesScreen, catalogScreen, credentialsScreen, settingsScreen];
+export const orgScreens: readonly OrgScreen[] = [
+  factoriesScreen,
+  apiKeysScreen,
+  catalogScreen,
+  credentialsScreen,
+  settingsScreen,
+];
+
+/** The screens of `screens` a person holding `can` sees; none of the gated ones while `can` loads. */
+export function screensFor<S extends OrgScreen>(screens: readonly S[], can: readonly string[] | undefined): S[] {
+  return screens.filter((s) => !s.permission || (can?.includes(s.permission) ?? false));
+}
 
 /** The rail's dashed square: D's New factory wizard, /o/:org/new/:step (no sidebar), from Start. */
 export const newFactoryScreen: Screen & { available: true; to: '/o/$org/new/$step' } = {

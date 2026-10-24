@@ -49,6 +49,7 @@ import {
   listVersions,
   validateDraft,
 } from './definitions';
+import { listApiKeys } from './keys';
 import type { ItemEvent } from './types';
 
 /**
@@ -104,6 +105,7 @@ export const keys = {
   /** What each factory needs from people now (the rail's badges). */
   attention: (org: string) => ['org', org, 'attention'] as const,
   settings: (org: string) => ['org', org, 'settings'] as const,
+  apiKeys: (org: string) => ['org', org, 'api-keys'] as const,
   factories: (org: string) => ['org', org, 'factories'] as const,
   /** The prefix of every factory overview window. */
   overviews: (org: string) => ['org', org, 'overview'] as const,
@@ -178,6 +180,13 @@ export const overviewQuery = (org: string, window = '7d') =>
 /** The inbox at goald's default limit; `factory` narrows it to one factory. */
 export const inboxQuery = (org: string, factory?: string) =>
   queryOptions({ queryKey: keys.inbox(org, factory), queryFn: ({ signal }) => getInbox(org, { factory }, signal) });
+
+export const apiKeysQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.apiKeys(org),
+    queryFn: ({ signal }) => listApiKeys(org, signal),
+    staleTime: 30_000,
+  });
 
 export const settingsQuery = (org: string) =>
   queryOptions({

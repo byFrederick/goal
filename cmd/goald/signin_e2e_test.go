@@ -66,6 +66,7 @@ func TestE2E_SignInWithAnEmailedCode(t *testing.T) {
 	s.signIn(t)
 	s.checkTheOwner(t)
 	s.checkTheirOrganizations(t)
+	s.checkAPIKeys(t)
 	s.cliLogsIn(t)
 	s.signOutEndsTheStream(t)
 
@@ -225,6 +226,63 @@ func (s *e2eStack) approveDevice(t *testing.T, code string) {
 
 	if res := s.do(t, http.MethodPost, "/api/auth/device/approve", fmt.Sprintf(`{"userCode":%q}`, code)); res.status != http.StatusOK {
 		t.Fatalf("approve = %d %s", res.status, res.body)
+	}
+}
+
+// checkAPIKeys checks spec 3 §4.3 against the real stack (3-12): the owner, signed in just now,
+// creates a key of e2e-labs; its secret comes once, uncached; the key acts in its organization
+// only, never manages keys, and stops at once when revoked.
+func (s *e2eStack) checkAPIKeys(t *testing.T) {
+	t.Helper()
+
+	res := s.do(t, http.MethodPost, "/v1/orgs/e2e-labs/api-keys", `{"name":"ci","scopes":["org:read","factory:read"],"role_ceiling":"viewer"}`)
+	if res.status != http.StatusCreated || res.header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("create key = %d %q %s; want 201, no-store", res.status, res.header.Get("Cache-Control"), res.body)
+	}
+
+	var created struct {
+		Key struct {
+			ID string `json:"id"`
+		} `json:"key"`
+		Secret string `json:"secret"`
+	}
+	if err := json.Unmarshal(res.body, &created); err != nil {
+		t.Fatal(err)
+	}
+
+	withKey := func(method, path string) int {
+		req, err := http.NewRequestWithContext(t.Context(), method, e2ePublicURL+path, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		req.Header.Set("Authorization", "Bearer "+created.Secret)
+
+		res, err := http.DefaultClient.Do(req) // no cookies: the key alone
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_ = res.Body.Close()
+
+		return res.StatusCode
+	}
+
+	for path, want := range map[string]int{
+		"/v1/me": http.StatusOK, "/v1/orgs/e2e-labs/factories": http.StatusOK, "/v1/orgs/default": http.StatusNotFound,
+		"/v1/orgs/e2e-labs/api-keys": http.StatusForbidden,
+	} {
+		if got := withKey(http.MethodGet, path); got != want {
+			t.Errorf("GET %s with the key = %d; want %d", path, got, want)
+		}
+	}
+
+	if res := s.do(t, http.MethodDelete, "/v1/orgs/e2e-labs/api-keys/"+created.Key.ID, ""); res.status != http.StatusNoContent {
+		t.Fatalf("revoke = %d %s; want 204", res.status, res.body)
+	}
+
+	if got := withKey(http.MethodGet, "/v1/me"); got != http.StatusUnauthorized {
+		t.Errorf("the revoked key = %d; want 401", got)
 	}
 }
 
