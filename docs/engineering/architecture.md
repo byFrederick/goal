@@ -302,7 +302,7 @@ goal merge goal#N         POST /v1/orgs/default/items/goal%23N/merge → squash-
 
 ### Roadmap
 
-2.2 (A–E: organizations, definitions, app shell, factory builder, work screens) → phase 3, [identity and access](../specs/3-identity-and-access.md) → phase 4, [credentials, connectors and MCP gateway](../specs/4-credentials-and-connectors.md) → phase 5, [Goal MCP server](../specs/5-goal-mcp-server.md) (OAuth for outside MCP clients at `/v1/mcp`). Everything else marked "later" (knowledge base, Jonah, drum-buffer-rope enforcement, the AWS deployment with Terraform, 1Password) is unscheduled.
+2.2 (A–E: organizations, definitions, app shell, factory builder, work screens) → phase 3, [identity and access](../specs/3-identity-and-access.md) → phase 4, [credentials, connectors and MCP gateway](../specs/4-connections-runs-and-knowledge.md) → phase 5, [Goal MCP server](../specs/5-goal-mcp-server.md) (OAuth for outside MCP clients at `/v1/mcp`). Everything else marked "later" (knowledge base, Jonah, drum-buffer-rope enforcement, the AWS deployment with Terraform, 1Password) is unscheduled.
 
 ## Scale and failure
 

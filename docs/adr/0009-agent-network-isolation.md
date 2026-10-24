@@ -1,6 +1,6 @@
 # ADR 0009 — Agent network isolation and the egress proxy
 
-Status: accepted · 2026-10-24 · Builds on [ADR 0003](0003-hexagonal-architecture-and-deployment.md), [ADR 0006](0006-workspaces-and-command-checks.md) and [ADR 0007](0007-identity-better-auth.md). (0008 is reserved for phase 4's connectors, [spec 4](../specs/4-credentials-and-connectors.md) §15.)
+Status: accepted · 2026-10-24 · Builds on [ADR 0003](0003-hexagonal-architecture-and-deployment.md), [ADR 0006](0006-workspaces-and-command-checks.md) and [ADR 0007](0007-identity-better-auth.md). (0008 is reserved for phase 4's connectors, [spec 4](../specs/4-connections-runs-and-knowledge.md) §15.)
 
 ## Context
 

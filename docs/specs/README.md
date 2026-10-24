@@ -15,7 +15,7 @@ Phase 2.2 builds every backend and frontend piece of the Goal UI canvas that nee
 | Phase | Spec | Notes |
 | --- | --- | --- |
 | 3 | [Identity and access](3-identity-and-access.md) | After 2.2. Better Auth beside goald ([ADR 0007](../adr/0007-identity-better-auth.md)); takes everything in "Out of 2.2" below. PRs `3-1…3-16` and `3-12b`, migrations `00040–00049`. |
-| 4 | [Credentials, connectors and MCP gateway](4-credentials-and-connectors.md) (part 4.1 vault and credentials, part 4.2 connectors and MCP gateway) | After phase 3. A design pass comes first and may rewrite the spec. Migrations `00050–00059`. |
+| 4 | [Credentials, connectors and MCP gateway](4-connections-runs-and-knowledge.md) (part 4.1 vault and credentials, part 4.2 connectors and MCP gateway) | After phase 3. A design pass comes first and may rewrite the spec. Migrations `00050–00059`. |
 | 5 | [Goal MCP server](5-goal-mcp-server.md) (stub) | After phase 4: Goal itself as an MCP server for outside clients, OAuth through Better Auth. Migrations from `00060`. |
 
 The roadmap stops at phase 5. Work marked "later" in these specs (knowledge base, Jonah, drum-buffer-rope enforcement, run transcripts, the AWS deployment with Terraform, KMS and IAM, 1Password) is unscheduled.
