@@ -93,6 +93,12 @@ describe('loadSettings', () => {
     ['a public listen address', { ...base, GOAL_AUTH_LISTEN: '0.0.0.0:8081' }, 'GOAL_AUTH_LISTEN must be loopback'],
     ['a malformed listen address', { ...base, GOAL_AUTH_LISTEN: '127.0.0.1' }, 'GOAL_AUTH_LISTEN: expected host:port'],
     ['http off loopback', { ...base, GOAL_PUBLIC_URL: 'http://goal.example.com' }, 'must be https unless'],
+    [
+      'http under a localhost lookalike',
+      { ...base, GOAL_PUBLIC_URL: 'http://goal.localhost.example.com' },
+      'must be https',
+    ],
+    ['http on a name ending like localhost', { ...base, GOAL_PUBLIC_URL: 'http://evillocalhost' }, 'must be https'],
     ['a public URL with a path', { ...base, GOAL_PUBLIC_URL: 'https://example.com/goal' }, 'an origin'],
     ['not a URL', { ...base, GOAL_PUBLIC_URL: 'goal.example.com' }, 'GOAL_PUBLIC_URL: not a URL'],
     [
@@ -119,6 +125,14 @@ describe('loadSettings', () => {
     ],
   ])('refuses %s', (_, env, want) => {
     expect(problems(env).join('\n')).toContain(want);
+  });
+
+  // A name of its own under .localhost keeps the session cookie from other local web servers
+  // (cookies are not port-scoped; review L5); browsers resolve it to this machine.
+  it('takes an http public URL on a .localhost name', () => {
+    expect(loadSettings({ ...base, GOAL_PUBLIC_URL: 'http://goal.localhost:8080' }).publicURL).toBe(
+      'http://goal.localhost:8080',
+    );
   });
 
   it('accepts BETTER_AUTH_URL equal to GOAL_PUBLIC_URL and other loopback addresses', () => {

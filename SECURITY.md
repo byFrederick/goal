@@ -10,6 +10,27 @@ a public issue. Include what you found, how to reproduce it and what it lets som
 [Spec 3 §11.1](docs/specs/3-identity-and-access.md#111-threat-model) lists every threat to the
 install, its control and the test that holds it.
 
+## Known limits, by design
+
+- **Anyone can lock an address out of sign-in by code for a day** (phase 3 review L3). Ten wrong
+  codes for an address in 24 hours lock sign-in by code for that address until the oldest failure
+  is a day old, whoever sent them: the bootstrap owner's address too. This is the brute-force
+  control of threat row 10 (six digits, five minutes, three tries a code): counting only the
+  owner's own failures would need to know who is typing. The person gets one email saying so;
+  Google sign-in, an existing session and `goal db recover-admin` / `goal db recover-owner` (they
+  need only the database) still work. Keying failures by address and network, or not counting
+  them while no code is outstanding, may come later.
+- **Over plain http, other local web servers receive the session cookie** (review L5). Browsers do
+  not separate cookies by port, so with `GOAL_PUBLIC_URL=http://127.0.0.1:8080` (or `localhost`)
+  any other web server you open on that host name, `127.0.0.1:3000` say, is sent
+  `goal.session_token`. When you run other local dev servers, give Goal a name of its own under
+  `.localhost`, which browsers resolve to this machine themselves (RFC 6761), and open it only
+  there: `GOAL_PUBLIC_URL=http://goal.localhost:8080` (goald and the identity service accept http
+  on `*.localhost` names as on `localhost`; where a browser or tool does not resolve it, add
+  `127.0.0.1 goal.localhost` to `/etc/hosts`). The CLI keeps `GOAL_API_URL=http://127.0.0.1:8080`:
+  it sends credentials over http only to a loopback address. Any install other people reach uses
+  https, whose cookie is `__Secure-` and `Secure`.
+
 ## Dependencies
 
 - Go modules and npm packages are pinned exactly (`go.sum`, `pnpm-lock.yaml`); pnpm runs no

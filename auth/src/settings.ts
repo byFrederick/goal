@@ -146,7 +146,11 @@ function parseOrigin(name: string, value: string, problems: string[]): string | 
     problems.push(`${name} must be an origin: scheme, host and port only`);
     return undefined;
   }
-  if (url.protocol === 'http:' && !isLoopback(url.hostname.replace(/^\[(.*)\]$/, '$1'))) {
+  if (
+    url.protocol === 'http:' &&
+    !isLoopback(url.hostname.replace(/^\[(.*)\]$/, '$1')) &&
+    !localhostName(url.hostname)
+  ) {
     problems.push(`${name} must be https unless its host is loopback`);
     return undefined;
   }
@@ -207,6 +211,15 @@ function parseSMTP(get: (name: string) => string | undefined, problems: string[]
     problems.push('GOAL_SMTP_FROM must be an address or "Name <address>"');
   }
   return { url, from };
+}
+
+/**
+ * localhostName is true for a name under .localhost (RFC 6761 §6.3), such as goal.localhost: browsers
+ * resolve it to this machine themselves, so a public URL on it may be http, and a name of its own
+ * keeps the session cookie from other local web servers, as cookies are not port-scoped (review L5).
+ */
+export function localhostName(host: string): boolean {
+  return /^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+localhost$/.test(host.toLowerCase());
 }
 
 /** isLoopback is true for localhost, 127.0.0.0/8 and ::1. */

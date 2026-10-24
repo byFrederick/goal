@@ -197,6 +197,8 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 		{name: "a model twice", env: map[string]string{modelsEnv: "claude-opus-5-5,claude-opus-5-5"}, want: "twice"},
 		{name: "an empty model", env: map[string]string{modelsEnv: "claude-opus-5-5,"}, want: "not a model id"},
 		{name: "public URL in clear text", env: map[string]string{publicURLEnv: "http://goal.example.com"}, want: publicURLEnv},
+		{name: "public URL in clear text under a localhost lookalike", env: map[string]string{publicURLEnv: "http://goal.localhost.example.com"}, want: publicURLEnv},
+		{name: "public URL in clear text ending like localhost", env: map[string]string{publicURLEnv: "http://evillocalhost"}, want: publicURLEnv},
 		{name: "public URL without a scheme", env: map[string]string{publicURLEnv: "goal.example.com"}, want: publicURLEnv},
 		{name: "public URL with a path", env: map[string]string{publicURLEnv: "https://example.com/goal"}, want: publicURLEnv},
 		{name: "gateway listener on the main one", env: map[string]string{gatewayEnv: defaultListen}, want: "another address"},
@@ -342,12 +344,14 @@ func TestGatewayListen_IsRequiredOffLoopback(t *testing.T) {
 func TestSettings_Hosts(t *testing.T) {
 	t.Parallel()
 
+	loopback := []string{"localhost", "127.0.0.1", "::1"}
+
 	tests := []struct {
 		name string
 		env  map[string]string
 		want []string
 	}{
-		{name: "defaults", want: []string{"localhost", "127.0.0.1", "::1"}},
+		{name: "defaults", want: loopback},
 		{
 			name: "listen host and public URL",
 			env:  map[string]string{listenEnv: "127.0.0.2:9090", publicURLEnv: testPublicURL},
@@ -356,6 +360,12 @@ func TestSettings_Hosts(t *testing.T) {
 		{
 			name: "loopback public URL in clear text", env: map[string]string{publicURLEnv: "http://localhost:8080/"},
 			want: []string{"localhost", "127.0.0.1", "::1"},
+		},
+		// A name of its own under .localhost keeps the session cookie from other local web servers
+		// (cookies are not port-scoped; review L5); browsers resolve it to this machine.
+		{
+			name: "a .localhost public URL in clear text", env: map[string]string{publicURLEnv: "http://Goal.localhost:8080"},
+			want: append(slices.Clone(loopback), "goal.localhost"),
 		},
 	}
 

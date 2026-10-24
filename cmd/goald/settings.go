@@ -607,7 +607,8 @@ func isLoopback(host string) bool {
 }
 
 // publicURL refuses a GOAL_PUBLIC_URL that is not an origin (scheme and host, no path), or one
-// in clear text off this machine. Empty is no public URL.
+// in clear text off this machine: http only on a loopback host or a .localhost name. Empty is no
+// public URL.
 func publicURL(raw string) error {
 	if raw == "" {
 		return nil
@@ -619,11 +620,22 @@ func publicURL(raw string) error {
 		return fmt.Errorf("GOAL_PUBLIC_URL %q is not an origin such as https://goal.example.com", raw)
 	}
 
-	if u.Scheme == schemeHTTP && !isLoopback(u.Hostname()) {
+	if u.Scheme == schemeHTTP && !isLoopback(u.Hostname()) && !localhostName(u.Hostname()) {
 		return fmt.Errorf("GOAL_PUBLIC_URL %q must be https off this machine", raw)
 	}
 
 	return nil
+}
+
+// localhostNameForm is a name under .localhost (RFC 6761 §6.3), such as goal.localhost.
+var localhostNameForm = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+localhost$`)
+
+// localhostName is whether host is a name under .localhost, which browsers resolve to this
+// machine themselves, so a public URL on it may be http like one on localhost. Browsers do not
+// separate cookies by port, so a name of its own keeps goald's session cookie from every other
+// local web server the person opens (review L5, SECURITY.md).
+func localhostName(host string) bool {
+	return localhostNameForm.MatchString(strings.ToLower(host))
 }
 
 // hosts are the names goald answers to (api.CheckHost), each once: the loopback names when it
