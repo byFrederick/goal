@@ -143,6 +143,7 @@ func (q *Queries) OrgByRef(ctx context.Context, ref string) (OrgByRefRow, error)
 
 const orgs = `-- name: Orgs :many
 SELECT id, slug, name, mark, created_at, goal_org_factory_count(id)::bigint AS factory_count FROM goal_orgs()
+ORDER BY name, id
 `
 
 type OrgsRow struct {

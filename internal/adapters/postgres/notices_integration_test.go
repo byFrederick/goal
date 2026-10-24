@@ -67,7 +67,9 @@ func TestNotices_EveryCommittedEventWithTheItemsStateAfterIt(t *testing.T) {
 
 	pool := newTestPool(t)
 	s := New(pool)
-	factory := saveFactory(t, s)
+	org := newOrgID(t, s)
+	ctx := domain.WithOrg(t.Context(), org)
+	factory := saveFactory(ctx, t, s)
 	notices := listening(t, NewNotices(pool.Config().ConnConfig, nil), factory)
 
 	if n := next(t, notices); !n.Resync {
@@ -76,7 +78,7 @@ func TestNotices_EveryCommittedEventWithTheItemsStateAfterIt(t *testing.T) {
 
 	at := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
 
-	it, err := s.CreateItem(t.Context(), domain.NewItem{
+	it, err := s.CreateItem(ctx, domain.NewItem{
 		FactoryID: factory, Type: typeTask, Title: "x", Station: stWork, State: domain.StateQueued,
 		Class: domain.ClassStandard, CreatedAt: at,
 	})
@@ -86,7 +88,7 @@ func TestNotices_EveryCommittedEventWithTheItemsStateAfterIt(t *testing.T) {
 
 	moved := at.Add(time.Minute)
 
-	_, err = s.Transition(t.Context(), ports.Transition{
+	_, err = s.Transition(ctx, ports.Transition{
 		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: "approve", State: domain.StateWaitingHuman}, At: moved,
 		Events: []domain.Event{
 			{FactoryID: factory, ItemID: it.ID, At: moved, Kind: domain.EventMoved, Station: stWork, Actor: domain.ActorEngine},
@@ -98,9 +100,9 @@ func TestNotices_EveryCommittedEventWithTheItemsStateAfterIt(t *testing.T) {
 	}
 
 	want := []ports.ItemNotice{
-		{FactoryID: factory, ItemID: it.ID, Number: 1, Kind: domain.EventCreated, Station: stWork, State: domain.StateQueued, At: at},
-		{FactoryID: factory, ItemID: it.ID, Number: 1, Kind: domain.EventMoved, Station: stWork, State: domain.StateWaitingHuman, At: moved},
-		{FactoryID: factory, ItemID: it.ID, Number: 1, Kind: domain.EventWaitingHuman, Station: "approve", State: domain.StateWaitingHuman, At: moved},
+		{OrgID: org, FactoryID: factory, ItemID: it.ID, Number: 1, Kind: domain.EventCreated, Station: stWork, State: domain.StateQueued, At: at},
+		{OrgID: org, FactoryID: factory, ItemID: it.ID, Number: 1, Kind: domain.EventMoved, Station: stWork, State: domain.StateWaitingHuman, At: moved},
+		{OrgID: org, FactoryID: factory, ItemID: it.ID, Number: 1, Kind: domain.EventWaitingHuman, Station: "approve", State: domain.StateWaitingHuman, At: moved},
 	}
 
 	var last int64
@@ -126,7 +128,9 @@ func TestNotices_ReconnectsAndResyncsAfterTheConnectionIsLost(t *testing.T) {
 
 	pool := openPool(t, db.app)
 	s := New(pool)
-	factory := saveFactory(t, s)
+	org := newOrgID(t, s)
+	ctx := domain.WithOrg(t.Context(), org)
+	factory := saveFactory(ctx, t, s)
 
 	cfg := pool.Config().ConnConfig
 	app := "goal_test_listener_" + randomHex(t)
@@ -149,7 +153,7 @@ func TestNotices_ReconnectsAndResyncsAfterTheConnectionIsLost(t *testing.T) {
 		t.Fatalf("notice after the connection was lost = %+v; want Resync", n)
 	}
 
-	it, err := s.CreateItem(t.Context(), domain.NewItem{
+	it, err := s.CreateItem(ctx, domain.NewItem{
 		FactoryID: factory, Type: typeTask, Title: "x", Station: stWork, State: domain.StateQueued,
 		Class: domain.ClassStandard, CreatedAt: time.Now(),
 	})

@@ -43,23 +43,17 @@ func TestInitRoles_UpgradesADatabaseFromBeforeTheRoles(t *testing.T) {
 	admin := openPool(t, db.admin)
 	migrateTo(t, admin, 3)
 
-	old := New(admin)
-	factory := saveFactory(t, old)
-
-	it, err := old.CreateItem(t.Context(), domain.NewItem{
-		FactoryID: factory, Type: typeTask, Title: "from before", Station: stWork, State: domain.StateQueued,
-		Class: domain.ClassStandard, CreatedAt: time.Now(),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	before := insertRowsFromBefore(t, admin)
+	ctx := domain.WithOrg(t.Context(), DefaultOrgID)
 
 	var moved int
 
-	err = pgx.BeginFunc(t.Context(), admin, func(tx pgx.Tx) error {
+	err := pgx.BeginFunc(t.Context(), admin, func(tx pgx.Tx) error {
 		if err := createRoles(t.Context(), tx); err != nil {
 			return err
 		}
+
+		var err error
 
 		moved, err = grantAndTransfer(t.Context(), tx)
 
@@ -98,13 +92,13 @@ func TestInitRoles_UpgradesADatabaseFromBeforeTheRoles(t *testing.T) {
 
 	s := New(app)
 
-	got, err := s.Item(t.Context(), it.ID)
+	got, err := s.Item(ctx, before.item)
 	if err != nil || got.Title != "from before" {
 		t.Fatalf("Item as goal_app = %+v, %v; want the existing item", got, err)
 	}
 
-	if _, err := s.CreateItem(t.Context(), domain.NewItem{
-		FactoryID: factory, Type: typeTask, Title: "after", Station: stWork, State: domain.StateQueued,
+	if _, err := s.CreateItem(ctx, domain.NewItem{
+		FactoryID: before.factory, Type: typeTask, Title: "after", Station: stWork, State: domain.StateQueued,
 		Class: domain.ClassStandard, CreatedAt: time.Now(),
 	}); err != nil {
 		t.Errorf("CreateItem as goal_app = %v", err)

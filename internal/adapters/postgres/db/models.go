@@ -26,6 +26,7 @@ type AgentRun struct {
 	Error        *string
 	StartedAt    time.Time
 	EndedAt      *time.Time
+	OrgID        uuid.UUID
 }
 
 type AndonPull struct {
@@ -35,6 +36,7 @@ type AndonPull struct {
 	PulledBy  string
 	PulledAt  time.Time
 	ClearedAt *time.Time
+	OrgID     uuid.UUID
 }
 
 type AuditLog struct {
@@ -61,6 +63,7 @@ type Factory struct {
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	LastItemNumber   int64
+	OrgID            uuid.UUID
 }
 
 type ItemEvent struct {
@@ -73,6 +76,7 @@ type ItemEvent struct {
 	Station   *string
 	Actor     string
 	Data      []byte
+	OrgID     uuid.UUID
 }
 
 type Lease struct {
@@ -85,6 +89,7 @@ type Lease struct {
 	AcquiredAt  time.Time
 	HeartbeatAt time.Time
 	ExpiresAt   time.Time
+	OrgID       uuid.UUID
 }
 
 type Organization struct {
@@ -125,4 +130,5 @@ type WorkItem struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	DoneAt         *time.Time
+	OrgID          uuid.UUID
 }

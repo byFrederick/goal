@@ -33,8 +33,9 @@ func itemFrom(w db.WorkItem) (domain.Item, error) {
 	}
 
 	it := domain.Item{
-		ID: domain.ItemID(w.ID.String()), FactoryID: domain.FactoryID(w.FactoryID.String()), Number: w.Number,
-		Type: w.Type, Lane: deref(w.Lane), Title: w.Title, Body: w.Body, Station: w.Station,
+		ID: domain.ItemID(w.ID.String()), OrgID: domain.OrgID(w.OrgID.String()), FactoryID: domain.FactoryID(w.FactoryID.String()),
+		Number: w.Number,
+		Type:   w.Type, Lane: deref(w.Lane), Title: w.Title, Body: w.Body, Station: w.Station,
 		State: domain.ItemState(w.State), Class: domain.ClassOfService(w.ClassOfService), Priority: int(w.Priority),
 		ReworkCount: int(w.ReworkCount), CostUSD: w.CostUsd, Outputs: outputs,
 		CreatedAt: w.CreatedAt.UTC(), UpdatedAt: w.UpdatedAt.UTC(),
@@ -76,7 +77,16 @@ func appendEvents(ctx context.Context, q *db.Queries, events []domain.Event) err
 		rows = append(rows, row)
 	}
 
-	if _, err := q.InsertEvents(ctx, rows); err != nil {
+	var errs []error
+
+	batch := q.InsertEvents(ctx, rows)
+	batch.Exec(func(i int, err error) {
+		if err != nil {
+			errs = append(errs, fmt.Errorf("event %d (%s): %w", i, events[i].Kind, err))
+		}
+	})
+
+	if err := errors.Join(append(errs, batch.Close())...); err != nil {
 		return fmt.Errorf("append events: %w", err)
 	}
 

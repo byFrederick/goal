@@ -1,6 +1,7 @@
 // Package storetest is the conformance suite for ports.Store. The in-memory fake in porttest
 // and every Store adapter run it, so the engine's tests on the fake hold for the real store:
-// same pull order, same claim and slot rules, same lease fencing, same compare-and-set.
+// same pull order, same claim and slot rules, same lease fencing, same compare-and-set, and the
+// same tenancy: every call carries an organization and sees only that organization's rows.
 package storetest
 
 import (
@@ -20,10 +21,12 @@ import (
 // Harness is one store under test and what the suite needs to see beyond the port.
 type Harness struct {
 	Store ports.Store
-	// NewFactory returns a factory the store accepts items for.
-	NewFactory func(t *testing.T) domain.FactoryID
-	// Runs returns an item's runs, oldest first.
-	Runs func(t *testing.T, id domain.ItemID) []domain.Run
+	// NewOrg returns a new organization.
+	NewOrg func(t *testing.T) domain.OrgID
+	// NewFactory returns a factory of org the store accepts items for.
+	NewFactory func(t *testing.T, org domain.OrgID) domain.FactoryID
+	// Runs returns an item's runs in org, oldest first.
+	Runs func(t *testing.T, org domain.OrgID, id domain.ItemID) []domain.Run
 }
 
 // Run runs the suite. Tests run in parallel and call newHarness once each; every harness must
@@ -59,6 +62,10 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Concurrent_CreateItemNumbersAreUnique", testConcurrentCreate},
 		{"Concurrent_ClaimsNeverShareASlotOrAnItem", testConcurrentClaims},
 		{"Concurrent_RequeueOrTransitionWinsNeverBoth", testRequeueRace},
+		{"Tenancy_NoOrgIsAnError", testNoOrg},
+		{"Tenancy_OtherOrgSeesNothing", testOtherOrg},
+		{"CreateItem_FactoryOfAnotherOrgNotFound", testFactoryOfAnotherOrg},
+		{"RequeueExpiredLeases_OnlyTheCurrentOrg", testRequeueOneOrg},
 	}
 
 	for _, tc := range tests {
@@ -66,7 +73,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 			t.Parallel()
 
 			h := newHarness(t)
-			tc.test(&fixture{Harness: h, t: t, factory: h.NewFactory(t)})
+			org := h.NewOrg(t)
+			tc.test(&fixture{Harness: h, t: t, org: org, factory: h.NewFactory(t, org)})
 		})
 	}
 }
@@ -81,6 +89,7 @@ const (
 	agBackend   = "backend-engineer"
 	ttl         = time.Minute
 	model       = "model-a"
+	typeTask    = "task"
 )
 
 var (
@@ -95,20 +104,35 @@ const (
 	missingRun  domain.RunID  = "00000000-0000-7000-8000-fffffffffffe"
 )
 
-// fixture is one test's store and factory. It holds the test's T so the test bodies are not
-// mistaken for helpers.
+// fixture is one test's store, organization and factory. It holds the test's T so the test
+// bodies are not mistaken for helpers.
 type fixture struct {
 	Harness
 
 	t       *testing.T
+	org     domain.OrgID
 	factory domain.FactoryID
+}
+
+// ctx is the test's context bound to the fixture's organization.
+func (f *fixture) ctx(t *testing.T) context.Context {
+	t.Helper()
+
+	return domain.WithOrg(t.Context(), f.org)
+}
+
+// newFactory returns another factory of the fixture's organization.
+func (f *fixture) newFactory(t *testing.T) domain.FactoryID {
+	t.Helper()
+
+	return f.NewFactory(t, f.org)
 }
 
 // Events returns all of an item's events through the port, in append order.
 func (f *fixture) Events(t *testing.T, id domain.ItemID) []domain.Event {
 	t.Helper()
 
-	events, err := f.Store.ItemEvents(t.Context(), id, 0, 10_000)
+	events, err := f.Store.ItemEvents(f.ctx(t), id, 0, 10_000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +161,7 @@ func (f *fixture) create(t *testing.T, n domain.NewItem) domain.Item {
 	}
 
 	if n.Type == "" {
-		n.Type = "task"
+		n.Type = typeTask
 	}
 
 	if n.Title == "" {
@@ -148,7 +172,7 @@ func (f *fixture) create(t *testing.T, n domain.NewItem) domain.Item {
 		n.CreatedAt = t0
 	}
 
-	it, err := f.Store.CreateItem(t.Context(), n)
+	it, err := f.Store.CreateItem(f.ctx(t), n)
 	if err != nil {
 		t.Fatalf("CreateItem: %v", err)
 	}
@@ -159,7 +183,7 @@ func (f *fixture) create(t *testing.T, n domain.NewItem) domain.Item {
 func (f *fixture) claim(t *testing.T, st domain.Station, slot int, now time.Time) (domain.Item, domain.Lease) {
 	t.Helper()
 
-	it, l, err := f.Store.ClaimNext(t.Context(), ports.Claim{FactoryID: f.factory, Station: st, Slot: slot, Now: now, ExpiresAt: now.Add(ttl)})
+	it, l, err := f.Store.ClaimNext(f.ctx(t), ports.Claim{FactoryID: f.factory, Station: st, Slot: slot, Now: now, ExpiresAt: now.Add(ttl)})
 	if err != nil {
 		t.Fatalf("ClaimNext slot %d: %v", slot, err)
 	}
@@ -170,7 +194,7 @@ func (f *fixture) claim(t *testing.T, st domain.Station, slot int, now time.Time
 func (f *fixture) item(t *testing.T, id domain.ItemID) domain.Item {
 	t.Helper()
 
-	it, err := f.Store.Item(t.Context(), id)
+	it, err := f.Store.Item(f.ctx(t), id)
 	if err != nil {
 		t.Fatalf("Item: %v", err)
 	}
@@ -181,7 +205,7 @@ func (f *fixture) item(t *testing.T, id domain.ItemID) domain.Item {
 func (f *fixture) leases(t *testing.T, station string) []domain.Lease {
 	t.Helper()
 
-	ls, err := f.Store.Leases(t.Context(), f.factory, station)
+	ls, err := f.Store.Leases(f.ctx(t), f.factory, station)
 	if err != nil {
 		t.Fatalf("Leases: %v", err)
 	}
@@ -202,14 +226,14 @@ func testCreateItem(f *fixture) {
 
 	a := f.create(t, domain.NewItem{Title: "a", Lane: laneBackend, Priority: 3, Body: "details"})
 	b := f.create(t, domain.NewItem{Title: "b", ParentID: a.ID, Class: domain.ClassExpedite})
-	c := f.create(t, domain.NewItem{FactoryID: f.NewFactory(t), Title: "c"})
+	c := f.create(t, domain.NewItem{FactoryID: f.newFactory(t), Title: "c"})
 
 	if a.Number != 1 || b.Number != 2 || c.Number != 1 {
 		t.Errorf("numbers = %d, %d, %d; want 1, 2 and 1 in the other factory", a.Number, b.Number, c.Number)
 	}
 
 	want := domain.Item{
-		ID: a.ID, FactoryID: f.factory, Number: 1, Type: "task", Lane: laneBackend, Title: "a", Body: "details",
+		ID: a.ID, OrgID: f.org, FactoryID: f.factory, Number: 1, Type: typeTask, Lane: laneBackend, Title: "a", Body: "details",
 		Station: stWork, State: domain.StateQueued, Class: domain.ClassStandard, Priority: 3,
 		Outputs: map[string]json.RawMessage{}, CreatedAt: t0, UpdatedAt: t0,
 	}
@@ -228,11 +252,11 @@ func testCreateItem(f *fixture) {
 func testNotFound(f *fixture) {
 	t := f.t
 
-	if _, err := f.Store.Item(t.Context(), missingItem); !errors.Is(err, ports.ErrNotFound) {
+	if _, err := f.Store.Item(f.ctx(t), missingItem); !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("Item = %v; want ErrNotFound", err)
 	}
 
-	_, err := f.Store.Transition(t.Context(), ports.Transition{
+	_, err := f.Store.Transition(f.ctx(t), ports.Transition{
 		ItemID: missingItem, From: domain.Position{Station: stWork, State: domain.StateQueued},
 		To: domain.Position{Station: stNext, State: domain.StateQueued}, At: t1,
 	})
@@ -240,7 +264,7 @@ func testNotFound(f *fixture) {
 		t.Errorf("Transition = %v; want ErrNotFound", err)
 	}
 
-	if err := f.Store.FinishRun(t.Context(), missingRun, domain.RunResult{Status: domain.RunSucceeded}, t1); !errors.Is(err, ports.ErrNotFound) {
+	if err := f.Store.FinishRun(f.ctx(t), missingRun, domain.RunResult{Status: domain.RunSucceeded}, t1); !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("FinishRun = %v; want ErrNotFound", err)
 	}
 }
@@ -261,11 +285,11 @@ func testWaiting(f *fixture) {
 	f.create(t, domain.NewItem{Title: "busy", State: domain.StateInProgress, Priority: 9})
 	f.create(t, domain.NewItem{Title: "blocked", State: domain.StateBlocked, Priority: 9})
 	f.create(t, domain.NewItem{Title: "elsewhere", Station: stNext, Priority: 9})
-	f.create(t, domain.NewItem{Title: "other factory", FactoryID: f.NewFactory(t), Priority: 9})
+	f.create(t, domain.NewItem{Title: "other factory", FactoryID: f.newFactory(t), Priority: 9})
 
 	want := []string{"expedite", "std-high", "std-old", "std-new", "tie-1", "tie-2", "ready"}
 
-	got, err := f.Store.Waiting(t.Context(), f.factory, stWork, 100)
+	got, err := f.Store.Waiting(f.ctx(t), f.factory, stWork, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +298,7 @@ func testWaiting(f *fixture) {
 		t.Errorf("Waiting = %v; want %v", titles, want)
 	}
 
-	got, err = f.Store.Waiting(t.Context(), f.factory, stWork, 2)
+	got, err = f.Store.Waiting(f.ctx(t), f.factory, stWork, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,7 +363,7 @@ func testClaimNoWork(f *fixture) {
 	f.create(t, domain.NewItem{State: domain.StateBlocked})
 	f.create(t, domain.NewItem{Station: stNext})
 
-	_, _, err := f.Store.ClaimNext(t.Context(), ports.Claim{FactoryID: f.factory, Station: work, Slot: 0, Now: t1, ExpiresAt: t1.Add(ttl)})
+	_, _, err := f.Store.ClaimNext(f.ctx(t), ports.Claim{FactoryID: f.factory, Station: work, Slot: 0, Now: t1, ExpiresAt: t1.Add(ttl)})
 	if !errors.Is(err, ports.ErrNoWork) {
 		t.Fatalf("ClaimNext = %v; want ErrNoWork", err)
 	}
@@ -358,7 +382,7 @@ func testClaimSlotTaken(f *fixture) {
 	f.claim(t, work, 0, t1)
 
 	claim := func(factory domain.FactoryID, st domain.Station, slot int) error {
-		_, _, err := f.Store.ClaimNext(t.Context(), ports.Claim{FactoryID: factory, Station: st, Slot: slot, Now: t1, ExpiresAt: t1.Add(ttl)})
+		_, _, err := f.Store.ClaimNext(f.ctx(t), ports.Claim{FactoryID: factory, Station: st, Slot: slot, Now: t1, ExpiresAt: t1.Add(ttl)})
 		return err
 	}
 
@@ -384,7 +408,7 @@ func testClaimSlotTaken(f *fixture) {
 		t.Errorf("slot 0 at another station = %v; want a claim", err)
 	}
 
-	other := f.NewFactory(t)
+	other := f.newFactory(t)
 	f.create(t, domain.NewItem{FactoryID: other})
 
 	if err := claim(other, work, 0); err != nil {
@@ -398,7 +422,7 @@ func testHeartbeat(f *fixture) {
 	it := f.create(t, domain.NewItem{})
 	_, l := f.claim(t, work, 0, t1)
 
-	beat, err := f.Store.HeartbeatLease(t.Context(), l, t1.Add(20*time.Second), t1.Add(80*time.Second))
+	beat, err := f.Store.HeartbeatLease(f.ctx(t), l, t1.Add(20*time.Second), t1.Add(80*time.Second))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -417,15 +441,15 @@ func testHeartbeat(f *fixture) {
 	stale := l
 	stale.AcquiredAt = l.AcquiredAt.Add(-time.Second)
 
-	if _, err := f.Store.HeartbeatLease(t.Context(), stale, t1, t1.Add(ttl)); !errors.Is(err, ports.ErrLeaseLost) {
+	if _, err := f.Store.HeartbeatLease(f.ctx(t), stale, t1, t1.Add(ttl)); !errors.Is(err, ports.ErrLeaseLost) {
 		t.Errorf("heartbeat with another AcquiredAt = %v; want ErrLeaseLost", err)
 	}
 
-	if _, err := f.Store.Transition(t.Context(), next(it, l, t1)); err != nil {
+	if _, err := f.Store.Transition(f.ctx(t), next(it, l, t1)); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := f.Store.HeartbeatLease(t.Context(), l, t1, t1.Add(ttl)); !errors.Is(err, ports.ErrLeaseLost) {
+	if _, err := f.Store.HeartbeatLease(f.ctx(t), l, t1, t1.Add(ttl)); !errors.Is(err, ports.ErrLeaseLost) {
 		t.Errorf("heartbeat after release = %v; want ErrLeaseLost", err)
 	}
 }
@@ -444,7 +468,7 @@ func testTransition(f *fixture) {
 		Data: map[string]any{"from": stWork, "to": stNext},
 	}}
 
-	moved, err := f.Store.Transition(t.Context(), tr)
+	moved, err := f.Store.Transition(f.ctx(t), tr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -463,7 +487,7 @@ func testTransition(f *fixture) {
 	sameEvents(t, events[len(events)-1:], tr.Events)
 
 	// No lease, no lane, no output: those stay; reaching done stores DoneAt.
-	done, err := f.Store.Transition(t.Context(), ports.Transition{
+	done, err := f.Store.Transition(f.ctx(t), ports.Transition{
 		ItemID: it.ID, From: domain.Position{Station: stNext, State: domain.StateQueued},
 		To: domain.Position{Station: "done", State: domain.StateDone}, At: t3, DoneAt: t3,
 	})
@@ -486,7 +510,7 @@ func testTransitionConflict(f *fixture) {
 	tr.From.State = domain.StateQueued
 	tr.Events = []domain.Event{{FactoryID: f.factory, ItemID: it.ID, At: t1, Kind: domain.EventMoved, Actor: agWorker}}
 
-	if _, err := f.Store.Transition(t.Context(), tr); !errors.Is(err, ports.ErrConflict) {
+	if _, err := f.Store.Transition(f.ctx(t), tr); !errors.Is(err, ports.ErrConflict) {
 		t.Fatalf("Transition from the wrong state = %v; want ErrConflict", err)
 	}
 
@@ -510,7 +534,7 @@ func testTransitionLeaseLost(f *fixture) {
 	stale := l
 	stale.AcquiredAt = l.AcquiredAt.Add(-time.Second)
 
-	if _, err := f.Store.Transition(t.Context(), next(it, stale, t1)); !errors.Is(err, ports.ErrLeaseLost) {
+	if _, err := f.Store.Transition(f.ctx(t), next(it, stale, t1)); !errors.Is(err, ports.ErrLeaseLost) {
 		t.Fatalf("Transition with another AcquiredAt = %v; want ErrLeaseLost", err)
 	}
 
@@ -518,7 +542,7 @@ func testTransitionLeaseLost(f *fixture) {
 	tr := next(it, stale, t1)
 	tr.From.Station = stNext
 
-	if _, err := f.Store.Transition(t.Context(), tr); !errors.Is(err, ports.ErrLeaseLost) {
+	if _, err := f.Store.Transition(f.ctx(t), tr); !errors.Is(err, ports.ErrLeaseLost) {
 		t.Errorf("Transition with a lost lease and a wrong position = %v; want ErrLeaseLost", err)
 	}
 
@@ -543,7 +567,7 @@ func testRequeue(f *fixture) {
 
 	now := t1.Add(ttl) // a's lease expires exactly now
 
-	got, err := f.Store.RequeueExpiredLeases(t.Context(), now, 100)
+	got, err := f.Store.RequeueExpiredLeases(f.ctx(t), now, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -560,12 +584,12 @@ func testRequeue(f *fixture) {
 		t.Errorf("Leases = %+v; want only b's", ls)
 	}
 
-	sameRuns(t, f.Runs(t, a.ID), []domain.Run{{
+	sameRuns(t, f.Runs(t, f.org, a.ID), []domain.Run{{
 		ID: runA, FactoryID: f.factory, ItemID: a.ID, Station: stWork, Agent: agWorker, Model: model,
 		Result: domain.RunResult{Status: domain.RunFailed, Error: "lease expired"}, StartedAt: t1, EndedAt: now,
 	}})
 
-	if runs := f.Runs(t, b.ID); len(runs) != 1 || runs[0].Result.Status != domain.RunRunning {
+	if runs := f.Runs(t, f.org, b.ID); len(runs) != 1 || runs[0].Result.Status != domain.RunRunning {
 		t.Errorf("b's runs = %+v; want still running", runs)
 	}
 
@@ -585,11 +609,11 @@ func testRequeueFences(f *fixture) {
 	_, la := f.claim(t, work, 0, t1)
 	now := t1.Add(ttl)
 
-	if got, err := f.Store.RequeueExpiredLeases(t.Context(), now, 100); err != nil || len(got) != 1 {
+	if got, err := f.Store.RequeueExpiredLeases(f.ctx(t), now, 100); err != nil || len(got) != 1 {
 		t.Fatalf("RequeueExpiredLeases = %+v, %v; want one lease", got, err)
 	}
 
-	if _, err := f.Store.HeartbeatLease(t.Context(), la, now, now.Add(ttl)); !errors.Is(err, ports.ErrLeaseLost) {
+	if _, err := f.Store.HeartbeatLease(f.ctx(t), la, now, now.Add(ttl)); !errors.Is(err, ports.ErrLeaseLost) {
 		t.Errorf("old holder's heartbeat = %v; want ErrLeaseLost", err)
 	}
 
@@ -598,7 +622,7 @@ func testRequeueFences(f *fixture) {
 		t.Fatalf("reclaimed %s with AcquiredAt %s; want %s with a new AcquiredAt", reclaimed.ID, l2.AcquiredAt, a.ID)
 	}
 
-	if _, err := f.Store.Transition(t.Context(), next(a, la, now)); !errors.Is(err, ports.ErrLeaseLost) {
+	if _, err := f.Store.Transition(f.ctx(t), next(a, la, now)); !errors.Is(err, ports.ErrLeaseLost) {
 		t.Errorf("old holder's transition = %v; want ErrLeaseLost", err)
 	}
 }
@@ -612,7 +636,7 @@ func testRequeueLimit(f *fixture) {
 	_, late := f.claim(t, work, 0, t1.Add(time.Second))
 	_, early := f.claim(t, work, 1, t1)
 
-	got, err := f.Store.RequeueExpiredLeases(t.Context(), t1.Add(time.Hour), 1)
+	got, err := f.Store.RequeueExpiredLeases(f.ctx(t), t1.Add(time.Hour), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -621,7 +645,7 @@ func testRequeueLimit(f *fixture) {
 		t.Fatalf("RequeueExpiredLeases limit 1 = %+v; want the earliest expiry [%+v]", got, early)
 	}
 
-	got, err = f.Store.RequeueExpiredLeases(t.Context(), t1.Add(time.Hour), 1)
+	got, err = f.Store.RequeueExpiredLeases(f.ctx(t), t1.Add(time.Hour), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -630,7 +654,7 @@ func testRequeueLimit(f *fixture) {
 		t.Errorf("second sweep = %+v; want [%+v]", got, late)
 	}
 
-	if got, err := f.Store.RequeueExpiredLeases(t.Context(), t1.Add(time.Hour), 1); err != nil || len(got) != 0 {
+	if got, err := f.Store.RequeueExpiredLeases(f.ctx(t), t1.Add(time.Hour), 1); err != nil || len(got) != 0 {
 		t.Errorf("third sweep = %+v, %v; want nothing", got, err)
 	}
 }
@@ -638,7 +662,7 @@ func testRequeueLimit(f *fixture) {
 func (f *fixture) startRun(t *testing.T, item domain.ItemID, at time.Time) domain.RunID {
 	t.Helper()
 
-	id, err := f.Store.StartRun(t.Context(), ports.NewRun{
+	id, err := f.Store.StartRun(f.ctx(t), ports.NewRun{
 		FactoryID: f.factory, ItemID: item, Station: stWork, Agent: agWorker, Model: model, StartedAt: at,
 	})
 	if err != nil {
@@ -660,15 +684,15 @@ func testRuns(f *fixture) {
 		ID: id, FactoryID: f.factory, ItemID: it.ID, Station: stWork, Agent: agWorker, Model: model,
 		Result: domain.RunResult{Status: domain.RunRunning}, StartedAt: t1,
 	}
-	sameRuns(t, f.Runs(t, it.ID), []domain.Run{want})
+	sameRuns(t, f.Runs(t, f.org, it.ID), []domain.Run{want})
 
 	res := domain.RunResult{Status: domain.RunSucceeded, CostUSD: 0.25, Turns: 3, InputTokens: 100, OutputTokens: 50, SessionID: "s-1"}
-	if err := f.Store.FinishRun(t.Context(), id, res, t2); err != nil {
+	if err := f.Store.FinishRun(f.ctx(t), id, res, t2); err != nil {
 		t.Fatal(err)
 	}
 
 	want.Result, want.EndedAt = res, t2
-	sameRuns(t, f.Runs(t, it.ID), []domain.Run{want})
+	sameRuns(t, f.Runs(t, f.org, it.ID), []domain.Run{want})
 
 	events := f.Events(t, it.ID)
 	sameEvents(t, events[len(events)-2:], []domain.Event{
@@ -680,18 +704,18 @@ func testRuns(f *fixture) {
 	})
 
 	// Finishing again changes nothing.
-	if err := f.Store.FinishRun(t.Context(), id, domain.RunResult{Status: domain.RunFailed, CostUSD: 1}, t2.Add(time.Minute)); err != nil {
+	if err := f.Store.FinishRun(f.ctx(t), id, domain.RunResult{Status: domain.RunFailed, CostUSD: 1}, t2.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 
-	sameRuns(t, f.Runs(t, it.ID), []domain.Run{want})
+	sameRuns(t, f.Runs(t, f.org, it.ID), []domain.Run{want})
 
 	if n := len(f.Events(t, it.ID)); n != len(events) {
 		t.Errorf("events after a second finish = %d; want %d", n, len(events))
 	}
 
 	second := f.startRun(t, it.ID, t2)
-	if err := f.Store.FinishRun(t.Context(), second, domain.RunResult{Status: domain.RunFailed, CostUSD: 0.5, Error: "boom"}, t2); err != nil {
+	if err := f.Store.FinishRun(f.ctx(t), second, domain.RunResult{Status: domain.RunFailed, CostUSD: 0.5, Error: "boom"}, t2); err != nil {
 		t.Fatal(err)
 	}
 
@@ -714,7 +738,7 @@ func testAppendEvents(f *fixture) {
 		{FactoryID: f.factory, ItemID: it.ID, At: t1.Add(time.Second), Kind: domain.EventBlocked, Actor: "human"},
 	}
 
-	if err := f.Store.AppendEvents(t.Context(), events...); err != nil {
+	if err := f.Store.AppendEvents(f.ctx(t), events...); err != nil {
 		t.Fatal(err)
 	}
 
@@ -734,7 +758,7 @@ func testItemEvents(f *fixture) {
 
 	for i := range 5 {
 		ev := domain.Event{FactoryID: f.factory, ItemID: it.ID, At: t1, Kind: "note", Actor: agWorker, Data: map[string]any{"i": i}}
-		if err := f.Store.AppendEvents(t.Context(), ev, domain.Event{FactoryID: f.factory, ItemID: other.ID, At: t1, Kind: "note", Actor: agWorker}); err != nil {
+		if err := f.Store.AppendEvents(f.ctx(t), ev, domain.Event{FactoryID: f.factory, ItemID: other.ID, At: t1, Kind: "note", Actor: agWorker}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -744,7 +768,7 @@ func testItemEvents(f *fixture) {
 		t.Fatalf("%d events, want 6 (created and five notes)", len(all))
 	}
 
-	page, err := f.Store.ItemEvents(t.Context(), it.ID, all[2].ID, 2)
+	page, err := f.Store.ItemEvents(f.ctx(t), it.ID, all[2].ID, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -757,12 +781,12 @@ func testItemEvents(f *fixture) {
 		}
 	}
 
-	rest, err := f.Store.ItemEvents(t.Context(), it.ID, all[5].ID, 10)
+	rest, err := f.Store.ItemEvents(f.ctx(t), it.ID, all[5].ID, 10)
 	if err != nil || len(rest) != 0 {
 		t.Errorf("events after the last = %v, %v; want none", rest, err)
 	}
 
-	none, err := f.Store.ItemEvents(t.Context(), missingItem, 0, 10)
+	none, err := f.Store.ItemEvents(f.ctx(t), missingItem, 0, 10)
 	if err != nil || len(none) != 0 {
 		t.Errorf("events of an unknown item = %v, %v; want none and no error", none, err)
 	}
@@ -779,8 +803,8 @@ func testConcurrentCreate(f *fixture) {
 
 	for range n {
 		wg.Go(func() {
-			it, err := f.Store.CreateItem(t.Context(), domain.NewItem{
-				FactoryID: f.factory, Type: "task", Title: "x", Station: stWork, State: domain.StateQueued,
+			it, err := f.Store.CreateItem(f.ctx(t), domain.NewItem{
+				FactoryID: f.factory, Type: typeTask, Title: "x", Station: stWork, State: domain.StateQueued,
 				Class: domain.ClassStandard, CreatedAt: t0,
 			})
 			if err != nil {
@@ -822,7 +846,7 @@ func testConcurrentClaims(f *fixture) {
 		f.create(t, domain.NewItem{CreatedAt: t0.Add(time.Duration(i) * time.Second)})
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(f.ctx(t), 30*time.Second)
 	defer cancel()
 
 	var wg sync.WaitGroup
@@ -842,7 +866,7 @@ func testConcurrentClaims(f *fixture) {
 		}
 	}
 
-	if w, err := f.Store.Waiting(t.Context(), f.factory, stNext, items+1); err != nil || len(w) != items {
+	if w, err := f.Store.Waiting(f.ctx(t), f.factory, stNext, items+1); err != nil || len(w) != items {
 		t.Errorf("Waiting at %s = %d, %v; want all %d items", stNext, len(w), err, items)
 	}
 }
@@ -913,8 +937,8 @@ func testRequeueRace(f *fixture) {
 			wg       sync.WaitGroup
 		)
 
-		wg.Go(func() { requeued, sweepErr = f.Store.RequeueExpiredLeases(t.Context(), t1.Add(time.Hour), 10) })
-		wg.Go(func() { _, moveErr = f.Store.Transition(t.Context(), next(it, l, t1)) })
+		wg.Go(func() { requeued, sweepErr = f.Store.RequeueExpiredLeases(f.ctx(t), t1.Add(time.Hour), 10) })
+		wg.Go(func() { _, moveErr = f.Store.Transition(f.ctx(t), next(it, l, t1)) })
 		wg.Wait()
 
 		if sweepErr != nil {
@@ -940,7 +964,7 @@ func testRequeueRace(f *fixture) {
 		if swept {
 			// Park the requeued item so the next round claims a fresh one.
 			_, l := f.claim(t, work, 0, t1)
-			if _, err := f.Store.Transition(t.Context(), next(it, l, t1)); err != nil {
+			if _, err := f.Store.Transition(f.ctx(t), next(it, l, t1)); err != nil {
 				t.Fatal(err)
 			}
 		}

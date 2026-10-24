@@ -36,9 +36,18 @@ func TestStore_Conformance(t *testing.T) {
 		s := New(newTestPool(t))
 
 		return storetest.Harness{
-			Store:      s,
-			NewFactory: func(t *testing.T) domain.FactoryID { t.Helper(); return saveFactory(t, s) },
-			Runs:       func(t *testing.T, id domain.ItemID) []domain.Run { t.Helper(); return s.runs(t, id) },
+			Store:  s,
+			NewOrg: func(t *testing.T) domain.OrgID { t.Helper(); return newOrgID(t, s) },
+			NewFactory: func(t *testing.T, org domain.OrgID) domain.FactoryID {
+				t.Helper()
+
+				return saveFactory(domain.WithOrg(t.Context(), org), t, s)
+			},
+			Runs: func(t *testing.T, org domain.OrgID, id domain.ItemID) []domain.Run {
+				t.Helper()
+
+				return s.runs(domain.WithOrg(t.Context(), org), t, id)
+			},
 		}
 	})
 }
@@ -94,7 +103,7 @@ func TestCreateItem_UnsavedFactoryNotFound(t *testing.T) {
 
 	s := New(newTestPool(t))
 
-	_, err := s.CreateItem(t.Context(), domain.NewItem{
+	_, err := s.CreateItem(domain.WithOrg(t.Context(), DefaultOrgID), domain.NewItem{
 		FactoryID: domain.FactoryID(uuid.NewString()), Type: typeTask, Title: "x", Station: "work",
 		State: domain.StateQueued, Class: domain.ClassStandard, CreatedAt: time.Now(),
 	})
@@ -107,20 +116,21 @@ func TestSaveFactory_UpdatesTheDefinition(t *testing.T) {
 	t.Parallel()
 
 	s := New(newTestPool(t))
+	ctx := domain.WithOrg(t.Context(), DefaultOrgID)
 	f := Factory{ID: domain.FactoryID(uuid.NewString()), Name: "acme-support", Definition: json.RawMessage(`{"v": 1}`)}
 
-	if err := s.SaveFactory(t.Context(), f); err != nil {
+	if err := s.SaveFactory(ctx, f); err != nil {
 		t.Fatal(err)
 	}
 
 	f.Name, f.Title, f.Definition = "acme-help", "Help desk", json.RawMessage(`{"v": 2}`)
-	if err := s.SaveFactory(t.Context(), f); err != nil {
+	if err := s.SaveFactory(ctx, f); err != nil {
 		t.Fatal(err)
 	}
 
 	var name, title, def string
-	if err := s.pool.QueryRow(t.Context(), "SELECT name, title, definition::text FROM factories WHERE id = $1", string(f.ID)).
-		Scan(&name, &title, &def); err != nil {
+	if err := asOrg(t, s.pool, DefaultOrgID, "SELECT name, title, definition::text FROM factories WHERE id = '"+string(f.ID)+"'",
+		&name, &title, &def); err != nil {
 		t.Fatal(err)
 	}
 
@@ -247,12 +257,25 @@ func randomHex(t *testing.T) string {
 	return hex.EncodeToString(b)
 }
 
-func saveFactory(t *testing.T, s *Store) domain.FactoryID {
+// newOrgID creates an organization through the Tenancy port.
+func newOrgID(t *testing.T, s *Store) domain.OrgID {
+	t.Helper()
+
+	o, err := s.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: "acme-" + randomHex(t), Name: "Acme"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return o.ID
+}
+
+// saveFactory saves a new factory in the organization of ctx.
+func saveFactory(ctx context.Context, t *testing.T, s *Store) domain.FactoryID {
 	t.Helper()
 
 	id := uuid.NewString()
 
-	err := s.SaveFactory(t.Context(), Factory{
+	err := s.SaveFactory(ctx, Factory{
 		ID: domain.FactoryID(id), Name: "acme-" + id[:8], Definition: json.RawMessage(`{"metadata": {"id": "` + id + `"}}`),
 	})
 	if err != nil {
@@ -262,11 +285,24 @@ func saveFactory(t *testing.T, s *Store) domain.FactoryID {
 	return domain.FactoryID(id)
 }
 
-// runs reads an item's runs straight from agent_runs; the port has no reader yet.
-func (s *Store) runs(t *testing.T, id domain.ItemID) []domain.Run {
+// runs reads an item's runs straight from agent_runs in the organization of ctx; the port has
+// no reader yet.
+func (s *Store) runs(ctx context.Context, t *testing.T, id domain.ItemID) []domain.Run {
 	t.Helper()
 
-	rows, err := s.pool.Query(t.Context(), `
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	org, _ := domain.OrgFrom(ctx)
+	if _, err := tx.Exec(ctx, "SELECT set_config('goal.org_id', $1, true)", string(org)); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := tx.Query(ctx, `
 		SELECT id::text, factory_id::text, item_id::text, station, agent, model, status, coalesce(session_id, ''),
 		       turns, input_tokens, output_tokens, cost_usd, coalesce(error, ''), started_at, ended_at
 		FROM agent_runs WHERE item_id = $1 ORDER BY id`, string(id))

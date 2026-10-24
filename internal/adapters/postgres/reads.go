@@ -20,7 +20,9 @@ func (s *Store) ItemByNumber(ctx context.Context, factory domain.FactoryID, numb
 		return domain.Item{}, err
 	}
 
-	row, err := s.q.GetItemByNumber(ctx, db.GetItemByNumberParams{FactoryID: fid, Number: number})
+	row, err := fetch(ctx, s.read, func(q *db.Queries) (db.WorkItem, error) {
+		return q.GetItemByNumber(ctx, db.GetItemByNumberParams{FactoryID: fid, Number: number})
+	})
 	if notFound(err) {
 		return domain.Item{}, fmt.Errorf("item %d of factory %s: %w", number, factory, ports.ErrNotFound)
 	}
@@ -44,8 +46,10 @@ func (s *Store) ListItems(ctx context.Context, q ports.ItemQuery) ([]domain.Item
 		states = append(states, string(st))
 	}
 
-	rows, err := s.q.ListItems(ctx, db.ListItemsParams{
-		FactoryID: fid, States: states, Station: q.Station, Before: q.Before, MaxItems: int64(q.Limit),
+	rows, err := fetch(ctx, s.read, func(dq *db.Queries) ([]db.WorkItem, error) {
+		return dq.ListItems(ctx, db.ListItemsParams{
+			FactoryID: fid, States: states, Station: q.Station, Before: q.Before, MaxItems: int64(q.Limit),
+		})
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list items of factory %s: %w", q.FactoryID, err)
@@ -61,7 +65,9 @@ func (s *Store) StationLoads(ctx context.Context, factory domain.FactoryID) ([]d
 		return nil, err
 	}
 
-	rows, err := s.q.StationLoads(ctx, fid)
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.StationLoadsRow, error) {
+		return q.StationLoads(ctx, fid)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("station loads of factory %s: %w", factory, err)
 	}
@@ -83,9 +89,7 @@ func (s *Store) FlowMetrics(ctx context.Context, factory domain.FactoryID, since
 
 	var m domain.FlowMetrics
 
-	err = pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
-		q := s.q.WithTx(tx)
-
+	err = s.orgTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(q *db.Queries) error {
 		days, err := q.DonePerDay(ctx, db.DonePerDayParams{FactoryID: fid, Since: since, Until: until})
 		if err != nil {
 			return fmt.Errorf("done per day: %w", err)

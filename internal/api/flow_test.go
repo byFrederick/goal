@@ -34,7 +34,7 @@ var build = domain.Station{
 func (h *harness) seed(t *testing.T, station string, state domain.ItemState, created time.Time) domain.Item {
 	t.Helper()
 
-	it, err := h.store.CreateItem(t.Context(), domain.NewItem{
+	it, err := h.store.CreateItem(inOrg(t), domain.NewItem{
 		FactoryID: lineID, Type: "feature", Lane: "api", Title: "item at " + station, Station: station,
 		State: state, Class: domain.ClassStandard, CreatedAt: created,
 	})
@@ -54,7 +54,7 @@ func (h *harness) move(t *testing.T, it domain.Item, to domain.Position, mutate 
 		mutate(&tr)
 	}
 
-	got, err := h.store.Transition(t.Context(), tr)
+	got, err := h.store.Transition(inOrg(t), tr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func (h *harness) move(t *testing.T, it domain.Item, to domain.Position, mutate 
 func (h *harness) claim(t *testing.T, slot int) domain.Item {
 	t.Helper()
 
-	it, _, err := h.store.ClaimNext(t.Context(), ports.Claim{
+	it, _, err := h.store.ClaimNext(inOrg(t), ports.Claim{
 		FactoryID: lineID, Station: build, Slot: slot, Now: h.clock.Now(), ExpiresAt: h.clock.Now().Add(time.Minute),
 	})
 	if err != nil {
@@ -117,7 +117,7 @@ func TestAPI_ItemsByReference(t *testing.T) {
 		}
 	}
 
-	if err := h.engine.Tick(t.Context()); err != nil { // inbox → approve
+	if err := h.engine.Tick(inOrg(t)); err != nil { // inbox → approve
 		t.Fatal(err)
 	}
 
@@ -327,12 +327,12 @@ func TestAPI_MetricsOverTheWindow(t *testing.T) {
 
 	open := h.seed(t, stBuild, domain.StateQueued, day(22, 0))
 
-	run, err := h.store.StartRun(t.Context(), ports.NewRun{FactoryID: lineID, ItemID: open.ID, Station: stBuild, Agent: agBackend, StartedAt: day(23, 8)})
+	run, err := h.store.StartRun(inOrg(t), ports.NewRun{FactoryID: lineID, ItemID: open.ID, Station: stBuild, Agent: agBackend, StartedAt: day(23, 8)})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := h.store.FinishRun(t.Context(), run, domain.RunResult{Status: domain.RunSucceeded, CostUSD: 0.5}, day(23, 8)); err != nil {
+	if err := h.store.FinishRun(inOrg(t), run, domain.RunResult{Status: domain.RunSucceeded, CostUSD: 0.5}, day(23, 8)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -444,13 +444,13 @@ func TestAPI_MergeRefusalsAreConflicts(t *testing.T) {
 		t.Errorf("merge of an unmergeable pull request = %d, want 409", code)
 	}
 
-	if got, _ := h.store.Item(t.Context(), stuck.ID); got.Position() != stuck.Position() {
+	if got, _ := h.store.Item(inOrg(t), stuck.ID); got.Position() != stuck.Position() {
 		t.Errorf("refused merge moved the item to %+v", got.Position())
 	}
 
 	// Approving at a human station without a merge action is no merge.
 	acme := h.submit(t)
-	if err := h.engine.Tick(t.Context()); err != nil {
+	if err := h.engine.Tick(inOrg(t)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -488,7 +488,7 @@ func (s sse) next(t *testing.T) []string {
 func (h *harness) stream(t *testing.T, query string) (int, string, sse) {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(inOrg(t), 10*time.Second)
 	t.Cleanup(cancel)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.srv.URL+"/v1/stream"+query, nil)
@@ -510,7 +510,7 @@ func TestAPI_StreamSendsItemEventsAsTheyHappen(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
-	if err := h.notices.AwaitListeners(t.Context(), 1); err != nil {
+	if err := h.notices.AwaitListeners(inOrg(t), 1); err != nil {
 		t.Fatal(err)
 	}
 

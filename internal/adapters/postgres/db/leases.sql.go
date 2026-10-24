@@ -15,7 +15,7 @@ import (
 const heartbeatLease = `-- name: HeartbeatLease :one
 UPDATE leases SET heartbeat_at = $1, expires_at = $2
 WHERE item_id = $3 AND acquired_at = $4
-RETURNING item_id, factory_id, station, agent, slot, container, acquired_at, heartbeat_at, expires_at
+RETURNING item_id, factory_id, station, agent, slot, container, acquired_at, heartbeat_at, expires_at, org_id
 `
 
 type HeartbeatLeaseParams struct {
@@ -44,6 +44,7 @@ func (q *Queries) HeartbeatLease(ctx context.Context, arg HeartbeatLeaseParams) 
 		&i.AcquiredAt,
 		&i.HeartbeatAt,
 		&i.ExpiresAt,
+		&i.OrgID,
 	)
 	return i, err
 }
@@ -55,7 +56,7 @@ VALUES ($1, $2, $3, $4, $5::bigint,
 ON CONFLICT (item_id) DO UPDATE SET
   factory_id = EXCLUDED.factory_id, station = EXCLUDED.station, agent = EXCLUDED.agent, slot = EXCLUDED.slot,
   acquired_at = EXCLUDED.acquired_at, heartbeat_at = EXCLUDED.heartbeat_at, expires_at = EXCLUDED.expires_at
-RETURNING item_id, factory_id, station, agent, slot, container, acquired_at, heartbeat_at, expires_at
+RETURNING item_id, factory_id, station, agent, slot, container, acquired_at, heartbeat_at, expires_at, org_id
 `
 
 type InsertLeaseParams struct {
@@ -91,12 +92,13 @@ func (q *Queries) InsertLease(ctx context.Context, arg InsertLeaseParams) (Lease
 		&i.AcquiredAt,
 		&i.HeartbeatAt,
 		&i.ExpiresAt,
+		&i.OrgID,
 	)
 	return i, err
 }
 
 const lockExpiredLeases = `-- name: LockExpiredLeases :many
-SELECT l.item_id, l.factory_id, l.station, l.agent, l.slot, l.container, l.acquired_at, l.heartbeat_at, l.expires_at FROM leases l JOIN work_items w ON w.id = l.item_id
+SELECT l.item_id, l.factory_id, l.station, l.agent, l.slot, l.container, l.acquired_at, l.heartbeat_at, l.expires_at, l.org_id FROM leases l JOIN work_items w ON w.id = l.item_id
 WHERE l.expires_at <= $1
 ORDER BY l.expires_at
 LIMIT $2::bigint
@@ -130,6 +132,7 @@ func (q *Queries) LockExpiredLeases(ctx context.Context, arg LockExpiredLeasesPa
 			&i.AcquiredAt,
 			&i.HeartbeatAt,
 			&i.ExpiresAt,
+			&i.OrgID,
 		); err != nil {
 			return nil, err
 		}
@@ -199,7 +202,7 @@ func (q *Queries) SlotTaken(ctx context.Context, arg SlotTakenParams) (bool, err
 }
 
 const stationLeases = `-- name: StationLeases :many
-SELECT item_id, factory_id, station, agent, slot, container, acquired_at, heartbeat_at, expires_at FROM leases WHERE factory_id = $1 AND station = $2 ORDER BY slot
+SELECT item_id, factory_id, station, agent, slot, container, acquired_at, heartbeat_at, expires_at, org_id FROM leases WHERE factory_id = $1 AND station = $2 ORDER BY slot
 `
 
 type StationLeasesParams struct {
@@ -226,6 +229,7 @@ func (q *Queries) StationLeases(ctx context.Context, arg StationLeasesParams) ([
 			&i.AcquiredAt,
 			&i.HeartbeatAt,
 			&i.ExpiresAt,
+			&i.OrgID,
 		); err != nil {
 			return nil, err
 		}

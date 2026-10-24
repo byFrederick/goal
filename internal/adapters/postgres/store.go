@@ -82,7 +82,9 @@ func (s *Store) Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
 		return domain.Item{}, err
 	}
 
-	row, err := s.q.GetItem(ctx, uid)
+	row, err := fetch(ctx, s.read, func(q *db.Queries) (db.WorkItem, error) {
+		return q.GetItem(ctx, uid)
+	})
 	if notFound(err) {
 		return domain.Item{}, fmt.Errorf("item %s: %w", id, ports.ErrNotFound)
 	}
@@ -101,12 +103,19 @@ func (s *Store) Waiting(ctx context.Context, factory domain.FactoryID, station s
 		return nil, err
 	}
 
-	rows, err := s.q.WaitingItems(ctx, db.WaitingItemsParams{FactoryID: fid, Station: station, MaxItems: int64(limit)})
+	items, err := fetch(ctx, s.read, func(q *db.Queries) ([]domain.Item, error) {
+		rows, err := q.WaitingItems(ctx, db.WaitingItemsParams{FactoryID: fid, Station: station, MaxItems: int64(limit)})
+		if err != nil {
+			return nil, err
+		}
+
+		return convertAll(rows, itemFrom)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("station %s: waiting items: %w", station, err)
 	}
 
-	return convertAll(rows, itemFrom)
+	return items, nil
 }
 
 // Leases implements ports.Store.
@@ -116,7 +125,9 @@ func (s *Store) Leases(ctx context.Context, factory domain.FactoryID, station st
 		return nil, err
 	}
 
-	rows, err := s.q.StationLeases(ctx, db.StationLeasesParams{FactoryID: fid, Station: station})
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.Lease, error) {
+		return q.StationLeases(ctx, db.StationLeasesParams{FactoryID: fid, Station: station})
+	})
 	if err != nil {
 		return nil, fmt.Errorf("station %s: leases: %w", station, err)
 	}
@@ -209,8 +220,10 @@ func (s *Store) HeartbeatLease(ctx context.Context, l domain.Lease, now, expires
 		return domain.Lease{}, err
 	}
 
-	row, err := s.q.HeartbeatLease(ctx, db.HeartbeatLeaseParams{
-		ItemID: item, AcquiredAt: l.AcquiredAt, HeartbeatAt: now, ExpiresAt: expiresAt,
+	row, err := fetch(ctx, s.inTx, func(q *db.Queries) (db.Lease, error) {
+		return q.HeartbeatLease(ctx, db.HeartbeatLeaseParams{
+			ItemID: item, AcquiredAt: l.AcquiredAt, HeartbeatAt: now, ExpiresAt: expiresAt,
+		})
 	})
 	if notFound(err) {
 		return domain.Lease{}, fmt.Errorf("item %s: %w", l.ItemID, ports.ErrLeaseLost)
@@ -426,7 +439,11 @@ func moveParams(item uuid.UUID, t ports.Transition) db.MoveItemParams {
 
 // AppendEvents implements ports.Store.
 func (s *Store) AppendEvents(ctx context.Context, events ...domain.Event) error {
-	return appendEvents(ctx, s.q, events)
+	if err := s.inTx(ctx, func(q *db.Queries) error { return appendEvents(ctx, q, events) }); err != nil {
+		return fmt.Errorf("append events: %w", err)
+	}
+
+	return nil
 }
 
 // ItemEvents implements ports.Store.
@@ -436,7 +453,9 @@ func (s *Store) ItemEvents(ctx context.Context, id domain.ItemID, after int64, l
 		return nil, err
 	}
 
-	rows, err := s.q.ItemEvents(ctx, db.ItemEventsParams{ItemID: uid, After: after, MaxEvents: int64(limit)})
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.ItemEvent, error) {
+		return q.ItemEvents(ctx, db.ItemEventsParams{ItemID: uid, After: after, MaxEvents: int64(limit)})
+	})
 	if err != nil {
 		return nil, fmt.Errorf("events of item %s: %w", id, err)
 	}

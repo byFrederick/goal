@@ -16,6 +16,16 @@ import (
 
 const factoryID domain.FactoryID = "31efd04e-b231-4939-9f13-8986bf7e462a"
 
+// testOrg is the organization the tests' items belong to: every store call carries one.
+const testOrg domain.OrgID = "019a1c00-0000-7000-8000-0000000000aa"
+
+// inOrg is the test's context bound to testOrg.
+func inOrg(t *testing.T) context.Context {
+	t.Helper()
+
+	return domain.WithOrg(t.Context(), testOrg)
+}
+
 var t0 = time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
 
 // Names the test lines use.
@@ -119,7 +129,7 @@ func (h *harness) submit(t *testing.T, n domain.NewItem) domain.Item {
 		n.Type = typeFeature
 	}
 
-	it, err := h.e.Submit(t.Context(), n)
+	it, err := h.e.Submit(inOrg(t), n)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +141,7 @@ func (h *harness) submit(t *testing.T, n domain.NewItem) domain.Item {
 func (h *harness) step(t *testing.T) {
 	t.Helper()
 
-	if err := h.e.Tick(t.Context()); err != nil {
+	if err := h.e.Tick(inOrg(t)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -164,7 +174,7 @@ func (h *harness) wait(t *testing.T, e *engine.Engine) {
 func bounded(t *testing.T) context.Context {
 	t.Helper()
 
-	c, cancel := context.WithTimeout(t.Context(), deadline)
+	c, cancel := context.WithTimeout(inOrg(t), deadline)
 	t.Cleanup(cancel)
 
 	return c
@@ -175,14 +185,14 @@ func bounded(t *testing.T) context.Context {
 func (h *harness) claimAsDeadInstance(t *testing.T, it domain.Item, station string) {
 	t.Helper()
 
-	if _, err := h.store.Transition(t.Context(), ports.Transition{
+	if _, err := h.store.Transition(inOrg(t), ports.Transition{
 		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: station, State: domain.StateQueued}, At: t0,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	st, _ := h.line.Station(station)
-	if _, _, err := h.store.ClaimNext(t.Context(), ports.Claim{
+	if _, _, err := h.store.ClaimNext(inOrg(t), ports.Claim{
 		FactoryID: factoryID, Station: st, Slot: 0, Now: h.clock.Now(), ExpiresAt: h.clock.Now().Add(ttl),
 	}); err != nil {
 		t.Fatal(err)
@@ -192,7 +202,7 @@ func (h *harness) claimAsDeadInstance(t *testing.T, it domain.Item, station stri
 func (h *harness) item(t *testing.T, id domain.ItemID) domain.Item {
 	t.Helper()
 
-	it, err := h.store.Item(t.Context(), id)
+	it, err := h.store.Item(inOrg(t), id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,13 +380,13 @@ func TestTick_NeverExceedsWIP(t *testing.T) {
 
 			for range 2 {
 				for _, e := range engines {
-					if err := e.Tick(t.Context()); err != nil {
+					if err := e.Tick(inOrg(t)); err != nil {
 						t.Fatal(err)
 					}
 				}
 			}
 
-			leases, err := h.store.Leases(t.Context(), factoryID, stWork)
+			leases, err := h.store.Leases(inOrg(t), factoryID, stWork)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -416,13 +426,13 @@ func TestSweep_ExpiredLeaseRequeues(t *testing.T) {
 		t.Fatal("a tick started work while the dead instance's lease filled the only slot")
 	}
 
-	if n, err := h.e.SweepLeases(t.Context()); err != nil || n != 0 {
+	if n, err := h.e.SweepLeases(inOrg(t)); err != nil || n != 0 {
 		t.Fatalf("sweep before expiry requeued %d (%v), want 0", n, err)
 	}
 
 	h.clock.Advance(ttl)
 
-	n, err := h.e.SweepLeases(t.Context())
+	n, err := h.e.SweepLeases(inOrg(t))
 	if err != nil || n != 1 {
 		t.Fatalf("sweep after expiry requeued %d (%v), want 1", n, err)
 	}
@@ -435,7 +445,7 @@ func TestSweep_ExpiredLeaseRequeues(t *testing.T) {
 		t.Errorf("events %v, want one lease_expired", h.kinds(crashed.ID))
 	}
 
-	if n, err := h.e.SweepLeases(t.Context()); err != nil || n != 0 {
+	if n, err := h.e.SweepLeases(inOrg(t)); err != nil || n != 0 {
 		t.Errorf("second sweep requeued %d (%v), want 0", n, err)
 	}
 
@@ -451,7 +461,7 @@ func TestRun_LoopTicksOnTheClock(t *testing.T) {
 
 	h := newHarness(t, lineOf(agentStation(stWork, agWorker, 1, 1)), porttest.Succeed(`{}`))
 
-	ctx, cancel := context.WithCancel(t.Context())
+	ctx, cancel := context.WithCancel(inOrg(t))
 	done := make(chan error)
 
 	go func() { done <- h.e.Run(ctx) }()
@@ -483,7 +493,7 @@ func TestSetLines_LoadsAndUnloadsFactories(t *testing.T) {
 	other.FactoryID = "5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a01"
 	n := domain.NewItem{FactoryID: other.FactoryID, Title: "an item", Type: typeFeature}
 
-	if _, err := h.e.Submit(t.Context(), n); err == nil {
+	if _, err := h.e.Submit(inOrg(t), n); err == nil {
 		t.Fatal("submit to a factory that is not loaded succeeded")
 	}
 
@@ -491,7 +501,7 @@ func TestSetLines_LoadsAndUnloadsFactories(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	it, err := h.e.Submit(t.Context(), n)
+	it, err := h.e.Submit(inOrg(t), n)
 	if err != nil {
 		t.Fatalf("submit after loading the factory: %v", err)
 	}
@@ -506,7 +516,7 @@ func TestSetLines_LoadsAndUnloadsFactories(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := h.e.Submit(t.Context(), domain.NewItem{FactoryID: factoryID, Title: "x", Type: typeFeature}); err == nil {
+	if _, err := h.e.Submit(inOrg(t), domain.NewItem{FactoryID: factoryID, Title: "x", Type: typeFeature}); err == nil {
 		t.Error("submit to an unloaded factory succeeded")
 	}
 }

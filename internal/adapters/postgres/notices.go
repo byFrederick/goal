@@ -119,6 +119,7 @@ func (n *Notices) serve(ctx context.Context, deliver func(ports.ItemNotice)) (bo
 
 // payload is what notify_item_event() sends.
 type payload struct {
+	OrgID     string    `json:"org_id"`
 	ID        int64     `json:"id"`
 	FactoryID string    `json:"factory_id"`
 	ItemID    string    `json:"item_id"`
@@ -135,12 +136,12 @@ func noticeFrom(raw string) (ports.ItemNotice, error) {
 		return ports.ItemNotice{}, fmt.Errorf("decode %q: %w", raw, err)
 	}
 
-	if p.ItemID == "" || p.FactoryID == "" {
-		return ports.ItemNotice{}, errors.New("notification without an item or factory")
+	if p.ItemID == "" || p.FactoryID == "" || p.OrgID == "" {
+		return ports.ItemNotice{}, errors.New("notification without an organization, item or factory")
 	}
 
 	return ports.ItemNotice{
-		EventID: p.ID, FactoryID: domain.FactoryID(p.FactoryID), ItemID: domain.ItemID(p.ItemID), Number: p.Number,
+		EventID: p.ID, OrgID: domain.OrgID(p.OrgID), FactoryID: domain.FactoryID(p.FactoryID), ItemID: domain.ItemID(p.ItemID), Number: p.Number,
 		Kind: domain.EventKind(p.Kind), Station: deref(p.Station), State: domain.ItemState(p.State), At: p.At.UTC(),
 	}, nil
 }

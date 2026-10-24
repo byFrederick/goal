@@ -338,13 +338,18 @@ func (e *Engine) gatewayToken(ctx context.Context, c claimed, runID domain.RunID
 		return "", nil
 	}
 
+	org, ok := domain.OrgFrom(ctx)
+	if !ok {
+		return "", fmt.Errorf("gateway token: %w", domain.ErrNoOrg)
+	}
+
 	key, err := e.secrets.Resolve(ctx, e.cfg.GatewayKeyRef)
 	if err != nil {
 		return "", fmt.Errorf("gateway key: %w", err)
 	}
 
 	token, err := domain.SignTaskToken([]byte(key), domain.TaskClaims{
-		FactoryID: c.line.FactoryID, ItemID: c.item.ID, Station: c.station.ID, Agent: c.agent.Name, RunID: runID,
+		OrgID: org, FactoryID: c.line.FactoryID, ItemID: c.item.ID, Station: c.station.ID, Agent: c.agent.Name, RunID: runID,
 		Connections: c.agent.Connections, ExpiresAt: e.clock.Now().Add(e.cfg.TaskTimeout + e.cfg.LeaseTTL).Unix(),
 	})
 	if err != nil {

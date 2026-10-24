@@ -266,8 +266,10 @@ type ItemNotices interface {
 // ItemNotice is one committed item event as listeners see it, with the item's state right
 // after it. A Resync notice carries nothing else: listeners must re-read what they show.
 type ItemNotice struct {
-	Resync    bool
-	EventID   int64
+	Resync  bool
+	EventID int64
+	// OrgID is the organization of the item; a stream serves one organization's notices.
+	OrgID     domain.OrgID
 	FactoryID domain.FactoryID
 	ItemID    domain.ItemID
 	// Number is the item's per-factory number.

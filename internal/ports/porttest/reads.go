@@ -14,12 +14,17 @@ import (
 )
 
 // ItemByNumber implements ports.Store.
-func (s *Store) ItemByNumber(_ context.Context, factory domain.FactoryID, number int64) (domain.Item, error) {
+func (s *Store) ItemByNumber(ctx context.Context, factory domain.FactoryID, number int64) (domain.Item, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.Item{}, err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	for _, it := range s.items {
-		if it.FactoryID == factory && it.Number == number {
+		if it.OrgID == org && it.FactoryID == factory && it.Number == number {
 			return clone(it), nil
 		}
 	}
@@ -28,14 +33,19 @@ func (s *Store) ItemByNumber(_ context.Context, factory domain.FactoryID, number
 }
 
 // ListItems implements ports.Store.
-func (s *Store) ListItems(_ context.Context, q ports.ItemQuery) ([]domain.Item, error) {
+func (s *Store) ListItems(ctx context.Context, q ports.ItemQuery) ([]domain.Item, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	var match []*domain.Item
 
 	for _, it := range s.items {
-		if it.FactoryID == q.FactoryID && (len(q.States) == 0 || slices.Contains(q.States, it.State)) &&
+		if it.OrgID == org && it.FactoryID == q.FactoryID && (len(q.States) == 0 || slices.Contains(q.States, it.State)) &&
 			(q.Station == "" || it.Station == q.Station) && (q.Before <= 0 || it.Number < q.Before) {
 			match = append(match, it)
 		}
@@ -52,14 +62,19 @@ func (s *Store) ListItems(_ context.Context, q ports.ItemQuery) ([]domain.Item, 
 }
 
 // StationLoads implements ports.Store.
-func (s *Store) StationLoads(_ context.Context, factory domain.FactoryID) ([]domain.StationLoad, error) {
+func (s *Store) StationLoads(ctx context.Context, factory domain.FactoryID) ([]domain.StationLoad, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	loads := map[string]*domain.StationLoad{}
 
 	for _, it := range s.items {
-		if it.FactoryID != factory || it.State == domain.StateDone || it.State == domain.StateCancelled {
+		if it.OrgID != org || it.FactoryID != factory || it.State == domain.StateDone || it.State == domain.StateCancelled {
 			continue
 		}
 
@@ -86,7 +101,12 @@ func (s *Store) StationLoads(_ context.Context, factory domain.FactoryID) ([]dom
 }
 
 // FlowMetrics implements ports.Store.
-func (s *Store) FlowMetrics(_ context.Context, factory domain.FactoryID, since, until time.Time) (domain.FlowMetrics, error) {
+func (s *Store) FlowMetrics(ctx context.Context, factory domain.FactoryID, since, until time.Time) (domain.FlowMetrics, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.FlowMetrics{}, err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -97,7 +117,7 @@ func (s *Store) FlowMetrics(_ context.Context, factory domain.FactoryID, since, 
 	)
 
 	for _, it := range s.items {
-		if it.FactoryID != factory {
+		if it.OrgID != org || it.FactoryID != factory {
 			continue
 		}
 
@@ -123,13 +143,23 @@ func (s *Store) FlowMetrics(_ context.Context, factory domain.FactoryID, since, 
 	slices.Sort(leadTime)
 	m.LeadTimeP50, m.LeadTimeP85 = percentile(leadTime, 0.5), percentile(leadTime, 0.85)
 
+	m.SpendUSD = s.spend(org, factory, since, until)
+
+	return m, nil
+}
+
+// spend adds the cost of an organization's factory's runs started in [since, until). Callers
+// hold s.mu.
+func (s *Store) spend(org domain.OrgID, factory domain.FactoryID, since, until time.Time) float64 {
+	var usd float64
+
 	for _, r := range s.runs {
-		if r.FactoryID == factory && inWindow(r.StartedAt, since, until) {
-			m.SpendUSD += r.Result.CostUSD
+		if _, ok := s.visible(r.ItemID, org); ok && r.FactoryID == factory && inWindow(r.StartedAt, since, until) {
+			usd += r.Result.CostUSD
 		}
 	}
 
-	return m, nil
+	return usd
 }
 
 // inWindow reports whether t, when set, is in [since, until).

@@ -225,6 +225,9 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The token's organization binds every store call of the request (its audit events).
+	r = r.WithContext(domain.WithOrg(r.Context(), claims.OrgID))
+
 	s, err := g.session(r.Context(), claims)
 	switch {
 	case errors.Is(err, errForbidden) || errors.Is(err, ports.ErrNotFound):

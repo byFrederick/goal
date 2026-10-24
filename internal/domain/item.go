@@ -49,7 +49,9 @@ type Position struct {
 
 // Item is one unit of work flowing through a factory's line.
 type Item struct {
-	ID        ItemID
+	ID ItemID
+	// OrgID is the organization the item's factory belongs to.
+	OrgID     OrgID
 	FactoryID FactoryID
 	// Number is unique per factory and shown as <FACTORY>-<number>.
 	Number   int64

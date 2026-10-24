@@ -104,6 +104,11 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	store := postgres.New(pool)
 
+	// Every factory, item and run is in the default organization until the engine and the
+	// definitions take each line's organization from the bucket (phase 2.2 A4): the store binds
+	// each transaction to the organization in ctx, and the engine's work inherits this one.
+	ctx = domain.WithOrg(ctx, postgres.DefaultOrgID)
+
 	s3cfg, err := s3store.ConfigFromEnv(os.Getenv)
 	if err != nil {
 		return err
@@ -168,7 +173,9 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	feed := api.NewFeed(postgres.NewNotices(pool.Config().ConnConfig, log), log)
 
-	apiHandler, err := api.New(api.Deps{Engine: eng, Items: store, Factories: defs, Feed: feed, Clock: clock, Logger: log})
+	apiHandler, err := api.New(api.Deps{
+		Engine: eng, Items: store, Factories: defs, Feed: feed, Clock: clock, LegacyOrg: postgres.DefaultOrgID, Logger: log,
+	})
 	if err != nil {
 		return err
 	}

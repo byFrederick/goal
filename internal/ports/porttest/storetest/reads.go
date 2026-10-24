@@ -18,24 +18,24 @@ import (
 func testItemByNumber(f *fixture) {
 	t := f.t
 
-	other := f.NewFactory(t)
+	other := f.newFactory(t)
 	a := f.create(t, domain.NewItem{Title: "a"})
 	b := f.create(t, domain.NewItem{Title: "b"})
 	f.create(t, domain.NewItem{FactoryID: other, Title: "other a"})
 
-	got, err := f.Store.ItemByNumber(t.Context(), f.factory, 2)
+	got, err := f.Store.ItemByNumber(f.ctx(t), f.factory, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	sameItem(t, got, b)
 
-	if got, err := f.Store.ItemByNumber(t.Context(), other, 1); err != nil || got.Title != "other a" || got.ID == a.ID {
+	if got, err := f.Store.ItemByNumber(f.ctx(t), other, 1); err != nil || got.Title != "other a" || got.ID == a.ID {
 		t.Errorf("other factory's #1 = %+v, %v; want its own item", got, err)
 	}
 
 	for _, n := range []int64{0, 3} {
-		if _, err := f.Store.ItemByNumber(t.Context(), f.factory, n); !errors.Is(err, ports.ErrNotFound) {
+		if _, err := f.Store.ItemByNumber(f.ctx(t), f.factory, n); !errors.Is(err, ports.ErrNotFound) {
 			t.Errorf("ItemByNumber(%d) = %v; want ErrNotFound", n, err)
 		}
 	}
@@ -49,18 +49,18 @@ func testListItems(f *fixture) {
 		f.create(t, domain.NewItem{})
 	}
 
-	f.create(t, domain.NewItem{FactoryID: f.NewFactory(t)})
+	f.create(t, domain.NewItem{FactoryID: f.newFactory(t)})
 
 	if claimed, _ := f.claim(t, work, 0, t1); claimed.Number != 1 {
 		t.Fatalf("claimed #%d; want #1, the first in pull order", claimed.Number)
 	}
 
-	four, err := f.Store.ItemByNumber(t.Context(), f.factory, 4)
+	four, err := f.Store.ItemByNumber(f.ctx(t), f.factory, 4)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := f.Store.Transition(t.Context(), ports.Transition{
+	if _, err := f.Store.Transition(f.ctx(t), ports.Transition{
 		ItemID: four.ID, From: four.Position(), To: domain.Position{Station: stNext, State: domain.StateQueued}, At: t1,
 	}); err != nil {
 		t.Fatal(err)
@@ -74,7 +74,7 @@ func testListItems(f *fixture) {
 			q.Limit = 100
 		}
 
-		items, err := f.Store.ListItems(t.Context(), q)
+		items, err := f.Store.ListItems(f.ctx(t), q)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -118,13 +118,13 @@ func testStationLoads(f *fixture) {
 
 	f.create(t, domain.NewItem{Station: stNext})
 	f.create(t, domain.NewItem{Station: stNext, State: domain.StateWaitingHuman})
-	f.create(t, domain.NewItem{FactoryID: f.NewFactory(t)})
+	f.create(t, domain.NewItem{FactoryID: f.newFactory(t)})
 
 	f.claim(t, work, 0, t1)
 	it, l := f.claim(t, work, 1, t1)
 
 	// A blocked item is open but neither waiting nor in progress; a done one is not counted.
-	if _, err := f.Store.Transition(t.Context(), ports.Transition{
+	if _, err := f.Store.Transition(f.ctx(t), ports.Transition{
 		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: stWork, State: domain.StateBlocked}, Lease: &l, At: t1,
 	}); err != nil {
 		t.Fatal(err)
@@ -132,7 +132,7 @@ func testStationLoads(f *fixture) {
 
 	f.finish(t, f.create(t, domain.NewItem{}), t1, false)
 
-	loads, err := f.Store.StationLoads(t.Context(), f.factory)
+	loads, err := f.Store.StationLoads(f.ctx(t), f.factory)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +173,7 @@ func testFlowMetrics(f *fixture) {
 
 	open := f.create(t, domain.NewItem{CreatedAt: since})
 	f.create(t, domain.NewItem{CreatedAt: since, State: domain.StateCancelled})
-	f.create(t, domain.NewItem{FactoryID: f.NewFactory(t), CreatedAt: since})
+	f.create(t, domain.NewItem{FactoryID: f.newFactory(t), CreatedAt: since})
 
 	// Spend counts the runs started in the window.
 	for _, r := range []struct {
@@ -181,12 +181,12 @@ func testFlowMetrics(f *fixture) {
 		cost float64
 	}{{since, 0.25}, {since.Add(time.Hour), 1.5}, {since.Add(-time.Minute), 7}, {until, 9}} {
 		run := f.startRun(t, open.ID, r.at)
-		if err := f.Store.FinishRun(t.Context(), run, domain.RunResult{Status: domain.RunSucceeded, CostUSD: r.cost}, r.at); err != nil {
+		if err := f.Store.FinishRun(f.ctx(t), run, domain.RunResult{Status: domain.RunSucceeded, CostUSD: r.cost}, r.at); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	m, err := f.Store.FlowMetrics(t.Context(), f.factory, since, until)
+	m, err := f.Store.FlowMetrics(f.ctx(t), f.factory, since, until)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +211,7 @@ func testFlowMetrics(f *fixture) {
 		t.Errorf("metrics =\n  %+v\nwant\n  %+v", m, want)
 	}
 
-	empty, err := f.Store.FlowMetrics(t.Context(), f.factory, until.Add(time.Hour), until.Add(2*time.Hour))
+	empty, err := f.Store.FlowMetrics(f.ctx(t), f.factory, until.Add(time.Hour), until.Add(2*time.Hour))
 	if err != nil || empty.ItemsDone != 0 || empty.LeadTimeP50 != 0 || len(empty.DonePerDay) != 0 || empty.WIP != 1 {
 		t.Errorf("metrics of an empty window = %+v, %v; want nothing done and the line's WIP", empty, err)
 	}
@@ -225,7 +225,7 @@ func (f *fixture) finish(t *testing.T, it domain.Item, doneAt time.Time, rework 
 	if rework {
 		var err error
 
-		it, err = f.Store.Transition(t.Context(), ports.Transition{
+		it, err = f.Store.Transition(f.ctx(t), ports.Transition{
 			ItemID: it.ID, From: it.Position(), To: it.Position(), Rework: true, At: doneAt,
 		})
 		if err != nil {
@@ -233,7 +233,7 @@ func (f *fixture) finish(t *testing.T, it domain.Item, doneAt time.Time, rework 
 		}
 	}
 
-	_, err := f.Store.Transition(t.Context(), ports.Transition{
+	_, err := f.Store.Transition(f.ctx(t), ports.Transition{
 		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: "done", State: domain.StateDone},
 		At: doneAt, DoneAt: doneAt,
 	})

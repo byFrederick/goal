@@ -72,8 +72,11 @@ type Deps struct {
 	// Feed serves /v1/stream; the caller runs it (Feed.Run).
 	Feed *Feed
 	// Clock dates ages and metric windows and paces stream heartbeats.
-	Clock  ports.Clock
-	Logger *slog.Logger
+	Clock ports.Clock
+	// LegacyOrg is the organization every request runs in until the routes move under
+	// /v1/orgs/{org} (phase 2.2 A5 removes it).
+	LegacyOrg domain.OrgID
+	Logger    *slog.Logger
 }
 
 // Limits on requests.
@@ -88,8 +91,8 @@ var errInvalid = errors.New("invalid request")
 
 // New returns the API's handler for the /v1/ routes.
 func New(d Deps) (http.Handler, error) {
-	if d.Engine == nil || d.Items == nil || d.Factories == nil || d.Feed == nil || d.Clock == nil {
-		return nil, errors.New("api: Engine, Items, Factories, Feed and Clock are required")
+	if d.Engine == nil || d.Items == nil || d.Factories == nil || d.Feed == nil || d.Clock == nil || d.LegacyOrg == "" {
+		return nil, errors.New("api: Engine, Items, Factories, Feed, Clock and LegacyOrg are required")
 	}
 
 	log := d.Logger
@@ -112,7 +115,7 @@ func New(d Deps) (http.Handler, error) {
 		},
 	})
 
-	return http.MaxBytesHandler(h, maxRequestBytes), nil
+	return http.MaxBytesHandler(legacyOrg(d.LegacyOrg, h), maxRequestBytes), nil
 }
 
 type server struct {

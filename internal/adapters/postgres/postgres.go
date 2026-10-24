@@ -1,12 +1,15 @@
 // Package postgres implements ports.Store on PostgreSQL 18 with pgx and the sqlc-generated
 // queries in package db (compiled from queries/ against migrations/).
 //
-// Every Store method runs in one transaction. A claim takes the next waiting item with FOR NO
-// KEY UPDATE SKIP LOCKED, and the unique (factory_id, station, slot) lease index keeps WIP at
-// or under capacity across goald instances. A lease's acquired_at fences its holder: a
-// heartbeat or transition naming another acquired_at fails with ports.ErrLeaseLost. IDs are
-// UUIDv7 generated here, not by column defaults. Locks are taken item first, then its lease or
-// runs, so concurrent methods never deadlock.
+// Every Store method runs in one transaction bound to the organization in ctx
+// (domain.WithOrg): it starts with set_config('goal.org_id', <org>, true), so row-level security
+// shows it that organization's rows only, and fails with domain.ErrNoOrg without one. Reads run
+// in read-only transactions, because SET LOCAL needs one. A claim takes the next waiting item
+// with FOR NO KEY UPDATE SKIP LOCKED, and the unique (factory_id, station, slot) lease index
+// keeps WIP at or under capacity across goald instances. A lease's acquired_at fences its
+// holder: a heartbeat or transition naming another acquired_at fails with ports.ErrLeaseLost.
+// IDs are UUIDv7 generated here, not by column defaults. Locks are taken item first, then its
+// lease or runs, so concurrent methods never deadlock.
 package postgres
 
 import (
@@ -97,9 +100,10 @@ type Factory struct {
 	Definition json.RawMessage
 }
 
-// SaveFactory registers a factory, or updates its row when the definition changed. Items
-// reference their factory, so goald saves every factory it runs before work enters it;
-// CreateItem returns ports.ErrNotFound for a factory that was never saved.
+// SaveFactory registers a factory in the organization in ctx, or updates its row when the
+// definition changed. Items reference their factory, so goald saves every factory it runs
+// before work enters it; CreateItem returns ports.ErrNotFound for a factory that was never
+// saved in the item's organization.
 func (s *Store) SaveFactory(ctx context.Context, f Factory) error {
 	id, err := parseID("factory", string(f.ID))
 	if err != nil {
@@ -108,8 +112,10 @@ func (s *Store) SaveFactory(ctx context.Context, f Factory) error {
 
 	sum := sha256.Sum256(f.Definition)
 
-	err = s.q.SaveFactory(ctx, db.SaveFactoryParams{
-		ID: id, Name: f.Name, Title: optional(f.Title), Definition: f.Definition, DefinitionSha256: hex.EncodeToString(sum[:]),
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		return q.SaveFactory(ctx, db.SaveFactoryParams{
+			ID: id, Name: f.Name, Title: optional(f.Title), Definition: f.Definition, DefinitionSha256: hex.EncodeToString(sum[:]),
+		})
 	})
 	if err != nil {
 		return fmt.Errorf("save factory %s: %w", f.ID, err)
@@ -118,9 +124,60 @@ func (s *Store) SaveFactory(ctx context.Context, f Factory) error {
 	return nil
 }
 
-// inTx runs fn in a transaction, committing when it returns nil. fn's error is returned as is,
-// so the ports errors it wraps stay visible to errors.Is.
+// inTx runs fn in a transaction bound to the organization in ctx, committing when it returns
+// nil. fn's error is returned as is, so the ports errors it wraps stay visible to errors.Is.
 func (s *Store) inTx(ctx context.Context, fn func(q *db.Queries) error) error {
+	return s.orgTx(ctx, pgx.TxOptions{}, fn)
+}
+
+// read runs fn in a read-only transaction bound to the organization in ctx.
+func (s *Store) read(ctx context.Context, fn func(q *db.Queries) error) error {
+	return s.orgTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly}, fn)
+}
+
+// orgTx binds a transaction to the organization in ctx before fn runs: without one it fails
+// with domain.ErrNoOrg and never reaches the database.
+func (s *Store) orgTx(ctx context.Context, opts pgx.TxOptions, fn func(q *db.Queries) error) error {
+	id, ok := domain.OrgFrom(ctx)
+	if !ok {
+		return domain.ErrNoOrg
+	}
+
+	org, err := uuid.Parse(string(id))
+	if err != nil {
+		return fmt.Errorf("org %q: %w", id, ports.ErrNotFound)
+	}
+
+	return pgx.BeginTxFunc(ctx, s.pool, opts, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		if err := q.SetOrg(ctx, org.String()); err != nil {
+			return fmt.Errorf("set org: %w", err)
+		}
+
+		return fn(q)
+	})
+}
+
+// fetch runs one query in a transaction of tx (Store.read or Store.inTx) and returns its result.
+func fetch[T any](ctx context.Context, tx func(context.Context, func(*db.Queries) error) error,
+	query func(*db.Queries) (T, error),
+) (T, error) {
+	var out T
+
+	err := tx(ctx, func(q *db.Queries) error {
+		var err error
+
+		out, err = query(q)
+
+		return err
+	})
+
+	return out, err
+}
+
+// systemTx runs fn in a transaction bound to no organization, for the cross-organization
+// SECURITY DEFINER functions only; every org-owned row stays out of its reach.
+func (s *Store) systemTx(ctx context.Context, fn func(q *db.Queries) error) error {
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error { return fn(s.q.WithTx(tx)) })
 }
 

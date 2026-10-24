@@ -7,24 +7,12 @@ package db
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 )
 
-type InsertEventsParams struct {
-	FactoryID uuid.UUID
-	ItemID    uuid.UUID
-	RunID     *uuid.UUID
-	At        time.Time
-	Kind      string
-	Station   *string
-	Actor     string
-	Data      []byte
-}
-
 const itemEvents = `-- name: ItemEvents :many
-SELECT id, factory_id, item_id, run_id, at, kind, station, actor, data FROM item_events
+SELECT id, factory_id, item_id, run_id, at, kind, station, actor, data, org_id FROM item_events
 WHERE item_id = $1 AND id > $2::bigint
 ORDER BY id
 LIMIT $3::bigint
@@ -56,6 +44,7 @@ func (q *Queries) ItemEvents(ctx context.Context, arg ItemEventsParams) ([]ItemE
 			&i.Station,
 			&i.Actor,
 			&i.Data,
+			&i.OrgID,
 		); err != nil {
 			return nil, err
 		}

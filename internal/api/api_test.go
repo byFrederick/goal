@@ -71,6 +71,16 @@ spec:
 
 const lineID = "0b6f1c9e-5d0a-4c39-9a51-6f1f3f0e2a10"
 
+// testOrg is the organization the tests' items belong to: every store call carries one.
+const testOrg domain.OrgID = "019a1c00-0000-7000-8000-0000000000aa"
+
+// inOrg is the test's context bound to testOrg.
+func inOrg(t *testing.T) context.Context {
+	t.Helper()
+
+	return domain.WithOrg(t.Context(), testOrg)
+}
+
 var t0 = time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
 
 type harness struct {
@@ -102,7 +112,7 @@ func newHarness(t *testing.T) *harness {
 			}
 		}
 
-		if _, _, err := catalog.Push(t.Context(), dir); err != nil {
+		if _, _, err := catalog.Push(inOrg(t), dir); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -134,12 +144,12 @@ func newHarness(t *testing.T) *harness {
 	}, nil)
 
 	feed := api.NewFeed(h.notices, nil)
-	ctx, stop := context.WithCancel(context.Background())
+	ctx, stop := context.WithCancel(domain.WithOrg(context.Background(), testOrg))
 	done := make(chan error, 1)
 
 	go func() { done <- feed.Run(ctx) }()
 
-	handler, err := api.New(api.Deps{Engine: e, Items: h.store, Factories: defs, Feed: feed, Clock: h.clock})
+	handler, err := api.New(api.Deps{Engine: e, Items: h.store, Factories: defs, Feed: feed, Clock: h.clock, LegacyOrg: testOrg})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +174,7 @@ func newHarness(t *testing.T) *harness {
 func (h *harness) call(t *testing.T, method, path, body string, out any) int {
 	t.Helper()
 
-	req, err := http.NewRequestWithContext(t.Context(), method, h.srv.URL+path, strings.NewReader(body))
+	req, err := http.NewRequestWithContext(inOrg(t), method, h.srv.URL+path, strings.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +275,7 @@ func TestAPI_GetItem(t *testing.T) {
 	h := newHarness(t)
 	submitted := h.submit(t)
 
-	if err := h.engine.Tick(t.Context()); err != nil { // inbox → approve
+	if err := h.engine.Tick(inOrg(t)); err != nil { // inbox → approve
 		t.Fatal(err)
 	}
 
@@ -289,7 +299,7 @@ func TestAPI_EventPages(t *testing.T) {
 	h := newHarness(t)
 	it := h.submit(t)
 
-	if err := h.engine.Tick(t.Context()); err != nil {
+	if err := h.engine.Tick(inOrg(t)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -324,7 +334,7 @@ func TestAPI_HumanDecisions(t *testing.T) {
 		t.Errorf("approve while queued = %d, want 409", code)
 	}
 
-	if err := h.engine.Tick(t.Context()); err != nil {
+	if err := h.engine.Tick(inOrg(t)); err != nil {
 		t.Fatal(err)
 	}
 

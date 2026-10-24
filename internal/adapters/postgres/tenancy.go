@@ -27,29 +27,6 @@ const DefaultOrgID domain.OrgID = "019a1c00-0000-7000-8000-000000000001"
 // SQLSTATEs the tenancy methods map to domain.ErrInvalid.
 const checkViolation = "23514"
 
-// inOrgTx runs fn in a transaction bound to the organization in ctx: set_config('goal.org_id')
-// first, so row-level security shows fn that organization's rows only. Without an org in ctx
-// it fails with domain.ErrNoOrg before touching the database.
-func (s *Store) inOrgTx(ctx context.Context, fn func(q *db.Queries, org uuid.UUID) error) error {
-	id, ok := domain.OrgFrom(ctx)
-	if !ok {
-		return domain.ErrNoOrg
-	}
-
-	org, err := uuid.Parse(string(id))
-	if err != nil {
-		return fmt.Errorf("org %q: %w", id, ports.ErrNotFound)
-	}
-
-	return s.inTx(ctx, func(q *db.Queries) error {
-		if err := q.SetOrg(ctx, org.String()); err != nil {
-			return fmt.Errorf("set org: %w", err)
-		}
-
-		return fn(q, org)
-	})
-}
-
 // Orgs implements ports.Tenancy.
 func (s *Store) Orgs(ctx context.Context) ([]domain.OrgSummary, error) {
 	rows, err := s.q.Orgs(ctx)
@@ -115,7 +92,7 @@ func (s *Store) CreateOrg(ctx context.Context, by domain.Actor, n ports.NewOrg) 
 
 	var o domain.Org
 
-	err = s.inOrgTx(domain.WithOrg(ctx, domain.OrgID(id.String())), func(q *db.Queries, _ uuid.UUID) error {
+	err = s.inTx(domain.WithOrg(ctx, domain.OrgID(id.String())), func(q *db.Queries) error {
 		row, err := q.InsertOrg(ctx, db.InsertOrgParams{ID: id, Slug: n.Slug, Name: n.Name, Mark: n.Mark})
 		if err != nil {
 			return ruleError(err, n.Slug)
@@ -136,7 +113,7 @@ func (s *Store) CreateOrg(ctx context.Context, by domain.Actor, n ports.NewOrg) 
 func (s *Store) UpdateOrg(ctx context.Context, by domain.Actor, u ports.OrgUpdate) (domain.Org, error) {
 	var o domain.Org
 
-	err := s.inOrgTx(ctx, func(q *db.Queries, _ uuid.UUID) error {
+	err := s.inTx(ctx, func(q *db.Queries) error {
 		row, err := q.CurrentOrg(ctx)
 		if notFound(err) {
 			return ports.ErrNotFound
@@ -171,7 +148,7 @@ func (s *Store) UpdateOrg(ctx context.Context, by domain.Actor, u ports.OrgUpdat
 
 // DeleteOrg implements ports.Tenancy.
 func (s *Store) DeleteOrg(ctx context.Context, by domain.Actor, now time.Time) error {
-	err := s.inOrgTx(ctx, func(q *db.Queries, _ uuid.UUID) error {
+	err := s.inTx(ctx, func(q *db.Queries) error {
 		row, err := q.CurrentOrg(ctx)
 		if notFound(err) {
 			return ports.ErrNotFound
@@ -202,7 +179,7 @@ func (s *Store) DeleteOrg(ctx context.Context, by domain.Actor, now time.Time) e
 func (s *Store) PurgeDeletedOrgs(ctx context.Context, cutoff time.Time, limit int) ([]domain.OrgID, error) {
 	var out []domain.OrgID
 
-	err := s.inTx(ctx, func(q *db.Queries) error {
+	err := s.systemTx(ctx, func(q *db.Queries) error {
 		ids, err := q.DeletedOrgs(ctx, db.DeletedOrgsParams{Before: cutoff, MaxOrgs: int32(min(limit, 1000))}) //nolint:gosec // capped
 		if err != nil {
 			return err
@@ -231,7 +208,7 @@ func (s *Store) Append(ctx context.Context, e domain.AuditEntry) error {
 		return err
 	}
 
-	if err := s.inOrgTx(ctx, func(q *db.Queries, _ uuid.UUID) error { return appendAudit(ctx, q, e) }); err != nil {
+	if err := s.inTx(ctx, func(q *db.Queries) error { return appendAudit(ctx, q, e) }); err != nil {
 		return fmt.Errorf("append audit entry: %w", err)
 	}
 
@@ -254,7 +231,7 @@ func (s *Store) AuditLog(ctx context.Context, aq ports.AuditQuery) ([]domain.Aud
 		factory = &id
 	}
 
-	err := s.inOrgTx(ctx, func(q *db.Queries, _ uuid.UUID) error {
+	err := s.inTx(ctx, func(q *db.Queries) error {
 		rows, err := q.AuditLog(ctx, db.AuditLogParams{
 			Before: aq.Before, Action: aq.Action, TargetKind: aq.TargetKind, TargetID: aq.TargetID,
 			FactoryID: factory, MaxEntries: int64(aq.Limit),

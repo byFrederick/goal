@@ -18,13 +18,13 @@ func TestRetry_BlockedItemGoesBackToItsQueue(t *testing.T) {
 		porttest.Sequence(domain.RunResult{Status: domain.RunFailed, Error: "container exited 1"}))
 	it := h.submit(t, domain.NewItem{})
 
-	if _, err := h.e.Retry(t.Context(), it.ID, human); !errors.Is(err, engine.ErrNotBlocked) {
+	if _, err := h.e.Retry(inOrg(t), it.ID, human); !errors.Is(err, engine.ErrNotBlocked) {
 		t.Errorf("Retry of a queued item = %v, want ErrNotBlocked", err)
 	}
 
 	h.step(t)
 
-	got, err := h.e.Retry(t.Context(), it.ID, human)
+	got, err := h.e.Retry(inOrg(t), it.ID, human)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestRetry_BlockedItemGoesBackToItsQueue(t *testing.T) {
 		t.Errorf("retried events %+v, want one by fcruz at %s", retried, stWork)
 	}
 
-	if _, err := h.e.Retry(t.Context(), it.ID, human); !errors.Is(err, engine.ErrNotBlocked) {
+	if _, err := h.e.Retry(inOrg(t), it.ID, human); !errors.Is(err, engine.ErrNotBlocked) {
 		t.Errorf("second Retry = %v, want ErrNotBlocked", err)
 	}
 }
@@ -101,7 +101,7 @@ func TestMerge_MergesThePullRequestThenApproves(t *testing.T) {
 			it := h.submit(t, domain.NewItem{})
 			h.step(t)
 
-			got, err := h.e.Merge(t.Context(), it.ID, human, "")
+			got, err := h.e.Merge(inOrg(t), it.ID, human, "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -174,7 +174,7 @@ func TestMerge_RefusesAndChangesNothing(t *testing.T) {
 
 			before := h.item(t, it.ID)
 
-			if _, err := h.e.Merge(t.Context(), it.ID, human, ""); !errors.Is(err, tt.wantErr) {
+			if _, err := h.e.Merge(inOrg(t), it.ID, human, ""); !errors.Is(err, tt.wantErr) {
 				t.Fatalf("Merge = %v, want %v", err, tt.wantErr)
 			}
 

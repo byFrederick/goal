@@ -14,9 +14,10 @@ import (
 // ErrBadTaskToken means a task token is malformed, forged or expired.
 var ErrBadTaskToken = errors.New("bad task token")
 
-// TaskClaims scope one agent task's access to the MCP gateway: which factory, item, station,
-// agent and run it acts for, which connections it may use and until when.
+// TaskClaims scope one agent task's access to the MCP gateway: which organization, factory,
+// item, station, agent and run it acts for, which connections it may use and until when.
 type TaskClaims struct {
+	OrgID       OrgID     `json:"o"`
 	FactoryID   FactoryID `json:"f"`
 	ItemID      ItemID    `json:"i"`
 	Station     string    `json:"s"`
@@ -69,6 +70,11 @@ func VerifyTaskToken(key []byte, token string, now time.Time) (TaskClaims, error
 
 	if now.Unix() >= c.ExpiresAt {
 		return TaskClaims{}, fmt.Errorf("%w: expired", ErrBadTaskToken)
+	}
+
+	// Tokens issued before organizations name none; their runs ended when goald was upgraded.
+	if c.OrgID == "" {
+		return TaskClaims{}, fmt.Errorf("%w: no organization", ErrBadTaskToken)
 	}
 
 	return c, nil

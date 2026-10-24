@@ -223,7 +223,7 @@ func newHarness(t *testing.T, cfg Config) *harness {
 
 func (h *harness) claims() domain.TaskClaims {
 	return domain.TaskClaims{
-		FactoryID: factoryID, ItemID: itemID, Station: "build", Agent: "engineer", RunID: "run-1",
+		OrgID: "org-1", FactoryID: factoryID, ItemID: itemID, Station: "build", Agent: "engineer", RunID: "run-1",
 		Connections: []string{"knowledge", tracker, "postgres", "crm", shopDB},
 		ExpiresAt:   h.clock.Now().Add(time.Hour).Unix(),
 	}

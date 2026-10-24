@@ -91,12 +91,19 @@ func TestRLS_TenancyTablesNeedTheOrg(t *testing.T) {
 func asOrg(t *testing.T, pool *pgxpool.Pool, org domain.OrgID, sql string, dest ...any) error {
 	t.Helper()
 
+	return inOrgTx(t, pool, org, func(tx pgx.Tx) error { return tx.QueryRow(t.Context(), sql).Scan(dest...) })
+}
+
+// inOrgTx runs fn in a transaction bound to org, as the store does.
+func inOrgTx(t *testing.T, pool *pgxpool.Pool, org domain.OrgID, fn func(pgx.Tx) error) error {
+	t.Helper()
+
 	return pgx.BeginFunc(t.Context(), pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(t.Context(), "SELECT set_config('goal.org_id', $1, true)", string(org)); err != nil {
 			return err
 		}
 
-		return tx.QueryRow(t.Context(), sql).Scan(dest...)
+		return fn(tx)
 	})
 }
 

@@ -17,26 +17,59 @@ import (
 var _ ports.Store = (*Store)(nil)
 
 // Store keeps items, leases, runs and events in memory behind one mutex, so every method is
-// atomic like a PostgreSQL transaction.
+// atomic like a PostgreSQL transaction. Like row-level security, every method needs an
+// organization in ctx (domain.ErrNoOrg otherwise) and sees only that organization's rows. A
+// factory belongs to the organization AddFactory names, or to the one its first item is created
+// in.
 type Store struct {
-	mu      sync.Mutex
-	items   map[domain.ItemID]*domain.Item
-	numbers map[domain.FactoryID]int64
-	leases  map[domain.ItemID]domain.Lease
-	runs    map[domain.RunID]*domain.Run
-	events  []domain.Event
-	ids     int
-	changes changes
+	mu        sync.Mutex
+	factories map[domain.FactoryID]domain.OrgID
+	items     map[domain.ItemID]*domain.Item
+	numbers   map[domain.FactoryID]int64
+	leases    map[domain.ItemID]domain.Lease
+	runs      map[domain.RunID]*domain.Run
+	events    []domain.Event
+	ids       int
+	changes   changes
 }
 
 // NewStore returns an empty store.
 func NewStore() *Store {
 	return &Store{
-		items:   map[domain.ItemID]*domain.Item{},
-		numbers: map[domain.FactoryID]int64{},
-		leases:  map[domain.ItemID]domain.Lease{},
-		runs:    map[domain.RunID]*domain.Run{},
+		factories: map[domain.FactoryID]domain.OrgID{},
+		items:     map[domain.ItemID]*domain.Item{},
+		numbers:   map[domain.FactoryID]int64{},
+		leases:    map[domain.ItemID]domain.Lease{},
+		runs:      map[domain.RunID]*domain.Run{},
 	}
+}
+
+// AddFactory registers a factory in an organization, as SaveFactory does for PostgreSQL.
+func (s *Store) AddFactory(org domain.OrgID, id domain.FactoryID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.factories[id] = org
+}
+
+// orgOf returns the organization in ctx, as row-level security requires.
+func orgOf(ctx context.Context) (domain.OrgID, error) {
+	org, ok := domain.OrgFrom(ctx)
+	if !ok {
+		return "", domain.ErrNoOrg
+	}
+
+	return org, nil
+}
+
+// visible returns the item when it exists in org. Callers hold s.mu.
+func (s *Store) visible(id domain.ItemID, org domain.OrgID) (*domain.Item, bool) {
+	it, ok := s.items[id]
+	if !ok || it.OrgID != org {
+		return nil, false
+	}
+
+	return it, true
 }
 
 // Await blocks until cond holds or ctx ends; cond is re-checked after every change.
@@ -71,12 +104,16 @@ func (s *Store) Lease(id domain.ItemID) (domain.Lease, bool) {
 	return l, ok
 }
 
-// Runs returns an item's runs, oldest first.
-func (s *Store) Runs(id domain.ItemID) []domain.Run {
+// Runs returns the runs of an item of org, oldest first.
+func (s *Store) Runs(org domain.OrgID, id domain.ItemID) []domain.Run {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	var out []domain.Run
+
+	if _, ok := s.visible(id, org); !ok {
+		return out
+	}
 
 	for _, r := range s.runs {
 		if r.ItemID == id {
@@ -90,14 +127,24 @@ func (s *Store) Runs(id domain.ItemID) []domain.Run {
 }
 
 // CreateItem implements ports.Store.
-func (s *Store) CreateItem(_ context.Context, n domain.NewItem) (domain.Item, error) {
+func (s *Store) CreateItem(ctx context.Context, n domain.NewItem) (domain.Item, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.Item{}, err
+	}
+
 	s.mu.Lock()
 	defer s.changes.signal()
 	defer s.mu.Unlock()
 
+	if owner, ok := s.factories[n.FactoryID]; ok && owner != org {
+		return domain.Item{}, fmt.Errorf("factory %s: %w", n.FactoryID, ports.ErrNotFound)
+	}
+
+	s.factories[n.FactoryID] = org
 	s.numbers[n.FactoryID]++
 	it := &domain.Item{
-		ID: domain.ItemID(s.newID()), FactoryID: n.FactoryID, Number: s.numbers[n.FactoryID],
+		ID: domain.ItemID(s.newID()), OrgID: org, FactoryID: n.FactoryID, Number: s.numbers[n.FactoryID],
 		ParentID: n.ParentID, Type: n.Type, Lane: n.Lane, Title: n.Title, Body: n.Body,
 		Station: n.Station, State: n.State, Class: n.Class, Priority: n.Priority,
 		Outputs: map[string]json.RawMessage{}, CreatedAt: n.CreatedAt, UpdatedAt: n.CreatedAt,
@@ -112,11 +159,16 @@ func (s *Store) CreateItem(_ context.Context, n domain.NewItem) (domain.Item, er
 }
 
 // Item implements ports.Store.
-func (s *Store) Item(_ context.Context, id domain.ItemID) (domain.Item, error) {
+func (s *Store) Item(ctx context.Context, id domain.ItemID) (domain.Item, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.Item{}, err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	it, ok := s.items[id]
+	it, ok := s.visible(id, org)
 	if !ok {
 		return domain.Item{}, fmt.Errorf("item %s: %w", id, ports.ErrNotFound)
 	}
@@ -125,11 +177,16 @@ func (s *Store) Item(_ context.Context, id domain.ItemID) (domain.Item, error) {
 }
 
 // Waiting implements ports.Store.
-func (s *Store) Waiting(_ context.Context, factory domain.FactoryID, station string, limit int) ([]domain.Item, error) {
+func (s *Store) Waiting(ctx context.Context, factory domain.FactoryID, station string, limit int) ([]domain.Item, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	w := s.waiting(factory, station)
+	w := s.waiting(org, factory, station)
 	out := make([]domain.Item, 0, min(limit, len(w)))
 
 	for _, it := range w[:min(limit, len(w))] {
@@ -140,14 +197,19 @@ func (s *Store) Waiting(_ context.Context, factory domain.FactoryID, station str
 }
 
 // Leases implements ports.Store.
-func (s *Store) Leases(_ context.Context, factory domain.FactoryID, station string) ([]domain.Lease, error) {
+func (s *Store) Leases(ctx context.Context, factory domain.FactoryID, station string) ([]domain.Lease, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	out := []domain.Lease{}
 
 	for _, l := range s.leases {
-		if l.FactoryID == factory && l.Station == station {
+		if _, ok := s.visible(l.ItemID, org); ok && l.FactoryID == factory && l.Station == station {
 			out = append(out, l)
 		}
 	}
@@ -156,7 +218,12 @@ func (s *Store) Leases(_ context.Context, factory domain.FactoryID, station stri
 }
 
 // ClaimNext implements ports.Store.
-func (s *Store) ClaimNext(_ context.Context, c ports.Claim) (domain.Item, domain.Lease, error) {
+func (s *Store) ClaimNext(ctx context.Context, c ports.Claim) (domain.Item, domain.Lease, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.Item{}, domain.Lease{}, err
+	}
+
 	s.mu.Lock()
 	defer s.changes.signal()
 	defer s.mu.Unlock()
@@ -167,7 +234,7 @@ func (s *Store) ClaimNext(_ context.Context, c ports.Claim) (domain.Item, domain
 		}
 	}
 
-	w := s.waiting(c.FactoryID, c.Station.ID)
+	w := s.waiting(org, c.FactoryID, c.Station.ID)
 	if len(w) == 0 {
 		return domain.Item{}, domain.Lease{}, fmt.Errorf("station %s: %w", c.Station.ID, ports.ErrNoWork)
 	}
@@ -192,13 +259,18 @@ func (s *Store) ClaimNext(_ context.Context, c ports.Claim) (domain.Item, domain
 }
 
 // HeartbeatLease implements ports.Store.
-func (s *Store) HeartbeatLease(_ context.Context, l domain.Lease, now, expiresAt time.Time) (domain.Lease, error) {
+func (s *Store) HeartbeatLease(ctx context.Context, l domain.Lease, now, expiresAt time.Time) (domain.Lease, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.Lease{}, err
+	}
+
 	s.mu.Lock()
 	defer s.changes.signal()
 	defer s.mu.Unlock()
 
 	held, ok := s.leases[l.ItemID]
-	if !ok || !held.AcquiredAt.Equal(l.AcquiredAt) {
+	if _, mine := s.visible(l.ItemID, org); !ok || !mine || !held.AcquiredAt.Equal(l.AcquiredAt) {
 		return domain.Lease{}, fmt.Errorf("item %s: %w", l.ItemID, ports.ErrLeaseLost)
 	}
 
@@ -209,7 +281,12 @@ func (s *Store) HeartbeatLease(_ context.Context, l domain.Lease, now, expiresAt
 }
 
 // RequeueExpiredLeases implements ports.Store.
-func (s *Store) RequeueExpiredLeases(_ context.Context, now time.Time, limit int) ([]domain.Lease, error) {
+func (s *Store) RequeueExpiredLeases(ctx context.Context, now time.Time, limit int) ([]domain.Lease, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	s.mu.Lock()
 	defer s.changes.signal()
 	defer s.mu.Unlock()
@@ -217,7 +294,7 @@ func (s *Store) RequeueExpiredLeases(_ context.Context, now time.Time, limit int
 	var expired []domain.Lease
 
 	for _, l := range s.leases {
-		if l.Expired(now) {
+		if _, ok := s.visible(l.ItemID, org); ok && l.Expired(now) {
 			expired = append(expired, l)
 		}
 	}
@@ -249,10 +326,19 @@ func (s *Store) RequeueExpiredLeases(_ context.Context, now time.Time, limit int
 }
 
 // StartRun implements ports.Store.
-func (s *Store) StartRun(_ context.Context, r ports.NewRun) (domain.RunID, error) {
+func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return "", err
+	}
+
 	s.mu.Lock()
 	defer s.changes.signal()
 	defer s.mu.Unlock()
+
+	if _, ok := s.visible(r.ItemID, org); !ok {
+		return "", fmt.Errorf("item %s: %w", r.ItemID, ports.ErrNotFound)
+	}
 
 	run := &domain.Run{
 		ID: domain.RunID(s.newID()), FactoryID: r.FactoryID, ItemID: r.ItemID, Station: r.Station,
@@ -268,12 +354,21 @@ func (s *Store) StartRun(_ context.Context, r ports.NewRun) (domain.RunID, error
 }
 
 // FinishRun implements ports.Store.
-func (s *Store) FinishRun(_ context.Context, id domain.RunID, res domain.RunResult, endedAt time.Time) error {
+func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunResult, endedAt time.Time) error {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return err
+	}
+
 	s.mu.Lock()
 	defer s.changes.signal()
 	defer s.mu.Unlock()
 
 	r, ok := s.runs[id]
+	if ok {
+		_, ok = s.visible(r.ItemID, org)
+	}
+
 	if !ok {
 		return fmt.Errorf("run %s: %w", id, ports.ErrNotFound)
 	}
@@ -295,12 +390,17 @@ func (s *Store) FinishRun(_ context.Context, id domain.RunID, res domain.RunResu
 }
 
 // Transition implements ports.Store.
-func (s *Store) Transition(_ context.Context, t ports.Transition) (domain.Item, error) {
+func (s *Store) Transition(ctx context.Context, t ports.Transition) (domain.Item, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.Item{}, err
+	}
+
 	s.mu.Lock()
 	defer s.changes.signal()
 	defer s.mu.Unlock()
 
-	it, ok := s.items[t.ItemID]
+	it, ok := s.visible(t.ItemID, org)
 	if !ok {
 		return domain.Item{}, fmt.Errorf("item %s: %w", t.ItemID, ports.ErrNotFound)
 	}
@@ -346,10 +446,21 @@ func (s *Store) Transition(_ context.Context, t ports.Transition) (domain.Item, 
 }
 
 // AppendEvents implements ports.Store.
-func (s *Store) AppendEvents(_ context.Context, events ...domain.Event) error {
+func (s *Store) AppendEvents(ctx context.Context, events ...domain.Event) error {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return err
+	}
+
 	s.mu.Lock()
 	defer s.changes.signal()
 	defer s.mu.Unlock()
+
+	for _, e := range events {
+		if it, ok := s.items[e.ItemID]; ok && it.OrgID != org {
+			return fmt.Errorf("event of item %s: %w", e.ItemID, ports.ErrNotFound)
+		}
+	}
 
 	for _, e := range events {
 		s.append(e)
@@ -359,11 +470,20 @@ func (s *Store) AppendEvents(_ context.Context, events ...domain.Event) error {
 }
 
 // ItemEvents implements ports.Store.
-func (s *Store) ItemEvents(_ context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error) {
+func (s *Store) ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	out := []domain.Event{}
+
+	if _, ok := s.visible(id, org); !ok {
+		return out, nil
+	}
 
 	for _, e := range s.events {
 		if len(out) == limit {
@@ -378,12 +498,12 @@ func (s *Store) ItemEvents(_ context.Context, id domain.ItemID, after int64, lim
 	return out, nil
 }
 
-// waiting returns the items waiting at a station in pull order. Callers hold s.mu.
-func (s *Store) waiting(factory domain.FactoryID, station string) []*domain.Item {
+// waiting returns an organization's items waiting at a station in pull order. Callers hold s.mu.
+func (s *Store) waiting(org domain.OrgID, factory domain.FactoryID, station string) []*domain.Item {
 	var w []*domain.Item
 
 	for _, it := range s.items {
-		if it.FactoryID == factory && it.Station == station && it.State.Waiting() {
+		if it.OrgID == org && it.FactoryID == factory && it.Station == station && it.State.Waiting() {
 			w = append(w, it)
 		}
 	}

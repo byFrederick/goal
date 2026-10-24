@@ -17,14 +17,20 @@ func TestStore_Conformance(t *testing.T) {
 	storetest.Run(t, func(*testing.T) storetest.Harness {
 		s := porttest.NewStore()
 
-		var factories atomic.Int64
+		var orgs, factories atomic.Int64
 
 		return storetest.Harness{
 			Store: s,
-			NewFactory: func(*testing.T) domain.FactoryID {
-				return domain.FactoryID(fmt.Sprintf("00000000-0000-4000-8000-%012d", factories.Add(1)))
+			NewOrg: func(*testing.T) domain.OrgID {
+				return domain.OrgID(fmt.Sprintf("00000000-0000-4000-9000-%012d", orgs.Add(1)))
 			},
-			Runs: func(_ *testing.T, id domain.ItemID) []domain.Run { return s.Runs(id) },
+			NewFactory: func(_ *testing.T, org domain.OrgID) domain.FactoryID {
+				id := domain.FactoryID(fmt.Sprintf("00000000-0000-4000-8000-%012d", factories.Add(1)))
+				s.AddFactory(org, id)
+
+				return id
+			},
+			Runs: func(_ *testing.T, org domain.OrgID, id domain.ItemID) []domain.Run { return s.Runs(org, id) },
 		}
 	})
 }

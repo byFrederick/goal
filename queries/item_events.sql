@@ -1,5 +1,6 @@
--- name: InsertEvents :copyfrom
--- COPY fires the item_events_notify trigger per row, like INSERT.
+-- name: InsertEvents :batchexec
+-- One INSERT per event, sent as one batch in order (COPY is refused under row-level security).
+-- org_id comes from its default, the transaction's organization.
 INSERT INTO item_events (factory_id, item_id, run_id, at, kind, station, actor, data)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 

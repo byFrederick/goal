@@ -370,7 +370,7 @@ func TestRun_GatewayTokenIsScopedToTheTask(t *testing.T) {
 	}
 
 	want := domain.TaskClaims{
-		FactoryID: factoryID, ItemID: it.ID, Station: stWork, Agent: agWorker, RunID: h.store.Runs(it.ID)[0].ID,
+		OrgID: testOrg, FactoryID: factoryID, ItemID: it.ID, Station: stWork, Agent: agWorker, RunID: h.store.Runs(testOrg, it.ID)[0].ID,
 		Connections: []string{"github"}, ExpiresAt: claims.ExpiresAt,
 	}
 	if !reflect.DeepEqual(claims, want) {
@@ -387,7 +387,7 @@ func TestRun_EndedRunsAreReported(t *testing.T) {
 
 	h.step(t)
 
-	if got, want := h.endedRuns(), []domain.RunID{h.store.Runs(it.ID)[0].ID}; !slices.Equal(got, want) {
+	if got, want := h.endedRuns(), []domain.RunID{h.store.Runs(testOrg, it.ID)[0].ID}; !slices.Equal(got, want) {
 		t.Fatalf("ended runs = %v, want %v: the gateway would keep the run's sidecars", got, want)
 	}
 }
@@ -418,7 +418,7 @@ func TestRun_HeartbeatKeepsLeaseAlive(t *testing.T) {
 	h := newHarness(t, lineOf(agentStation(stWork, agWorker, 1, 1)), porttest.Block(release, `{}`))
 	it := h.submit(t, domain.NewItem{})
 
-	if err := h.e.Tick(t.Context()); err != nil {
+	if err := h.e.Tick(inOrg(t)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -438,7 +438,7 @@ func TestRun_HeartbeatKeepsLeaseAlive(t *testing.T) {
 		}
 	}
 
-	if n, err := h.e.SweepLeases(t.Context()); err != nil || n != 0 {
+	if n, err := h.e.SweepLeases(inOrg(t)); err != nil || n != 0 {
 		t.Fatalf("sweep requeued %d (%v) a heartbeated lease", n, err)
 	}
 
@@ -456,7 +456,7 @@ func TestRun_LostLeaseStopsTheTask(t *testing.T) {
 	h := newHarness(t, lineOf(agentStation(stWork, agWorker, 1, 1)), porttest.Block(nil, `{}`))
 	it := h.submit(t, domain.NewItem{})
 
-	if err := h.e.Tick(t.Context()); err != nil {
+	if err := h.e.Tick(inOrg(t)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -465,7 +465,7 @@ func TestRun_LostLeaseStopsTheTask(t *testing.T) {
 	}
 
 	// Another instance saw the lease expire (clock skew, a long pause) and requeued the item.
-	if _, err := h.store.RequeueExpiredLeases(t.Context(), h.clock.Now().Add(ttl), 10); err != nil {
+	if _, err := h.store.RequeueExpiredLeases(inOrg(t), h.clock.Now().Add(ttl), 10); err != nil {
 		t.Fatal(err)
 	}
 
@@ -489,7 +489,7 @@ func TestRun_ShutdownReleasesItemsToTheQueue(t *testing.T) {
 	a := h.submit(t, domain.NewItem{})
 	b := h.submit(t, domain.NewItem{})
 
-	ctx, cancel := context.WithCancel(t.Context())
+	ctx, cancel := context.WithCancel(inOrg(t))
 	if err := h.e.Tick(ctx); err != nil {
 		t.Fatal(err)
 	}
