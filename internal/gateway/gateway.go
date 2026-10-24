@@ -204,7 +204,7 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 	g.mcp = mcp.NewStreamableHTTPHandler(serverOf, &mcp.StreamableHTTPOptions{
 		Stateless:           true,
 		MaxRequestBodyBytes: cfg.MaxRequestBytes,
-		// Agent containers reach goald as host.docker.internal while goald may listen on
+		// The egress proxy reaches goald as host.docker.internal while goald may listen on
 		// loopback; the SDK's DNS-rebinding guard would refuse that Host header. A rebinding
 		// page cannot present a task token, which every request here must carry.
 		DisableLocalhostProtection: true,

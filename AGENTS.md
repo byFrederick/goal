@@ -20,12 +20,14 @@ Goal is a config-driven platform for AI agent factories. It runs on a laptop tod
 ```
 cmd/goal/            CLI            (main: parse flags, wire, run)
 cmd/goald/           daemon         (main: wire adapters into the engine)
+cmd/goal-egress/     egress proxy   (the container agents, sidecars and checks go out through; ADR 0009)
 internal/domain/     plain types and rules: factory, item, station, lease. Imports nothing internal.
 internal/engine/     flow engine: pull, WIP, drum-buffer-rope, andon. Imports domain + ports only.
 internal/ports/      interfaces: Store, Runner, Reaper, Workspaces, Checker, Secrets, Contracts, ObjectStore, ItemNotices, CodeHost, Clock, Tenancy, Audit, DefinitionStore, DefinitionNotices, SkillSource (Identity, Access, Platform in phase 3; Knowledge, ModelAuth later)
 internal/adapters/   s3store/ postgres/ docker/ gitworkspace/ github/ envsecrets/ sysclock/ skillssh/ (ecs/ awssecrets/ bedrockkb/ onepassword/ later)
 internal/api/        HTTP API handlers for api/openapi.yaml (generated types in internal/api/gen); no adapter imports
 internal/gateway/    MCP gateway inside goald: task-token auth, per-agent tools, credentials added on the host
+internal/egress/     the egress proxy's policy: agents to the model API and the gateway's path, tools to public hosts, nothing private. Standard library only
 internal/definitions/ goald's cache of published definition versions (current and pinned by runs): lines, contracts, agent files, gateway lookups, legacy import
 internal/config/     loads and validates one factory definition from an fs.FS (bucket prefix or local folder)
 internal/factorymodel/ the Visual editor's model of factory.yaml: read, apply section edits keeping comments, format

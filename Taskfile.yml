@@ -16,6 +16,8 @@ vars:
   # The agent images factories name in runtime.image; built locally, never pushed from here.
   WORKER_IMAGE: '{{.WORKER_IMAGE | default "ghcr.io/byfrederick/goal-agent:0.1.0"}}'
   WORKER_DEV_IMAGE: '{{.WORKER_DEV_IMAGE | default "ghcr.io/byfrederick/goal-agent-dev:0.1.0"}}'
+  # The egress proxy agents, sidecars and checks go out through (ADR 0009); built locally, never pushed.
+  EGRESS_IMAGE: '{{.GOAL_EGRESS_IMAGE | default "ghcr.io/byfrederick/goal-egress:0.1.0"}}'
   # The auth service's sidecar image (spec 3 §5.5); built locally, never pushed from here.
   AUTH_IMAGE: '{{.AUTH_IMAGE | default "ghcr.io/byfrederick/goal-auth:0.1.0"}}'
   # Where migrate-check gets its throwaway PostgreSQL 18: Docker, or a local cluster where there is
@@ -60,7 +62,7 @@ tasks:
 
   up:
     desc: Start PostgreSQL and RustFS, prepare the database roles and the bucket, run goald in the foreground with, under GOAL_AUTH=session, the auth service and Mailpit (goal up)
-    deps: [build, auth:build]
+    deps: [build, auth:build, egress:image]
     cmds:
       - bin/goal up
 
@@ -365,6 +367,11 @@ tasks:
     desc: Build the agent worker image locally (WORKER_IMAGE); never pushes
     cmds:
       - docker build -f worker/Dockerfile --target runtime -t {{.WORKER_IMAGE}} .
+
+  egress:image:
+    desc: Build the egress proxy's image locally (EGRESS_IMAGE, cmd/goal-egress); goald runs it for agent runs, sidecars and checks; never pushes
+    cmds:
+      - docker build -q -f cmd/goal-egress/Dockerfile --target runtime -t {{.EGRESS_IMAGE}} . >/dev/null
 
   auth:image:
     desc: Build the auth service's sidecar image locally (AUTH_IMAGE); never pushes

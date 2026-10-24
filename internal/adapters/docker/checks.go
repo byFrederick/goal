@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -40,16 +42,20 @@ const (
 // Checker runs station command checks: each in its own container of the factory's image, with
 // the same hardening as an agent task, the run's workspace mounted read-write at /workspace and
 // nothing else. A check gets no secrets, no gateway token and no Docker socket; it keeps
-// network access, because toolchains fetch modules and providers.
+// network access, because toolchains fetch modules and providers: the egress tools' network,
+// where public hosts are reachable through the egress proxy and the host and private networks
+// are not.
 type Checker struct {
 	docker *client.Client
+	egress *Egress
 	cfg    Config
 	log    *slog.Logger
 }
 
-// NewChecker returns a checker on docker with the runner's resource limits.
-func NewChecker(docker *client.Client, cfg Config, log *slog.Logger) *Checker {
-	return &Checker{docker: docker, cfg: cfg.withDefaults(), log: log}
+// NewChecker returns a checker on docker with the runner's resource limits, going out through
+// egress.
+func NewChecker(docker *client.Client, egress *Egress, cfg Config, log *slog.Logger) *Checker {
+	return &Checker{docker: docker, egress: egress, cfg: cfg.withDefaults(), log: log}
 }
 
 // Check implements ports.Checker. A command that exits non-zero, or runs past c.Timeout, is a
@@ -59,11 +65,15 @@ func (k *Checker) Check(ctx context.Context, c ports.CheckSpec) (ports.CheckResu
 		return ports.CheckResult{}, fmt.Errorf("check spec: %w", err)
 	}
 
+	if err := k.egress.Ensure(ctx); err != nil {
+		return ports.CheckResult{}, err
+	}
+
 	if err := ensureImage(ctx, k.docker, k.log, c.Image); err != nil {
 		return ports.CheckResult{}, err
 	}
 
-	cc, hc := checkContainerOf(k.cfg, c)
+	cc, hc := checkContainerOf(k.cfg, k.egress.tools(), c)
 
 	created, err := k.docker.ContainerCreate(ctx, client.ContainerCreateOptions{Config: cc, HostConfig: hc, Name: checkName(c)})
 	if err != nil {
@@ -191,15 +201,20 @@ func validateCheck(c ports.CheckSpec) error {
 	return errors.Join(errs...)
 }
 
-// checkContainerOf is one check's container: the command under sh -c in /workspace, with only
-// HOME in its environment.
-func checkContainerOf(cfg Config, c ports.CheckSpec) (*container.Config, *container.HostConfig) {
+// checkContainerOf is one check's container: the command under sh -c in /workspace on the tools'
+// network, with only HOME, CI and the proxy variables in its environment.
+func checkContainerOf(cfg Config, tools route, c ports.CheckSpec) (*container.Config, *container.HostConfig) {
+	env := []string{envHome + "=" + containerHome, "CI=true"}
+	for _, k := range slices.Sorted(maps.Keys(tools.env)) {
+		env = append(env, k+"="+tools.env[k])
+	}
+
 	cc := &container.Config{
 		Image:      c.Image,
 		User:       containerUser,
 		Entrypoint: []string{"/bin/sh", "-c"},
 		Cmd:        []string{c.Command},
-		Env:        []string{envHome + "=" + containerHome, "CI=true"},
+		Env:        env,
 		WorkingDir: containerWorkspace,
 		Labels: map[string]string{
 			LabelOrg: string(c.OrgID), LabelFactory: string(c.FactoryID), LabelItem: string(c.ItemID), LabelRun: string(c.RunID),
@@ -207,7 +222,10 @@ func checkContainerOf(cfg Config, c ports.CheckSpec) (*container.Config, *contai
 		},
 	}
 
-	return cc, hardened(cfg, mount.Mount{Type: mount.TypeBind, Source: c.WorkspaceDir, Target: containerWorkspace})
+	hc := hardened(cfg, mount.Mount{Type: mount.TypeBind, Source: c.WorkspaceDir, Target: containerWorkspace})
+	hc.NetworkMode = container.NetworkMode(tools.network)
+
+	return cc, hc
 }
 
 // checkName is unique per check, since a run can have several.

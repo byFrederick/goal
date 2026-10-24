@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/byFrederick/goal/internal/adapters/docker"
 	"github.com/byFrederick/goal/internal/adapters/postgres"
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
@@ -116,6 +117,14 @@ type settings struct {
 	// DefaultAgentImage is the agent image a blank factory's skeleton names
 	// (GOAL_DEFAULT_AGENT_IMAGE, default the agent image this repository builds).
 	DefaultAgentImage string
+	// Egress is the egress proxy agent, sidecar and check containers reach the outside through
+	// (ADR 0009): its container and network name (GOAL_EGRESS_NAME, default goal-egress; goalds
+	// with different settings on one Docker host need different names), its image
+	// (GOAL_EGRESS_IMAGE, default the one task egress:image builds), the hosts agents may reach
+	// besides the gateway (GOAL_AGENT_EGRESS: comma-separated host or host:port, port 443 by
+	// default; default api.anthropic.com, the model API) and the gateway it serves them
+	// (GatewayURL).
+	Egress docker.EgressConfig
 }
 
 const (
@@ -135,6 +144,9 @@ const (
 	schemeHTTP     = "http"
 	schemeHTTPS    = "https"
 	taskEnvEnv     = "GOAL_TASK_ENV"
+	egressNameEnv  = "GOAL_EGRESS_NAME"
+	egressImageEnv = "GOAL_EGRESS_IMAGE"
+	agentEgressEnv = "GOAL_AGENT_EGRESS"
 	defaultModels  = "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5"
 	defaultListen  = "127.0.0.1:8080"
 	defaultTaskEnv = "CLAUDE_CODE_OAUTH_TOKEN=env:CLAUDE_CODE_OAUTH_TOKEN"
@@ -166,7 +178,7 @@ var ownVariables = []string{
 	authEnv, upstreamEnv, proxiesEnv, googleEnv,
 	"GOAL_WORKSPACE_ROOT", "GOAL_RUN_DIR", "GOAL_TICK_EVERY", "GOAL_REFRESH_EVERY", "GOAL_MAX_RUNS",
 	"GOAL_GITHUB_API_URL", githubWebEnv, "GOAL_LOG_LEVEL", "GOAL_LOG_FORMAT", "GOAL_DEFAULT_AGENT_IMAGE", "GOAL_ORG_RETENTION", "GOAL_MODELS",
-	"GOAL_DEFINITION_CACHE_BYTES", "GOAL_LEGACY_IMPORT",
+	"GOAL_DEFINITION_CACHE_BYTES", "GOAL_LEGACY_IMPORT", egressNameEnv, egressImageEnv, agentEgressEnv,
 	"GOAL_S3_BUCKET", "GOAL_S3_ENDPOINT", "GOAL_S3_ACCESS_KEY", "GOAL_S3_SECRET_KEY",
 	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
 }
@@ -253,6 +265,7 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 	s.GatewayURL = or(gatewayURLEnv, defaultGatewayURL(s))
 	errs := authSettings(&s, or)
 	errs = append(errs, listenErrors(s)...)
+	errs = append(errs, egressSettings(&s, or)...)
 
 	var err error
 	if s.TaskEnv, err = taskEnv(or(taskEnvEnv, defaultTaskEnv)); err != nil {
@@ -297,6 +310,27 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 	s.Models, err = models(or(modelsEnv, defaultModels))
 
 	return s, errors.Join(append(errs, err)...)
+}
+
+// egressSettings reads GOAL_EGRESS_NAME, GOAL_EGRESS_IMAGE and GOAL_AGENT_EGRESS, checked as the
+// Docker adapter will use them.
+func egressSettings(s *settings, or func(name, def string) string) []error {
+	s.Egress = docker.EgressConfig{
+		Name: or(egressNameEnv, docker.DefaultEgressName), Image: or(egressImageEnv, docker.DefaultEgressImage), Gateway: s.GatewayURL,
+	}
+
+	for h := range strings.SplitSeq(or(agentEgressEnv, docker.DefaultAgentHost), ",") {
+		if h = strings.TrimSpace(h); h != "" {
+			s.Egress.AgentHosts = append(s.Egress.AgentHosts, h)
+		}
+	}
+
+	// NewEgress only checks and keeps its configuration; the Docker client is not used.
+	if _, err := docker.NewEgress(nil, s.Egress, slog.New(slog.DiscardHandler)); err != nil {
+		return []error{fmt.Errorf("%s, %s, %s: %w", egressNameEnv, agentEgressEnv, gatewayURLEnv, err)}
+	}
+
+	return nil
 }
 
 // definitionSettings reads the settings of the definitions cache and the legacy import.

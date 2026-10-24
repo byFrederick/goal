@@ -248,6 +248,13 @@ linters:
               desc: container access belongs in internal/adapters/docker
             - pkg: github.com/moby
               desc: container access belongs in internal/adapters/docker
+        egress:
+          # The proxy is its own small image: cmd/goal-egress/Dockerfile copies internal/egress only.
+          list-mode: strict
+          files: ["**/internal/egress/**", "**/cmd/goal-egress/**"]
+          allow:
+            - $gostd
+            - github.com/byFrederick/goal/internal/egress
         permgen:
           files: ["**/cmd/permgen/**"]
           deny:

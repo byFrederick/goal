@@ -1,0 +1,7 @@
+# The image builds from the repository root and needs only the module files and the proxy's code.
+*
+!go.mod
+!go.sum
+!internal/egress/
+!cmd/goal-egress/
+**/*_test.go

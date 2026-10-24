@@ -29,10 +29,12 @@ import (
 
 const (
 	// testOrg labels the tests' containers; no store knows it.
-	testOrg   = "org-reap-it"
-	stubImage = "goal-runner-stub:test"
-	oauth     = "oauth-token-for-tests-only"
-	gateway   = "gateway-token-for-tests-only"
+	testOrg      = "org-reap-it"
+	stubImage    = "goal-runner-stub:test"
+	oauth        = "oauth-token-for-tests-only"
+	gatewayToken = "gateway-token-for-tests-only"
+	// stubGateway is the gateway stub tasks name; the shared test egress serves it.
+	stubGateway = "http://127.0.0.1:8081/mcp"
 )
 
 var (
@@ -63,7 +65,7 @@ func newTestRunner(t *testing.T) (*Runner, *client.Client) {
 		t.Fatalf("build stub image: %v", errStubBuild)
 	}
 
-	return New(docker, promptFiles{}, Config{RunDir: t.TempDir(), StopGrace: time.Second}, slog.New(slog.DiscardHandler)), docker
+	return New(docker, promptFiles{}, testEgress(t, docker), Config{RunDir: t.TempDir(), StopGrace: time.Second}, slog.New(slog.DiscardHandler)), docker
 }
 
 func buildStub(docker *client.Client) error {
@@ -145,7 +147,7 @@ func stubSpec(t *testing.T, brief string) ports.TaskSpec {
 	return ports.TaskSpec{
 		OrgID: testOrg, FactoryID: "factory-1", ItemID: "item-1", RunID: domain.RunID(fmt.Sprintf("it-%s-%d-%d", brief, time.Now().UnixNano(), runSeq.Add(1))),
 		Station: "build", Agent: "engineer", Image: stubImage, Brief: brief, WorkspaceDir: workspace,
-		GatewayURL: "http://127.0.0.1:8081/mcp", GatewayToken: gateway,
+		GatewayURL: stubGateway, GatewayToken: gatewayToken,
 		Env: map[string]string{"CLAUDE_CODE_OAUTH_TOKEN": oauth, "ANTHROPIC_API_KEY": "sk-ant-must-not-reach-the-task"},
 	}
 }
@@ -224,7 +226,7 @@ func TestRunner_StreamsEventsAndReturnsResult(t *testing.T) {
 		}
 	}
 
-	if msg := fmt.Sprint(events[3].Data["text"]); strings.Contains(msg, oauth) || strings.Contains(msg, gateway) || !strings.Contains(msg, redacted) {
+	if msg := fmt.Sprint(events[3].Data["text"]); strings.Contains(msg, oauth) || strings.Contains(msg, gatewayToken) || !strings.Contains(msg, redacted) {
 		t.Errorf("secrets reached an event: %q", msg)
 	}
 
@@ -288,7 +290,7 @@ func assertHardened(t *testing.T, docker *client.Client, r *Runner, spec ports.T
 	}
 
 	running := hardeningOf(got.Container.Config, got.Container.HostConfig)
-	want := hardeningOf(containerOf(r.cfg, spec, r.runDir(spec.RunID)))
+	want := hardeningOf(containerOf(r.cfg, r.egress.agents(), spec, r.runDir(spec.RunID)))
 	running.Env, want.Env = "", "" // the image adds its own variables, such as PATH
 
 	if running != want {
@@ -320,6 +322,25 @@ func TestRunner_CrashReportsRedactedStderr(t *testing.T) {
 // Several goalds may share one Docker host, so Leftovers lists every run's containers, labelled
 // with the run's organization, and its run folder, while Reap removes only the runs it is given:
 // here this test's orphan, never another test's or goald's containers.
+// createOrphan creates spec's task container, unstarted, as a goald that died would leave it;
+// it goes when the test ends should Reap not remove it.
+func createOrphan(t *testing.T, r *Runner, docker *client.Client, spec ports.TaskSpec, runDir string) {
+	t.Helper()
+
+	if err := r.egress.Ensure(t.Context()); err != nil { // the agents' network must exist
+		t.Fatal(err)
+	}
+
+	cc, hc := containerOf(r.cfg, r.egress.agents(), spec, runDir)
+	if _, err := docker.ContainerCreate(t.Context(), client.ContainerCreateOptions{Config: cc, HostConfig: hc, Name: containerName(spec.RunID)}); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		_, _ = docker.ContainerRemove(context.Background(), containerName(spec.RunID), client.ContainerRemoveOptions{Force: true})
+	})
+}
+
 func TestRunner_ReapRemovesOnlyTheGivenRuns(t *testing.T) {
 	t.Parallel()
 
@@ -331,15 +352,7 @@ func TestRunner_ReapRemovesOnlyTheGivenRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cc, hc := containerOf(r.cfg, orphan, orphanDir)
-	if _, err := docker.ContainerCreate(t.Context(), client.ContainerCreateOptions{Config: cc, HostConfig: hc, Name: containerName(orphan.RunID)}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Should Reap fail, the orphan this test created goes anyway (by its unique name).
-	t.Cleanup(func() {
-		_, _ = docker.ContainerRemove(context.Background(), containerName(orphan.RunID), client.ContainerRemoveOptions{Force: true})
-	})
+	createOrphan(t, r, docker, orphan, orphanDir)
 
 	live := stubSpec(t, "sleep")
 	ctx, cancel := context.WithCancel(t.Context())

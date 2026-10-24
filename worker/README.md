@@ -10,7 +10,7 @@ task worker:image-dev   # the dev variant, ghcr.io/byfrederick/goal-agent-dev:0.
 
 ## Dev variant
 
-`--target dev` adds the toolchain a factory that builds this repository needs: Go (with a C compiler for `-race`), task, golangci-lint v2, pnpm, Terraform with the AWS provider mirrored (`TF_CLI_CONFIG_FILE`), and a PostgreSQL 18 server, which `task migrate-check` uses for a throwaway local cluster when there is no Docker. Go modules from `go.mod` are prewarmed as a read-only local `GOPROXY`; anything new still downloads. The goal factory names this image in `runtime.image`, so its agents and its station command checks run with it. Checks run in their own container of the same image (`docker.Checker`): same hardening, the run's workspace at `/workspace`, `HOME` and `CI` only in the environment, no secrets, no gateway token, no Docker socket.
+`--target dev` adds the toolchain a factory that builds this repository needs: Go (with a C compiler for `-race`), task, golangci-lint v2, pnpm, Terraform with the AWS provider mirrored (`TF_CLI_CONFIG_FILE`), and a PostgreSQL 18 server, which `task migrate-check` uses for a throwaway local cluster when there is no Docker. Go modules from `go.mod` are prewarmed as a read-only local `GOPROXY`; anything new still downloads in a check, and in an agent only from a host `GOAL_AGENT_EGRESS` adds (such as `proxy.golang.org` or `registry.npmjs.org`): agents reach only the model API by default. The goal factory names this image in `runtime.image`, so its agents and its station command checks run with it. Checks run in their own container of the same image (`docker.Checker`): same hardening, the run's workspace at `/workspace`, `HOME`, `CI` and the egress proxy's variables only in the environment, no secrets, no gateway token, no Docker socket, and the tools' network: public hosts through the proxy, never the host or a private address.
 
 The image is built locally and never pushed from this repository.
 
@@ -28,7 +28,7 @@ The image is built locally and never pushed from this repository.
 
 The runner writes `spec.json` into a per-run host folder (`$TMPDIR/goal-runs/<run id>/` by default) and has goald's `AgentFiles` write `agent/` next to it, then mounts the folder at `/goal`. The container runs as uid 1000 with every capability dropped, `no-new-privileges`, an init process, and CPU, memory and PID limits; it carries the labels `goal.org`, `goal.factory`, `goal.item`, `goal.run`, `goal.station` and `goal.agent`, and goald's reaper removes the containers and folders of runs that are over (neither running nor holding their lease, whichever goald on the host started them).
 
-Environment: only the task's `Env` from goald (which carries `CLAUDE_CODE_OAUTH_TOKEN`), `GOAL_GATEWAY_TOKEN`, `HOME` and `CLAUDE_CONFIG_DIR=/home/node/.claude` (set by the runner over anything in `Env`, and again by the worker, so Claude Code's config always lives in the container's throwaway home; no host `~/.claude` is ever mounted). `ANTHROPIC_API_KEY` is removed by the runner and again by the worker before the SDK starts; the gateway token is removed from the agent's environment too and reaches the gateway only as a header.
+Environment: only the task's `Env` from goald (which carries `CLAUDE_CODE_OAUTH_TOKEN`), `GOAL_GATEWAY_TOKEN`, `HOME`, `CLAUDE_CONFIG_DIR=/home/node/.claude` and the egress proxy's variables (Networking, below; all set by the runner over anything in `Env`; the config dir set again by the worker, so Claude Code's config always lives in the container's throwaway home; no host `~/.claude` is ever mounted). `ANTHROPIC_API_KEY` is removed by the runner and again by the worker before the SDK starts; the gateway token is removed from the agent's environment too and reaches the gateway only as a header.
 
 ### spec.json
 
@@ -38,7 +38,7 @@ Environment: only the task's `Env` from goald (which carries `CLAUDE_CODE_OAUTH_
   "model": "claude-sonnet-5-5",
   "skills": ["goal-conventions"],
   "tools_allow": ["Read", "Edit", "Bash"], "tools_deny": ["Bash(git push*)"],
-  "gateway_url": "http://host.docker.internal:8081/mcp",
+  "gateway_url": "http://goal-egress:3128/mcp",
   "purpose": "what the factory is for (omitted when it has none)",
   "brief": "title and body of the item",
   "inputs": { "spec": { "…": "outputs of earlier stations" } },
@@ -74,4 +74,4 @@ One JSON object per line, each with `type` and `at` (RFC 3339). Logs go to stder
 
 ## Networking
 
-The container runs on Docker's default bridge network. goald's gateway URL on the host's loopback (`127.0.0.1`, `localhost`, `::1`) is rewritten to `host.docker.internal`, which Docker Desktop and OrbStack on macOS resolve to the host; the runner also adds `host.docker.internal:host-gateway` so the same name works on Linux. On macOS a gateway listening on the host's `127.0.0.1` is reachable that way; on Linux it must listen on an address the bridge reaches (for example the `docker0` address), not only on loopback.
+The container runs on goald's agents' network (`<GOAL_EGRESS_NAME>-agents`, ADR 0009): an internal Docker network without a bridge address, so it has no route to the host, to other networks or to the internet. The only other container on it is goald's egress proxy (`cmd/goal-egress`), named like the network (`goal-egress` by default), and the runner sets `HTTP_PROXY`, `HTTPS_PROXY` (and the lower-case forms) to it, `NO_PROXY` to the proxy itself and `NODE_USE_ENV_PROXY=1`. Through it an agent reaches the model API (`GOAL_AGENT_EGRESS`, default `api.anthropic.com`) over `CONNECT`, and goald's gateway at `gateway_url`, which is the proxy's own address at the gateway's path (`http://goal-egress:3128/mcp`): the proxy forwards exactly that path to goald and nothing else of it. Every other destination, and any name that resolves to a loopback, private or link-local address, is refused. The worker turns off Claude Code's nonessential traffic (`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`: telemetry, error reports, the updater), which the proxy would refuse anyway. A tool that fetches from the web (`WebFetch`, `curl` in `Bash`) reaches only those hosts.

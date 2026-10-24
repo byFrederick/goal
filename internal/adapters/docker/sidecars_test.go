@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"fmt"
 	"log/slog"
 	"testing"
 
@@ -14,9 +15,10 @@ func TestSidecarContainerOf_IsHardened(t *testing.T) {
 		OrgID: "o1", FactoryID: "f1", ItemID: "i1", RunID: "r1", Connection: "shop-db", Image: "ghcr.io/acme/shop-db-mcp:1.4.2",
 		Command: []string{"--read-only"}, Env: map[string]string{"SHOP_TOKEN": "token-123456"},
 	}
-	cfg := NewSidecars(nil, Config{}, slog.New(slog.DiscardHandler)).cfg
+	cfg := NewSidecars(nil, nil, Config{}, slog.New(slog.DiscardHandler)).cfg
+	tools := unitEgress(t).tools()
 
-	cc, hc := sidecarContainerOf(cfg, spec, "")
+	cc, hc := sidecarContainerOf(cfg, tools, spec, "")
 	got := hardeningOf(cc, hc)
 	want := hardening{
 		User: "65534:65534", CapDrop: "[ALL]", SecurityOpt: "[no-new-privileges:true]", Mounts: "[]",
@@ -37,8 +39,15 @@ func TestSidecarContainerOf_IsHardened(t *testing.T) {
 	}
 
 	spec.Network = true
-	if _, hc := sidecarContainerOf(cfg, spec, ""); hc.NetworkMode != "" || len(hc.ExtraHosts) != 1 {
-		t.Errorf("with network: mode %q, extra hosts %v; want the default bridge with the host alias", hc.NetworkMode, hc.ExtraHosts)
+	spec.Env["HTTPS_PROXY"] = "http://attacker.example.com:3128"
+
+	cc, hc = sidecarContainerOf(cfg, tools, spec, "")
+	if hc.NetworkMode != "goal-egress-tools" || len(hc.ExtraHosts) != 0 {
+		t.Errorf("with network: mode %q, extra hosts %v; want the tools' network and no host alias", hc.NetworkMode, hc.ExtraHosts)
+	}
+
+	if got := fmt.Sprint(cc.Env); got != "[HOME=/tmp "+upperProxyVars+" SHOP_TOKEN=token-123456 "+lowerProxyVars+"]" {
+		t.Errorf("with network: env %s; want the egress proxy's variables over the spec's", got)
 	}
 }
 

@@ -129,6 +129,12 @@ describe('runTask', () => {
     }
   });
 
+  it("turns off Claude Code's nonessential traffic: the egress proxy lets agents reach the model API only", async () => {
+    const { calls } = await run([success], { env: { ...env, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '0' } });
+
+    expect(calls[0]?.options.env).toMatchObject({ CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' });
+  });
+
   it('keeps a config dir from the environment from replacing its own', async () => {
     const { calls } = await run([success], { env: { ...env, CLAUDE_CONFIG_DIR: '/host/.claude' } });
 

@@ -62,6 +62,31 @@ func TestSettings_Defaults(t *testing.T) {
 	}
 }
 
+// Agents reach the model API and the gateway through the egress proxy, nothing else, unless
+// GOAL_AGENT_EGRESS adds hosts.
+func TestSettings_Egress(t *testing.T) {
+	t.Parallel()
+
+	s, err := settingsFrom(envOf(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if e := s.Egress; e.Name != "goal-egress" || e.Image != "ghcr.io/byfrederick/goal-egress:0.1.0" || e.Gateway != s.GatewayURL ||
+		!slices.Equal(e.AgentHosts, []string{"api.anthropic.com"}) || len(e.Trusted) != 0 {
+		t.Errorf("egress = %+v; want the default proxy serving the gateway and the model API to agents", e)
+	}
+
+	s, err = settingsFrom(envOf(map[string]string{agentEgressEnv: " api.anthropic.com, proxy.golang.org:443 ,", egressNameEnv: "goal-egress-dev"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Equal(s.Egress.AgentHosts, []string{"api.anthropic.com", "proxy.golang.org:443"}) || s.Egress.Name != "goal-egress-dev" {
+		t.Errorf("egress = %+v; want GOAL_AGENT_EGRESS's hosts and GOAL_EGRESS_NAME", s.Egress)
+	}
+}
+
 // Sign-in by default (spec 3 §14, PR 3-16; GOAL_AUTH=none only when asked for), the identity
 // service beside goald on loopback, no proxy believed, and the public origin the listen address,
 // over http.
@@ -178,6 +203,8 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 		{name: "gateway listener on the main one by name", env: map[string]string{gatewayEnv: "localhost:8080"}, want: "another address"},
 		{name: "gateway listener on every interface's main port", env: map[string]string{gatewayEnv: ":8080"}, want: "another address"},
 		{name: "gateway listener without a port", env: map[string]string{gatewayEnv: "gateway.example.com"}, want: "host:port"},
+		{name: "an agent egress URL", env: map[string]string{agentEgressEnv: "https://api.anthropic.com/v1"}, want: agentEgressEnv},
+		{name: "an egress name with a path", env: map[string]string{egressNameEnv: "../goal"}, want: egressNameEnv},
 		{
 			name: "gateway URL on the main listener beside a gateway listener",
 			env:  map[string]string{gatewayEnv: "127.0.0.1:8090", gatewayURLEnv: "http://host.docker.internal:8080/mcp"},

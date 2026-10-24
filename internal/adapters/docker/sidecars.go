@@ -50,17 +50,20 @@ const sidecarStderrLines = 20
 // root filesystem with a tmpfs /tmp (also HOME), every capability dropped, no privilege
 // escalation, an init process and CPU, memory and PID limits. A sidecar runs as its image's user
 // unless that is root, in which case it runs as nobody. It has no network unless its spec asks
-// for one; then it is on the default bridge, where host.docker.internal is the host. Nothing is
-// mounted: a sidecar sees neither the run's workspace nor its agent files.
+// for one; then it is on the egress tools' network, where it reaches public hosts through the
+// egress proxy and nothing on the host or a private network. Nothing is mounted: a sidecar sees
+// neither the run's workspace nor its agent files.
 type Sidecars struct {
 	docker *client.Client
+	egress *Egress
 	cfg    Config
 	log    *slog.Logger
 }
 
-// NewSidecars returns a sidecar manager on docker. Zero CPUs, MemoryBytes and PIDs in cfg take
-// the sidecar defaults (1 CPU, 2 GiB, 512 PIDs); RunDir is not used.
-func NewSidecars(docker *client.Client, cfg Config, log *slog.Logger) *Sidecars {
+// NewSidecars returns a sidecar manager on docker whose networked sidecars go out through
+// egress. Zero CPUs, MemoryBytes and PIDs in cfg take the sidecar defaults (1 CPU, 2 GiB, 512
+// PIDs); RunDir is not used.
+func NewSidecars(docker *client.Client, egress *Egress, cfg Config, log *slog.Logger) *Sidecars {
 	if cfg.CPUs <= 0 {
 		cfg.CPUs = sidecarCPUs
 	}
@@ -73,13 +76,19 @@ func NewSidecars(docker *client.Client, cfg Config, log *slog.Logger) *Sidecars 
 		cfg.PIDs = sidecarPIDs
 	}
 
-	return &Sidecars{docker: docker, cfg: cfg.withDefaults(), log: log}
+	return &Sidecars{docker: docker, egress: egress, cfg: cfg.withDefaults(), log: log}
 }
 
 // Start implements ports.Sidecars: it creates the container, attaches to its stdio and starts it.
 func (s *Sidecars) Start(ctx context.Context, spec ports.SidecarSpec) (ports.Sidecar, error) {
 	if err := validateSidecar(spec); err != nil {
 		return nil, fmt.Errorf("sidecar spec: %w", err)
+	}
+
+	if spec.Network {
+		if err := s.egress.Ensure(ctx); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := ensureImage(ctx, s.docker, s.log, spec.Image); err != nil {
@@ -96,7 +105,7 @@ func (s *Sidecars) Start(ctx context.Context, spec ports.SidecarSpec) (ports.Sid
 		imageUser = img.Config.User
 	}
 
-	cc, hc := sidecarContainerOf(s.cfg, spec, imageUser)
+	cc, hc := sidecarContainerOf(s.cfg, s.egress.tools(), spec, imageUser)
 
 	created, err := s.docker.ContainerCreate(ctx, client.ContainerCreateOptions{Config: cc, HostConfig: hc, Name: sidecarName(spec)})
 	if err != nil {
@@ -151,8 +160,8 @@ func validateSidecar(s ports.SidecarSpec) error {
 
 // sidecarContainerOf is one sidecar's container: the image's entrypoint with the spec's command,
 // stdin open for the gateway, the spec's environment with HOME on the tmpfs, and no network
-// unless the spec asks for it.
-func sidecarContainerOf(cfg Config, s ports.SidecarSpec, imageUser string) (*container.Config, *container.HostConfig) {
+// unless the spec asks for it; then the tools' network and its proxy variables (tools).
+func sidecarContainerOf(cfg Config, tools route, s ports.SidecarSpec, imageUser string) (*container.Config, *container.HostConfig) {
 	env := maps.Clone(s.Env)
 	if env == nil {
 		env = map[string]string{}
@@ -160,6 +169,10 @@ func sidecarContainerOf(cfg Config, s ports.SidecarSpec, imageUser string) (*con
 
 	if _, ok := env[envHome]; !ok {
 		env[envHome] = sidecarHome
+	}
+
+	if s.Network {
+		maps.Copy(env, tools.env)
 	}
 
 	vars := make([]string, 0, len(env))
@@ -185,7 +198,7 @@ func sidecarContainerOf(cfg Config, s ports.SidecarSpec, imageUser string) (*con
 
 	hc := isolated(cfg)
 	if s.Network {
-		hc.ExtraHosts = []string{hostAlias + ":host-gateway"}
+		hc.NetworkMode = container.NetworkMode(tools.network)
 	} else {
 		hc.NetworkMode = "none"
 	}

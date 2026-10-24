@@ -922,7 +922,7 @@ Organizations connect their factories to outside systems through a **connector c
 - UI: Connector catalog, factory Connections page (read-only, operational), the connector part of Credentials and New credential, Approval, the full Connections section of the wizard and the Definition editor (Visual and YAML problems), the Connections card of the Agent page.
 
 **Out** (later or other phases)
-- ECS sidecars (an ECS `Sidecars` adapter), egress filtering for sidecars, kubectl and other CLIs beyond `aws` and `az`.
+- ECS sidecars (an ECS `Sidecars` adapter), per-connection egress allowlists for sidecars, kubectl and other CLIs beyond `aws` and `az`. Egress filtering itself is in place since [ADR 0009](../adr/0009-agent-network-isolation.md): a sidecar with `network: true` (and an exec sidecar of `spec.cli`, which the Docker adapter starts the same way) runs on the egress tools' network and reaches only public hosts, through the egress proxy, never the host, a private network or a metadata service. A connection's own host list (from its connector's `spec.image` or `spec.cli`) becomes one more policy of that proxy.
 - Gateway multi-instance routing (the `g` owner-instance claim, `GOAL_PEER_URL`, forwarding; old 4.2-16): Goal runs one goald until the AWS deployment, no board needs it, and architecture.md already documents that sidecar and held-approval traffic must reach the instance that owns the run. It comes with the AWS deployment (review).
 - The `knowledge` builtin connection (later, with the knowledge base); it keeps being reported unavailable and shows as "Not served yet" in the UI.
 - Editing a held call's arguments, auto-approve rules, approval delegation, push notifications for approvals.

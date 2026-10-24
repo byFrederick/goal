@@ -20,7 +20,7 @@ func newTestChecker(t *testing.T) (*Checker, *client.Client) {
 
 	r, docker := newTestRunner(t) // builds the stub image, skips without Docker
 
-	return NewChecker(docker, Config{RunDir: r.cfg.RunDir, StopGrace: time.Second}, slog.New(slog.DiscardHandler)), docker
+	return NewChecker(docker, r.egress, Config{RunDir: r.cfg.RunDir, StopGrace: time.Second}, slog.New(slog.DiscardHandler)), docker
 }
 
 func checkSpec(t *testing.T, command string, timeout time.Duration) ports.CheckSpec {

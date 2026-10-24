@@ -106,11 +106,18 @@ function isGatewayRule(rule: string): boolean {
   return name.includes('__') && !name.startsWith('mcp__');
 }
 
+/**
+ * The agent's environment: the container's, without hiddenEnv, with Claude Code's config in the
+ * throwaway home and its nonessential traffic (telemetry, error reports, the updater) off. The
+ * container reaches the outside only through goald's egress proxy (HTTPS_PROXY), which lets an
+ * agent reach the model API and the gateway and refuses everything else.
+ */
 export function agentEnv(env: NodeJS.ProcessEnv): Record<string, string | undefined> {
   const out: Record<string, string | undefined> = {
     ...env,
     CLAUDE_AGENT_SDK_CLIENT_APP: 'goal-worker/0.1.0',
     CLAUDE_CONFIG_DIR: paths.claudeConfig,
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
   };
   for (const name of hiddenEnv) delete out[name];
   return out;

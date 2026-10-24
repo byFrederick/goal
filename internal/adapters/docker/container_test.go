@@ -11,7 +11,6 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 
-	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
 )
 
@@ -45,12 +44,14 @@ func TestContainerOf_IsHardened(t *testing.T) {
 		Env: map[string]string{"CLAUDE_CODE_OAUTH_TOKEN": "oauth-token-123", "ANTHROPIC_API_KEY": "sk-ant-not-passed"}, //nolint:gosec // fake values
 	}
 
-	got := hardeningOf(containerOf(Config{}.withDefaults(), spec, "/runs/r1"))
+	cc, hc := containerOf(Config{}.withDefaults(), unitEgress(t).agents(), spec, "/runs/r1")
+	got := hardeningOf(cc, hc)
 	want := hardening{
 		User: "1000:1000", CapDrop: "[ALL]", SecurityOpt: "[no-new-privileges:true]",
-		Mounts:     "[bind /runs/r1:/goal:ro=true bind /work/r1:/workspace:ro=false volume :/home/node:ro=false]",
-		Labels:     "map[goal.agent:engineer goal.factory:f1 goal.item:i1 goal.org:o1 goal.run:r1 goal.station:build]",
-		Env:        "[CLAUDE_CODE_OAUTH_TOKEN=oauth-token-123 CLAUDE_CONFIG_DIR=/home/node/.claude GOAL_GATEWAY_TOKEN=gateway-token-123 HOME=/home/node]",
+		Mounts: "[bind /runs/r1:/goal:ro=true bind /work/r1:/workspace:ro=false volume :/home/node:ro=false]",
+		Labels: "map[goal.agent:engineer goal.factory:f1 goal.item:i1 goal.org:o1 goal.run:r1 goal.station:build]",
+		Env: "[CLAUDE_CODE_OAUTH_TOKEN=oauth-token-123 CLAUDE_CONFIG_DIR=/home/node/.claude GOAL_GATEWAY_TOKEN=gateway-token-123 HOME=/home/node " +
+			proxyVars + "]",
 		Tmpfs:      "map[/tmp:rw,nosuid,nodev,size=1g,mode=1777]",
 		Privileged: false, ReadOnlyRoot: true, Init: true,
 		CPUs: 2e9, Memory: 4 << 30, Swap: 4 << 30, PIDs: 1024,
@@ -58,6 +59,23 @@ func TestContainerOf_IsHardened(t *testing.T) {
 
 	if got != want {
 		t.Errorf("container hardening:\n got %+v\nwant %+v", got, want)
+	}
+
+	// The agents' network reaches nothing but the egress proxy; no name leads to the host.
+	if hc.NetworkMode != "goal-egress-agents" || len(hc.ExtraHosts) != 0 {
+		t.Errorf("network %q, extra hosts %v; want the agents' network and no host alias", hc.NetworkMode, hc.ExtraHosts)
+	}
+}
+
+// A task's environment cannot point its HTTP clients past the egress proxy.
+func TestTaskEnv_TheProxyVariablesWin(t *testing.T) {
+	t.Parallel()
+
+	spec := ports.TaskSpec{Env: map[string]string{"HTTPS_PROXY": "http://attacker.example.com:3128", "NO_PROXY": "*"}}
+
+	env := taskEnv(spec, unitEgress(t).agents())
+	if !slices.Contains(env, "HTTPS_PROXY=http://goal-egress:3128") || !slices.Contains(env, "NO_PROXY=goal-egress") {
+		t.Errorf("env %v: want the egress proxy's variables", env)
 	}
 }
 
@@ -72,7 +90,7 @@ func TestContainerOf_KeepsHostClaudeConfigOut(t *testing.T) {
 		Env: map[string]string{"CLAUDE_CONFIG_DIR": "/Users/acme/.claude", "CLAUDE_CODE_OAUTH_TOKEN": "oauth-token-123"}, //nolint:gosec // fake values
 	}
 
-	cc, hc := containerOf(Config{}.withDefaults(), spec, "/runs/r1")
+	cc, hc := containerOf(Config{}.withDefaults(), unitEgress(t).agents(), spec, "/runs/r1")
 
 	for _, m := range hc.Mounts {
 		if m.Type == mount.TypeBind && m.Target != containerGoal && m.Target != containerWorkspace {
@@ -89,47 +107,13 @@ func TestContainerOf_KeepsHostClaudeConfigOut(t *testing.T) {
 	}
 }
 
-func TestWorkerSpecOf_KeepsSecretsOutAndRewritesLoopbackGateway(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]string{
-		"http://127.0.0.1:8081/mcp":  "http://host.docker.internal:8081/mcp",
-		"http://localhost/mcp":       "http://host.docker.internal/mcp",
-		"http://[::1]:9/mcp":         "http://host.docker.internal:9/mcp",
-		"http://172.17.0.1:8090/mcp": "http://172.17.0.1:8090/mcp", // a gateway listener on the Linux bridge
-		"https://gw.example.com/mcp": "https://gw.example.com/mcp",
-		"":                           "",
-	}
-
-	for in, want := range tests {
-		s, err := workerSpecOf(ports.TaskSpec{
-			GatewayURL: in, GatewayToken: "gateway-token-123", Env: map[string]string{"X": "secret-value-123"},
-			Skills: []domain.SkillRef{{Name: "acme-conventions", Source: "./skills/acme-conventions"}},
-		})
-		if err != nil {
-			t.Fatalf("workerSpecOf(%q): %v", in, err)
-		}
-
-		if s.GatewayURL != want || !slices.Equal(s.Skills, []string{"acme-conventions"}) {
-			t.Errorf("workerSpecOf(%q) = gateway %q skills %v; want %q", in, s.GatewayURL, s.Skills, want)
-		}
-	}
-
-	if _, err := workerSpecOf(ports.TaskSpec{GatewayURL: "unix:///tmp/gw.sock"}); err == nil {
-		t.Error("a non-HTTP gateway URL must be rejected")
-	}
-}
-
 // spec.json carries the factory's purpose for the worker's system prompt, and leaves it out
 // when the factory has none.
 func TestWorkerSpecOf_CarriesThePurpose(t *testing.T) {
 	t.Parallel()
 
 	for _, purpose := range []string{"Answers acme's support questions.", ""} {
-		s, err := workerSpecOf(ports.TaskSpec{Purpose: purpose})
-		if err != nil {
-			t.Fatal(err)
-		}
+		s := workerSpecOf(ports.TaskSpec{Purpose: purpose}, "")
 
 		b, err := json.Marshal(s)
 		if err != nil {

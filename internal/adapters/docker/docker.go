@@ -10,9 +10,13 @@
 // its result as JSON lines on stdout (protocol.go). worker/README.md describes the whole
 // contract from the container's side.
 //
-// Networking: the container runs on the default bridge network. A gateway URL on the host's
-// loopback address is rewritten to host.docker.internal, which Docker Desktop and OrbStack
-// resolve to the host; on Linux the host-gateway extra host provides the same name.
+// Networking (egress.go, ADR 0009): agent containers run on an internal network (<egress>-agents),
+// and sidecars with network access and command checks on another (<egress>-tools); neither has a
+// route to the host, to other networks or to the internet. The one other container on them is
+// the egress proxy (cmd/goal-egress), which every container's HTTP_PROXY and HTTPS_PROXY name: it
+// lets agents reach the model API and, at the gateway's path only, goald's MCP gateway (the
+// gateway URL an agent is given is the proxy's), and lets tools reach public hosts. Nothing
+// reaches a loopback, private or link-local address through it.
 package docker
 
 import (
@@ -93,26 +97,37 @@ func (c Config) withDefaults() Config {
 type Runner struct {
 	docker *client.Client
 	files  AgentFiles
+	egress *Egress
 	cfg    Config
 	log    *slog.Logger
 }
 
-// New returns a runner that talks to docker and stages agent files with files.
-func New(docker *client.Client, files AgentFiles, cfg Config, log *slog.Logger) *Runner {
-	return &Runner{docker: docker, files: files, cfg: cfg.withDefaults(), log: log}
+// New returns a runner that talks to docker, stages agent files with files and runs tasks on
+// egress's agents' network.
+func New(docker *client.Client, files AgentFiles, egress *Egress, cfg Config, log *slog.Logger) *Runner {
+	return &Runner{docker: docker, files: files, egress: egress, cfg: cfg.withDefaults(), log: log}
 }
 
 // cleanupTimeout bounds removing a container and its files once the task's context is gone.
 const cleanupTimeout = 30 * time.Second
 
-// Start implements ports.Runner. It pulls the image when it is missing, then creates, attaches
-// to and starts the task's container.
+// Start implements ports.Runner. It makes sure the egress proxy runs, pulls the image when it is
+// missing, then creates, attaches to and starts the task's container.
 func (r *Runner) Start(ctx context.Context, t ports.TaskSpec) (ports.Task, error) {
 	if err := validate(t); err != nil {
 		return nil, fmt.Errorf("task spec: %w", err)
 	}
 
-	runDir, err := r.prepare(ctx, t)
+	gateway, err := r.egress.gatewayFor(t.GatewayURL)
+	if err != nil {
+		return nil, fmt.Errorf("task spec: %w", err)
+	}
+
+	if err := r.egress.Ensure(ctx); err != nil {
+		return nil, err
+	}
+
+	runDir, err := r.prepare(ctx, t, gateway)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +146,7 @@ func (r *Runner) start(ctx context.Context, t ports.TaskSpec, runDir string) (*t
 		return nil, err
 	}
 
-	cc, hc := containerOf(r.cfg, t, runDir)
+	cc, hc := containerOf(r.cfg, r.egress.agents(), t, runDir)
 
 	created, err := r.docker.ContainerCreate(ctx, client.ContainerCreateOptions{Config: cc, HostConfig: hc, Name: containerName(t.RunID)})
 	if err != nil {
@@ -162,14 +177,9 @@ func (r *Runner) start(ctx context.Context, t ports.TaskSpec, runDir string) (*t
 	return tk, nil
 }
 
-// prepare creates the run's folder with spec.json and the agent's files.
-func (r *Runner) prepare(ctx context.Context, t ports.TaskSpec) (string, error) {
-	spec, err := workerSpecOf(t)
-	if err != nil {
-		return "", fmt.Errorf("task spec: %w", err)
-	}
-
-	body, err := json.Marshal(spec)
+// prepare creates the run's folder with spec.json, naming gateway, and the agent's files.
+func (r *Runner) prepare(ctx context.Context, t ports.TaskSpec, gateway string) (string, error) {
+	body, err := json.Marshal(workerSpecOf(t, gateway))
 	if err != nil {
 		return "", fmt.Errorf("encode worker spec: %w", err)
 	}

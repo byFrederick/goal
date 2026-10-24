@@ -53,8 +53,9 @@ const (
 	envAPIKey = "ANTHROPIC_API_KEY" //nolint:gosec // a variable name, not a credential
 )
 
-// hostAlias is how a container reaches the host; Docker Desktop and OrbStack resolve it, and
-// the host-gateway extra host makes it resolve on Linux too.
+// hostAlias is how the egress proxy reaches goald on the host; Docker Desktop and OrbStack
+// resolve it, and the host-gateway extra host makes it resolve on Linux too. No other container
+// is given it.
 const hostAlias = "host.docker.internal"
 
 // safeID matches run ids usable as a container name and a directory name.
@@ -81,12 +82,9 @@ type workerSpec struct {
 	MaxUSD     float64                    `json:"max_usd,omitempty"`
 }
 
-func workerSpecOf(t ports.TaskSpec) (workerSpec, error) {
-	gateway, err := containerURL(t.GatewayURL)
-	if err != nil {
-		return workerSpec{}, fmt.Errorf("gateway url: %w", err)
-	}
-
+// workerSpecOf is t as the worker reads it, with gateway, the gateway's URL as the container
+// reaches it (Egress.gatewayFor).
+func workerSpecOf(t ports.TaskSpec, gateway string) workerSpec {
 	s := workerSpec{
 		FactoryID: t.FactoryID, ItemID: t.ItemID, RunID: t.RunID, Station: t.Station, Agent: t.Agent, Model: t.Model,
 		Skills: make([]string, 0, len(t.Skills)), ToolsAllow: nonNil(t.ToolsAllow), ToolsDeny: nonNil(t.ToolsDeny),
@@ -97,7 +95,7 @@ func workerSpecOf(t ports.TaskSpec) (workerSpec, error) {
 		s.Skills = append(s.Skills, sk.Name)
 	}
 
-	return s, nil
+	return s
 }
 
 func nonNil(s []string) []string {
@@ -108,7 +106,7 @@ func nonNil(s []string) []string {
 	return s
 }
 
-// containerURL rewrites a loopback URL (goald's own address on the host) to one a container
+// containerURL rewrites a loopback URL (goald's own address on the host) to one the egress proxy
 // can reach.
 func containerURL(raw string) (string, error) {
 	if raw == "" {
@@ -138,14 +136,16 @@ func containerURL(raw string) (string, error) {
 
 // taskEnv is the container's whole environment: the spec's Env (which carries
 // CLAUDE_CODE_OAUTH_TOKEN), the gateway token, HOME and CLAUDE_CONFIG_DIR (always the
-// container's, so no host config reaches the agent). ANTHROPIC_API_KEY is always removed.
-func taskEnv(t ports.TaskSpec) []string {
+// container's, so no host config reaches the agent) and the egress proxy's variables of r.
+// ANTHROPIC_API_KEY is always removed.
+func taskEnv(t ports.TaskSpec, r route) []string {
 	env := maps.Clone(t.Env)
 	if env == nil {
 		env = map[string]string{}
 	}
 
 	delete(env, envAPIKey)
+	maps.Copy(env, r.env)
 
 	env[envHome] = containerHome
 	env[envClaudeConfig] = containerClaudeConfig
@@ -185,13 +185,14 @@ func containerName(run domain.RunID) string { return "goal-run-" + string(run) }
 
 // containerOf is the hardened container for one task: non-root, read-only root filesystem with
 // a tmpfs /tmp and a throwaway home volume, every capability dropped, no privilege escalation,
-// CPU, memory and PID limits. The run directory is mounted read-only at /goal and the workspace
-// read-write at /workspace.
-func containerOf(cfg Config, t ports.TaskSpec, runDir string) (*container.Config, *container.HostConfig) {
+// CPU, memory and PID limits, on the agents' network (r), where nothing but the egress proxy is
+// reachable. The run directory is mounted read-only at /goal and the workspace read-write at
+// /workspace.
+func containerOf(cfg Config, r route, t ports.TaskSpec, runDir string) (*container.Config, *container.HostConfig) {
 	cc := &container.Config{
 		Image:      t.Image,
 		User:       containerUser,
-		Env:        taskEnv(t),
+		Env:        taskEnv(t, r),
 		WorkingDir: containerWorkspace,
 		Labels: map[string]string{
 			LabelOrg: string(t.OrgID), LabelFactory: string(t.FactoryID), LabelItem: string(t.ItemID), LabelRun: string(t.RunID),
@@ -203,7 +204,7 @@ func containerOf(cfg Config, t ports.TaskSpec, runDir string) (*container.Config
 		mount.Mount{Type: mount.TypeBind, Source: runDir, Target: containerGoal, ReadOnly: true},
 		mount.Mount{Type: mount.TypeBind, Source: t.WorkspaceDir, Target: containerWorkspace},
 	)
-	hc.ExtraHosts = []string{hostAlias + ":host-gateway"}
+	hc.NetworkMode = container.NetworkMode(r.network)
 
 	return cc, hc
 }
