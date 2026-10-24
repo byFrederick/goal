@@ -96,6 +96,12 @@ func (f *Feed) broadcastDefinition(n ports.DefinitionNotice) {
 		return
 	}
 
+	// An organization's deletion is for goald's cache, not a definition event; its clients'
+	// requests answer 404 from now on.
+	if n.Kind == ports.NoticeOrg {
+		return
+	}
+
 	data, err := json.Marshal(definitionEventOf(n))
 	if err != nil {
 		f.log.Error("encode definition event", slog.Any("error", err))

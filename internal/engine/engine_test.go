@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/byFrederick/goal/internal/domain"
@@ -693,6 +694,68 @@ func TestSetLines_LoadsAndUnloadsFactories(t *testing.T) {
 	if _, err := h.e.Submit(inOrg(t), domain.NewItem{FactoryID: factoryID, Title: "x", Type: typeFeature}); err == nil {
 		t.Error("submit to an unloaded factory succeeded")
 	}
+}
+
+// A factory that is no longer loaded (its organization was deleted) stops at once: the runs this
+// instance has there are cancelled and their items released to their queue, so no lease is left
+// behind for a sweep that no longer visits the organization.
+func TestSetLines_UnloadingAFactoryReleasesItsRuns(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		release := make(chan struct{})
+		h := newHarness(t, lineOf(agentStation(stWork, agWorker, 1, 1)), porttest.Block(release, `{}`))
+		it := h.submit(t, domain.NewItem{})
+
+		other := lineOf(agentStation(stWork, agWorker, 1, 1))
+		other.FactoryID = "5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a01"
+
+		if err := h.e.SetLines([]domain.Line{h.line, other}); err != nil {
+			t.Fatal(err)
+		}
+
+		theirs, err := h.e.Submit(inOrg(t), domain.NewItem{FactoryID: other.FactoryID, Title: anItem, Type: typeFeature})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for range 2 { // release from the inbox, then claim at work
+			if err := h.e.Tick(inOrg(t)); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		synctest.Wait()
+
+		if n := len(h.runner.Started()); n != 2 {
+			t.Fatalf("%d runs started, want one per factory", n)
+		}
+
+		if err := h.e.SetLines([]domain.Line{other}); err != nil {
+			t.Fatal(err)
+		}
+
+		synctest.Wait() // the unloaded factory's run has ended
+
+		if got := h.item(t, it.ID); got.Position() != (domain.Position{Station: stWork, State: domain.StateQueued}) {
+			t.Errorf("item of the unloaded factory at %+v (events %v), want released to work's queue", got.Position(), h.kinds(it.ID))
+		}
+
+		if _, held := h.store.Lease(it.ID); held {
+			t.Error("the unloaded factory's item still holds a lease")
+		}
+
+		if evs := h.eventsOf(it.ID, domain.EventReleased); len(evs) != 1 || evs[0].Data["reason"] != "unloaded" {
+			t.Errorf("released events %+v, want one with reason unloaded", evs)
+		}
+
+		if got := h.item(t, theirs.ID); got.State != domain.StateInProgress {
+			t.Errorf("item of the loaded factory is %s, want its run going on", got.State)
+		}
+
+		close(release)
+		h.wait(t, h.e)
+	})
 }
 
 // A paused line takes no work: nothing is released from its queue or claimed, and it picks up

@@ -130,6 +130,17 @@ func (q *Queries) InsertOrg(ctx context.Context, arg InsertOrgParams) (Organizat
 	return i, err
 }
 
+const notifyOrgDeleted = `-- name: NotifyOrgDeleted :exec
+SELECT pg_notify('goal_definitions', json_build_object('org_id', goal_org(), 'kind', 'org')::text)
+`
+
+// Tells every goald, on goal_definitions, that the transaction's organization was deleted (kind
+// org): its lines stop at once.
+func (q *Queries) NotifyOrgDeleted(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, notifyOrgDeleted)
+	return err
+}
+
 const orgByRef = `-- name: OrgByRef :one
 SELECT id, slug, name, mark, max_slots, created_at FROM goal_org_by_ref($1::text)
 `

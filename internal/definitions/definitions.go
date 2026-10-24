@@ -105,6 +105,7 @@ type Cache struct {
 	mu      sync.RWMutex
 	current map[domain.FactoryID]current
 	byID    map[domain.DefinitionVersionID]*version // the current versions, by id
+	live    map[domain.OrgID]bool                   // the organizations the last reload found live
 
 	pinned *lru // versions no longer current
 }
@@ -122,7 +123,7 @@ func New(store ports.DefinitionStore, orgs Orgs, onLoad LoadFunc, cfg Config, lo
 
 	return &Cache{
 		store: store, orgs: orgs, onLoad: onLoad, log: log,
-		current: map[domain.FactoryID]current{}, byID: map[domain.DefinitionVersionID]*version{},
+		current: map[domain.FactoryID]current{}, byID: map[domain.DefinitionVersionID]*version{}, live: map[domain.OrgID]bool{},
 		pinned: newLRU(cfg.CacheBytes),
 	}
 }
@@ -184,7 +185,7 @@ func (c *Cache) reloadOrgs(ctx context.Context, only []domain.OrgID) ([]domain.L
 	}
 
 	c.mu.Lock()
-	c.current, c.byID = next, byID
+	c.current, c.byID, c.live = next, byID, live
 	c.mu.Unlock()
 
 	// A version that stopped being current may still have runs on it.
@@ -304,7 +305,8 @@ func (c *Cache) load(ctx context.Context, id domain.DefinitionVersionID, reuse *
 }
 
 // version returns a published version of the organization in ctx: a current one, one kept for
-// runs, or else one read from the store.
+// runs, or else one read from the store. An organization the last reload did not find live
+// (deleted, or unknown) has none.
 func (c *Cache) version(ctx context.Context, id domain.DefinitionVersionID) (*version, error) {
 	org, ok := domain.OrgFrom(ctx)
 	if !ok {
@@ -317,7 +319,12 @@ func (c *Cache) version(ctx context.Context, id domain.DefinitionVersionID) (*ve
 
 	c.mu.RLock()
 	v, ok := c.byID[id]
+	live := c.live[org]
 	c.mu.RUnlock()
+
+	if !live {
+		return nil, fmt.Errorf("definition version %s: organization %s is not live: %w", id, org, ports.ErrNotFound)
+	}
 
 	if !ok {
 		v, ok = c.pinned.get(id)

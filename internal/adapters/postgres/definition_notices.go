@@ -38,7 +38,8 @@ func (n *DefinitionNotices) Listen(ctx context.Context, deliver func(ports.Defin
 	return n.l.Listen(ctx, deliver)
 }
 
-// definitionPayload is what notify_factory_definition() and notify_definition_version() send.
+// definitionPayload is what notify_factory_definition() and notify_definition_version() send, and
+// DeleteOrg (kind org, no factory).
 type definitionPayload struct {
 	OrgID     string  `json:"org_id"`
 	FactoryID string  `json:"factory_id"`
@@ -55,7 +56,8 @@ func definitionNoticeFrom(_, raw string) (ports.DefinitionNotice, error) {
 		return ports.DefinitionNotice{}, fmt.Errorf("decode %q: %w", raw, err)
 	}
 
-	if p.OrgID == "" || p.FactoryID == "" || p.Kind == "" {
+	// Only an organization's deletion (DeleteOrg) names no factory.
+	if p.OrgID == "" || p.Kind == "" || (p.FactoryID == "" && p.Kind != ports.NoticeOrg) {
 		return ports.DefinitionNotice{}, errors.New("notification without an organization, factory or kind")
 	}
 

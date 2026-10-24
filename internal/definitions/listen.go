@@ -12,9 +12,9 @@ import (
 )
 
 // Listen keeps the cache current until ctx ends: on every notice that a factory's current
-// version moved, that it was paused or resumed, created or deleted, it reloads that factory's
-// organization, and on a resync (the first notice, and after a lost connection) every
-// organization. Draft notices change nothing that runs. Notices that arrive while a reload
+// version moved, that it was paused or resumed, created or deleted, or that an organization was
+// deleted (whose lines it then drops), it reloads that organization, and on a resync (the first
+// notice, and after a lost connection) every organization. Draft notices change nothing that runs. Notices that arrive while a reload
 // runs are folded into the next one. It returns what notices.Listen returns.
 func (c *Cache) Listen(ctx context.Context, notices ports.DefinitionNotices) error {
 	ctx, cancel := context.WithCancel(ctx)
@@ -75,7 +75,7 @@ func (w *wanted) add(n ports.DefinitionNotice) {
 	switch {
 	case n.Resync:
 		w.all = true
-	case n.Kind == ports.NoticeCurrent || n.Kind == ports.NoticeFactory:
+	case n.Kind == ports.NoticeCurrent || n.Kind == ports.NoticeFactory || n.Kind == ports.NoticeOrg:
 		w.orgs[n.OrgID] = true
 	default:
 		w.mu.Unlock()

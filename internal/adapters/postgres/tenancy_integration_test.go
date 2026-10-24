@@ -67,6 +67,54 @@ func TestPurgeOrg_SkipsAnOrgAnotherPurgeHolds(t *testing.T) {
 	}
 }
 
+// Deleting an organization tells every goald at once, on goal_definitions (kind org), so its
+// lines stop before the next refresh.
+func TestDeleteOrg_NotifiesTheDefinitionListeners(t *testing.T) {
+	t.Parallel()
+
+	pool := newTestPool(t)
+	s := New(pool)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	got := make(chan ports.DefinitionNotice, 64)
+	done := make(chan error, 1)
+
+	go func() {
+		done <- NewDefinitionNotices(pool.Config().ConnConfig, nil).Listen(ctx, func(n ports.DefinitionNotice) { got <- n })
+	}()
+
+	t.Cleanup(func() {
+		cancel()
+
+		if err := <-done; err != nil {
+			t.Error(err)
+		}
+	})
+
+	if n := <-got; !n.Resync {
+		t.Fatalf("first notice = %+v, want the resync", n)
+	}
+
+	org := deletedOrg(t, s, "doomed", time.Now())
+
+	for {
+		select {
+		case n := <-got:
+			if n.Kind != ports.NoticeOrg {
+				continue
+			}
+
+			if n.OrgID != org || n.FactoryID != "" {
+				t.Errorf("org notice = %+v, want organization %s and no factory", n, org)
+			}
+
+			return
+		case <-time.After(10 * time.Second):
+			t.Fatal("no org notice after the delete")
+		}
+	}
+}
+
 // deletedOrg creates an organization and deletes it at the given time.
 func deletedOrg(t *testing.T, s *Store, slug string, at time.Time) domain.OrgID {
 	t.Helper()

@@ -235,6 +235,11 @@ func (s *Store) DeleteOrg(ctx context.Context, by domain.Actor, now time.Time) e
 			return err
 		}
 
+		// Delivered at commit: every goald drops the organization's lines at once.
+		if err := q.NotifyOrgDeleted(ctx); err != nil {
+			return err
+		}
+
 		o := orgFrom(row)
 
 		return appendAudit(ctx, q, orgEntry(by, domain.AuditOrgDeleted, o, map[string]any{"slug": o.Slug, "name": o.Name}))

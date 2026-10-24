@@ -352,6 +352,63 @@ func TestRefresh_DropsTheFactoriesOfADeletedOrg(t *testing.T) {
 	}
 }
 
+// The notice of an organization's deletion drops its lines at once, without waiting for a
+// refresh, and from then on none of its versions is served, not even one a run pinned.
+func TestListen_ADeletedOrgStopsAtOnce(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	v1 := h.publish(t, other, withID(acme(acmeName, noteContract), otherID))
+	v2 := h.publish(t, other, withID(acme(acmeName, bodyContract), otherID))
+	mine := h.publish(t, org, acme(acmeName, noteContract))
+
+	rec := newLoads()
+	c := New(h.store, h.orgs, rec.record, Config{}, nil)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+
+	go func() { done <- c.Listen(ctx, h.notices) }()
+
+	t.Cleanup(func() {
+		cancel()
+
+		if err := <-done; err != nil {
+			t.Error(err)
+		}
+	})
+
+	rec.await(t, "on the first resync", func(l []domain.Line) bool { return versionsOf(l)[otherID] == v2.ID })
+
+	if f, err := c.Version(ctxOf(t, other), v1.ID); err != nil || f == nil { // a run pinned v1
+		t.Fatalf("Version(v1) = %v, %v; want it served while the organization lives", f, err)
+	}
+
+	if err := h.orgs.DeleteOrg(ctxOf(t, other), domain.LocalUser, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	h.notices.Publish(ports.DefinitionNotice{OrgID: other, Kind: ports.NoticeOrg})
+	rec.await(t, "on the organization's deletion", func(l []domain.Line) bool {
+		v := versionsOf(l)
+		return v[otherID] == "" && v[acmeID] == mine.ID
+	})
+
+	for _, id := range []domain.DefinitionVersionID{v1.ID, v2.ID} {
+		if _, err := c.Version(ctxOf(t, other), id); !errors.Is(err, ports.ErrNotFound) {
+			t.Errorf("Version(%s) of the deleted organization = %v, want ErrNotFound", id, err)
+		}
+	}
+
+	if _, err := c.Lookup(ctxOf(t, other), acmeName); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("Lookup in the deleted organization = %v, want ErrNotFound", err)
+	}
+
+	if f, err := c.Version(ctxOf(t, org), mine.ID); err != nil || f == nil {
+		t.Errorf("Version of a live organization = %v, %v; want it served", f, err)
+	}
+}
+
 // withID is files with another metadata.id.
 func withID(files map[string]string, id domain.FactoryID) map[string]string {
 	out := maps.Clone(files)

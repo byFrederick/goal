@@ -44,6 +44,8 @@ func TestFeed_HandsEachClientItsOrgsNotices(t *testing.T) {
 		notices.Publish(ports.ItemNotice{OrgID: acme, EventID: int64(i + 1)})
 	}
 
+	// The deletion of an organization is no definition event of the contract: it is not streamed.
+	definitions.Publish(ports.DefinitionNotice{OrgID: labs, Kind: ports.NoticeOrg})
 	notices.Publish(ports.ItemNotice{OrgID: labs, EventID: 900})
 	notices.Publish(ports.ItemNotice{Resync: true})
 

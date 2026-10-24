@@ -259,7 +259,8 @@ type Tenancy interface {
 	// FactorySlots returns every factory of the organization with its slot cap (0: none). (org)
 	FactorySlots(ctx context.Context) (map[domain.FactoryID]int, error)
 	// DeleteOrg soft-deletes the organization: from now on Org, Orgs and ActiveOrgs no longer
-	// see it. It appends org.deleted. (org)
+	// see it. It appends org.deleted and, at commit, a DefinitionNotices notice of kind NoticeOrg, so
+	// every goald drops its lines at once (the postgres adapter; the fake leaves that to tests). (org)
 	DeleteOrg(ctx context.Context, by domain.Actor, now time.Time) error
 	// DeletedOrgs returns up to limit organizations deleted before cutoff, oldest deletion
 	// first. It needs no org (a system job).

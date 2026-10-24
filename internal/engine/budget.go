@@ -159,12 +159,18 @@ func (e *Engine) cancelRuns(factory domain.FactoryID, cause error) {
 	}
 }
 
+// errUnloaded is the cause of a run cancelled because its factory is no longer loaded.
+var errUnloaded = errors.New("the factory is no longer loaded")
+
 // releaseEvent is the event of an item returned to its queue because its run's context ended:
-// agent_cancelled with reason budget when the weekly budget stopped it, else released at
-// shutdown.
+// agent_cancelled with reason budget when the weekly budget stopped it, released with reason
+// unloaded when its factory was unloaded, else released at shutdown.
 func releaseEvent(it domain.Item, cause error, at time.Time) domain.Event {
-	if errors.Is(cause, errBudgetStop) {
+	switch {
+	case errors.Is(cause, errBudgetStop):
 		return event(it, domain.EventAgentCancelled, at, domain.ActorEngine, map[string]any{keyReason: reasonBudget})
+	case errors.Is(cause, errUnloaded):
+		return event(it, domain.EventReleased, at, domain.ActorEngine, map[string]any{keyReason: "unloaded"})
 	}
 
 	return event(it, domain.EventReleased, at, domain.ActorEngine, map[string]any{keyReason: "shutdown"})

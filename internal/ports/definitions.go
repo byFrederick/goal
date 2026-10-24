@@ -286,6 +286,9 @@ const (
 	// NoticeDraft: a version row changed: a draft opened, saved, discarded or published.
 	// VersionID, Number (once published), Revision and By are that version's.
 	NoticeDraft = "draft"
+	// NoticeOrg: the organization was deleted (soft delete); FactoryID is empty. Its factories
+	// stop at once: every goald drops their lines.
+	NoticeOrg = "org"
 )
 
 // DefinitionNotice is one committed definition change. A Resync notice carries nothing else:

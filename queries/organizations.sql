@@ -37,3 +37,8 @@ WHERE id = goal_org() RETURNING *;
 
 -- name: SoftDeleteOrg :exec
 UPDATE organizations SET deleted_at = $1, updated_at = now() WHERE id = goal_org();
+
+-- name: NotifyOrgDeleted :exec
+-- Tells every goald, on goal_definitions, that the transaction's organization was deleted (kind
+-- org): its lines stop at once.
+SELECT pg_notify('goal_definitions', json_build_object('org_id', goal_org(), 'kind', 'org')::text);

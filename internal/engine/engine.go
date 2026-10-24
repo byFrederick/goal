@@ -213,8 +213,10 @@ func New(d Deps, cfg Config) (*Engine, error) {
 
 // SetLines replaces the lines the engine runs, for example after a definition version was
 // published. Runs already started keep the line (and version) they started with; the next move
-// of their item follows the new line, matched by station id. Items of a factory that is no
-// longer loaded stay where they are until it is loaded again.
+// of their item follows the new line, matched by station id. A factory that is no longer loaded
+// (its organization was deleted) stops at once: the runs this instance has there are cancelled
+// and their items released to their queue, so no lease outlives it; its other items stay where
+// they are.
 func (e *Engine) SetLines(ls []domain.Line) error {
 	lines, err := index(ls)
 	if err != nil {
@@ -224,6 +226,15 @@ func (e *Engine) SetLines(ls []domain.Line) error {
 	e.mu.Lock()
 	e.lines = lines
 	e.mu.Unlock()
+
+	e.activeMu.Lock()
+	defer e.activeMu.Unlock()
+
+	for _, r := range e.active {
+		if _, loaded := lines[r.factory]; !loaded {
+			r.cancel(errUnloaded)
+		}
+	}
 
 	return nil
 }
