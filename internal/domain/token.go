@@ -11,13 +11,19 @@ import (
 	"time"
 )
 
-// ErrBadTaskToken means a task token is malformed, forged or expired.
+// ErrBadTaskToken means a task token is malformed, forged, expired or not for the gateway.
 var ErrBadTaskToken = errors.New("bad task token")
+
+// TaskAudience is the one audience of a task token: the agents' MCP gateway. goald's API never
+// accepts a task token, and nothing else verifies one.
+const TaskAudience = "goal-gateway"
 
 // TaskClaims scope one agent task's access to the MCP gateway: which organization, factory,
 // definition version, item, station, agent and run it acts for, which connections it may use
 // and until when.
 type TaskClaims struct {
+	// Audience is always TaskAudience: SignTaskToken sets it and VerifyTaskToken requires it.
+	Audience  string    `json:"aud"`
 	OrgID     OrgID     `json:"o"`
 	FactoryID FactoryID `json:"f"`
 	// VersionID is the definition version the run started on: the gateway serves that
@@ -31,12 +37,14 @@ type TaskClaims struct {
 	ExpiresAt   int64               `json:"e"` // unix seconds
 }
 
-// SignTaskToken issues a per-task gateway token. Any goald instance holding key can verify it,
-// so no token state is stored.
+// SignTaskToken issues a per-task gateway token for TaskAudience, whatever c.Audience says. Any
+// goald instance holding key can verify it, so no token state is stored.
 func SignTaskToken(key []byte, c TaskClaims) (string, error) {
 	if len(key) == 0 {
 		return "", fmt.Errorf("%w: empty signing key", ErrBadTaskToken)
 	}
+
+	c.Audience = TaskAudience
 
 	payload, err := json.Marshal(c)
 	if err != nil {
@@ -48,7 +56,7 @@ func SignTaskToken(key []byte, c TaskClaims) (string, error) {
 	return enc.EncodeToString(payload) + "." + enc.EncodeToString(mac(key, payload)), nil
 }
 
-// VerifyTaskToken checks a token's signature and expiry and returns its claims.
+// VerifyTaskToken checks a token's signature, expiry and audience and returns its claims.
 func VerifyTaskToken(key []byte, token string, now time.Time) (TaskClaims, error) {
 	enc := base64.RawURLEncoding
 
@@ -74,6 +82,11 @@ func VerifyTaskToken(key []byte, token string, now time.Time) (TaskClaims, error
 
 	if now.Unix() >= c.ExpiresAt {
 		return TaskClaims{}, fmt.Errorf("%w: expired", ErrBadTaskToken)
+	}
+
+	// Tokens issued before audiences name none; their runs were released when goald restarted.
+	if c.Audience != TaskAudience {
+		return TaskClaims{}, fmt.Errorf("%w: not for the gateway", ErrBadTaskToken)
 	}
 
 	// Tokens issued before organizations name none; their runs ended when goald was upgraded.

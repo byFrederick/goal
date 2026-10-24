@@ -6,7 +6,9 @@
 // # Auth
 //
 // Every request carries "Authorization: Bearer <task token>" signed by the engine
-// (domain.SignTaskToken). A missing, forged or expired token gets 401 with no detail. The
+// (domain.SignTaskToken) for the audience goal-gateway (domain.TaskAudience). A missing, forged
+// or expired token, or one for no or another audience, gets 401 with no detail. goald's API
+// refuses task tokens, so they work only here. The
 // claims name the factory, agent and run; the factory's current definition must still declare
 // that agent, otherwise 403.
 //

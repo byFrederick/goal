@@ -33,16 +33,22 @@ type settings struct {
 	// passwords `goal db init` gives the roles.
 	MigrateDatabaseURL string
 	DatabaseURL        string
-	// Listen is the API and gateway address (GOAL_LISTEN, default 127.0.0.1:8080). Phase 1 has no
-	// API authentication, so it must be a loopback address.
+	// Listen is the API's address, and the gateway's without GatewayListen (GOAL_LISTEN, default
+	// 127.0.0.1:8080). The API has no authentication yet, so it must be a loopback address.
 	Listen string
+	// GatewayListen is the MCP gateway's own address (GOAL_GATEWAY_LISTEN, optional). When set,
+	// that listener serves only /mcp and the main one answers /mcp with 404; it is required, and
+	// different, when Listen is not loopback (phase 3, §5.5). It may be off loopback, such as the
+	// Docker bridge's address on Linux: every request there needs a task token.
+	GatewayListen string
 	// PublicURL is the origin people open goald at when it is not the listen address, such as a
 	// reverse proxy's name (GOAL_PUBLIC_URL, optional; https unless its host is loopback). Its
 	// host is the one name besides the loopback names and the listen host that the Host check
 	// accepts (api.CheckHost).
 	PublicURL string
-	// GatewayURL is the MCP gateway as agent containers reach it (GOAL_GATEWAY_URL, default
-	// http://<listen>/mcp; the Docker runner rewrites loopback to host.docker.internal).
+	// GatewayURL is the MCP gateway as agent containers reach it, the only goald address they are
+	// given (GOAL_GATEWAY_URL, default http://<gateway listen or listen>/mcp, a wildcard host
+	// becoming 127.0.0.1; the Docker runner rewrites loopback to host.docker.internal).
 	GatewayURL string
 	// GatewayKeyRef names the secret that signs task tokens (GOAL_GATEWAY_KEY_REF, default
 	// env:GOAL_GATEWAY_KEY).
@@ -93,6 +99,8 @@ const (
 	// capable first.
 	modelsEnv      = "GOAL_MODELS"
 	publicURLEnv   = "GOAL_PUBLIC_URL"
+	gatewayEnv     = "GOAL_GATEWAY_LISTEN"
+	gatewayURLEnv  = "GOAL_GATEWAY_URL"
 	taskEnvEnv     = "GOAL_TASK_ENV"
 	defaultModels  = "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5"
 	defaultListen  = "127.0.0.1:8080"
@@ -121,7 +129,7 @@ const (
 // connection.
 var ownVariables = []string{
 	"GOAL_MIGRATE_DATABASE_URL", "GOAL_DATABASE_URL", "GOAL_PG_PASSWORD", "GOAL_PG_OWNER_PASSWORD", "GOAL_PG_APP_PASSWORD",
-	"GOAL_LISTEN", publicURLEnv, "GOAL_GATEWAY_URL", "GOAL_GATEWAY_KEY_REF", "GOAL_GATEWAY_KEY", taskEnvEnv,
+	"GOAL_LISTEN", publicURLEnv, gatewayEnv, gatewayURLEnv, "GOAL_GATEWAY_KEY_REF", "GOAL_GATEWAY_KEY", taskEnvEnv,
 	"GOAL_WORKSPACE_ROOT", "GOAL_RUN_DIR", "GOAL_TICK_EVERY", "GOAL_REFRESH_EVERY", "GOAL_MAX_RUNS",
 	"GOAL_GITHUB_API_URL", "GOAL_LOG_LEVEL", "GOAL_LOG_FORMAT", "GOAL_DEFAULT_AGENT_IMAGE", "GOAL_ORG_RETENTION", "GOAL_MODELS",
 	"GOAL_DEFINITION_CACHE_BYTES", "GOAL_LEGACY_IMPORT",
@@ -190,9 +198,9 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 	}
 
 	s.PublicURL = strings.TrimSpace(getenv(publicURLEnv))
+	s.GatewayListen = strings.TrimSpace(getenv(gatewayEnv))
+	s.GatewayURL = or(gatewayURLEnv, defaultGatewayURL(s))
 	errs := listenErrors(s)
-
-	s.GatewayURL = or("GOAL_GATEWAY_URL", "http://"+s.Listen+"/mcp")
 
 	var err error
 	if s.TaskEnv, err = taskEnv(or(taskEnvEnv, defaultTaskEnv)); err != nil {
@@ -278,17 +286,114 @@ func loopback(listen string) error {
 	return nil
 }
 
-// listenErrors refuses a listen address off loopback and a public URL that is not a safe origin.
+// listenErrors refuses a listen address off loopback, a gateway listener that breaks §5.5's rule,
+// a gateway URL that names the main listener when the gateway has its own, and a public URL that
+// is not a safe origin.
 func listenErrors(s settings) []error {
 	var errs []error
 
-	for _, err := range []error{loopback(s.Listen), publicURL(s.PublicURL)} {
+	for _, err := range []error{loopback(s.Listen), gatewayListen(s.Listen, s.GatewayListen), gatewayURL(s), publicURL(s.PublicURL)} {
 		if err != nil {
 			errs = append(errs, err)
 		}
 	}
 
 	return errs
+}
+
+// gatewayListen applies phase 3's listener rule: the gateway's own address is a host and port,
+// not the main listener's, and it is required when the main listener is off loopback (so /mcp is
+// never served beside the API off this machine). GOAL_LISTEN stays loopback-only until 3-9, so
+// for now only the first two parts can refuse a start.
+func gatewayListen(listen, gateway string) error {
+	host, _, _ := net.SplitHostPort(listen) // loopback reports a malformed GOAL_LISTEN
+
+	if gateway == "" {
+		if host != "" && !isLoopback(host) {
+			return fmt.Errorf("%s is required when GOAL_LISTEN %q is not a loopback address: the gateway gets a listener of its own", gatewayEnv, listen)
+		}
+
+		return nil
+	}
+
+	if _, port, err := net.SplitHostPort(gateway); err != nil || port == "" {
+		return fmt.Errorf("%s %q is not a host:port address", gatewayEnv, gateway)
+	}
+
+	if sameAddress(listen, gateway) {
+		return fmt.Errorf("%s %q is GOAL_LISTEN: the gateway's own listener needs another address", gatewayEnv, gateway)
+	}
+
+	return nil
+}
+
+// gatewayURL refuses a GOAL_GATEWAY_URL that names the main listener while the gateway has a
+// listener of its own: the main listener answers /mcp with 404, so agents would reach nothing
+// but the API.
+func gatewayURL(s settings) error {
+	if s.GatewayListen == "" {
+		return nil
+	}
+
+	u, err := url.Parse(s.GatewayURL)
+	if err != nil || u.Host == "" {
+		return fmt.Errorf("%s %q is not a URL", gatewayURLEnv, s.GatewayURL)
+	}
+
+	port := u.Port()
+	if port == "" && u.Scheme == "https" {
+		port = "443"
+	} else if port == "" {
+		port = "80"
+	}
+
+	host := u.Hostname()
+	if host == dockerHost { // how agent containers name this machine (the Docker runner's alias)
+		host = "127.0.0.1"
+	}
+
+	if sameAddress(s.Listen, net.JoinHostPort(host, port)) {
+		return fmt.Errorf("%s %q names GOAL_LISTEN, which answers /mcp with 404 when %s is set; leave it unset to follow the gateway listener",
+			gatewayURLEnv, s.GatewayURL, gatewayEnv)
+	}
+
+	return nil
+}
+
+// dockerHost is the name agent containers reach this machine by.
+const dockerHost = "host.docker.internal"
+
+// sameAddress reports whether host:port addresses a and b would be one listener: the same port,
+// and the same host, two loopback names or a wildcard host (every interface).
+func sameAddress(a, b string) bool {
+	ah, ap, errA := net.SplitHostPort(a)
+	bh, bp, errB := net.SplitHostPort(b)
+
+	if errA != nil || errB != nil || ap != bp {
+		return false
+	}
+
+	return strings.EqualFold(ah, bh) || (isLoopback(ah) && isLoopback(bh)) || wildcard(ah) || wildcard(bh)
+}
+
+// wildcard reports whether a listen host (no port) means every interface.
+func wildcard(host string) bool {
+	ip := net.ParseIP(host)
+
+	return host == "" || (ip != nil && ip.IsUnspecified())
+}
+
+// defaultGatewayURL is the gateway as agent containers reach it: on its own listener when it has
+// one, else on the main listener. A wildcard host (every interface) becomes 127.0.0.1, which the
+// Docker runner rewrites to the host's name in a container.
+func defaultGatewayURL(s settings) string {
+	addr := cmp.Or(s.GatewayListen, s.Listen)
+
+	if host, port, err := net.SplitHostPort(addr); err == nil && wildcard(host) {
+		addr = net.JoinHostPort("127.0.0.1", port)
+	}
+
+	return "http://" + addr + "/mcp"
 }
 
 // isLoopback reports whether host (no port) names this machine.

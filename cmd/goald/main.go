@@ -1,6 +1,6 @@
 // Command goald is Goal's daemon: it runs the current definition version of every factory on one
-// flow engine, serves the HTTP API (/v1/) and the MCP gateway agents use (/mcp), and starts agent
-// tasks in Docker.
+// flow engine, serves the HTTP API (/v1/) and the MCP gateway agents use (/mcp, on a listener of
+// its own with GOAL_GATEWAY_LISTEN), and starts agent tasks in Docker.
 //
 // All wiring happens here, by hand: PostgreSQL (store, definition versions, item and definition
 // notices), the bucket (definition file content), environment secrets, git workspaces, GitHub
@@ -14,6 +14,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -209,24 +210,55 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	mux := http.NewServeMux()
-	mux.Handle("/v1/", apiHandler)
-	mux.Handle(api.GatewayPath, gw)
-	mux.Handle("/", web.Handler())
-
-	// Every request but the health check and the agents' gateway must name goald (DNS rebinding).
-	srv := httpServer(s, api.CheckHost(s.hosts(), mux))
+	servers := httpServers(s, apiHandler, gw, web.Handler())
 
 	// Deleted organizations go, rows and bucket objects, once their retention has passed.
 	purger := retention.New(store, objects, clock, s.OrgRetention, log)
 
-	return serve(ctx, log, s, srv, eng, defs, definitionNotices, feed, purger)
+	return serve(ctx, log, s, servers, eng, defs, definitionNotices, feed, purger)
 }
 
-// serve runs the HTTP server, the engine, the stream feed, the definitions reloads and the
+// httpServers are goald's HTTP servers: the main listener and, with GOAL_GATEWAY_LISTEN, the
+// gateway's own. Every request to the main one but the health check and the agents' gateway must
+// name goald (DNS rebinding); the gateway's serves nothing that a Host could matter to.
+func httpServers(s settings, apiHandler, gw, spa http.Handler) []*http.Server {
+	primary, gatewayOnly := routes(s.GatewayListen != "", apiHandler, gw, spa)
+
+	servers := []*http.Server{httpServer(s.Listen, api.CheckHost(s.hosts(), primary))}
+	if gatewayOnly != nil {
+		servers = append(servers, httpServer(s.GatewayListen, gatewayOnly))
+	}
+
+	return servers
+}
+
+// routes are the handlers of goald's listeners: the main one serves the API, the SPA and, when
+// the gateway has no listener of its own, the agents' gateway at /mcp. With one (separate), the
+// gateway listener serves only /mcp (everything else 404) and the main one answers /mcp with 404,
+// so the gateway address agents are given reaches nothing else; gatewayOnly is nil without one.
+func routes(separate bool, apiHandler, gw, spa http.Handler) (primary, gatewayOnly http.Handler) {
+	mux := http.NewServeMux()
+	mux.Handle("/v1/", apiHandler)
+	mux.Handle("/", spa)
+
+	if !separate {
+		mux.Handle(api.GatewayPath, gw)
+
+		return mux, nil
+	}
+
+	mux.Handle(api.GatewayPath, http.NotFoundHandler())
+
+	only := http.NewServeMux()
+	only.Handle(api.GatewayPath, gw)
+
+	return mux, only
+}
+
+// serve runs the HTTP servers, the engine, the stream feed, the definitions reloads and the
 // purge of deleted organizations until ctx ends, then shuts them down: the feed ends every
 // stream, HTTP drains, then the engine releases the items its runs held.
-func serve(ctx context.Context, log *slog.Logger, s settings, srv *http.Server, eng *engine.Engine, defs *definitions.Cache,
+func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Server, eng *engine.Engine, defs *definitions.Cache,
 	notices ports.DefinitionNotices, feed *api.Feed, purger *retention.Purger,
 ) error {
 	ctx, cancel := context.WithCancel(ctx)
@@ -243,13 +275,16 @@ func serve(ctx context.Context, log *slog.Logger, s settings, srv *http.Server, 
 		cancel()
 	}
 
-	wg.Go(func() {
-		log.InfoContext(ctx, "goald listening", slog.String("addr", s.Listen), slog.String("gateway", s.GatewayURL))
+	log.InfoContext(ctx, "goald listening", slog.String("addr", s.Listen), slog.String("gateway_listen", cmp.Or(s.GatewayListen, s.Listen)),
+		slog.String("gateway", s.GatewayURL))
 
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			fail(fmt.Errorf("http: %w", err))
-		}
-	})
+	for _, srv := range servers {
+		wg.Go(func() {
+			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				fail(fmt.Errorf("http %s: %w", srv.Addr, err))
+			}
+		})
+	}
 
 	wg.Go(func() {
 		if err := eng.Run(ctx); err != nil {
@@ -278,8 +313,10 @@ func serve(ctx context.Context, log *slog.Logger, s settings, srv *http.Server, 
 	shutdownCtx, done := context.WithTimeout(context.WithoutCancel(ctx), shutdownGrace)
 	defer done()
 
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Warn("http shutdown", slog.Any("error", err))
+	for _, srv := range servers {
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Warn("http shutdown", slog.String("addr", srv.Addr), slog.Any("error", err))
+		}
 	}
 
 	wg.Wait()
@@ -370,10 +407,10 @@ const (
 	idleTimeout       = 2 * time.Minute
 )
 
-// httpServer is goald's HTTP server on the listen address.
-func httpServer(s settings, h http.Handler) *http.Server {
+// httpServer is one of goald's HTTP servers, on addr.
+func httpServer(addr string, h http.Handler) *http.Server {
 	return &http.Server{
-		Addr: s.Listen, Handler: h, ReadHeaderTimeout: readHeaderTimeout, ReadTimeout: readTimeout, IdleTimeout: idleTimeout,
+		Addr: addr, Handler: h, ReadHeaderTimeout: readHeaderTimeout, ReadTimeout: readTimeout, IdleTimeout: idleTimeout,
 	}
 }
 

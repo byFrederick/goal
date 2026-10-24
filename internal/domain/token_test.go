@@ -1,7 +1,10 @@
 package domain
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -37,6 +40,15 @@ func TestTaskToken_OnlyTheSigningKeyVerifiesUnexpiredClaims(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// SignTaskToken always names the gateway, whatever the claims say.
+	other := claims
+	other.Audience = "goal-api"
+
+	renamed, err := SignTaskToken(key, other)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	tests := []struct {
 		name  string
 		key   []byte
@@ -51,6 +63,10 @@ func TestTaskToken_OnlyTheSigningKeyVerifiesUnexpiredClaims(t *testing.T) {
 		{name: "no signature", key: key, token: "abc", now: now},
 		{name: "no organization", key: key, token: unscoped, now: now},
 		{name: "no definition version", key: key, token: unversioned, now: now},
+		{name: "signed for the gateway whatever the claims say", key: key, token: renamed, now: now, ok: true},
+		{name: "no audience", key: key, token: signedAs(t, key, claims, ""), now: now},
+		{name: "another audience", key: key, token: signedAs(t, key, claims, "goal-api"), now: now},
+		{name: "the audience in another case", key: key, token: signedAs(t, key, claims, "Goal-Gateway"), now: now},
 	}
 
 	for _, tt := range tests {
@@ -70,9 +86,29 @@ func TestTaskToken_OnlyTheSigningKeyVerifiesUnexpiredClaims(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if got.OrgID != claims.OrgID || got.VersionID != claims.VersionID || got.ItemID != claims.ItemID || got.Agent != claims.Agent || len(got.Connections) != 1 {
-				t.Errorf("claims = %+v, want %+v", got, claims)
+			want := claims
+			want.Audience = TaskAudience
+
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("claims = %+v, want %+v", got, want)
 			}
 		})
 	}
+}
+
+// signedAs signs claims with key under audience aud, as a token issuer other than SignTaskToken
+// (or one from before audiences, when aud is "") would.
+func signedAs(t *testing.T, key []byte, c TaskClaims, aud string) string {
+	t.Helper()
+
+	c.Audience = aud
+
+	payload, err := json.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	enc := base64.RawURLEncoding
+
+	return enc.EncodeToString(payload) + "." + enc.EncodeToString(mac(key, payload))
 }

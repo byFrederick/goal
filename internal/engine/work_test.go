@@ -404,7 +404,7 @@ func TestRun_GatewayTokenIsScopedToTheTask(t *testing.T) {
 	}
 
 	want := domain.TaskClaims{
-		OrgID: testOrg, FactoryID: factoryID, VersionID: v1, ItemID: it.ID, Station: stWork, Agent: agWorker, RunID: h.runs(t, testOrg, it.ID)[0].ID,
+		Audience: domain.TaskAudience, OrgID: testOrg, FactoryID: factoryID, VersionID: v1, ItemID: it.ID, Station: stWork, Agent: agWorker, RunID: h.runs(t, testOrg, it.ID)[0].ID,
 		Connections: []string{"github"}, ExpiresAt: claims.ExpiresAt,
 	}
 	if !reflect.DeepEqual(claims, want) {

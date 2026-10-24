@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -256,6 +259,26 @@ func (h *harness) token(t *testing.T, c domain.TaskClaims) string {
 	return tok
 }
 
+// tokenFor signs c with the gateway's key for audience aud, as an issuer other than
+// domain.SignTaskToken (or one from before audiences, for "") would.
+func (h *harness) tokenFor(t *testing.T, c domain.TaskClaims, aud string) string {
+	t.Helper()
+
+	c.Audience = aud
+
+	payload, err := json.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mac := hmac.New(sha256.New, h.key)
+	mac.Write(payload)
+
+	enc := base64.RawURLEncoding
+
+	return enc.EncodeToString(payload) + "." + enc.EncodeToString(mac.Sum(nil))
+}
+
 // bearer adds an agent's task token, as the worker does.
 type bearer string
 
@@ -480,6 +503,8 @@ func TestGateway_RejectsToolsTheAgentMayNotCall(t *testing.T) {
 	}
 }
 
+// The hand-signed token for the gateway's audience passes, so the ones without it fail for the
+// audience alone.
 func TestGateway_RejectsRequestsWithoutAValidToken(t *testing.T) {
 	t.Parallel()
 
@@ -510,6 +535,9 @@ func TestGateway_RejectsRequestsWithoutAValidToken(t *testing.T) {
 		{name: "garbage", header: "Bearer not-a-token", status: http.StatusUnauthorized},
 		{name: "other key", header: "Bearer " + other, status: http.StatusUnauthorized},
 		{name: "expired", header: "Bearer " + h.token(t, expired), status: http.StatusUnauthorized},
+		{name: "no audience", header: "Bearer " + h.tokenFor(t, valid, ""), status: http.StatusUnauthorized},
+		{name: "another audience", header: "Bearer " + h.tokenFor(t, valid, "goal-api"), status: http.StatusUnauthorized},
+		{name: "signed by hand for the gateway", header: "Bearer " + h.tokenFor(t, valid, domain.TaskAudience), status: http.StatusOK},
 		{name: "agent not in the definition", header: "Bearer " + h.token(t, stranger), status: http.StatusForbidden},
 		{name: "unknown definition version", header: "Bearer " + h.token(t, unknownVersion), status: http.StatusForbidden},
 		{name: "another factory's version", header: "Bearer " + h.token(t, otherFactorys), status: http.StatusForbidden},
@@ -544,7 +572,7 @@ func TestGateway_RejectsRequestsWithoutAValidToken(t *testing.T) {
 				t.Fatalf("status = %d, want %d (%s)", resp.StatusCode, tt.status, got)
 			}
 
-			if s := strings.TrimSpace(string(got)); s != "unauthorized" && s != "forbidden" {
+			if s := strings.TrimSpace(string(got)); tt.status != http.StatusOK && s != "unauthorized" && s != "forbidden" {
 				t.Fatalf("body = %q, want no detail", s)
 			}
 		})

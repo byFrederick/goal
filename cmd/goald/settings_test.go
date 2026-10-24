@@ -26,8 +26,9 @@ func TestSettings_Defaults(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if s.Listen != "127.0.0.1:8080" || s.GatewayURL != "http://127.0.0.1:8080/mcp" || s.GatewayKeyRef != "env:GOAL_GATEWAY_KEY" {
-		t.Errorf("listen %s, gateway %s, key %s; want the loopback defaults", s.Listen, s.GatewayURL, s.GatewayKeyRef)
+	if s.Listen != "127.0.0.1:8080" || s.GatewayListen != "" || s.GatewayURL != "http://127.0.0.1:8080/mcp" || s.GatewayKeyRef != "env:GOAL_GATEWAY_KEY" {
+		t.Errorf("listen %s, gateway listen %q, gateway %s, key %s; want the loopback defaults on one listener",
+			s.Listen, s.GatewayListen, s.GatewayURL, s.GatewayKeyRef)
 	}
 
 	// goald never connects as compose's superuser: migrations run as goal_owner, the rest as goal_app.
@@ -107,6 +108,15 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 		{name: "public URL in clear text", env: map[string]string{publicURLEnv: "http://goal.example.com"}, want: publicURLEnv},
 		{name: "public URL without a scheme", env: map[string]string{publicURLEnv: "goal.example.com"}, want: publicURLEnv},
 		{name: "public URL with a path", env: map[string]string{publicURLEnv: "https://example.com/goal"}, want: publicURLEnv},
+		{name: "gateway listener on the main one", env: map[string]string{gatewayEnv: defaultListen}, want: "another address"},
+		{name: "gateway listener on the main one by name", env: map[string]string{gatewayEnv: "localhost:8080"}, want: "another address"},
+		{name: "gateway listener on every interface's main port", env: map[string]string{gatewayEnv: ":8080"}, want: "another address"},
+		{name: "gateway listener without a port", env: map[string]string{gatewayEnv: "gateway.example.com"}, want: "host:port"},
+		{
+			name: "gateway URL on the main listener beside a gateway listener",
+			env:  map[string]string{gatewayEnv: "127.0.0.1:8090", gatewayURLEnv: "http://host.docker.internal:8080/mcp"},
+			want: "names GOAL_LISTEN",
+		},
 	}
 
 	for _, tt := range tests {
@@ -115,6 +125,74 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 
 			if _, err := settingsFrom(envOf(tt.env)); err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Errorf("settings error = %v, want one mentioning %q", err, tt.want)
+			}
+		})
+	}
+}
+
+// GOAL_GATEWAY_URL follows the gateway's own listener, so agents are given only its address; a
+// wildcard host becomes loopback, which the Docker runner rewrites to the host's name, and an
+// explicit URL elsewhere is kept.
+func TestSettings_GatewayURLFollowsTheGatewayListener(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{name: "one listener", want: "http://127.0.0.1:8080/mcp"},
+		{name: "one listener elsewhere on loopback", env: map[string]string{"GOAL_LISTEN": "127.0.0.1:9090"}, want: "http://127.0.0.1:9090/mcp"},
+		{name: "gateway listener on loopback", env: map[string]string{gatewayEnv: "127.0.0.1:8090"}, want: "http://127.0.0.1:8090/mcp"},
+		{name: "gateway listener on the Docker bridge", env: map[string]string{gatewayEnv: "172.17.0.1:8090"}, want: "http://172.17.0.1:8090/mcp"},
+		{name: "gateway listener on every interface", env: map[string]string{gatewayEnv: ":8090"}, want: "http://127.0.0.1:8090/mcp"},
+		{name: "gateway listener on every IPv4 interface", env: map[string]string{gatewayEnv: "0.0.0.0:8090"}, want: "http://127.0.0.1:8090/mcp"},
+		{
+			name: "explicit gateway URL", env: map[string]string{gatewayEnv: "0.0.0.0:8090", gatewayURLEnv: "http://gateway.example.com:8090/mcp"},
+			want: "http://gateway.example.com:8090/mcp",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s, err := settingsFrom(envOf(tt.env))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if s.GatewayURL != tt.want {
+				t.Errorf("gateway URL = %s, want %s", s.GatewayURL, tt.want)
+			}
+		})
+	}
+}
+
+// Phase 3's listener rule: off loopback the gateway needs a listener of its own. GOAL_LISTEN is
+// loopback-only until 3-9, so the rule is checked on its own.
+func TestGatewayListen_IsRequiredOffLoopback(t *testing.T) {
+	t.Parallel()
+
+	const offLoopback = "10.0.0.5:8080"
+
+	tests := []struct {
+		name, listen, gateway string
+		ok                    bool
+	}{
+		{name: "loopback, one listener", listen: defaultListen, ok: true},
+		{name: "loopback, gateway listener", listen: defaultListen, gateway: "[::1]:8090", ok: true},
+		{name: "off loopback, one listener", listen: offLoopback},
+		{name: "off loopback, gateway listener", listen: offLoopback, gateway: "10.0.0.5:8090", ok: true},
+		{name: "off loopback, gateway on the main listener", listen: offLoopback, gateway: offLoopback},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if err := gatewayListen(tt.listen, tt.gateway); (err == nil) != tt.ok {
+				t.Errorf("gatewayListen(%q, %q) = %v, want ok %v", tt.listen, tt.gateway, err, tt.ok)
 			}
 		})
 	}

@@ -67,6 +67,7 @@ func TestWorkerSpecOf_KeepsSecretsOutAndRewritesLoopbackGateway(t *testing.T) {
 		"http://127.0.0.1:8081/mcp":  "http://host.docker.internal:8081/mcp",
 		"http://localhost/mcp":       "http://host.docker.internal/mcp",
 		"http://[::1]:9/mcp":         "http://host.docker.internal:9/mcp",
+		"http://172.17.0.1:8090/mcp": "http://172.17.0.1:8090/mcp", // a gateway listener on the Linux bridge
 		"https://gw.example.com/mcp": "https://gw.example.com/mcp",
 		"":                           "",
 	}
