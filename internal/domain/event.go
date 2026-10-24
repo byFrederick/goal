@@ -1,6 +1,17 @@
 package domain
 
-import "time"
+import (
+	"regexp"
+	"time"
+)
+
+// eventName is what an organization event may be called on the realtime stream.
+var eventName = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
+
+// IsEventName reports whether name may name an organization event on the realtime stream:
+// lowercase letters and digits, words joined by single dashes, a letter first. The adapter that
+// receives such events and the stream that writes them both refuse any other.
+func IsEventName(name string) bool { return eventName.MatchString(name) }
 
 // EventKind names what happened to an item. Kinds are open: runners add their own (tool_call, ...).
 type EventKind string

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"regexp"
 	"sync"
 	"time"
 
@@ -295,13 +294,10 @@ func (st stream) send(write func(string, ...any) bool, n ports.ItemNotice) bool 
 // line. A name or data that could break the event stream is never written.
 func (st stream) sendOrgEvent(write func(string, ...any) bool, e *ports.OrgEvent) bool {
 	var data bytes.Buffer
-	if err := json.Compact(&data, e.Data); err != nil || !eventName.MatchString(e.Name) {
+	if err := json.Compact(&data, e.Data); err != nil || !domain.IsEventName(e.Name) {
 		st.s.log.WarnContext(st.ctx, "organization event not sent", slog.String("event", e.Name), slog.Any("error", err))
 		return true
 	}
 
 	return write("event: %s\ndata: %s\n\n", e.Name, data.Bytes())
 }
-
-// eventName is what a stream event may be called besides item and resync.
-var eventName = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)

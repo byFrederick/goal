@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"time"
 
 	"github.com/byFrederick/goal/internal/adapters/postgres/db"
@@ -21,9 +20,6 @@ const (
 	noticeChannel   = "goal_events"
 	orgEventChannel = "goal_org_events"
 )
-
-// eventName is what an organization event may be called on the stream.
-var eventName = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 
 var _ ports.ItemNotices = (*Notices)(nil)
 
@@ -104,7 +100,7 @@ func orgEventFrom(raw string) (ports.ItemNotice, error) {
 		return ports.ItemNotice{}, fmt.Errorf("decode %q: %w", raw, err)
 	}
 
-	if p.OrgID == "" || !eventName.MatchString(p.Event) {
+	if p.OrgID == "" || !domain.IsEventName(p.Event) {
 		return ports.ItemNotice{}, fmt.Errorf("organization event %q without an organization or a valid name", p.Event)
 	}
 
