@@ -576,7 +576,7 @@ They replace spec 3's proposed `credential:read|manage|grant`, `vault:manage`, `
 | `GET /v1/orgs/{org}/knowledge/documents/{document}` | `knowledge:read` | metadata and the indexed text |
 | `GET /v1/orgs/{org}/knowledge/documents/{document}/content` | `knowledge:read` | the uploaded original (`Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`) |
 | `DELETE /v1/orgs/{org}/knowledge/documents/{document}` | `knowledge:manage` | an uploaded document; 409 `not-an-upload-source` otherwise |
-| `GET /v1/orgs/{org}/knowledge/search?q=&source=&limit=` | `knowledge:read` | what `knowledge__search` returns, over every source or the named ones |
+| `GET /v1/orgs/{org}/knowledge/search?q=&source=&limit=` | `knowledge:read` | `searchKnowledge`: what `knowledge__search` returns, over every source or the named ones |
 
 Upload routes take bodies up to `GOAL_UPLOAD_MAX_BYTES`; every other route keeps the 1 MiB cap. Secret values appear in no response, log line, event or audit entry. Changed shared schemas: `Problem.code` adds the codes above; `Factory` gains nothing (the builder reads connections by `?factory=`). Removed from the registry: `/v1/oauth/callback` and `/oauth/client-metadata.json` (deferred with OAuth connections).
 
