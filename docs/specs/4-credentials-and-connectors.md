@@ -177,6 +177,8 @@ Credential names: the factory slug pattern `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, uni
 
 `domain.Runtime` gains `ModelCredential string` (a credential name; empty = the organization's model access). `domain.Repository.AuthRef` now holds `credential:<name>` (or a legacy `env:` ref until cutover).
 
+**Credential host binding (keeps 2.2's repository host binding).** A credential is sent only to the host(s) of its code host or service, never to a URL a definition names: a `github-token` clones and merges only on its GitHub's web host (`GOAL_GITHUB_WEB_URL`'s, or the credential's own once `api_url` is used) and reaches its API only, so both the credentials check (`repository-host-not-allowed`) and `gitworkspace`'s clone-time refusal before resolving keep applying to `credential:` references, as they do to `env:GOAL_GITHUB_TOKEN` today (architecture.md, `Workspaces`).
+
 #### 4.2 Engine
 
 - `engine.Deps` gains `ModelAuth ports.ModelAuth` (required). `engine.Config.TaskEnv` is removed at cutover (4.1-9); until then it is the fallback when `ModelAuth` returns `ErrNoModelAccess` (logged as deprecated once per factory).

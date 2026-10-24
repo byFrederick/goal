@@ -87,7 +87,7 @@
             "required": ["url"],
             "additionalProperties": false,
             "properties": {
-              "url": { "type": "string", "pattern": "^https://[^/@]+/.+", "description": "https clone URL without credentials" },
+              "url": { "type": "string", "pattern": "^https://[^/@]+/.+", "description": "https clone URL without credentials, on the install's GitHub host (GOAL_GITHUB_WEB_URL, default github.com): goald clones from no other host, since the token is the install's" },
               "token": { "$ref": "#/$defs/secretRef", "description": "Token for cloning a private repository (GitHub: a fine-grained PAT)" }
             }
           }
