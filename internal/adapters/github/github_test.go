@@ -192,6 +192,42 @@ func TestDeleteBranch_DeletesTheRefAndToleratesAGoneOne(t *testing.T) {
 	}
 }
 
+// A version published before a variable was reserved may still name it as the repository's
+// token: the install's SecretPolicy refuses it before it is resolved, so GitHub, though trusted
+// with the repository token, never receives goald's own secrets.
+func TestClient_RefusesAReservedToken(t *testing.T) {
+	t.Parallel()
+
+	var calls sync.Map
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Store(r.Method+" "+r.URL.Path, r.Header.Get("Authorization"))
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := New(porttest.Secrets{"GOAL_GATEWAY_KEY": token}, Config{
+		APIURL: srv.URL, Policy: domain.SecretPolicy{Reserved: []string{"GOAL_GATEWAY_KEY"}},
+	})
+	reserved := domain.Repository{URL: repo.URL, AuthRef: "env:GOAL_GATEWAY_KEY"}
+
+	_, perr := c.PullRequest(t.Context(), reserved, prURL)
+	_, merr := c.Merge(t.Context(), reserved, prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
+	derr := c.DeleteBranch(t.Context(), reserved, "goal/7-add-x")
+
+	for _, err := range []error{perr, merr, derr} {
+		if err == nil || !strings.Contains(err.Error(), "reserved") {
+			t.Errorf("err = %v; want the reserved token refused", err)
+		}
+	}
+
+	calls.Range(func(k, v any) bool {
+		t.Errorf("sent %v with Authorization %q; want nothing sent", k, v)
+
+		return true
+	})
+}
+
 func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 	t.Parallel()
 

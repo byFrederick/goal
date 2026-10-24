@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"net/url"
 	"slices"
 	"strings"
@@ -59,6 +60,22 @@ func (p SecretPolicy) ForConnection(ref, target string) SecretVerdict {
 		return SecretAllowed
 	}
 }
+
+// ForRepository decides whether ref, a factory's runtime.repository.token, may be resolved for
+// its repository (a clone, a pull request's merge): any reference but one naming a Reserved
+// variable, which goes nowhere, not even to the install's trusted repository host. The
+// workspaces and the code host check it before they resolve the token, so a version published
+// before the variable was reserved cannot send it either.
+func (p SecretPolicy) ForRepository(ref string) SecretVerdict {
+	if name, ok := strings.CutPrefix(ref, "env:"); ok && p.Reserves(name) {
+		return SecretReserved
+	}
+
+	return SecretAllowed
+}
+
+// ErrSecretReserved means a reference names a variable the install's SecretPolicy reserves.
+var ErrSecretReserved = errors.New("the reference names a variable reserved for goald (env-reserved)")
 
 // connectionHost reports whether target is an https url on one of ConnectionHosts.
 func (p SecretPolicy) connectionHost(target string) bool {

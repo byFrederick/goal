@@ -158,21 +158,23 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return eng.SetLines(lines)
 	}, definitions.Config{CacheBytes: s.DefinitionCacheBytes}, log)
 
+	// One rule for env:NAME references wherever goald resolves one: clones, the code host, the gateway.
+	policy := s.secretPolicy()
 	runnerCfg := docker.Config{RunDir: s.RunDir}
-	workspaces := gitworkspace.New(secrets, gitworkspace.Config{Root: s.WorkspaceRoot, Hosts: []string{s.GitHubWebHost}}, log)
+	workspaces := gitworkspace.New(secrets, gitworkspace.Config{Root: s.WorkspaceRoot, Hosts: []string{s.GitHubWebHost}, Policy: policy}, log)
 	runner := docker.New(dockerClient, defs, runnerCfg, log)
 
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Secrets: secrets, Events: store, Clock: clock, Logger: log,
 		Sidecars: docker.NewSidecars(dockerClient, docker.Config{}, log),
-	}, gateway.Config{Key: []byte(key), SecretPolicy: s.secretPolicy()})
+	}, gateway.Config{Key: []byte(key), SecretPolicy: policy})
 	if err != nil {
 		return err
 	}
 	// Runs after serve returns: HTTP is drained and the engine's runs have ended.
 	defer gw.Close()
 
-	codehost := github.New(secrets, github.Config{APIURL: s.GitHubAPIURL, WebHost: s.GitHubWebHost})
+	codehost := github.New(secrets, github.Config{APIURL: s.GitHubAPIURL, WebHost: s.GitHubWebHost, Policy: policy})
 
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Runner: runner, Workspaces: workspaces, Checker: docker.NewChecker(dockerClient, runnerCfg, log),

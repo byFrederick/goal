@@ -6,7 +6,8 @@
 // refuses it if the branch moved, and it is never forced: GitHub's refusals (not mergeable,
 // head moved, invalid) come back as ports.ErrNotMergeable. The token travels only in the
 // Authorization header of requests to the configured API; redirects are not followed, and the
-// token is scrubbed from every error.
+// token is scrubbed from every error. A token reference naming a variable the install reserves
+// (Config.Policy) is refused before it is resolved.
 package github
 
 import (
@@ -36,6 +37,9 @@ type Config struct {
 	WebHost string
 	// Timeout bounds one request. Default: 30s.
 	Timeout time.Duration
+	// Policy is the install's rule for env:NAME references (goald's settings): a repository token
+	// naming a reserved variable is refused before it is resolved. The zero value refuses none.
+	Policy domain.SecretPolicy
 }
 
 const (
@@ -46,6 +50,7 @@ const (
 // Client calls GitHub's REST API. It is safe for concurrent use and keeps no state.
 type Client struct {
 	secrets ports.Secrets
+	policy  domain.SecretPolicy
 	api     string
 	web     string
 	http    *http.Client
@@ -67,7 +72,7 @@ func New(secrets ports.Secrets, cfg Config) *Client {
 	}
 
 	return &Client{
-		secrets: secrets, api: strings.TrimSuffix(cfg.APIURL, "/"), web: strings.ToLower(cfg.WebHost),
+		secrets: secrets, policy: cfg.Policy, api: strings.TrimSuffix(cfg.APIURL, "/"), web: strings.ToLower(cfg.WebHost),
 		http: &http.Client{
 			Timeout: cfg.Timeout,
 			// A credentialed request is never sent anywhere but the configured API.
@@ -250,6 +255,10 @@ func (c *Client) DeleteBranch(ctx context.Context, repo domain.Repository, branc
 func (c *Client) call(ctx context.Context, repo domain.Repository, method, path string, body, out any) (int, string, error) {
 	if repo.AuthRef == "" {
 		return 0, "", errors.New("the repository has no token (runtime.repository.token)")
+	}
+
+	if c.policy.ForRepository(repo.AuthRef) == domain.SecretReserved {
+		return 0, "", fmt.Errorf("repository token %s: %w", repo.AuthRef, domain.ErrSecretReserved)
 	}
 
 	token, err := c.secrets.Resolve(ctx, repo.AuthRef)

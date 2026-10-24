@@ -4,7 +4,8 @@
 //
 // The repository's URL comes from a factory definition but its token is the install's, so
 // clones reach only the configured hosts (Config.Hosts, github.com by default): a URL on any
-// other host is refused before the token is resolved.
+// other host is refused before the token is resolved, and so is a token reference naming a
+// variable the install reserves (Config.Policy).
 //
 // The clone token never touches the disk or another process's command line. It reaches git
 // once, for the clone, as an http.<origin>.extraHeader set through GIT_CONFIG_* environment
@@ -59,6 +60,9 @@ type Config struct {
 	// URL on any other host is refused before its token is resolved: git sends the token on its
 	// first request. Default: github.com.
 	Hosts []string
+	// Policy is the install's rule for env:NAME references (goald's settings): a repository token
+	// naming a reserved variable is refused before it is resolved. The zero value refuses none.
+	Policy domain.SecretPolicy
 }
 
 func (c Config) withDefaults() Config {
@@ -164,7 +168,12 @@ func (w *Workspaces) prepare(ctx context.Context, s ports.WorkspaceSpec, ws *por
 	}
 
 	var token string
+
 	if s.Repository.AuthRef != "" {
+		if w.cfg.Policy.ForRepository(s.Repository.AuthRef) == domain.SecretReserved {
+			return fmt.Errorf("repository token %s: %w", s.Repository.AuthRef, domain.ErrSecretReserved)
+		}
+
 		if token, err = w.secrets.Resolve(ctx, s.Repository.AuthRef); err != nil {
 			return fmt.Errorf("repository token: %w", err)
 		}

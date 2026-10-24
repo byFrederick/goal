@@ -50,3 +50,23 @@ func TestSecretPolicy_ForConnection(t *testing.T) {
 		})
 	}
 }
+
+// A repository's token (runtime.repository.token) may be any variable but a reserved one: an old
+// version naming goald's own gateway key must not have it resolved for a clone or a merge, even
+// though both go only to the install's trusted GitHub host.
+func TestSecretPolicy_ForRepository(t *testing.T) {
+	t.Parallel()
+
+	p := SecretPolicy{Reserved: []string{"GOAL_GATEWAY_KEY"}, RepositoryOnly: []string{"ACME_REPO_TOKEN"}}
+
+	for ref, want := range map[string]SecretVerdict{
+		repoToken:                SecretAllowed,
+		"env:ACME_TICKETS_TOKEN": SecretAllowed,
+		"env:GOAL_GATEWAY_KEY":   SecretReserved,
+		"op://vault/acme/token":  SecretAllowed,
+	} {
+		if got := p.ForRepository(ref); got != want {
+			t.Errorf("ForRepository(%q) = %v, want %v", ref, got, want)
+		}
+	}
+}

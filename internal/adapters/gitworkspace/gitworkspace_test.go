@@ -347,6 +347,36 @@ func TestPrepare_RefusesHostsItDoesNotCloneFrom(t *testing.T) {
 	}
 }
 
+// A version published before a variable was reserved may still name it as the repository's
+// token: the install's SecretPolicy refuses it before it is resolved, so not even the trusted
+// repository host receives goald's own secrets.
+func TestPrepare_RefusesAReservedToken(t *testing.T) {
+	t.Parallel()
+
+	r := newRemote(t)
+
+	var resolved atomic.Int64
+
+	w := New(resolveLog{Secrets: porttest.Secrets{"GOAL_GATEWAY_KEY": token}, refs: &resolved}, Config{
+		Root: t.TempDir(), Hosts: []string{r.host}, Policy: domain.SecretPolicy{Reserved: []string{"GOAL_GATEWAY_KEY"}},
+	}, nil)
+
+	_, err := w.Prepare(t.Context(), ports.WorkspaceSpec{
+		RunID: "run-6", Repository: domain.Repository{URL: r.url, AuthRef: "env:GOAL_GATEWAY_KEY"}, Branch: someBranch,
+	})
+	if err == nil || !strings.Contains(err.Error(), "reserved") {
+		t.Fatalf("Prepare = %v; want the reserved token refused", err)
+	}
+
+	if n, a := resolved.Load(), r.authed.Load(); n != 0 || a != 0 {
+		t.Errorf("resolved the token %d times and sent it %d times; want neither", n, a)
+	}
+
+	if _, serr := os.Stat(filepath.Join(w.cfg.Root, "run-6")); !errors.Is(serr, os.ErrNotExist) {
+		t.Errorf("refused workspace left behind: %v", serr)
+	}
+}
+
 // A clone URL's host and port must equal an allowed host's, without case.
 func TestCloneOrigin_MatchesAllowedHostsExactly(t *testing.T) {
 	t.Parallel()
