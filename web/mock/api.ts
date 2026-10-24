@@ -5,7 +5,8 @@
 // inbox, keeps state per process and broadcasts each organization's item events on its
 // /v1/orgs/{org}/stream. Decisions are the local user's: every decision waits on you. The
 // definitions and builder routes are definitions.ts's. POST /__mock/reset restores the seed;
-// POST /__mock/fail injects faults (faults.ts); an X-Mock-Latency-Ms header delays the answer.
+// POST /__mock/fail injects faults (faults.ts); an X-Mock-Latency-Ms header delays the answer; a
+// reset's {now} fixes the mock's clock until the next reset.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
   AgentStats,
@@ -62,8 +63,8 @@ const reserved = ['new', 'settings', 'api', 'v1', 'o', 'me', 'orgs', 'auth', 'in
 const windowRule = /^([1-9][0-9]?)d$/;
 const dayMs = 86_400_000;
 
-/** The UTC date `offset` days before today. */
-const utcDay = (offset: number) => new Date(Date.now() - offset * dayMs).toISOString().slice(0, 10);
+/** The UTC date `offset` days before `now`'s day. */
+const utcDay = (offset: number, now: number) => new Date(now - offset * dayMs).toISOString().slice(0, 10);
 
 const cents = (usd: number) => Math.round(usd * 100) / 100;
 
@@ -97,7 +98,11 @@ async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> 
 }
 
 export function createMockApi(options: { live?: boolean } = {}): MockApi {
-  let state: MockState = seed();
+  // The mock's clock: real time, or the instant a reset fixed (POST /__mock/reset {now}), so a test
+  // and the page it drives count days from the same day even across UTC midnight.
+  let fixed: number | undefined;
+  const clock = () => fixed ?? Date.now();
+  let state: MockState = seed(clock());
   const subscribers = new Set<Subscriber>();
   const definitions = createDefinitions({
     state: () => state,
@@ -157,7 +162,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       cost_usd: it.cost_usd,
       created_at: it.created_at,
       updated_at: it.updated_at,
-      age_seconds: Math.round((Date.now() - Date.parse(it.created_at)) / 1000),
+      age_seconds: Math.round((clock() - Date.parse(it.created_at)) / 1000),
       agent: it.agent,
       pr_url: it.pr_url,
       slot: run && copies > 1 ? run.slot + 1 : null,
@@ -247,7 +252,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       org: org.id,
       entry: {
         id: state.nextAuditId++,
-        at: new Date().toISOString(),
+        at: new Date(clock()).toISOString(),
         actor: { kind: 'user', id: 'local', name: localUser },
         action,
         target: { kind: 'org', id: org.id },
@@ -310,7 +315,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   };
 
   const emit = (it: MockItem, kind: string, actor: string, data: Record<string, unknown> = {}) => {
-    const at = new Date().toISOString();
+    const at = new Date(clock()).toISOString();
     const event: ItemEvent = { id: state.nextEventId++, item_id: it.id, at, kind, station: it.station, actor, data };
     state.events.push(event);
     it.updated_at = at;
@@ -341,7 +346,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const kind = findFactory(it.factory)?.stations.find((s) => s.id === to)?.kind;
     it.state = kind === 'done' ? 'done' : kind === 'human' ? 'waiting_human' : 'queued';
     it.agent = null;
-    if (it.state === 'done') it.done_at = new Date().toISOString();
+    if (it.state === 'done') it.done_at = new Date(clock()).toISOString();
     emit(it, 'moved', actor, { from, to, ...data });
     if (it.state === 'waiting_human') emit(it, 'waiting_human', 'engine');
     if (it.state === 'done') emit(it, 'done', 'engine');
@@ -421,7 +426,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (method !== 'POST') return problem(res, 405, 'Method not allowed');
 
     const body = await readBody(req);
-    const now = new Date().toISOString();
+    const now = new Date(clock()).toISOString();
     const open = openAndon(f);
     if (clear) {
       const note = typeof body.note === 'string' ? body.note.trim() : '';
@@ -468,11 +473,11 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     flow: state.flow[f.name],
     drum: state.constraint[f.name] ?? null,
     type,
-    now: Date.now(),
+    now: clock(),
   });
 
   const overviewOf = (f: Factory, days: number): FactoryOverview => {
-    const today = Date.parse(`${utcDay(0)}T00:00:00Z`);
+    const today = Date.parse(`${utcDay(0, clock())}T00:00:00Z`);
     const metrics = metricsOf(flowInput(f), { from: today - (days - 1) * dayMs, to: today }, true);
     const waiting = inState(f, 'waiting_human');
     const types = [...new Set(waiting.map((it) => it.type))].sort();
@@ -574,7 +579,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (pull) return [...items, { ...entry(f, 'andon', String(pull.id), pull.pulled_at), andon: pull }];
 
     const gates = state.gates[f.name];
-    const now = new Date().toISOString();
+    const now = new Date(clock()).toISOString();
     const warnings = (gates?.tallies ?? []).flatMap((t): InboxEntry[] =>
       t.warning && gates?.policy
         ? [
@@ -611,14 +616,14 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const waitingSince = here
       .filter((it) => it.state === 'queued' || it.state === 'ready')
       .map((it) => Date.parse(it.spans.findLast((sp) => sp.left_at === null)?.entered_at ?? it.updated_at));
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date(clock()).toISOString().slice(0, 10);
     const queues = s.kind === 'queue' || s.kind === 'agent';
     return {
       busy_ratio: s.kind === 'agent' ? (seeded?.busy_ratio ?? null) : null,
       send_back_ratio: seeded?.send_back_ratio ?? null,
       queue_trend: queues ? (seeded?.queue_trend ?? 'steady') : null,
       oldest_waiting_seconds:
-        queues && waitingSince.length > 0 ? Math.round((Date.now() - Math.min(...waitingSince)) / 1000) : null,
+        queues && waitingSince.length > 0 ? Math.round((clock() - Math.min(...waitingSince)) / 1000) : null,
       done_today:
         s.kind === 'done' ? here.filter((it) => it.state === 'done' && it.done_at?.startsWith(today)).length : null,
     };
@@ -653,7 +658,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
           ).length,
         ]),
       ),
-      now: Date.now(),
+      now: clock(),
     });
 
   /**
@@ -672,7 +677,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         constraint: state.constraint[factory.name] === s.id,
       }));
     if (stations.length === 0) return null;
-    const range = rangeOf(params, Date.now());
+    const range = rangeOf(params, clock());
     if (typeof range === 'string') return range;
     const measured: MockAgentStats = state.agentStats[factory.name]?.[agent] ?? {
       model: null,
@@ -730,7 +735,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const drum = state.constraint[factory.name] ?? null;
     const limited = stations.filter((s) => s.wip_limit !== null);
     const weekly = state.weeklyBudget[factory.name] ?? null;
-    const today = Date.parse(`${utcDay(0)}T00:00:00Z`);
+    const today = Date.parse(`${utcDay(0, clock())}T00:00:00Z`);
     const spent = metricsOf(flowInput(factory), { from: today - 6 * dayMs, to: today }, false).spend_usd;
     const queues = new Set(stations.filter((s) => s.kind === 'queue').map((s) => s.id));
     const lane = flow?.expedite_wip !== undefined;
@@ -774,7 +779,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const method = req.method ?? 'GET';
 
     if (path === '/__mock/reset' && method === 'POST') {
-      state = seed();
+      const at = (await readBody(req)).now;
+      fixed = typeof at === 'string' && !Number.isNaN(Date.parse(at)) ? Date.parse(at) : undefined;
+      state = seed(clock());
       return json(res, 200, { ok: true });
     }
     if (path === '/__mock/fail' && method === 'POST') {
@@ -821,7 +828,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         name,
         mark,
         factory_count: 0,
-        created_at: new Date().toISOString(),
+        created_at: new Date(clock()).toISOString(),
       };
       state.orgs.push(org);
       return json(res, 201, org);
@@ -848,7 +855,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       }
       audit(org, 'org.deleted', { slug: org.slug, name: org.name });
       state.orgs = state.orgs.filter((o) => o.id !== org.id);
-      return json(res, 202, { purge_after: new Date(Date.now() + retentionMs).toISOString() });
+      return json(res, 202, { purge_after: new Date(clock() + retentionMs).toISOString() });
     }
     if (rest === '/settings' && method === 'GET') return json(res, 200, settingsOf(org));
     if (rest === '/settings' && method === 'PATCH') return patchSettings(org, await readBody(req), res);
@@ -897,8 +904,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       const budgets = factories.flatMap((o) => (o.budget_usd === null ? [] : [o.budget_usd]));
       const body: FactoryOverviewList = {
         window,
-        since: utcDay(days - 1),
-        until: utcDay(0),
+        since: utcDay(days - 1, clock()),
+        until: utcDay(0, clock()),
         waiting_on_you: factories.reduce((n, o) => n + o.waiting.on_you, 0),
         spend_usd: cents(factories.reduce((n, o) => n + o.spend_usd, 0)),
         budget_usd: budgets.length > 0 ? cents(budgets.reduce((n, b) => n + b, 0)) : null,
@@ -970,7 +977,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       if (m[2] === 'board' && method === 'GET') return json(res, 200, board(factory.id));
       if (m[2] === 'constraint' && method === 'GET') {
         if (url.searchParams.has('window')) return problem(res, 400, 'Bad Request', 'the report takes from and to');
-        const range = rangeOf(url.searchParams, Date.now());
+        const range = rangeOf(url.searchParams, clock());
         return typeof range === 'string'
           ? problem(res, 400, 'Bad Request', range)
           : json(res, 200, constraintReport(factory, range));
@@ -1019,7 +1026,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         if (!factory.work_types.includes(type)) return problem(res, 400, 'Invalid item', `unknown work type "${type}"`);
         const number =
           Math.max(0, ...state.items.filter((it) => it.factory === factory.name).map((it) => it.number)) + 1;
-        const now = new Date().toISOString();
+        const now = new Date(clock()).toISOString();
         const it: MockItem = {
           id: crypto.randomUUID(),
           factory: factory.name,

@@ -1,10 +1,19 @@
 // Organization settings (C §13 Playwright 5): rename, short mark, address, slot limits, the
 // unsaved-changes prompt and Delete, at every width against the mock.
 import { expect, type Page, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll, isPhone, orgMarkOf, orgNav } from './support';
+import {
+  expectAccessible,
+  expectNoHorizontalScroll,
+  expectToast,
+  isPhone,
+  orgMarkOf,
+  orgNav,
+  recordToasts,
+} from './support';
 
-test.beforeEach(async ({ request }) => {
+test.beforeEach(async ({ page, request }) => {
   await request.post('/__mock/reset');
+  await recordToasts(page);
 });
 
 const heading = (page: Page) => page.getByRole('heading', { level: 1, name: 'Organization settings' });
@@ -47,7 +56,7 @@ test('a new name and short mark show in the rail once saved', async ({ page }) =
   await page.getByLabel('Short mark').fill('AR');
   await save(page).click();
 
-  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  await expectToast(page, 'Saved');
   await expect(save(page)).toBeDisabled();
   await expect(orgMarkOf(page, 'AR, Acme Robotics organization, switch organization')).toBeVisible();
   await expect(page.getByText('Settings for Acme Robotics and all 3 of its factories.')).toBeVisible();
@@ -109,7 +118,7 @@ test('slot limits: per factory and across the organization', async ({ page, requ
     page.getByText('Limits add up to 8 of 6 slots, so factories wait for each other at peak. That’s allowed.'),
   ).toBeVisible();
   await save(page).click();
-  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  await expectToast(page, 'Saved');
 
   await page.getByLabel('Slots shared by every factory').fill('');
   await save(page).click();
@@ -159,7 +168,7 @@ test('delete is enabled only by the typed name, then opens the next organization
   await confirm.click();
 
   await expect(page).toHaveURL(/\/o\/example-labs$/);
-  await expect(page.getByText('Deleted Acme')).toBeVisible();
+  await expectToast(page, 'Deleted Acme');
   expect((await request.get('/v1/orgs/acme')).status()).toBe(404);
 
   // The last organization: `/` says there is none.

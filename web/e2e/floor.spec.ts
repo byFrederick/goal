@@ -3,12 +3,18 @@
 import { expect, type Page, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
 
-test.beforeEach(async ({ request }) => {
-  await request.post('/__mock/reset');
+// One instant for the test, the mock and the page: noon UTC of the day the file loads, so the days
+// this test expects are the days goald and the page count from, even when the run crosses UTC
+// midnight.
+const now = new Date(`${new Date().toISOString().slice(0, 10)}T12:00:00Z`);
+
+test.beforeEach(async ({ page, request }) => {
+  await request.post('/__mock/reset', { data: { now: now.toISOString() } });
+  await page.clock.setFixedTime(now);
 });
 
 const dayMs = 86_400_000;
-const utcDay = (offset: number) => new Date(Date.now() - offset * dayMs).toISOString().slice(0, 10);
+const utcDay = (offset: number) => new Date(now.getTime() - offset * dayMs).toISOString().slice(0, 10);
 const month = new Intl.DateTimeFormat('en-US', { month: 'short', timeZone: 'UTC' });
 
 /** "Oct 9" for a day `offset` days before today. */

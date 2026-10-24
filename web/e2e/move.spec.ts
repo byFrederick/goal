@@ -1,9 +1,10 @@
 // E10: a person moves, pauses and sends back work, at any state, without dragging (WCAG 2.2 2.5.7).
 import { expect, test } from '@playwright/test';
-import { expectAccessible, isPhone } from './support';
+import { expectAccessible, expectToast, isPhone, pressUntilHeard, recordToasts } from './support';
 
-test.beforeEach(async ({ request }) => {
+test.beforeEach(async ({ page, request }) => {
   await request.post('/__mock/reset');
+  await recordToasts(page);
 });
 
 const serveUI = 'goald: serve the embedded web UI'; // goal#12, waiting at Approve spec
@@ -32,7 +33,7 @@ test('move a card with the keyboard: focus it, press M, choose, confirm', async 
   await page.keyboard.press('Enter');
 
   await expect(dialog).toBeHidden();
-  await expect(page.getByText('Moved goal#12 to Review.')).toBeVisible();
+  await expectToast(page, 'Moved goal#12 to Review.');
   const item = await (await request.get('/v1/orgs/acme/items/goal%2312')).json();
   expect([item.station, item.state, item.rework_count]).toEqual(['review', 'queued', 0]);
 
@@ -56,7 +57,7 @@ test('moving upstream asks why, and the Move button opens the same menu', async 
   await dialog.getByLabel('Why it goes back').fill('The spec misses the reload case.');
   await dialog.getByRole('button', { name: 'Move to Spec' }).click();
 
-  await expect(page.getByText('Moved goal#12 to Spec.')).toBeVisible();
+  await expectToast(page, 'Moved goal#12 to Spec.');
   const item = await (await request.get('/v1/orgs/acme/items/goal%2312')).json();
   expect([item.station, item.rework_count]).toEqual(['spec', 1]);
 });
@@ -100,13 +101,13 @@ test('carry a card with the keyboard to a column off the screen: one arrow, one 
   if (page.viewportSize()?.width === 768) await expect(merge).not.toBeInViewport();
 
   await page.keyboard.press('Space');
-  await expect(page.getByText('goal#12 is over Approve spec.')).toBeAttached();
-  // dnd-kit starts listening for the arrows in a task it queues at the pick-up: let it run.
-  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve)));
+  const over = (station: string) => page.getByText(`goal#12 is over ${station}.`);
+  await expect(over('Approve spec')).toBeAttached();
 
-  // Three presses in a row, as a person taps: each carries the card one column, scrolling the
-  // board at once when the column is out of view, so the next press starts from there.
-  await page.keyboard.press('ArrowRight');
+  // Once the drag hears the arrows, three columns in a row, as a person taps: each press carries
+  // the card one column, scrolling the board at once when the column is out of view, so the next
+  // press starts from there.
+  await pressUntilHeard(page, 'ArrowRight', over('Approve spec'), over('Build'));
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('ArrowRight');
   await expect(page.getByText('goal#12 is over Merge.')).toBeAttached();
@@ -128,9 +129,9 @@ test('pause a running item, then resume it', async ({ page }) => {
   await dialog.getByLabel('Why (optional)').fill('Waiting for the gateway fix.');
   await dialog.getByRole('button', { name: 'Pause' }).click();
 
-  await expect(page.getByText('Paused goal#9 at Build.')).toBeVisible();
+  await expectToast(page, 'Paused goal#9 at Build.');
   await page.getByRole('button', { name: 'Resume' }).click();
-  await expect(page.getByText('goal#9 is back in the queue.')).toBeVisible();
+  await expectToast(page, 'goal#9 is back in the queue.');
   await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible();
 });
 
@@ -143,7 +144,7 @@ test('send a running item back to its rework station', async ({ page, request })
   await dialog.getByLabel('What must change').fill('Cache per agent, not per run.');
   await dialog.getByRole('button', { name: 'Send back' }).click();
 
-  await expect(page.getByText('Sent goal#9 back. It is now at Spec.')).toBeVisible();
+  await expectToast(page, 'Sent goal#9 back. It is now at Spec.');
   const events = await (await request.get('/v1/orgs/acme/items/goal%239/events')).json();
   expect(events.events.map((e: { kind: string }) => e.kind)).toEqual(
     expect.arrayContaining(['lease_taken', 'rejected']),

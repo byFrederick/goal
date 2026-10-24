@@ -4,7 +4,17 @@
 // unknown agent is a problem with a fix, and a factory.yaml that stops parsing holds Visual until
 // it parses again. Monaco on desktop and tablet, the textarea on phones.
 import { expect, test } from '@playwright/test';
-import { definition, editor, expectShown, openYaml, problems, replaceLine, status, tile } from './editor';
+import {
+  definition,
+  editorReady,
+  expectShown,
+  monacoTimeout,
+  openYaml,
+  problems,
+  replaceLine,
+  status,
+  tile,
+} from './editor';
 import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
 
 test.beforeEach(async ({ request }) => {
@@ -48,7 +58,7 @@ test('Visual ↔ YAML: one draft, comments kept, the place kept (flow 2)', async
   await expect(status(page)).toContainText('Autosaved');
 
   await page.getByRole('navigation', { name: 'Editor view' }).getByRole('link', { name: 'YAML' }).click();
-  await expect(editor(page)).toBeAttached();
+  await editorReady(page);
   await expectShown(page, 'title: Goal platform');
   await expectShown(page, "# the spec's lane picks the engineer");
 
@@ -81,7 +91,9 @@ test('an unknown agent is a problem in place, with a fix (flow 3, YAML)', async 
 
   await expect(problems(page)).toContainText('station spec: unknown agent "ghost"');
   await expect(problems(page)).toContainText(/Line \d+, line › spec/);
-  if (!isPhone(page)) await expect(page.locator('.monaco-editor .goal-glyph-problem').first()).toBeVisible();
+  if (!isPhone(page)) {
+    await expect(page.locator('.monaco-editor .goal-glyph-problem').first()).toBeVisible({ timeout: monacoTimeout });
+  }
   await expect(tile(page, /^Line, board, lines \d+–\d+, 3 changes, 1 problem$/)).toBeAttached();
   await expect(tile(page, /^Review and publish, budget, .*Fix 2 problems first$/)).toBeAttached();
   await expectAccessible(page);
@@ -107,7 +119,7 @@ test('a factory.yaml that stops parsing holds Visual until it parses again', asy
   await expectAccessible(page);
 
   await held.getByRole('link', { name: 'Open in YAML' }).click();
-  await expect(editor(page)).toBeAttached();
+  await editorReady(page);
   await replaceLine(page, 'kind: Factory: x', 'kind: Factory');
   await expect(tile(page, /^Basics, metadata, lines \d+–\d+, No changes$/)).toBeAttached();
 

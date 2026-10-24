@@ -4,10 +4,11 @@
 // removes while items wait there asks where they go before the publish.
 import { expect, type Page, test } from '@playwright/test';
 import { definition, openYaml, problems, replaceLine, status } from './editor';
-import { expectAccessible, expectNoHorizontalScroll } from './support';
+import { expectAccessible, expectNoHorizontalScroll, expectToast, recordToasts } from './support';
 
-test.beforeEach(async ({ request }) => {
+test.beforeEach(async ({ page, request }) => {
   await request.post('/__mock/reset');
+  await recordToasts(page);
 });
 
 const reviewLink = (page: Page) => page.getByRole('link', { name: 'Review and publish', exact: true });
@@ -64,7 +65,7 @@ test('a problem blocks Publish until it is fixed; then v9 runs (flow 3)', async 
   await page.getByRole('textbox', { name: 'Describe this version' }).fill('Build also runs pnpm test');
   await publishButton(page).click();
 
-  await expect(page.getByText('goal v9 published', { exact: true })).toBeVisible();
+  await expectToast(page, 'goal v9 published');
   await expect(page.getByRole('region', { name: 'Publish' })).toContainText('No draft. v9 is running.');
   await expect(versionRow(page, 9)).toContainText('Build also runs pnpm test');
   await expect(versionRow(page, 9)).toContainText('Running');
@@ -122,5 +123,5 @@ test('items waiting at a station the draft removes ask where they go', async ({ 
     'No open items wait at a station it removes',
   );
   await publishButton(page).click();
-  await expect(page.getByText('goal v9 published', { exact: true })).toBeVisible();
+  await expectToast(page, 'goal v9 published');
 });

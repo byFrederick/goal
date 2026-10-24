@@ -1,7 +1,7 @@
 // The Line section (D7) against the mock: goal's draft of v9 has Inbox, Spec, Approve spec,
 // Build, Review, Merge (a merge step) and Done; sre has no repository and no draft.
 import { expect, type Locator, type Page, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll } from './support';
+import { expectAccessible, expectNoHorizontalScroll, pressUntilHeard } from './support';
 
 const goalLine = '/o/acme/f/goal/definition/line';
 
@@ -114,12 +114,12 @@ test('reorder by button, Alt+Arrow and drag; Done stays last', async ({ page }) 
     .focus();
   const dndStatus = page.locator('[id^="DndLiveRegion"]');
   await page.keyboard.press('Space');
-  // dnd-kit listens for the arrows a moment after the pick-up: press until the row is over Spec
-  // (Spec is first, so a second press has nowhere further to go).
-  await expect(async () => {
-    await page.keyboard.press('ArrowUp');
-    await expect(dndStatus).toContainText('Inbox is over Spec', { timeout: 200 });
-  }).toPass();
+  await pressUntilHeard(
+    page,
+    'ArrowUp',
+    dndStatus.filter({ hasText: 'Inbox is over Inbox' }),
+    dndStatus.filter({ hasText: 'Inbox is over Spec' }),
+  );
   await page.keyboard.press('Space');
   await expect.poll(() => order(page)).toEqual(['Inbox', 'Spec', 'Review', 'Approve spec', 'Build', 'Merge', 'Done']);
 

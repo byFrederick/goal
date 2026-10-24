@@ -1,8 +1,18 @@
 import { expect, type Page, test } from '@playwright/test';
-import { expectAccessible, expectBoardLive, expectNoHorizontalScroll, isPhone, orgMarkOf, orgNav } from './support';
+import {
+  expectAccessible,
+  expectBoardLive,
+  expectNoHorizontalScroll,
+  expectToast,
+  isPhone,
+  orgMarkOf,
+  orgNav,
+  recordToasts,
+} from './support';
 
-test.beforeEach(async ({ request }) => {
+test.beforeEach(async ({ page, request }) => {
   await request.post('/__mock/reset');
+  await recordToasts(page);
 });
 
 /** On a narrow page the item shows its latest steps; the whole trace is one tap away. */
@@ -285,7 +295,7 @@ test('approve from the phone: the oldest decision is open to decide on the spot'
   await expectNoHorizontalScroll(page);
 
   await card.getByRole('button', { name: 'Approve' }).click();
-  await expect(page.getByText('Approved sre#4.')).toBeVisible();
+  await expectToast(page, 'Approved sre#4.');
   await expect(needs.getByText('1 toil, 1 change at Approve.')).toBeVisible();
   await expect(needs.getByRole('article', { name: 'Rotate the staging TLS certificate' })).toBeVisible();
 });
@@ -334,7 +344,7 @@ test('send an item back with a reason', async ({ page }) => {
   await dialog.getByRole('button', { name: 'Send back' }).click();
 
   await expect(dialog).toBeHidden();
-  await expect(page.getByText('Sent goal#12 back. It is now at Spec.')).toBeVisible();
+  await expectToast(page, 'Sent goal#12 back. It is now at Spec.');
   await expect(page.getByText('At Spec', { exact: true })).toBeVisible();
   await showTrace(page);
   await expect(page.getByText('Cover the empty-bucket case with a test.')).toBeVisible();

@@ -13,11 +13,24 @@ export const tile = (page: Page, name: RegExp) => tiles(page).getByRole('link', 
 export const status = (page: Page) => page.getByRole('status').filter({ hasText: /Based on|runs now/ });
 export const problems = (page: Page) => page.getByRole('region', { name: /^Problems/ });
 
+/**
+ * How long Monaco may take to show its first lines: its chunk is about 850 KB gzipped, a cold
+ * load on a busy machine outlasts the default 5 s.
+ */
+export const monacoTimeout = 20_000;
+
+/** The YAML editor is ready: Monaco shows its lines (the textarea on phones). */
+export async function editorReady(page: Page) {
+  await expect(editor(page)).toBeAttached({ timeout: monacoTimeout });
+  if (!isPhone(page)) {
+    await expect(page.locator('.monaco-editor .view-line').first()).toBeVisible({ timeout: monacoTimeout });
+  }
+}
+
 export async function openYaml(page: Page, section = 'line', search = '') {
   await page.goto(`${definition}/${section}?mode=yaml${search}`);
   await expect(page.getByRole('heading', { level: 1, name: 'Definition' })).toBeVisible();
-  await expect(editor(page)).toBeAttached();
-  if (!isPhone(page)) await expect(page.locator('.monaco-editor .view-line').first()).toBeVisible();
+  await editorReady(page);
 }
 
 /**

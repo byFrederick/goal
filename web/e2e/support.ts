@@ -1,6 +1,6 @@
 // What every flow checks: axe at WCAG 2.2 AA, no horizontal scroll, which chrome the width shows.
 import AxeBuilder from '@axe-core/playwright';
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 0) < 768;
 
@@ -28,6 +28,56 @@ export const orgNav = (page: Page) => page.getByRole('navigation', { name: 'Orga
 export async function expectBoardLive(page: Page) {
   const status = page.getByRole('status').filter({ hasText: /^Line running(, WIP \d+( of \d+)?)?$/ });
   await expect(status.filter({ visible: true })).toBeVisible();
+}
+
+declare global {
+  interface Window {
+    /** The text of every toast shown since the page loaded (recordToasts). */
+    __toasts?: string[];
+  }
+}
+
+/**
+ * Records the text of every toast as it appears. Sonner removes a toast after 4 s, which a slow
+ * run can outlast between the action and its assertion; expectToast asserts on this record, not
+ * on a toast that may be gone. Call it before the page loads.
+ */
+export async function recordToasts(page: Page) {
+  await page.addInitScript(() => {
+    const seen: string[] = [];
+    window.__toasts = seen;
+    new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (!(node instanceof HTMLElement)) continue;
+          const toasts = node.matches('[data-sonner-toast]')
+            ? [node]
+            : [...node.querySelectorAll<HTMLElement>('[data-sonner-toast]')];
+          for (const toast of toasts) seen.push(toast.textContent ?? '');
+        }
+      }
+    }).observe(document, { childList: true, subtree: true });
+  });
+}
+
+/** A toast saying `text` was shown since the page loaded (recordToasts), however long ago. */
+export async function expectToast(page: Page, text: string) {
+  await expect.poll(() => page.evaluate(() => window.__toasts ?? [])).toContainEqual(expect.stringContaining(text));
+}
+
+/**
+ * The first arrow of a keyboard drag: dnd-kit starts listening for the arrows in a task it queues
+ * at the pick-up, so a press right after it can go unheard. The key is pressed again only while
+ * `before` (where the pick-up left the item) still shows, until `after` shows.
+ */
+export async function pressUntilHeard(page: Page, key: string, before: Locator, after: Locator) {
+  await expect
+    .poll(async () => {
+      if ((await after.count()) > 0) return true;
+      if ((await before.count()) > 0) await page.keyboard.press(key);
+      return (await after.count()) > 0;
+    })
+    .toBe(true);
 }
 
 /** The organization mark of the shown navigation: it opens the organization menu or sheet. */
