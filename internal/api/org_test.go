@@ -389,7 +389,7 @@ func checkSeam(t *testing.T, op string, p probe, steps []step) {
 		return
 	}
 
-	if first := *steps[0].access; first.Operation != op || first.Org != p.org || first.Factory != "" || first.Actor != domain.LocalUser {
+	if first := *steps[0].access; first.Operation != op || first.Org != p.org || first.Factory != "" || first.Principal.Actor() != domain.LocalUser {
 		t.Errorf("%s: the middleware asked %+v, want %s in org %q by the local user", op, first, op, p.org)
 	}
 

@@ -82,7 +82,7 @@ func TestAPI_NoteRefusals(t *testing.T) {
 		{name: "too long", path: acmeNotes, body: noteBody(t, strings.Repeat("a", 2001)), want: http.StatusBadRequest},
 		{name: "no text", path: acmeNotes, body: `{}`, want: http.StatusBadRequest},
 		{name: "done item", path: "/v1/orgs/acme/items/" + string(done.ID) + "/notes", body: noteBody(t, "late"), want: http.StatusConflict, code: "item-closed"},
-		{name: "unknown item", path: "/v1/orgs/acme/items/acme%2399/notes", body: noteBody(t, "hi"), want: http.StatusNotFound},
+		{name: "unknown item", path: "/v1/orgs/acme/items/acme%2399/notes", body: noteBody(t, "hi"), want: http.StatusNotFound, code: "item-not-found"},
 	}
 
 	for _, tt := range tests {

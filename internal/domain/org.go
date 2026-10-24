@@ -45,29 +45,31 @@ type OrgSummary struct {
 	FactoryCount int
 }
 
-// ActorKind is who did something: a person, an agent or the system.
+// ActorKind is who did something: a person, an API key, an agent or the system.
 type ActorKind string
 
 // Actor kinds.
 const (
-	ActorUser   ActorKind = "user"
-	ActorAgent  ActorKind = "agent"
-	ActorSystem ActorKind = "system"
+	ActorUser    ActorKind = "user"
+	ActorService ActorKind = "service"
+	ActorAgent   ActorKind = "agent"
+	ActorSystem  ActorKind = "system"
 )
 
-// Actor is who did something. ID is "local" for the local user, an agent's name or a job's name.
+// Actor is who did something. ID is a user's id ("local" for the local user), an API key's id,
+// an agent's name or a job's name.
 type Actor struct {
 	Kind ActorKind
 	ID   string
 	Name string
 }
 
-// LocalUser is the only person in phase 2.2, which has no sign-in: every request acts as it.
-// Phase 3 adds real users; refs recorded before then stay readable.
+// LocalUser is the one person of GOAL_AUTH=none, where every request acts as it, and the author
+// of rows written before sign-in; those refs stay readable and are never rewritten.
 var LocalUser = Actor{Kind: ActorUser, ID: "local", Name: "Local user"}
 
 // Ref is how other tables record an actor (`*_by text` columns): "user:local",
-// "agent:investigator", "system:engine".
+// "service:<key id>", "agent:investigator", "system:engine".
 func (a Actor) Ref() string { return string(a.Kind) + ":" + a.ID }
 
 // ActorFromRef parses a Ref back into an actor and fills its name.
@@ -84,7 +86,7 @@ func ActorFromRef(ref string) (Actor, error) {
 		}
 
 		return Actor{Kind: ActorUser, ID: id, Name: id}, nil
-	case ActorAgent, ActorSystem:
+	case ActorService, ActorAgent, ActorSystem:
 		return Actor{Kind: ActorKind(kind), ID: id, Name: id}, nil
 	default:
 		return Actor{}, fmt.Errorf("actor ref %q: unknown kind %q", ref, kind)
@@ -222,8 +224,8 @@ func OrgFrom(ctx context.Context) (OrgID, bool) {
 	return id, id != ""
 }
 
-// WithActor returns ctx carrying who acts: the API sets the request's actor (always LocalUser
-// in 2.2), the engine and jobs their own.
+// WithActor returns ctx carrying who acts: the API sets the request's actor (its principal's
+// Actor), the engine and jobs their own.
 func WithActor(ctx context.Context, a Actor) context.Context {
 	return context.WithValue(ctx, actorKey{}, a)
 }

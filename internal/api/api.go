@@ -12,7 +12,7 @@
 //
 // Every request goes through the same layers: cross-origin protection (a browser may change
 // things only from goald's own origin), a body limit, a request id (X-Request-Id), the request's
-// actor (actor.go: always the local user in phase 2.2, which has no identity), then, per
+// principal and actor (credential.go: the local user under GOAL_AUTH=none), then, per
 // operation, the organization of the path (org.go: unknown or deleted is 404, and the request is
 // bound to it with domain.WithOrg so row-level security scopes every store call) and the
 // Authorizer seam (authz.go), passed again by the resolvers of factories, definitions, items and
@@ -28,7 +28,8 @@
 // events and one for definition changes, fanned out to that instance's clients of each
 // organization, so any instance serves any client.
 //
-// No authentication yet: goald binds the API to 127.0.0.1.
+// No authentication yet (GOAL_AUTH=none): goald binds the API to 127.0.0.1. Permissions, the
+// Authorizer of signed-in installs, and the credential parsing are ready for it (spec 3).
 package api
 
 import (
@@ -116,7 +117,7 @@ type Deps struct {
 	// OrgRetention is how long a deleted organization is kept before the purge removes it
 	// (GOAL_ORG_RETENTION); a deletion answers when that will be.
 	OrgRetention time.Duration
-	// Authorizer decides every request (AllowAll in phase 2.2).
+	// Authorizer decides every request: AllowAll under GOAL_AUTH=none only, else Permissions.
 	Authorizer Authorizer
 	// Feed serves /v1/orgs/{org}/stream; the caller runs it (Feed.Run).
 	Feed *Feed
@@ -201,7 +202,7 @@ func New(d Deps) (http.Handler, error) {
 		s.problem(w, r, errCrossOrigin)
 	}))
 
-	return cop.Handler(limitBodies(withRequestID(withActor(h)))), nil
+	return cop.Handler(limitBodies(withRequestID(s.withLocalUser(h)))), nil
 }
 
 // limitBodies refuses request bodies over the route's limit (413): the definitions routes take
@@ -422,6 +423,10 @@ func (s *server) problem(w http.ResponseWriter, r *http.Request, err error) {
 			slog.String("path", r.URL.Path), slog.String("request_id", w.Header().Get(requestIDHeader)), slog.Any("error", err))
 	}
 
+	if p.Status == http.StatusUnauthorized {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="goal"`)
+	}
+
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(p.Status)
 
@@ -431,9 +436,14 @@ func (s *server) problem(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 // problemOf maps an error to its problem details. An unknown and a deleted organization get the
-// same body, so nobody learns which organizations once existed.
+// same body, so nobody learns which organizations once existed; so do an unknown factory, item or
+// run and one the principal may not see, and every credential refusal.
 func problemOf(err error) gen.Problem {
 	var tooLarge *http.MaxBytesError
+
+	if p, ok := fixedProblem(err); ok {
+		return p
+	}
 
 	if p, ok := definitionProblem(err); ok {
 		return p
@@ -448,8 +458,6 @@ func problemOf(err error) gen.Problem {
 	}
 
 	switch {
-	case errors.Is(err, errOrgNotFound):
-		return gen.Problem{Title: "Organization not found", Status: http.StatusNotFound, Code: optional("org-not-found")}
 	case errors.Is(err, domain.ErrSkillNotFound):
 		p := detailed(http.StatusNotFound, err)
 		p.Code = optional("skill-not-found")
@@ -493,6 +501,32 @@ func problemOf(err error) gen.Problem {
 
 		return gen.Problem{Title: http.StatusText(http.StatusInternalServerError), Status: http.StatusInternalServerError, Detail: &detail}
 	}
+}
+
+// fixedProblem is the one body, without detail, of the answers that must not tell anything
+// apart: whether an organization, factory, item or run exists, or why a credential failed.
+func fixedProblem(err error) (gen.Problem, bool) {
+	fixed := []struct {
+		err    error
+		status int
+		title  string
+		code   string
+	}{
+		{err: domain.ErrUnauthenticated, status: http.StatusUnauthorized, title: "Not signed in", code: "unauthenticated"},
+		{err: domain.ErrReauthRequired, status: http.StatusForbidden, title: "Sign in again to do this", code: "reauth-required"},
+		{err: errOrgNotFound, status: http.StatusNotFound, title: "Organization not found", code: "org-not-found"},
+		{err: errFactoryNotFound, status: http.StatusNotFound, title: "Factory not found", code: "factory-not-found"},
+		{err: errItemNotFound, status: http.StatusNotFound, title: "Item not found", code: "item-not-found"},
+		{err: errRunNotFound, status: http.StatusNotFound, title: "Run not found", code: "run-not-found"},
+	}
+
+	for _, f := range fixed {
+		if errors.Is(err, f.err) {
+			return gen.Problem{Title: f.title, Status: f.status, Code: optional(f.code)}, true
+		}
+	}
+
+	return gen.Problem{}, false
 }
 
 func detailed(status int, err error) gen.Problem {

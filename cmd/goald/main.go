@@ -204,7 +204,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	apiHandler, err := api.New(api.Deps{
 		Engine: eng, Items: store, Factories: defs, Definitions: authors, Versions: definitionStore, Orgs: store, Audit: store, OrgRetention: s.OrgRetention,
-		Authorizer: api.AllowAll{}, Feed: feed, Builder: editor, Clock: clock, Logger: log,
+		Authorizer: authorizer(s.Auth), Feed: feed, Builder: editor, Clock: clock, Logger: log,
 	})
 	if err != nil {
 		return err
@@ -449,4 +449,15 @@ func refresh(ctx context.Context, log *slog.Logger, defs *definitions.Cache, eve
 			log.WarnContext(ctx, "refresh factory definitions", slog.Any("error", err))
 		}
 	}
+}
+
+// authorizer is the API's Authorizer for the auth mode: AllowAll, everything allowed, only under
+// GOAL_AUTH=none (a loopback listen, one local user); api.Permissions joins with sign-in. Any
+// other mode has none, which api.New refuses: goald fails closed.
+func authorizer(mode authMode) api.Authorizer {
+	if mode != authNone {
+		return nil
+	}
+
+	return api.AllowAll{}
 }

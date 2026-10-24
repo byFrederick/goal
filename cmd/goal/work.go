@@ -602,10 +602,20 @@ func answer(it *gen.Item, res *http.Response, p *gen.Problem) (*gen.Item, error)
 
 func problem(res *http.Response, p *gen.Problem) error {
 	if p != nil {
-		return fmt.Errorf("%s: %s", p.Title, deref(p.Detail))
+		return errors.New(problemText(p))
 	}
 
 	return fmt.Errorf("goald answered %s", res.Status)
+}
+
+// problemText is a problem as the CLI prints it: its title, then its detail when it has one (a
+// not-found or a refused credential has none).
+func problemText(p *gen.Problem) string {
+	if d := deref(p.Detail); d != "" {
+		return p.Title + ": " + d
+	}
+
+	return p.Title
 }
 
 func apiDown(err error) error {

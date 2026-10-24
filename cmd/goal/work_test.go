@@ -288,3 +288,22 @@ func TestControl_UsageErrors(t *testing.T) {
 		}
 	}
 }
+
+// A not-found or a refused credential has no detail: the CLI prints its title alone.
+func TestProblemText_DetailOnlyWhenThere(t *testing.T) {
+	t.Parallel()
+
+	detail := "the item is not waiting for a human"
+
+	for _, tt := range []struct {
+		p    gen.Problem
+		want string
+	}{
+		{p: gen.Problem{Title: "Item not found", Status: http.StatusNotFound}, want: "Item not found"},
+		{p: gen.Problem{Title: "Item closed", Status: http.StatusConflict, Detail: &detail}, want: "Item closed: " + detail},
+	} {
+		if got := problemText(&tt.p); got != tt.want {
+			t.Errorf("problemText = %q, want %q", got, tt.want)
+		}
+	}
+}

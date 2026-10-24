@@ -55,7 +55,7 @@ func (s *server) scope(next gen.StrictHandlerFunc, operation string) gen.StrictH
 			ctx = context.WithValue(domain.WithOrg(ctx, o.ID), orgKey{}, o)
 		}
 
-		if err := s.authorize(ctx, ""); err != nil {
+		if err := s.authorize(ctx, "", errOrgNotFound); err != nil {
 			return nil, err
 		}
 

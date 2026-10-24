@@ -173,7 +173,7 @@ func TestSettings_BrokenRulesChangeNothing(t *testing.T) {
 		{body: `{"slots":{"max":0}}`, want: http.StatusConflict},
 		{body: `{"slots":{"max":1001}}`, want: http.StatusConflict},
 		{body: `{"slots":{"max":2,"factories":[{"factory_id":"acme","max":-1}]}}`, want: http.StatusConflict},
-		{body: `{"slots":{"max":2,"factories":[{"factory_id":"nope","max":1}]}}`, want: http.StatusNotFound},
+		{body: `{"slots":{"max":2,"factories":[{"factory_id":"nope","max":1}]}}`, want: http.StatusNotFound, code: "factory-not-found"},
 		{body: `{"slots":`, want: http.StatusBadRequest},
 	}
 

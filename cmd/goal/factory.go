@@ -576,7 +576,7 @@ func refusal(out *printer, root string, f *gen.Factory, revision int64, status s
 			"(items being worked must finish or be stopped first)")
 	}
 
-	return fmt.Errorf("%s: %s", p.Title, deref(p.Detail))
+	return errors.New(problemText(p))
 }
 
 // pullArgs are the flags of goal factory pull.

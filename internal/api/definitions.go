@@ -257,11 +257,15 @@ func readFile(body io.Reader) ([]byte, error) {
 // only through here.
 func (s *server) definition(ctx context.Context, ref string) (ports.FactoryRecord, error) {
 	rec, err := s.defs.Factory(ctx, ref)
+	if errors.Is(err, authoring.ErrFactoryNotFound) {
+		return ports.FactoryRecord{}, errFactoryNotFound
+	}
+
 	if err != nil {
 		return ports.FactoryRecord{}, err
 	}
 
-	if err := s.authorize(ctx, rec.ID); err != nil {
+	if err := s.authorize(ctx, rec.ID, errFactoryNotFound); err != nil {
 		return ports.FactoryRecord{}, err
 	}
 
