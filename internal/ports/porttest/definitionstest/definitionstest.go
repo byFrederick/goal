@@ -56,6 +56,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"PutBlobs_StoresEachContentOnce", testPutBlobs},
 		{"PutBlobs_TooLargeStoresNothing", testPutBlobsTooLarge},
 		{"Blob_VerifiesItsHash", testBlobCorrupt},
+		{"PutBlobs_RepairsAPlantedObject", testPutBlobsRepairsAPlantedObject},
 		{"OpenDraft_OneDraftPerFactory", testOpenDraft},
 		{"OpenDraft_FromABaseOrReplacing", testOpenDraftBase},
 		{"OpenDraft_ConcurrentCallsOpenOne", testOpenDraftConcurrent},

@@ -259,8 +259,10 @@ func (d *Definitions) PutBlobs(ctx context.Context, files map[string][]byte) (do
 	return m, nil
 }
 
-// upload writes one blob's object unless it is there; an object already there (from a put that
-// did not get as far as recording it) must have the content's size.
+// upload writes one blob's object unless it is there. An object already there (from a put that
+// did not get as far as recording it) is adopted only when it hashes to h; any other object at
+// the key (written to the bucket directly) is replaced by body, so a corrupt object is never
+// recorded as the blob.
 func (d *Definitions) upload(ctx context.Context, org domain.OrgID, h domain.BlobHash, body []byte) error {
 	key := domain.BlobKey(org, h)
 
@@ -269,10 +271,20 @@ func (d *Definitions) upload(ctx context.Context, org domain.OrgID, h domain.Blo
 		return fmt.Errorf("blob %s: %w", h, err)
 	}
 
-	if !created && info.Size != int64(len(body)) {
-		d.log.WarnContext(ctx, "definition blob does not match its hash", slog.String("key", key))
+	if created {
+		return nil
+	}
 
-		return fmt.Errorf("blob %s: object has %d bytes, not %d: %w", h, info.Size, len(body), ports.ErrBlobCorrupt)
+	if obj, err := d.objects.Get(ctx, key, info.Version); err == nil && domain.HashBlob(obj.Body) == h {
+		return nil
+	} else if err != nil && !errors.Is(err, ports.ErrNotFound) {
+		return fmt.Errorf("blob %s: read the object there: %w", h, err)
+	}
+
+	d.log.WarnContext(ctx, "definition blob object does not match its hash; replaced", slog.String("key", key))
+
+	if _, err := d.objects.Put(ctx, key, body); err != nil {
+		return fmt.Errorf("blob %s: replace the object there: %w", h, err)
 	}
 
 	return nil

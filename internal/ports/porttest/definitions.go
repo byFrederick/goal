@@ -338,8 +338,18 @@ func (d *Definitions) PutBlobs(ctx context.Context, files map[string][]byte) (do
 			continue
 		}
 
-		if _, _, err := d.objects.PutIfAbsent(ctx, domain.BlobKey(org, h), files[path]); err != nil {
+		key := domain.BlobKey(org, h)
+
+		info, created, err := d.objects.PutIfAbsent(ctx, key, files[path])
+		if err != nil {
 			return nil, fmt.Errorf("put blob %s: %w", h, err)
+		}
+
+		// An object already there that does not hold the blob is replaced, as the adapter does.
+		if obj, gerr := d.objects.Get(ctx, key, info.Version); !created && (gerr != nil || domain.HashBlob(obj.Body) != h) {
+			if _, err := d.objects.Put(ctx, key, files[path]); err != nil {
+				return nil, fmt.Errorf("repair blob %s: %w", h, err)
+			}
 		}
 
 		if d.blobs[org] == nil {

@@ -167,6 +167,27 @@ func testBlobCorrupt(f *fixture) {
 	expect(t, "Blob whose content changed", err, ports.ErrBlobCorrupt)
 }
 
+// An object already at a blob's key that does not hold the blob's bytes (written by something
+// other than a put, the same size or not) is replaced, never adopted.
+func testPutBlobsRepairsAPlantedObject(f *fixture) {
+	t := f.t
+	ctx := f.ctx(t)
+	content := []byte("kind: Factory\n")
+	h := domain.HashBlob(content)
+
+	if _, err := f.Objects.Put(ctx, domain.BlobKey(f.org, h), []byte("kind: Tampers\n")); err != nil { // same size
+		t.Fatal(err)
+	}
+
+	if _, err := f.Definitions.PutBlobs(ctx, map[string][]byte{factoryYAML: content}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, err := f.Definitions.Blob(ctx, h); err != nil || !bytes.Equal(got, content) {
+		t.Errorf("Blob after the put = %q, %v; want the content put", got, err)
+	}
+}
+
 func testSetPaused(f *fixture) {
 	t := f.t
 	ctx := f.ctx(t)
