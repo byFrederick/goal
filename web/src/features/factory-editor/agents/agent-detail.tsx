@@ -14,7 +14,7 @@ import { formatClock } from '../../../shared/format';
 import { Button } from '../../../ui/button';
 import { Field, Input, NativeSelect } from '../../../ui/field';
 import { duplicateAgent, setAgentField } from '../draft/ops';
-import { useDraft, useDraftSession, useSection } from '../draft/use-draft';
+import { useDraft, useDraftSession, useSection, useViewOnly } from '../draft/use-draft';
 import { EditedMark } from '../frame/section-shell';
 import { useProblemText } from '../frame/use-editor';
 import { useSetSearch } from '../search-link';
@@ -33,6 +33,7 @@ interface AgentDetailProps {
 
 export function AgentDetail({ agent, place, openPicker }: AgentDetailProps) {
   const session = useDraftSession();
+  const viewOnly = useViewOnly();
   const agents = useSection('agents');
   const line = useSection('line');
   const savedAt = useDraft((s) => (s.hasDraft ? s.savedAt : null));
@@ -78,15 +79,19 @@ export function AgentDetail({ agent, place, openPicker }: AgentDetailProps) {
         </div>
         <div className="flex flex-wrap gap-2">
           {place === 'definition' ? <AgentPageLink agent={agent.name} /> : null}
-          <Button variant="white" size="sm" className="h-11 md:h-8" onClick={() => void duplicate()}>
-            Duplicate
-          </Button>
-          <Button variant="white" size="sm" className="h-11 md:h-8" onClick={() => setRenaming(true)}>
-            Rename…
-          </Button>
-          <Button variant="white" size="sm" className="h-11 md:h-8" onClick={() => setRemoving(true)}>
-            Remove…
-          </Button>
+          {viewOnly ? null : (
+            <>
+              <Button variant="white" size="sm" className="h-11 md:h-8" onClick={() => void duplicate()}>
+                Duplicate
+              </Button>
+              <Button variant="white" size="sm" className="h-11 md:h-8" onClick={() => setRenaming(true)}>
+                Rename…
+              </Button>
+              <Button variant="white" size="sm" className="h-11 md:h-8" onClick={() => setRemoving(true)}>
+                Remove…
+              </Button>
+            </>
+          )}
         </div>
       </div>
       <RenameAgentDialog agent={agent} open={renaming} onOpenChange={setRenaming} />

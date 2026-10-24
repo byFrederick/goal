@@ -1,6 +1,6 @@
 import { createFileRoute, notFound, Outlet } from '@tanstack/react-router';
 import { useEffect } from 'react';
-import { ensureFound, ensureLoaded, factoriesQuery, meQuery, orgsQuery } from '../api/queries';
+import { ensureFound, ensureLoaded, factoriesQuery, meQuery, orgQuery, orgsQuery } from '../api/queries';
 import { AppShell } from '../app/app-shell';
 import { NotFoundScreen } from '../app/states';
 import { findOrg, rememberOrg } from '../shared/org';
@@ -14,11 +14,13 @@ export const Route = createFileRoute('/o/$org')({
     if (!org) throw notFound();
     return { org };
   },
-  // The rail lists the organization's factories on every page, and names the person (the account;
-  // a goald that cannot say, an older one, leaves it the local user rather than failing the page).
+  // The rail lists the organization's factories on every page, offers New factory by what the
+  // caller may do (`can`), and names the person (the account; a goald that cannot say, an older
+  // one, leaves it the local user rather than failing the page).
   loader: ({ context: { queryClient, org } }) =>
     Promise.all([
       ensureLoaded(queryClient, factoriesQuery(org.id)),
+      ensureLoaded(queryClient, orgQuery(org.id)),
       ensureLoaded(queryClient, meQuery).catch(() => undefined),
     ]),
   component: OrgLayout,

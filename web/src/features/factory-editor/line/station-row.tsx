@@ -11,6 +11,7 @@ import { Button } from '../../../ui/button';
 import { Chip } from '../../../ui/chip';
 import { cn } from '../../../ui/cn';
 import { ConfirmDialog } from '../../../ui/confirm-dialog';
+import { readOnlyControl } from '../../../ui/field';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '../../../ui/menu';
 import { SegmentedControl } from '../../../ui/segmented-control';
 import {
@@ -164,7 +165,7 @@ export function StationRow({ station, index, selected }: { station: ModelStation
         drag.dragging && 'opacity-50',
       )}
     >
-      {drag.handle ? (
+      {drag.handle && !editor.viewOnly ? (
         <button
           type="button"
           {...drag.handle}
@@ -192,9 +193,13 @@ export function StationRow({ station, index, selected }: { station: ModelStation
           aria-invalid={invalid('name') || undefined}
           onChange={(e) => setName(e.target.value)}
           onBlur={editor.flush}
+          readOnly={editor.viewOnly}
           autoComplete="off"
           placeholder={station.id}
-          className="h-11 w-full min-w-0 rounded-control border border-rule bg-surface px-3 text-base text-ink transition-colors duration-200 placeholder:text-muted hover:border-faint aria-[invalid=true]:border-rework md:h-9 md:text-[15px]"
+          className={cn(
+            'h-11 w-full min-w-0 rounded-control border border-rule bg-surface px-3 text-base text-ink transition-colors duration-200 placeholder:text-muted hover:border-faint aria-[invalid=true]:border-rework md:h-9 md:text-[15px]',
+            readOnlyControl,
+          )}
         />
         <span className="group/id flex flex-wrap items-center gap-1.5">
           <span translate="no" className="font-mono text-xs text-muted">
@@ -226,6 +231,7 @@ export function StationRow({ station, index, selected }: { station: ModelStation
           className="flex w-full [&>label]:min-w-0 [&>label]:flex-1 [&>label]:justify-center"
           value={station.kind}
           onChange={setKind}
+          readOnly={editor.viewOnly}
           options={kinds.map((k) => ({
             value: k,
             label: kindLabel[k],
@@ -245,6 +251,7 @@ export function StationRow({ station, index, selected }: { station: ModelStation
               onBlur={editor.flush}
               invalid={invalid('wip')}
               describedBy={describedBy('wip')}
+              readOnly={editor.viewOnly}
             />
           ) : (
             <span className="text-sm text-muted">Not limited</span>
@@ -254,43 +261,45 @@ export function StationRow({ station, index, selected }: { station: ModelStation
           <WhoWorks station={station} invalid={invalid('who')} describedBy={describedBy('who')} />
         </div>
         {/* Beside WIP and who works when the row has room, on a line of their own when not. */}
-        <div className="ml-auto flex justify-end gap-1.5">
-          <OrderButton dir={-1} label={label} blocked={up} onStep={step} />
-          <OrderButton dir={1} label={label} blocked={down} onStep={step} />
-          <Menu>
-            <MenuTrigger asChild>
-              <button type="button" aria-label={`More for ${label}`} className={iconButton}>
-                <MoreHorizontal size={16} strokeWidth={1.5} aria-hidden="true" />
-              </button>
-            </MenuTrigger>
-            <MenuContent side="bottom" align="end" className="w-64">
-              <MenuItem onSelect={() => insert('above')}>Insert above</MenuItem>
-              {station.kind === 'done' ? null : <MenuItem onSelect={() => insert('below')}>Insert below</MenuItem>}
-              {station.kind === 'done' ? null : (
-                <MenuItem
-                  onSelect={() => {
-                    const copy = duplicateStation(line, station.id);
-                    if (copy) editor.insert(copy.edit, copy.station);
-                  }}
-                >
-                  Duplicate
+        {editor.viewOnly ? null : (
+          <div className="ml-auto flex justify-end gap-1.5">
+            <OrderButton dir={-1} label={label} blocked={up} onStep={step} />
+            <OrderButton dir={1} label={label} blocked={down} onStep={step} />
+            <Menu>
+              <MenuTrigger asChild>
+                <button type="button" aria-label={`More for ${label}`} className={iconButton}>
+                  <MoreHorizontal size={16} strokeWidth={1.5} aria-hidden="true" />
+                </button>
+              </MenuTrigger>
+              <MenuContent side="bottom" align="end" className="w-64">
+                <MenuItem onSelect={() => insert('above')}>Insert above</MenuItem>
+                {station.kind === 'done' ? null : <MenuItem onSelect={() => insert('below')}>Insert below</MenuItem>}
+                {station.kind === 'done' ? null : (
+                  <MenuItem
+                    onSelect={() => {
+                      const copy = duplicateStation(line, station.id);
+                      if (copy) editor.insert(copy.edit, copy.station);
+                    }}
+                  >
+                    Duplicate
+                  </MenuItem>
+                )}
+                {station.kind === 'agent' ? (
+                  <>
+                    <MenuSeparator />
+                    <MenuItem onSelect={() => setDialog('agents')}>Parallel agents…</MenuItem>
+                    <MenuItem onSelect={() => setDialog('output')}>Output contract…</MenuItem>
+                    <MenuItem onSelect={() => setDialog('buffer')}>Buffer in front…</MenuItem>
+                  </>
+                ) : null}
+                <MenuSeparator />
+                <MenuItem onSelect={() => setDialog('delete')} className="text-rework-ink">
+                  Delete…
                 </MenuItem>
-              )}
-              {station.kind === 'agent' ? (
-                <>
-                  <MenuSeparator />
-                  <MenuItem onSelect={() => setDialog('agents')}>Parallel agents…</MenuItem>
-                  <MenuItem onSelect={() => setDialog('output')}>Output contract…</MenuItem>
-                  <MenuItem onSelect={() => setDialog('buffer')}>Buffer in front…</MenuItem>
-                </>
-              ) : null}
-              <MenuSeparator />
-              <MenuItem onSelect={() => setDialog('delete')} className="text-rework-ink">
-                Delete…
-              </MenuItem>
-            </MenuContent>
-          </Menu>
-        </div>
+              </MenuContent>
+            </Menu>
+          </div>
+        )}
       </div>
 
       <StationRules station={station} index={index} invalid={invalid} describedBy={describedBy} />
@@ -306,7 +315,7 @@ export function StationRow({ station, index, selected }: { station: ModelStation
                   {p.message}
                 </span>
               </span>
-              {p.fixes.length > 0 ? (
+              {p.fixes.length > 0 && !editor.viewOnly ? (
                 <span className="flex flex-wrap gap-1.5 pl-5">
                   {p.fixes.map((f) => (
                     <Button
@@ -431,6 +440,7 @@ function WipStepper({
   onBlur,
   invalid,
   describedBy,
+  readOnly,
 }: {
   label: string;
   wip: number | undefined;
@@ -438,22 +448,26 @@ function WipStepper({
   onBlur: () => void;
   invalid: boolean;
   describedBy: string | undefined;
+  /** The limit only: no − and + (a view-only editor). */
+  readOnly: boolean;
 }) {
   const atMin = (wip ?? 1) <= 1;
   return (
     <fieldset className="m-0 inline-flex min-w-0 items-center gap-1 border-0 p-0">
       <legend className="sr-only">WIP limit for {label}</legend>
-      <button
-        type="button"
-        aria-label={`Lower the WIP limit of ${label}`}
-        aria-disabled={atMin || undefined}
-        onClick={() => {
-          if (!atMin) onChange((wip ?? 2) - 1);
-        }}
-        className={iconButton}
-      >
-        <span aria-hidden="true">−</span>
-      </button>
+      {readOnly ? null : (
+        <button
+          type="button"
+          aria-label={`Lower the WIP limit of ${label}`}
+          aria-disabled={atMin || undefined}
+          onClick={() => {
+            if (!atMin) onChange((wip ?? 2) - 1);
+          }}
+          className={iconButton}
+        >
+          <span aria-hidden="true">−</span>
+        </button>
+      )}
       <input
         inputMode="numeric"
         value={wip ?? ''}
@@ -465,17 +479,23 @@ function WipStepper({
           onChange(Number.isInteger(n) && n > 0 ? n : undefined);
         }}
         onBlur={onBlur}
+        readOnly={readOnly}
         autoComplete="off"
-        className="h-11 w-12 rounded-control border border-rule bg-surface text-center text-base text-ink tabular-nums transition-colors duration-200 placeholder:text-muted hover:border-faint aria-[invalid=true]:border-rework md:h-9 md:text-[15px]"
+        className={cn(
+          'h-11 w-12 rounded-control border border-rule bg-surface text-center text-base text-ink tabular-nums transition-colors duration-200 placeholder:text-muted hover:border-faint aria-[invalid=true]:border-rework md:h-9 md:text-[15px]',
+          readOnlyControl,
+        )}
       />
-      <button
-        type="button"
-        aria-label={`Raise the WIP limit of ${label}`}
-        onClick={() => onChange((wip ?? 0) + 1)}
-        className={iconButton}
-      >
-        <span aria-hidden="true">+</span>
-      </button>
+      {readOnly ? null : (
+        <button
+          type="button"
+          aria-label={`Raise the WIP limit of ${label}`}
+          onClick={() => onChange((wip ?? 0) + 1)}
+          className={iconButton}
+        >
+          <span aria-hidden="true">+</span>
+        </button>
+      )}
     </fieldset>
   );
 }

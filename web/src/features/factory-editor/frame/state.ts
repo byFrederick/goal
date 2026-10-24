@@ -24,6 +24,23 @@ export function sectionTile(summary: SectionSummary | undefined): { state: TileS
   return { state: 'unchanged', text: 'No changes' };
 }
 
+/**
+ * A section's tile in a view-only editor (canvas Define-View): what the section holds, since
+ * there are no changes to count ("Purpose and repository", "7 stations").
+ */
+export function viewTileText(section: Exclude<Section, 'review'>, model: Model): string {
+  switch (section) {
+    case 'basics':
+      return 'Purpose and repository';
+    case 'line':
+      return plural(model.line.stations?.length ?? 0, 'station');
+    case 'agents':
+      return plural(model.agents.agents?.length ?? 0, 'agent');
+    case 'connections':
+      return plural(model.connections.length, 'connection');
+  }
+}
+
 /** The Review and publish tile: what stands between the draft and a publish. */
 export function reviewTile({ problems, changes, hasDraft }: { problems: number; changes: number; hasDraft: boolean }): {
   state: TileState | 'ready';

@@ -18,6 +18,8 @@ interface FileTabsProps {
   onNew: (group: FileGroup) => void;
   onRename: (path: string) => void;
   onDelete: (path: string) => void;
+  /** Files are shown, not added, renamed or deleted (a view-only editor). */
+  readOnly?: boolean;
   /** Right of the tabs: Format and Copy. */
   actions?: ReactNode;
 }
@@ -48,7 +50,17 @@ function moveFocus(e: KeyboardEvent<HTMLDivElement>) {
   tabs[next]?.focus();
 }
 
-export function FileTabs({ groups, path, panelId, onOpen, onNew, onRename, onDelete, actions }: FileTabsProps) {
+export function FileTabs({
+  groups,
+  path,
+  panelId,
+  onOpen,
+  onNew,
+  onRename,
+  onDelete,
+  readOnly = false,
+  actions,
+}: FileTabsProps) {
   const current = groupOf(groups, path);
   const id = useId();
   return (
@@ -108,7 +120,7 @@ export function FileTabs({ groups, path, panelId, onOpen, onNew, onRename, onDel
                 ) : (
                   <MenuLabel>No files yet</MenuLabel>
                 )}
-                {g.readOnly ? (
+                {readOnly ? null : g.readOnly ? (
                   <MenuLabel>Edited from Jonah later</MenuLabel>
                 ) : (
                   <>

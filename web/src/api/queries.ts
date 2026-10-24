@@ -25,6 +25,7 @@ import {
   getLeadTime,
   getMe,
   getMetrics,
+  getOrg,
   getOrgSettings,
   getWeekly,
   type ItemFilter,
@@ -98,6 +99,8 @@ export const keys = {
   orgs: ['orgs'] as const,
   /** The prefix of everything of one organization. */
   org: (org: string) => ['org', org] as const,
+  /** The organization with the caller's role and `can` (what screens offer). */
+  detail: (org: string) => ['org', org, 'detail'] as const,
   /** What each factory needs from people now (the rail's badges). */
   attention: (org: string) => ['org', org, 'attention'] as const,
   settings: (org: string) => ['org', org, 'settings'] as const,
@@ -148,6 +151,14 @@ export const orgsQuery = queryOptions({
   queryFn: ({ signal }) => listOrgs(signal),
   staleTime: 60_000,
 });
+
+/** The organization's `can`: rarely changes; a refusal (403 forbidden) refetches it (main.tsx). */
+export const orgQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.detail(org),
+    queryFn: ({ signal }) => getOrg(org, signal),
+    staleTime: 60_000,
+  });
 
 /** The rail's badges: cheap enough to refetch on every stream event. */
 export const attentionQuery = (org: string) =>

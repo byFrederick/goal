@@ -6,8 +6,10 @@
 // /v1/orgs/{org}/stream. Decisions are the local user's: every decision waits on you. The
 // definitions and builder routes are definitions.ts's. POST /__mock/reset restores the seed;
 // POST /__mock/fail injects faults (faults.ts); an X-Mock-Latency-Ms header delays the answer; a
-// reset's {now} fixes the mock's clock until the next reset, and its {auth} turns sign-in on
-// (auth.ts: /v1/auth/config, /v1/me and the identity service's /api/auth/*).
+// reset's {now} fixes the mock's clock until the next reset, its {auth} turns sign-in on
+// (auth.ts: /v1/auth/config, /v1/me and the identity service's /api/auth/*), and its {role} makes
+// the caller an owner, admin, member, editor, approver or viewer (roles.ts): Org.can and
+// Factory.can follow, and an operation the role lacks is refused 403 forbidden, as goald does.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
   AgentStats,
@@ -50,6 +52,7 @@ import {
   trackSpan,
 } from './fixtures.ts';
 import { constraintOf, type DayRange, type FlowInput, leadTimeOf, metricsOf, rangeOf, weeklyOf } from './flow.ts';
+import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
 
 type Next = (err?: unknown) => void;
 
@@ -107,12 +110,26 @@ async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> 
   }
 }
 
+/**
+ * The caller in a role (roles.ts): every organization's and factory's role and `can` as goald
+ * answers them; a member with no factory role sees no factory, as goald hides them.
+ */
+function withRole(state: MockState, grants: Grants): void {
+  for (const org of state.orgs) Object.assign(org, { role: grants.orgRole, can: grants.org });
+  if (grants.factoryRole === null) state.factories = [];
+  for (const f of state.factories) Object.assign(f, { role: grants.factoryRole, can: grants.factory });
+}
+
 export function createMockApi(options: { live?: boolean } = {}): MockApi {
   // The mock's clock: real time, or the instant a reset fixed (POST /__mock/reset {now}), so a test
   // and the page it drives count days from the same day even across UTC midnight.
   let fixed: number | undefined;
   const clock = () => fixed ?? Date.now();
   let state: MockState = seed(clock());
+  // Who the caller is (roles.ts): undefined, the local user, until a reset names a role.
+  const sources = readSources();
+  const levels = levelsOf(sources.table);
+  let grants: Grants | undefined;
   // Sign-in: off until a reset turns it on (auth.ts).
   const auth = createMockAuth(clock);
   const subscribers = new Set<Subscriber>();
@@ -470,9 +487,12 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return json(res, 201, pull);
   };
 
+  /** The decisions waiting on the caller: only where they decide (item:decide), as goald counts them. */
+  const decisionsOf = (f: Factory) => (f.can.includes('item:decide') ? inState(f, 'waiting_human') : []);
+
   const attentionOf = (f: Factory): FactoryAttention => ({
     factory_id: f.id,
-    waiting_on_you: inState(f, 'waiting_human').length,
+    waiting_on_you: decisionsOf(f).length,
     blocked_items: inState(f, 'blocked').length,
     andon: openAndon(f),
     connections_blocked: 0,
@@ -491,7 +511,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   const overviewOf = (f: Factory, days: number): FactoryOverview => {
     const today = Date.parse(`${utcDay(0, clock())}T00:00:00Z`);
     const metrics = metricsOf(flowInput(f), { from: today - (days - 1) * dayMs, to: today }, true);
-    const waiting = inState(f, 'waiting_human');
+    const waiting = decisionsOf(f);
     const types = [...new Set(waiting.map((it) => it.type))].sort();
     const andon = openAndon(f);
     const constraint = state.constraint[f.name] ?? null;
@@ -562,14 +582,19 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return { reason, paused: last?.kind === 'paused' };
   };
 
-  /** One factory's inbox entries, as goald's work source makes them (E §8.4). */
+  /**
+   * One factory's inbox entries, as goald's work source makes them (E §8.4): decisions only where
+   * the caller decides (item:decide), the other kinds wherever they see the factory.
+   */
   const inboxOf = (f: Factory): InboxEntry[] => {
     const open = (it: MockItem) => it.state !== 'done' && it.state !== 'cancelled';
+    const decides = f.can.includes('item:decide');
     const items = state.items
       .filter((it) => it.factory === f.name)
       .flatMap((it): InboxEntry[] => {
         const base = { ...entry(f, 'expedite', it.id, it.created_at), item: card(it), station: it.station };
         if (it.state === 'waiting_human') {
+          if (!decides) return [];
           return [
             {
               ...base,
@@ -783,6 +808,23 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     };
   };
 
+  /**
+   * Whether goald would refuse the request for want of a permission: the operation's x-goal-scope,
+   * held in the organization (Org.can) or in the factory it names, directly or through an item
+   * (Factory.can). A factory the caller cannot see is left to the route, which answers 404.
+   */
+  const refused = (method: string, path: string, org: Org): boolean => {
+    const scope = scopeOf(sources.scopes, method, path);
+    if (!scope) return false;
+    const level = levels.get(scope.permission);
+    if (level === 'org') return !org.can.includes(scope.permission);
+    if (level !== 'factory') return false;
+    const { factory: key, item } = scope.params;
+    const named = item ? findItem(item, org.id)?.factory : key;
+    const factory = named ? findFactory(named, org.id) : undefined;
+    return factory !== undefined && !factory.can.includes(scope.permission);
+  };
+
   async function route(req: IncomingMessage, res: ServerResponse, next: Next) {
     const url = new URL(req.url ?? '/', 'http://mock');
     const path = url.pathname;
@@ -793,6 +835,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       const at = body.now;
       fixed = typeof at === 'string' && !Number.isNaN(Date.parse(at)) ? Date.parse(at) : undefined;
       state = seed(clock());
+      const role = roleSetting(body.role);
+      grants = role ? grantsOf(sources.table, role) : undefined;
+      if (grants) withRole(state, grants);
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
       const cookie = auth.reset(authSettings(body.auth));
       if (cookie) res.setHeader('Set-Cookie', cookie);
@@ -835,7 +880,11 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (path === '/v1/orgs' && method === 'GET') {
       const orgs = [...state.orgs].sort((a, b) => a.name.localeCompare(b.name)).map(withCount);
       return json(res, 200, {
-        orgs: auth.visible(req, orgs).map(({ created_at: _created, can: _can, ...summary }) => summary),
+        orgs: auth
+          .visible(req, orgs)
+          .map(({ created_at: _created, can: _can, ...summary }) =>
+            grants ? { ...summary, role: grants.orgRole } : summary,
+          ),
       });
     }
     if (path === '/v1/orgs' && method === 'POST') {
@@ -867,6 +916,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const org = findOrg(decodeURIComponent(scoped[1] ?? ''));
     if (!org) return json(res, 404, { title: 'Organization not found', status: 404, code: 'org-not-found' });
     const rest = scoped[2] ?? '';
+    if (refused(method, path, org)) {
+      return json(res, 403, { title: 'Forbidden', status: 403, code: 'forbidden' });
+    }
     if (await definitions.handle(org, rest, method, url, req, res)) return;
 
     if (rest === '' && method === 'GET') return json(res, 200, withCount(org));

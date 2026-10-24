@@ -2,7 +2,10 @@
 // wizard, keyed by factory so a new factory gets a new session) creates one DraftSession, feeds
 // it B's draft model from TanStack Query (the stream's `definition` events invalidate it; the
 // session's own saves refetch it once per burst), or the running version while no draft is open,
-// and provides it; useDraft reads a slice of its snapshot through useSyncExternalStore.
+// and provides it; useDraft reads a slice of its snapshot through useSyncExternalStore. Without
+// definition:edit the session is read-only (`readOnly`, keyed by the caller so a role change
+// makes a new one) and shows the running version even while someone edits a draft (canvas
+// Define-View); a factory never published shows its draft.
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createContext,
@@ -27,16 +30,19 @@ export interface DraftSessionProviderProps {
   org: string;
   /** The factory's id. */
   factory: string;
+  /** The caller may not change the definition: show it only (key the provider by it). */
+  readOnly?: boolean;
   children: ReactNode;
 }
 
-export function DraftSessionProvider({ org, factory, children }: DraftSessionProviderProps) {
+export function DraftSessionProvider({ org, factory, readOnly = false, children }: DraftSessionProviderProps) {
   const client = useQueryClient();
   const [session] = useState(
     () =>
       new DraftSession({
         org,
         factory,
+        readOnly,
         refresh: () => void client.invalidateQueries({ queryKey: defKeys.draft(org, factory) }),
         // Before the publish or discard refetches anything: the draft's queries go (an
         // invalidation would read the closed draft through observers not yet rendered again)
@@ -86,7 +92,15 @@ export function useDraftOpen(session: DraftSession): boolean | undefined {
   const opened = useSyncExternalStore(session.subscribe, () => session.getSnapshot().hasDraft);
   const detail = useQuery(factoryQuery(session.org, session.factory)).data;
   if (opened) return true;
-  return detail ? detail.draft !== null : undefined;
+  if (!detail) return undefined;
+  // Read-only, the running version is what there is to see; someone else's draft is theirs.
+  if (session.readOnly && detail.current !== null) return false;
+  return detail.draft !== null;
+}
+
+/** The editor only shows the definition: the caller lacks definition:edit (canvas Define-View). */
+export function useViewOnly(): boolean {
+  return useDraftSession().readOnly;
 }
 
 /** The editor's draft session; only inside DraftSessionProvider. */

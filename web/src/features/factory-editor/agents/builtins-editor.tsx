@@ -13,7 +13,7 @@ import { Dialog, DialogClose, DialogContent } from '../../../ui/dialog';
 import { Field, Input } from '../../../ui/field';
 import { SegmentedControl } from '../../../ui/segmented-control';
 import { setAgentField, setBuiltin, setRunCommands, useBuiltins as simpleBuiltins } from '../draft/ops';
-import { useDraft, useDraftSession, useSection } from '../draft/use-draft';
+import { useDraft, useDraftSession, useSection, useViewOnly } from '../draft/use-draft';
 import { useProblems } from '../frame/use-editor';
 import { SearchLink } from '../search-link';
 
@@ -44,6 +44,7 @@ const rows: { key: BuiltinKey; label: string; detail: (b: Builtins) => string }[
 const modeOf = (b: Builtins, key: BuiltinKey): BuiltinMode => (key === 'run' ? b.run?.mode : b[key]) ?? 'off';
 
 export function BuiltinsEditor({ agent, index }: { agent: ModelAgent; index: number }) {
+  const viewOnly = useViewOnly();
   const session = useDraftSession();
   const agents = useSection('agents');
   const headingId = useId();
@@ -83,7 +84,7 @@ export function BuiltinsEditor({ agent, index }: { agent: ModelAgent; index: num
                   <span className="min-w-0">
                     <span className="block text-sm font-medium">{row.label}</span>
                     <span className="block text-[13px] text-muted">{row.detail(builtins)}</span>
-                    {row.key === 'run' && modeOf(builtins, 'run') !== 'off' ? (
+                    {row.key === 'run' && modeOf(builtins, 'run') !== 'off' && !viewOnly ? (
                       <button
                         type="button"
                         onClick={() => setLimiting(true)}
@@ -99,6 +100,7 @@ export function BuiltinsEditor({ agent, index }: { agent: ModelAgent; index: num
                     value={modeOf(builtins, row.key)}
                     onChange={(mode) => choose(row.key, mode)}
                     describedBy={warning ? warningId : undefined}
+                    readOnly={viewOnly}
                   />
                 </div>
                 {warning ? (
@@ -127,6 +129,7 @@ export function BuiltinsEditor({ agent, index }: { agent: ModelAgent; index: num
 /** A legacy `tools` block: its rules stay in YAML until the agent switches to simple settings. */
 function CustomRules({ agent, index }: { agent: ModelAgent; index: number }) {
   const session = useDraftSession();
+  const viewOnly = useViewOnly();
   const agents = useSection('agents');
   const line = useDraft((s) => s.ranges[`/agents/agents/${index}/custom_tools`]?.[0]);
   const [confirming, setConfirming] = useState(false);
@@ -140,9 +143,11 @@ function CustomRules({ agent, index }: { agent: ModelAgent; index: number }) {
         >
           Open in YAML
         </SearchLink>
-        <Button variant="white" size="sm" className="h-11 md:h-8" onClick={() => setConfirming(true)}>
-          Switch to simple settings…
-        </Button>
+        {viewOnly ? null : (
+          <Button variant="white" size="sm" className="h-11 md:h-8" onClick={() => setConfirming(true)}>
+            Switch to simple settings…
+          </Button>
+        )}
       </div>
       <ConfirmDialog
         open={confirming}

@@ -1,7 +1,9 @@
 // The andon cord of a factory's line (E §4.4, Board): whether the line runs, and the button that
 // stops it (with a reason) or restarts it (with an optional note). While the cord is pulled goald
 // releases and claims nothing on the line; runs in progress finish and people still decide. Both
-// read the line from the board (Board.line.status and .andon).
+// read the line from the board (Board.line.status and .andon). Pulling and clearing need
+// andon:manage (approvers and editors); without it the button stays in view, disabled, with who
+// may pull it beside it (canvas Board-Viewer).
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Hand, Play } from 'lucide-react';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
@@ -15,6 +17,7 @@ import { Dialog, DialogClose, DialogContent } from '../ui/dialog';
 import { factoryTitle } from './factory';
 import { factoryWorkInvalidations } from './invalidation';
 import { useOrg } from './org';
+import { holds, reasons } from './permissions';
 import { useStreamStatus } from './stream';
 
 /** The longest reason goald takes, in characters. */
@@ -104,16 +107,36 @@ export function AndonButton({
 }) {
   const act = useAndon(factory);
   const [dialog, setDialog] = useState(false);
+  const reasonId = useId();
+  const label = (
+    <>
+      {andon ? (
+        <Play size={16} strokeWidth={1.75} aria-hidden="true" />
+      ) : (
+        <Hand size={16} strokeWidth={1.75} aria-hidden="true" />
+      )}
+      {andon ? 'Clear the andon' : 'Pull the andon cord'}
+    </>
+  );
+
+  if (!holds(factory, 'andon:manage')) {
+    // In view and focusable, so the reason is heard as well as seen; it does nothing.
+    return (
+      <span className={cn('inline-flex items-center gap-3', className)}>
+        <span id={reasonId} className="max-w-[150px] text-[13px] leading-tight text-muted md:text-right">
+          {reasons.andon(andon !== null)}
+        </span>
+        <Button variant={andon ? 'secondary' : 'rework'} aria-disabled="true" aria-describedby={reasonId}>
+          {label}
+        </Button>
+      </span>
+    );
+  }
 
   return (
     <>
       <Button variant={andon ? 'secondary' : 'rework'} className={className} onClick={() => setDialog(true)}>
-        {andon ? (
-          <Play size={16} strokeWidth={1.75} aria-hidden="true" />
-        ) : (
-          <Hand size={16} strokeWidth={1.75} aria-hidden="true" />
-        )}
-        {andon ? 'Clear the andon' : 'Pull the andon cord'}
+        {label}
       </Button>
       {andon ? (
         <ClearDialog

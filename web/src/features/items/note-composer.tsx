@@ -1,11 +1,13 @@
 // "Note to the investigator": a person's note for the agents working an item (E14a). goald
 // records it on the item and the item's next run reads it in its brief; the composer says so.
+// Notes need item:operate (approvers and editors); without it the composer says who sends them.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useId, useState } from 'react';
 import { noteItem } from '../../api/client';
 import { keys } from '../../api/queries';
-import type { ItemState, NoteReceipt } from '../../api/types';
+import type { Factory, ItemState, NoteReceipt } from '../../api/types';
 import { useOrg } from '../../shared/org';
+import { holds, reasons } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
 
@@ -20,6 +22,8 @@ const delivered: Record<NoteReceipt['delivery'], string> = {
 interface Props {
   /** The id or ref the API accepts. */
   itemKey: string;
+  /** The item's factory: its name and what the caller may do there. */
+  factory: Pick<Factory, 'name' | 'can'>;
   state: ItemState;
   /** The agent the note reaches; unknown before any agent worked at the item's station. */
   agent: string | undefined;
@@ -28,7 +32,7 @@ interface Props {
   className?: string;
 }
 
-export function NoteComposer({ itemKey, state, agent, compact = false, className }: Props) {
+export function NoteComposer({ itemKey, factory, state, agent, compact = false, className }: Props) {
   const org = useOrg();
   const client = useQueryClient();
   const id = useId();
@@ -41,6 +45,9 @@ export function NoteComposer({ itemKey, state, agent, compact = false, className
   });
 
   if (state === 'done' || state === 'cancelled') return null;
+  if (!holds(factory, 'item:operate')) {
+    return <p className={cn('m-0 text-[13px] text-muted', className)}>{reasons.note(factory.name)}</p>;
+  }
 
   const submit = (e: FormEvent) => {
     e.preventDefault();

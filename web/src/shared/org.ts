@@ -1,12 +1,29 @@
 // The organization the screens act in: the one the URL names (/o/$org, by slug or id), resolved
 // by the /o/$org layout before anything under it loads. The last one opened is remembered so `/`
 // can return to it.
+import { useQuery } from '@tanstack/react-query';
 import { useRouteContext } from '@tanstack/react-router';
-import type { OrgSummary } from '../api/types';
+import { orgQuery } from '../api/queries';
+import type { Org, OrgSummary } from '../api/types';
+import { holds, type OrgPermission } from './permissions';
 
 /** The organization of the current /o/$org route. Query keys are rooted at its `id`; links use its `slug`. */
 export function useOrg(): OrgSummary {
   return useRouteContext({ from: '/o/$org' }).org;
+}
+
+/**
+ * The current organization as goald answers it to the caller: their role and `can`, what the
+ * screens may offer (holds() in permissions.ts). Loaded by the /o/$org layout; undefined only
+ * while a refetch after an error is pending.
+ */
+export function useOrgGrants(): Org | undefined {
+  return useQuery(orgQuery(useOrg().id)).data;
+}
+
+/** Whether the caller holds an organization permission in the current organization (its `can`). */
+export function useOrgHolds(permission: OrgPermission): boolean {
+  return holds(useOrgGrants(), permission);
 }
 
 /** The organization matching a URL's $org: its slug or its id. */

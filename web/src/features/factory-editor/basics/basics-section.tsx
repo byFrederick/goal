@@ -1,5 +1,5 @@
-// Basics (D §10.5, canvas Define-Basics): name, title, purpose, work types, repository, Advanced
-// and, in Definition, the factory id. Two columns that become one under 640 px of `main`. Every
+// Basics (D §10.5, canvas Define-Basics): name, title, purpose, work types, repository, who
+// approves (spec 3 §10.2), Advanced and, in Definition, the factory id. Two columns that become one under 640 px of `main`. Every
 // change is a session edit (typing into one field is one undo step) saved 800 ms later; leaving a
 // field saves at once. B's problems show at their field.
 import { Copy } from 'lucide-react';
@@ -12,6 +12,7 @@ import { useProblemText } from '../frame/use-editor';
 import type { SectionViewProps } from '../section-views';
 import { AdvancedFields } from './advanced-fields';
 import { RepositoryField } from './repository-field';
+import { WhoApproves } from './who-approves';
 import { WorkTypes } from './work-types';
 
 type TextField = 'name' | 'title' | 'purpose';
@@ -76,6 +77,7 @@ export function BasicsSection({ place }: SectionViewProps) {
         </Field>
         <WorkTypes basics={basics} />
         <RepositoryField basics={basics} />
+        <WhoApproves place={place} />
         <AdvancedFields />
         {place === 'definition' && basics.id ? <FactoryId id={basics.id} /> : null}
       </div>

@@ -1,6 +1,7 @@
 // Who works at a station (D §10.6): an agent station's agent (or its lanes, or a new agent made on
-// the spot), the person deciding at a human station (the local user until phase 3), the queue's
-// intake (read-only beyond manual until connectors arrive), and the librarian at Done.
+// the spot), the factory's approvers at a human station (a factory role, spec 3 §10.2), the
+// queue's intake (read-only beyond manual until connectors arrive), and the librarian at Done.
+// View only, the choices are shown, not offered.
 import { Link } from '@tanstack/react-router';
 import { Users } from 'lucide-react';
 import { useState } from 'react';
@@ -18,6 +19,7 @@ const create = '__new';
 const select = cn(
   'h-11 w-full min-w-0 cursor-pointer truncate rounded-control border border-rule bg-surface pr-8 pl-2.5 text-base text-ink transition-colors duration-200 md:h-9 md:text-sm',
   'hover:border-faint aria-[invalid=true]:border-rework',
+  'disabled:cursor-default disabled:border-line disabled:bg-shell disabled:hover:border-line',
 );
 
 export function WhoWorks({
@@ -31,6 +33,7 @@ export function WhoWorks({
 }) {
   const editor = useLineEditor();
   const agentsSection = useSection('agents');
+  const factory = useSection('basics').name ?? 'this factory';
   const { line, agents } = editor;
   const label = stationLabel(station);
   const [newAgent, setNewAgent] = useState(false);
@@ -40,7 +43,7 @@ export function WhoWorks({
     return (
       <span className="flex min-h-9 items-center gap-2 text-sm text-ink-soft">
         <Users size={16} strokeWidth={1.5} aria-hidden="true" className="text-muted" />
-        You decide here
+        Approvers of {factory}
       </span>
     );
   }
@@ -70,6 +73,7 @@ export function WhoWorks({
         <select
           aria-label={`Who works at ${label}`}
           value={line.librarian ?? ''}
+          disabled={editor.viewOnly}
           onChange={(e) => editor.edit(setLibrarian(line, e.target.value || null))}
           className={select}
         >
@@ -99,6 +103,7 @@ export function WhoWorks({
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
         value={value}
+        disabled={editor.viewOnly}
         onChange={(e) => {
           const v = e.target.value;
           if (v === create) setNewAgent(true);

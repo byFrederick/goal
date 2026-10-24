@@ -11,6 +11,7 @@ import {
   reviewTile,
   saveSentence,
   sectionTile,
+  viewTileText,
   yamlTileText,
 } from './state';
 
@@ -36,6 +37,25 @@ describe('section tiles', () => {
     expect(sectionTile(summary('line', 2, 0))).toEqual({ state: 'edited', text: '2 changes' });
     expect(sectionTile(summary('basics', 0, 0))).toEqual({ state: 'unchanged', text: 'No changes' });
     expect(sectionTile(undefined)).toEqual({ state: 'unchanged', text: 'No changes' });
+  });
+
+  test('say what each section holds when the editor is view only', () => {
+    const model = {
+      basics: { name: 'goal' },
+      line: {
+        stations: [
+          { id: 'inbox', kind: 'queue' },
+          { id: 'done', kind: 'done' },
+        ],
+      },
+      agents: { agents: [{ name: 'engineer' }] },
+      connections: [],
+      review: {},
+    } as unknown as Model;
+    expect(viewTileText('basics', model)).toBe('Purpose and repository');
+    expect(viewTileText('line', model)).toBe('2 stations');
+    expect(viewTileText('agents', model)).toBe('1 agent');
+    expect(viewTileText('connections', model)).toBe('0 connections');
   });
 
   test('Review and publish says what stands between the draft and a publish', () => {

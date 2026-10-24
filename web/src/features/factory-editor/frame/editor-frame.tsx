@@ -2,7 +2,9 @@
 // with the draft's chip, Visual | YAML, Versions, Discard draft…, Review and publish), the status
 // line, the section tiles, then the section (children), and the dialogs a draft can need: discard,
 // conflicts, a discard elsewhere and the unsaved-changes guard. It reads the draft session and
-// B's draft; sections render inside it through `section-views.tsx`.
+// B's draft; sections render inside it through `section-views.tsx`. View only (no
+// definition:edit, canvas Define-View): the running version's chip, a banner saying who edits
+// (and whose draft is open), no Discard, no Review and publish, no status line.
 import { useQuery } from '@tanstack/react-query';
 import { Link, useLinkProps, useNavigate, useSearch } from '@tanstack/react-router';
 import { ChevronRight, Clock, Code, SlidersHorizontal } from 'lucide-react';
@@ -14,9 +16,11 @@ import { type Model, sections } from '../../../shared/definition/model';
 import { placeAtLine } from '../../../shared/definition/place';
 import { useFactory, useFactoryParams } from '../../../shared/factory';
 import { useOrg } from '../../../shared/org';
+import { reasons } from '../../../shared/permissions';
 import { Button } from '../../../ui/button';
 import { Chip } from '../../../ui/chip';
 import { cn } from '../../../ui/cn';
+import { ViewOnlyBanner } from '../../../ui/view-only-banner';
 import type { DraftSession, SessionState } from '../draft/session';
 import { useDraft, useDraftOpen, useDraftSession, useModel } from '../draft/use-draft';
 import { yamlView } from '../section-views';
@@ -99,14 +103,17 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
   const unchangedId = useId();
   const firstProblem = validation?.problems.find((p) => p.severity !== 'info');
   const hasFileConflicts = Object.keys(s.fileConflicts).length > 0;
+  const viewOnly = session.readOnly;
   const chip =
     s.hasDraft && draft
       ? draft.base || current
         ? `Draft of v${draft.next_number}`
         : 'Draft'
       : current
-        ? `v${current.number}`
+        ? `v${current.number}${viewOnly ? ', running' : ''}`
         : null;
+  // Someone else's draft, while a viewer sees the running version.
+  const elsewhere = viewOnly && current && detail?.draft ? detail.draft : null;
 
   return (
     <>
@@ -145,7 +152,7 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
                 Versions
               </Link>
             </Button>
-            {s.hasDraft && current ? (
+            {s.hasDraft && current && !viewOnly ? (
               <Button
                 variant="white"
                 className="h-11 md:h-10"
@@ -155,35 +162,49 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
                 Discard draft…
               </Button>
             ) : null}
-            <Button asChild variant={unchanged ? 'white' : 'primary'} className="h-11 md:h-10">
-              <Link
-                to="/o/$org/f/$factory/definition/$section"
-                params={{ ...params, section: 'review' }}
-                aria-describedby={unchanged ? unchangedId : undefined}
-              >
-                Review and publish
-                <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
-              </Link>
-            </Button>
-            {unchanged ? (
-              <span id={unchangedId} className="text-sm text-muted max-md:sr-only">
-                No changes yet
-              </span>
-            ) : null}
+            {viewOnly ? null : (
+              <>
+                <Button asChild variant={unchanged ? 'white' : 'primary'} className="h-11 md:h-10">
+                  <Link
+                    to="/o/$org/f/$factory/definition/$section"
+                    params={{ ...params, section: 'review' }}
+                    aria-describedby={unchanged ? unchangedId : undefined}
+                  >
+                    Review and publish
+                    <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
+                  </Link>
+                </Button>
+                {unchanged ? (
+                  <span id={unchangedId} className="text-sm text-muted max-md:sr-only">
+                    No changes yet
+                  </span>
+                ) : null}
+              </>
+            )}
           </div>
         </div>
-        <StatusLine
-          session={{ ...s, savedAt: s.savedAt ?? (s.hasDraft ? (draft?.updated_at ?? null) : null) }}
-          base={base}
-          current={current}
-          changes={changes}
-          problemCount={problemCount}
-          firstProblem={firstProblem}
-          model={modelOfSession(s)}
-          onRetry={() => session.retryNow()}
-          onResolve={() => setConflictOpen(true)}
-          onRestart={() => session.restart()}
-        />
+        {viewOnly ? (
+          <ViewOnlyBanner
+            detail={
+              elsewhere ? `${elsewhere.updated_by.name} is working on a draft of v${(current?.number ?? 0) + 1}.` : null
+            }
+          >
+            {reasons.definition(factory.name)}
+          </ViewOnlyBanner>
+        ) : (
+          <StatusLine
+            session={{ ...s, savedAt: s.savedAt ?? (s.hasDraft ? (draft?.updated_at ?? null) : null) }}
+            base={base}
+            current={current}
+            changes={changes}
+            problemCount={problemCount}
+            firstProblem={firstProblem}
+            model={modelOfSession(s)}
+            onRetry={() => session.retryNow()}
+            onResolve={() => setConflictOpen(true)}
+            onRestart={() => session.restart()}
+          />
+        )}
       </header>
 
       <SectionTiles
@@ -194,6 +215,7 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
         hasDraft={s.hasDraft}
         yaml={yaml && yamlView !== null}
         parseError={s.parseError}
+        viewOnly={viewOnly}
       />
 
       {children}

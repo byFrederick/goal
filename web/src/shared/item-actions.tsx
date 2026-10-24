@@ -2,6 +2,9 @@
 // retry a blocked item; and, where the Item page passes its controls, pause, resume and move it
 // (E10), which stop a run in progress. Send back, merge, pause and move ask first; approve, retry
 // and resume do not, since they only move work forward and the next decision can undo them.
+// What the caller may do comes from the factory's `can` (spec 3 §10.2): without item:decide the
+// decisions show disabled with who decides ("Approvers of sre decide here."); without
+// item:operate pause and move are not offered. goald refuses them anyway.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, Check, ExternalLink, GitMerge, Pause, Play, RotateCcw, Undo2 } from 'lucide-react';
 import { type FormEvent, useId, useState } from 'react';
@@ -12,11 +15,13 @@ import type { Factory, Item, ItemState, Station } from '../api/types';
 import { Button } from '../ui/button';
 import { cn } from '../ui/cn';
 import { Dialog, DialogClose, DialogContent } from '../ui/dialog';
+import { useFactoryById } from './factory';
 import { humanize } from './format';
 import { factoryWorkInvalidations } from './invalidation';
 import { controlsFor, decisionsFor, pullRequestLabel } from './item-state';
 import { MoveDialog } from './move-menu';
 import { useOrg } from './org';
+import { holds, reasons } from './permissions';
 
 export interface DecidableItem {
   /** The id or ref the API accepts. */
@@ -120,23 +125,34 @@ export function ItemDecisions({
   className,
 }: Props) {
   const decide = useDecision(item, factory);
+  const grants = useFactoryById(factory);
+  const mayDecide = holds(grants, 'item:decide');
+  const mayOperate = holds(grants, 'item:operate');
+  const reasonId = useId();
   const can = decisionsFor(item, station);
-  const ctl = controls ? controlsFor(item, controls.reworkTarget) : { pause: false, sendBack: false, move: false };
+  const ctl =
+    controls && mayOperate ? controlsFor(item, controls.reworkTarget) : { pause: false, sendBack: false, move: false };
   const [open, setOpen] = useState<'reject' | 'merge' | 'pause' | 'move' | null>(null);
   const reject = can.reject || ctl.sendBack;
+  const decisions = can.approve || reject || can.merge || can.retry;
 
-  if (!can.approve && !reject && !can.merge && !can.retry && !ctl.pause && !ctl.move) return null;
+  if (!decisions && !ctl.pause && !ctl.move) return null;
 
   const pending = decide.isPending ? decide.variables?.kind : undefined;
   const btn = layout === 'stack' ? 'w-full justify-center' : '';
   const s = layout === 'stack' ? 'lg' : size;
   const backTo = controls?.reworkTarget ? `Send back to ${humanize(controls.reworkTarget)}` : sendBackLabel;
   const resume = controls?.paused ?? false;
+  // A decision the caller may not make stays in view, disabled and focusable, saying who decides.
+  const decision = (act: () => void) =>
+    mayDecide
+      ? { disabled: decide.isPending, onClick: act }
+      : { 'aria-disabled': true, 'aria-describedby': reasonId, onClick: undefined };
 
   return (
     <div className={cn('flex gap-2', layout === 'stack' ? 'flex-col' : 'flex-wrap items-center', className)}>
       {can.merge ? (
-        <Button variant="primary" size={s} className={btn} disabled={decide.isPending} onClick={() => setOpen('merge')}>
+        <Button variant="primary" size={s} className={btn} {...decision(() => setOpen('merge'))}>
           <GitMerge size={16} strokeWidth={1.75} aria-hidden="true" />
           {pending === 'merge' ? 'Merging…' : 'Merge'}
         </Button>
@@ -146,8 +162,7 @@ export function ItemDecisions({
           variant="primary"
           size={s}
           className={btn}
-          disabled={decide.isPending}
-          onClick={() => decide.mutate({ kind: 'approve' })}
+          {...decision(() => decide.mutate({ kind: 'approve' }))}
           aria-label={layout === 'row' && size === 'md' ? `Approve ${item.ref}` : undefined}
         >
           <Check size={16} strokeWidth={1.75} aria-hidden="true" />
@@ -155,13 +170,7 @@ export function ItemDecisions({
         </Button>
       ) : null}
       {can.retry ? (
-        <Button
-          variant="primary"
-          size={s}
-          className={btn}
-          disabled={decide.isPending}
-          onClick={() => decide.mutate({ kind: 'retry' })}
-        >
+        <Button variant="primary" size={s} className={btn} {...decision(() => decide.mutate({ kind: 'retry' }))}>
           {resume ? (
             <Play size={16} strokeWidth={1.75} aria-hidden="true" />
           ) : (
@@ -183,7 +192,7 @@ export function ItemDecisions({
         </Button>
       ) : null}
       {reject ? (
-        <Button variant="rework" size={s} className={btn} disabled={decide.isPending} onClick={() => setOpen('reject')}>
+        <Button variant="rework" size={s} className={btn} {...decision(() => setOpen('reject'))}>
           <Undo2 size={16} strokeWidth={1.75} aria-hidden="true" />
           {pending === 'reject' ? 'Sending back…' : backTo}
         </Button>
@@ -199,6 +208,11 @@ export function ItemDecisions({
           <ArrowRight size={16} strokeWidth={1.75} aria-hidden="true" />
           Move
         </Button>
+      ) : null}
+      {decisions && !mayDecide ? (
+        <p id={reasonId} className={cn('m-0 text-sm text-muted', layout === 'row' && 'basis-full')}>
+          {reasons.decide(grants?.name ?? 'this factory')}
+        </p>
       ) : null}
 
       <RejectDialog

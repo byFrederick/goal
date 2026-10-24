@@ -4,6 +4,7 @@
 // (C §10.3, canvas "Main" and "Factories").
 import { Plus } from 'lucide-react';
 import type { OrgSummary } from '../api/types';
+import { useOrgHolds } from '../shared/org';
 import { AccountMenu } from './account-menu';
 import { useFactorySquares } from './factory-squares';
 import { OrgMark } from './org-mark';
@@ -14,6 +15,8 @@ const iconProps = { size: 20, strokeWidth: 1.5, 'aria-hidden': true } as const;
 
 export function Rail({ org }: { org: OrgSummary }) {
   const squares = useFactorySquares(org);
+  // New factory only for whoever may create one (owners and admins).
+  const mayCreate = useOrgHolds('factory:create');
   const onKeyDown = useRailKeys('vertical');
   const Catalog = catalogScreen.icon;
   const Credentials = credentialsScreen.icon;
@@ -33,11 +36,13 @@ export function Rail({ org }: { org: OrgSummary }) {
             <FactorySquareLink org={org} square={square} size="rail" />
           </li>
         ))}
-        <li>
-          <NewFactoryLink org={org} size="rail">
-            <Plus size={18} strokeWidth={1.5} aria-hidden="true" />
-          </NewFactoryLink>
-        </li>
+        {mayCreate ? (
+          <li>
+            <NewFactoryLink org={org} size="rail">
+              <Plus size={18} strokeWidth={1.5} aria-hidden="true" />
+            </NewFactoryLink>
+          </li>
+        ) : null}
       </ul>
       <div className="mt-auto flex flex-col items-center gap-1.5 pt-3">
         <LaterRailItem label={catalogScreen.label} kind="icon" size="rail">

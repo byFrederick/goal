@@ -934,6 +934,7 @@ Every board follows `design-system/goal/MASTER.md`, desktop 1440 and phone 375. 
 - **Basics (New-Basics, Define-Basics)**: "Who approves" read-only: "Owners and admins of Acme, and this factory's approvers and editors: M. Okafor, J. Lindqvist." Link "Change in Members" with `member:manage`. New factory: "Owners and admins approve until you add approvers in Members."; human stations' "Who works here: approvers of {factory}".
 - **Definition boards**: read-only mode without `definition:edit`: banner "View only. Editors of goal change its definition."; inputs read-only, Publish, Discard and YAML editing absent.
 - **Board, Item, Phone**: decisions, Move, Pause, notes and "Pull the andon cord" from `can`; for viewers the andon button is disabled with "Approvers and editors can pull the cord".
+- As built (3-14): controls follow `can` as listed in `docs/engineering/frontend.md` ("What the caller may do"). A viewer sees the running version, not someone's open draft ("M. Okafor is working on a draft of v9."); a factory never published shows its draft. Decisions wait "on you" only where `item:decide` is held, "on an approver" elsewhere. A 403 `forbidden` refetches `can`. Who approves names no one until Members' `listMembers` (3-11) is on main; then it lists them and links "Change in Members" with `member:manage`. The mock plays each role (`POST /__mock/reset {role}`) and refuses by `x-goal-scope`, as goald does.
 
 ## 11. Security and tenancy
 

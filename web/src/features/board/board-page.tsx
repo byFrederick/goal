@@ -11,6 +11,7 @@ import { waitingOnYou } from '../../shared/item-state';
 import { MoveDialog } from '../../shared/move-menu';
 import { NewItemButton } from '../../shared/new-item';
 import { useOrg } from '../../shared/org';
+import { factoryRoleNote, holds, reasons } from '../../shared/permissions';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
@@ -30,15 +31,18 @@ import {
   wipText,
 } from './stats';
 
-/** Opens the Move menu for a card, with the station a drop chose. */
-type OnMove = (item: ItemCard, to?: string) => void;
+/** Opens the Move menu for a card, with the station a drop chose; undefined: the caller may not move work. */
+type OnMove = ((item: ItemCard, to?: string) => void) | undefined;
+
+/** A card's Move, bound to the card. */
+const moveOf = (onMove: OnMove, item: ItemCard) => (onMove ? () => onMove(item) : undefined);
 
 const live = (it: ItemCard) => it.state !== 'done' && it.state !== 'cancelled';
 const isExpedite = (it: ItemCard) => it.class_of_service === 'expedite' && live(it);
 
 const constraintRing = 'border-amber shadow-[inset_0_3px_0_var(--color-amber)]';
 
-function LineCard({ board }: { board: Board }) {
+function LineCard({ board, decides }: { board: Board; decides: boolean }) {
   const sentence = lineSentence(board.line);
   const budget = budgetNote(board.line);
 
@@ -82,8 +86,8 @@ function LineCard({ board }: { board: Board }) {
                   {drum ? <Chip tone="constraint">Constraint</Chip> : null}
                 </div>
                 <Meter className="bg-shell" {...stationMeter(s)} />
-                <span className={cn('text-sm', waitingOnYou(s) > 0 && 'text-you')}>{stationStat(s)}</span>
-                <span className="text-[13px] leading-snug text-muted">{stationNote(s)}</span>
+                <span className={cn('text-sm', decides && waitingOnYou(s) > 0 && 'text-you')}>{stationStat(s)}</span>
+                <span className="text-[13px] leading-snug text-muted">{stationNote(s, decides)}</span>
               </li>
             );
           })}
@@ -108,7 +112,7 @@ function ExpediteLane({ line, items, onMove }: { line: Board['line']; items: Ite
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-2 md:max-w-[680px]">
         {items.map((it) => (
-          <ExpediteCard key={it.id} item={it} onMove={() => onMove(it)} />
+          <ExpediteCard key={it.id} item={it} onMove={moveOf(onMove, it)} />
         ))}
       </div>
     </section>
@@ -116,43 +120,63 @@ function ExpediteLane({ line, items, onMove }: { line: Board['line']; items: Ite
 }
 
 function Columns({ board, onMove }: { board: Board; onMove: OnMove }) {
-  return (
+  const columns = <ColumnGrid board={board} onMove={onMove} />;
+  // Cards are dragged only by someone who may move them.
+  return onMove ? (
     <CardDnd board={board} onDrop={onMove}>
-      <section aria-label="Stations" className="-mx-1 hidden overflow-x-auto px-1 pb-2 md:block">
-        <div
-          className="grid items-start gap-2"
-          style={{ gridTemplateColumns: `repeat(${board.stations.length}, minmax(144px, 1fr))` }}
-        >
-          {board.stations.map((s) => {
-            const drum = s.id === board.constraint;
-            const items = s.items.filter((it) => !isExpedite(it));
-            return (
-              <DropColumn
-                key={s.id}
-                station={s}
-                className={cn(
-                  'flex min-w-0 flex-col gap-2 rounded-card border border-line bg-card p-3',
-                  drum && constraintRing,
-                )}
-              >
-                <div className="flex items-baseline justify-between gap-2 px-1 pt-0.5 pb-1">
-                  <h2 className="m-0 text-[15px] font-medium">{humanize(s.id)}</h2>
-                  <span className={cn('text-[13px] whitespace-nowrap text-muted', waitingOnYou(s) > 0 && 'text-you')}>
-                    {columnCount(s)}
-                  </span>
-                </div>
-                {items.length === 0 ? <p className="m-0 px-1 pb-1 text-[13px] text-muted">Empty</p> : null}
-                {items.map((it) => (
+      {columns}
+    </CardDnd>
+  ) : (
+    columns
+  );
+}
+
+function ColumnGrid({ board, onMove }: { board: Board; onMove: OnMove }) {
+  const decides = holds(useFactory(), 'item:decide');
+  return (
+    <section aria-label="Stations" className="-mx-1 hidden overflow-x-auto px-1 pb-2 md:block">
+      <div
+        className="grid items-start gap-2"
+        style={{ gridTemplateColumns: `repeat(${board.stations.length}, minmax(144px, 1fr))` }}
+      >
+        {board.stations.map((s) => {
+          const drum = s.id === board.constraint;
+          const items = s.items.filter((it) => !isExpedite(it));
+          return (
+            <DropColumn
+              key={s.id}
+              station={s}
+              className={cn(
+                'flex min-w-0 flex-col gap-2 rounded-card border border-line bg-card p-3',
+                drum && constraintRing,
+              )}
+            >
+              <div className="flex items-baseline justify-between gap-2 px-1 pt-0.5 pb-1">
+                <h2 className="m-0 text-[15px] font-medium">{humanize(s.id)}</h2>
+                <span
+                  className={cn(
+                    'text-[13px] whitespace-nowrap text-muted',
+                    decides && waitingOnYou(s) > 0 && 'text-you',
+                  )}
+                >
+                  {columnCount(s)}
+                </span>
+              </div>
+              {items.length === 0 ? <p className="m-0 px-1 pb-1 text-[13px] text-muted">Empty</p> : null}
+              {items.map((it) =>
+                onMove ? (
                   <DraggableCard key={it.id} item={it}>
                     {(drag) => <BoardCard item={it} onMove={() => onMove(it)} drag={drag} />}
                   </DraggableCard>
-                ))}
-              </DropColumn>
-            );
-          })}
-        </div>
-      </section>
-    </CardDnd>
+                ) : (
+                  <BoardCard key={it.id} item={it} />
+                ),
+              )}
+            </DropColumn>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -205,7 +229,7 @@ function StationTabs({
         })}
       </Tabs.List>
       {expedite.map((it) => (
-        <ExpediteRow key={it.id} item={it} onMove={() => onMove(it)} />
+        <ExpediteRow key={it.id} item={it} onMove={moveOf(onMove, it)} />
       ))}
       {board.stations.map((s) => {
         const drum = s.id === board.constraint;
@@ -228,7 +252,7 @@ function StationTabs({
               {drum ? <p className="m-0 mb-1 text-[13px] text-ink-soft">{constraintNote(s)}</p> : null}
               {items.length === 0 ? <p className="m-0 text-sm text-muted">Nothing here right now.</p> : null}
               {items.map((it) => (
-                <BoardCard key={it.id} item={it} onMove={() => onMove(it)} compact />
+                <BoardCard key={it.id} item={it} onMove={moveOf(onMove, it)} compact />
               ))}
             </section>
           </Tabs.Content>
@@ -255,14 +279,18 @@ export function BoardPage() {
   const expedite = board.stations.flatMap((s) => s.items.filter(isExpedite));
   const selected = board.stations.find((s) => s.id === search.station)?.id ?? firstStation(board);
   const [moving, setMoving] = useState<{ item: ItemCard; to?: string | undefined } | null>(null);
-  const onMove: OnMove = (item, to) => setMoving({ item, to });
+  const onMove: OnMove = holds(factory, 'item:operate') ? (item, to) => setMoving({ item, to }) : undefined;
+  const role = factoryRoleNote(factory.role, factory.name);
 
   return (
     <>
       <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <h1 className="m-0 text-[34px] leading-[1.05] font-normal tracking-display md:text-5xl">
-          {factoryTitle(factory)} board
-        </h1>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+          <h1 className="m-0 text-[34px] leading-[1.05] font-normal tracking-display md:text-5xl">
+            {factoryTitle(factory)} board
+          </h1>
+          {role ? <Chip tone="plain">{role}</Chip> : null}
+        </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="hidden h-10 max-w-[360px] items-center rounded-control bg-surface px-3.5 shadow-raise md:inline-flex">
             <LineStatus andon={board.line.andon} className="text-sm text-ink" />
@@ -276,7 +304,7 @@ export function BoardPage() {
           </span>
         </div>
       </header>
-      <div className="-mt-3 flex items-center justify-between gap-2 text-sm text-muted md:hidden">
+      <div className="-mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-muted md:hidden">
         <LineStatus
           andon={board.line.andon}
           className="text-sm"
@@ -291,17 +319,23 @@ export function BoardPage() {
       </div>
 
       <div className="hidden md:block">
-        <LineCard board={board} />
+        <LineCard board={board} decides={holds(factory, 'item:decide')} />
       </div>
       <ExpediteLane line={board.line} items={expedite} onMove={onMove} />
       <Columns board={board} onMove={onMove} />
       <StationTabs board={board} selected={selected} expedite={expedite} onMove={onMove} />
-      <p className="m-0 hidden text-[13px] text-muted md:block">
-        Drag a card, or focus it and press M to choose a station. Agents pull work; nobody assigns it.
-      </p>
-      <p className="m-0 text-[13px] text-muted md:hidden">
-        Use the arrow on a card to move it; agents pull the next item themselves.
-      </p>
+      {onMove ? (
+        <>
+          <p className="m-0 hidden text-[13px] text-muted md:block">
+            Drag a card, or focus it and press M to choose a station. Agents pull work; nobody assigns it.
+          </p>
+          <p className="m-0 text-[13px] text-muted md:hidden">
+            Use the arrow on a card to move it; agents pull the next item themselves.
+          </p>
+        </>
+      ) : (
+        <p className="m-0 text-[13px] text-muted">{reasons.board(factory.name)}</p>
+      )}
       {moving ? (
         <MoveDialog
           item={{ ...moving.item, key: itemKey(factory.name, moving.item.ref) }}

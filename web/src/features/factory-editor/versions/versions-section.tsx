@@ -9,6 +9,7 @@ import { defKeys } from '../../../api/queries';
 import type { Version } from '../../../api/types';
 import { Button } from '../../../ui/button';
 import { SectionCard } from '../../../ui/card';
+import { useViewOnly } from '../draft/use-draft';
 import { SectionShell } from '../frame/section-shell';
 import { ChangesCard } from '../review/changes-card';
 import { parseCompare } from '../review/review';
@@ -20,6 +21,8 @@ const pageSize = 20;
 
 export function VersionsSection({ search }: SectionViewProps) {
   const { org, factory, hasDraft, next, draft } = useEditorFacts();
+  // Restoring a version publishes it: not for a view-only editor.
+  const viewOnly = useViewOnly();
   const pages = useInfiniteQuery({
     queryKey: [...defKeys.versions(org, factory), 'pages'],
     queryFn: ({ pageParam, signal }) => listVersions(org, factory, { before: pageParam, limit: pageSize }, signal),
@@ -44,7 +47,12 @@ export function VersionsSection({ search }: SectionViewProps) {
             <ul className="m-0 list-none p-0 [&>li:first-child]:border-t-0">
               {hasDraft ? <DraftRow label={`Draft of v${next}`} detail={draftDetail(draft?.updated_at)} /> : null}
               {versions.map((v) => (
-                <VersionRow key={v.id} version={v} comparing={search.compare} onRestore={setRestoring} />
+                <VersionRow
+                  key={v.id}
+                  version={v}
+                  comparing={search.compare}
+                  onRestore={viewOnly ? undefined : setRestoring}
+                />
               ))}
             </ul>
             {versions.length === 0 ? (

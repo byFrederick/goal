@@ -77,6 +77,12 @@ describe('describeState', () => {
       'Ready in buffer',
     );
   });
+
+  it('waits on you only where you decide', () => {
+    const waiting = { state: 'waiting_human', agent: null, rework_count: 0 } as const;
+    expect(describeState(waiting, { decides: true })).toEqual({ text: 'Waiting on you', tone: 'you' });
+    expect(describeState(waiting, { decides: false })).toEqual({ text: 'Waiting on an approver', tone: 'muted' });
+  });
 });
 
 describe('pullRequestOf', () => {

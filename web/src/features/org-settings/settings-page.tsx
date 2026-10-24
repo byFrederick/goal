@@ -2,7 +2,9 @@
 // mark, address) and the slot limits, saved by "Save changes" with only what changed; Model
 // access and Vault arrive with credentials (phase 4); the Danger zone deletes the organization.
 // Leaving with unsaved changes asks first. A new address moves the page to it: links with the
-// old one stop working (review decision 2).
+// old one stop working (review decision 2). What the caller may do comes from the organization's
+// `can` (spec 3 §10.2): without org:manage the form is shown read-only, with who changes it; the
+// Danger zone shows only with org:delete (owners).
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { useBlocker, useNavigate, useRouter } from '@tanstack/react-router';
 import { TriangleAlert } from 'lucide-react';
@@ -11,10 +13,13 @@ import { toast } from 'sonner';
 import { ApiError, patchOrgSettings } from '../../api/client';
 import { keys, settingsQuery } from '../../api/queries';
 import type { OrgSettings, OrgSettingsPatch, OrgSummary } from '../../api/types';
-import { useOrg } from '../../shared/org';
+import { useOrg, useOrgHolds } from '../../shared/org';
+import { reasons } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Field, Input } from '../../ui/field';
+import { ReadOnly } from '../../ui/read-only';
+import { ViewOnlyBanner } from '../../ui/view-only-banner';
 import { DangerZone } from './danger-zone';
 import { changedFields, type FieldErrors, formOf, type SettingsForm, slotNote, validate } from './form';
 import { SettingsSection } from './section';
@@ -43,6 +48,8 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
   const client = useQueryClient();
   const router = useRouter();
   const navigate = useNavigate();
+  const mayManage = useOrgHolds('org:manage');
+  const mayDelete = useOrgHolds('org:delete');
 
   // The settings as goald last answered them, and the form over them.
   const [saved, setSaved] = useState(settings);
@@ -99,6 +106,7 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
+    if (!mayManage) return;
     setSubmitted(true);
     if (Object.keys(errors).length > 0) {
       requestAnimationFrame(() => document.querySelector<HTMLElement>(`#${formId} [aria-invalid="true"]`)?.focus());
@@ -123,16 +131,20 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
           </h1>
           <p className="m-0 text-[15px] text-muted">{subtitle(saved.name, org.factory_count)}</p>
         </div>
-        <Button
-          type="submit"
-          form={formId}
-          variant="primary"
-          className="h-11 md:h-10"
-          disabled={!dirty || save.isPending}
-        >
-          {save.isPending ? 'Saving…' : 'Save changes'}
-        </Button>
+        {mayManage ? (
+          <Button
+            type="submit"
+            form={formId}
+            variant="primary"
+            className="h-11 md:h-10"
+            disabled={!dirty || save.isPending}
+          >
+            {save.isPending ? 'Saving…' : 'Save changes'}
+          </Button>
+        ) : null}
       </header>
+
+      {mayManage ? null : <ViewOnlyBanner className="max-w-[980px]">{reasons.settings(saved.name)}</ViewOnlyBanner>}
 
       {failed ? (
         <p
@@ -144,134 +156,138 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
       ) : null}
 
       <div className="flex max-w-[980px] flex-col">
-        <form id={formId} onSubmit={onSubmit} noValidate className="flex flex-col">
-          <SettingsSection
-            title="General"
-            lede="The name and short mark people see in the rail, and the address in links."
-          >
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(240px,100%),1fr))] gap-3.5">
-              <Field label="Name" error={shown('name')}>
-                <Input
-                  value={form.name}
-                  name="name"
-                  onChange={set('name')}
-                  onBlur={blur('name')}
-                  maxLength={80}
-                  autoComplete="organization"
-                />
-              </Field>
-              <Field label="Short mark" help="Two letters, shown at the top of the rail" error={shown('mark')}>
-                <Input
-                  value={form.mark}
-                  name="mark"
-                  onChange={set('mark')}
-                  onBlur={blur('mark')}
-                  maxLength={2}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-              </Field>
-              <Field
-                label="Address"
-                error={shown('slug')}
-                help={
-                  <>
-                    <span className="break-all">
-                      {window.location.host}/o/{slug || '…'}
-                    </span>
-                    <span role="status" className="block">
-                      {slug !== saved.slug ? (
-                        <span className="mt-1 flex items-center gap-1.5 text-ink">
-                          <TriangleAlert size={14} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
-                          Links with the old address stop working.
-                        </span>
-                      ) : null}
-                    </span>
-                  </>
-                }
-              >
-                <Input
-                  value={form.slug}
-                  name="slug"
-                  onChange={set('slug')}
-                  onBlur={blur('slug')}
-                  maxLength={40}
-                  autoComplete="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                  className="font-mono md:text-sm"
-                />
-              </Field>
-            </div>
-          </SettingsSection>
+        <ReadOnly when={!mayManage}>
+          <form id={formId} onSubmit={onSubmit} noValidate className="flex flex-col">
+            <SettingsSection
+              title="General"
+              lede="The name and short mark people see in the rail, and the address in links."
+            >
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(min(240px,100%),1fr))] gap-3.5">
+                <Field label="Name" error={shown('name')}>
+                  <Input
+                    value={form.name}
+                    name="name"
+                    onChange={set('name')}
+                    onBlur={blur('name')}
+                    maxLength={80}
+                    autoComplete="organization"
+                  />
+                </Field>
+                <Field label="Short mark" help="Two letters, shown at the top of the rail" error={shown('mark')}>
+                  <Input
+                    value={form.mark}
+                    name="mark"
+                    onChange={set('mark')}
+                    onBlur={blur('mark')}
+                    maxLength={2}
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </Field>
+                <Field
+                  label="Address"
+                  error={shown('slug')}
+                  help={
+                    <>
+                      <span className="break-all">
+                        {window.location.host}/o/{slug || '…'}
+                      </span>
+                      <span role="status" className="block">
+                        {slug !== saved.slug ? (
+                          <span className="mt-1 flex items-center gap-1.5 text-ink">
+                            <TriangleAlert size={14} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+                            Links with the old address stop working.
+                          </span>
+                        ) : null}
+                      </span>
+                    </>
+                  }
+                >
+                  <Input
+                    value={form.slug}
+                    name="slug"
+                    onChange={set('slug')}
+                    onBlur={blur('slug')}
+                    maxLength={40}
+                    autoComplete="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    className="font-mono md:text-sm"
+                  />
+                </Field>
+              </div>
+            </SettingsSection>
 
-          <SettingsSection
-            title="Model access"
-            lede={`How ${saved.name}’s agents reach Claude. Slots are how many agents can run at once across all factories.`}
-          >
-            <p className="m-0 rounded-control border border-line bg-surface px-4 py-3.5 text-sm leading-normal text-muted">
-              Model access is a platform setting of this install. Choosing a subscription or API key arrives with
-              credentials.
-            </p>
-            <div className="flex flex-col gap-3 rounded-card border border-line bg-card p-4">
-              <Field
-                label="Slots shared by every factory"
-                help="Blank for no limit."
-                error={shown('max')}
-                className={capRow}
-              >
-                <Input
-                  value={form.max}
-                  name="max"
-                  onChange={set('max')}
-                  onBlur={blur('max')}
-                  inputMode="numeric"
-                  autoComplete="off"
-                />
-              </Field>
-              {saved.slots.factories.length > 0 ? (
-                <fieldset className="m-0 flex min-w-0 flex-col gap-2.5 border-0 border-t border-line p-0 pt-3">
-                  <legend className="float-left mb-1 w-full p-0 text-[15px] font-medium">
-                    Most slots each factory may use
-                  </legend>
-                  {saved.slots.factories.map((f) => {
-                    const key = `factory:${f.factory_id}` as const;
-                    return (
-                      <Field key={f.factory_id} label={f.name} error={shown(key)} className={capRow}>
-                        <Input
-                          value={form.factories[f.factory_id] ?? ''}
-                          name={`slots-${f.name}`}
-                          onChange={setCap(f.factory_id)}
-                          onBlur={blur(key)}
-                          inputMode="numeric"
-                          autoComplete="off"
-                        />
-                      </Field>
-                    );
-                  })}
-                </fieldset>
-              ) : null}
-              {note ? <p className="m-0 text-[13px] leading-snug text-muted">{note}</p> : null}
-            </div>
-          </SettingsSection>
+            <SettingsSection
+              title="Model access"
+              lede={`How ${saved.name}’s agents reach Claude. Slots are how many agents can run at once across all factories.`}
+            >
+              <p className="m-0 rounded-control border border-line bg-surface px-4 py-3.5 text-sm leading-normal text-muted">
+                Model access is a platform setting of this install. Choosing a subscription or API key arrives with
+                credentials.
+              </p>
+              <div className="flex flex-col gap-3 rounded-card border border-line bg-card p-4">
+                <Field
+                  label="Slots shared by every factory"
+                  help="Blank for no limit."
+                  error={shown('max')}
+                  className={capRow}
+                >
+                  <Input
+                    value={form.max}
+                    name="max"
+                    onChange={set('max')}
+                    onBlur={blur('max')}
+                    inputMode="numeric"
+                    autoComplete="off"
+                  />
+                </Field>
+                {saved.slots.factories.length > 0 ? (
+                  <fieldset className="m-0 flex min-w-0 flex-col gap-2.5 border-0 border-t border-line p-0 pt-3">
+                    <legend className="float-left mb-1 w-full p-0 text-[15px] font-medium">
+                      Most slots each factory may use
+                    </legend>
+                    {saved.slots.factories.map((f) => {
+                      const key = `factory:${f.factory_id}` as const;
+                      return (
+                        <Field key={f.factory_id} label={f.name} error={shown(key)} className={capRow}>
+                          <Input
+                            value={form.factories[f.factory_id] ?? ''}
+                            name={`slots-${f.name}`}
+                            onChange={setCap(f.factory_id)}
+                            onBlur={blur(key)}
+                            inputMode="numeric"
+                            autoComplete="off"
+                          />
+                        </Field>
+                      );
+                    })}
+                  </fieldset>
+                ) : null}
+                {note ? <p className="m-0 text-[13px] leading-snug text-muted">{note}</p> : null}
+              </div>
+            </SettingsSection>
 
-          <SettingsSection
-            title="Vault"
-            lede={`Where ${saved.name}’s credentials are kept. Agents never see them; Goal adds them when a tool runs.`}
-          >
-            <p className="m-0 rounded-control border border-dashed border-rule px-4 py-3.5 text-sm text-muted">
-              Arrives with credentials
-            </p>
-          </SettingsSection>
-        </form>
+            <SettingsSection
+              title="Vault"
+              lede={`Where ${saved.name}’s credentials are kept. Agents never see them; Goal adds them when a tool runs.`}
+            >
+              <p className="m-0 rounded-control border border-dashed border-rule px-4 py-3.5 text-sm text-muted">
+                Arrives with credentials
+              </p>
+            </SettingsSection>
+          </form>
+        </ReadOnly>
 
-        <DangerZone
-          org={org}
-          name={saved.name}
-          onLeave={() => {
-            leaving.current = true;
-          }}
-        />
+        {mayDelete ? (
+          <DangerZone
+            org={org}
+            name={saved.name}
+            onLeave={() => {
+              leaving.current = true;
+            }}
+          />
+        ) : null}
       </div>
 
       <ConfirmDialog

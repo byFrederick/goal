@@ -6,7 +6,7 @@ import { Bot, ChevronLeft } from 'lucide-react';
 import { whereLabel } from '../../../shared/definition/where';
 import { cn } from '../../../ui/cn';
 import { EmptyState } from '../../../ui/empty-state';
-import { useSection } from '../draft/use-draft';
+import { useSection, useViewOnly } from '../draft/use-draft';
 import { bareSection, SectionShell } from '../frame/section-shell';
 import { SearchLink } from '../search-link';
 import type { SectionViewProps } from '../section-views';
@@ -14,6 +14,7 @@ import { AgentDetail } from './agent-detail';
 import { AddAgentButton, CopyAgentButton } from './agent-dialogs';
 
 export function AgentsSection({ place, search }: SectionViewProps) {
+  const viewOnly = useViewOnly();
   const agents = useSection('agents').agents ?? [];
   const line = useSection('line');
   const chosen = search.agent ? agents.find((a) => a.name === search.agent) : agents[0];
@@ -68,8 +69,12 @@ export function AgentsSection({ place, search }: SectionViewProps) {
               })}
             </ul>
           ) : null}
-          <AddAgentButton />
-          <CopyAgentButton />
+          {viewOnly ? null : (
+            <>
+              <AddAgentButton />
+              <CopyAgentButton />
+            </>
+          )}
         </nav>
 
         <div className={cn('flex min-w-0 flex-col gap-3', !search.agent && 'max-md:hidden')}>

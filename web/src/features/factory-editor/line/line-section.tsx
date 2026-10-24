@@ -60,11 +60,13 @@ function Stations({ selected }: { selected: string | undefined }) {
       descriptionId={help}
       description={
         <>
-          Stations in the order work moves through them.{constraintSentence} Move a station with its arrow buttons, or
-          focus it and press Alt with the up or down arrow. Dragging its number works too.
+          Stations in the order work moves through them.{constraintSentence}
+          {editor.viewOnly
+            ? null
+            : ' Move a station with its arrow buttons, or focus it and press Alt with the up or down arrow. Dragging its number works too.'}
         </>
       }
-      aside={<AddStationMenu />}
+      aside={editor.viewOnly ? null : <AddStationMenu />}
     >
       <div className="@container -mx-1 flex min-w-0 flex-col gap-2 md:mx-0">
         <div
@@ -76,7 +78,7 @@ function Stations({ selected }: { selected: string | undefined }) {
           <span>Kind</span>
           <span>WIP limit</span>
           <span>Who works here</span>
-          <span className="text-right">Order</span>
+          <span className="text-right">{editor.viewOnly ? null : 'Order'}</span>
         </div>
         {stations.length === 0 ? (
           <p className="m-0 rounded-control border border-dashed border-rule px-4 py-3.5 text-sm text-muted">

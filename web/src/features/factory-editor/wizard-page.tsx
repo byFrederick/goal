@@ -2,13 +2,18 @@
 // sidebar. Start chooses how to begin and creates the factory; from then on `?factory=` names the
 // new factory's id and the steps edit its draft in the editor's section views. `start` with a
 // factory resumes it (the Factories home's "Continue setup"): it opens the first step not done.
+// Starting a factory needs factory:create (owners and admins); a draft factory the caller may not
+// edit (no definition:edit) opens view only, as in Definition.
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect } from 'react';
 import { ApiError } from '../../api/client';
 import { draftModelQuery } from '../../api/queries';
 import { ShellFrame } from '../../app/app-shell';
-import { useOrg } from '../../shared/org';
+import { useFactoryById } from '../../shared/factory';
+import { useOrg, useOrgHolds } from '../../shared/org';
+import { holds, reasons } from '../../shared/permissions';
+import { EmptyState } from '../../ui/empty-state';
 import { DraftSessionProvider, useDraft, useModel } from './draft/use-draft';
 import { StartStep } from './start/start-step';
 import { WizardEditor } from './wizard-editor';
@@ -18,19 +23,37 @@ import type { WizardSearch } from './wizard-search';
 export function WizardPage({ step, search }: { step: WizardStep; search: WizardSearch }) {
   const org = useOrg();
   const { factory, from: _from, template: _template, ...section } = search;
+  const mayCreate = useOrgHolds('factory:create');
+  // A factory the list does not have yet was just created here: its creator edits it.
+  const listed = useFactoryById(factory ?? '');
+  const readOnly = listed !== undefined && !holds(listed, 'definition:edit');
 
   return (
     <ShellFrame sidebar={null}>
       {factory ? (
-        <DraftSessionProvider key={factory} org={org.id} factory={factory}>
+        <DraftSessionProvider key={`${factory}:${readOnly}`} org={org.id} factory={factory} readOnly={readOnly}>
           {step === 'start' ? (
             <Resume factory={factory} />
           ) : (
             <WizardEditor step={step} factory={factory} search={section} />
           )}
         </DraftSessionProvider>
-      ) : (
+      ) : mayCreate ? (
         <StartStep search={search} />
+      ) : (
+        <main id="main" className="flex flex-col gap-4">
+          <h1 className="m-0 text-[34px] leading-[1.05] font-normal tracking-display md:text-5xl">New factory</h1>
+          <EmptyState title="Only owners and admins start factories">
+            {reasons.newFactory(org.name)}{' '}
+            <Link
+              to="/o/$org"
+              params={{ org: org.slug }}
+              className="text-ink underline underline-offset-3 hover:text-run"
+            >
+              Back to the factories
+            </Link>
+          </EmptyState>
+        </main>
       )}
     </ShellFrame>
   );

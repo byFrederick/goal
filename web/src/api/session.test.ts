@@ -91,15 +91,29 @@ describe('withSession', () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  test('any other 403 is not a question of signing in', async () => {
+  test('a 403 forbidden is not a question of signing in: the app reads what the caller may do again', async () => {
     const { fetch } = goald(problem(403, 'forbidden'));
     const reauth = vi.fn(async () => true);
     const unauthenticated = vi.fn();
+    const forbidden = vi.fn();
 
-    const res = await withSession(fetch, { unauthenticated, reauth })(post());
+    const res = await withSession(fetch, { unauthenticated, reauth, forbidden })(post());
 
     expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: 'forbidden' });
+    expect(forbidden).toHaveBeenCalledOnce();
     expect(reauth).not.toHaveBeenCalled();
     expect(unauthenticated).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  test('other refusals leave what the caller may do alone', async () => {
+    const { fetch } = goald(problem(403, 'cross-origin'), problem(404, 'factory-not-found'));
+    const forbidden = vi.fn();
+    const send = withSession(fetch, { unauthenticated: vi.fn(), reauth: vi.fn(async () => true), forbidden });
+
+    expect((await send(post())).status).toBe(403);
+    expect((await send(post())).status).toBe(404);
+    expect(forbidden).not.toHaveBeenCalled();
   });
 });

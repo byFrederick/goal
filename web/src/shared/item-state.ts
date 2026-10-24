@@ -18,15 +18,21 @@ export interface StateLabel {
   tone: Tone;
 }
 
+/**
+ * An item's state in words. A decision waits on "you" only for someone who decides there
+ * (`decides`: the factory's item:decide); anyone else sees it waiting on an approver.
+ */
 export function describeState(
   item: Pick<ItemCard, 'state' | 'agent' | 'rework_count'>,
-  opts: { atConstraint?: boolean } = {},
+  opts: { atConstraint?: boolean; decides?: boolean } = {},
 ): StateLabel {
   switch (item.state) {
     case 'in_progress':
       return { text: item.agent ? `${item.agent} working` : 'In progress', tone: 'run' };
     case 'waiting_human':
-      return { text: 'Waiting on you', tone: 'you' };
+      return opts.decides === false
+        ? { text: 'Waiting on an approver', tone: 'muted' }
+        : { text: 'Waiting on you', tone: 'you' };
     case 'blocked':
       return { text: 'Blocked, needs a retry', tone: 'rework' };
     case 'ready':

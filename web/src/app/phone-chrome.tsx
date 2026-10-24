@@ -5,6 +5,7 @@ import { Link } from '@tanstack/react-router';
 import { Bot, ChevronRight, Ellipsis, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { Factory, OrgSummary } from '../api/types';
+import { useOrgHolds } from '../shared/org';
 import { cn } from '../ui/cn';
 import { Sheet, SheetContent, SheetLabel, SheetTrigger } from '../ui/sheet';
 import { AccountMenu } from './account-menu';
@@ -15,6 +16,8 @@ import { factoriesScreen, factoryScreens, laterText } from './screens';
 
 export function PhoneTopRow({ org }: { org: OrgSummary }) {
   const squares = useFactorySquares(org);
+  // New factory only for whoever may create one (owners and admins).
+  const mayCreate = useOrgHolds('factory:create');
   const onKeyDown = useRailKeys('horizontal');
 
   return (
@@ -32,11 +35,13 @@ export function PhoneTopRow({ org }: { org: OrgSummary }) {
             <FactorySquareLink org={org} square={square} size="phone" />
           </li>
         ))}
-        <li>
-          <NewFactoryLink org={org} size="phone">
-            <Plus size={16} strokeWidth={1.5} aria-hidden="true" />
-          </NewFactoryLink>
-        </li>
+        {mayCreate ? (
+          <li>
+            <NewFactoryLink org={org} size="phone">
+              <Plus size={16} strokeWidth={1.5} aria-hidden="true" />
+            </NewFactoryLink>
+          </li>
+        ) : null}
       </ul>
       <AccountMenu org={org} size="phone" />
     </nav>

@@ -12,10 +12,12 @@ import { ApiError } from '../../api/client';
 import { deleteFactory } from '../../api/definitions';
 import { draftQuery, factoriesQuery, factoryQuery, keys, templatesQuery } from '../../api/queries';
 import { useOrg } from '../../shared/org';
+import { reasons } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { EmptyState } from '../../ui/empty-state';
+import { ViewOnlyBanner } from '../../ui/view-only-banner';
 import { SectionView } from './definition-page';
 import { useDraft, useDraftSession, useModel } from './draft/use-draft';
 import { ConflictDialog, DiscardedDialog, FileConflictDialog } from './frame/conflict-dialog';
@@ -126,6 +128,7 @@ export function WizardEditor({
   };
 
   const footerButton = 'md:h-10 md:text-sm';
+  const viewOnly = session.readOnly;
   const deleteError =
     remove.error instanceof ApiError && remove.error.code === 'factory-published'
       ? 'It was published in the meantime, so it stays. Change it in its Definition.'
@@ -141,22 +144,27 @@ export function WizardEditor({
         description={`${from ? `${from} ` : ''}Everything here stays editable later in the factory’s Definition.`}
         actions={
           <>
-            <DraftSaved
-              session={{ ...s, savedAt: s.savedAt ?? draft?.updated_at ?? null }}
-              onRetry={() => session.retryNow()}
-              onResolve={() => setConflictOpen(true)}
-            />
+            {viewOnly ? null : (
+              <DraftSaved
+                session={{ ...s, savedAt: s.savedAt ?? draft?.updated_at ?? null }}
+                onRetry={() => session.retryNow()}
+                onResolve={() => setConflictOpen(true)}
+              />
+            )}
             <WizardViewToggle
               yaml={yaml}
               yamlUnavailable={yamlView ? undefined : 'arrives later'}
               onChange={(y) => void go(step, y ? 'yaml' : undefined)}
             />
-            <Button variant="white" className="h-11 md:h-10" onClick={() => void saveAndExit()}>
-              Save and exit
-            </Button>
+            {viewOnly ? null : (
+              <Button variant="white" className="h-11 md:h-10" onClick={() => void saveAndExit()}>
+                Save and exit
+              </Button>
+            )}
           </>
         }
       />
+      {viewOnly ? <ViewOnlyBanner>{reasons.definition(name)}</ViewOnlyBanner> : null}
       <WizardSteps current={step} done={done} factory={factory} />
 
       <SectionView place="wizard" section={step} search={search} />
@@ -172,15 +180,17 @@ export function WizardEditor({
                 </Link>
               </Button>
             ) : null}
-            <Button
-              variant="ghost"
-              size="lg"
-              className={`${footerButton} text-rework-ink`}
-              aria-haspopup="dialog"
-              onClick={() => setDeleteOpen(true)}
-            >
-              Delete this draft factory…
-            </Button>
+            {viewOnly ? null : (
+              <Button
+                variant="ghost"
+                size="lg"
+                className={`${footerButton} text-rework-ink`}
+                aria-haspopup="dialog"
+                onClick={() => setDeleteOpen(true)}
+              >
+                Delete this draft factory…
+              </Button>
+            )}
           </>
         }
         end={

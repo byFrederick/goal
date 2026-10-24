@@ -8,7 +8,7 @@ import { Button } from '../../../ui/button';
 import { cn } from '../../../ui/cn';
 import { ConfirmDialog } from '../../../ui/confirm-dialog';
 import { removeConnection, setConnectionAgents } from '../draft/ops';
-import { useDraft, useDraftSession, useModel } from '../draft/use-draft';
+import { useDraft, useDraftSession, useModel, useViewOnly } from '../draft/use-draft';
 import { useValidation } from '../frame/use-editor';
 import { SearchLink, useSetSearch } from '../search-link';
 import { agentsWithAccess, connectionKind, connectionStatus, problemsAt, signIn, statusTone } from './describe';
@@ -18,6 +18,7 @@ const and = (words: string[]) =>
 
 export function ConnectionDetail({ connection, index }: { connection: ModelConnection; index: number }) {
   const session = useDraftSession();
+  const viewOnly = useViewOnly();
   const model = useModel();
   const setSearch = useSetSearch();
   const headingId = useId();
@@ -62,9 +63,11 @@ export function ConnectionDetail({ connection, index }: { connection: ModelConne
             {connection.legacy ? ', reached through Goal’s gateway.' : '.'}
           </p>
         </div>
-        <Button variant="white" size="sm" className="h-11 md:h-8" onClick={() => setRemoving(true)}>
-          Remove…
-        </Button>
+        {viewOnly ? null : (
+          <Button variant="white" size="sm" className="h-11 md:h-8" onClick={() => setRemoving(true)}>
+            Remove…
+          </Button>
+        )}
       </div>
 
       <dl className="m-0 grid grid-cols-1 gap-3.5 @[560px]:grid-cols-2">
@@ -106,13 +109,14 @@ export function ConnectionDetail({ connection, index }: { connection: ModelConne
             {agents.map((agent) => (
               <label
                 key={agent}
-                className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-chip border border-line bg-surface pr-2.5 pl-2 text-[13px] whitespace-nowrap transition-colors duration-200 has-[:checked]:border-ink has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-run md:h-8"
+                className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-chip border border-line bg-surface pr-2.5 pl-2 has-[:disabled]:cursor-default text-[13px] whitespace-nowrap transition-colors duration-200 has-[:checked]:border-ink has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-run md:h-8"
               >
                 <input
                   type="checkbox"
                   checked={allowed.includes(agent)}
+                  disabled={viewOnly}
                   onChange={(e) => toggle(agent, e.target.checked)}
-                  className="m-0 size-4 cursor-pointer accent-ink focus-visible:outline-none"
+                  className="m-0 size-4 cursor-pointer accent-ink focus-visible:outline-none disabled:cursor-default"
                 />
                 <span translate="no">{agent}</span>
               </label>

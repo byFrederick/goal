@@ -74,6 +74,11 @@ describe('stationNote', () => {
     expect(stationNote(station({ kind: 'human' }))).toBe('Nothing waiting');
     expect(stationNote(station({ kind: 'done', done_today: 4 }))).toBe('');
   });
+
+  it('says a decision waits on the approvers to someone who does not decide', () => {
+    expect(stationNote(station({ kind: 'human', items: [waitingHuman] }), false)).toBe('Waiting on approvers');
+    expect(stationNote(station({ kind: 'human' }), false)).toBe('Nothing waiting');
+  });
 });
 
 describe('columnCount', () => {
@@ -214,6 +219,10 @@ describe('cardState', () => {
 
   it('asks for your OK, says how often work was sent back, and what a done item became', () => {
     expect(cardState(card({ state: 'waiting_human' }))).toEqual({ text: 'Needs your OK', tone: 'you' });
+    expect(cardState(card({ state: 'waiting_human' }), false)).toEqual({
+      text: 'Waiting on an approver',
+      tone: 'muted',
+    });
     expect(cardState(card({ rework_count: 1 }))).toEqual({ text: 'Sent back once', tone: 'rework' });
     expect(cardState(card({ rework_count: 2 })).text).toBe('Sent back twice');
     expect(cardState(card({ rework_count: 3 })).text).toBe('Sent back 3 times');

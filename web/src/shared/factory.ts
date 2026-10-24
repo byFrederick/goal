@@ -4,6 +4,7 @@ import { useCallback } from 'react';
 import { factoriesQuery } from '../api/queries';
 import type { Factory } from '../api/types';
 import { humanize } from './format';
+import { useOrg } from './org';
 
 /**
  * The factory of the current /o/$org/f/$factory route, as the organization's factory list has it
@@ -15,6 +16,17 @@ export function useFactory(): Factory {
   const { org, factory } = useRouteContext({ from: '/o/$org/f/$factory' });
   const select = useCallback((list: Factory[]) => list.find((f) => f.id === factory.id), [factory.id]);
   return useQuery({ ...factoriesQuery(org.id), select }).data ?? factory;
+}
+
+/**
+ * A factory of the current organization by id, from its factory list: what a row of another
+ * factory (the inbox's) needs, such as its `can`. Undefined while the list loads or when goald
+ * no longer lists it.
+ */
+export function useFactoryById(id: string): Factory | undefined {
+  const org = useOrg();
+  const select = useCallback((list: Factory[]) => list.find((f) => f.id === id), [id]);
+  return useQuery({ ...factoriesQuery(org.id), select }).data;
 }
 
 /** The canonical params of the current factory's pages (organization slug, factory name), for links. */

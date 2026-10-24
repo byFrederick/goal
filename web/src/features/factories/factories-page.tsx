@@ -7,7 +7,8 @@ import { Factory as FactoryIcon } from 'lucide-react';
 import { useId } from 'react';
 import { inboxQuery, overviewQuery } from '../../api/queries';
 import { factoryMark } from '../../shared/marks';
-import { useOrg } from '../../shared/org';
+import { useOrg, useOrgHolds } from '../../shared/org';
+import { reasons } from '../../shared/permissions';
 import { cn } from '../../ui/cn';
 import { EmptyState } from '../../ui/empty-state';
 import { actionsClass, descriptionClass, eyebrowClass, PageHeader } from '../../ui/page-header';
@@ -26,6 +27,8 @@ export function FactoriesPage() {
   const listId = useId();
   const factories = overview.factories.toSorted((a, b) => a.factory.name.localeCompare(b.factory.name));
   const named = factories.map((o) => o.factory);
+  // The ways to start a factory are offered only to whoever may create one (owners and admins).
+  const mayCreate = useOrgHolds('factory:create');
 
   const actions = (
     <div className={cn(actionsClass, 'hidden md:flex')}>
@@ -45,10 +48,10 @@ export function FactoriesPage() {
             </p>
           ) : null
         }
-        actions={factories.length > 0 ? actions : null}
+        actions={factories.length > 0 && mayCreate ? actions : null}
       />
 
-      {factories.length === 0 ? (
+      {factories.length === 0 && mayCreate ? (
         <EmptyState
           icon={<FactoryIcon size={20} strokeWidth={1.5} />}
           title={`No factories in ${org.name} yet`}
@@ -56,6 +59,10 @@ export function FactoriesPage() {
         >
           A factory runs from a definition: its line, agents and connections. Start one blank, from a template or from a
           factory.yaml.
+        </EmptyState>
+      ) : factories.length === 0 ? (
+        <EmptyState icon={<FactoryIcon size={20} strokeWidth={1.5} />} title="No factories to show yet">
+          You see a factory once an owner or admin of {org.name} gives you a role on it. {reasons.newFactory(org.name)}
         </EmptyState>
       ) : (
         <>
@@ -74,12 +81,12 @@ export function FactoriesPage() {
             </ul>
           </section>
 
-          <div className="grid gap-3 md:gap-4 @[1000px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <div className={cn('grid gap-3 md:gap-4', mayCreate && '@[1000px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]')}>
             <WaitingList org={org} inbox={inbox} className="scroll-mt-4" />
-            <NewFactoryCard className="hidden md:flex" />
+            {mayCreate ? <NewFactoryCard className="hidden md:flex" /> : null}
           </div>
 
-          <NewFactoryButton className="md:hidden" />
+          {mayCreate ? <NewFactoryButton className="md:hidden" /> : null}
           <p className="m-0 text-center text-[13px] text-muted md:hidden">
             {budgetLine(org.name, overview.spend_usd, overview.budget_usd)}
           </p>

@@ -9,6 +9,7 @@ import { humanize } from '../../shared/format';
 import { type ItemControls, ItemDecisions } from '../../shared/item-actions';
 import { describeState, pausedNow, pullRequestOf, type Tone } from '../../shared/item-state';
 import { useOrg } from '../../shared/org';
+import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
 import { Chip, type ChipTone } from '../../ui/chip';
@@ -102,11 +103,10 @@ export function ItemPage() {
   const [fullTrace, setFullTrace] = useState(false);
   const recipient = noteRecipient(trace, item.station);
   const station = factory.stations.find((s) => s.id === item.station);
-  const state = describeState({
-    state: item.state,
-    agent: agentOf(trace),
-    rework_count: item.rework_count,
-  });
+  const state = describeState(
+    { state: item.state, agent: agentOf(trace), rework_count: item.rework_count },
+    { decides: holds(factory, 'item:decide') },
+  );
   const decidable = {
     key,
     ref: item.ref,
@@ -211,10 +211,23 @@ export function ItemPage() {
             trace={trace}
             className={cn('order-6 @[720px]:order-none', !fullTrace && 'hidden @[720px]:flex')}
           >
-            <NoteComposer itemKey={key} state={item.state} agent={recipient} className="mt-1 hidden @[720px]:flex" />
+            <NoteComposer
+              itemKey={key}
+              factory={factory}
+              state={item.state}
+              agent={recipient}
+              className="mt-1 hidden @[720px]:flex"
+            />
           </TraceCard>
         </div>
-        <NoteComposer itemKey={key} state={item.state} agent={recipient} compact className="order-8 @[720px]:hidden" />
+        <NoteComposer
+          itemKey={key}
+          factory={factory}
+          state={item.state}
+          agent={recipient}
+          compact
+          className="order-8 @[720px]:hidden"
+        />
       </div>
     </>
   );

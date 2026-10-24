@@ -1,7 +1,9 @@
 // A small radio group drawn as one concrete pill of options (C §10.11 `SegmentedControl`): Off /
 // Ask me / Allowed, Write / Preview, a station's kind. Native radios in a fieldset: one tab stop,
 // and the arrow keys move the choice, as in any radio group. A disabled option says why in a
-// tooltip and in its accessible description; the arrow keys skip it.
+// tooltip and in its accessible description; the arrow keys skip it. `readOnly` shows the choice
+// without letting it change (a view-only editor): every option is disabled, the chosen one drawn
+// as chosen.
 import { useId } from 'react';
 import { cn } from './cn';
 import { Tooltip } from './tooltip';
@@ -21,6 +23,8 @@ interface SegmentedControlProps<T extends string> {
   onChange: (value: T) => void;
   /** Ids of what describes the group (a warning under it). */
   describedBy?: string | undefined;
+  /** Shows the choice only. */
+  readOnly?: boolean;
   className?: string;
 }
 
@@ -30,6 +34,7 @@ export function SegmentedControl<T extends string>({
   value,
   onChange,
   describedBy,
+  readOnly = false,
   className,
 }: SegmentedControlProps<T>) {
   const name = useId();
@@ -48,8 +53,10 @@ export function SegmentedControl<T extends string>({
             className={cn(
               'relative inline-flex h-11 cursor-pointer items-center rounded-chip px-2.5 text-[13px] whitespace-nowrap text-muted transition-colors duration-200 hover:text-ink md:h-[30px]',
               'has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-run',
-              'has-[:disabled]:cursor-not-allowed has-[:disabled]:text-faint has-[:disabled]:hover:text-faint',
-              checked && 'bg-surface font-medium text-ink shadow-raise',
+              readOnly
+                ? 'cursor-default hover:text-muted'
+                : 'has-[:disabled]:cursor-not-allowed has-[:disabled]:text-faint has-[:disabled]:hover:text-faint',
+              checked && 'bg-surface font-medium text-ink shadow-raise hover:text-ink',
             )}
           >
             <input
@@ -57,20 +64,23 @@ export function SegmentedControl<T extends string>({
               name={name}
               value={o.value}
               checked={checked}
-              disabled={Boolean(o.disabledReason)}
-              aria-describedby={o.disabledReason ? reasonId : undefined}
+              disabled={readOnly || Boolean(o.disabledReason)}
+              aria-describedby={o.disabledReason && !readOnly ? reasonId : undefined}
               onChange={() => onChange(o.value)}
-              className="absolute inset-0 m-0 cursor-pointer appearance-none opacity-0 disabled:cursor-not-allowed"
+              className={cn(
+                'absolute inset-0 m-0 cursor-pointer appearance-none opacity-0',
+                readOnly ? 'disabled:cursor-default' : 'disabled:cursor-not-allowed',
+              )}
             />
             {o.label}
-            {o.disabledReason ? (
+            {o.disabledReason && !readOnly ? (
               <span id={reasonId} className="sr-only">
                 {o.disabledReason}
               </span>
             ) : null}
           </label>
         );
-        return o.disabledReason ? (
+        return o.disabledReason && !readOnly ? (
           <Tooltip key={o.value} label={o.disabledReason} side="top">
             {option}
           </Tooltip>

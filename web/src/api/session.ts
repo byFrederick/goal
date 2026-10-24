@@ -1,6 +1,7 @@
 // What every /v1 request does about the session (spec 3 §10.1): a 401 sends the person to sign
 // in, keeping the page they were on; a 403 reauth-required asks them to confirm it's them and
-// sends the same request once more. client.ts wraps the client's fetch with withSession; the app
+// sends the same request once more; a 403 forbidden (the screen offered what the caller may no
+// longer do) has the app read `can` again, so the screen stops offering it. client.ts wraps the client's fetch with withSession; the app
 // (main.tsx and the re-auth dialog) says what happens through setSessionHandlers.
 
 export interface SessionHandlers {
@@ -12,6 +13,8 @@ export interface SessionHandlers {
    * they cancelled (the refusal is the answer).
    */
   reauth: () => Promise<boolean>;
+  /** goald answered 403 forbidden: what the screens read `can` from is stale. The refusal is the answer. */
+  forbidden?: () => void;
 }
 
 /** Wraps fetch with the handling of 401 and 403 reauth-required. */
@@ -27,7 +30,10 @@ export function withSession(
       handlers.unauthenticated();
       return response;
     }
-    if (response.status !== 403 || (await problemCode(response)) !== 'reauth-required') return response;
+    if (response.status !== 403) return response;
+    const code = await problemCode(response);
+    if (code === 'forbidden') handlers.forbidden?.();
+    if (code !== 'reauth-required') return response;
     if (!(await handlers.reauth())) return response;
     return fetch(retry);
   };
@@ -44,7 +50,7 @@ async function problemCode(response: Response): Promise<string | undefined> {
   }
 }
 
-let current: SessionHandlers = { unauthenticated: () => {}, reauth: async () => false };
+let current: SessionHandlers = { unauthenticated: () => {}, reauth: async () => false, forbidden: () => {} };
 
 /** The app's handlers; until the app sets them, a 401 or reauth-required is only answered. */
 export function setSessionHandlers(handlers: Partial<SessionHandlers>): void {
@@ -55,6 +61,7 @@ export function setSessionHandlers(handlers: Partial<SessionHandlers>): void {
 export const sessionHandlers: SessionHandlers = {
   unauthenticated: () => current.unauthenticated(),
   reauth: () => current.reauth(),
+  forbidden: () => current.forbidden?.(),
 };
 
 /**

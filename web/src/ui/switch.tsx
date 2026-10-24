@@ -3,6 +3,7 @@
 // switch stays focusable (aria-disabled), so the reason it describes can be heard.
 import type { ComponentProps } from 'react';
 import { cn } from './cn';
+import { useReadOnly } from './read-only';
 
 type SwitchProps = Omit<ComponentProps<'button'>, 'onChange' | 'role'> & {
   checked: boolean;
@@ -11,7 +12,9 @@ type SwitchProps = Omit<ComponentProps<'button'>, 'onChange' | 'role'> & {
   disabled?: boolean;
 };
 
-export function Switch({ checked, onCheckedChange, disabled, className, ...props }: SwitchProps) {
+export function Switch({ checked, onCheckedChange, disabled: off, className, ...props }: SwitchProps) {
+  const shown = useReadOnly();
+  const disabled = off || shown;
   return (
     <button
       type="button"

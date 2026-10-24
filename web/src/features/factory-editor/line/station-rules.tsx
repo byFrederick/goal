@@ -7,6 +7,7 @@ import { type RefObject, useId, useRef, useState } from 'react';
 import type { ModelStation, StationCheck } from '../../../shared/definition/model';
 import { Button } from '../../../ui/button';
 import { cn } from '../../../ui/cn';
+import { readOnlyControl } from '../../../ui/field';
 import { Switch } from '../../../ui/switch';
 import { addCheck, removeCheck, setGate, setMergeStep, setStationField } from '../draft/ops';
 import { EditedMark } from '../frame/section-shell';
@@ -46,8 +47,11 @@ export function fieldOf(pointer: string | undefined, index: number): StationFiel
 }
 
 const rule = 'flex min-w-0 flex-wrap items-center gap-2';
-const smallInput =
-  'h-11 rounded-control border border-rule bg-surface px-2 text-base text-ink transition-colors duration-200 hover:border-faint md:h-8 md:text-sm aria-[invalid=true]:border-rework';
+const smallInput = cn(
+  'h-11 rounded-control border border-rule bg-surface px-2 text-base text-ink transition-colors duration-200 hover:border-faint md:h-8 md:text-sm aria-[invalid=true]:border-rework',
+  readOnlyControl,
+  'disabled:cursor-default disabled:border-line disabled:bg-shell disabled:hover:border-line',
+);
 
 /** Where the Basics section is, in Definition or in the wizard. */
 function BasicsLink({ children }: { children: string }) {
@@ -131,7 +135,7 @@ export function StationRules({
       {station.description !== undefined || noting ? (
         <Note station={station} label={label} at={at} input={noteInput} onDone={() => setNoting(false)} />
       ) : null}
-      {reworkTarget || (station.description === undefined && !noting) ? (
+      {!editor.viewOnly && (reworkTarget || (station.description === undefined && !noting)) ? (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           {reworkTarget ? (
             <button
@@ -184,15 +188,17 @@ function Lanes({ station, index }: { station: ModelStation; index: number }) {
           </span>
         </span>
       ))}
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-haspopup="dialog"
-        aria-label={`Edit lanes of ${label}`}
-        className="inline-flex min-h-6 items-center px-0.5 text-[13px] text-ink-soft underline underline-offset-3 transition-colors duration-200 hover:text-ink"
-      >
-        Edit lanes
-      </button>
+      {editor.viewOnly ? null : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-haspopup="dialog"
+          aria-label={`Edit lanes of ${label}`}
+          className="inline-flex min-h-6 items-center px-0.5 text-[13px] text-ink-soft underline underline-offset-3 transition-colors duration-200 hover:text-ink"
+        >
+          Edit lanes
+        </button>
+      )}
       <EditedMark section="line" pointer={`/line/stations/${index}/route`} label={`the lanes of ${label}`} />
       <LanesDialog
         open={open}
@@ -252,30 +258,37 @@ function Checks({
               {text}
             </span>
             {isNew ? <span className="sr-only">, added in this draft</span> : null}
-            <button
-              type="button"
-              aria-label={`Remove check ${text} from ${label}`}
-              onClick={() => editor.edit(removeCheck(editor.line, station.id, i))}
-              className="inline-flex size-6 shrink-0 items-center justify-center rounded-chip text-muted transition-colors duration-200 hover:bg-shell hover:text-ink"
-            >
-              <X size={13} strokeWidth={1.5} aria-hidden="true" />
-            </button>
+            {editor.viewOnly ? (
+              <span className="w-1.5" />
+            ) : (
+              <button
+                type="button"
+                aria-label={`Remove check ${text} from ${label}`}
+                onClick={() => editor.edit(removeCheck(editor.line, station.id, i))}
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded-chip text-muted transition-colors duration-200 hover:bg-shell hover:text-ink"
+              >
+                <X size={13} strokeWidth={1.5} aria-hidden="true" />
+              </button>
+            )}
           </span>
         );
       })}
-      <Button
-        variant="white"
-        size="sm"
-        className="h-11 md:h-8"
-        aria-haspopup="dialog"
-        aria-label={`Add check to ${label}`}
-        aria-invalid={invalid || undefined}
-        aria-describedby={describedBy}
-        onClick={() => setOpen(true)}
-      >
-        <Plus size={14} strokeWidth={1.5} aria-hidden="true" />
-        Add check
-      </Button>
+      {editor.viewOnly && checks.length === 0 ? <span className="text-ink-soft">None</span> : null}
+      {editor.viewOnly ? null : (
+        <Button
+          variant="white"
+          size="sm"
+          className="h-11 md:h-8"
+          aria-haspopup="dialog"
+          aria-label={`Add check to ${label}`}
+          aria-invalid={invalid || undefined}
+          aria-describedby={describedBy}
+          onClick={() => setOpen(true)}
+        >
+          <Plus size={14} strokeWidth={1.5} aria-hidden="true" />
+          Add check
+        </Button>
+      )}
       <EditedMark section="line" pointer={`/line/stations/${index}/checks`} label={`the checks of ${label}`} />
       <AddCheckDialog
         open={open}
@@ -320,6 +333,7 @@ function GateRule({
         value={gate.on_reject ?? ''}
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
+        disabled={editor.viewOnly}
         onChange={(e) => editor.edit(setGate(editor.line, station.id, { ...gate, on_reject: e.target.value }))}
         className={cn(smallInput, 'max-w-[220px] cursor-pointer pr-7')}
       >
@@ -348,18 +362,21 @@ function GateRule({
           );
         }}
         onBlur={editor.flush}
+        readOnly={editor.viewOnly}
         autoComplete="off"
         className={cn(smallInput, 'w-12 text-center tabular-nums')}
       />
       <span className="text-muted">times</span>
-      <button
-        type="button"
-        onClick={() => editor.edit(setGate(editor.line, station.id, null))}
-        aria-label={`Remove the rework rule of ${label}`}
-        className="inline-flex size-11 items-center justify-center rounded-chip text-muted transition-colors duration-200 hover:bg-shell hover:text-ink md:size-7"
-      >
-        <X size={14} strokeWidth={1.5} aria-hidden="true" />
-      </button>
+      {editor.viewOnly ? null : (
+        <button
+          type="button"
+          onClick={() => editor.edit(setGate(editor.line, station.id, null))}
+          aria-label={`Remove the rework rule of ${label}`}
+          className="inline-flex size-11 items-center justify-center rounded-chip text-muted transition-colors duration-200 hover:bg-shell hover:text-ink md:size-7"
+        >
+          <X size={14} strokeWidth={1.5} aria-hidden="true" />
+        </button>
+      )}
       <EditedMark section="line" pointer={`/line/stations/${index}/gate`} label={`the rework rule of ${label}`} />
     </div>
   );
@@ -446,6 +463,7 @@ function Note({
           if (!note) onDone();
           editor.flush();
         }}
+        readOnly={editor.viewOnly}
         autoComplete="off"
         className="h-11 min-w-0 flex-1 rounded-control border border-transparent bg-transparent px-1.5 text-base text-muted transition-colors duration-200 placeholder:text-muted hover:border-rule focus-visible:border-rule focus-visible:bg-surface focus-visible:text-ink md:h-8 md:text-sm"
       />

@@ -8,6 +8,7 @@ import { formatAge, formatUsd, humanize } from '../../shared/format';
 import { describeState, toneText } from '../../shared/item-state';
 import { NewItemButton } from '../../shared/new-item';
 import { useOrg } from '../../shared/org';
+import { holds } from '../../shared/permissions';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { PhoneNeedsYou } from './phone-needs-you';
@@ -26,6 +27,7 @@ export function ItemsPage() {
   const { state } = useSearch({ from: '/o/$org/f/$factory/items/' });
   const org = useOrg();
   const { data } = useSuspenseQuery(itemsQuery(org.id, factory.id, { state, limit: 200 }));
+  const decides = holds(factory, 'item:decide');
 
   return (
     <>
@@ -74,7 +76,7 @@ export function ItemsPage() {
       ) : (
         <ul className="m-0 flex list-none flex-col overflow-hidden rounded-card border border-line bg-card p-0">
           {data.items.map((it) => {
-            const label = describeState(it);
+            const label = describeState(it, { decides });
             return (
               <li key={it.id} className="border-t border-line first:border-t-0">
                 <Link

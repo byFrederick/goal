@@ -5,7 +5,7 @@ import { useId, useRef } from 'react';
 import type { BasicsSection, Repository } from '../../../shared/definition/model';
 import { Field, Input } from '../../../ui/field';
 import { setBasics } from '../draft/ops';
-import { useDraft, useDraftSession } from '../draft/use-draft';
+import { useDraft, useDraftSession, useViewOnly } from '../draft/use-draft';
 import { EditedMark } from '../frame/section-shell';
 import { useProblemText } from '../frame/use-editor';
 
@@ -19,6 +19,7 @@ function signsIn(repository: Repository | null | undefined): string {
 
 export function RepositoryField({ basics }: { basics: BasicsSection }) {
   const session = useDraftSession();
+  const viewOnly = useViewOnly();
   const id = useId();
   const saved = useDraft((s) => s.sections.basics.server.repository);
   // The repository a "None" replaced, put back when it is unchecked.
@@ -61,12 +62,13 @@ export function RepositoryField({ basics }: { basics: BasicsSection }) {
       />
       <label
         htmlFor={`${id}-none`}
-        className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm md:min-h-8"
+        className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm has-[:disabled]:cursor-default md:min-h-8"
       >
         <input
           id={`${id}-none`}
           type="checkbox"
           checked={none}
+          disabled={viewOnly}
           onChange={(e) => setNone(e.target.checked)}
           className="size-4 accent-ink"
         />

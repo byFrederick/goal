@@ -5,6 +5,7 @@ import { ExternalLink } from 'lucide-react';
 import type { CurrentRun, Factory, Item, ItemFlow, ItemSpan, Station } from '../../api/types';
 import { formatClock, formatDuration, formatUsd, humanize } from '../../shared/format';
 import { describeState, pullRequestLabel, pullRequestOf } from '../../shared/item-state';
+import { holds } from '../../shared/permissions';
 import { SectionCard, StatRow } from '../../ui/card';
 import { cn } from '../../ui/cn';
 import { Hatch } from '../../ui/hatch';
@@ -194,7 +195,7 @@ export function TimeCard({
 const kindNote: Record<Station['kind'], string | null> = {
   queue: 'Waits to be pulled',
   agent: 'Agents work here',
-  human: 'You decide here',
+  human: 'Approvers decide here',
   done: null,
 };
 
@@ -217,11 +218,10 @@ export function PathCard({ item, factory, className }: { item: Item; factory: Fa
   const flow = item.flow ?? noFlow;
   const end = item.done_at ? Date.parse(item.done_at) : now;
   const run = flow.current_run;
-  const state = describeState({
-    state: item.state,
-    agent: run ? agentCopy(run) : null,
-    rework_count: item.rework_count,
-  });
+  const state = describeState(
+    { state: item.state, agent: run ? agentCopy(run) : null, rework_count: item.rework_count },
+    { decides: holds(factory, 'item:decide') },
+  );
 
   return (
     <SectionCard title="Path" className={className}>

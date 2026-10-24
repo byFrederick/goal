@@ -90,6 +90,11 @@ export function createOrg(org: NewOrg): Promise<Org> {
   return unwrap(goal.POST('/v1/orgs', { body: org }));
 }
 
+/** One organization with the caller's role and what they may do in it (`can`). */
+export function getOrg(org: string, signal?: AbortSignal): Promise<Org> {
+  return unwrap(goal.GET('/v1/orgs/{org}', { params: { path: { org } }, ...cancel(signal) }));
+}
+
 /** What each factory needs from people now: the rail's badges and dots. */
 export function getAttention(org: string, signal?: AbortSignal): Promise<OrgAttention> {
   return unwrap(goal.GET(orgPath('/attention'), { params: { path: { org } }, ...cancel(signal) }));

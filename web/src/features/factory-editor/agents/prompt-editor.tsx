@@ -11,7 +11,7 @@ import type { ModelAgent } from '../../../shared/definition/model';
 import { cleanPath } from '../../../shared/definition/place';
 import { Button } from '../../../ui/button';
 import { SegmentedControl } from '../../../ui/segmented-control';
-import { useDraft, useDraftSession, useSection } from '../draft/use-draft';
+import { useDraft, useDraftSession, useSection, useViewOnly } from '../draft/use-draft';
 import { useProblemText } from '../frame/use-editor';
 import { CodeEditor, LinedText } from '../yaml/code-editor';
 
@@ -74,6 +74,7 @@ type View = 'write' | 'preview';
 
 export function PromptEditor({ agent, index }: { agent: ModelAgent; index: number }) {
   const session = useDraftSession();
+  const viewOnly = useViewOnly();
   const headingId = useId();
   const [view, setView] = useState<View>('write');
   const { path, text, error } = usePromptText(agent.name);
@@ -92,9 +93,11 @@ export function PromptEditor({ agent, index }: { agent: ModelAgent; index: numbe
       return (
         <div className="flex flex-wrap items-center gap-3 p-3 text-sm">
           <span className="text-rework-ink">{path} isn’t in the draft.</span>
-          <Button variant="white" size="sm" onClick={() => session.editFile(path, `# ${agent.name}\n`)}>
-            Create it
-          </Button>
+          {viewOnly ? null : (
+            <Button variant="white" size="sm" onClick={() => session.editFile(path, `# ${agent.name}\n`)}>
+              Create it
+            </Button>
+          )}
         </div>
       );
     }
@@ -113,6 +116,7 @@ export function PromptEditor({ agent, index }: { agent: ModelAgent; index: numbe
         label={`Prompt of ${agent.name}`}
         onChange={(next) => session.editFile(path, next)}
         onBlur={() => void session.flush()}
+        readOnly={viewOnly}
         minLines={12}
         maxLines={28}
       />

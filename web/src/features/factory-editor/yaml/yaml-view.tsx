@@ -36,7 +36,7 @@ import { cleanPath, lineOfPlace } from '../../../shared/definition/place';
 import { formatClock } from '../../../shared/format';
 import { Button } from '../../../ui/button';
 import { applyFix } from '../draft/ops';
-import { useDraft, useDraftSession, useModel } from '../draft/use-draft';
+import { useDraft, useDraftSession, useModel, useViewOnly } from '../draft/use-draft';
 import { problemPlace } from '../frame/state';
 import { useValidation } from '../frame/use-editor';
 import { useGoTo } from '../search-link';
@@ -97,6 +97,7 @@ const toMarker = (p: DefinitionProblem): EditorMarker => ({
 
 export function YamlView({ search }: SectionViewProps) {
   const session = useDraftSession();
+  const viewOnly = useViewOnly();
   const { org, factory: f } = session;
   const client = useQueryClient();
   const go = useGoTo();
@@ -137,7 +138,7 @@ export function YamlView({ search }: SectionViewProps) {
   const text = fileState?.text;
   const dirty = fileState?.dirty ?? false;
   const binary = text !== undefined && isBinary(text);
-  const readOnly = path.startsWith('evals/') || binary;
+  const readOnly = viewOnly || path.startsWith('evals/') || binary;
 
   // Problems: of the saved draft, or of the text being typed (an overlay) between saves.
   const saved = useValidation();
@@ -325,9 +326,10 @@ export function YamlView({ search }: SectionViewProps) {
           onNew={(g) => setDialog({ kind: 'new', folder: g.folder ?? '' })}
           onRename={(p) => setDialog({ kind: 'rename', path: p })}
           onDelete={(p) => setDialog({ kind: 'delete', path: p })}
+          readOnly={viewOnly}
           actions={
             <>
-              {path === factoryFile ? (
+              {path === factoryFile && !viewOnly ? (
                 <Button
                   size="sm"
                   variant="white"
@@ -415,7 +417,7 @@ export function YamlView({ search }: SectionViewProps) {
           <span>
             Line {cursor?.line ?? 1}, column {cursor?.column ?? 1}. {languageNames[language]}
             {path === factoryFile ? ', schema goal/v1' : ''}
-            {readOnly && !binary ? '. Read-only: edited from Jonah later' : ''}
+            {viewOnly ? '. View only' : readOnly && !binary ? '. Read-only: edited from Jonah later' : ''}
           </span>
           <span role="status">
             {path === factoryFile ? 'Checked as you type. ' : ''}

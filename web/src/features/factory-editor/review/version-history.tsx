@@ -55,7 +55,8 @@ export function VersionRow({
   version: Version;
   /** The `?compare=` shown now. */
   comparing: string | undefined;
-  onRestore: (v: Version) => void;
+  /** Restore…; absent for someone who may not publish (a view-only editor). */
+  onRestore?: ((v: Version) => void) | undefined;
 }) {
   const { hasDraft } = useEditorFacts();
   const setSearch = useSetSearch();
@@ -89,7 +90,7 @@ export function VersionRow({
               {pressed ? 'Comparing' : 'Compare'}
             </Button>
           ) : null}
-          {version.current ? null : (
+          {version.current || !onRestore ? null : (
             <Button
               size="sm"
               variant="white"

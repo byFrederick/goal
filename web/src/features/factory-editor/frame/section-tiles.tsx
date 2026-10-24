@@ -2,16 +2,18 @@
 // changes", "No changes") and Review and publish with what stands before a publish. A grid of
 // five once `main` is wide enough, else a row that scrolls inside `main` (never the page). In
 // YAML mode each tile jumps to its block of factory.yaml ("board, lines 31–45", D §10.9); while
-// factory.yaml does not parse, every tile says so.
+// factory.yaml does not parse, every tile says so. View only, there is no Review and publish and
+// each tile says what its section holds, with an eye (canvas Define-View).
 import { useLinkProps } from '@tanstack/react-router';
-import { Pencil, TriangleAlert, Upload } from 'lucide-react';
+import { Eye, Pencil, TriangleAlert, Upload } from 'lucide-react';
 import { type ReactNode, useEffect, useRef } from 'react';
 import type { ParseError, SectionSummary } from '../../../api/types';
 import { type Section, sections } from '../../../shared/definition/model';
 import { useFactoryParams } from '../../../shared/factory';
 import { cn } from '../../../ui/cn';
+import { useModel } from '../draft/use-draft';
 import { type EditorSection, sectionInfo } from '../sections';
-import { parseErrorTile, reviewTile, sectionTile, yamlTileText } from './state';
+import { parseErrorTile, reviewTile, sectionTile, viewTileText, yamlTileText } from './state';
 
 interface TilesProps {
   current: EditorSection;
@@ -22,6 +24,8 @@ interface TilesProps {
   /** The YAML view is open: tiles jump to their block. */
   yaml: boolean;
   parseError: ParseError | null;
+  /** The caller may not change the definition. */
+  viewOnly?: boolean;
 }
 
 export function SectionTiles({
@@ -32,20 +36,30 @@ export function SectionTiles({
   hasDraft,
   yaml,
   parseError,
+  viewOnly = false,
 }: TilesProps) {
+  const model = useModel();
+  const shown = viewOnly ? sections.filter((s) => s !== 'review') : sections;
   return (
     <nav
       aria-label={yaml ? 'Definition sections, jump to a block in factory.yaml' : 'Definition sections'}
       className="-mx-4 min-w-0 md:mx-0"
     >
-      <ul className="m-0 flex list-none gap-2 overflow-x-auto px-4 py-0.5 md:px-0 @[880px]:grid @[880px]:grid-cols-5 @[880px]:overflow-visible">
-        {sections.map((s) => {
+      <ul
+        className={cn(
+          'm-0 flex list-none gap-2 overflow-x-auto px-4 py-0.5 md:px-0 @[880px]:grid @[880px]:overflow-visible',
+          viewOnly ? '@[880px]:grid-cols-4' : '@[880px]:grid-cols-5',
+        )}
+      >
+        {shown.map((s) => {
           const summary = summaries.find((x) => x.section === s);
           const tile = parseError
             ? parseErrorTile(s, parseError)
             : s === 'review'
               ? reviewTile({ problems: problemCount, changes: changeCount, hasDraft })
-              : sectionTile(summary);
+              : viewOnly
+                ? { state: 'view' as const, text: viewTileText(s, model) }
+                : sectionTile(summary);
           const line = yaml ? summary?.lines[0] : undefined;
           return (
             <li key={s} className="min-w-[176px] shrink-0 @[880px]:min-w-0">
@@ -134,6 +148,13 @@ function Tile({
 const iconBox = 'flex size-[22px] shrink-0 items-center justify-center rounded-chip';
 
 function TileIcon({ section, state }: { section: Section; state: string }) {
+  if (state === 'view') {
+    return (
+      <span aria-hidden="true" className={cn(iconBox, 'bg-control text-ink')}>
+        <Eye size={13} strokeWidth={1.75} />
+      </span>
+    );
+  }
   if (section === 'review') {
     return (
       <span aria-hidden="true" className={cn(iconBox, 'bg-control text-ink')}>

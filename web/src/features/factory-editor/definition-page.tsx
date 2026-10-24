@@ -1,7 +1,9 @@
 // Definition (D §10.1): /o/$org/f/$factory/definition/$section. The layout opens the factory's
 // draft session and draws the frame once; each section route renders its view from
 // `section-views.tsx` inside it (or LaterSection), with a skeleton until the draft (or the
-// running version) has loaded and an error with Try again when it can't.
+// running version) has loaded and an error with Try again when it can't. Without
+// definition:edit the whole editor is view only (canvas Define-View): the session changes
+// nothing, the controls only show their values, and Review and publish says who publishes.
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useSearch } from '@tanstack/react-router';
 import { type ReactNode, Suspense } from 'react';
@@ -9,8 +11,10 @@ import { ApiError } from '../../api/client';
 import { defKeys, draftModelQuery } from '../../api/queries';
 import { useFactory } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
+import { holds, reasons } from '../../shared/permissions';
 import { Button } from '../../ui/button';
-import { DraftSessionProvider, useDraft, useDraftOpen, useDraftSession } from './draft/use-draft';
+import { ReadOnly } from '../../ui/read-only';
+import { DraftSessionProvider, useDraft, useDraftOpen, useDraftSession, useSection } from './draft/use-draft';
 import { DefinitionFrame } from './frame/editor-frame';
 import { LaterSection } from './frame/section-shell';
 import { type SectionViewProps, sectionViews, yamlView } from './section-views';
@@ -22,8 +26,9 @@ export function DefinitionLayout({ children }: { children: ReactNode }) {
   const { section } = useParams({ strict: false });
   const { mode } = useSearch({ strict: false });
   const current: EditorSection = section && isEditorSection(section) ? section : 'line';
+  const readOnly = !holds(factory, 'definition:edit');
   return (
-    <DraftSessionProvider key={factory.id} org={org.id} factory={factory.id}>
+    <DraftSessionProvider key={`${factory.id}:${readOnly}`} org={org.id} factory={factory.id} readOnly={readOnly}>
       <DefinitionFrame section={current} yaml={mode === 'yaml'}>
         {children}
       </DefinitionFrame>
@@ -80,12 +85,28 @@ export function SectionView({
   if (parseError && View !== yamlView && section !== 'versions') {
     return <ParseErrorState line={parseError.line} />;
   }
+  if (session.readOnly && section === 'review' && View !== yamlView) return <ViewOnlyReview />;
   return View ? (
-    <Suspense fallback={<SectionSkeleton />}>
-      <View place={place} search={search} />
-    </Suspense>
+    <ReadOnly when={session.readOnly}>
+      <Suspense fallback={<SectionSkeleton />}>
+        <View place={place} search={search} />
+      </Suspense>
+    </ReadOnly>
   ) : (
     <LaterSection section={section} />
+  );
+}
+
+/** Review and publish, for someone who may not publish: who does. */
+function ViewOnlyReview() {
+  const name = useSection('basics').name ?? 'this factory';
+  return (
+    <div className="flex max-w-xl flex-col gap-3 rounded-card border border-line bg-card p-5">
+      <h2 data-route-focus="" tabIndex={-1} className="m-0 text-xl font-medium outline-none">
+        Review and publish
+      </h2>
+      <p className="m-0 text-[15px] leading-relaxed">{reasons.publish(name)}</p>
+    </div>
   );
 }
 

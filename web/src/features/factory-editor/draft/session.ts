@@ -5,7 +5,9 @@
 // on flush), one request in flight per section or file; it merges a 412 three ways (disjoint
 // changes are sent again, overlapping leaves wait for the conflict dialog); it backs off while
 // goald cannot be reached; and it holds Visual saves while factory.yaml does not parse. Without
-// an open draft it shows the running version, and the first save opens a draft.
+// an open draft it shows the running version, and the first save opens a draft. A read-only
+// session (someone without definition:edit) shows what it adopts and changes nothing: no edit,
+// undo, revert or discard touches it or goald.
 //
 // It is not a store library: one class with a snapshot, replaced on every change.
 import { ApiError } from '../../../api/client';
@@ -45,6 +47,8 @@ export interface SessionOptions {
   closed?: () => void;
   /** Autosave delay after the last edit of a section or file; 800 ms (B's figure). */
   debounceMs?: number;
+  /** Shows the definition without changing it (the caller lacks definition:edit). */
+  readOnly?: boolean;
 }
 
 /**
@@ -237,6 +241,11 @@ export class DraftSession {
     return this.opts.factory;
   }
 
+  /** The session shows the definition and changes nothing (no definition:edit). */
+  get readOnly(): boolean {
+    return this.opts.readOnly ?? false;
+  }
+
   // The store.
 
   subscribe = (listener: () => void): (() => void) => {
@@ -352,6 +361,7 @@ export class DraftSession {
 
   /** "Start a new draft" after a discard elsewhere: the next save opens one, unsaved edits kept. */
   restart(): void {
+    if (this.readOnly) return;
     this.set({ discarded: false, hasDraft: false });
     this.scheduleDirty();
   }
@@ -360,6 +370,7 @@ export class DraftSession {
 
   /** Replaces sections' local values (ops.ts), queues their saves, and records one undo step. */
   edit(edits: AnyEdit | AnyEdit[], { undoable = true, coalesce }: EditOptions = {}): void {
+    if (this.readOnly) return;
     const list = Array.isArray(edits) ? edits : [edits];
     const changes: UndoEntry['changes'] = [];
     for (const e of list) {
@@ -404,6 +415,7 @@ export class DraftSession {
 
   /** Types into a file (YAML view, a prompt): saved as typed, 800 ms after the last keystroke. */
   editFile(path: string, text: string): void {
+    if (this.readOnly) return;
     const cur = this.state.files.get(path);
     const dirty = text !== (cur?.server ?? null);
     this.setFile(path, { text, dirty });
@@ -412,6 +424,7 @@ export class DraftSession {
 
   /** Ctrl/Cmd+Z: puts the sections back as they were before the last edit, as a new save. */
   undo(): boolean {
+    if (this.readOnly) return false;
     const entry = this.undoStack.pop();
     if (!entry) return false;
     const below = this.undoStack.at(-1);
@@ -423,6 +436,7 @@ export class DraftSession {
   }
 
   redo(): boolean {
+    if (this.readOnly) return false;
     const entry = this.redoStack.pop();
     if (!entry) return false;
     this.undoStack.push(entry);
@@ -724,6 +738,7 @@ export class DraftSession {
 
   /** "Edited · Undo": puts the base version's value back at pointers of one section, through goald. */
   async revert(section: Section, pointers: string[]): Promise<void> {
+    if (this.readOnly) return;
     await this.flush();
     const cur = this.state.sections[section];
     const result = await this.api.revertDraftSection(
@@ -744,6 +759,7 @@ export class DraftSession {
    * draft. A 412 (the draft moved since) throws and keeps everything.
    */
   async discard(): Promise<void> {
+    if (this.readOnly) return;
     await this.api.discardDraft(this.opts.org, this.opts.factory, this.state.revision);
     this.closeDraft();
   }

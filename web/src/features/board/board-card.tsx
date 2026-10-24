@@ -2,10 +2,11 @@ import { Link } from '@tanstack/react-router';
 import { ExternalLink, Zap } from 'lucide-react';
 import type { CSSProperties, KeyboardEvent, PointerEvent, Ref } from 'react';
 import type { ItemCard } from '../../api/types';
-import { refParam, useFactoryParams } from '../../shared/factory';
+import { refParam, useFactory, useFactoryParams } from '../../shared/factory';
 import { formatAge, formatUsd, humanize } from '../../shared/format';
 import { pullRequestLabel, toneText } from '../../shared/item-state';
 import { isMoveShortcut, MoveButton, moveShortcut } from '../../shared/move-menu';
+import { holds } from '../../shared/permissions';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { agentCopy, cardState } from './stats';
@@ -22,7 +23,8 @@ export interface CardDrag {
 }
 
 /** M on a focused card opens its Move menu; other keys go on to the drag, if any. */
-function moveKeys(onMove: () => void, drag?: CardDrag) {
+function moveKeys(onMove: (() => void) | undefined, drag?: CardDrag) {
+  if (!onMove) return drag?.onKeyDown;
   return (e: KeyboardEvent) => {
     if (isMoveShortcut(e)) {
       e.preventDefault();
@@ -38,6 +40,7 @@ function moveKeys(onMove: () => void, drag?: CardDrag) {
  * and the pull request link sit above it so each stays separately focusable. M on the focused card
  * opens its Move menu; in columns the card can be dragged too. `compact` is the phone's list row:
  * the reference, type and age on one line, no chips, and the 44 px Move arrow beside the text.
+ * Without `onMove` (the caller may not move work: no item:operate) there is no Move at all.
  */
 export function BoardCard({
   item,
@@ -46,11 +49,13 @@ export function BoardCard({
   compact = false,
 }: {
   item: ItemCard;
-  onMove: () => void;
+  onMove?: (() => void) | undefined;
   drag?: CardDrag | undefined;
   compact?: boolean;
 }) {
-  const state = cardState(item);
+  // A decision waits on "you" only for someone who decides here.
+  const decides = holds(useFactory(), 'item:decide');
+  const state = cardState(item, decides);
   const age = formatAge(item.age_seconds);
 
   const stateLine = <span className={cn(compact ? 'text-[13px]' : 'text-xs', toneText[state.tone])}>{state.text}</span>;
@@ -80,7 +85,7 @@ export function BoardCard({
         compact ? 'items-center gap-2 p-3' : 'flex-col gap-2 p-3',
         item.in_buffer
           ? 'border-amber-line bg-amber-tint'
-          : item.state === 'waiting_human'
+          : item.state === 'waiting_human' && decides
             ? 'border-you-line'
             : item.state === 'blocked'
               ? 'border-rework-line'
@@ -94,13 +99,13 @@ export function BoardCard({
             <span className="text-xs text-muted tabular-nums">
               {[item.ref, item.type ? humanize(item.type) : null, age].filter(Boolean).join(', ')}
             </span>
-            <CardTitle item={item} compact describedBy={drag?.describedBy} />
+            <CardTitle item={item} compact describedBy={drag?.describedBy} movable={Boolean(onMove)} />
             <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
               {stateLine}
               {prLink}
             </div>
           </div>
-          <MoveButton item={item} onMove={onMove} size="lg" />
+          {onMove ? <MoveButton item={item} onMove={onMove} size="lg" /> : null}
         </>
       ) : (
         <>
@@ -108,7 +113,7 @@ export function BoardCard({
             <span>{item.ref}</span>
             <span className="whitespace-nowrap">{age}</span>
           </div>
-          <CardTitle item={item} describedBy={drag?.describedBy} />
+          <CardTitle item={item} describedBy={drag?.describedBy} movable={Boolean(onMove)} />
           <div className="flex flex-wrap items-center gap-1.5">
             {item.type ? <Chip tone="quiet">{humanize(item.type)}</Chip> : null}
             {item.lane ? <Chip tone="quiet">{item.lane}</Chip> : null}
@@ -118,7 +123,7 @@ export function BoardCard({
               {stateLine}
               {prLink}
             </div>
-            <MoveButton item={item} onMove={onMove} className="-mr-1 -mb-1" />
+            {onMove ? <MoveButton item={item} onMove={onMove} className="-mr-1 -mb-1" /> : null}
           </div>
         </>
       )}
@@ -130,10 +135,13 @@ function CardTitle({
   item,
   compact = false,
   describedBy,
+  movable,
 }: {
   item: ItemCard;
   compact?: boolean;
   describedBy?: string | undefined;
+  /** M opens the card's Move menu. */
+  movable: boolean;
 }) {
   const params = useFactoryParams();
   return (
@@ -142,7 +150,7 @@ function CardTitle({
         to="/o/$org/f/$factory/items/$ref"
         params={{ ...params, ref: refParam(item.ref) }}
         draggable={false}
-        aria-keyshortcuts={moveShortcut}
+        aria-keyshortcuts={movable ? moveShortcut : undefined}
         aria-describedby={describedBy}
         className="no-underline outline-none after:absolute after:inset-0 after:rounded-control"
       >
@@ -159,7 +167,7 @@ function expediteProgress(item: ItemCard): string {
 }
 
 /** An expedited item on a phone, under the station picker: the lane's name, its title, who works it. */
-export function ExpediteRow({ item, onMove }: { item: ItemCard; onMove: () => void }) {
+export function ExpediteRow({ item, onMove }: { item: ItemCard; onMove?: (() => void) | undefined }) {
   const params = useFactoryParams();
   const who = item.state === 'in_progress' && item.agent ? agentCopy(item) : humanize(item.station);
   return (
@@ -179,7 +187,7 @@ export function ExpediteRow({ item, onMove }: { item: ItemCard; onMove: () => vo
         <Link
           to="/o/$org/f/$factory/items/$ref"
           params={{ ...params, ref: refParam(item.ref) }}
-          aria-keyshortcuts={moveShortcut}
+          aria-keyshortcuts={onMove ? moveShortcut : undefined}
           className="block text-[15px] leading-snug font-medium no-underline outline-none after:absolute after:inset-0 after:rounded-card"
         >
           {item.title}
@@ -188,13 +196,13 @@ export function ExpediteRow({ item, onMove }: { item: ItemCard; onMove: () => vo
           {item.ref}, {who}, {formatAge(item.age_seconds)}
         </span>
       </span>
-      <MoveButton item={item} onMove={onMove} size="lg" />
+      {onMove ? <MoveButton item={item} onMove={onMove} size="lg" /> : null}
     </article>
   );
 }
 
 /** An expedited item: it skips the queue, so it rides in its own lane above the columns. */
-export function ExpediteCard({ item, onMove }: { item: ItemCard; onMove: () => void }) {
+export function ExpediteCard({ item, onMove }: { item: ItemCard; onMove?: (() => void) | undefined }) {
   const params = useFactoryParams();
   return (
     <article
@@ -212,7 +220,7 @@ export function ExpediteCard({ item, onMove }: { item: ItemCard; onMove: () => v
         <Link
           to="/o/$org/f/$factory/items/$ref"
           params={{ ...params, ref: refParam(item.ref) }}
-          aria-keyshortcuts={moveShortcut}
+          aria-keyshortcuts={onMove ? moveShortcut : undefined}
           className="block text-[15px] leading-snug font-medium no-underline outline-none after:absolute after:inset-0 after:rounded-control"
         >
           {item.title}
@@ -226,11 +234,13 @@ export function ExpediteCard({ item, onMove }: { item: ItemCard; onMove: () => v
       <span className="col-start-2 row-start-2 text-sm whitespace-nowrap text-muted md:col-start-auto md:row-start-auto">
         {formatAge(item.age_seconds)}, {formatUsd(item.cost_usd)}
       </span>
-      <MoveButton
-        item={item}
-        onMove={onMove}
-        className="col-start-3 row-start-1 size-11 md:col-start-auto md:row-start-auto md:size-8"
-      />
+      {onMove ? (
+        <MoveButton
+          item={item}
+          onMove={onMove}
+          className="col-start-3 row-start-1 size-11 md:col-start-auto md:row-start-auto md:size-8"
+        />
+      ) : null}
     </article>
   );
 }

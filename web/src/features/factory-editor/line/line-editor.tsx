@@ -19,6 +19,8 @@ import { movedMessage } from './reorder';
 
 export interface LineEditor {
   place: 'definition' | 'wizard';
+  /** The caller may not change the definition: rows show their values and offer no edits. */
+  viewOnly: boolean;
   line: LineSection;
   stations: ModelStation[];
   /** The agents' names, in the Agents section's order. */
@@ -173,6 +175,7 @@ export function LineEditorProvider({ place, children }: { place: 'definition' | 
 
   const value: LineEditor = {
     place,
+    viewOnly: session.readOnly,
     line,
     stations,
     agents: (agentsSection.agents ?? []).map((a) => a.name),

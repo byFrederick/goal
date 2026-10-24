@@ -4,6 +4,7 @@ import { createRouter, RouterProvider } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ApiError } from './api/client';
+import { keys } from './api/queries';
 import { safeNext, setSessionHandlers } from './api/session';
 import { ErrorScreen, NotFoundScreen, PendingScreen } from './app/states';
 import { routeTree } from './routeTree.gen';
@@ -46,6 +47,13 @@ setSessionHandlers({
     queryClient.clear();
     const next = safeNext(here.href);
     void router.navigate({ to: '/sign-in', search: next ? { next } : {}, replace: true });
+  },
+  // A refusal means `can` was stale (a role changed): read it again, so the screens stop offering it.
+  forbidden: () => {
+    void queryClient.invalidateQueries({ queryKey: keys.orgs });
+    void queryClient.invalidateQueries({
+      predicate: ({ queryKey: [root, , what] }) => root === 'org' && (what === 'detail' || what === 'factories'),
+    });
   },
 });
 

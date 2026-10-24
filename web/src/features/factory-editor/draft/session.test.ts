@@ -583,3 +583,31 @@ describe('mounting', () => {
     s.dispose();
   });
 });
+
+describe('read-only', () => {
+  it('shows what it adopts and changes nothing, locally or at goald', async () => {
+    const s = new DraftSession({ org: 'acme', factory: 'f1', api: fake.api, readOnly: true });
+    s.adoptVersion({ model: model() as unknown as FactoryModel, ranges: {} });
+    const before = s.getSnapshot();
+
+    s.edit(setStationField(line(s), 'build', 'wip', 9));
+    s.editFile('agents/engineer.md', '# changed');
+    expect(s.undo()).toBe(false);
+    expect(s.redo()).toBe(false);
+    await s.revert('line', ['/line/stations/1/wip']);
+    await s.discard();
+    s.restart();
+    await s.flush();
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(s.getSnapshot()).toBe(before);
+    expect(wipOf(line(s), 'build')).toBe(2);
+    expect(s.hasUnsaved()).toBe(false);
+    expect(fake.api.openDraft).not.toHaveBeenCalled();
+    expect(fake.saves).toHaveLength(0);
+    expect(fake.files).toHaveLength(0);
+    expect(fake.api.revertDraftSection).not.toHaveBeenCalled();
+    expect(fake.api.discardDraft).not.toHaveBeenCalled();
+    s.dispose();
+  });
+});

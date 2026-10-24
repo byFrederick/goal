@@ -114,6 +114,7 @@ export function FlowPanel() {
             label="Release"
             value={release}
             onChange={(v) => write({ ...flow, release: v === 'push' ? undefined : v })}
+            readOnly={editor.viewOnly}
             options={[
               { value: 'push', label: 'Push' },
               { value: 'drum-buffer-rope', label: 'Drum-buffer-rope' },
@@ -156,10 +157,14 @@ export function FlowPanel() {
           {editor.workTypes.length > 0 ? (
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               {editor.workTypes.map((t) => (
-                <label key={t} className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm md:min-h-8">
+                <label
+                  key={t}
+                  className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm has-[:disabled]:cursor-default md:min-h-8"
+                >
                   <input
                     type="checkbox"
                     checked={expediteTypes.includes(t)}
+                    disabled={editor.viewOnly}
                     onChange={(e) => {
                       const types = e.target.checked ? [...expediteTypes, t] : expediteTypes.filter((x) => x !== t);
                       write({ ...flow, expedite: { ...flow.expedite, types: types.length > 0 ? types : undefined } });

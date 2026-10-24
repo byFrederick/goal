@@ -11,12 +11,25 @@ import { refParam } from './factory';
 import { humanize } from './format';
 import { factoryWorkInvalidations } from './invalidation';
 import { useOrg } from './org';
+import { holds } from './permissions';
 
 const field =
   'w-full rounded-control border border-rule bg-surface px-3 text-base text-ink placeholder:text-muted aria-[invalid=true]:border-rework';
 
-/** "New item": submits work to the factory's first station. */
-export function NewItemButton({ factory, compact }: { factory: Factory; compact?: boolean }) {
+interface NewItemProps {
+  factory: Factory;
+  compact?: boolean;
+}
+
+/**
+ * "New item": submits work to the factory's first station. Not offered without item:create
+ * (viewers): they have nothing to submit, and goald would refuse it.
+ */
+export function NewItemButton(props: NewItemProps) {
+  return holds(props.factory, 'item:create') ? <NewItem {...props} /> : null;
+}
+
+function NewItem({ factory, compact }: NewItemProps) {
   const id = useId();
   const client = useQueryClient();
   const org = useOrg();

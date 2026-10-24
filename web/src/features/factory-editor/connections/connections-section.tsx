@@ -8,7 +8,7 @@ import { ChevronLeft, Plug } from 'lucide-react';
 import { builderMetaQuery } from '../../../api/queries';
 import { cn } from '../../../ui/cn';
 import { EmptyState } from '../../../ui/empty-state';
-import { useDraft, useDraftSession, useSection } from '../draft/use-draft';
+import { useDraft, useDraftSession, useSection, useViewOnly } from '../draft/use-draft';
 import { bareSection, SectionShell } from '../frame/section-shell';
 import { useValidation } from '../frame/use-editor';
 import { SearchLink } from '../search-link';
@@ -24,6 +24,7 @@ const monogram = (name: string) => {
 
 export function ConnectionsSection({ search }: SectionViewProps) {
   const session = useDraftSession();
+  const viewOnly = useViewOnly();
   const connections = useSection('connections');
   const factoryName = useSection('basics').name;
   const problems = useValidation()?.problems ?? [];
@@ -95,7 +96,7 @@ export function ConnectionsSection({ search }: SectionViewProps) {
               </p>
             )}
           </nav>
-          {meta?.capabilities.connectors ? null : <CatalogPlaceholder />}
+          {meta?.capabilities.connectors || viewOnly ? null : <CatalogPlaceholder />}
         </div>
 
         <div className={cn('flex min-w-0 flex-col gap-3', !search.connection && 'max-md:hidden')}>

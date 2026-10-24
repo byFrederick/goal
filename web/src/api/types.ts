@@ -45,6 +45,7 @@ export type {
   FactoryModel,
   FactoryOverview,
   FactoryOverviewList,
+  FactoryRole,
   FactorySlots,
   FactoryStart,
   FileChange,

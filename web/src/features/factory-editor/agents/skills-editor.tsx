@@ -16,7 +16,7 @@ import { Button } from '../../../ui/button';
 import { cn } from '../../../ui/cn';
 import { Dialog, DialogClose, DialogContent } from '../../../ui/dialog';
 import { addSkillFromCatalog, addSkillToAgent, removeSkillFromAgent, SkillExistsError } from '../draft/ops';
-import { useDraftSession, useSection } from '../draft/use-draft';
+import { useDraftSession, useSection, useViewOnly } from '../draft/use-draft';
 import { useProblems } from '../frame/use-editor';
 
 /** The value, once it has stopped changing for `ms`. */
@@ -37,6 +37,7 @@ const installs = new Intl.NumberFormat('en', { notation: 'compact' });
 
 export function SkillsEditor({ agent, index, openPicker }: { agent: ModelAgent; index: number; openPicker: boolean }) {
   const session = useDraftSession();
+  const viewOnly = useViewOnly();
   const agents = useSection('agents');
   const headingId = useId();
   const listId = useId();
@@ -121,14 +122,18 @@ export function SkillsEditor({ agent, index, openPicker }: { agent: ModelAgent; 
                   {name}
                 </span>
                 {problem ? <span className="sr-only">, {problem.message}</span> : null}
-                <button
-                  type="button"
-                  aria-label={`Remove ${name}`}
-                  onClick={() => session.edit(removeSkillFromAgent(agents, agent.name, name))}
-                  className="inline-flex size-9 items-center justify-center rounded-chip text-muted transition-colors duration-200 hover:bg-shell hover:text-ink md:size-6"
-                >
-                  <X size={14} strokeWidth={1.5} aria-hidden="true" />
-                </button>
+                {viewOnly ? (
+                  <span className="w-1.5" />
+                ) : (
+                  <button
+                    type="button"
+                    aria-label={`Remove ${name}`}
+                    onClick={() => session.edit(removeSkillFromAgent(agents, agent.name, name))}
+                    className="inline-flex size-9 items-center justify-center rounded-chip text-muted transition-colors duration-200 hover:bg-shell hover:text-ink md:size-6"
+                  >
+                    <X size={14} strokeWidth={1.5} aria-hidden="true" />
+                  </button>
+                )}
               </li>
             );
           })}
@@ -144,101 +149,103 @@ export function SkillsEditor({ agent, index, openPicker }: { agent: ModelAgent; 
         </ul>
       ) : null}
 
-      <div className="relative">
-        <div className="flex h-11 items-center gap-2 rounded-control border border-rule bg-surface px-3 text-muted transition-colors duration-200 hover:border-faint has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-run md:h-10">
-          <Search size={16} strokeWidth={1.5} aria-hidden="true" />
-          <input
-            ref={input}
-            role="combobox"
-            aria-label="Add a skill from the catalog"
-            aria-expanded={showList}
-            aria-controls={listId}
-            aria-autocomplete="list"
-            aria-activedescendant={showList && options[activeIndex] ? optionId(activeIndex) : undefined}
-            placeholder="Add a skill from the catalog…"
-            autoComplete="off"
-            spellCheck={false}
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setActive(0);
-              setOpen(true);
-            }}
-            onFocus={() => setOpen(true)}
-            onClick={() => setOpen(true)}
-            onBlur={() => setOpen(false)}
-            onKeyDown={onKeyDown}
-            className="h-full min-w-0 flex-1 border-0 bg-transparent text-base text-ink placeholder:text-muted focus-visible:outline-none md:text-[15px]"
-          />
-        </div>
-        <div
-          id={listId}
-          role="listbox"
-          aria-label="Skills"
-          hidden={!showList}
-          className="absolute top-full right-0 left-0 z-20 mt-1 max-h-80 overflow-y-auto rounded-card border border-rule bg-surface p-1.5 shadow-menu"
-        >
-          {groups.map((g, gi) => (
-            // biome-ignore lint/a11y/useSemanticElements: a group of a combobox's listbox (ARIA 1.2), not a form fieldset.
-            <div key={g.label} role="group" aria-labelledby={`${listId}-g${gi}`}>
-              <div
-                id={`${listId}-g${gi}`}
-                role="presentation"
-                className="px-2.5 pt-2 pb-1 text-xs font-medium text-muted"
-              >
-                {g.label}
-              </div>
-              {g.items.map((o, j) => {
-                const i = g.offset + j;
-                return (
-                  // biome-ignore lint/a11y/useKeyWithClickEvents: the combobox's input handles the keys (aria-activedescendant).
-                  // biome-ignore lint/a11y/useFocusableInteractive: options are reached through aria-activedescendant; focus stays in the input.
-                  <div
-                    key={optionKey(o)}
-                    id={optionId(i)}
-                    role="option"
-                    aria-selected={i === activeIndex}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onMouseMove={() => setActive(i)}
-                    onClick={() => choose(o)}
-                    className={cn(
-                      'flex min-h-11 cursor-pointer flex-col justify-center rounded-control px-2.5 py-1.5',
-                      i === activeIndex && 'bg-shell',
-                    )}
-                  >
-                    {o.kind === 'local' ? (
-                      <span translate="no" className="font-mono text-[13px]">
-                        {o.name}
-                      </span>
-                    ) : (
-                      <>
-                        <span className="flex flex-wrap items-baseline gap-x-2 text-sm">
-                          <span translate="no" className="font-mono text-[13px] text-ink">
-                            {o.listing.skill}
-                          </span>
-                          <span className="text-xs text-muted">
-                            {o.listing.owner}/{o.listing.repo} · {installs.format(o.listing.installs)} installs
-                          </span>
+      {viewOnly ? null : (
+        <div className="relative">
+          <div className="flex h-11 items-center gap-2 rounded-control border border-rule bg-surface px-3 text-muted transition-colors duration-200 hover:border-faint has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-run md:h-10">
+            <Search size={16} strokeWidth={1.5} aria-hidden="true" />
+            <input
+              ref={input}
+              role="combobox"
+              aria-label="Add a skill from the catalog"
+              aria-expanded={showList}
+              aria-controls={listId}
+              aria-autocomplete="list"
+              aria-activedescendant={showList && options[activeIndex] ? optionId(activeIndex) : undefined}
+              placeholder="Add a skill from the catalog…"
+              autoComplete="off"
+              spellCheck={false}
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setActive(0);
+                setOpen(true);
+              }}
+              onFocus={() => setOpen(true)}
+              onClick={() => setOpen(true)}
+              onBlur={() => setOpen(false)}
+              onKeyDown={onKeyDown}
+              className="h-full min-w-0 flex-1 border-0 bg-transparent text-base text-ink placeholder:text-muted focus-visible:outline-none md:text-[15px]"
+            />
+          </div>
+          <div
+            id={listId}
+            role="listbox"
+            aria-label="Skills"
+            hidden={!showList}
+            className="absolute top-full right-0 left-0 z-20 mt-1 max-h-80 overflow-y-auto rounded-card border border-rule bg-surface p-1.5 shadow-menu"
+          >
+            {groups.map((g, gi) => (
+              // biome-ignore lint/a11y/useSemanticElements: a group of a combobox's listbox (ARIA 1.2), not a form fieldset.
+              <div key={g.label} role="group" aria-labelledby={`${listId}-g${gi}`}>
+                <div
+                  id={`${listId}-g${gi}`}
+                  role="presentation"
+                  className="px-2.5 pt-2 pb-1 text-xs font-medium text-muted"
+                >
+                  {g.label}
+                </div>
+                {g.items.map((o, j) => {
+                  const i = g.offset + j;
+                  return (
+                    // biome-ignore lint/a11y/useKeyWithClickEvents: the combobox's input handles the keys (aria-activedescendant).
+                    // biome-ignore lint/a11y/useFocusableInteractive: options are reached through aria-activedescendant; focus stays in the input.
+                    <div
+                      key={optionKey(o)}
+                      id={optionId(i)}
+                      role="option"
+                      aria-selected={i === activeIndex}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onMouseMove={() => setActive(i)}
+                      onClick={() => choose(o)}
+                      className={cn(
+                        'flex min-h-11 cursor-pointer flex-col justify-center rounded-control px-2.5 py-1.5',
+                        i === activeIndex && 'bg-shell',
+                      )}
+                    >
+                      {o.kind === 'local' ? (
+                        <span translate="no" className="font-mono text-[13px]">
+                          {o.name}
                         </span>
-                        <span className="line-clamp-2 text-[13px] text-muted">{o.listing.description}</span>
-                      </>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-          {options.length === 0 ? (
-            <p className="m-0 px-2.5 py-2 text-sm text-muted">
-              {catalog.isError
-                ? 'The skills catalog can’t be reached. Try again in a moment.'
-                : query.trim()
-                  ? `No skills match ${query.trim()}`
-                  : 'No skills in the catalog yet. An operator adds them with goal catalog skills sync.'}
-            </p>
-          ) : null}
+                      ) : (
+                        <>
+                          <span className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                            <span translate="no" className="font-mono text-[13px] text-ink">
+                              {o.listing.skill}
+                            </span>
+                            <span className="text-xs text-muted">
+                              {o.listing.owner}/{o.listing.repo} · {installs.format(o.listing.installs)} installs
+                            </span>
+                          </span>
+                          <span className="line-clamp-2 text-[13px] text-muted">{o.listing.description}</span>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+            {options.length === 0 ? (
+              <p className="m-0 px-2.5 py-2 text-sm text-muted">
+                {catalog.isError
+                  ? 'The skills catalog can’t be reached. Try again in a moment.'
+                  : query.trim()
+                    ? `No skills match ${query.trim()}`
+                    : 'No skills in the catalog yet. An operator adds them with goal catalog skills sync.'}
+              </p>
+            ) : null}
+          </div>
         </div>
-      </div>
+      )}
 
       <AddSkillDialog
         agent={agent}

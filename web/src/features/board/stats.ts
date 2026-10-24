@@ -59,9 +59,9 @@ function trend(s: BoardStation): string {
 /**
  * The line under a station's load: how long the oldest item has waited in a queue, how busy an
  * agent station has been (its idle share when mostly idle) or how often its gate sends work back,
- * whether a human station waits on you.
+ * whether a human station waits on you (on its approvers, for someone who does not decide).
  */
-export function stationNote(s: BoardStation): string {
+export function stationNote(s: BoardStation, decides = true): string {
   switch (s.kind) {
     case 'queue':
       return s.oldest_waiting_seconds !== null ? `Oldest ${formatDuration(s.oldest_waiting_seconds * 1000)}` : 'Empty';
@@ -72,7 +72,8 @@ export function stationNote(s: BoardStation): string {
         ? `Idle ${formatPercent(1 - s.busy_ratio)} of the time`
         : `Busy ${formatPercent(s.busy_ratio)}${trend(s)}`;
     case 'human':
-      return waitingOnYou(s) > 0 ? 'Waiting on you' : 'Nothing waiting';
+      if (waitingOnYou(s) === 0) return 'Nothing waiting';
+      return decides ? 'Waiting on you' : 'Waiting on approvers';
     case 'done':
       return '';
   }
@@ -146,13 +147,14 @@ const times = ['once', 'twice'];
  */
 export function cardState(
   item: Pick<ItemCard, 'state' | 'agent' | 'slot' | 'turn' | 'rework_count' | 'summary' | 'in_buffer' | 'rope_held'>,
+  decides = true,
 ): StateLabel {
   switch (item.state) {
     case 'in_progress':
       if (!item.agent) break;
       return { text: `${agentCopy(item)}${item.turn ? `, turn ${item.turn}` : ''}`, tone: 'run' };
     case 'waiting_human':
-      return { text: 'Needs your OK', tone: 'you' };
+      return decides ? { text: 'Needs your OK', tone: 'you' } : { text: 'Waiting on an approver', tone: 'muted' };
     case 'done':
       return { text: item.summary ?? 'Done', tone: 'ok' };
     case 'queued':
