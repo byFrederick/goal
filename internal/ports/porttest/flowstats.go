@@ -148,9 +148,7 @@ func (s *Store) StationTimes(ctx context.Context, factory domain.FactoryID, sinc
 
 	for id, spans := range s.spans {
 		if s.ofFactory(id, org, factory) {
-			for _, sp := range spans {
-				m.span(sp)
-			}
+			m.item(spans)
 		}
 	}
 
@@ -224,6 +222,42 @@ func (m *stationMeter) span(sp domain.Span) {
 	if openAt(m.until.Add(-24 * time.Hour)) {
 		m.at(sp.Station).WaitingDayAgo++
 	}
+}
+
+// item counts one item's spans, the item once as a waiter at each station it waited at in the
+// window.
+func (m *stationMeter) item(spans []domain.Span) {
+	waited := map[string]bool{}
+
+	for _, sp := range spans {
+		m.span(sp)
+
+		if m.wait(sp) && !waited[sp.Station] {
+			waited[sp.Station] = true
+			m.at(sp.Station).Waiters++
+		}
+	}
+}
+
+// wait adds the time a waiting span overlaps the window, clipped to it, and reports whether it
+// did.
+func (m *stationMeter) wait(sp domain.Span) bool {
+	from, to := sp.EnteredAt, sp.LeftAt
+	if to.IsZero() || to.After(m.until) {
+		to = m.until
+	}
+
+	if from.Before(m.since) {
+		from = m.since
+	}
+
+	if !sp.State.Waiting() || !to.After(from) {
+		return false
+	}
+
+	m.at(sp.Station).Waiting += to.Sub(from)
+
+	return true
 }
 
 // event counts a gate verdict given in the window.

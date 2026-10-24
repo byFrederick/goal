@@ -181,7 +181,7 @@ func TestComponentOf(t *testing.T) {
 		{Span{Station: "intake", State: StateQueued}, inbox},
 		{Span{Station: stationBuild, State: StateReady}, atBuild},
 		{Span{Station: stationBuild, State: StateInProgress}, build},
-		{Span{Station: "decide", State: StateWaitingHuman}, onYou},
+		{Span{Station: stDecide, State: StateWaitingHuman}, onYou},
 		{Span{Station: stationBuild, State: StateBlocked}, blocked},
 		{Span{Station: stationBuild, State: StateInProgress, ReworkRound: 1, ReworkBy: "review"}, rework},
 	}

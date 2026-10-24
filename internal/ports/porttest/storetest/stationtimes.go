@@ -62,10 +62,13 @@ func testStationTimes(f *fixture) {
 	slices.SortFunc(got, func(x, y domain.StationTimes) int { return cmp.Compare(x.Station, y.Station) })
 
 	want := []domain.StationTimes{
-		{Station: stNext, WaitingNow: 1, OldestWaiting: h(1)},
+		// a waits at next from 1 h to the end: 9 h.
+		{Station: stNext, WaitingNow: 1, OldestWaiting: h(1), Waiting: 9 * time.Hour, Waiters: 1},
+		// At work the item made at 2 h waits 1 h and c from 4 h to the end; a's wait ended
+		// before the window.
 		{
 			Station: stWork, Busy: 8 * time.Hour, Leases: 2, WaitingNow: 1, WaitingDayAgo: 1, OldestWaiting: h(4),
-			Verdicts: 2, Rejected: 1,
+			Waiting: 7 * time.Hour, Waiters: 2, Verdicts: 2, Rejected: 1,
 		},
 	}
 	if !reflect.DeepEqual(got, want) {

@@ -11,6 +11,7 @@ import type {
   AuditPage,
   Board,
   BoardStation,
+  ConstraintReport,
   Factory,
   FactoryAttention,
   FactoryOverview,
@@ -32,7 +33,7 @@ import type {
 import { createDefinitions } from './definitions.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
 import { type MockItem, type MockSlots, type MockState, seed, trackSpan } from './fixtures.ts';
-import { type FlowInput, leadTimeOf, metricsOf, rangeOf, weeklyOf } from './flow.ts';
+import { constraintOf, type DayRange, type FlowInput, leadTimeOf, metricsOf, rangeOf, weeklyOf } from './flow.ts';
 
 type Next = (err?: unknown) => void;
 
@@ -384,7 +385,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         previous_per_day: metrics.previous?.throughput_per_day ?? 0,
         days: metrics.throughput,
       },
-      constraint: constraint ? { station: constraint, busy: null } : null,
+      constraint: constraint
+        ? { station: constraint, busy: state.stationStats[f.name]?.[constraint]?.busy_ratio ?? null }
+        : null,
       waiting: {
         on_you: waiting.length,
         items_by_type: types.map((type) => ({ type, count: waiting.filter((it) => it.type === type).length })),
@@ -431,6 +434,38 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     };
   };
 
+  /** Detected when the seeded statistics measured the constraint over time, else the snapshot. */
+  const constraintSourceOf = (f: Factory): Board['constraint_source'] => {
+    const c = state.constraint[f.name];
+    return c && state.stationStats[f.name]?.[c]?.busy_ratio !== undefined ? 'detected' : 'snapshot';
+  };
+
+  /** GET …/constraint: the agent stations ranked by their seeded busy shares (constraintOf). */
+  const constraintReport = (f: Factory, range: DayRange): ConstraintReport =>
+    constraintOf({
+      factory: f,
+      range,
+      constraint: state.constraint[f.name] ?? null,
+      source: constraintSourceOf(f),
+      stats: state.stationStats[f.name] ?? {},
+      agents: Object.fromEntries(Object.entries(state.stations[f.name] ?? {}).map(([id, c]) => [id, c.agents])),
+      slots: Object.fromEntries(
+        Object.entries(state.stations[f.name] ?? {}).map(([id, c]) => [
+          id,
+          c.wip_limit ?? Math.max(c.agents.length, 1),
+        ]),
+      ),
+      waiting: Object.fromEntries(
+        f.stations.map((s) => [
+          s.id,
+          state.items.filter(
+            (it) => it.factory === f.name && it.station === s.id && (it.state === 'queued' || it.state === 'ready'),
+          ).length,
+        ]),
+      ),
+      now: Date.now(),
+    });
+
   const board = (name: string): Board | undefined => {
     const factory = findFactory(name);
     if (!factory) return undefined;
@@ -458,6 +493,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       factory: { id: factory.id, name: factory.name, ...(factory.title ? { title: factory.title } : {}) },
       stations,
       constraint: state.constraint[factory.name] ?? null,
+      constraint_source: constraintSourceOf(factory),
       line: lineOf(factory, stations, items),
     };
   };
@@ -671,13 +707,20 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return;
     }
 
-    let m = rest.match(/^\/factories\/([^/]+)\/(board|items|metrics|metrics\/weekly|metrics\/lead-time)$/);
+    let m = rest.match(/^\/factories\/([^/]+)\/(board|items|constraint|metrics|metrics\/weekly|metrics\/lead-time)$/);
     if (m) {
       const key = decodeURIComponent(m[1] ?? '');
       const factory = findFactory(key, org.id);
       if (!factory) return problem(res, 404, 'Factory not found', key);
 
       if (m[2] === 'board' && method === 'GET') return json(res, 200, board(factory.id));
+      if (m[2] === 'constraint' && method === 'GET') {
+        if (url.searchParams.has('window')) return problem(res, 400, 'Bad Request', 'the report takes from and to');
+        const range = rangeOf(url.searchParams, Date.now());
+        return typeof range === 'string'
+          ? problem(res, 400, 'Bad Request', range)
+          : json(res, 200, constraintReport(factory, range));
+      }
       if (m[2]?.startsWith('metrics') && method === 'GET') {
         const type = url.searchParams.get('type') ?? '';
         if (type && factory.work_types.length > 0 && !factory.work_types.includes(type)) {

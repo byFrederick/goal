@@ -85,6 +85,12 @@ type StationTimes struct {
 	// OldestWaiting is when the longest-waiting of the items waiting at until began waiting (its
 	// open span entered); zero when none waits.
 	OldestWaiting time.Time
+	// Waiting is the time items spent waiting (queued or ready) at the station in the window,
+	// summed over the items: every waiting span that overlaps the window, clipped to it. Over
+	// the window's length it is the time-weighted number of items waiting.
+	Waiting time.Duration
+	// Waiters counts the items with such a span.
+	Waiters int
 	// Verdicts counts the gate verdicts given at the station in the window, Rejected the
 	// rejections among them.
 	Verdicts int

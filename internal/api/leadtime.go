@@ -102,41 +102,30 @@ func overTarget(out *gen.GetLeadTimeBridge200JSONResponse, items []domain.ItemTi
 	}
 }
 
-// constraintBusy is the line's constraint (drum) with its busy share over r, for the bridge's
+// constraintBusy is the line's constraint over r with its busy share over r, for the bridge's
 // insight; nil without a constraint, a nil share before the factory's lease history.
 func (s *server) constraintBusy(ctx context.Context, l domain.Line, r dayRange, now time.Time) (*struct {
 	BusyRatio *float64 `json:"busy_ratio"`
 	Station   string   `json:"station"`
 }, error,
 ) {
-	drum, err := s.drum(ctx, l)
-	if err != nil || drum == "" {
+	loads, err := s.stationLoads(ctx, l.FactoryID)
+	if err != nil {
 		return nil, err
 	}
 
-	out := &struct {
+	m, err := s.measure(ctx, l, r.from, r.until(now))
+	if err != nil {
+		return nil, err
+	}
+
+	drum := drumOf(l, loads, m.cands)
+	if drum == "" {
+		return nil, nil
+	}
+
+	return &struct {
 		BusyRatio *float64 `json:"busy_ratio"`
 		Station   string   `json:"station"`
-	}{Station: drum}
-
-	until := r.until(now)
-
-	times, history, err := s.items.StationTimes(ctx, l.FactoryID, r.from, until)
-	if err != nil || history.IsZero() || !history.Before(until) {
-		return out, err
-	}
-
-	st, _ := l.Station(drum)
-
-	for _, t := range times {
-		if t.Station == drum {
-			out.BusyRatio = new(t.BusyRatio(st.Capacity(), until.Sub(maxTime(r.from, history))))
-		}
-	}
-
-	if out.BusyRatio == nil {
-		out.BusyRatio = new(0.0)
-	}
-
-	return out, nil
+	}{Station: drum, BusyRatio: m.busyOf(drum)}, nil
 }

@@ -203,6 +203,27 @@ func (e CloneStartKind) Valid() bool {
 	}
 }
 
+// Defines values for ConstraintSource.
+const (
+	Configured ConstraintSource = "configured"
+	Detected   ConstraintSource = "detected"
+	Snapshot   ConstraintSource = "snapshot"
+)
+
+// Valid indicates whether the value is a known member of the ConstraintSource enum.
+func (e ConstraintSource) Valid() bool {
+	switch e {
+	case Configured:
+		return true
+	case Detected:
+		return true
+	case Snapshot:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DefinitionEventKind.
 const (
 	DefinitionEventKindCurrent DefinitionEventKind = "current"
@@ -728,9 +749,12 @@ type BlankStartKind string
 
 // Board defines model for Board.
 type Board struct {
-	// Constraint The id of the agent station with the most work per slot now, or null
+	// Constraint The station that holds the line back (see constraint_source), or null when none does
 	Constraint *string `json:"constraint"`
-	Factory    struct {
+
+	// ConstraintSource How the constraint was found: configured (the definition's flow.constraint), detected (the agent station busiest over the window of lease history), or snapshot (the agent station with the most work per slot now, while there is no lease history)
+	ConstraintSource ConstraintSource `json:"constraint_source"`
+	Factory          struct {
 		Id    string  `json:"id"`
 		Name  string  `json:"name"`
 		Title *string `json:"title,omitempty"`
@@ -939,6 +963,54 @@ type Comparison struct {
 	// To One side of a comparison; id, number and state are null for a starting tree no version holds
 	To CompareSide `json:"to"`
 }
+
+// ConstraintCandidate defines model for ConstraintCandidate.
+type ConstraintCandidate struct {
+	Agents []string `json:"agents"`
+
+	// AvgWaiting Items waiting in front of it on average (time-weighted)
+	AvgWaiting float64 `json:"avg_waiting"`
+
+	// BusyRatio Lease-held time over slots × the measured range
+	BusyRatio float64 `json:"busy_ratio"`
+
+	// Estimate How much mean wait one more slot would save (an M/M/c approximation, capped at the observed wait); null when busy ≥ 99%, with under 20 leases or no waiting
+	Estimate *struct {
+		ExtraSlotSavesHours float64 `json:"extra_slot_saves_hours"`
+	} `json:"estimate"`
+	Leases int `json:"leases"`
+
+	// MeanServiceMinutes Mean lease; null without leases
+	MeanServiceMinutes *float64 `json:"mean_service_minutes"`
+
+	// MeanWaitMinutes Mean wait of an item that waited there; null when none did
+	MeanWaitMinutes *float64 `json:"mean_wait_minutes"`
+	Slots           int      `json:"slots"`
+	Station         string   `json:"station"`
+}
+
+// ConstraintReport defines model for ConstraintReport.
+type ConstraintReport struct {
+	// Candidates The busiest agent stations over the range, busiest first, at most 3; none before any lease history
+	Candidates []ConstraintCandidate `json:"candidates"`
+
+	// Configured The definition's flow.constraint when it names a station
+	Configured *string `json:"configured"`
+
+	// Constraint The constraint: configured, else the first candidate, else the snapshot
+	Constraint *string `json:"constraint"`
+
+	// CoverageSince The factory's first lease; busy shares are measured from it. Null with no lease history yet.
+	CoverageSince *time.Time         `json:"coverage_since"`
+	From          openapi_types.Date `json:"from"`
+
+	// Source How the constraint was found: configured (the definition's flow.constraint), detected (the agent station busiest over the window of lease history), or snapshot (the agent station with the most work per slot now, while there is no lease history)
+	Source ConstraintSource   `json:"source"`
+	To     openapi_types.Date `json:"to"`
+}
+
+// ConstraintSource How the constraint was found: configured (the definition's flow.constraint), detected (the agent station busiest over the window of lease history), or snapshot (the agent station with the most work per slot now, while there is no lease history)
+type ConstraintSource string
 
 // ConstraintSummary defines model for ConstraintSummary.
 type ConstraintSummary struct {
@@ -2355,6 +2427,15 @@ type CompareVersionsParams struct {
 	To   *string `form:"to,omitempty" json:"to,omitempty"`
 }
 
+// GetConstraintReportParams defines parameters for GetConstraintReport.
+type GetConstraintReportParams struct {
+	// From The first UTC day of the range; 6 days before `to` when absent
+	From *RangeFrom `form:"from,omitempty" json:"from,omitempty"`
+
+	// To The last UTC day of the range, included; today when absent
+	To *RangeTo `form:"to,omitempty" json:"to,omitempty"`
+}
+
 // DiscardDraftParams defines parameters for DiscardDraft.
 type DiscardDraftParams struct {
 	// IfMatch The entity tag the write is based on, quoted ("<etag>"); writes without it are 428
@@ -3007,6 +3088,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/compare (the `CompareVersions` operationId).
 	CompareVersions(ctx context.Context, org OrgRef, factory FactoryRef, params *CompareVersionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetConstraintReport The constraint over a range of UTC days, with the top candidates
+	//
+	// The agent stations ranked by how busy their slots were over the range (lease time over slots × the range, measured from the factory's first lease when that is later), with the time-weighted number of items waiting, the mean wait and service, and an estimate of the wait one more slot would save. The constraint is the configured one, else the busiest candidate, else the snapshot of the loads now. 400 for a bad range.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/constraint (the `GetConstraintReport` operationId).
+	GetConstraintReport(ctx context.Context, org OrgRef, factory FactoryRef, params *GetConstraintReportParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DiscardDraft Discard (archive) the open draft; the version that runs is unchanged
 	//
@@ -3806,6 +3894,23 @@ func (c *Client) GetBoard(ctx context.Context, org OrgRef, factory FactoryRef, p
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/compare (the `CompareVersions` operationId).
 func (c *Client) CompareVersions(ctx context.Context, org OrgRef, factory FactoryRef, params *CompareVersionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCompareVersionsRequest(c.Server, org, factory, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetConstraintReport The constraint over a range of UTC days, with the top candidates
+//
+// The agent stations ranked by how busy their slots were over the range (lease time over slots × the range, measured from the factory's first lease when that is later), with the time-weighted number of items waiting, the mean wait and service, and an estimate of the wait one more slot would save. The constraint is the configured one, else the busiest candidate, else the snapshot of the loads now. 400 for a bad range.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/constraint (the `GetConstraintReport` operationId).
+func (c *Client) GetConstraintReport(ctx context.Context, org OrgRef, factory FactoryRef, params *GetConstraintReportParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetConstraintReportRequest(c.Server, org, factory, params)
 	if err != nil {
 		return nil, err
 	}
@@ -5686,6 +5791,86 @@ func NewCompareVersionsRequest(server string, org OrgRef, factory FactoryRef, pa
 		if params.To != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "to", *params.To, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetConstraintReportRequest constructs an http.Request for the GetConstraintReport method
+func NewGetConstraintReportRequest(server string, org OrgRef, factory FactoryRef, params *GetConstraintReportParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/constraint", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.From != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "from", *params.From, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.To != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "to", *params.To, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date"}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -8440,6 +8625,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/compare (the `CompareVersions` operationId).
 	CompareVersionsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *CompareVersionsParams, reqEditors ...RequestEditorFn) (*CompareVersionsResponse, error)
 
+	// GetConstraintReportWithResponse The constraint over a range of UTC days, with the top candidates
+	//
+	// The agent stations ranked by how busy their slots were over the range (lease time over slots × the range, measured from the factory's first lease when that is later), with the time-weighted number of items waiting, the mean wait and service, and an estimate of the wait one more slot would save. The constraint is the configured one, else the busiest candidate, else the snapshot of the loads now. 400 for a bad range.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/constraint (the `GetConstraintReport` operationId).
+	GetConstraintReportWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetConstraintReportParams, reqEditors ...RequestEditorFn) (*GetConstraintReportResponse, error)
+
 	// DiscardDraftWithResponse Discard (archive) the open draft; the version that runs is unchanged
 	//
 	// If-Match is the draft's revision ("42"): without it 428 precondition-required, when the draft moved since 412 draft-conflict.
@@ -9773,6 +9967,54 @@ func (r CompareVersionsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r CompareVersionsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetConstraintReportResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ConstraintReport
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetConstraintReportResponse) GetJSON200() *ConstraintReport {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetConstraintReportResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetConstraintReportResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetConstraintReportResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetConstraintReportResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetConstraintReportResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -12164,6 +12406,21 @@ func (c *ClientWithResponses) CompareVersionsWithResponse(ctx context.Context, o
 	return ParseCompareVersionsResponse(rsp)
 }
 
+// GetConstraintReportWithResponse The constraint over a range of UTC days, with the top candidates
+//
+// The agent stations ranked by how busy their slots were over the range (lease time over slots × the range, measured from the factory's first lease when that is later), with the time-weighted number of items waiting, the mean wait and service, and an estimate of the wait one more slot would save. The constraint is the configured one, else the busiest candidate, else the snapshot of the loads now. 400 for a bad range.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/constraint (the `GetConstraintReport` operationId).
+func (c *ClientWithResponses) GetConstraintReportWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetConstraintReportParams, reqEditors ...RequestEditorFn) (*GetConstraintReportResponse, error) {
+	rsp, err := c.GetConstraintReport(ctx, org, factory, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetConstraintReportResponse(rsp)
+}
+
 // DiscardDraftWithResponse Discard (archive) the open draft; the version that runs is unchanged
 //
 // If-Match is the draft's revision ("42"): without it 428 precondition-required, when the draft moved since 412 draft-conflict.
@@ -13566,6 +13823,39 @@ func ParseCompareVersionsResponse(rsp *http.Response) (*CompareVersionsResponse,
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Comparison
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetConstraintReportResponse parses an HTTP response from a GetConstraintReportWithResponse call
+func ParseGetConstraintReportResponse(rsp *http.Response) (*GetConstraintReportResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetConstraintReportResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ConstraintReport
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -15086,6 +15376,9 @@ type ServerInterface interface {
 	// CompareVersions The semantic difference between two versions
 	// (GET /v1/orgs/{org}/factories/{factory}/compare)
 	CompareVersions(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params CompareVersionsParams)
+	// GetConstraintReport The constraint over a range of UTC days, with the top candidates
+	// (GET /v1/orgs/{org}/factories/{factory}/constraint)
+	GetConstraintReport(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetConstraintReportParams)
 	// DiscardDraft Discard (archive) the open draft; the version that runs is unchanged
 	// (DELETE /v1/orgs/{org}/factories/{factory}/draft)
 	DiscardDraft(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params DiscardDraftParams)
@@ -15880,6 +16173,70 @@ func (siw *ServerInterfaceWrapper) CompareVersions(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CompareVersions(w, r, org, factory, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetConstraintReport operation middleware
+func (siw *ServerInterfaceWrapper) GetConstraintReport(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetConstraintReportParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetConstraintReport(w, r, org, factory, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -18076,6 +18433,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/board", wrapper.GetBoard)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics", wrapper.GetMetrics)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/weekly", wrapper.GetWeeklyThroughput)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/constraint", wrapper.GetConstraintReport)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/lead-time", wrapper.GetLeadTimeBridge)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/stream", wrapper.StreamEvents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}", wrapper.GetItem)
@@ -18793,6 +19151,47 @@ type CompareVersionsdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response CompareVersionsdefaultApplicationProblemPlusJSONResponse) VisitCompareVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetConstraintReportRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Params  GetConstraintReportParams
+}
+
+type GetConstraintReportResponseObject interface {
+	VisitGetConstraintReportResponse(w http.ResponseWriter) error
+}
+
+type GetConstraintReport200JSONResponse ConstraintReport
+
+func (response GetConstraintReport200JSONResponse) VisitGetConstraintReportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetConstraintReportdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetConstraintReportdefaultApplicationProblemPlusJSONResponse) VisitGetConstraintReportResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -20685,6 +21084,9 @@ type StrictServerInterface interface {
 	// CompareVersions The semantic difference between two versions
 	// (GET /v1/orgs/{org}/factories/{factory}/compare)
 	CompareVersions(ctx context.Context, request CompareVersionsRequestObject) (CompareVersionsResponseObject, error)
+	// GetConstraintReport The constraint over a range of UTC days, with the top candidates
+	// (GET /v1/orgs/{org}/factories/{factory}/constraint)
+	GetConstraintReport(ctx context.Context, request GetConstraintReportRequestObject) (GetConstraintReportResponseObject, error)
 	// DiscardDraft Discard (archive) the open draft; the version that runs is unchanged
 	// (DELETE /v1/orgs/{org}/factories/{factory}/draft)
 	DiscardDraft(ctx context.Context, request DiscardDraftRequestObject) (DiscardDraftResponseObject, error)
@@ -21351,6 +21753,34 @@ func (sh *strictHandler) CompareVersions(w http.ResponseWriter, r *http.Request,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CompareVersionsResponseObject); ok {
 		if err := validResponse.VisitCompareVersionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetConstraintReport operation middleware
+func (sh *strictHandler) GetConstraintReport(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetConstraintReportParams) {
+	var request GetConstraintReportRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetConstraintReport(ctx, request.(GetConstraintReportRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetConstraintReport")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetConstraintReportResponseObject); ok {
+		if err := validResponse.VisitGetConstraintReportResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

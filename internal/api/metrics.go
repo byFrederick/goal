@@ -160,7 +160,7 @@ func (s *server) GetMetrics(ctx context.Context, req gen.GetMetricsRequestObject
 
 	l := f.Line()
 
-	drum, err := s.drum(ctx, l)
+	drum, err := s.drum(ctx, l, now)
 	if err != nil {
 		return nil, err
 	}
@@ -195,35 +195,19 @@ func (s *server) GetMetrics(ctx context.Context, req gen.GetMetricsRequestObject
 	return out, nil
 }
 
-// drum is the station the line's flow is paced by, where long waits are counted: the
-// definition's flow.constraint when it names a station, else the station holding the most work
-// per slot now; "" when there is none.
-func (s *server) drum(ctx context.Context, l domain.Line) (string, error) {
+// drum is the station the line's flow is paced by now (drumNow), where long waits are counted;
+// "" when there is none.
+func (s *server) drum(ctx context.Context, l domain.Line, now time.Time) (string, error) {
 	if _, ok := l.Station(l.Flow.Constraint); ok {
 		return l.Flow.Constraint, nil
 	}
 
-	loads, err := s.loads(ctx, l.FactoryID)
+	loads, err := s.stationLoads(ctx, l.FactoryID)
 	if err != nil {
 		return "", err
 	}
 
-	return drumOf(l, loads), nil
-}
-
-// loads is the load of every station of a factory with open items, by station.
-func (s *server) loads(ctx context.Context, factory domain.FactoryID) (map[string]domain.StationLoad, error) {
-	list, err := s.items.StationLoads(ctx, factory)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make(map[string]domain.StationLoad, len(list))
-	for _, ld := range list {
-		out[ld.Station] = ld
-	}
-
-	return out, nil
+	return s.drumNow(ctx, l, loads, now)
 }
 
 func (s *server) GetWeeklyThroughput(ctx context.Context, req gen.GetWeeklyThroughputRequestObject) (gen.GetWeeklyThroughputResponseObject, error) {

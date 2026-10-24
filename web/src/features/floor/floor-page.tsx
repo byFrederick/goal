@@ -1,7 +1,7 @@
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { ChevronDown, ListFilter } from 'lucide-react';
-import { boardQuery, leadTimeQuery, metricsQuery, weeklyQuery } from '../../api/queries';
+import { boardQuery, constraintQuery, leadTimeQuery, metricsQuery, weeklyQuery } from '../../api/queries';
 import type { Metrics } from '../../api/types';
 import { factoryTitle, useFactory } from '../../shared/factory';
 import { NewItemButton } from '../../shared/new-item';
@@ -10,7 +10,7 @@ import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
 import { DateRange } from '../../ui/date-range';
 import { Menu, MenuChoice, MenuContent, MenuRadioGroup, MenuTrigger } from '../../ui/menu';
-import { ConstraintCard } from './cards';
+import { ConstraintCard } from './constraint-card';
 import { LeadTimeCard } from './lead-time-card';
 import { NeedsYouCard } from './needs-you';
 import { lastDaysSearch, presetOf, presets, previousName, rangeLabel, todayUtc } from './range';
@@ -38,6 +38,7 @@ export function FloorPage() {
   const { data: metrics } = useSuspenseQuery(metricsQuery(org.id, factory.id, search));
   const { data: weekly } = useSuspenseQuery(weeklyQuery(org.id, factory.id, search));
   const { data: bridge } = useSuspenseQuery(leadTimeQuery(org.id, factory.id, search));
+  const { data: constraint } = useSuspenseQuery(constraintQuery(org.id, factory.id, search));
   const title = `${factoryTitle(factory)} floor`;
   const range = rangeLabel(metrics.from, metrics.to);
   const before = metrics.previous ? rangeLabel(metrics.previous.from, metrics.previous.to) : null;
@@ -58,7 +59,7 @@ export function FloorPage() {
 
       <div className={grid}>
         <ThroughputCard metrics={metrics} className="[grid-area:tp]" />
-        <ConstraintCard board={board} className="[grid-area:hero]" />
+        <ConstraintCard report={constraint} board={board} className="[grid-area:hero]" />
         <NeedsYouCard board={board} factory={factory} className="[grid-area:needs]" />
         <LeadTimeCard bridge={bridge} factory={factory} className="[grid-area:flow]" />
         <WeeklyCard weekly={weekly} className="[grid-area:wk]" />

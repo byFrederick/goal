@@ -4,6 +4,7 @@
 // range shows something; the items the mock moves to done count too.
 import type {
   BridgeStep,
+  ConstraintReport,
   Factory,
   ItemSpan,
   LeadTimeBridge,
@@ -12,7 +13,7 @@ import type {
   Targets,
   WeeklyThroughput,
 } from '@goal/api-client';
-import type { MockFlow, MockItem } from './fixtures.ts';
+import type { MockFlow, MockItem, MockStationStats } from './fixtures.ts';
 
 const dayMs = 86_400_000;
 const maxRangeDays = 90;
@@ -294,6 +295,73 @@ export function weeklyOf(input: FlowInput, params: URLSearchParams): WeeklyThrou
       const n = done.filter((d) => d.done_at >= from && d.done_at < from + 7 * dayMs).length;
       return { from: iso(from), to: iso(from + 6 * dayMs), done: n, per_day: n / 7 };
     }),
+  };
+}
+
+/** domain.WaitSaved: the mean wait one more slot saves (Sakasegawa's M/M/c), in hours, or null. */
+export function waitSaved(busy: number, slots: number, serviceHours: number, waitHours: number, leases: number) {
+  if (busy >= 0.99 || leases < 20 || slots < 1 || waitHours <= 0 || busy <= 0) return null;
+  const wq = (rho: number, c: number) => (rho ** (Math.sqrt(2 * (c + 1)) - 1) / (c * (1 - rho))) * serviceHours;
+  const saved = wq(busy, slots) - wq((busy * slots) / (slots + 1), slots + 1);
+  return Math.min(Math.max(saved, 0), waitHours);
+}
+
+export interface ConstraintInput {
+  factory: Factory;
+  range: DayRange;
+  constraint: string | null;
+  source: ConstraintReport['source'];
+  /** Seeded busy shares by station; a station without one has no lease history. */
+  stats: Record<string, MockStationStats>;
+  agents: Record<string, string[]>;
+  /** Each station's capacity (Station.Capacity). */
+  slots: Record<string, number>;
+  /** Items waiting at each station now. */
+  waiting: Record<string, number>;
+  now: number;
+}
+
+/** A mean lease of the mock's agents, in hours. */
+const serviceHours = 1.5;
+
+/**
+ * GET …/constraint: the agent stations with a seeded busy share, busiest first, at most 3; the
+ * items waiting now stand for the time-weighted queue, Little's law gives the mean wait.
+ */
+export function constraintOf(i: ConstraintInput): ConstraintReport {
+  const hours = (Math.min(i.range.to + dayMs, i.now) - i.range.from) / 3_600_000;
+  const candidates = i.factory.stations
+    .filter((s) => s.kind === 'agent' && i.stats[s.id]?.busy_ratio !== undefined)
+    .map((s) => {
+      const agents = i.agents[s.id] ?? [];
+      const slots = i.slots[s.id] ?? Math.max(agents.length, 1);
+      const busy = i.stats[s.id]?.busy_ratio ?? 0;
+      const leases = Math.round((busy * slots * hours) / serviceHours);
+      const avg = i.waiting[s.id] ?? 0;
+      const wait = leases > 0 && avg > 0 ? (avg * hours) / leases : null;
+      const saved = waitSaved(busy, slots, serviceHours, wait ?? 0, leases);
+      return {
+        station: s.id,
+        slots,
+        agents,
+        busy_ratio: busy,
+        avg_waiting: avg,
+        mean_wait_minutes: wait === null ? null : wait * 60,
+        mean_service_minutes: leases > 0 ? serviceHours * 60 : null,
+        leases,
+        estimate: saved === null ? null : { extra_slot_saves_hours: saved },
+      };
+    })
+    .sort((a, b) => b.busy_ratio - a.busy_ratio)
+    .slice(0, 3);
+  return {
+    from: iso(i.range.from),
+    to: iso(i.range.to),
+    coverage_since: candidates.length > 0 ? new Date(i.now - 120 * dayMs).toISOString() : null,
+    configured: null,
+    constraint: i.constraint,
+    source: i.source,
+    candidates,
   };
 }
 

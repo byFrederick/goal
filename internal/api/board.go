@@ -51,17 +51,22 @@ func (s *server) GetBoard(ctx context.Context, req gen.GetBoardRequestObject) (g
 		return nil, err
 	}
 
-	byStation, err := s.boardCards(ctx, f, l, drumOf(l, loads))
+	constraint, source := l.ConstraintOf(l.Candidates(stats.list, stats.busyOver, 1), loads)
+
+	byStation, err := s.boardCards(ctx, f, l, constraint)
 	if err != nil {
 		return nil, err
 	}
 
-	line, err := s.boardLine(ctx, l, loads, byStation, now)
+	line, err := s.boardLine(ctx, l, constraint, loads, byStation, now)
 	if err != nil {
 		return nil, err
 	}
 
-	board := gen.GetBoard200JSONResponse{Stations: make([]gen.BoardStation, 0, len(l.Stations)), Line: line}
+	board := gen.GetBoard200JSONResponse{
+		Stations: make([]gen.BoardStation, 0, len(l.Stations)), Line: line, Constraint: optional(constraint),
+		ConstraintSource: gen.ConstraintSource(source),
+	}
 	board.Factory.Id, board.Factory.Name, board.Factory.Title = f.Metadata.ID, f.Metadata.Name, optional(f.Metadata.Title)
 
 	for _, st := range l.Stations {
@@ -80,10 +85,6 @@ func (s *server) GetBoard(ctx context.Context, req gen.GetBoardRequestObject) (g
 
 		stats.fill(st, &bs)
 		board.Stations = append(board.Stations, bs)
-	}
-
-	if c, ok := l.Constraint(loads); ok {
-		board.Constraint = &c
 	}
 
 	return board, nil
@@ -135,6 +136,7 @@ func (s *server) boardCards(ctx context.Context, f *config.Factory, l domain.Lin
 // boardStats is what the board's station statistics come from: every station measured over the
 // window, and the items done today.
 type boardStats struct {
+	list  []domain.StationTimes
 	times map[string]domain.StationTimes
 	now   time.Time
 	// busyOver is the stretch busy shares are measured over: the window, from when the factory's
@@ -156,7 +158,7 @@ func (s *server) boardStats(ctx context.Context, f domain.FactoryID, w dayRange,
 		return boardStats{}, err
 	}
 
-	b := boardStats{times: make(map[string]domain.StationTimes, len(list)), now: now, doneToday: today.ItemsDone}
+	b := boardStats{list: list, times: make(map[string]domain.StationTimes, len(list)), now: now, doneToday: today.ItemsDone}
 	for _, t := range list {
 		b.times[t.Station] = t
 	}
@@ -268,7 +270,12 @@ func (s *server) listCards(ctx context.Context, f *config.Factory, items []domai
 		return nil, err
 	}
 
-	return s.cards(ctx, f, l, drumOf(l, loads), items)
+	drum, err := s.drumNow(ctx, l, loads, s.clock.Now().UTC())
+	if err != nil {
+		return nil, err
+	}
+
+	return s.cards(ctx, f, l, drum, items)
 }
 
 // cards renders items of factory f as cards: for every item in progress the agent working it, the

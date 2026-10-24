@@ -17,3 +17,15 @@ WHERE w.factory_id = sqlc.arg(factory_id) AND w.done_at >= sqlc.arg(since)::time
   AND (sqlc.arg(type)::text = '' OR w.type = sqlc.arg(type)::text)
 GROUP BY w.id, w.done_at, w.created_at, s.station, s.state, s.rework_by
 ORDER BY w.done_at, w.id;
+
+-- name: StationWaitTimes :many
+-- How long items waited (queued or ready) at each station in [since, until): the waiting spans
+-- that overlap the window, each clipped to it, summed, and the items that had one
+-- (item_spans_window_idx).
+SELECT station, count(DISTINCT item_id) AS waiters,
+       coalesce(sum(extract(epoch FROM least(coalesce(left_at, sqlc.arg(until)::timestamptz), sqlc.arg(until)::timestamptz)
+                                 - greatest(entered_at, sqlc.arg(since)::timestamptz))), 0)::float8 AS waiting_seconds
+FROM item_spans
+WHERE factory_id = sqlc.arg(factory_id) AND state IN ('queued', 'ready')
+  AND (left_at IS NULL OR left_at > sqlc.arg(since)::timestamptz) AND entered_at < sqlc.arg(until)::timestamptz
+GROUP BY station;

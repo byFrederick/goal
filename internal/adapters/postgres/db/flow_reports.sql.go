@@ -80,3 +80,48 @@ func (q *Queries) FlowItemTimes(ctx context.Context, arg FlowItemTimesParams) ([
 	}
 	return items, nil
 }
+
+const stationWaitTimes = `-- name: StationWaitTimes :many
+SELECT station, count(DISTINCT item_id) AS waiters,
+       coalesce(sum(extract(epoch FROM least(coalesce(left_at, $1::timestamptz), $1::timestamptz)
+                                 - greatest(entered_at, $2::timestamptz))), 0)::float8 AS waiting_seconds
+FROM item_spans
+WHERE factory_id = $3 AND state IN ('queued', 'ready')
+  AND (left_at IS NULL OR left_at > $2::timestamptz) AND entered_at < $1::timestamptz
+GROUP BY station
+`
+
+type StationWaitTimesParams struct {
+	Until     time.Time
+	Since     time.Time
+	FactoryID uuid.UUID
+}
+
+type StationWaitTimesRow struct {
+	Station        string
+	Waiters        int64
+	WaitingSeconds float64
+}
+
+// How long items waited (queued or ready) at each station in [since, until): the waiting spans
+// that overlap the window, each clipped to it, summed, and the items that had one
+// (item_spans_window_idx).
+func (q *Queries) StationWaitTimes(ctx context.Context, arg StationWaitTimesParams) ([]StationWaitTimesRow, error) {
+	rows, err := q.db.Query(ctx, stationWaitTimes, arg.Until, arg.Since, arg.FactoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StationWaitTimesRow
+	for rows.Next() {
+		var i StationWaitTimesRow
+		if err := rows.Scan(&i.Station, &i.Waiters, &i.WaitingSeconds); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

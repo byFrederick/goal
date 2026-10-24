@@ -9,24 +9,21 @@ import (
 )
 
 // drumOf is the station the line is paced by: its configured constraint (flow.constraint naming a
-// station), else the constraint of the loads now; "" without one.
-func drumOf(l domain.Line, loads map[string]domain.StationLoad) string {
-	if _, ok := l.Station(l.Flow.Constraint); ok {
-		return l.Flow.Constraint
-	}
-
-	c, _ := l.Constraint(loads)
+// station), else the busiest of the candidates measured over time, else the constraint of the
+// loads now (domain.Line.ConstraintOf); "" without one.
+func drumOf(l domain.Line, loads map[string]domain.StationLoad, cands []domain.Candidate) string {
+	c, _ := l.ConstraintOf(cands, loads)
 
 	return c
 }
 
-// boardLine describes line l as a whole for the board: its work in progress at the stations with
-// a wip limit, its release policy with the drum's buffer, its expedite lane and its weekly
-// budget. Release policies and the expedite limit are shown, not enforced (2.2-E, deferred).
+// boardLine describes line l, paced by drum, as a whole for the board: its work in progress at
+// the stations with a wip limit, its release policy with the drum's buffer, its expedite lane and
+// its weekly budget. Release policies and the expedite limit are shown, not enforced (2.2-E,
+// deferred).
 func (s *server) boardLine(
-	ctx context.Context, l domain.Line, loads map[string]domain.StationLoad, cards map[string][]gen.ItemCard, now time.Time,
+	ctx context.Context, l domain.Line, drum string, loads map[string]domain.StationLoad, cards map[string][]gen.ItemCard, now time.Time,
 ) (gen.BoardLine, error) {
-	drum := drumOf(l, loads)
 	line := gen.BoardLine{
 		Wip:      lineWIP(l, loads, cards),
 		Release:  gen.LineRelease{Policy: gen.Push, InBuffer: loads[drum].Waiting},

@@ -863,6 +863,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/constraint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The constraint over a range of UTC days, with the top candidates
+         * @description The agent stations ranked by how busy their slots were over the range (lease time over slots × the range, measured from the factory's first lease when that is later), with the time-weighted number of items waiting, the mean wait and service, and an estimate of the wait one more slot would save. The constraint is the configured one, else the busiest candidate, else the snapshot of the loads now. 400 for a bad range.
+         */
+        get: operations["getConstraintReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/metrics/lead-time": {
         parameters: {
             query?: never;
@@ -1587,10 +1612,16 @@ export interface components {
                 title?: string;
             };
             stations: components["schemas"]["BoardStation"][];
-            /** @description The id of the agent station with the most work per slot now, or null */
+            /** @description The station that holds the line back (see constraint_source), or null when none does */
             constraint: string | null;
+            constraint_source: components["schemas"]["ConstraintSource"];
             line: components["schemas"]["BoardLine"];
         };
+        /**
+         * @description How the constraint was found: configured (the definition's flow.constraint), detected (the agent station busiest over the window of lease history), or snapshot (the agent station with the most work per slot now, while there is no lease history)
+         * @enum {string}
+         */
+        ConstraintSource: "configured" | "detected" | "snapshot";
         /** @description The line as a whole: its work in progress against its limits, how work is released into it, its expedite lane and its weekly budget. The release policy and the expedite limit are shown as configured; goald does not enforce them yet (it releases as push). */
         BoardLine: {
             wip: components["schemas"]["LineWip"];
@@ -1839,6 +1870,55 @@ export interface components {
             share: number;
             /** @description Items over the target with time in this component */
             items: number;
+        };
+        ConstraintReport: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            /**
+             * Format: date-time
+             * @description The factory's first lease; busy shares are measured from it. Null with no lease history yet.
+             */
+            coverage_since: string | null;
+            /** @description The definition's flow.constraint when it names a station */
+            configured: string | null;
+            /** @description The constraint: configured, else the first candidate, else the snapshot */
+            constraint: string | null;
+            source: components["schemas"]["ConstraintSource"];
+            /** @description The busiest agent stations over the range, busiest first, at most 3; none before any lease history */
+            candidates: components["schemas"]["ConstraintCandidate"][];
+        };
+        ConstraintCandidate: {
+            station: string;
+            slots: number;
+            agents: string[];
+            /**
+             * Format: double
+             * @description Lease-held time over slots × the measured range
+             */
+            busy_ratio: number;
+            /**
+             * Format: double
+             * @description Items waiting in front of it on average (time-weighted)
+             */
+            avg_waiting: number;
+            /**
+             * Format: double
+             * @description Mean wait of an item that waited there; null when none did
+             */
+            mean_wait_minutes: number | null;
+            /**
+             * Format: double
+             * @description Mean lease; null without leases
+             */
+            mean_service_minutes: number | null;
+            leases: number;
+            /** @description How much mean wait one more slot would save (an M/M/c approximation, capped at the observed wait); null when busy ≥ 99%, with under 20 leases or no waiting */
+            estimate: {
+                /** Format: double */
+                extra_slot_saves_hours: number;
+            } | null;
         };
         /** @description The data of one `event: item` on /v1/orgs/{org}/stream */
         StreamEvent: {
@@ -3953,6 +4033,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WeeklyThroughput"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getConstraintReport: {
+        parameters: {
+            query?: {
+                /** @description The first UTC day of the range; 6 days before `to` when absent */
+                from?: components["parameters"]["RangeFrom"];
+                /** @description The last UTC day of the range, included; today when absent */
+                to?: components["parameters"]["RangeTo"];
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The constraint report */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConstraintReport"];
                 };
             };
             default: components["responses"]["Problem"];

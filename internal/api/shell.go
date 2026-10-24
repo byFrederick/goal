@@ -144,7 +144,7 @@ func (s *server) overview(
 ) (gen.FactoryOverview, error) {
 	l := f.Line()
 
-	loads, err := s.loads(ctx, l.FactoryID)
+	loads, err := s.stationLoads(ctx, l.FactoryID)
 	if err != nil {
 		return gen.FactoryOverview{}, err
 	}
@@ -172,8 +172,13 @@ func (s *server) overview(
 		o.Health = gen.FactoryHealthStopped
 	}
 
-	if station, ok := l.Constraint(loads); ok {
-		o.Constraint = &gen.ConstraintSummary{Station: station}
+	m, err := s.measure(ctx, l, w.from, w.until(now))
+	if err != nil {
+		return gen.FactoryOverview{}, err
+	}
+
+	if station := drumOf(l, loads, m.cands); station != "" {
+		o.Constraint = &gen.ConstraintSummary{Station: station, Busy: m.busyOf(station)}
 	}
 
 	o.Waiting.ItemsByType = make([]struct {

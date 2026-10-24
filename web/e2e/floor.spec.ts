@@ -51,6 +51,31 @@ test('the floor shows throughput against last week and its target, and the last 
   await expectNoHorizontalScroll(page);
 });
 
+test('the constraint card pages through the busiest stations over the range', async ({ page }) => {
+  await page.goto('/o/acme/f/sre');
+
+  const card = page.getByRole('region', { name: 'Investigate is holding the line back' });
+  await expect(card.getByText('Constraint found')).toBeVisible();
+  await expect(card.getByText(/^\d+%$/)).toBeVisible();
+  await expect(card.getByText(isPhone(page) ? '7 days' : 'over 7 days', { exact: true })).toBeVisible();
+  await expect(
+    card.getByText(/A fourth investigator would cut lead time by about \d+ (hours?|minutes?)\.$/),
+  ).toBeVisible();
+  await expect(card.getByRole('link', { name: 'Add an investigator' })).toHaveAttribute(
+    'href',
+    '/o/acme/f/sre/definition/line?station=investigate',
+  );
+
+  await card.getByRole('button', { name: 'Next candidate' }).click();
+  const next = page.getByRole('region', { name: 'Triage is the next busiest' });
+  await expect(next.getByText('2 of 2')).toBeVisible();
+  await expect(next.getByText(/would cut lead time/)).toHaveCount(0); // no estimate without a queue
+  await expect(next.getByRole('button', { name: 'Next candidate' })).toBeDisabled();
+  await next.getByRole('button', { name: 'Previous candidate' }).click();
+  await expect(page.getByRole('region', { name: 'Investigate is holding the line back' })).toBeVisible();
+  await expectAccessible(page);
+});
+
 test('a range and a work type change the URL and the cards', async ({ page }) => {
   test.skip(isPhone(page), 'phones show the range the URL names; the controls are on wider screens');
   await page.goto('/o/acme/f/sre');

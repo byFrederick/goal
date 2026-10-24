@@ -16,6 +16,7 @@ import type {
   AuditFilter,
   AuditPage,
   Board,
+  ConstraintReport,
   EventPage,
   Factory,
   FactoryOverviewList,
@@ -146,6 +147,21 @@ export function getMetrics(org: string, factory: string, range: FlowRange, signa
   return unwrap(
     goal.GET(orgPath('/factories/{factory}/metrics'), {
       params: { path: { org, factory }, query: { ...rangeQuery(range), compare: 'previous' } },
+      ...cancel(signal),
+    }),
+  );
+}
+
+/** The constraint over a range, with the top candidates. */
+export function getConstraint(
+  org: string,
+  factory: string,
+  { from, to }: Pick<FlowRange, 'from' | 'to'>,
+  signal?: AbortSignal,
+): Promise<ConstraintReport> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/constraint'), {
+      params: { path: { org, factory }, query: rangeQuery({ from, to }) },
       ...cancel(signal),
     }),
   );

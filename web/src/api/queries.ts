@@ -9,6 +9,7 @@ import {
   type FlowRange,
   getAttention,
   getBoard,
+  getConstraint,
   getFactoryOverview,
   getInbox,
   getItem,
@@ -64,6 +65,8 @@ export const keys = {
     ['org', org, 'factory', factory, 'metrics', range] as const,
   weekly: (org: string, factory: string, to: string | undefined, type: string | undefined) =>
     ['org', org, 'factory', factory, 'weekly', to ?? 'today', type ?? 'all'] as const,
+  constraint: (org: string, factory: string, from: string | undefined, to: string | undefined) =>
+    ['org', org, 'factory', factory, 'constraint', from ?? 'week', to ?? 'today'] as const,
   leadTime: (org: string, factory: string, range: FlowRange) =>
     ['org', org, 'factory', factory, 'lead-time', range] as const,
   items: (org: string, factory: string, filter: ItemFilter) =>
@@ -137,6 +140,14 @@ export const weeklyQuery = (org: string, factory: string, { to, type }: FlowRang
   queryOptions({
     queryKey: keys.weekly(org, factory, to, type),
     queryFn: ({ signal }) => getWeekly(org, factory, { to, type }, signal),
+    staleTime: 30_000,
+  });
+
+/** The constraint over a range (the work type does not change it). */
+export const constraintQuery = (org: string, factory: string, { from, to }: FlowRange = {}) =>
+  queryOptions({
+    queryKey: keys.constraint(org, factory, from, to),
+    queryFn: ({ signal }) => getConstraint(org, factory, { from, to }, signal),
     staleTime: 30_000,
   });
 

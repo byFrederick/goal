@@ -176,6 +176,16 @@ func (t stationTally) read(ctx context.Context, q *db.Queries, fid uuid.UUID, si
 		}
 	}
 
+	waits, err := q.StationWaitTimes(ctx, db.StationWaitTimesParams{FactoryID: fid, Since: since, Until: until})
+	if err != nil {
+		return fmt.Errorf("wait times: %w", err)
+	}
+
+	for _, r := range waits {
+		st := t.at(r.Station)
+		st.Waiting, st.Waiters = seconds(r.WaitingSeconds), int(r.Waiters)
+	}
+
 	verdicts, err := q.StationVerdicts(ctx, db.StationVerdictsParams{FactoryID: fid, Since: since, Until: until})
 	if err != nil {
 		return fmt.Errorf("verdicts: %w", err)
