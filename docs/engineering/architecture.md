@@ -25,9 +25,10 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object s
 | `internal/config` | `domain` | adapters, engine |
 | `internal/factorystore` | `config`, `ports` | adapters, engine, cloud SDKs |
 | `internal/factorymodel` | `domain`, `config`, `go.yaml.in/yaml/v3` | adapters, engine, `api`, cloud SDKs |
-| `internal/gateway` | `domain`, `ports`, `config`, the MCP Go SDK | adapters, engine, `factorystore`, cloud SDKs |
+| `internal/authoring` | `domain`, `ports`, `config`, `factorymodel`, `go.yaml.in/yaml/v3` | adapters, engine, `api`, `gateway`, `definitions`, `factorystore`, cloud SDKs |
+| `internal/gateway` | `domain`, `ports`, `config`, the MCP Go SDK | adapters, engine, `factorystore`, `authoring`, cloud SDKs |
 | `internal/definitions` | `domain`, `ports`, `config`, `factorystore` | adapters, engine, cloud SDKs |
-| `internal/api` (+ generated `api/gen`) | `domain`, `ports`, `config`, `engine` | adapters, `factorystore`, `definitions`, `factorymodel`, `gateway`, cloud SDKs |
+| `internal/api` (+ generated `api/gen`) | `domain`, `ports`, `config`, `engine` | adapters, `factorystore`, `definitions`, `factorymodel`, `authoring`, `gateway`, cloud SDKs |
 | `cmd/*` | everything | — (wiring only) |
 
 `depguard` in `.golangci.yml` enforces every row but the last. A new external system is a new adapter behind an existing or new port; it never adds an import to the engine.
