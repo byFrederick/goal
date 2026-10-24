@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { type FormEvent, useId, useRef, useState } from 'react';
 import { builderMetaQuery } from '../../../api/queries';
 import type { BuiltinKey, BuiltinMode, Builtins, ModelAgent } from '../../../shared/definition/model';
+import { builtinLabels, defaultBuiltins } from '../../../shared/definition/tool-policy';
 import { Button } from '../../../ui/button';
 import { ConfirmDialog } from '../../../ui/confirm-dialog';
 import { Dialog, DialogClose, DialogContent } from '../../../ui/dialog';
@@ -26,25 +27,19 @@ const and = (words: string[]) =>
   words.length < 2 ? (words[0] ?? '') : `${words.slice(0, -1).join(', ')} and ${words.at(-1)}`;
 
 const rows: { key: BuiltinKey; label: string; detail: (b: Builtins) => string }[] = [
-  { key: 'read', label: 'Read files', detail: () => 'In the item workspace' },
-  { key: 'edit', label: 'Edit files', detail: () => 'In the item workspace' },
+  { key: 'read', label: builtinLabels.read, detail: () => 'In the item workspace' },
+  { key: 'edit', label: builtinLabels.edit, detail: () => 'In the item workspace' },
   {
     key: 'run',
-    label: 'Run commands',
+    label: builtinLabels.run,
     detail: (b) => {
       const commands = b.run?.commands ?? [];
       return commands.length > 0 ? `Only ${and(commands)}` : 'Any command in the item workspace';
     },
   },
-  { key: 'web', label: 'Fetch web pages', detail: () => 'Public pages only' },
-  { key: 'subagents', label: 'Start subagents', detail: () => 'Uses more Claude slots' },
+  { key: 'web', label: builtinLabels.web, detail: () => 'Public pages only' },
+  { key: 'subagents', label: builtinLabels.subagents, detail: () => 'Uses more Claude slots' },
 ];
-
-/**
- * Without a builtins block (and without legacy rules) the worker gives an agent read-only tools;
- * a group a block leaves out is off. So the first choice starts from what the agent has now.
- */
-const implicit: Builtins = { read: 'allowed' };
 
 const modeOf = (b: Builtins, key: BuiltinKey): BuiltinMode => (key === 'run' ? b.run?.mode : b[key]) ?? 'off';
 
@@ -55,10 +50,10 @@ export function BuiltinsEditor({ agent, index }: { agent: ModelAgent; index: num
   const meta = useQuery(builderMetaQuery(session.org)).data;
   const problems = useProblems(`/agents/agents/${index}/builtins`);
   const [limiting, setLimiting] = useState(false);
-  const builtins = agent.builtins ?? implicit;
+  const builtins = agent.builtins ?? defaultBuiltins;
 
   const choose = (key: BuiltinKey, mode: BuiltinMode) => {
-    const from = agent.builtins ? agents : setAgentField(agents, agent.name, 'builtins', implicit).value;
+    const from = agent.builtins ? agents : setAgentField(agents, agent.name, 'builtins', defaultBuiltins).value;
     session.edit(setBuiltin(from, agent.name, key, mode));
   };
 
@@ -121,7 +116,7 @@ export function BuiltinsEditor({ agent, index }: { agent: ModelAgent; index: num
         onOpenChange={setLimiting}
         commands={builtins.run?.commands ?? []}
         onSave={(commands) => {
-          const from = agent.builtins ? agents : setAgentField(agents, agent.name, 'builtins', implicit).value;
+          const from = agent.builtins ? agents : setAgentField(agents, agent.name, 'builtins', defaultBuiltins).value;
           session.edit(setRunCommands(from, agent.name, commands));
         }}
       />

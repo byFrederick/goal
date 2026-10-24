@@ -1,6 +1,7 @@
 // The Agent page (Agent and Mobile-Agent boards): who the agent is and how its work went over the
-// last 7 days. E12 builds the frame and the statistics; D12 adds the definition's cards
-// (Connections, Skills, Tool policy) and "Edit in Definition" through AgentPage's slots.
+// last 7 days. E12 builds the frame and the statistics; D12 adds the definition's cards (Skills,
+// Tool policy; Connections in phase 4), its role and "Edit in Definition" through AgentPage's
+// slots (agent-screen.tsx).
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
@@ -127,8 +128,19 @@ export function BlockedCalls({ stats, className }: { stats: AgentStats; classNam
   return <p className={cn('m-0 text-[13px] text-muted', className)}>{blockedSentence(stats.denied_tool_calls)}</p>;
 }
 
-/** The page's header: where the agent sits, its name, what it does and where it runs. */
-export function AgentHeader({ stats, actions }: { stats: AgentStats; actions?: ReactNode }) {
+/**
+ * The page's header: where the agent sits, its name, what it does and where it runs. `role` is
+ * the definition's description of the agent; phones leave it out (Mobile-Agent).
+ */
+export function AgentHeader({
+  stats,
+  actions,
+  role,
+}: {
+  stats: AgentStats;
+  actions?: ReactNode;
+  role?: string | undefined;
+}) {
   const factory = useFactory();
   const params = useFactoryParams();
   return (
@@ -150,7 +162,10 @@ export function AgentHeader({ stats, actions }: { stats: AgentStats; actions?: R
         <h1 className="m-0 text-[34px] leading-[1.05] font-normal tracking-display break-words md:text-5xl">
           {stats.agent}
         </h1>
-        <p className="m-0 max-w-[64ch] text-[14px] leading-[1.45] text-muted md:text-base">{agentSentence(stats)}</p>
+        <p className="m-0 max-w-[64ch] text-[14px] leading-[1.45] text-muted md:text-base">
+          {role ? <span className="hidden md:inline">{role.replace(/\.?\s*$/, '. ')}</span> : null}
+          {agentSentence(stats)}
+        </p>
       </div>
       {actions}
     </header>
@@ -158,10 +173,19 @@ export function AgentHeader({ stats, actions }: { stats: AgentStats; actions?: R
 }
 
 /**
- * The agent page. `actions` sits beside the title (D12: Edit in Definition); `cards` come before
- * the reasons in the grid (D12: Connections, Skills, Tool policy, which then shows BlockedCalls).
+ * The agent page. `actions` sits beside the title (D12: Edit in Definition) and `role` before the
+ * sentence; `cards` come before the reasons in the grid (D12: Skills, Tool policy, which then
+ * shows BlockedCalls; Connections in phase 4).
  */
-export function AgentPage({ actions, cards }: { actions?: ReactNode; cards?: ReactNode } = {}) {
+export function AgentPage({
+  actions,
+  cards,
+  role,
+}: {
+  actions?: ReactNode;
+  cards?: ReactNode;
+  role?: string | undefined;
+} = {}) {
   const factory = useFactory();
   const org = useOrg();
   const { agent } = useParams({ from: '/o/$org/f/$factory/agents/$agent' });
@@ -169,7 +193,7 @@ export function AgentPage({ actions, cards }: { actions?: ReactNode; cards?: Rea
 
   return (
     <>
-      <AgentHeader stats={stats} actions={actions} />
+      <AgentHeader stats={stats} actions={actions} role={role} />
       <AgentStatsStrip stats={stats} />
       {cards ? null : <BlockedCalls stats={stats} className="-mt-1" />}
       <div className="grid items-start gap-3 md:gap-4 @[720px]:grid-cols-[repeat(auto-fit,minmax(min(100%,380px),1fr))]">

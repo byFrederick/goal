@@ -75,7 +75,7 @@ routes/       file-based route files (TanStack Router plugin; routeTree.gen.ts i
                   /o/$org/f/$factory/items/$ref → Item         ($ref: the number, goal#12 or the id)
                   /o/$org/f/$factory/definition → D's editor: frame + draft session; its index → /definition/line
                   /o/$org/f/$factory/definition/$section → basics|line|agents|connections|review|versions (?mode=yaml, ?station=, ?agent=, …)
-                  /o/$org/f/$factory/agents/$agent → Agent     (E12: header, the last 7 days, send-back reasons; D12 adds its cards)
+                  /o/$org/f/$factory/agents/$agent → Agent     (E12: header, the last 7 days, send-back reasons; D12: Skills, Tool policy, Edit in Definition)
                   /o/$org/new/$step             → D's New factory wizard (rail only, no sidebar; ?factory= from step 2)
 api/          the only HTTP code: types.ts (generated contract shapes), client.ts (requests over @goal/api-client), definitions.ts and builder.ts (B's and D's routes), queries.ts (keys, queryOptions)
 app/          the shell: AppShell and ShellFrame, Rail, PhoneTopRow, PhoneCrumb, TabBar, FactorySidebar,
@@ -89,7 +89,7 @@ features/
 shared/       code more than one feature uses: decisions (approve, send back, merge, retry), new item,
               the andon cord (andon.tsx: the line status and the pull and clear dialogs, from Board.line),
               what waits on you (needs-you.ts: rows from the inbox; needs-you-list.tsx: the rows and the approval card),
-              definition/ (typed views of B's FactoryModel, where an agent works, slots at full WIP, pointer ↔ line),
+              definition/ (typed views of B's FactoryModel, where an agent works, slots at full WIP, pointer ↔ line, the Agent page's cards and the tool policy),
               the organization's live stream, org and factory helpers, marks, formatting (Intl), state labels, the address rule (org-rules.ts)
 ui/           design-system primitives on Radix: button, dialog, confirm-dialog (typed confirmation), field and input, segmented-control, sheet, menu, tooltip,
               card (SectionCard, StatGrid), chip, count, mark, hatch (Meter, HatchBars), target-bar, bars (weekly bars with a target line and a hidden table), bridge (the lead-time waterfall, `bridgeGeometry`, with a hidden table), date-range, page-header, list-row, empty-state, logo

@@ -181,15 +181,26 @@ spec:
   runtime:
     model: claude-sonnet-5-5
     budget: { weeklyUsd: 20, onExhausted: stop }
+  skills:
+    - { name: aws-investigation, source: ./skills/aws-investigation }
+    - { name: incident-triage, source: ./skills/incident-triage }
+    - name: postmortem-writing
+      source: ./skills/postmortem-writing
+      origin: "skills.sh:acme/agent-skills@postmortem-writing#${'5e'.repeat(20)}"
   agents:
     - name: triager
       description: Sorts new alerts and requests.
       prompt: ./agents/triager.md
+      skills: [incident-triage]
     - name: investigator
-      description: Finds the cause and proposes a fix.
+      description: Gathers evidence from AWS and the repository and proposes a diagnosis.
       prompt: ./agents/investigator.md
       maxTurns: 40
-      builtins: { read: allowed, run: { mode: allowed, commands: [terraform, tflint, git] } }
+      skills: [aws-investigation, incident-triage, postmortem-writing]
+      # rules from before the built-in settings: read and run, never change anything
+      tools:
+        allow: [Read, Grep, Glob, Bash, WebFetch]
+        deny: ["Bash(aws * delete*)", "Bash(aws * put*)", "Bash(terraform apply*)", "Bash(kubectl delete*)"]
   board:
     workTypes: [incident, change, toil]
     stations:
@@ -206,6 +217,12 @@ const sreFiles = () =>
     'agents/triager.md': '# triager\n\nSort the alert: incident, change or toil, and how urgent it is.\n',
     'agents/investigator.md':
       '# investigator\n\nFind the cause. Propose the smallest safe change and how to roll it back.\n',
+    'skills/aws-investigation/SKILL.md':
+      '---\nname: aws-investigation\ndescription: Read-only playbook for ECS, RDS, ALB, Lambda\n---\n\n# AWS investigation\n\nDescribe before you change: logs, metrics, recent deploys.\n',
+    'skills/incident-triage/SKILL.md':
+      '---\nname: incident-triage\ndescription: Severity and sizing rules\n---\n\n# Incident triage\n\nSev1 when customers cannot pay; sev2 when they wait.\n',
+    'skills/postmortem-writing/SKILL.md':
+      '---\nname: postmortem-writing\ndescription: Used when the item becomes a postmortem\n---\n\n# Postmortem writing\n\nTimeline, impact, causes, actions. No blame.\n',
   });
 
 const supportYaml = `apiVersion: goal/v1
