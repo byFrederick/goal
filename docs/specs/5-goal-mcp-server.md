@@ -14,7 +14,7 @@ Out: agents' access to outside tools (that is phase 4's gateway at `/mcp`), clie
 - **Resource server: goald's MCP endpoint at `/v1/mcp`** (reserved by phase 3; the agents' gateway keeps `/mcp`, on an internal listener in the cloud). Access tokens must carry the exact canonical resource URI as `aud`; verified against Better Auth's JWKS with EdDSA only, refetch on an unknown `kid` at most once a minute, cache at most 10 minutes. RFC 9728 protected-resource metadata at `/.well-known/oauth-protected-resource`; the proxy allowlist gains the authorization server's metadata and OAuth endpoints.
 - **One organization per token**, chosen at consent. Effective rights = the token's scopes ∩ the member's current role, resolved per request like a session (phase 3's `goal_principal`).
 - **No token passthrough.** MCP tools call goald's domain services in-process with the principal; no Better Auth or Goal token reaches an upstream or an agent.
-- Task tokens, sessions and API keys are never accepted at `/v1/mcp`; MCP access tokens are accepted nowhere else.
+- Task tokens, sessions and API keys are never accepted at `/v1/mcp`, nor personal tokens unless open question 6 decides otherwise; MCP access tokens are accepted nowhere else.
 
 ## What phase 3 already provides
 
@@ -30,3 +30,4 @@ Out: agents' access to outside tools (that is phase 4's gateway at `/mcp`), clie
 3. Client metadata document fetching: egress allowlist and SSRF controls.
 4. Whether the CLI moves from the device-authorization session to OAuth device grant tokens.
 5. Audit: actor kind `client` with `via`, and how tool calls appear in item events.
+6. Whether `/v1/mcp` accepts phase 3's personal tokens (`goal_pat_…`, spec 3 §4.5) for MCP clients without OAuth. Phase 3 accepts them on `/v1` only. MCP client configurations are often committed or shared, so if they are ever allowed, a token must be bound to that audience when it is created (an `audience` chosen at creation, `/v1` or `/v1/mcp`, never both), so one copied from an MCP config cannot call `/v1`, and the reverse.

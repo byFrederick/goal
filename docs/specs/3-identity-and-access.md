@@ -1,29 +1,29 @@
 # Phase 3 — Identity and access
 
-Status: reviewed 2026-10-24, owner decisions applied · follows phase 2.2 (3-1 to 3-3 and 3-7 need only A's seams and can start now; 3-4, the first migration (`00040`), merges after 2.2's last, `00039` (E's `00030–00035`, the 2.2 review's `00036–00039`), since goose refuses a lower number after a higher one; the screens need C–E's boards) · migrations `00040–00049` (`00040–00046` planned, `00047–00049` reserved) · OpenAPI tag `identity` · PRs `3-1…3-16` · decision record [ADR 0007](../adr/0007-identity-better-auth.md)
+Status: reviewed 2026-10-24, owner decisions applied · follows phase 2.2 (3-1 to 3-3 and 3-7 need only A's seams and can start now; 3-4, the first migration (`00040`), merges after 2.2's last, `00039` (E's `00030–00035`, the 2.2 review's `00036–00039`), since goose refuses a lower number after a higher one; the screens need C–E's boards) · migrations `00040–00049` (`00040–00047` planned, `00048–00049` reserved) · OpenAPI tag `identity` · PRs `3-1…3-16` and `3-12b` · decision record [ADR 0007](../adr/0007-identity-better-auth.md)
 
 Phase 3 takes everything the README listed under "Out of 2.2". It replaces A's two seams (A §5.3), the request actor and the `Authorizer`, without changing handlers. Phase 4 (credentials, connectors and the MCP gateway) and phase 5 (the Goal MCP server) build on it.
 
 ## 1. Summary
 
-People sign in to Goal without passwords, with a one-time code sent by email or with Google, through a small Better Auth service (`auth/`) that goald proxies on its own origin under `/api/auth/*`. goald checks the Better Auth session token, or a Goal API key, inside PostgreSQL on every request and authorizes each OpenAPI operation from one permission table (`api/permissions.yaml`) against the caller's organization role (owner, admin, member), factory role (viewer, approver, editor) and, for keys, scopes. Sign-up is invite-only, organizations are created only by platform admins and only through goald, and every membership, role, invitation and key change is audited in the organization's audit log.
+People sign in to Goal without passwords, with a one-time code sent by email or with Google, through a small Better Auth service (`auth/`) that goald proxies on its own origin under `/api/auth/*`. goald checks the Better Auth session token, a Goal API key or a person's personal token inside PostgreSQL on every request and authorizes each OpenAPI operation from one permission table (`api/permissions.yaml`) against the caller's organization role (owner, admin, member), factory role (viewer, approver, editor) and, for keys and personal tokens, scopes. Sign-up is invite-only, organizations are created only by platform admins and only through goald, and every membership, role, invitation and key change is audited in the organization's audit log.
 
 ## 2. Scope
 
 **In**
 - `auth/`: a Node service (Hono + `better-auth`, exact pin `1.7.12` or later 1.7.x) with the plugins email OTP, organization, device authorization and bearer, nothing else. Local process beside goald; a sidecar container in goald's ECS task in the cloud.
 - goald's reverse proxy for an allowlist of Better Auth paths, a `Host` check, the gateway's own listener off loopback, and a Content-Security-Policy on the SPA.
-- Schema `auth` (Better Auth's tables, generated and committed as goose migrations), the role `goal_auth`, Goal-owned tables `platform_admins`, `factory_roles`, `api_keys`, `api_key_factories`, `auth_events`, and the definer functions and triggers of §6.
+- Schema `auth` (Better Auth's tables, generated and committed as goose migrations), the role `goal_auth`, Goal-owned tables `platform_admins`, `factory_roles`, `api_keys`, `api_key_factories`, `personal_tokens`, `auth_events`, and the definer functions and triggers of §6.
 - Organization lifecycle owned by goald: create, rename, soft delete and purge write Goal's and Better Auth's rows in one transaction.
 - `domain.Principal`, the real `Authorizer`, the permission table generated from `api/permissions.yaml` (with `x-goal-scope` on every operation), fail-closed modes, the fresh-session rule, 401/403/404 semantics, streams that end on access changes, the task token `aud`.
-- Endpoints: `/v1/auth/config`, `/v1/auth/device/{user_code}`, `/v1/me`, membership reads, factory roles, ownership transfer, API keys, platform admins, the security log; `role` and `can` on organizations and factories.
-- CLI: `goal login`, `logout`, `whoami` (device flow, OS keychain), `GOAL_API_KEY`, `goal key …`, `goal admin …`, `goal db recover-admin|recover-owner`.
-- Web: sign in (email code, Google), invitation acceptance, device approval, the account menu, Members and roles (with invitations and factory roles), API keys, the org switcher's roles, Transfer ownership, D's Who approves and read-only mode, E's role-aware controls, role-filtered inbox and attention.
+- Endpoints: `/v1/auth/config`, `/v1/auth/device/{user_code}`, `/v1/me`, membership reads, factory roles, ownership transfer, API keys, personal tokens (§4.5), platform admins, the security log; `role` and `can` on organizations and factories.
+- CLI: `goal login`, `logout`, `whoami` (device flow, OS keychain), `goal login --token` (a personal token from stdin), `GOAL_API_KEY` (an API key or a personal token), `goal key …`, `goal admin …`, `goal db recover-admin|recover-owner`.
+- Web: sign in (email code, Google), invitation acceptance, device approval, the account menu, Members and roles (with invitations and factory roles), API keys and personal tokens, the org switcher's roles, Transfer ownership, D's Who approves and read-only mode, E's role-aware controls, role-filtered inbox and attention.
 - Email through a `Mailer` port in `auth/` with an SMTP adapter: Mailpit locally (compose, 127.0.0.1), Amazon SES SMTP in the cloud.
 - Moving an existing install to sign-in: the bootstrap owner, existing organizations and `user:local` rows.
 
 **Out** (deferred, unscheduled unless noted)
-- Passwords, 2FA, passkeys, SSO/SAML, SCIM, magic links, teams, dynamic roles, per-station approvers, user-owned API keys, per-org allowed email domains or Google `hd`, JWTs and the OAuth provider (phase 5), rate limiting of goald's own API, a user erasure workflow (defined in §11.6, not built), a GeoIP location on device approval, a platform-admin screen (CLI only).
+- Passwords, 2FA, passkeys, SSO/SAML, SCIM, magic links, teams, dynamic roles, per-station approvers, per-org allowed email domains or Google `hd`, JWTs and the OAuth provider (phase 5), rate limiting of goald's own API, a user erasure workflow (defined in §11.6, not built), a GeoIP location on device approval, a platform-admin screen (CLI only); for personal tokens, the later items of §17 and their use at `/v1/mcp` (phase 5 decides).
 - Credentials, connectors, tool approvals and the agents' gateway changes beyond `aud` (phase 4).
 - Terraform for the ECS sidecar, SES and Secrets Manager (the AWS deployment, later); this spec fixes the shape they must take.
 
@@ -38,7 +38,7 @@ People sign in to Goal without passwords, with a one-time code sent by email or 
 | `New-Basics.dc.html`, `Define-Basics.dc.html` | Who approves | 3-14 |
 | `Define.dc.html` and the other Definition boards | read-only mode for viewers and approvers | 3-14 |
 | `Board.dc.html`, `Item.dc.html`, `Mobile-Board.dc.html`, `Phone.dc.html` | controls and the andon cord by permission; "waiting on you" by permission | 3-14 |
-| New: `Sign-In.dc.html`, `Sign-In-Code.dc.html`, `Invite-Accept.dc.html`, `Device-Approve.dc.html`, `Api-Keys.dc.html`, `Account-Menu.dc.html` | §10.2 describes each board for the designer | 3-10, 3-11, 3-12, 3-13 |
+| New: `Sign-In.dc.html`, `Sign-In-Code.dc.html`, `Invite-Accept.dc.html`, `Device-Approve.dc.html`, `Api-Keys.dc.html`, `Account-Menu.dc.html` | §10.2 describes each board for the designer | 3-10, 3-11, 3-12, 3-12b (Api-Keys' personal tokens sections, Account-Menu's link), 3-13 |
 
 Not delivered: billing ("Owner: everything, including billing"; no billing exists), the vault parts of Org settings (phase 4).
 
@@ -47,8 +47,9 @@ Not delivered: billing ("Owner: everything, including billing"; no billing exist
 ### 4.1 Identity types (`internal/domain/identity.go`, new)
 
 ```go
-type UserID string    // Better Auth user id (UUID)
-type APIKeyID string  // UUIDv7
+type UserID string           // Better Auth user id (UUID)
+type APIKeyID string         // UUIDv7
+type PersonalTokenID string  // UUIDv7
 
 type OrgRole string     // "owner" | "admin" | "member" (Better Auth organization roles)
 type FactoryRole string // "viewer" | "approver" | "editor", a ladder: each includes the one before
@@ -67,20 +68,22 @@ type Principal struct {
 	User          UserID           // user
 	Key           APIKeyID         // service
 	Name, Email   string           // Email: users only, never logged
-	PlatformAdmin bool
-	Session       *Session         // user signed in with a session; nil for keys and GOAL_AUTH=none
-	Org           OrgID            // the organization the role fields describe ("" outside one)
-	OrgRole       OrgRole          // "" when not a member of Org
+	PlatformAdmin bool             // never set for a personal token
+	Session       *Session         // user signed in with a session; nil for keys, personal tokens and GOAL_AUTH=none
+	Token         *TokenGrant      // user acting through a personal token (§4.5); nil otherwise
+	Org           OrgID            // the organization the role fields describe ("" outside one; a token's own org)
+	OrgRole       OrgRole          // "" when not a member of Org; the CURRENT role, also for tokens
 	FactoryRoles  map[FactoryID]FactoryRole
 	// API keys only: the key's grants (§4.3).
 	Scopes        []Permission
 	KeyFactories  []FactoryID      // nil: every factory of Org
 	KeyCeiling    FactoryRole
 }
-type Session struct { ID string; CreatedAt, ExpiresAt time.Time }
+type Session struct { ID string; CreatedAt, ExpiresAt time.Time; Bearer bool } // Bearer: sent as Authorization (the CLI), not the cookie
+type TokenGrant struct { ID PersonalTokenID; Name string; Scopes []Permission; ExpiresAt time.Time }
 
-// Actor is how the principal is recorded: user:<uuid> (the user's name), service:<key id>
-// ("<key name> (API key)").
+// Actor is how the principal is recorded: user:<uuid> (the user's name, also through a personal
+// token), service:<key id> ("<key name> (API key)").
 func (p Principal) Actor() Actor
 
 func WithPrincipal(ctx context.Context, p Principal) context.Context
@@ -97,7 +100,7 @@ New errors: `domain.ErrUnauthenticated` (a missing, malformed, unknown, expired 
 | --- | --- |
 | Owner | every org permission (settings, audit, members, keys, delete, transfer) and every factory permission in every factory |
 | Admin | the owner's, except `org:delete` and `org:transfer`; may not make or change an owner |
-| Member | `org:read`, `member:read`, plus what each factory role gives |
+| Member | `org:read`, `member:read`, `personal_token:read`/`manage` (their own tokens, 3-12b), plus what each factory role gives |
 | Viewer | sees the factory: floor, board, items, traces, metrics, definition (read-only) |
 | Approver | the viewer's, plus submit work, decide (approve, reject, retry, merge), move, pause, notes, pull and clear the andon; phase 4: tool approvals |
 | Editor | the approver's, plus edit drafts, publish and restore versions, pause the factory, delete an unpublished factory |
@@ -106,11 +109,22 @@ Platform admins create organizations and manage platform admins; inside an organ
 
 ### 4.3 API keys
 
-An API key is an org-owned service account: name, scopes, an optional factory restriction, a role ceiling, a mandatory expiry (default and maximum 90 days), revocable at once. For an operation needing permission P on factory F, a key passes when P is in its scopes, P is `keys: true` in the table, P is held by its ceiling role (factory permissions), and F is in its factories (otherwise the factory is 404 to it). Scopes must be `keys: true` and held by the creator when the key is created. Keys never hold `member:*`, `invitation:read`, `api_key:*`, `org:delete`, `org:transfer`, `org:manage`, `org:create` or `platform:*`.
+An API key is an org-owned service account: name, scopes, an optional factory restriction, a role ceiling, a mandatory expiry (default and maximum 90 days), revocable at once. For an operation needing permission P on factory F, a key passes when P is in its scopes, P is `keys: true` in the table, P is held by its ceiling role (factory permissions), and F is in its factories (otherwise the factory is 404 to it). Scopes must be `keys: true` and held by the creator when the key is created. Keys never hold `member:*`, `invitation:read`, `api_key:*`, `personal_token:*`, `org:delete`, `org:transfer`, `org:manage`, `org:create` or `platform:*`.
 
 ### 4.4 Engine
 
 No engine change. Decisions already take `domain.Actor` (A §4.2); the API passes `Principal.Actor()`.
+
+### 4.5 Personal tokens (PR 3-12b)
+
+A personal token lets a person use the CLI or a script on their own machine without the device flow. It belongs to one user in one organization (they must be a member there), and it acts as that user: the actor is `user:<id>`, and every write made with it records `via: pat:<id>` in `audit_log.data` and in item event data.
+
+- **Rights = the token's scopes ∩ the owner's current roles.** The lookup returns the owner's org role and factory roles at that moment, so demotion narrows a token on the next request, and removal from the organization deletes the token (the foreign key to `auth.member` cascades; a re-invitation never brings one back). A token never carries platform admin rights.
+- **Scopes** come from the permissions marked `pat: true` (§8.2): `authenticated`, `org:read`, `factory:read`, `item:create`, `item:decide`, `item:operate`, `andon:manage`, and the high-impact `definition:edit`, `definition:publish`, `factory:create` (setting factories up from the CLI). Never member, key, ownership, org deletion, platform, device approval, audit or phase 4 permissions.
+- **Never fresh.** A token never satisfies `fresh: true`; no `fresh` permission is `pat: true`, so such an operation is 403 `forbidden`, never `reauth-required`.
+- **Creation.** Only in the browser: a cookie session that is fresh (≤ 10 minutes). A bearer credential (the CLI's device-flow session, an API key, a personal token) gets 403 `browser-session-required`, so a phished device approval cannot mint a lasting token. Each scope must be `pat: true` and held by the creator now (an org permission by their org role, a factory permission in at least one factory), else 400 `scope-not-allowed`. Expiry is mandatory: 1–90 days, default 30. The secret (`goal_pat_` + base64url of 32 bytes from `crypto/rand`) is shown once; only its SHA-256 and the hint `goal_pat_XXXX` are stored.
+- **Revocation.** The owner revokes their own tokens without a fresh sign-in (incident response stays fast); owners and admins list and revoke members' tokens with `api_key:read` / `api_key:manage`. Deleting the organization revokes them. Revocation, expiry and removal apply on the next request and end the token's streams.
+- **Where it works.** `/v1` only. The agents' gateway refuses it, the `/api/auth` proxy answers 401 without forwarding it, and `/v1/mcp` is phase 5's decision (spec 5).
 
 ## 5. Ports and adapters
 
@@ -126,6 +140,11 @@ type Identity interface {
 	// APIKey resolves base64url(SHA-256(key)). ErrUnauthenticated when unknown, revoked, expired
 	// or of a deleted org. Touches last_used_at at most once a minute.
 	APIKey(ctx context.Context, hash string) (domain.Principal, error)
+	// PersonalToken resolves base64url(SHA-256(token)) to its owner (Kind user, Token set, Org
+	// the token's) with the owner's CURRENT org and factory roles. ErrUnauthenticated when
+	// unknown, revoked, expired, of a removed member or of a deleted org. Touches last_used_at
+	// at most once a minute (§6.7).
+	PersonalToken(ctx context.Context, hash string) (domain.Principal, error)
 	// OrgsFor lists the live organizations the user belongs to, by name, with the user's role.
 	OrgsFor(ctx context.Context, user domain.UserID) ([]domain.OrgMembership, error)
 	// DeviceRequest describes a pending CLI sign-in by its user code (§10.2 Device-Approve).
@@ -142,6 +161,11 @@ type Access interface {
 	APIKeys(ctx context.Context) ([]domain.APIKey, error)
 	CreateAPIKey(ctx context.Context, by domain.Actor, k domain.NewAPIKey) (domain.APIKey, error) // k.Hash computed by the caller
 	RevokeAPIKey(ctx context.Context, by domain.Actor, id domain.APIKeyID) error
+	// Personal tokens (3-12b). owner nil means every member's (the admins' listing); the owner
+	// filter is part of the statement, so a member's call can never reach another's token.
+	PersonalTokens(ctx context.Context, owner *domain.UserID) ([]domain.PersonalToken, error)
+	CreatePersonalToken(ctx context.Context, by domain.Actor, t domain.NewPersonalToken) (domain.PersonalToken, error) // t.Hash computed by the caller
+	RevokePersonalToken(ctx context.Context, by domain.Actor, id domain.PersonalTokenID, owner *domain.UserID) error // ErrNotFound outside the filter
 }
 
 // Platform keeps install-level identity: platform admins, the security log and clean-up.
@@ -160,7 +184,7 @@ type Platform interface {
 
 | Port | Package | Notes |
 | --- | --- | --- |
-| `Identity`, `Access`, `Platform` | `internal/adapters/postgres` | Through the definer functions of §6.5 (decoded from `jsonb`, because sqlc cannot type `RETURNS TABLE`, A §6.4) and, for `factory_roles` and `api_keys`, sqlc queries under RLS. |
+| `Identity`, `Access`, `Platform` | `internal/adapters/postgres` | Through the definer functions of §6.5 (decoded from `jsonb`, because sqlc cannot type `RETURNS TABLE`, A §6.4) and, for `factory_roles`, `api_keys` and `personal_tokens`, sqlc queries under RLS. |
 | fakes | `internal/ports/porttest` | `porttest.Identity` (principals by token and hash, memberships, keys, the ≥1-owner and last-platform-admin rules). |
 | conformance | `internal/ports/porttest/identitytest` | Run by the fake and the PostgreSQL adapter (§13). |
 | `Mailer` | `auth/src/mail/` (TypeScript) | `interface Mailer { send(m: Mail): Promise<void> }`; adapters `smtp.ts` (nodemailer, pinned) and `memory.ts` (tests). goald sends no mail in phase 3. |
@@ -207,6 +231,7 @@ The auth service refuses a non-loopback `GOAL_AUTH_LISTEN`. There is no internal
 | Paths | exactly the table below (method and path, case-sensitive); anything else under `/api/auth` is 404 problem `not-found` and never reaches the service |
 | Path hygiene | refuse (404) a `RawPath` containing `%2f`, `%2e` or `%5c` in any case, `//`, a dot segment, a trailing slash, or a path whose cleaned form differs |
 | Headers in | drop `X-Forwarded-*`, `Forwarded`, `X-Real-Ip` and any `X-Goal-Client-Ip`; set `X-Goal-Client-Ip` to the client address: the right-most `X-Forwarded-For` entry not in `GOAL_TRUSTED_PROXIES` when the peer is a trusted proxy, else the peer address (all entries trusted: the left-most; a malformed entry stops the walk at the last trusted address); pass `X-Request-Id` (goald's, as on `/v1`) |
+| Goal credentials | a request whose `Authorization` is `Bearer goal_sk_…` or `Bearer goal_pat_…` (any case of the scheme) is 401 problem `unauthenticated` and never forwarded: Better Auth has no use for Goal's keys or personal tokens (3-12b) |
 | Headers out | drop `Set-Auth-Token` (bearer plugin) from every response; nothing else is added |
 | Limits | body 64 KiB (`http.MaxBytesReader`, 413); dial 2 s, response headers 10 s, whole request 15 s; upstream down or timed out is 503 problem `auth-unavailable` |
 | Origin | wrapped in goald's `http.CrossOriginProtection`; Better Auth's own origin check stays on |
@@ -274,7 +299,8 @@ All migrations run as `goal_owner`. New roles and grants follow A §6.0.
 | `00044_auth_service_functions.sql` | 3-8 | Definers the auth service calls: events, caps, bootstrap claim, invitation roles, factory list |
 | `00045_principal.sql` | 3-9 | Definers goald calls: `goal_principal`, `goal_orgs_for`, `goal_members`, `goal_invitations`, `goal_device_request`, `goal_identity_ready`, `goal_auth_cleanup`, platform admin functions |
 | `00046_api_keys.sql` | 3-12 | `api_keys`, `api_key_factories`, `goal_api_key`; the retire trigger also revokes keys |
-| `00047–00049` | — | reserved for phase 3 fixes |
+| `00047_personal_tokens.sql` | 3-12b | `personal_tokens`, `goal_personal_token`; the retire trigger also revokes personal tokens; `goal_access` kind `personal_token` (§6.7) |
+| `00048–00049` | — | reserved for phase 3 fixes (`00047`, once reserved, is 3-12b's) |
 
 Phase 4 uses `00050–00059`, phase 5 `00060` up.
 
@@ -418,7 +444,7 @@ ALTER TABLE audit_log ADD CONSTRAINT audit_log_actor_kind_check
 ALTER TABLE audit_log VALIDATE CONSTRAINT audit_log_actor_kind_check;
 ```
 
-`auth_events.kind` values: `sign_in.succeeded {method: email_code|google|device}`, `sign_up.refused`, `user.created`, `otp.sent`, `otp.suppressed {reason: unknown|cap|locked}`, `otp.failed`, `otp.locked`, `device.requested {client_id}`, `device.approved`, `device.denied`, `session.revoked`, `platform_admin.added`, `platform_admin.removed`, `recovery.used`.
+`auth_events.kind` values: `sign_in.succeeded {method: email_code|google|device}`, `sign_up.refused`, `user.created`, `otp.sent`, `otp.suppressed {reason: unknown|cap|locked}`, `otp.failed`, `otp.locked`, `device.requested {client_id}`, `device.approved`, `device.denied`, `session.revoked`, `platform_admin.added`, `platform_admin.removed`, `recovery.used`, and from `00047` `personal_token.refused {token_id, reason}` (written by `goal_personal_token`, §6.7).
 
 **Triggers on `auth.*`** (definer functions, atomic with Better Auth's write):
 
@@ -434,7 +460,7 @@ The actor is `changedBy` when `changedAt` is within the last minute (set by the 
 
 As built (3-6): `goal_audit_member()` and `goal_audit_invitation()` behind the triggers `member_audit_added`, `member_audit_role_changed` (only when the role changes), `member_audit_removed`, `invitation_audit_created`, `invitation_audit_answered` (only into `accepted`, `rejected` or `canceled`: Better Auth's return of a failed acceptance to `pending` writes nothing); the stamp rule is `goal_auth_actor(changedBy, changedAt, fallback)` (±1 minute of `clock_timestamp()`, a malformed ref ignored), the entries go through `goal_append_audit` (00042) with target `member:<user id>` or `invitation:<id>` and no request id. `via` is `bootstrap`/`recovery` by the stamps `system:bootstrap`/`system:recovery`, `invitation` when the user's accepted invitation of the organization exists (Better Auth marks it accepted before inserting the member), else `org_created`. A soft delete's canceled invitations are by `system:org-deleted`. "Being purged" is "no `organizations` row": `goal_purge_org` deletes it before Better Auth's rows.
 
-`goal_notify_access()` triggers send `pg_notify('goal_access', {kind, org_id?, user_id?, session_id?, key_id?})` on `auth.member` UPDATE OF role or DELETE, `auth.session` DELETE, `factory_roles` changes, `organizations.deleted_at` set and (from `00046`) `api_keys.revoked_at` set. A notice only ends streams (§8.8); it never grants anything, since any role can `NOTIFY`. As built, kinds are `member {org_id, user_id}`, `session {user_id, session_id}`, `factory_role {org_id, user_id, factory_id}` and `org {org_id}`; triggers `member_access_role_changed`, `member_access_removed`, `session_access_ended`, `factory_roles_access`, `organizations_access_deleted`.
+`goal_notify_access()` triggers send `pg_notify('goal_access', {kind, org_id?, user_id?, session_id?, key_id?})` on `auth.member` UPDATE OF role or DELETE, `auth.session` DELETE, `factory_roles` changes, `organizations.deleted_at` set, (from `00046`) `api_keys.revoked_at` set and (from `00047`) `personal_tokens.revoked_at` set (kind `personal_token {org_id, user_id, token_id}`). A notice only ends streams (§8.8); it never grants anything, since any role can `NOTIFY`. As built, kinds are `member {org_id, user_id}`, `session {user_id, session_id}`, `factory_role {org_id, user_id, factory_id}` and `org {org_id}`; triggers `member_access_role_changed`, `member_access_removed`, `session_access_ended`, `factory_roles_access`, `organizations_access_deleted`.
 
 ### 6.5 `00044` and `00045`: definer functions
 
@@ -502,11 +528,50 @@ GRANT UPDATE (revoked_at, revoked_by) ON api_keys TO goal_app;
 
 `goal_api_key(p_hash text)` (app) returns jsonb `{id, org_id, name, scopes, role_ceiling, factories (null = all), expires_at}` for a key that is unrevoked, unexpired and of a live org, and sets `last_used_at = now()` when it is null or older than a minute. It is a definer because the key names its organization before any org is bound. `goal_retire_org` is replaced to revoke the org's keys (`revoked_by = 'system:org-deleted'`).
 
-### 6.7 sqlc and conformance
+### 6.7 `00047_personal_tokens.sql`
 
-- New query files: `queries/identity.sql` (calls of the definers), `factory_roles.sql`, `api_keys.sql`. `factory_roles` and `api_keys` writes run under RLS in `inTx` with `appendAudit`.
+A table of its own, not a column on `api_keys`: an API key is an org's service account, a personal token a member's credential, and keeping them apart keeps each lookup, grant and test about one thing.
+
+```sql
+-- +goose Up
+CREATE TABLE personal_tokens (
+  id           uuid PRIMARY KEY,
+  org_id       uuid NOT NULL DEFAULT goal_org() REFERENCES organizations (id) ON DELETE CASCADE,
+  user_id      uuid NOT NULL,
+  name         text NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
+  hint         text NOT NULL CHECK (hint ~ '^goal_pat_[A-Za-z0-9_-]{4}$'),  -- shown in lists
+  hash         text NOT NULL CHECK (hash ~ '^[A-Za-z0-9_-]{43}$'),          -- base64url(SHA-256(token))
+  scopes       text[] NOT NULL CHECK (cardinality(scopes) BETWEEN 1 AND 64),
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  expires_at   timestamptz NOT NULL DEFAULT now() + interval '30 days'
+               CHECK (expires_at > created_at AND expires_at <= created_at + interval '90 days'),
+  revoked_at   timestamptz,
+  revoked_by   text,
+  last_used_at timestamptz,
+  -- Removal from the organization deletes the member's tokens; a re-invitation starts empty.
+  FOREIGN KEY (org_id, user_id) REFERENCES auth.member ("organizationId", "userId") ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX personal_tokens_hash_key   ON personal_tokens (hash);
+CREATE UNIQUE INDEX personal_tokens_name_key   ON personal_tokens (org_id, user_id, lower(name)) WHERE revoked_at IS NULL;
+CREATE INDEX        personal_tokens_member_idx ON personal_tokens (org_id, user_id);  -- the cascade and "my tokens"
+
+ALTER TABLE personal_tokens ENABLE ROW LEVEL SECURITY;
+CREATE POLICY org_isolation ON personal_tokens
+  USING (org_id = (SELECT goal_org())) WITH CHECK (org_id = (SELECT goal_org()));
+GRANT SELECT, INSERT ON personal_tokens TO goal_app;
+GRANT UPDATE (revoked_at, revoked_by, last_used_at) ON personal_tokens TO goal_app;
+```
+
+- `goal_personal_token(p_hash text)` (app; definer, `SET search_path FROM CURRENT`, `REVOKE ALL FROM PUBLIC`, `EXECUTE` to `goal_app` only) returns jsonb `{id, org_id, user_id, name, email, token_name, scopes, expires_at, org_role, factory_roles: [{factory_id, role}]}` for an unrevoked, unexpired token, inner-joined with `auth.member` (the current role), `auth."user"` and a live `organizations` row, else NULL. It never returns the hash and never reports platform admin. It sets `last_used_at = now()` when null or older than a minute. When the hash matches a revoked or expired token it appends `auth_events` `personal_token.refused {token_id, reason: revoked|expired}` (user = the owner), at most once a minute per token; an unknown hash writes nothing (no unauthenticated writes; the metric counts it, §12). A definer because the token names its organization before any org is bound.
+- `goal_retire_org` is replaced again to revoke the org's live personal tokens too (`revoked_by = 'system:org-deleted'`).
+- `goal_notify_access` gains the trigger `personal_tokens_access_revoked` (`AFTER UPDATE OF revoked_at` when it becomes non-null): kind `personal_token {org_id, user_id, token_id}`. A member's removal already sends `member`.
+- Audit (goald, in the write's transaction): `personal_token.created {token_id, name, user_id, scopes, expires_at}`, `personal_token.revoked {token_id, name, user_id}` (the actor is the owner or the admin who revoked it).
+
+### 6.8 sqlc and conformance
+
+- New query files: `queries/identity.sql` (calls of the definers), `factory_roles.sql`, `api_keys.sql`, `personal_tokens.sql`. `factory_roles`, `api_keys` and `personal_tokens` writes run under RLS in `inTx` with `appendAudit`. `appendAudit` and the item event writer add `via: pat:<id>` to their data when the principal in `ctx` carries a `Token`.
 - Audit actions written by goald: `factory_role.granted|changed|removed {user_id, factory_id, from?, to?}`, `api_key.created {key_id, name, scopes, role_ceiling, factories, expires_at}`, `api_key.revoked {key_id, name}`, `org.ownership_transferred {from, to}`.
-- `TestSchema_EveryOrgTableHasRLS` (A §6.6): `factory_roles`, `api_keys`, `api_key_factories` carry the policy; `platform_admins`, `auth_events` join the allowlist; schema `auth` is out of its scope and covered by `TestSchema_AuthSchemaIsolation` (§13).
+- `TestSchema_EveryOrgTableHasRLS` (A §6.6): `factory_roles`, `api_keys`, `api_key_factories`, `personal_tokens` carry the policy; `platform_admins`, `auth_events` join the allowlist; schema `auth` is out of its scope and covered by `TestSchema_AuthSchemaIsolation` (§13).
 
 ## 7. Bucket layout changes
 
@@ -516,10 +581,11 @@ None.
 
 ### 8.1 OpenAPI
 
-- Tag `identity`. Security schemes `session` (`apiKey` in cookie `goal.session_token`; `__Secure-goal.session_token` when `GOAL_PUBLIC_URL` is https) and `bearer` (`http`, bearer: a session token from `goal login` or an API key `goal_sk_…`). Global `security: [{session: []}, {bearer: []}]`; `getHealth` and `getAuthConfig` declare `security: []`.
+- Tag `identity`. Security schemes `session` (`apiKey` in cookie `goal.session_token`; `__Secure-goal.session_token` when `GOAL_PUBLIC_URL` is https) and `bearer` (`http`, bearer: a session token from `goal login`, an API key `goal_sk_…` or a personal token `goal_pat_…`). Global `security: [{session: []}, {bearer: []}]`; `getHealth` and `getAuthConfig` declare `security: []`.
 - Every operation carries `x-goal-scope: <permission>` (§8.2). A conformance test fails when an operation lacks one, names an unknown permission, or a permission is unused.
-- New schemas: `AuthConfig`, `Me`, `User` (`{id, name, email}`), `OrgRole`, `FactoryRole`, `Permission` (enum generated from the table), `Member`, `FactoryRoleGrant`, `Invitation`, `ApiKey`, `NewApiKey`, `CreatedApiKey`, `TransferRequest`, `PlatformAdmin`, `AuthEvent`, `DeviceRequest`.
-- Changed: `OrgSummary` + `role: OrgRole|null` (null for a key); `Org` + `role`, `can: Permission[]` (org permissions held); `Factory` + `role: FactoryRole|null` (effective: `editor` for owners and admins) and `can: Permission[]` (factory permissions held); `Actor.kind` + `service`; `Problem.code` + `unauthenticated`, `reauth-required`, `auth-unavailable`, `factory-not-found`, `item-not-found`, `run-not-found`, `last-owner`, `not-an-admin`, `last-platform-admin`, `api-key-name-taken`, `scope-not-allowed` (§8.5).
+- New schemas: `AuthConfig`, `Me`, `User` (`{id, name, email}`), `OrgRole`, `FactoryRole`, `Permission` (enum generated from the table), `Member`, `FactoryRoleGrant`, `Invitation`, `ApiKey`, `NewApiKey`, `CreatedApiKey`, `TransferRequest`, `PlatformAdmin`, `AuthEvent`, `DeviceRequest`; from 3-12b `PersonalToken` (`{id, name, hint, scopes, owner: User, created_at, expires_at, last_used_at, revoked_at, revoked_by: Actor|null}`), `NewPersonalToken` (`{name, scopes, expires_in_days}`) and `CreatedPersonalToken` (`{token: PersonalToken, secret}`).
+- `Me` gains `token?: {id, name, org_id, scopes, expires_at}` when the request carries a personal token (3-12b; `kind` stays `user`, `session` is absent).
+- Changed: `OrgSummary` + `role: OrgRole|null` (null for a key); `Org` + `role`, `can: Permission[]` (org permissions held); `Factory` + `role: FactoryRole|null` (effective: `editor` for owners and admins) and `can: Permission[]` (factory permissions held); `Actor.kind` + `service`; `Problem.code` + `unauthenticated`, `reauth-required`, `auth-unavailable`, `factory-not-found`, `item-not-found`, `run-not-found`, `last-owner`, `not-an-admin`, `last-platform-admin`, `api-key-name-taken`, `scope-not-allowed`, and from 3-12b `personal-token-name-taken`, `browser-session-required` (§8.5).
 - **The Better Auth client contract** (ADR 0007): the SPA and CLI call the allowlisted `/api/auth/*` paths of §5.5 directly, with Better Auth's own request and response shapes, pinned to the exact `better-auth` version (one pnpm catalog entry for `auth/` and `web/`). Only `web/src/api/auth.ts` and `cmd/goal/login.go` call them. Membership *changes* go to Better Auth (so its owner rules apply); membership *reads* come from goald (`listMembers`, `listInvitations`), joined with factory roles and last activity.
 
 ### 8.2 The permission table (`api/permissions.yaml`)
@@ -535,14 +601,16 @@ permissions:
   # by platform admins only with platform_admin, by keys only with keys. org_roles: who holds
   # it (owners and admins hold every factory permission). factory_role: the lowest factory
   # role holding it. keys: API keys may carry it. fresh: needs a session signed in within 10
-  # minutes. better_auth: the Better Auth access-control statements it maps to.
+  # minutes. better_auth: the Better Auth access-control statements it maps to. pat: personal
+  # tokens may carry it (3-12b; absent = false). permgen refuses pat on a fresh, platform_admin
+  # or install permission other than authenticated. "High impact": never in a preset.
   - {name: public,             level: install}                       # no credential needed
-  - {name: authenticated,      level: install, keys: true}           # any valid principal
+  - {name: authenticated,      level: install, keys: true, pat: true} # any valid principal
   - {name: device:read,        level: install}                       # signed-in users, not keys
   - {name: org:create,         level: install, platform_admin: true}
   - {name: platform:read,      level: install, platform_admin: true}
   - {name: platform:manage,    level: install, platform_admin: true, fresh: true}
-  - {name: org:read,           level: org, org_roles: [owner, admin, member], keys: true}
+  - {name: org:read,           level: org, org_roles: [owner, admin, member], keys: true, pat: true}
   - {name: org:manage,         level: org, org_roles: [owner, admin]}
   - {name: org:delete,         level: org, org_roles: [owner], fresh: true,
      better_auth: {organization: [update, delete]}}   # Better Auth's own paths for both are off
@@ -554,18 +622,20 @@ permissions:
      better_auth: {member: [create, update, delete], invitation: [create, cancel]}}
   - {name: api_key:read,       level: org, org_roles: [owner, admin]}
   - {name: api_key:manage,     level: org, org_roles: [owner, admin], fresh: true}
-  - {name: factory:create,     level: org, org_roles: [owner, admin], keys: true}
-  - {name: factory:read,       level: factory, factory_role: viewer,   keys: true}
-  - {name: item:create,        level: factory, factory_role: approver, keys: true}
-  - {name: item:decide,        level: factory, factory_role: approver, keys: true}
-  - {name: item:operate,       level: factory, factory_role: approver, keys: true}
-  - {name: andon:manage,       level: factory, factory_role: approver, keys: true}
-  - {name: definition:edit,    level: factory, factory_role: editor,   keys: true}
-  - {name: definition:publish, level: factory, factory_role: editor,   keys: true}
+  - {name: personal_token:read,   level: org, org_roles: [owner, admin, member]}               # one's own (3-12b)
+  - {name: personal_token:manage, level: org, org_roles: [owner, admin, member], fresh: true}  # create one's own
+  - {name: factory:create,     level: org, org_roles: [owner, admin], keys: true, pat: true}   # high impact
+  - {name: factory:read,       level: factory, factory_role: viewer,   keys: true, pat: true}
+  - {name: item:create,        level: factory, factory_role: approver, keys: true, pat: true}
+  - {name: item:decide,        level: factory, factory_role: approver, keys: true, pat: true}
+  - {name: item:operate,       level: factory, factory_role: approver, keys: true, pat: true}
+  - {name: andon:manage,       level: factory, factory_role: approver, keys: true, pat: true}
+  - {name: definition:edit,    level: factory, factory_role: editor,   keys: true, pat: true}  # high impact
+  - {name: definition:publish, level: factory, factory_role: editor,   keys: true, pat: true}  # high impact
   - {name: factory:manage,     level: factory, factory_role: editor,   keys: true}
 ```
 
-The owner role's Better Auth statements also include `organization: [update, delete]` (their paths are disabled; §8.6); as built in 3-4 they are `org:delete`'s `better_auth`, so permgen derives every role from the table alone (a role holds the `better_auth` actions of the permissions it holds; `better_auth` is for org permissions only). The same vocabulary names API key scopes now and OAuth scopes in phase 5.
+The owner role's Better Auth statements also include `organization: [update, delete]` (their paths are disabled; §8.6); as built in 3-4 they are `org:delete`'s `better_auth`, so permgen derives every role from the table alone (a role holds the `better_auth` actions of the permissions it holds; `better_auth` is for org permissions only). The same vocabulary names API key scopes and personal token scopes now and OAuth scopes in phase 5. `pat` is its own flag, not `keys`: the two sets differ (`audit:read` and `factory:manage` are `keys` only), and each new permission decides both explicitly. `TestPermissions_RoleGrants` pins the `pat: true` set to §4.5's list, so widening it is a reviewed diff.
 
 **Operations by scope** (2.2's and phase 3's; phase 4 adds `credential:*`, `connector:*`, `approval:decide` in its PRs):
 
@@ -582,7 +652,9 @@ The owner role's Better Auth statements also include `organization: [update, del
 | `audit:read` | listAudit |
 | `member:read`, `invitation:read` | listMembers, listInvitations |
 | `member:manage` | setFactoryRole, removeFactoryRole (and Better Auth's invite, cancel, remove, change role) |
-| `api_key:read`, `api_key:manage` | listApiKeys, createApiKey, revokeApiKey |
+| `api_key:read`, `api_key:manage` | listApiKeys, createApiKey, revokeApiKey; listMemberTokens, revokeMemberToken (3-12b) |
+| `personal_token:read` | listPersonalTokens, revokePersonalToken (one's own; a write under `read` on purpose: revoking never waits for a fresh sign-in) |
+| `personal_token:manage` | createPersonalToken (cookie session only, §4.5) |
 | `factory:create` | createFactory |
 | `factory:read` | listItems, getBoard, getMetrics and E's metrics, constraint, agent stats and andon reads, getItem, listItemEvents, E's runs, B's draft, model, files, versions and compare reads |
 | `item:create` | submitItem |
@@ -598,10 +670,10 @@ The exact operationIds are whatever `api/openapi.yaml` holds when 3-1 lands; 3-1
 ### 8.3 Authentication
 
 1. **Credential** (`credential.go`, every `/v1` request):
-   - `Authorization: Bearer <v>`: `goal_sk_` + 43 base64url characters is an API key; 32 characters `[A-Za-z0-9]` is a session token; anything else (an agent task token included) is 401. A request with a bearer value ignores cookies.
+   - `Authorization: Bearer <v>`: `goal_sk_` + 43 base64url characters is an API key; `goal_pat_` + 43 base64url characters is a personal token (3-12b); 32 characters `[A-Za-z0-9]` is a session token (marked `Session.Bearer`); anything else (an agent task token included) is 401. A request with a bearer value ignores cookies.
    - Else the session cookie (`goal.session_token`, or `__Secure-goal.session_token` on https; the other name is ignored): URL-decoded, the part before the first `.` must be 32 `[A-Za-z0-9]`. goald does not check Better Auth's cookie signature (it holds no Better Auth secret); the token is the credential, as with bearer.
    - None: 401, except `public` operations, which read no credential at all (a stale cookie never keeps anyone from `getHealth` or the sign-in page's `getAuthConfig`).
-2. **Principal** (`scope`, per operation), in this order of answers: the credential (`Identity.Session(token, org)` or `Identity.APIKey(sha256)`; unknown, expired or revoked → 401 whatever the path, so a stranger learns nothing about organizations), then the path's organization (`Tenancy.Org`; unknown or deleted → 404 `org-not-found`), then membership (a user who is not a member, or a key of another organization → the same 404). The lookups run in one transaction. Outside an organization (`listOrgs`, `getMe`, platform routes) the principal is resolved with org "".
+2. **Principal** (`scope`, per operation), in this order of answers: the credential (`Identity.Session(token, org)`, `Identity.APIKey(sha256)` or `Identity.PersonalToken(sha256)`; unknown, expired or revoked → 401 whatever the path, so a stranger learns nothing about organizations), then the path's organization (`Tenancy.Org`; unknown or deleted → 404 `org-not-found`), then membership (a user who is not a member, or a key or personal token of another organization → the same 404). The lookups run in one transaction. Outside an organization (`listOrgs`, `getMe`, platform routes) the principal is resolved with org "".
 3. **Per request, no cache.** Removal, role changes, revocation and sign-out take effect on the next request. Signed-in users keep working while the auth service is down (only signing in, out and membership changes need it).
 4. **Keeping sessions alive.** Better Auth extends a session (7 days, `updateAge` 1 day) only when its own endpoints see it, so the SPA calls `GET /api/auth/get-session` on load and hourly, and the CLI at most daily (recorded beside the token).
 5. **`GOAL_AUTH`** (fail closed): `session` (the default from 3-16) or `none`; any other value refuses to start. `none` requires a loopback `GOAL_LISTEN`, wires `AllowAll` and `LocalUser`, ignores well-formed credentials (a malformed one, an agent task token included, is 401 in every mode, as built in 3-3), mounts no `/api/auth`, logs a warning at startup and makes `getAuthConfig` report `mode: none`. Under `none` any process that reaches the listener, agent containers included, acts as the local user: it is one developer's laptop mode, never a shared install. With `session`, goald wires `Permissions` (never `AllowAll`) and refuses to start unless `goal_identity_ready()` is true, `GOAL_PUBLIC_URL` is valid (https unless loopback) and the listener rule of §5.5 holds. It starts when the auth service is unreachable (signed-in people keep working) and when no user exists yet, but logs a warning naming what is missing ("no one can sign in: set GOAL_BOOTSTRAP_OWNER_EMAIL and BETTER_AUTH_SECRET and start the auth service (goal up does), or set GOAL_AUTH=none"). A missing or invalid credential is 401, never `LocalUser`.
@@ -611,12 +683,13 @@ The exact operationIds are whatever `api/openapi.yaml` holds when 3-1 lands; 3-1
 For `AccessRequest{Principal, Operation, Org, Factory}`, from the generated table:
 
 1. An operation missing from the table is refused (fail closed; the conformance test keeps it from happening).
-2. `public` passes; `authenticated` needs a principal; `device:read` a user; `org:create` and `platform:*` a user who is a platform admin (403 otherwise).
-3. Org level: a non-member user or a key of another org → `ErrNotFound` (404). Then the org role (users) or scopes (keys) must hold the permission → else 403 `forbidden`.
-4. Factory level, in `s.factory`/`s.item`: the effective factory role is `editor` for owners and admins, else `FactoryRoles[f]`; none, or a key restricted to other factories → `ErrNotFound` (404 `factory-not-found` / `item-not-found`). The role, and for keys the ceiling and scopes, must hold the permission → else 403. In the middleware pass (Factory "") a factory-level operation only needs membership (or a key of the org).
-5. `fresh: true` permissions: users need `now − Session.CreatedAt ≤ 10 min` → else 403 `reauth-required`; keys never hold them.
+2. **Personal tokens first** (3-12b), before the level rules: when `Principal.Token != nil`, the permission must be `pat: true` in the table and in `Token.Scopes`, else 403 `forbidden` (never `reauth-required`), decided from the token alone, so it says nothing about the organization or factory asked for. A rule that cannot be read refuses. Then the rules below apply to the owner as a user, with their current roles, so the result is scopes ∩ roles; `listOrgs` returns only the token's organization.
+3. `public` passes; `authenticated` needs a principal; `device:read` a user; `org:create` and `platform:*` a user who is a platform admin (403 otherwise).
+4. Org level: a non-member user or a key of another org → `ErrNotFound` (404). Then the org role (users) or scopes (keys) must hold the permission → else 403 `forbidden`.
+5. Factory level, in `s.factory`/`s.item`: the effective factory role is `editor` for owners and admins, else `FactoryRoles[f]`; none, or a key restricted to other factories → `ErrNotFound` (404 `factory-not-found` / `item-not-found`). The role, and for keys the ceiling and scopes, must hold the permission → else 403. In the middleware pass (Factory "") a factory-level operation only needs membership (or a key of the org).
+6. `fresh: true` permissions: users need `now − Session.CreatedAt ≤ 10 min` → else 403 `reauth-required`; keys never hold them, and personal tokens never reach this step for them (2).
 
-Lists and aggregates show only visible factories: `listFactories`, `getOrgAttention`, `getFactoryOverview`, `getInbox` (decisions only where `item:decide` is held; E's other kinds where `factory:read` is held), `listTemplates` (unchanged), `getOrg.factory_count` (visible ones).
+Lists and aggregates show only visible factories: `listFactories`, `getOrgAttention`, `getFactoryOverview`, `getInbox` (decisions only where `item:decide` is held; E's other kinds where `factory:read` is held), `listTemplates` (unchanged), `getOrg.factory_count` (visible ones). For a personal token, "held" also needs the scope, and `can` lists only what the token can do.
 
 ### 8.5 Status codes
 
@@ -625,10 +698,11 @@ Lists and aggregates show only visible factories: `listFactories`, `getOrgAttent
 | 401 | `unauthenticated` | no, malformed, unknown, expired or revoked credential; `WWW-Authenticate: Bearer realm="goal"`; one body, no detail |
 | 403 | `forbidden` | the principal sees the resource but lacks the permission; a key on a never-for-keys operation; cross-origin refusal (2.2) |
 | 403 | `reauth-required` | a fresh-only operation with an older session |
+| 403 | `browser-session-required` | creating a personal token with a bearer credential (a CLI session, key or token) instead of the browser's cookie session (3-12b) |
 | 404 | `org-not-found` | unknown, deleted, or not a member (users), another org (keys): one body |
 | 404 | `factory-not-found`, `item-not-found`, `run-not-found` | unknown, or invisible to the principal: one fixed body each, no detail, so a factory's existence never leaks (a run's factory is as visible as its items) |
-| 400 | `scope-not-allowed` | a key scope that is not `keys: true` or not held by its creator |
-| 409 | as 2.2, plus `last-owner`, `not-an-admin`, `confirmation-mismatch` (A), `last-platform-admin`, `api-key-name-taken` | the rule named |
+| 400 | `scope-not-allowed` | a key scope that is not `keys: true`, or a personal token scope that is not `pat: true`, or either not held by its creator |
+| 409 | as 2.2, plus `last-owner`, `not-an-admin`, `confirmation-mismatch` (A), `last-platform-admin`, `api-key-name-taken`, `personal-token-name-taken` | the rule named |
 | 421 | — | `Host` check (§5.5) |
 | 503 | `auth-unavailable` | proxy only |
 
@@ -728,7 +802,7 @@ betterAuth({
 
 ### 8.8 Stream
 
-`streamEvents` (`org:read`; `?factory=` passes the resolver with `factory:read`) remembers the subscriber's principal: user and session, or key, and its visible factories. The feed delivers an event with a `factory_id` only for a visible factory; events without one go to every member. A stream ends (the client reconnects and is checked again) when a `goal_access` notice names its session, user in its org, key or org; at the session's or key's expiry; and on every listener `Resync`, since access notices may have been missed. The browser's `EventSource` sends the same-origin cookie, so no token is put in a URL.
+`streamEvents` (`org:read`; `?factory=` passes the resolver with `factory:read`) remembers the subscriber's principal: user and session, key, or user and personal token, and its visible factories. The feed delivers an event with a `factory_id` only for a visible factory; events without one go to every member. A stream ends (the client reconnects and is checked again) when a `goal_access` notice names its session, user in its org, key, personal token or org; at the session's, key's or personal token's expiry; and on every listener `Resync`, since access notices may have been missed. The browser's `EventSource` sends the same-origin cookie, so no token is put in a URL.
 
 ### 8.9 Endpoints
 
@@ -738,8 +812,8 @@ Under `/v1`; problems as §8.5; F = fresh session required.
 | --- | --- | --- |
 | `GET /auth/config` | getAuthConfig · public | → `AuthConfig{mode: session\|none, methods: [email_code, google?]}` (`google` when `GOAL_AUTH_GOOGLE=on`) |
 | `GET /auth/device/{user_code}` | getDeviceRequest · device:read | → `DeviceRequest{client_id, client_name: "Goal CLI", requested_at, expires_at, ip, user_agent, same_ip: bool}`; 404 unknown or expired |
-| `GET /me` | getMe · authenticated | → `Me{kind: user\|service, mode, user?: User, key?: {id, name, org_id}, platform_admin, session?: {created_at, expires_at, fresh_until}}`; under `mode: none` the local user |
-| `GET /orgs` | listOrgs · authenticated | → `{orgs: OrgSummary[]}`: the user's organizations with `role`; a key's own org |
+| `GET /me` | getMe · authenticated | → `Me{kind: user\|service, mode, user?: User, key?: {id, name, org_id}, token?: {id, name, org_id, scopes, expires_at}, platform_admin, session?: {created_at, expires_at, fresh_until}}`; under `mode: none` the local user; with a personal token `token` is set, `session` absent and `platform_admin` false |
+| `GET /orgs` | listOrgs · authenticated | → `{orgs: OrgSummary[]}`: the user's organizations with `role`; a key's or personal token's own org |
 | `POST /orgs` | createOrg · org:create | `NewOrg` → 201 `Org`; the caller becomes its owner |
 | `GET /orgs/{org}/members` | listMembers · member:read | → `{members: Member[]}`, `Member{member_id, user: User, role, factory_roles: FactoryRoleGrant[], joined_at, last_active_at, you, can_change_role, can_remove}` |
 | `GET /orgs/{org}/invitations` | listInvitations · invitation:read | → `{invitations: Invitation[]}` (pending) |
@@ -749,27 +823,33 @@ Under `/v1`; problems as §8.5; F = fresh session required.
 | `GET /orgs/{org}/api-keys` | listApiKeys · api_key:read | → `{keys: ApiKey[]}`: `{id, name, hint, scopes, role_ceiling, factories: [id]\|null, created_by: Actor, created_at, expires_at, last_used_at, revoked_at}`; revoked ones for 30 days |
 | `POST /orgs/{org}/api-keys` | createApiKey · api_key:manage F | `NewApiKey{name, scopes, role_ceiling, factories?, expires_in_days (1–90, default 90)}` → 201 `CreatedApiKey{key: ApiKey, secret}`; the secret appears once, `Cache-Control: no-store`; 400 `scope-not-allowed`; 409 `api-key-name-taken` |
 | `DELETE /orgs/{org}/api-keys/{key}` | revokeApiKey · api_key:manage F | → 204 |
+| `GET /orgs/{org}/personal-tokens` | listPersonalTokens · personal_token:read | → `{tokens: PersonalToken[]}`: the caller's own in this org (the owner filter is in the statement); revoked ones for 30 days |
+| `POST /orgs/{org}/personal-tokens` | createPersonalToken · personal_token:manage F, cookie session only | `NewPersonalToken{name, scopes, expires_in_days (1–90, default 30)}` → 201 `CreatedPersonalToken{token, secret}`; the secret appears once, `Cache-Control: no-store`; 403 `browser-session-required`; 400 `scope-not-allowed`; 409 `personal-token-name-taken` |
+| `DELETE /orgs/{org}/personal-tokens/{token}` | revokePersonalToken · personal_token:read | → 204; the caller's own only (another's is 404); no fresh sign-in |
+| `GET /orgs/{org}/member-tokens` | listMemberTokens · api_key:read | → `{tokens: PersonalToken[]}`: every member's, with `owner` |
+| `DELETE /orgs/{org}/member-tokens/{token}` | revokeMemberToken · api_key:manage F | → 204 |
 | `GET /platform/admins` | listPlatformAdmins · platform:read | → `{admins: PlatformAdmin[]}` |
 | `POST /platform/admins` | addPlatformAdmin · platform:manage F | `{email}` → 201; 404 no such user |
 | `DELETE /platform/admins/{user}` | removePlatformAdmin · platform:manage F | → 204; 409 `last-platform-admin` |
 | `GET /platform/auth-events?before=&limit=&kind=` | listAuthEvents · platform:read | → `{events: AuthEvent[], next_before}` |
 
-Key secrets: `goal_sk_` + base64url of 32 random bytes from `crypto/rand`; goald stores the hash and the hint, never the secret, and never logs request or response bodies of these operations.
+Key and personal token secrets: `goal_sk_` or `goal_pat_` + base64url of 32 random bytes from `crypto/rand`; goald stores the hash and the hint, never the secret, and never logs request or response bodies of these operations.
 
 ## 9. CLI changes
 
 | Command | Does |
 | --- | --- |
 | `goal login [--store keychain\|file]` | Device flow (RFC 8628, client `goal-cli`): `POST /api/auth/device/code`, prints "Open https://goal.example.com/device and enter ABCD-EFGH", opens the browser at `/device` (never the complete URI with the code), polls `/device/token` at the server's interval (`authorization_pending`, `slow_down`, `expired_token`, `access_denied`). Stores the session token in the OS keychain (`github.com/zalando/go-keyring`, service `goal`, account = the API origin); `--store file` (remembered as `credential_store` in `config.json`) writes `$XDG_CONFIG_HOME/goal/credentials.json` with mode 0600 for headless machines. |
-| `goal logout [--all]` | `POST /api/auth/sign-out` (or `/revoke-sessions`) with the token, then deletes it locally; a server error still deletes it and says so |
-| `goal whoami` | `GET /v1/me` and `GET /v1/orgs`: name, email or key, platform admin, session expiry, organizations with roles |
+| `goal login --token [--store keychain\|file]` | (3-12b) reads a personal token from stdin only (`goal login --token < file`, or typed without echo on a terminal); a token on the command line (`--token=…` or an argument) is refused, since argv shows in `ps` and shell history. Checks it with `GET /v1/me`, then stores it like a session token: keychain keyed by the API origin, or the 0600 file with `--store file`. There is no `goal token create`: tokens are created in the browser only (§4.5). |
+| `goal logout [--all]` | `POST /api/auth/sign-out` (or `/revoke-sessions`) with the token, then deletes it locally; a server error still deletes it and says so. A stored personal token is only deleted locally, with "Revoke it in Goal under API keys → Personal tokens if it may have leaked" |
+| `goal whoami` | `GET /v1/me` and `GET /v1/orgs`: name, email or key, platform admin, session expiry, organizations with roles; with a personal token its name, organization, scopes and expiry ("Personal token laptop in Acme · expires Nov 23") |
 | `goal key create <name> --scope S… [--factory F…] [--role viewer\|approver\|editor] [--expires 90d]` | prints the secret once to stdout, the rest to stderr; `goal key list`, `goal key revoke <name\|id>` |
 | `goal admin list\|add <email>\|remove <email>`, `goal admin events [--kind K]` | platform admins and the security log |
 | `goal db recover-admin <email>`, `goal db recover-owner <org> <email>` | with `GOAL_DATABASE_ADMIN_URL` (proof of database access; default compose's superuser, as `goal db init`): makes the user a platform admin, or an owner of the organization (`changedBy = system:recovery`), creating the user first when the email has none (name = the email, `emailVerified` true), so they can then sign in by code; records `recovery.used` and `member.added {via: recovery}`. Works with goald and the auth service stopped. |
 
-- **Which credential.** `GOAL_API_KEY` from the environment (never written anywhere) wins; else the stored token for the API origin. Tokens are keyed by origin, so changing `api_url` or `GOAL_API_URL` never sends a token to another host. Credentials are sent only over https, or http to a loopback address (the existing `GOAL_GITHUB_API_URL` rule).
+- **Which credential.** `GOAL_API_KEY` from the environment (never written anywhere) wins; it holds an API key (`goal_sk_…`) or a personal token (`goal_pat_…`), and any other value is refused before a request is sent. Else the stored session or personal token for the API origin. Tokens are keyed by origin, so changing `api_url` or `GOAL_API_URL` never sends a token to another host. Credentials are sent only over https, or http to a loopback address (the existing `GOAL_GITHUB_API_URL` rule).
 - **Errors.** A 401 prints "Not signed in to https://goal.example.com: run goal login" and exits 77 (`EX_NOPERM`); `reauth-required` prints "This needs a recent sign-in: run goal login again"; 403 exits 77 too.
-- `goal org create` needs a platform admin. Org resolution (A §9) is unchanged; with an API key the default organization is the key's.
+- `goal org create` needs a platform admin. Org resolution (A §9) is unchanged; with an API key or a personal token the default organization is its own.
 - `goal up` resolves `GOAL_AUTH` with goald's default. Under `session` it also starts Mailpit (compose) and the auth service, splits the environment (§5.6), and prints `GOAL_PUBLIC_URL` and the Mailpit URL; it refuses to start, naming the variable and the `GOAL_AUTH=none` alternative, when `BETTER_AUTH_SECRET(S)` is unset or reused, or when no user exists and `GOAL_BOOTSTRAP_OWNER_EMAIL` is unset. Under `none` it starts neither.
 - Stdlib `flag`, no `init()`, as today; tests against a stub API cover each command's requests, the keychain fake, file permissions, origin scoping and exit codes.
 
@@ -784,15 +864,15 @@ Key secrets: `goal_sk_` + base64url of 32 random bytes from `crypto/rand`; goald
 | `/invite/:invitation` | Invite-Accept | Better Auth `get-invitation`, `accept-invitation`, `reject-invitation` |
 | `/device` | Device-Approve | `getDeviceRequest`; Better Auth `GET /device`, `device/approve`, `device/deny` |
 | `/o/:org/members` | Members | `['org', id, 'members']`, `['org', id, 'invitations']`, `['org', id, 'factories']` |
-| `/o/:org/api-keys` | Api-Keys | `['org', id, 'api-keys']`, `['org', id, 'factories']` |
+| `/o/:org/api-keys` | Api-Keys | `['org', id, 'api-keys']`, `['org', id, 'factories']`; from 3-12b `['org', id, 'personal-tokens']`, `['org', id, 'member-tokens']` |
 | rail avatar | Account-Menu | `['me']`, the current org's `role` |
 
-- New query keys: `['auth', 'config']`, `['me']`, `['org', id, 'members']`, `['org', id, 'invitations']`, `['org', id, 'api-keys']`. `['orgs']`, `['org', id, 'detail']` and `['org', id, 'factories']` now carry `role` and `can`. Mutations through Better Auth invalidate `members` and `invitations`; a stream that ends and reconnects resyncs as today.
+- New query keys: `['auth', 'config']`, `['me']`, `['org', id, 'members']`, `['org', id, 'invitations']`, `['org', id, 'api-keys']`, `['org', id, 'personal-tokens']`, `['org', id, 'member-tokens']`. `['orgs']`, `['org', id, 'detail']` and `['org', id, 'factories']` now carry `role` and `can`. Mutations through Better Auth invalidate `members` and `invitations`; a stream that ends and reconnects resyncs as today.
 - `web/src/api/auth.ts` is the only module calling `/api/auth/*` (`createAuthClient` from `better-auth/client` with the email OTP, organization and device client plugins, same pinned version), exposed as TanStack mutations.
 - **Session handling.** The `/v1` client middleware: 401 clears the query cache and navigates to `/sign-in?next=<current path>`; `next` is accepted only as a same-origin path starting with `/` and not `//`. 403 `reauth-required` opens the re-auth dialog and retries the action once after a fresh sign-in (email code inline; Google returns to the same page with "Signed in again. Try that once more."). After two stream errors in a row the app refetches `['me']`. `mode: none` skips every sign-in screen.
 - **Role-aware UI.** Controls render from `can`, never from role names: absent permission → the control is hidden when it would only confuse (Invite, New key, Danger zone) or disabled with a reason (Approve: "Approvers of sre decide here"). The server checks everything again.
-- Org sidebar: "Members and roles" for everyone; "API keys" with `api_key:read`. Org switcher rows show "3 factories, owner"; Create organization only for platform admins.
-- `web/mock` serves `/v1/auth/config`, `/v1/me` (F. Cruz, owner of `acme`, platform admin), members, invitations, keys, and a mock `/api/auth/*` subset (any address gets code `000000`) so preview deployments and Playwright run without goald.
+- Org sidebar: "Members and roles" for everyone; "API keys" with `api_key:read` or `personal_token:read` (so every member reaches their personal tokens). Org switcher rows show "3 factories, owner"; Create organization only for platform admins.
+- `web/mock` serves `/v1/auth/config`, `/v1/me` (F. Cruz, owner of `acme`, platform admin), members, invitations, keys, personal tokens, and a mock `/api/auth/*` subset (any address gets code `000000`) so preview deployments and Playwright run without goald.
 - Phone: every new screen at 375 px; dialogs become sheets; the code input fills the width; Members becomes a list of person cards with a details sheet.
 - Accessibility: one `h1` per page; the code input is one field (`inputmode="numeric"`, `autocomplete="one-time-code"`, paste-friendly) with an associated error; errors are announced (`aria-live="polite"`); role selects have visible labels; destructive dialogs focus Cancel first.
 
@@ -828,10 +908,14 @@ Every board follows `design-system/goal/MASTER.md`, desktop 1440 and phone 375. 
 - Created dialog: "Copy your key now. You won't see it again."; the secret in a mono field with "Copy"; checkbox "I've stored it somewhere safe"; "Done" enabled after the checkbox.
 - Revoke dialog: "Revoke ci-deploy? Anything using it stops working at once." Cancel / "Revoke key".
 - States: loading; empty ("No keys yet. Create one for CI or a script."); error; re-auth.
+- **Personal tokens section** (3-12b; a designer follow-up on the Api-Keys and Api-Keys-New boards; `id="personal-tokens"`, shown with `personal_token:read`; members without `api_key:read` see only this section): h2 "Personal tokens"; "A personal token lets the CLI or a script on your machine act as you in Acme, with no more than your role allows. Tokens expire after at most 90 days."; secondary "New token". Table: Name; Token (`goal_pat_Q7mk…`); Can (scope chips); Expires; Last used; "Revoke…" (no re-auth). Empty: "No personal tokens. Use goal login for the CLI, or create a token for a headless machine."
+- New token dialog: Name; Expires in (7, 30, 60, 90 days; default 30); What it can do: Read — see the organization, see factories; Work — submit items, decide items, move and pause items, pull and clear the andon; **High impact** — edit drafts, publish versions, create factories, under the callout "Publishing a version controls the prompts agents run and the repository they push to. Give this only to a token you keep safe."; preset "CLI: work" (Read and Work; never High impact); "Create token" (needs a recent sign-in: the re-auth dialog). The dialog takes nothing from the URL: name, scopes and expiry are never prefilled from a query string or a link, so a sent link cannot set up a token for someone else's use.
+- Token created dialog: "Copy your token now. You won't see it again."; the secret with "Copy"; warning callout "Anyone with this token can act as you in Acme. Goal never asks for it."; checkbox "I've stored it somewhere safe"; "Done".
+- **Members' tokens section** (`api_key:read`): h2 "Members' tokens"; the same columns plus Owner ("J. Lindqvist"); "Revoke…" ("Revoke J. Lindqvist's token laptop? Anything using it stops working at once."); needs a recent sign-in.
 
 **Account-Menu** (`Account-Menu.dc.html`, popover from the rail avatar; bottom of the org sheet on phones)
 - Initials avatar; "F. Cruz"; `f.cruz@example.com`; "Owner of Acme" (role in the current org); tag "Platform admin" when true.
-- Items: "Edit name…" (dialog with one field), "Sign out", "Sign out everywhere…" (confirm: "Sign out of every browser and the CLI?").
+- Items: "Edit name…" (dialog with one field), "Personal tokens" (3-12b; to `/o/:org/api-keys#personal-tokens` of the current org), "Sign out", "Sign out everywhere…" (confirm: "Sign out of every browser and the CLI?"; personal tokens stay valid until revoked, and the dialog says so).
 - `mode: none` variant: "Local user · This install · Sign-in is off", no items.
 
 **Updated boards**
@@ -849,7 +933,7 @@ Every board follows `design-system/goal/MASTER.md`, desktop 1440 and phone 375. 
 | # | Threat | Control | Test |
 | --- | --- | --- | --- |
 | 1 | A member of org B reads or changes org A, or learns it exists | org from the path, resolved to its id before any check; principal resolved per org; non-members, other orgs' keys and invisible factories and items get the unknown resource's exact body; `listOrgs` only the caller's | two-org matrix (§13, golden statuses and bodies); `identitytest` `OrgsFor` |
-| 2 | A removed member, revoked key or signed-out session keeps access | per-request lookup, no cache; streams end on `goal_access`, expiry, resync | `identitytest` revocation cases; stream test |
+| 2 | A removed member, revoked key or personal token, or signed-out session keeps access | per-request lookup, no cache; streams end on `goal_access`, expiry, resync | `identitytest` revocation cases; stream test |
 | 3 | Anonymous access | 401 on every operation but `public` | matrix |
 | 4 | Misconfigured install opens up | `GOAL_AUTH=none` loopback only; non-loopback needs https and a separate gateway listener; startup self-check; never falls back to `LocalUser` | settings tests; `TestAPI_InvalidCredentialIsNeverLocalUser`; listener test (gateway listener serves only `/mcp`, main one 404s it) |
 | 5 | Session theft by script | httpOnly cookie; no token in JS, storage or URLs; `Set-Auth-Token` stripped; CSP | header test; proxy test; e2e asserts `document.cookie` lacks the session |
@@ -880,11 +964,24 @@ Every board follows `design-system/goal/MASTER.md`, desktop 1440 and phone 375. 
 | 30 | Stolen or unattended session makes a sensitive change | `fresh: true` in goald and the before-hook on member paths and device approval | matrix "stale session" column; vitest fresh-session refusals |
 | 31 | Permissions drift between goald and Better Auth | one `api/permissions.yaml` generates both; `x-goal-scope` on every operation | `TestPermissions_EveryOperationHasAKnownScope`; permgen drift check |
 | 32 | Better Auth schema drift on upgrade | `auth generate` diff against goose head; `auth migrate` never run; `validateSchema` on | `task auth:schema-check` |
-| 33 | Auth secrets or user credentials reach an agent | each process gets only its own variables; goald's `env-reserved` list holds every auth variable, `GOAL_API_KEY` and `GOAL_DATABASE_ADMIN_URL`; sessions and keys never in task env | `TestSettings_ReservedIncludesAuthVariables`; `goal up` environment test |
+| 33 | Auth secrets or user credentials reach an agent | each process gets only its own variables; goald's `env-reserved` list holds every auth variable, `GOAL_API_KEY` and `GOAL_DATABASE_ADMIN_URL`; sessions, keys and personal tokens never in task env | `TestSettings_ReservedIncludesAuthVariables`; `goal up` environment test |
 | 34 | DNS rebinding against a loopback goald | `Host` check (§5.5) | API and SPA tests with a foreign `Host` |
 | 35 | CLI token leak | OS keychain (0600 file only by opt-in); keyed by origin, sent only there, https unless loopback; `GOAL_API_KEY` never written; `logout` revokes | CLI tests |
 | 36 | Local processes and agents under `GOAL_AUTH=none` act as the local user | `none` only on loopback, never the default from 3-16, startup warning | accepted for one developer's laptop; settings tests |
 | 37 | Owner locked out | bootstrap by configured email; signed-in sessions survive an auth outage; `goal db recover-admin` and `recover-owner`; `GOAL_AUTH=none` on loopback | CLI recovery tests; `task web:e2e-auth` bootstrap; upgrade rehearsal (§14) |
+| 38 | A removed member's personal token keeps working, or comes back on re-invitation | FK to `auth.member` `ON DELETE CASCADE`; the lookup inner-joins the member | `identitytest`: remove → 401; re-invite → still 401, no row |
+| 39 | A demoted owner's token keeps the old rights | rights = scopes ∩ current roles, resolved per request | matrix column "token, owner demoted to member"; `identitytest` role change on the next call |
+| 40 | A token carries a permission it should never hold | explicit `pat` flag; permgen refuses it on fresh, platform and install permissions; the token check runs first and fails closed | `TestPermissions_RoleGrants` (the `pat` set); permgen refusal test; matrix |
+| 41 | A token passes a fresh-only operation | no `fresh` permission is `pat: true`; 403 `forbidden`, never `reauth-required` | matrix (every `fresh` operation with a token) |
+| 42 | A token approves a device code | `device:read` is not `pat: true`; Better Auth never sees the token (row 45) | matrix; proxy test |
+| 43 | A platform admin's token creates organizations or manages admins | `PlatformAdmin` never set for a token principal | matrix column "token of a platform admin" |
+| 44 | A token is used against another organization | the token names its org; any other path org is the unknown org's 404 | matrix column "token of the other org" |
+| 45 | A Goal key or token is forwarded to Better Auth | the proxy answers 401 to `Bearer goal_sk_…`/`goal_pat_…` and never forwards it | proxy table test |
+| 46 | A token reaches the agents' gateway | the gateway accepts task tokens only | gateway test with a `goal_pat_` bearer |
+| 47 | A phished device approval mints a lasting token | creation needs a fresh cookie session; any bearer credential is 403 `browser-session-required` | API test (device-flow session, key and token each refused) |
+| 48 | The secret is cached or seen twice | shown once; `Cache-Control: no-store`; only the hash stored; never logged | API test (header, body once, list has the hint only); log-capture test |
+| 49 | A link tricks someone into creating a token for an attacker | the create dialog takes nothing from the URL; the warning copy; secrets never asked for by Goal | Vitest (query string ignored); Playwright flow |
+| 50 | A leaked high-impact token publishes a definition | high-impact scopes never in a preset, warned in the dialog; default 30 days; `via: pat:<id>` in audit and item events; owner revokes without re-auth | API test (audit `via`); Vitest (preset excludes them) |
 
 ### 11.2 Secrets (rule 7)
 
@@ -913,9 +1010,9 @@ Names and emails live in `auth."user"`; emails appear in invitations, `audit_log
 
 ## 12. Observability
 
-- **goald logs:** per request `principal` (`user:<id>`, `service:<key id>` or `none`), `org_id`, `operation`, `status`, `request_id`; never emails, tokens or cookies. Startup logs the auth mode, the public URL, the self-check result and the upstream reachability (a warning, not fatal).
+- **goald logs:** per request `principal` (`user:<id>`, `service:<key id>` or `none`), `credential=pat:<id>` with a personal token, `org_id`, `operation`, `status`, `request_id`; never emails, tokens or cookies. Startup logs the auth mode, the public URL, the self-check result and the upstream reachability (a warning, not fatal).
 - **auth service logs** (JSON, stdout): event, user id, hashed subject, IP, request id (from goald), outcome; Better Auth's logger at `warn`.
-- **Metrics** (logs until OTel lands): `goal_auth_requests_total{result=ok|unauthenticated|forbidden|not_found|reauth}`, `goal_auth_proxy_requests_total{route,status}`, `goal_auth_otp_total{result=sent|suppressed|failed|locked}`, `goal_api_key_verifications_total{result}`, `goal_streams_ended_total{reason=access|expiry|resync}`.
+- **Metrics** (logs until OTel lands): `goal_auth_requests_total{result=ok|unauthenticated|forbidden|not_found|reauth}`, `goal_auth_proxy_requests_total{route,status}`, `goal_auth_otp_total{result=sent|suppressed|failed|locked}`, `goal_api_key_verifications_total{kind=key|pat,result}` (failed lookups are counted, not written to `auth_events`), `goal_streams_ended_total{reason=access|expiry|resync}`.
 - **Security log:** `auth_events`, read with `goal admin events` or `GET /v1/platform/auth-events`; org-level changes in `audit_log`.
 - **Jobs:** `goal.auth.cleanup` daily under `pg_try_advisory_lock`, logging its counts.
 
@@ -923,17 +1020,17 @@ Names and emails live in `auth."user"`; emails appear in invitations, `audit_log
 
 | What | How |
 | --- | --- |
-| Permission source | `TestPermissions_EveryOperationHasAKnownScope` (openapi ↔ yaml); permgen output committed and checked for drift; `TestPermissions_RoleGrants`: table-driven product rules ("admin cannot delete the org", "viewer cannot decide", "approver cannot publish", "member without a role cannot see the factory", "no key holds member:manage") |
-| Two-org matrix | `TestAuthorize_TwoOrgMatrix` extends A's seam test: every operationId × principals {anonymous, owner, admin, member with viewer/approver/editor on one factory, member without roles, member of the other org only, platform admin who is not a member, stale session, key of acme (scoped, restricted), key of the other org, expired key, revoked key} × both orgs. Fixed properties: anonymous 401 (but `public`), other org 404 with the unknown org's body, an invisible factory or item with the unknown one's body, no handler side effect on refusal. The member-without-roles column catches a handler that skips the resolvers. 3-2 runs it against `Authorize` directly; 3-9 runs it over HTTP with the fake and the PostgreSQL `Identity`. Every status goes to the golden file `internal/api/testdata/access.golden` so a permission change is a reviewed diff. |
-| Authentication | credential parsing table (cookie names by scheme, signed value, bearer kinds, task token refused, both present); `GOAL_AUTH`, `GOAL_PUBLIC_URL` and listener combinations refuse or start; invalid credential never becomes `LocalUser`; `Host` check; `TestSettings_ReservedIncludesAuthVariables`; `goal up`'s environment split and refusals; goald refuses to migrate without `goal_auth` |
-| Identity adapter | `identitytest` on the fake and PostgreSQL: session lookup (expired, unknown, deleted org, non-member), keys (revoked, expired, other org, `last_used_at` throttle), removal and role changes visible on the next call, ≥1 owner under two concurrent demotions, last platform admin, invitation roles applied once, transfer rules, audit entries and actors |
+| Permission source | `TestPermissions_EveryOperationHasAKnownScope` (openapi ↔ yaml); permgen output committed and checked for drift; `TestPermissions_RoleGrants`: table-driven product rules ("admin cannot delete the org", "viewer cannot decide", "approver cannot publish", "member without a role cannot see the factory", "no key holds member:manage", "the `pat` set is exactly §4.5's"); permgen refuses `pat` on a fresh, platform or install permission other than `authenticated` |
+| Two-org matrix | `TestAuthorize_TwoOrgMatrix` extends A's seam test: every operationId × principals {anonymous, owner, admin, member with viewer/approver/editor on one factory, member without roles, member of the other org only, platform admin who is not a member, stale session, key of acme (scoped, restricted), key of the other org, expired key, revoked key; from 3-12b: device-flow (bearer) session, personal token of an approver (scopes `factory:read`, `item:create`), personal token of an owner with every `pat` scope, token whose owner was demoted to member, token of a removed member, token of a platform admin, token of the other org, expired token, revoked token} × both orgs. Fixed properties: anonymous 401 (but `public`), other org 404 with the unknown org's body, an invisible factory or item with the unknown one's body, no handler side effect on refusal; for tokens: never more than the same user's session would get, 403 `forbidden` (never `reauth-required`) on every `fresh` or non-`pat` operation, nothing on platform routes, and the bearer session and every token refused on `createPersonalToken`. The member-without-roles column catches a handler that skips the resolvers. 3-2 runs it against `Authorize` directly; 3-9 runs it over HTTP with the fake and the PostgreSQL `Identity`. Every status goes to the golden file `internal/api/testdata/access.golden` so a permission change is a reviewed diff. |
+| Authentication | credential parsing table (cookie names by scheme, signed value, bearer kinds including `goal_pat_` and its malformed lengths, task token refused, both present); `GOAL_AUTH`, `GOAL_PUBLIC_URL` and listener combinations refuse or start; invalid credential never becomes `LocalUser`; `Host` check; `TestSettings_ReservedIncludesAuthVariables`; `goal up`'s environment split and refusals; goald refuses to migrate without `goal_auth` |
+| Identity adapter | `identitytest` on the fake and PostgreSQL: session lookup (expired, unknown, deleted org, non-member), keys (revoked, expired, other org, `last_used_at` throttle), personal tokens (revoked, expired, deleted org, removed member and re-invited, demotion on the next call, `last_used_at` throttle, `personal_token.refused` once a minute, owner filter on list and revoke), removal and role changes visible on the next call, ≥1 owner under two concurrent demotions, last platform admin, invitation roles applied once, transfer rules, audit entries and actors |
 | Schema guards | `TestSchema_AuthSchemaIsolation`: `goal_app` has no `USAGE` on `auth`; `goal_auth` has exactly DML on `auth.*`, nothing on `public` tables, `EXECUTE` only on the "auth" functions; every definer pins `search_path` and revokes `PUBLIC`; the RLS guard includes the new tables |
-| Proxy | `httptest` upstream: allowlist both ways, path hygiene table, header stripping and `X-Goal-Client-Ip` with and without trusted proxies, 64 KiB, timeouts, 503, `Set-Auth-Token` removed, cross-origin refusal, logs without secrets, an unknown `/api/…` path 404 (never `index.html`), not mounted under `none` |
+| Proxy | `httptest` upstream: allowlist both ways, path hygiene table, header stripping and `X-Goal-Client-Ip` with and without trusted proxies, 64 KiB, timeouts, 503, `Set-Auth-Token` removed, `Bearer goal_sk_…`/`goal_pat_…` answered 401 and never forwarded, cross-origin refusal, logs without secrets, an unknown `/api/…` path 404 (never `index.html`), not mounted under `none` |
 | Auth service (Vitest, PostgreSQL 18 from compose, fake clock via `vi.useFakeTimers` and an injected clock for Goal's queries) | codes: length, expiry at 300 s, 3 tries, hashed at rest; uniform send response and timing; caps and lockout with the notice; the sign-up gate for codes and Google (Google's token endpoint stubbed on `fetch`, as built in 3-8); account linking; invitation email match and verification; owner rules; fresh-session refusals; the stamp hook's actor reaching `audit_log`; `/update-user` field allowlist; startup refusals |
 | Session format contract | Vitest pins the cookie name, attributes (HttpOnly, SameSite=Lax, Path=/, Secure on https), the value `<32 alnum>.<signature>`, `auth.session.token` = the part before the dot, and the device token = the raw 32 characters. A Go integration test resolves a session row of that shape. The Playwright flow below runs both together. |
-| Stream | per-subscriber filter; ends on access notices for its session, user, key and org, at expiry, and on resync |
-| CLI | stub API: login polling states, keychain fake, `--store file` mode 0600, origin scoping, http refusal off loopback, `GOAL_API_KEY` precedence, exit 77; `recover-admin` and `recover-owner` against PostgreSQL (existing and new user, audit, sign-in afterwards) |
-| Web | Vitest: `next` validation, 401 and `reauth-required` handling, `can`-driven rendering. Playwright on the mock at 375/768/1440 with axe: sign in by code, re-auth then retry, accept an invitation, approve a device code, create and revoke a key, change a factory role, viewer read-only Definition. One Playwright flow against real goald, auth and Mailpit (`task web:e2e-auth`, tagged): bootstrap sign-in, code from Mailpit's API, the API answers, sign-out ends access. |
+| Stream | per-subscriber filter; ends on access notices for its session, user, key, personal token and org, at expiry, and on resync |
+| CLI | stub API: login polling states, keychain fake, `--store file` mode 0600, origin scoping, http refusal off loopback, `GOAL_API_KEY` precedence and both prefixes, `login --token` from stdin (argv refused, `/v1/me` checked, stored by origin), `whoami` with a token, exit 77; `recover-admin` and `recover-owner` against PostgreSQL (existing and new user, audit, sign-in afterwards) |
+| Web | Vitest: `next` validation, 401 and `reauth-required` handling, `can`-driven rendering. Playwright on the mock at 375/768/1440 with axe: sign in by code, re-auth then retry, accept an invitation, approve a device code, create and revoke a key, create a personal token (no prefill from the URL, warning shown) and revoke it, change a factory role, viewer read-only Definition. One Playwright flow against real goald, auth and Mailpit (`task web:e2e-auth`, tagged): bootstrap sign-in, code from Mailpit's API, the API answers, sign-out ends access. |
 
 No tests for generated code, the Better Auth library itself or wiring.
 
@@ -941,8 +1038,8 @@ No tests for generated code, the Better Auth library itself or wiring.
 
 The default lives in goald (`cmd/goald/settings.go`): a goald started by `goal up`, `task goald` or by hand behaves the same.
 
-1. **3-1 to 3-15 keep `GOAL_AUTH=none` as the default**, so a running install changes nothing it does. From 3-4, goald's startup migrations need the role `goal_auth`: `goal up` creates it (`goal db init`); a goald started otherwise refuses with "run goal db init" and applies nothing. `00040–00046` add the schema, backfill `auth.organization` for every organization and add no members. `goal up` starts neither Mailpit nor the auth service under `none`. Trying sign-in early means setting `GOAL_AUTH=session` explicitly.
-2. **3-16 flips the default to `session`**, once web sign-in (3-10), API keys for CI (3-12), `goal login` (3-13) and recovery (3-15) exist. Upgrade: `pg_dump`; add `BETTER_AUTH_SECRET` (`openssl rand -hex 32`) and `GOAL_BOOTSTRAP_OWNER_EMAIL` to `.env` (`.env.example` lists every new variable); `goal up`, which refuses with the variable's name, and the `GOAL_AUTH=none` way back, when either is missing.
+1. **3-1 to 3-15 keep `GOAL_AUTH=none` as the default**, so a running install changes nothing it does. From 3-4, goald's startup migrations need the role `goal_auth`: `goal up` creates it (`goal db init`); a goald started otherwise refuses with "run goal db init" and applies nothing. `00040–00047` add the schema, backfill `auth.organization` for every organization and add no members. `goal up` starts neither Mailpit nor the auth service under `none`. Trying sign-in early means setting `GOAL_AUTH=session` explicitly.
+2. **3-16 flips the default to `session`**, once web sign-in (3-10), API keys for CI (3-12), personal tokens (3-12b), `goal login` (3-13) and recovery (3-15) exist. Upgrade: `pg_dump`; add `BETTER_AUTH_SECRET` (`openssl rand -hex 32`) and `GOAL_BOOTSTRAP_OWNER_EMAIL` to `.env` (`.env.example` lists every new variable); `goal up`, which refuses with the variable's name, and the `GOAL_AUTH=none` way back, when either is missing.
 3. **The bootstrap owner signs in** at `GOAL_PUBLIC_URL` with a code from Mailpit (`http://127.0.0.1:8025`) or Google. That user becomes a platform admin and owner of every existing organization, `default` included, then runs `goal login` for the CLI.
 4. **Earlier rows stay as they are.** `user:local` in `*_by` columns, events and `audit_log` is shown as "Local user (before sign-in)"; nothing is rewritten.
 5. **The owner invites people** from Members; invitees sign in and join.
@@ -953,7 +1050,7 @@ Forward-only migrations; back up first (`pg_dump`). Rolling back the binary afte
 
 ## 15. Work breakdown
 
-Each row is one PR on `goal/3-<n>-<slug>`, passing `task check`, plus `task migrate-check` and `task test-integration` when it touches SQL, adapters or `auth/`. Skills (AGENTS.md): the Go skills on every Go PR; Identity skills (better-auth-best-practices, better-auth-security-best-practices, organization-best-practices, create-auth as reference, security-and-hardening, golang-security) on 3-2 to 3-16; PostgreSQL skills on PRs with migrations; `golang-cli` on CLI PRs; UI skills on web PRs; `openapi-spec-generation` and `api-design-principles` on PRs that change `api/openapi.yaml`; monorepo skills on 3-1 and 3-4.
+Each row is one PR on `goal/3-<n>-<slug>`, passing `task check`, plus `task migrate-check` and `task test-integration` when it touches SQL, adapters or `auth/`. Skills (AGENTS.md): the Go skills on every Go PR; Identity skills (better-auth-best-practices, better-auth-security-best-practices, organization-best-practices, create-auth as reference, security-and-hardening, golang-security) on 3-2 to 3-16 and 3-12b; PostgreSQL skills on PRs with migrations; `golang-cli` on CLI PRs; UI skills on web PRs; `openapi-spec-generation` and `api-design-principles` on PRs that change `api/openapi.yaml`; monorepo skills on 3-1 and 3-4.
 
 | # | Pull request | Acceptance criteria | Verified by |
 | --- | --- | --- | --- |
@@ -969,12 +1066,13 @@ Each row is one PR on `goal/3-<n>-<slug>`, passing `task check`, plus `task migr
 | 3-10 | **Web sign-in:** Sign-In, Sign-In-Code, Account-Menu, re-auth dialog, 401 handling, session keep-alive, mock auth | Playwright sign-in flows on the mock; the real e2e flow passes under `GOAL_AUTH=session` | Playwright, `task web:e2e-auth` |
 | 3-11 | **Members:** `Access` (postgres, fake, `identitytest` cases), `listMembers`, `listInvitations`, factory role endpoints, `transferOwnership`; invitation with factory roles; Members, Invite-Accept, Org-Switcher roles, Transfer ownership | §10.2 states; owner rules; factory roles applied on accept; transfer atomic | API tests, Vitest, Playwright |
 | 3-12 | **API keys (00046):** tables, `goal_api_key`, create/list/revoke, retire revokes keys, Api-Keys screen, `GOAL_API_KEY` in the CLI, `goal key …` | §4.3 rules; secret once; revocation immediate; deleted org's keys fail | `identitytest`, API tests, Playwright |
+| 3-12b | **Personal tokens (00047):** `personal_tokens`, `goal_personal_token`, retire and `goal_access` triggers; the `pat` flag in `api/permissions.yaml` and permgen (refusing it on fresh, platform and install permissions), `personal_token:read`/`manage`; `Principal.Token`, `Session.Bearer`, `Identity.PersonalToken`, the `Access` token methods; the `goal_pat_` branch of `credential.go`; the token check first in `Authorize`; the five endpoints of §8.9 and `Me.token`; `via: pat:<id>` in audit and item events; the proxy's 401 on Goal bearers; streams ending on token notices; the Personal tokens and Members' tokens sections and the Account-Menu link; `GOAL_API_KEY` with both prefixes, `goal login --token` (stdin), `whoami` | §4.5 rules: rights never exceed scopes ∩ current roles; removal, demotion, revocation, expiry and org deletion apply on the next request and end streams; created only with a fresh cookie session (403 `browser-session-required` otherwise), secret once with `no-store`; owner revokes without re-auth, admins list and revoke members' tokens; never fresh, never platform admin, 404 in another org, refused at `/api/auth` and the gateway; §11.1 rows 38–50 each pass their test | `identitytest`, matrix and golden file with the token columns, permgen and `TestPermissions_RoleGrants`, proxy, gateway, stream and CLI tests, Vitest, Playwright. Skills: the Go, PostgreSQL, Identity, UI and `golang-cli` skills; `openapi-spec-generation`, `api-design-principles` |
 | 3-13 | **CLI login:** `goal login/logout/whoami`, device flow, keychain and file store, Device-Approve page, `getDeviceRequest` | §9 rules; approve needs the typed code and a fresh session | CLI tests, Vitest, Playwright |
 | 3-14 | **Role-aware screens:** D's Who approves and read-only mode, E's controls and andon, inbox and attention by permission | screens follow `can`; the server refuses anyway | Vitest, Playwright |
 | 3-15 | **Platform admins and recovery:** platform endpoints, `goal admin …`, `goal db recover-admin/recover-owner`, Create organization gated, `Platform.CleanUpAuth` and the cleanup job | last admin protected; recovery works with goald stopped, creates a missing user, and is audited | API tests, CLI recovery tests (§13) |
 | 3-16 | **Sign-in by default, docs and hardening:** `GOAL_AUTH` defaults to `session`; `.env.example`; architecture.md identity section as built; threat model rows checked against tests; `pnpm audit`; patch SLA in `auth/README.md` | §14's upgrade on a copy of a 2.2 database ends with the owner signed in, every org owned and `user:local` rows intact; every §11.1 row names a passing test | upgrade rehearsal, `task web:e2e-auth`, review |
 
-Migration numbers rise with PR order (3-4 → 00040–00041, 3-5 → 00042, 3-6 → 00043, 3-8 → 00044, 3-9 → 00045, 3-12 → 00046), and no PR needs a later one. 3-1, 3-2, 3-3 and 3-7 have no migration and can start now (3-7 tests against an `httptest` upstream). A PR that lands out of this order renumbers its migration before merging.
+Migration numbers rise with PR order (3-4 → 00040–00041, 3-5 → 00042, 3-6 → 00043, 3-8 → 00044, 3-9 → 00045, 3-12 → 00046, 3-12b → 00047), and no PR needs a later one. 3-1, 3-2, 3-3 and 3-7 have no migration and can start now (3-7 tests against an `httptest` upstream). A PR that lands out of this order renumbers its migration before merging.
 
 ## 16. Cross-spec contracts
 
@@ -986,6 +1084,7 @@ Migration numbers rise with PR order (3-4 → 00040–00041, 3-5 → 00042, 3-6 
 - Platform admins as the platform operator (phase 4's `goal catalog push` and any platform role).
 - The signed-in user as `requested_by` for phase 4's OAuth flows; the principal in `ctx` for every handler.
 - `goal_access` notices and stream termination; `auth_events` for install-level security events.
+- Personal tokens (3-12b): a person's credential for one organization, `/v1` only; phase 5 decides whether `/v1/mcp` accepts them (spec 5, open question 6).
 - Reserved for phase 5: the public path `/v1/mcp`, `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource` (added to the proxy allowlist then).
 
 **Phase 3 needs**
@@ -1001,3 +1100,4 @@ None. Settled by the owner (2026-10-24):
 2. **Editor includes approver: kept.** One role per factory; no separation of duties in phase 3.
 3. **Andon: kept.** Approvers and editors pull and clear it; viewers do not.
 4. **Vercel proxy ranges and SSE through rewrites: deferred** to when the hosted deployment is scheduled (§5.5).
+5. **Personal tokens: in phase 3 as PR 3-12b** (owner's ask, settled with the architecture and security reviews): own table and `goal_pat_` prefix, explicit `pat` flag, the token check first and fail closed, browser-only creation, `/v1` only (§4.5). Later, not blocking: an owner switch to turn personal tokens off for an organization; email on creation and before expiry (needs goald or the auth service to mail); `last_used_ip`; a checksum suffix for secret scanners; "Sign out everywhere" offering to revoke tokens; refusing `goal_(sk|pat)_` strings in item text and definition files. Accepted for phase 3: no rate limiting of goald's API (§2).
