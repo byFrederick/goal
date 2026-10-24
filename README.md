@@ -71,7 +71,8 @@ People sign in (`GOAL_AUTH=session`, the default): by a six-digit code mailed to
 # .env: BETTER_AUTH_SECRET (openssl rand -hex 32, not GOAL_GATEWAY_KEY),
 #       GOAL_BOOTSTRAP_OWNER_EMAIL (the first owner's address) and database passwords of your own
 #       (GOAL_PG_*_PASSWORD; goal up refuses the published dev ones); .env.example lists every sign-in variable
-task up                    # also builds auth/ and starts it and Mailpit (codes at http://127.0.0.1:8025)
+task up                    # also builds auth/ and starts it and Mailpit (codes at http://127.0.0.1:8025,
+                           # user goal, password in ~/.config/goal/mailpit-ui-auth, which goal up generates)
 open http://127.0.0.1:8080 # sign in as the bootstrap owner with the code Mailpit received
 bin/goal login             # the CLI: approve the code it shows in the browser; kept in the OS keychain
 bin/goal whoami

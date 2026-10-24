@@ -440,7 +440,7 @@ func (s *e2eStack) codeFromMailpit(t *testing.T, since time.Time) string {
 			} `json:"messages"`
 		}
 
-		res, err := http.Get(e2eMailpit + "/api/v1/search?query=" + url.QueryEscape(`to:"`+s.owner+`" subject:"sign-in code"`)) //nolint:noctx // a bounded poll
+		res, err := mailpitGet(t, "/api/v1/search?query="+url.QueryEscape(`to:"`+s.owner+`" subject:"sign-in code"`))
 		if err == nil && json.NewDecoder(res.Body).Decode(&search) == nil {
 			for _, m := range search.Messages {
 				if m.Created.After(since) {
@@ -464,7 +464,7 @@ func (s *e2eStack) codeFromMailpit(t *testing.T, since time.Time) string {
 func (s *e2eStack) codeOf(t *testing.T, id string) string {
 	t.Helper()
 
-	res, err := http.Get(e2eMailpit + "/api/v1/message/" + url.PathEscape(id)) //nolint:noctx // Mailpit's API on loopback
+	res, err := mailpitGet(t, "/api/v1/message/"+url.PathEscape(id))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -536,7 +536,8 @@ func (s *e2eStack) webFlow(t *testing.T) {
 	cmd := osexec.CommandContext(t.Context(), "pnpm", "exec", "playwright", "test", "--config", "playwright.auth.config.ts") //nolint:gosec // fixed arguments
 	cmd.Dir = "../../web"
 
-	cmd.Env = append(os.Environ(), "GOAL_E2E_AUTH_URL="+e2ePublicURL, "GOAL_MAILPIT_URL="+e2eMailpit, "GOAL_BOOTSTRAP_OWNER_EMAIL="+s.owner)
+	cmd.Env = append(os.Environ(), "GOAL_E2E_AUTH_URL="+e2ePublicURL, "GOAL_MAILPIT_URL="+e2eMailpit, "GOAL_BOOTSTRAP_OWNER_EMAIL="+s.owner,
+		"GOAL_MAILPIT_AUTH="+mailpitCredentials(t))
 
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("task web:e2e-auth against the stack: %v\n%s", err, out)
@@ -601,16 +602,57 @@ func randomSuffix(t *testing.T) string {
 	return hex.EncodeToString(b)
 }
 
-// startMailpit starts compose.yaml's Mailpit, alone, from the repository root.
+// startMailpit starts compose.yaml's Mailpit, alone, from the repository root, unless it runs
+// already: the test never restarts the install's (task e2e:auth creates its password file).
 func startMailpit(t *testing.T) {
 	t.Helper()
 
-	cmd := osexec.CommandContext(t.Context(), "docker", "compose", "up", "--detach", "--wait", "mailpit") //nolint:gosec // fixed arguments
+	cmd := osexec.CommandContext(t.Context(), "docker", "compose", "up", "--detach", "--wait", "--no-recreate", "mailpit") //nolint:gosec // fixed arguments
 	cmd.Dir = "../.."
 
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("docker compose up mailpit: %v\n%s", err, out)
 	}
+}
+
+// mailpitCredentials is "user:password" from the file goal up (or task e2e:auth) wrote for
+// Mailpit's UI and API, $XDG_CONFIG_HOME/goal/mailpit-ui-auth (default ~/.config/goal/...); empty
+// when there is none, as for a Mailpit started before it needed one.
+func mailpitCredentials(t *testing.T) string {
+	t.Helper()
+
+	dir := os.Getenv("XDG_CONFIG_HOME")
+	if dir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		dir = filepath.Join(home, ".config")
+	}
+
+	raw, err := os.ReadFile(filepath.Join(dir, "goal", "mailpit-ui-auth")) //nolint:gosec // the user's own config dir
+	if err != nil {
+		return ""
+	}
+
+	return strings.TrimSpace(string(raw))
+}
+
+// mailpitGet GETs path of Mailpit's API with its credentials.
+func mailpitGet(t *testing.T, path string) (*http.Response, error) {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, e2eMailpit+path, http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+
+	if user, password, ok := strings.Cut(mailpitCredentials(t), ":"); ok {
+		req.SetBasicAuth(user, password)
+	}
+
+	return http.DefaultClient.Do(req)
 }
 
 // e2eDatabase creates database name in compose's PostgreSQL (GOAL_TEST_DATABASE_URL, its

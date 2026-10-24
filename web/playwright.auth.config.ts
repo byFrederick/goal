@@ -2,7 +2,8 @@ import { defineConfig } from '@playwright/test';
 
 // `task web:e2e-auth` (spec 3 §13): the sign-in flow against a real goald under GOAL_AUTH=session,
 // its identity service and Mailpit, not the mock. Start them first (GOAL_AUTH=session goal up);
-// GOAL_E2E_AUTH_URL names goald (default the local one), GOAL_MAILPIT_URL Mailpit's API. Nothing
+// GOAL_E2E_AUTH_URL names goald (default the local one), GOAL_MAILPIT_URL Mailpit's API and
+// GOAL_MAILPIT_AUTH its user:password (~/.config/goal/mailpit-ui-auth, which goal up writes). Nothing
 // is started or stopped here.
 process.env.GOAL_E2E_RUN ??= `auth-${new Date().toISOString().replace(/[:.]/g, '-')}-${process.pid}`;
 

@@ -4,6 +4,8 @@ import (
 	"io"
 	"maps"
 	"os"
+	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -204,5 +206,41 @@ func TestUp_SignInRefusesPublishedDatabasePasswords(t *testing.T) {
 		if c.name != "nothing set" && err != nil && strings.Contains(err.Error(), "ALTER ROLE") {
 			t.Errorf("%s: asks to change the superuser, whose password is its own", c.name)
 		}
+	}
+}
+
+// Review 3, H1: Mailpit's UI and API, where sign-in codes arrive, need a password; goal up
+// generates it once, readable only by the user, beside the CLI's config, and keeps it after.
+func TestUp_MailpitAuthIsGeneratedOnceAndPrivate(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	getenv := func(n string) string { return map[string]string{"XDG_CONFIG_HOME": dir}[n] }
+
+	path, err := mailpitAuth(getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if want := filepath.Join(dir, "goal", "mailpit-ui-auth"); path != want {
+		t.Errorf("path = %s, want %s (compose.yaml mounts it from there)", path, want)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("password file %v, %v; want mode 0600", info, err)
+	}
+
+	first, _ := os.ReadFile(path) //nolint:gosec // the test's file
+	if !regexp.MustCompile(`^goal:[0-9a-f]{48}\n$`).Match(first) {
+		t.Errorf("password file holds %q; want goal:<48 hex digits>", first)
+	}
+
+	if _, err := mailpitAuth(getenv); err != nil {
+		t.Fatal(err)
+	}
+
+	if again, _ := os.ReadFile(path); string(again) != string(first) { //nolint:gosec // the test's file
+		t.Error("a second goal up replaced Mailpit's password")
 	}
 }

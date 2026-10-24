@@ -37,12 +37,23 @@ services:
       start_period: 10s
 
   # The development inbox (spec 3 §5.6): the auth service sends sign-in codes and invitations to
-  # its SMTP port (GOAL_SMTP_URL's default) and they are read at http://127.0.0.1:8025. Never part
-  # of a cloud configuration. Messages live in memory and are gone when it stops.
+  # its SMTP port (GOAL_SMTP_URL's default) and they are read at http://127.0.0.1:8025, as user
+  # goal with the password goal up generates into ~/.config/goal/mailpit-ui-auth ($XDG_CONFIG_HOME
+  # when set): a sign-in code there takes over the account it was sent to. Without that file
+  # Mailpit does not start. Never part of a cloud configuration. Messages live in memory and are
+  # gone when it stops.
   mailpit:
     image: axllent/mailpit:v1.31.4
     environment:
       MP_MAX_MESSAGES: 500
+      MP_UI_AUTH_FILE: /run/goal/mailpit-ui-auth
+    volumes:
+      - type: bind
+        source: ${XDG_CONFIG_HOME:-${HOME}/.config}/goal/mailpit-ui-auth
+        target: /run/goal/mailpit-ui-auth
+        read_only: true
+        bind:
+          create_host_path: false
     ports:
       - "127.0.0.1:1025:1025" # SMTP
       - "127.0.0.1:8025:8025" # inbox UI and API

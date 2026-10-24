@@ -1,12 +1,25 @@
 // The SMTP adapter against Mailpit from compose.yaml (task test-integration starts it), the inbox
 // the laptop setup sends to. Nothing here reaches a real mail server.
 import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { invitationMail } from './messages.js';
 import { SMTPMailer } from './smtp.js';
 
 const smtpURL = process.env.GOAL_TEST_SMTP_URL ?? 'smtp://127.0.0.1:1025';
 const inboxURL = process.env.GOAL_TEST_MAILPIT_URL ?? 'http://127.0.0.1:8025';
+
+/** Mailpit's API takes the credentials goal up writes (user:password), when there are any. */
+function inboxHeaders(): Record<string, string> {
+  const file = join(process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'), 'goal', 'mailpit-ui-auth');
+  try {
+    return { authorization: `Basic ${btoa(readFileSync(file, 'utf8').trim())}` };
+  } catch {
+    return {};
+  }
+}
 
 const mailer = new SMTPMailer(smtpURL, 'Goal <goal@localhost>');
 afterAll(() => mailer.close());
@@ -19,7 +32,9 @@ interface Summary {
 }
 
 async function inbox(to: string): Promise<Summary[]> {
-  const res = await fetch(`${inboxURL}/api/v1/search?query=${encodeURIComponent(`to:"${to}"`)}`);
+  const res = await fetch(`${inboxURL}/api/v1/search?query=${encodeURIComponent(`to:"${to}"`)}`, {
+    headers: inboxHeaders(),
+  });
   expect(res.status).toBe(200);
   return ((await res.json()) as { messages: Summary[] }).messages;
 }
@@ -48,7 +63,9 @@ describe('SMTPMailer', () => {
     expect(summary?.From).toEqual({ Address: 'goal@localhost', Name: 'Goal' });
     expect(summary?.Subject).toBe('M. Okafor invited you to Acme on Goal');
 
-    const message = (await (await fetch(`${inboxURL}/api/v1/message/${summary?.ID}`)).json()) as {
+    const message = (await (
+      await fetch(`${inboxURL}/api/v1/message/${summary?.ID}`, { headers: inboxHeaders() })
+    ).json()) as {
       Text: string;
       HTML: string;
     };

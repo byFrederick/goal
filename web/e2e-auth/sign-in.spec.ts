@@ -5,6 +5,9 @@
 import { type APIRequestContext, expect, test } from '@playwright/test';
 
 const mailpit = process.env.GOAL_MAILPIT_URL ?? 'http://127.0.0.1:8025';
+// Mailpit's API needs the user:password goal up generated (GOAL_MAILPIT_AUTH; the Go e2e passes it).
+const mailpitAuth = process.env.GOAL_MAILPIT_AUTH;
+const mailpitHeaders = mailpitAuth ? { authorization: `Basic ${btoa(mailpitAuth)}` } : {};
 const email = process.env.GOAL_BOOTSTRAP_OWNER_EMAIL;
 
 interface MailpitSearch {
@@ -17,11 +20,16 @@ async function codeFromMailpit(request: APIRequestContext, to: string, since: nu
   await expect
     .poll(
       async () => {
-        const search = await request.get(`${mailpit}/api/v1/search`, { params: { query: `to:"${to}"`, limit: 5 } });
+        const search = await request.get(`${mailpit}/api/v1/search`, {
+          params: { query: `to:"${to}"`, limit: 5 },
+          headers: mailpitHeaders,
+        });
         const { messages } = (await search.json()) as MailpitSearch;
         const latest = messages.find((m) => Date.parse(m.Created) >= since);
         if (!latest) return '';
-        const message = (await (await request.get(`${mailpit}/api/v1/message/${latest.ID}`)).json()) as {
+        const message = (await (
+          await request.get(`${mailpit}/api/v1/message/${latest.ID}`, { headers: mailpitHeaders })
+        ).json()) as {
           Text: string;
         };
         code = message.Text.match(/\b(\d{6})\b/)?.[1] ?? '';

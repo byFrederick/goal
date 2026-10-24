@@ -149,7 +149,7 @@ func invitedBy(t *testing.T, email, invitation string) {
 			} `json:"messages"`
 		}
 
-		res, err := http.Get(e2eMailpit + "/api/v1/search?query=" + query) //nolint:noctx // a bounded poll
+		res, err := mailpitGet(t, "/api/v1/search?query="+query)
 		if err == nil && json.NewDecoder(res.Body).Decode(&search) == nil && len(search.Messages) > 0 {
 			_ = res.Body.Close()
 
@@ -174,7 +174,7 @@ func invitedBy(t *testing.T, email, invitation string) {
 func mailText(t *testing.T, id string) string {
 	t.Helper()
 
-	res, err := http.Get(e2eMailpit + "/api/v1/message/" + url.PathEscape(id)) //nolint:noctx // Mailpit's API on loopback
+	res, err := mailpitGet(t, "/api/v1/message/"+url.PathEscape(id))
 	if err != nil {
 		t.Fatal(err)
 	}

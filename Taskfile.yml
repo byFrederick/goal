@@ -88,9 +88,10 @@ tasks:
     # The tests connect as compose's superuser and switch to goal_owner and goal_app per
     # connection (internal/adapters/postgres), so they never touch the roles' passwords.
     desc: Integration tests against PostgreSQL 18, RustFS and Mailpit from compose.yaml (Go, and the auth service's Vitest)
-    deps: [worker:install]
+    deps: [worker:install, mailpit:auth]
     cmds:
-      - docker compose up -d --wait postgres rustfs mailpit
+      # --no-recreate: the tests use the services as they run, never restarting the install's.
+      - docker compose up -d --wait --no-recreate postgres rustfs mailpit
       # The test databases a killed run left behind: goal_test_* created over an hour ago, so never
       # one a run in progress still uses, and never the install's own database.
       - |
@@ -107,6 +108,17 @@ tasks:
       GOAL_TEST_S3_ENDPOINT: http://127.0.0.1:9000
       GOAL_TEST_SMTP_URL: smtp://127.0.0.1:1025
       GOAL_TEST_MAILPIT_URL: http://127.0.0.1:8025
+
+  mailpit:auth:
+    internal: true
+    desc: Mailpit's password file, which compose.yaml mounts and goal up also creates (user goal, a random password, mode 0600)
+    cmds:
+      - |
+        f="${XDG_CONFIG_HOME:-$HOME/.config}/goal/mailpit-ui-auth"
+        if [ ! -s "$f" ]; then
+          mkdir -p "$(dirname "$f")"
+          touch "$f" && chmod 600 "$f" && printf 'goal:%s\n' "$(openssl rand -hex 24)" > "$f"
+        fi
 
   lint:
     desc: golangci-lint v2 with the repo's rules (.golangci.yml)
@@ -264,7 +276,7 @@ tasks:
       owner signs in with the code Mailpit received, then WEB=1 also runs task web:e2e-auth's
       Playwright flow against it. Never touches the install's goald, database or bucket; needs
       goal db init (the roles) and Docker. Not part of task check
-    deps: [build, auth:build]
+    deps: [build, auth:build, mailpit:auth]
     cmds:
       - go test -tags e2e -count=1 -run E2E -v ./cmd/goald
     env:
@@ -274,7 +286,7 @@ tasks:
   web:e2e-auth:
     desc: >-
       Playwright sign-in against a real goald under GOAL_AUTH=session, its identity service and
-      Mailpit (start them first; GOAL_E2E_AUTH_URL, GOAL_MAILPIT_URL, GOAL_BOOTSTRAP_OWNER_EMAIL).
+      Mailpit (start them first; GOAL_E2E_AUTH_URL, GOAL_MAILPIT_URL, GOAL_MAILPIT_AUTH (user:password), GOAL_BOOTSTRAP_OWNER_EMAIL).
       Not part of task check: it needs the running stack
     deps: [web:install]
     dir: web
@@ -312,7 +324,7 @@ tasks:
 
   auth:dev:
     desc: Run the auth service from auth/src, rebuilt and restarted on change, with only its own variables from .env, mailing to Mailpit (needs goal db init and BETTER_AUTH_SECRET)
-    deps: [auth:build]
+    deps: [auth:build, mailpit:auth]
     dir: auth
     cmds:
       - docker compose up -d --wait mailpit

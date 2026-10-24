@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/subtle"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
 	"os/exec"
@@ -38,8 +41,11 @@ const (
 	gatewayKeyEnv = "GOAL_GATEWAY_KEY"
 	// authServer is the auth service's build (task auth:build), from the repository root.
 	authServer = "auth/dist/server.js"
-	// mailpitInbox is compose.yaml's Mailpit, where sign-in codes arrive locally.
-	mailpitInbox = "http://127.0.0.1:8025"
+	// mailpitInbox is compose.yaml's Mailpit, where sign-in codes arrive locally; its UI and API
+	// take mailpitUser and the password in mailpitAuthName, beside the CLI's config.
+	mailpitInbox    = "http://127.0.0.1:8025"
+	mailpitUser     = "goal"
+	mailpitAuthName = "mailpit-ui-auth"
 )
 
 // authVariables are the auth service's own variables, and the only ones it is started with: the
@@ -106,13 +112,18 @@ func up(ctx context.Context, out *printer, getenv func(string) string, args []st
 	publicURL := publicURLOf(getenv)
 
 	if signIn {
+		inbox, err := mailpitAuth(getenv)
+		if err != nil {
+			return err
+		}
+
 		stop, err := startSignIn(ctx, out, authEnv(environ, publicURL))
 		if err != nil {
 			return err
 		}
 		defer stop()
 
-		out.printf("sign in at %s (codes arrive in Mailpit, %s)\n", publicURL, mailpitInbox)
+		out.printf("sign in at %s (codes arrive in Mailpit, %s: user %s, password in %s)\n", publicURL, mailpitInbox, mailpitUser, inbox)
 	}
 
 	return runGoald(ctx, out, bin, goaldEnv(environ, getenv, signIn, publicURL))
@@ -218,6 +229,45 @@ func sessionMode(getenv func(string) string) string {
 	}
 
 	return "GOAL_AUTH=session"
+}
+
+// mailpitAuth makes sure Mailpit's password file exists (compose.yaml mounts it; Mailpit does
+// not start without it): mailpitUser and a random password, mode 0600, beside the CLI's config
+// ($XDG_CONFIG_HOME/goal, default ~/.config/goal). An existing file is kept. It returns its path.
+func mailpitAuth(getenv func(string) string) (string, error) {
+	config, err := configPath(getenv)
+	if err != nil {
+		return "", err
+	}
+
+	path := filepath.Join(filepath.Dir(config), mailpitAuthName)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return "", fmt.Errorf("mailpit password file: %w", err)
+	}
+
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // the user's own config dir
+	if errors.Is(err, fs.ErrExist) {
+		return path, nil
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("mailpit password file: %w", err)
+	}
+
+	secret := make([]byte, 24)
+	_, _ = rand.Read(secret)
+
+	_, err = fmt.Fprintf(f, "%s:%s\n", mailpitUser, hex.EncodeToString(secret))
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+
+	if err != nil {
+		_ = os.Remove(path)
+		return "", fmt.Errorf("mailpit password file: %w", err)
+	}
+
+	return path, nil
 }
 
 // startSignIn starts what sign-in needs beside goald: Mailpit and the auth service with env. It
