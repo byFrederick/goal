@@ -5,6 +5,9 @@ terraform/backend.hcl
 terraform/terraform.tfvars
 .env
 /bin/
+# binaries built with a plain `go build ./cmd/goal` at the repo root
+/goal
+/goald
 node_modules/
 dist/
 .DS_Store
