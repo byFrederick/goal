@@ -189,6 +189,9 @@ importers:
       kysely:
         specifier: 0.29.7
         version: 0.29.7
+      nodemailer:
+        specifier: 10.1.7
+        version: 10.1.7
       pg:
         specifier: 8.23.1
         version: 8.23.1
@@ -2968,6 +2971,10 @@ packages:
   node-releases@2.0.60:
     resolution: {integrity: sha512-OmO8+GM1JUZqXET720VrJCwkjUCXmCMQm0Z3UDDRbfNLHS4NEAvY60j5jiFv0tkKw2PNNlqOLhahVmwJIOLDIQ==}
     engines: {node: '>=18'}
+
+  nodemailer@10.1.7:
+    resolution: {integrity: sha512-OQa6FDln5fLttmqSbjDiRYvFDOFNrBqfiOwHPlEbURil3b+vPB1v8xpi+Sp46drzNDlsTnNsS502vthmz56r4w==}
+    engines: {node: '>=20.0.0'}
 
   object-assign@4.1.1:
     resolution: {integrity: sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==}
@@ -6291,6 +6298,8 @@ snapshots:
       content-type: 2.1.0
 
   node-releases@2.0.60: {}
+
+  nodemailer@10.1.7: {}
 
   object-assign@4.1.1: {}
 

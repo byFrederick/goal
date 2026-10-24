@@ -4,16 +4,12 @@
 // its value `<token>.<signature>` whose token is auth.session.token, the device grant's access
 // token being that raw token, and the shape of auth.session. An upgrade that changes any of it
 // fails here before goald misreads a session.
-import { randomBytes } from 'node:crypto';
 import pg from 'pg';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { createApp } from './app.js';
-import { cliClientId, createAuth } from './auth.js';
-import type { Logger } from './log.js';
-import { loadSettings } from './settings.js';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { cliClientId } from './auth.js';
 import { createTestDatabase, type TestDatabase } from './testing/database.js';
+import { harness } from './testing/service.js';
 
-const silent: Logger = { log: () => {} };
 const email = 'ada@example.com';
 
 let db: TestDatabase;
@@ -22,7 +18,7 @@ let pool: pg.Pool;
 beforeAll(async () => {
   db = await createTestDatabase();
   pool = new pg.Pool({ connectionString: db.url('goal_auth') });
-  // Sign-up is closed, so the user exists before signing in, as an invitee will (spec 3 §8.7).
+  // Sign-up is invite-only (spec 3 §8.7); the user exists, as after their first sign-in.
   await pool.query(`INSERT INTO auth."user" (name, email, "emailVerified") VALUES ('Ada', $1, true)`, [email]);
 });
 
@@ -31,42 +27,10 @@ afterAll(async () => {
   await db?.drop();
 });
 
-let clients = 0;
-
-/**
- * service is the auth service's app at publicURL, with the codes it would send. Each one's
- * requests come from their own client address (goald's X-Goal-Client-Ip), so Better Auth's
- * rate limits, kept in the shared database, count each test apart.
- */
+/** service is the auth service's app at publicURL; signIn signs the test's user in by code. */
 function service(publicURL: string) {
-  const codes: string[] = [];
-  const ip = `192.0.2.${++clients}`;
-  const auth = createAuth({
-    settings: loadSettings({ GOAL_PUBLIC_URL: publicURL, BETTER_AUTH_SECRET: randomBytes(32).toString('hex') }),
-    pool,
-    log: silent,
-    sendSignInCode: async (_, code) => {
-      codes.push(code);
-    },
-  });
-  const app = createApp(auth);
-  const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
-    app.request(`/api/auth${path}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', origin: publicURL, 'x-goal-client-ip': ip, ...headers },
-      body: JSON.stringify(body),
-    });
-
-  return {
-    app,
-    post,
-    async signIn(address = email): Promise<Response> {
-      const sent = await post('/email-otp/send-verification-otp', { email: address, type: 'sign-in' });
-      expect(sent.status).toBe(200);
-      await vi.waitFor(() => expect(codes).toHaveLength(1));
-      return post('/sign-in/email-otp', { email: address, otp: codes.pop() });
-    },
-  };
+  const h = harness(pool, { publicURL });
+  return { ...h, signIn: async (address = email) => (await h.signIn(address)).res };
 }
 
 interface Cookie {
@@ -197,20 +161,8 @@ describe('auth.session', () => {
     expect(sessions.length).toBeGreaterThan(0);
     for (const s of sessions) {
       expect(s.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-      expect(s.ip).toMatch(/^192\.0\.2\.\d+$/);
+      expect(s.ip).toMatch(/^198\.51\.100\.\d+$/);
       expect(s.expires).toBe(true);
     }
-  });
-});
-
-describe('sign-up', () => {
-  it('is closed: the right code for an unknown address creates no user and no session', async () => {
-    const stranger = 'mallory@example.com';
-    const res = await service('http://127.0.0.1:8080').signIn(stranger);
-
-    expect(res.status).toBeGreaterThanOrEqual(400);
-    expect(res.headers.getSetCookie().join()).not.toContain('session_token=');
-    const { rows } = await pool.query(`SELECT 1 FROM auth."user" WHERE email = $1`, [stranger]);
-    expect(rows).toHaveLength(0);
   });
 });

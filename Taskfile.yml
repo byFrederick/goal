@@ -85,15 +85,17 @@ tasks:
   test-integration:
     # The tests connect as compose's superuser and switch to goal_owner and goal_app per
     # connection (internal/adapters/postgres), so they never touch the roles' passwords.
-    desc: Integration tests against PostgreSQL 18 and RustFS from compose.yaml (Go, and the auth service's Vitest)
+    desc: Integration tests against PostgreSQL 18, RustFS and Mailpit from compose.yaml (Go, and the auth service's Vitest)
     deps: [worker:install]
     cmds:
-      - docker compose up -d --wait postgres rustfs
+      - docker compose up -d --wait postgres rustfs mailpit
       - go test -race -tags integration ./...
       - pnpm --filter @goal/auth run --silent test:integration
     env:
       GOAL_TEST_DATABASE_URL: postgres://goal:{{.GOAL_PG_PASSWORD | default "goal-dev-only"}}@localhost:5432/goal?sslmode=disable
       GOAL_TEST_S3_ENDPOINT: http://127.0.0.1:9000
+      GOAL_TEST_SMTP_URL: smtp://127.0.0.1:1025
+      GOAL_TEST_MAILPIT_URL: http://127.0.0.1:8025
 
   lint:
     desc: golangci-lint v2 with the repo's rules (.golangci.yml)
@@ -268,10 +270,11 @@ tasks:
       - pnpm run --silent build
 
   auth:dev:
-    desc: Run the auth service from auth/src, rebuilt and restarted on change, with only its own variables from .env (needs goal db init and BETTER_AUTH_SECRET)
+    desc: Run the auth service from auth/src, rebuilt and restarted on change, with only its own variables from .env, mailing to Mailpit (needs goal db init and BETTER_AUTH_SECRET)
     deps: [auth:build]
     dir: auth
     cmds:
+      - docker compose up -d --wait mailpit
       - |
         pnpm exec tsc -p tsconfig.build.json --watch --preserveWatchOutput >/dev/null &
         trap 'kill $! 2>/dev/null' EXIT

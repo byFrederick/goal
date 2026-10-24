@@ -1,8 +1,10 @@
 import { type ServerType, serve } from '@hono/node-server';
 import { createApp } from './app.js';
-import { createAuth, type SendSignInCode } from './auth.js';
+import { createAuth } from './auth.js';
 import { checkRole, openPool } from './db.js';
 import type { Logger } from './log.js';
+import type { Mailer } from './mail/mailer.js';
+import { SMTPMailer } from './mail/smtp.js';
 import { type Env, loadSettings } from './settings.js';
 
 export interface Service {
@@ -16,17 +18,20 @@ export interface Service {
  * startService starts the auth service from env, refusing (with SettingsError, RoleError or
  * Better Auth's schema mismatch) before it serves anything: its settings must hold, it must
  * connect as a role that can do no more than Better Auth's DML, and the database must hold the
- * schema this Better Auth expects (goose migrations 00040 on). It then serves on loopback.
+ * schema this Better Auth expects (goose migrations 00040 on). It then serves on loopback. Mail goes
+ * through mailer, or else the SMTP server of GOAL_SMTP_URL.
  */
-export async function startService(env: Env, log: Logger, sendSignInCode: SendSignInCode): Promise<Service> {
+export async function startService(env: Env, log: Logger, mailer?: Mailer): Promise<Service> {
   const settings = loadSettings(env);
+  const smtp = mailer ? undefined : new SMTPMailer(settings.smtp.url, settings.smtp.from);
+  const mail: Mailer = mailer ?? (smtp as SMTPMailer);
   const pool = openPool(settings.databaseURL);
   pool.on('error', (e) => log.log('error', 'database.error', { error: e }));
 
   let server: ServerType;
   try {
     await checkRole(pool);
-    const auth = createAuth({ settings, pool, log, sendSignInCode });
+    const auth = createAuth({ settings, pool, log, mailer: mail });
     await (await auth.$context).explicitSchemaCheck?.();
 
     server = await new Promise<ServerType>((resolve, reject) => {
@@ -37,6 +42,7 @@ export async function startService(env: Env, log: Logger, sendSignInCode: SendSi
       s.once('error', reject);
     });
   } catch (e) {
+    smtp?.close();
     await pool.end();
     throw e;
   }
@@ -47,8 +53,9 @@ export async function startService(env: Env, log: Logger, sendSignInCode: SendSi
   return {
     url: `http://${host}:${settings.listen.port}`,
     close: () =>
-      new Promise<void>((resolve, reject) => server.close((e) => (e ? reject(e) : resolve()))).finally(() =>
-        pool.end(),
-      ),
+      new Promise<void>((resolve, reject) => server.close((e) => (e ? reject(e) : resolve()))).finally(() => {
+        smtp?.close();
+        return pool.end();
+      }),
   };
 }

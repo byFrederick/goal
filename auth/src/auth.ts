@@ -3,11 +3,16 @@ import { bearer } from 'better-auth/plugins/bearer';
 import { deviceAuthorization } from 'better-auth/plugins/device-authorization';
 import { emailOTP } from 'better-auth/plugins/email-otp';
 import { organization } from 'better-auth/plugins/organization';
+import type { GoogleOptions, GoogleProfile } from 'better-auth/social-providers';
 import { PostgresDialect } from 'kysely';
 import type pg from 'pg';
 import { ac, roles } from './access.gen.js';
+import { type Clock, GoalDatabase } from './goal.js';
+import { goalHooks } from './hooks.js';
 import type { Logger } from './log.js';
+import type { Mailer } from './mail/mailer.js';
 import type { Settings } from './settings.js';
+import { SignIn } from './signin.js';
 
 /** The schema of Better Auth's tables (migrations 00040, 00041). */
 export const authSchema = 'auth';
@@ -15,15 +20,18 @@ export const authSchema = 'auth';
 /** The one client the device authorization grant serves: `goal login`. */
 export const cliClientId = 'goal-cli';
 
-/** Sends a sign-in code to an address. It never logs the code. */
-export type SendSignInCode = (email: string, code: string) => Promise<void>;
+/** The endpoints whose deleted sessions are revocations (session.revoked in the security log). */
+const revocations = new Set(['/sign-out', '/revoke-sessions']);
 
 export interface AuthDeps {
   settings: Settings;
   /** The database as goal_auth (checkRole has passed). */
   pool: pg.Pool;
   log: Logger;
-  sendSignInCode: SendSignInCode;
+  /** Sends sign-in codes, invitations and the lockout notice. */
+  mailer: Mailer;
+  /** The time Goal's rules use (send caps, lockout, invitation expiry, fresh sessions). */
+  clock?: Clock;
 }
 
 // Fields Goal adds to Better Auth's member and invitation rows (spec 3 §6.2). changedBy holds the
@@ -39,10 +47,14 @@ const factoryRoles = { type: 'string', required: false, input: true } as const;
  * Google, organizations whose lifecycle goald owns (Better Auth's create, update and delete paths
  * are off), the device grant for `goal login`, and bearer tokens for the CLI. Its tables live in
  * schema auth under goose: `auth generate` (task auth:schema-check) must find nothing to change.
- * Sign-up is closed: no user is created until the invitation and bootstrap gate replaces the
- * refusal below (spec 3 §8.7).
+ * Sign-up is invite-only (signin.ts, spec 3 §8.7) and Goal's hooks (hooks.ts) add its rules to
+ * Better Auth's endpoints and write the security log.
  */
-export function createAuth({ settings, pool, log, sendSignInCode }: AuthDeps) {
+export function createAuth({ settings, pool, log, mailer, clock = () => new Date() }: AuthDeps) {
+  const db = new GoalDatabase(pool);
+  const signIn = new SignIn({ db, mailer, log, clock, bootstrapOwnerEmail: settings.bootstrapOwnerEmail });
+  const hooks = goalHooks({ db, signIn, mailer, log, clock, publicURL: settings.publicURL });
+
   return betterAuth({
     appName: 'Goal',
     baseURL: settings.publicURL,
@@ -120,12 +132,31 @@ export function createAuth({ settings, pool, log, sendSignInCode }: AuthDeps) {
             clientId: settings.google.clientId,
             clientSecret: settings.google.clientSecret,
             prompt: 'select_account',
+            // No accessType: Google issues no refresh token (no offline access).
+            getUserInfo: googleUserInfo,
           },
         }
       : {},
     databaseHooks: {
-      user: { create: { before: async () => false } },
+      user: { create: { before: signIn.allowOnlyInvitedOrBootstrap, after: signIn.recordUser } },
+      session: {
+        create: { after: signIn.recordSignInAndClaimBootstrap },
+        delete: {
+          after: async (session, ctx) => {
+            if (!ctx?.path || !revocations.has(ctx.path)) return;
+            await db
+              .record({ kind: 'session.revoked', user: session.userId, data: { via: ctx.path } })
+              .catch((e: unknown) => log.log('error', 'auth_event.failed', { path: ctx.path, error: e }));
+          },
+        },
+      },
+      // Goal never acts on a person's Google account, so it keeps no refresh token.
+      account: {
+        create: { before: async (account) => ({ data: { ...account, ...noRefreshToken } }) },
+        update: { before: async (account) => ({ data: { ...account, ...noRefreshToken } }) },
+      },
     },
+    hooks: { before: hooks.before, after: hooks.after },
     onAPIError: { errorURL: `${settings.publicURL}/sign-in` },
     telemetry: { enabled: false },
     plugins: [
@@ -134,10 +165,10 @@ export function createAuth({ settings, pool, log, sendSignInCode }: AuthDeps) {
         expiresIn: 300,
         allowedAttempts: 3,
         storeOTP: 'hashed',
+        // false on purpose: an invitee has no user until their first sign-in. The user-create hook
+        // is the single gate (spec 3 §8.7).
         disableSignUp: false,
-        sendVerificationOTP: async ({ email, otp, type }) => {
-          if (type === 'sign-in') await sendSignInCode(email, otp);
-        },
+        sendVerificationOTP: signIn.sendCodeIfAllowed,
       }),
       organization({
         ac,
@@ -151,6 +182,7 @@ export function createAuth({ settings, pool, log, sendSignInCode }: AuthDeps) {
         invitationLimit: 100,
         membershipLimit: 1000,
         teams: { enabled: false },
+        ...hooks.organization,
         schema: {
           member: { additionalFields: { changedBy, changedAt } },
           invitation: { additionalFields: { factoryRoles, changedBy, changedAt } },
@@ -169,3 +201,34 @@ export function createAuth({ settings, pool, log, sendSignInCode }: AuthDeps) {
 }
 
 export type Auth = ReturnType<typeof createAuth>;
+
+const noRefreshToken = { refreshToken: null, refreshTokenExpiresAt: null };
+
+type GoogleUserInfo = NonNullable<GoogleOptions['getUserInfo']>;
+
+/**
+ * googleUserInfo reads the person from the ID token Google's token endpoint returned (over TLS, to
+ * this service). Only a Google-verified email is accepted, since an account and email codes with
+ * the same email are one user (accountLinking.trustedProviders); no picture is kept (the UI shows
+ * initials).
+ */
+const googleUserInfo: GoogleUserInfo = async (tokens) => {
+  const claims = tokens.idToken ? decodeClaims(tokens.idToken) : undefined;
+  if (typeof claims?.sub !== 'string' || typeof claims.email !== 'string' || claims.email_verified !== true) {
+    return null;
+  }
+  return {
+    user: { email: claims.email, name: typeof claims.name === 'string' ? claims.name : '', emailVerified: true },
+    // The account is keyed by the profile's sub (the provider's accountSubject).
+    data: claims as unknown as GoogleProfile,
+  };
+};
+
+function decodeClaims(jwt: string): Record<string, unknown> | undefined {
+  try {
+    const claims: unknown = JSON.parse(Buffer.from(jwt.split('.')[1] ?? '', 'base64url').toString('utf8'));
+    return typeof claims === 'object' && claims !== null ? (claims as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
+}

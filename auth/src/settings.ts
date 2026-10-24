@@ -21,6 +21,13 @@ export interface Settings {
   secrets: VersionedSecret[] | undefined;
   /** Google sign-in (GOAL_AUTH_GOOGLE=on), with its client. */
   google: { clientId: string; clientSecret: string } | undefined;
+  /**
+   * GOAL_BOOTSTRAP_OWNER_EMAIL, trimmed and in lower case: the one address that may sign up while
+   * no user exists, then becomes platform admin and owner of every organization (spec 3 §8.7).
+   */
+  bootstrapOwnerEmail: string | undefined;
+  /** GOAL_SMTP_URL (it may hold the server's credentials) and GOAL_SMTP_FROM: where mail goes. */
+  smtp: { url: string; from: string };
 }
 
 export type Env = Readonly<Record<string, string | undefined>>;
@@ -37,6 +44,9 @@ const defaultListen = '127.0.0.1:8081';
 const defaultPublicURL = 'http://127.0.0.1:8080'; // goald's default GOAL_LISTEN
 const devAuthPassword = 'goal-auth-dev-only'; // GOAL_PG_AUTH_PASSWORD's documented dev-only default
 const minSecretBytes = 32;
+const defaultSMTPURL = 'smtp://127.0.0.1:1025'; // Mailpit from compose.yaml
+const defaultSMTPFrom = 'Goal <goal@localhost>';
+const emailPattern = /^[^\s@<>]+@[^\s@<>]+$/;
 
 export function loadSettings(env: Env): Settings {
   const problems: string[] = [];
@@ -69,6 +79,12 @@ export function loadSettings(env: Env): Settings {
 
   const google = parseGoogle(get, problems);
 
+  const bootstrapOwnerEmail = get('GOAL_BOOTSTRAP_OWNER_EMAIL')?.toLowerCase();
+  if (bootstrapOwnerEmail !== undefined && !emailPattern.test(bootstrapOwnerEmail)) {
+    problems.push('GOAL_BOOTSTRAP_OWNER_EMAIL must be an email address');
+  }
+  const smtp = parseSMTP(get, problems);
+
   const password = get('GOAL_PG_AUTH_PASSWORD') ?? devAuthPassword;
   const databaseURL =
     get('GOAL_AUTH_DATABASE_URL') ??
@@ -76,7 +92,7 @@ export function loadSettings(env: Env): Settings {
 
   if (problems.length > 0 || listen === undefined || publicURL === undefined) throw new SettingsError(problems);
 
-  return { listen, publicURL, databaseURL, secret, secrets, google };
+  return { listen, publicURL, databaseURL, secret, secrets, google, bootstrapOwnerEmail, smtp };
 }
 
 function parseListen(value: string, problems: string[]): Settings['listen'] | undefined {
@@ -151,6 +167,26 @@ function parseGoogle(get: (name: string) => string | undefined, problems: string
     return undefined;
   }
   return { clientId, clientSecret };
+}
+
+function parseSMTP(get: (name: string) => string | undefined, problems: string[]): Settings['smtp'] {
+  const url = get('GOAL_SMTP_URL') ?? defaultSMTPURL;
+  let parsed: URL | undefined;
+  try {
+    parsed = new URL(url);
+  } catch {
+    // The value is never repeated: it may hold the server's password.
+  }
+  if (parsed?.protocol !== 'smtp:' && parsed?.protocol !== 'smtps:') {
+    problems.push('GOAL_SMTP_URL must be an smtp:// or smtps:// URL');
+  }
+
+  const from = get('GOAL_SMTP_FROM') ?? defaultSMTPFrom;
+  const address = /<([^<>]+)>\s*$/.exec(from)?.[1] ?? from;
+  if (!emailPattern.test(address) || /[\r\n]/.test(from)) {
+    problems.push('GOAL_SMTP_FROM must be an address or "Name <address>"');
+  }
+  return { url, from };
 }
 
 /** isLoopback is true for localhost, 127.0.0.0/8 and ::1. */

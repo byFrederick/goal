@@ -36,6 +36,23 @@ services:
       retries: 10
       start_period: 10s
 
+  # The development inbox (spec 3 §5.6): the auth service sends sign-in codes and invitations to
+  # its SMTP port (GOAL_SMTP_URL's default) and they are read at http://127.0.0.1:8025. Never part
+  # of a cloud configuration. Messages live in memory and are gone when it stops.
+  mailpit:
+    image: axllent/mailpit:v1.31.4
+    environment:
+      MP_MAX_MESSAGES: 500
+    ports:
+      - "127.0.0.1:1025:1025" # SMTP
+      - "127.0.0.1:8025:8025" # inbox UI and API
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
 volumes:
   goal-pg:
   goal-objects:

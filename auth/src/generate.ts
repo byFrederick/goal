@@ -16,5 +16,5 @@ export const auth = createAuth({
   settings: loadSettings({ GOAL_AUTH_DATABASE_URL: url, BETTER_AUTH_SECRET: randomBytes(32).toString('hex') }),
   pool: openPool(url),
   log: jsonLogger((line) => process.stderr.write(line)),
-  sendSignInCode: async () => {},
+  mailer: { send: async () => {} },
 });

@@ -17,8 +17,10 @@ import (
 var betterAuthTables = []string{"account", "deviceCode", "invitation", "member", "organization", "rateLimit", "session", "user", "verification"}
 
 // authFunctions are the definer functions of Goal's schema the identity service may run (spec 3
-// §6.5 "auth"); 00044 adds them. goal_app runs the "app" ones.
-var authFunctions = []string{}
+// §6.5 "auth"), from 00044, by name. goal_app runs the "app" ones.
+var authFunctions = []string{
+	"goal_apply_invitation_roles", "goal_auth_count", "goal_auth_event", "goal_claim_bootstrap", "goal_org_factories",
+}
 
 // authTriggers are the triggers on Better Auth's tables, by table: the owner rule (00042), the
 // audit and the access notices (00043). A regenerated table that lost one fails here.

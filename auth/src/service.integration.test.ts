@@ -3,11 +3,12 @@ import { createServer } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { RoleError } from './db.js';
 import type { Logger } from './log.js';
+import { MemoryMailer } from './mail/memory.js';
 import { startService } from './service.js';
 import { createTestDatabase, type TestDatabase } from './testing/database.js';
 
 const silent: Logger = { log: () => {} };
-const noMail = async () => {};
+const noMail = new MemoryMailer();
 
 let head: TestDatabase;
 let beforeBetterAuth: TestDatabase;
