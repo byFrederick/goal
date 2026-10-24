@@ -14,12 +14,15 @@ export interface SectionViewProps {
 
 // Sections with heavy editors load on first use, outside the initial bundle (D §10.9's budget).
 const AgentsSection = lazy(() => import('./agents/agents-section').then((m) => ({ default: m.AgentsSection })));
+const ConnectionsSection = lazy(() =>
+  import('./connections/connections-section').then((m) => ({ default: m.ConnectionsSection })),
+);
 
 export const sectionViews: Record<EditorSection, ComponentType<SectionViewProps> | null> = {
   basics: BasicsSection,
   line: null,
   agents: AgentsSection,
-  connections: null,
+  connections: ConnectionsSection,
   review: null,
   versions: null,
 };

@@ -7,14 +7,11 @@ import { whereLabel } from '../../../shared/definition/where';
 import { cn } from '../../../ui/cn';
 import { EmptyState } from '../../../ui/empty-state';
 import { useSection } from '../draft/use-draft';
-import { SectionShell } from '../frame/section-shell';
+import { bareSection, SectionShell } from '../frame/section-shell';
 import { SearchLink } from '../search-link';
 import type { SectionViewProps } from '../section-views';
 import { AgentDetail } from './agent-detail';
 import { AddAgentButton, CopyAgentButton } from './agent-dialogs';
-
-/** The section's frame without a card of its own: the list and the detail are the cards. */
-export const bareShell = 'gap-3.5 rounded-none border-0 bg-transparent p-0 md:p-0';
 
 export function AgentsSection({ place, search }: SectionViewProps) {
   const agents = useSection('agents').agents ?? [];
@@ -22,7 +19,7 @@ export function AgentsSection({ place, search }: SectionViewProps) {
   const chosen = search.agent ? agents.find((a) => a.name === search.agent) : agents[0];
 
   return (
-    <SectionShell section="agents" className={bareShell}>
+    <SectionShell section="agents" className={bareSection}>
       <div className="grid items-start gap-4 @[760px]:grid-cols-[264px_minmax(0,1fr)]">
         <nav
           aria-label="Agents"

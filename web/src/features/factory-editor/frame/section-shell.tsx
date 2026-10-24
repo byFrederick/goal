@@ -49,6 +49,9 @@ export function SectionShell({
   );
 }
 
+/** SectionShell's className for a section without a card of its own (its list and detail are the cards). */
+export const bareSection = 'gap-3.5 rounded-none border-0 bg-transparent p-0 md:p-0';
+
 /** A section whose editor arrives with a later PR: what to use until then. */
 export function LaterSection({ section }: { section: EditorSection }) {
   return (
