@@ -307,3 +307,26 @@ func TestProblemText_DetailOnlyWhenThere(t *testing.T) {
 		}
 	}
 }
+
+// A cheap run's cost is not printed as $0.00: below a cent it keeps four decimals.
+func TestDescribe_RunCostKeepsCents(t *testing.T) {
+	t.Parallel()
+
+	for cost, want := range map[float64]string{
+		0:      "run succeeded ($0.00, 1 turns)",
+		0.0007: "run succeeded ($0.0007, 1 turns)",
+		0.0042: "run succeeded ($0.0042, 1 turns)",
+		0.01:   "run succeeded ($0.01, 1 turns)",
+		0.42:   "run succeeded ($0.42, 1 turns)",
+		12.345: "run succeeded ($12.35, 1 turns)",
+	} {
+		e := gen.Event{Kind: "run_finished", Data: map[string]any{"status": "succeeded", "cost_usd": cost, "turns": 1}}
+		if got := describe(e); got != want {
+			t.Errorf("describe(cost %v) = %q, want %q", cost, got, want)
+		}
+	}
+
+	if got := usd(0.00004); got != "<$0.0001" {
+		t.Errorf("usd(0.00004) = %q", got)
+	}
+}

@@ -245,7 +245,7 @@ func following(ctx context.Context, err error) error {
 }
 
 func stopped(out *printer, it *gen.Item) error {
-	out.printf("\n%s is %s at %s (cost $%.2f)\n", it.Ref, it.State, it.Station, it.CostUsd)
+	out.printf("\n%s is %s at %s (cost %s)\n", it.Ref, it.State, it.Station, usd(it.CostUsd))
 
 	if it.State == "waiting_human" {
 		out.printf("  goal item %s           # read it, with the outputs so far\n", it.Ref)
@@ -316,12 +316,27 @@ var describers = map[string]func(gen.Event) string{
 }
 
 func runFinished(e gen.Event) string {
-	line := fmt.Sprintf("run %s ($%.2f, %v turns)", str(e, "status"), e.Data["cost_usd"], e.Data["turns"])
+	cost, _ := e.Data["cost_usd"].(float64)
+
+	line := fmt.Sprintf("run %s (%s, %v turns)", str(e, "status"), usd(cost), e.Data["turns"])
 	if s := str(e, "error"); s != "" {
 		line += ": " + cut(oneLine(s), 200)
 	}
 
 	return line
+}
+
+// usd formats a cost in dollars: cents, or four decimals below a cent so a cheap run does not
+// read as free ($0.0007), and "<$0.0001" below that.
+func usd(v float64) string {
+	switch {
+	case v == 0 || v >= 0.01:
+		return fmt.Sprintf("$%.2f", v)
+	case v < 0.0001:
+		return "<$0.0001"
+	default:
+		return fmt.Sprintf("$%.4f", v)
+	}
 }
 
 func withReason(e gen.Event) string {
