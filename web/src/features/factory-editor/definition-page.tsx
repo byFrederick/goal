@@ -10,7 +10,7 @@ import { defKeys, draftModelQuery } from '../../api/queries';
 import { useFactory } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
-import { DraftSessionProvider, useDraft, useDraftSession } from './draft/use-draft';
+import { DraftSessionProvider, useDraft, useDraftOpen, useDraftSession } from './draft/use-draft';
 import { DefinitionFrame } from './frame/editor-frame';
 import { LaterSection } from './frame/section-shell';
 import { type SectionViewProps, sectionViews, yamlView } from './section-views';
@@ -49,7 +49,8 @@ export function SectionView({
   const client = useQueryClient();
   const ready = useDraft((s) => s.ready);
   const parseError = useDraft((s) => s.parseError);
-  const model = useQuery(draftModelQuery(session.org, session.factory));
+  const open = useDraftOpen(session);
+  const model = useQuery({ ...draftModelQuery(session.org, session.factory), enabled: open === true });
   const failed = model.error && !isDraftState(model.error) ? model.error : null;
 
   if (!ready && failed) {

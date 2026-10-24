@@ -72,6 +72,27 @@ test('a problem blocks Publish until it is fixed; then v9 runs (flow 3)', async 
   await expect(status(page)).toContainText('v9 runs now.');
 });
 
+test('after a publish the editor reads no draft that is gone', async ({ page }) => {
+  await openReview(page);
+  const failed: string[] = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error') failed.push(m.text());
+  });
+  page.on('response', (r) => {
+    if (r.status() >= 400) failed.push(`${r.status()} ${new URL(r.url()).pathname}`);
+  });
+
+  await publishButton(page).click();
+  await expectToast(page, 'goal v9 published');
+  await expect(page.getByRole('region', { name: 'Publish' })).toContainText('No draft. v9 is running.');
+  await page
+    .getByRole('link', { name: /^Line, / })
+    .first()
+    .click();
+  await expect(status(page)).toContainText('v9 runs now.');
+  expect(failed).toEqual([]);
+});
+
 test('Compare v7, Restore v7, then discard the draft (flow 5)', async ({ page }) => {
   await openReview(page);
 

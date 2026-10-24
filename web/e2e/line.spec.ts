@@ -130,6 +130,23 @@ test('reorder by button, Alt+Arrow and drag; Done stays last', async ({ page }) 
   expect(await order(page)).toEqual(['Inbox', 'Spec', 'Review', 'Approve spec', 'Build', 'Merge', 'Done']);
 });
 
+test('a factory without a draft opens its definition without a failed request', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text());
+  });
+  page.on('response', (r) => {
+    if (r.status() >= 400) errors.push(`${r.status()} ${new URL(r.url()).pathname}`);
+  });
+
+  // sre runs v3 with no draft open: "no draft" is a state, not an error to fetch and fail.
+  await openLine(page, '/o/acme/f/sre/definition/line');
+  await expect(status(page)).toContainText('runs now');
+  await page.goto('/o/acme/f/sre/definition/review');
+  await expect(page.getByRole('region', { name: 'Publish' })).toContainText('No draft. v3 is running.');
+  expect(errors).toEqual([]);
+});
+
 test('the merge switch is disabled without a repository', async ({ page }) => {
   await openLine(page, '/o/acme/f/sre/definition/line');
   const approve = row(page, 'Approve');

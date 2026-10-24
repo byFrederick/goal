@@ -13,7 +13,7 @@ import { type SlotCap, slotCap } from '../../../shared/definition/slots';
 import type { AnyEdit, Edit } from '../draft/ops';
 import { moveStation } from '../draft/ops';
 import type { EditOptions } from '../draft/session';
-import { useDraft, useDraftSession, useSection } from '../draft/use-draft';
+import { useDraft, useDraftOpen, useDraftSession, useSection } from '../draft/use-draft';
 import { stationLabel } from './labels';
 import { movedMessage } from './reorder';
 
@@ -79,7 +79,10 @@ export function LineEditorProvider({ place, children }: { place: 'definition' | 
   const hasDraft = useDraft((s) => s.hasDraft);
   const { org, factory } = session;
 
-  const draft = useQuery(draftQuery(org, factory)).data;
+  // Read as soon as the factory says a draft is open, beside the draft's model, not after it:
+  // which stations are new depends on the draft's base.
+  const open = useDraftOpen(session);
+  const draft = useQuery({ ...draftQuery(org, factory), enabled: open === true }).data;
   // The version the draft is based on, by number (a published version never changes); without a
   // draft the editor shows the running version, which is then the base.
   const baseNumber = draft?.base?.number;

@@ -16,7 +16,8 @@ import {
   useSyncExternalStore,
 } from 'react';
 import { ApiError } from '../../../api/client';
-import { defKeys, draftModelQuery, versionModelQuery } from '../../../api/queries';
+import { defKeys, draftModelQuery, factoryQuery, versionModelQuery } from '../../../api/queries';
+import type { Factory } from '../../../api/types';
 import type { Model, Section, SectionValues } from '../../../shared/definition/model';
 import { DraftSession, type SessionState } from './session';
 
@@ -37,6 +38,13 @@ export function DraftSessionProvider({ org, factory, children }: DraftSessionPro
         org,
         factory,
         refresh: () => void client.invalidateQueries({ queryKey: defKeys.draft(org, factory) }),
+        // Before the publish or discard refetches anything: the draft's queries go (an
+        // invalidation would read the closed draft through observers not yet rendered again)
+        // and the factory has no draft, so the editor reads none until the next one opens.
+        closed: () => {
+          client.removeQueries({ queryKey: defKeys.draft(org, factory) });
+          client.setQueryData<Factory>(defKeys.factory(org, factory), (f) => (f ? { ...f, draft: null } : f));
+        },
       }),
   );
   useEffect(() => {
@@ -44,9 +52,10 @@ export function DraftSessionProvider({ org, factory, children }: DraftSessionPro
     return () => session.dispose();
   }, [session]);
 
-  const draft = useQuery(draftModelQuery(org, factory));
+  const open = useDraftOpen(session);
+  const draft = useQuery({ ...draftModelQuery(org, factory), enabled: open === true });
   const refusal = draft.error instanceof ApiError ? draft.error : undefined;
-  const noDraft = refusal?.code === 'no-draft';
+  const noDraft = open === false || refusal?.code === 'no-draft';
   const current = useQuery({ ...versionModelQuery(org, factory, 'current'), enabled: noDraft });
 
   useEffect(() => {
@@ -65,6 +74,19 @@ export function DraftSessionProvider({ org, factory, children }: DraftSessionPro
   }, [noDraft, current.data, session]);
 
   return createElement(DraftSessionContext.Provider, { value: session }, children);
+}
+
+/**
+ * Whether the factory has a draft open: this session opened or adopted one, or the factory says
+ * so (its `draft`); undefined until the factory has loaded. "No draft" is a state the factory
+ * names, so the editor reads the draft only while one is open and a factory without one makes
+ * no request that fails (a 404 `no-draft` is then a draft discarded elsewhere).
+ */
+export function useDraftOpen(session: DraftSession): boolean | undefined {
+  const opened = useSyncExternalStore(session.subscribe, () => session.getSnapshot().hasDraft);
+  const detail = useQuery(factoryQuery(session.org, session.factory)).data;
+  if (opened) return true;
+  return detail ? detail.draft !== null : undefined;
 }
 
 /** The editor's draft session; only inside DraftSessionProvider. */

@@ -18,7 +18,7 @@ import { Button } from '../../../ui/button';
 import { Chip } from '../../../ui/chip';
 import { cn } from '../../../ui/cn';
 import type { DraftSession, SessionState } from '../draft/session';
-import { useDraft, useDraftSession, useModel } from '../draft/use-draft';
+import { useDraft, useDraftOpen, useDraftSession, useModel } from '../draft/use-draft';
 import { yamlView } from '../section-views';
 import { type EditorSection, validateDefinitionSearch } from '../sections';
 import { ConflictDialog, DiscardedDialog, FileConflictDialog } from './conflict-dialog';
@@ -74,7 +74,8 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
   const navigate = useNavigate();
   const session = useDraftSession();
   const s = useDraft((state) => state);
-  const draft = useQuery(draftQuery(org.id, factory.id)).data;
+  const open = useDraftOpen(session);
+  const draft = useQuery({ ...draftQuery(org.id, factory.id), enabled: open === true }).data;
   const detail = useQuery(factoryQuery(org.id, factory.id)).data;
   const validation = useValidation();
   useUndoKeys(session);

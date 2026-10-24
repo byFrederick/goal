@@ -38,6 +38,11 @@ export interface SessionOptions {
   api?: SessionApi;
   /** Called once a burst of saves has settled: refetch the draft's queries (draft, model, files). */
   refresh?: () => void;
+  /**
+   * Called when this session closes the draft (discarded or published here), before anything is
+   * refetched: forget the open draft, so nothing reads a draft that is gone.
+   */
+  closed?: () => void;
   /** Autosave delay after the last edit of a section or file; 800 ms (B's figure). */
   debounceMs?: number;
 }
@@ -781,6 +786,7 @@ export class DraftSession {
       updatedElsewhereAt: null,
       discarded: false,
     });
+    this.opts.closed?.();
   }
 
   /**
