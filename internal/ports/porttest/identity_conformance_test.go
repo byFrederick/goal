@@ -86,3 +86,13 @@ func TestIdentity_Conformance(t *testing.T) {
 		return id, fakeSeed{id: id, n: new(int)}
 	})
 }
+
+func TestPlatform_Conformance(t *testing.T) {
+	t.Parallel()
+
+	identitytest.RunPlatform(t, func(*testing.T) (ports.Platform, identitytest.Seed) {
+		id := porttest.NewIdentity(time.Now)
+
+		return porttest.NewPlatform(id), fakeSeed{id: id, n: new(int)}
+	})
+}

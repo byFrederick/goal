@@ -222,6 +222,8 @@ func problemCode(err error) string {
 		return "slug-taken"
 	case errors.Is(err, errConfirmMismatch):
 		return "confirmation-mismatch"
+	case errors.Is(err, errLastPlatformAdmin):
+		return "last-platform-admin"
 	case errors.Is(err, engine.ErrItemClosed):
 		return "item-closed"
 	case errors.Is(err, engine.ErrAndonPulled):

@@ -29,8 +29,6 @@ var updateGolden = flag.Bool("update", false, "rewrite testdata/access.golden fr
 // the test fails while one is both listed and used.
 var awaitingOperations = map[string]string{
 	"device:read":     "3-13: getDeviceRequest",
-	"platform:read":   "3-15: listPlatformAdmins, listAuthEvents",
-	"platform:manage": "3-15: addPlatformAdmin, removePlatformAdmin",
 	"org:transfer":    "3-11: transferOwnership",
 	"member:read":     "3-11: listMembers",
 	"invitation:read": "3-11: listInvitations",

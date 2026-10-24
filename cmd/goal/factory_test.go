@@ -103,7 +103,8 @@ func newDefGoald(t *testing.T) *defGoald {
 
 	handler, err := api.New(api.Deps{
 		Engine: e, Items: store, Factories: cache, Definitions: authors, Versions: defs, Orgs: tenancy, Audit: tenancy,
-		OrgRetention: time.Hour, Authorizer: api.AllowAll{}, Auth: api.AuthConfig{Mode: api.AuthNone}, Feed: api.NewFeed(porttest.NewItemNotices(), defNotices, nil),
+		OrgRetention: time.Hour, Authorizer: api.AllowAll{}, Auth: api.AuthConfig{Mode: api.AuthNone}, Platform: porttest.NewPlatform(porttest.NewIdentity(clock.Now)),
+		Feed:    api.NewFeed(porttest.NewItemNotices(), defNotices, nil),
 		Builder: builder.New(objects, clock, builder.Config{}), Clock: clock,
 	})
 	if err != nil {

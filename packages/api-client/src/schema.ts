@@ -61,6 +61,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/platform/admins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The install's platform admins, earliest first
+         * @description Platform admins create organizations and manage platform admins; inside an organization they have only the rights of their membership there. Platform admins only.
+         */
+        get: operations["listPlatformAdmins"];
+        put?: never;
+        /**
+         * Make a person a platform admin
+         * @description The person is the user with this email (case-insensitive), who must have signed in once (404 otherwise; invite them to an organization first). Adding an admin again changes nothing. Recorded in the security log as platform_admin.added. Needs a sign-in from the last 10 minutes.
+         */
+        post: operations["addPlatformAdmin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/admins/{user}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A person's user id */
+                user: components["parameters"]["UserRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Stop a person being a platform admin
+         * @description 404 when they are not one. The install keeps at least one platform admin: removing the last is 409 with code last-platform-admin and changes nothing (goal db recover-admin adds one with database access). Recorded in the security log as platform_admin.removed. Needs a sign-in from the last 10 minutes.
+         */
+        delete: operations["removePlatformAdmin"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/auth-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The install's security log, newest first
+         * @description Sign-ins, codes sent, suppressed and failed, lockouts, device approvals, platform admin changes and recoveries. An email or a user code appears only as its hash (subject); events older than 90 days are cleaned up. Platform admins only.
+         */
+        get: operations["listAuthEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs": {
         parameters: {
             query?: never;
@@ -1398,7 +1465,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found. */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found. */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -1464,6 +1531,46 @@ export interface components {
             platform_admin: boolean;
             /** @description A signed-in person's session; absent for a key and under mode none */
             session?: components["schemas"]["MeSession"];
+        };
+        PlatformAdmin: {
+            user: components["schemas"]["User"];
+            /** @description Who made them one: a platform admin, system bootstrap (the first sign-in) or system recovery (goal db recover-admin) */
+            added_by: components["schemas"]["Actor"];
+            /** Format: date-time */
+            added_at: string;
+        };
+        PlatformAdminList: {
+            admins: components["schemas"]["PlatformAdmin"][];
+        };
+        NewPlatformAdmin: {
+            email: string;
+        };
+        /** @description One event of the install's security log */
+        AuthEvent: {
+            /** Format: int64 */
+            id: number;
+            /** Format: date-time */
+            at: string;
+            /** @description <noun>.<past_verb>, as in sign_in.succeeded or recovery.used */
+            kind: string;
+            /** @description The person the event is about, when known */
+            user_id?: string | null;
+            /** @description base64url of the SHA-256 of the lowercase email or user code the event names; never the value */
+            subject?: string | null;
+            ip?: string | null;
+            user_agent?: string | null;
+            /** @description The event's details; never a code, token, key or email */
+            data: {
+                [key: string]: unknown;
+            };
+        };
+        AuthEventPage: {
+            events: components["schemas"]["AuthEvent"][];
+            /**
+             * Format: int64
+             * @description The before of the next page; null on the last page
+             */
+            next_before: number | null;
         };
         /** @enum {string} */
         OrgRole: "owner" | "admin" | "member";
@@ -3088,6 +3195,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description A person's user id */
+        UserRef: string;
         /** @description The organization's slug or id */
         OrgRef: string;
         /** @description The factory's metadata.id or metadata.name */
@@ -3173,6 +3282,101 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Me"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listPlatformAdmins: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The platform admins */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformAdminList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    addPlatformAdmin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewPlatformAdmin"];
+            };
+        };
+        responses: {
+            /** @description The platform admin */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformAdmin"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    removePlatformAdmin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A person's user id */
+                user: components["parameters"]["UserRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAuthEvents: {
+        parameters: {
+            query?: {
+                /** @description The cursor of the next page (next_before); events with a smaller id */
+                before?: number;
+                limit?: number;
+                /** @description Only events of this kind, as in sign_in.succeeded */
+                kind?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthEventPage"];
                 };
             };
             default: components["responses"]["Problem"];

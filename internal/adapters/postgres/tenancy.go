@@ -167,21 +167,14 @@ func orgOwner(ctx context.Context, q *db.Queries, user domain.UserID) (*uuid.UUI
 
 // platformAdmins lists the install's platform admins, earliest first (goal_platform_admins).
 func platformAdmins(ctx context.Context, q *db.Queries) ([]domain.UserID, error) {
-	raw, err := q.PlatformAdmins(ctx)
+	admins, err := platformAdminsOf(ctx, q)
 	if err != nil {
-		return nil, fmt.Errorf("platform admins: %w", err)
-	}
-
-	var admins []struct {
-		UserID domain.UserID `json:"user_id"`
-	}
-	if err := json.Unmarshal(raw, &admins); err != nil {
-		return nil, fmt.Errorf("platform admins: decode: %w", err)
+		return nil, err
 	}
 
 	out := make([]domain.UserID, 0, len(admins))
 	for _, a := range admins {
-		out = append(out, a.UserID)
+		out = append(out, a.User.ID)
 	}
 
 	return out, nil

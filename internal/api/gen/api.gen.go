@@ -989,6 +989,34 @@ type AuthConfig struct {
 	Mode AuthMode `json:"mode"`
 }
 
+// AuthEvent One event of the install's security log
+type AuthEvent struct {
+	At time.Time `json:"at"`
+
+	// Data The event's details; never a code, token, key or email
+	Data map[string]interface{} `json:"data"`
+	Id   int64                  `json:"id"`
+	Ip   *string                `json:"ip,omitempty"`
+
+	// Kind <noun>.<past_verb>, as in sign_in.succeeded or recovery.used
+	Kind string `json:"kind"`
+
+	// Subject base64url of the SHA-256 of the lowercase email or user code the event names; never the value
+	Subject   *string `json:"subject,omitempty"`
+	UserAgent *string `json:"user_agent,omitempty"`
+
+	// UserId The person the event is about, when known
+	UserId *string `json:"user_id,omitempty"`
+}
+
+// AuthEventPage defines model for AuthEventPage.
+type AuthEventPage struct {
+	Events []AuthEvent `json:"events"`
+
+	// NextBefore The before of the next page; null on the last page
+	NextBefore *int64 `json:"next_before"`
+}
+
 // AuthMode session: people sign in and every request carries a session or an API key. none: sign-in is off (GOAL_AUTH=none, a loopback install), every request acts as the local user.
 type AuthMode string
 
@@ -2131,6 +2159,11 @@ type NewOrg struct {
 	Slug string  `json:"slug"`
 }
 
+// NewPlatformAdmin defines model for NewPlatformAdmin.
+type NewPlatformAdmin struct {
+	Email string `json:"email"`
+}
+
 // NoteReceipt defines model for NoteReceipt.
 type NoteReceipt struct {
 	// Delivery next_run, the next run's brief carries it (live, to a running agent, comes later)
@@ -2276,9 +2309,23 @@ type PauseRequest struct {
 // Permission One permission of api/permissions.yaml, such as org:read or item:decide
 type Permission = string
 
+// PlatformAdmin defines model for PlatformAdmin.
+type PlatformAdmin struct {
+	AddedAt time.Time `json:"added_at"`
+
+	// AddedBy Who made them one: a platform admin, system bootstrap (the first sign-in) or system recovery (goal db recover-admin)
+	AddedBy Actor `json:"added_by"`
+	User    User  `json:"user"`
+}
+
+// PlatformAdminList defines model for PlatformAdminList.
+type PlatformAdminList struct {
+	Admins []PlatformAdmin `json:"admins"`
+}
+
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found.
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found.
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
@@ -2827,6 +2874,9 @@ type RangeTo = openapi_types.Date
 // SectionRef defines model for SectionRef.
 type SectionRef = Section
 
+// UserRef defines model for UserRef.
+type UserRef = string
+
 // VersionSelector defines model for VersionSelector.
 type VersionSelector = string
 
@@ -3021,6 +3071,16 @@ type GetTemplateParams struct {
 	Version *int `form:"version,omitempty" json:"version,omitempty"`
 }
 
+// ListAuthEventsParams defines parameters for ListAuthEvents.
+type ListAuthEventsParams struct {
+	// Before The cursor of the next page (next_before); events with a smaller id
+	Before *int64 `form:"before,omitempty" json:"before,omitempty"`
+	Limit  *int   `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Kind Only events of this kind, as in sign_in.succeeded
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty"`
+}
+
 // CreateOrgJSONRequestBody defines body for CreateOrg for application/json ContentType.
 type CreateOrgJSONRequestBody = NewOrg
 
@@ -3080,6 +3140,9 @@ type RejectItemJSONRequestBody = Rejection
 
 // UpdateOrgSettingsJSONRequestBody defines body for UpdateOrgSettings for application/json ContentType.
 type UpdateOrgSettingsJSONRequestBody = OrgSettingsPatch
+
+// AddPlatformAdminJSONRequestBody defines body for AddPlatformAdmin for application/json ContentType.
+type AddPlatformAdminJSONRequestBody = NewPlatformAdmin
 
 // AsBlankStart returns the union data inside the FactoryStart as a BlankStart
 func (t FactoryStart) AsBlankStart() (BlankStart, error) {
@@ -4047,6 +4110,45 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/templates/{name} (the `GetTemplate` operationId).
 	GetTemplate(ctx context.Context, org OrgRef, name string, params *GetTemplateParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListPlatformAdmins The install's platform admins, earliest first
+	//
+	// Platform admins create organizations and manage platform admins; inside an organization they have only the rights of their membership there. Platform admins only.
+	//
+	// Corresponds with GET /v1/platform/admins (the `ListPlatformAdmins` operationId).
+	ListPlatformAdmins(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AddPlatformAdminWithBody Make a person a platform admin
+	//
+	// The person is the user with this email (case-insensitive), who must have signed in once (404 otherwise; invite them to an organization first). Adding an admin again changes nothing. Recorded in the security log as platform_admin.added. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/platform/admins (the `AddPlatformAdmin` operationId).
+	AddPlatformAdminWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AddPlatformAdmin Make a person a platform admin
+	//
+	// The person is the user with this email (case-insensitive), who must have signed in once (404 otherwise; invite them to an organization first). Adding an admin again changes nothing. Recorded in the security log as platform_admin.added. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/platform/admins (the `AddPlatformAdmin` operationId).
+	AddPlatformAdmin(ctx context.Context, body AddPlatformAdminJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RemovePlatformAdmin Stop a person being a platform admin
+	//
+	// 404 when they are not one. The install keeps at least one platform admin: removing the last is 409 with code last-platform-admin and changes nothing (goal db recover-admin adds one with database access). Recorded in the security log as platform_admin.removed. Needs a sign-in from the last 10 minutes.
+	//
+	// Corresponds with DELETE /v1/platform/admins/{user} (the `RemovePlatformAdmin` operationId).
+	RemovePlatformAdmin(ctx context.Context, user UserRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListAuthEvents The install's security log, newest first
+	//
+	// Sign-ins, codes sent, suppressed and failed, lockouts, device approvals, platform admin changes and recoveries. An email or a user code appears only as its hash (subject); events older than 90 days are cleaned up. Platform admins only.
+	//
+	// Corresponds with GET /v1/platform/auth-events (the `ListAuthEvents` operationId).
+	ListAuthEvents(ctx context.Context, params *ListAuthEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // GetAuthConfig How this install signs people in
@@ -5577,6 +5679,95 @@ func (c *Client) ListTemplates(ctx context.Context, org OrgRef, reqEditors ...Re
 // Corresponds with GET /v1/orgs/{org}/templates/{name} (the `GetTemplate` operationId).
 func (c *Client) GetTemplate(ctx context.Context, org OrgRef, name string, params *GetTemplateParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetTemplateRequest(c.Server, org, name, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListPlatformAdmins The install's platform admins, earliest first
+//
+// Platform admins create organizations and manage platform admins; inside an organization they have only the rights of their membership there. Platform admins only.
+//
+// Corresponds with GET /v1/platform/admins (the `ListPlatformAdmins` operationId).
+func (c *Client) ListPlatformAdmins(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListPlatformAdminsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AddPlatformAdminWithBody Make a person a platform admin
+//
+// The person is the user with this email (case-insensitive), who must have signed in once (404 otherwise; invite them to an organization first). Adding an admin again changes nothing. Recorded in the security log as platform_admin.added. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/platform/admins (the `AddPlatformAdmin` operationId).
+func (c *Client) AddPlatformAdminWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAddPlatformAdminRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AddPlatformAdmin Make a person a platform admin
+//
+// The person is the user with this email (case-insensitive), who must have signed in once (404 otherwise; invite them to an organization first). Adding an admin again changes nothing. Recorded in the security log as platform_admin.added. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/platform/admins (the `AddPlatformAdmin` operationId).
+func (c *Client) AddPlatformAdmin(ctx context.Context, body AddPlatformAdminJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAddPlatformAdminRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RemovePlatformAdmin Stop a person being a platform admin
+//
+// 404 when they are not one. The install keeps at least one platform admin: removing the last is 409 with code last-platform-admin and changes nothing (goal db recover-admin adds one with database access). Recorded in the security log as platform_admin.removed. Needs a sign-in from the last 10 minutes.
+//
+// Corresponds with DELETE /v1/platform/admins/{user} (the `RemovePlatformAdmin` operationId).
+func (c *Client) RemovePlatformAdmin(ctx context.Context, user UserRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemovePlatformAdminRequest(c.Server, user)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListAuthEvents The install's security log, newest first
+//
+// Sign-ins, codes sent, suppressed and failed, lockouts, device approvals, platform admin changes and recoveries. An email or a user code appears only as its hash (subject); events older than 90 days are cleaned up. Platform admins only.
+//
+// Corresponds with GET /v1/platform/auth-events (the `ListAuthEvents` operationId).
+func (c *Client) ListAuthEvents(ctx context.Context, params *ListAuthEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListAuthEventsRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -9381,6 +9572,185 @@ func NewGetTemplateRequest(server string, org OrgRef, name string, params *GetTe
 	return req, nil
 }
 
+// NewListPlatformAdminsRequest constructs an http.Request for the ListPlatformAdmins method
+func NewListPlatformAdminsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/platform/admins")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAddPlatformAdminRequest calls the generic AddPlatformAdmin builder with application/json body
+func NewAddPlatformAdminRequest(server string, body AddPlatformAdminJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAddPlatformAdminRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewAddPlatformAdminRequestWithBody constructs an http.Request for the AddPlatformAdmin method, with any body, and a specified content type
+func NewAddPlatformAdminRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/platform/admins")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewRemovePlatformAdminRequest constructs an http.Request for the RemovePlatformAdmin method
+func NewRemovePlatformAdminRequest(server string, user UserRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "user", user, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/platform/admins/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListAuthEventsRequest constructs an http.Request for the ListAuthEvents method
+func NewListAuthEventsRequest(server string, params *ListAuthEventsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/platform/auth-events")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Before != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "before", *params.Before, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Kind != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "kind", *params.Kind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -10174,6 +10544,51 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/templates/{name} (the `GetTemplate` operationId).
 	GetTemplateWithResponse(ctx context.Context, org OrgRef, name string, params *GetTemplateParams, reqEditors ...RequestEditorFn) (*GetTemplateResponse, error)
+
+	// ListPlatformAdminsWithResponse The install's platform admins, earliest first
+	//
+	// Platform admins create organizations and manage platform admins; inside an organization they have only the rights of their membership there. Platform admins only.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/platform/admins (the `ListPlatformAdmins` operationId).
+	ListPlatformAdminsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListPlatformAdminsResponse, error)
+
+	// AddPlatformAdminWithBodyWithResponse Make a person a platform admin
+	//
+	// The person is the user with this email (case-insensitive), who must have signed in once (404 otherwise; invite them to an organization first). Adding an admin again changes nothing. Recorded in the security log as platform_admin.added. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/platform/admins (the `AddPlatformAdmin` operationId).
+	AddPlatformAdminWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AddPlatformAdminResponse, error)
+
+	// AddPlatformAdminWithResponse Make a person a platform admin
+	//
+	// The person is the user with this email (case-insensitive), who must have signed in once (404 otherwise; invite them to an organization first). Adding an admin again changes nothing. Recorded in the security log as platform_admin.added. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/platform/admins (the `AddPlatformAdmin` operationId).
+	AddPlatformAdminWithResponse(ctx context.Context, body AddPlatformAdminJSONRequestBody, reqEditors ...RequestEditorFn) (*AddPlatformAdminResponse, error)
+
+	// RemovePlatformAdminWithResponse Stop a person being a platform admin
+	//
+	// 404 when they are not one. The install keeps at least one platform admin: removing the last is 409 with code last-platform-admin and changes nothing (goal db recover-admin adds one with database access). Recorded in the security log as platform_admin.removed. Needs a sign-in from the last 10 minutes.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/platform/admins/{user} (the `RemovePlatformAdmin` operationId).
+	RemovePlatformAdminWithResponse(ctx context.Context, user UserRef, reqEditors ...RequestEditorFn) (*RemovePlatformAdminResponse, error)
+
+	// ListAuthEventsWithResponse The install's security log, newest first
+	//
+	// Sign-ins, codes sent, suppressed and failed, lockouts, device approvals, platform admin changes and recoveries. An email or a user code appears only as its hash (subject); events older than 90 days are cleaned up. Platform admins only.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/platform/auth-events (the `ListAuthEvents` operationId).
+	ListAuthEventsWithResponse(ctx context.Context, params *ListAuthEventsParams, reqEditors ...RequestEditorFn) (*ListAuthEventsResponse, error)
 }
 
 type GetAuthConfigResponse struct {
@@ -13420,6 +13835,191 @@ func (r GetTemplateResponse) ContentType() string {
 	return ""
 }
 
+type ListPlatformAdminsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PlatformAdminList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListPlatformAdminsResponse) GetJSON200() *PlatformAdminList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListPlatformAdminsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListPlatformAdminsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListPlatformAdminsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListPlatformAdminsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListPlatformAdminsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type AddPlatformAdminResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *PlatformAdmin
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r AddPlatformAdminResponse) GetJSON201() *PlatformAdmin {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r AddPlatformAdminResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AddPlatformAdminResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AddPlatformAdminResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AddPlatformAdminResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AddPlatformAdminResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RemovePlatformAdminResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RemovePlatformAdminResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RemovePlatformAdminResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RemovePlatformAdminResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RemovePlatformAdminResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RemovePlatformAdminResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListAuthEventsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AuthEventPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListAuthEventsResponse) GetJSON200() *AuthEventPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListAuthEventsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListAuthEventsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListAuthEventsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListAuthEventsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListAuthEventsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // GetAuthConfigWithResponse How this install signs people in
 //
 // Read by the sign-in page before anyone is signed in, so it reads no credential. Under GOAL_AUTH=none sign-in is off: the UI shows no sign-in page and every request acts as the local user.
@@ -14696,6 +15296,81 @@ func (c *ClientWithResponses) GetTemplateWithResponse(ctx context.Context, org O
 		return nil, err
 	}
 	return ParseGetTemplateResponse(rsp)
+}
+
+// ListPlatformAdminsWithResponse The install's platform admins, earliest first
+//
+// Platform admins create organizations and manage platform admins; inside an organization they have only the rights of their membership there. Platform admins only.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/platform/admins (the `ListPlatformAdmins` operationId).
+func (c *ClientWithResponses) ListPlatformAdminsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListPlatformAdminsResponse, error) {
+	rsp, err := c.ListPlatformAdmins(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListPlatformAdminsResponse(rsp)
+}
+
+// AddPlatformAdminWithBodyWithResponse Make a person a platform admin
+//
+// The person is the user with this email (case-insensitive), who must have signed in once (404 otherwise; invite them to an organization first). Adding an admin again changes nothing. Recorded in the security log as platform_admin.added. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/platform/admins (the `AddPlatformAdmin` operationId).
+func (c *ClientWithResponses) AddPlatformAdminWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AddPlatformAdminResponse, error) {
+	rsp, err := c.AddPlatformAdminWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAddPlatformAdminResponse(rsp)
+}
+
+// AddPlatformAdminWithResponse Make a person a platform admin
+//
+// The person is the user with this email (case-insensitive), who must have signed in once (404 otherwise; invite them to an organization first). Adding an admin again changes nothing. Recorded in the security log as platform_admin.added. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/platform/admins (the `AddPlatformAdmin` operationId).
+func (c *ClientWithResponses) AddPlatformAdminWithResponse(ctx context.Context, body AddPlatformAdminJSONRequestBody, reqEditors ...RequestEditorFn) (*AddPlatformAdminResponse, error) {
+	rsp, err := c.AddPlatformAdmin(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAddPlatformAdminResponse(rsp)
+}
+
+// RemovePlatformAdminWithResponse Stop a person being a platform admin
+//
+// 404 when they are not one. The install keeps at least one platform admin: removing the last is 409 with code last-platform-admin and changes nothing (goal db recover-admin adds one with database access). Recorded in the security log as platform_admin.removed. Needs a sign-in from the last 10 minutes.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/platform/admins/{user} (the `RemovePlatformAdmin` operationId).
+func (c *ClientWithResponses) RemovePlatformAdminWithResponse(ctx context.Context, user UserRef, reqEditors ...RequestEditorFn) (*RemovePlatformAdminResponse, error) {
+	rsp, err := c.RemovePlatformAdmin(ctx, user, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemovePlatformAdminResponse(rsp)
+}
+
+// ListAuthEventsWithResponse The install's security log, newest first
+//
+// Sign-ins, codes sent, suppressed and failed, lockouts, device approvals, platform admin changes and recoveries. An email or a user code appears only as its hash (subject); events older than 90 days are cleaned up. Platform admins only.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/platform/auth-events (the `ListAuthEvents` operationId).
+func (c *ClientWithResponses) ListAuthEventsWithResponse(ctx context.Context, params *ListAuthEventsParams, reqEditors ...RequestEditorFn) (*ListAuthEventsResponse, error) {
+	rsp, err := c.ListAuthEvents(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListAuthEventsResponse(rsp)
 }
 
 // ParseGetAuthConfigResponse parses an HTTP response from a GetAuthConfigWithResponse call
@@ -16958,6 +17633,134 @@ func ParseGetTemplateResponse(rsp *http.Response) (*GetTemplateResponse, error) 
 	return response, nil
 }
 
+// ParseListPlatformAdminsResponse parses an HTTP response from a ListPlatformAdminsWithResponse call
+func ParseListPlatformAdminsResponse(rsp *http.Response) (*ListPlatformAdminsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListPlatformAdminsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PlatformAdminList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAddPlatformAdminResponse parses an HTTP response from a AddPlatformAdminWithResponse call
+func ParseAddPlatformAdminResponse(rsp *http.Response) (*AddPlatformAdminResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AddPlatformAdminResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest PlatformAdmin
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRemovePlatformAdminResponse parses an HTTP response from a RemovePlatformAdminWithResponse call
+func ParseRemovePlatformAdminResponse(rsp *http.Response) (*RemovePlatformAdminResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RemovePlatformAdminResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListAuthEventsResponse parses an HTTP response from a ListAuthEventsWithResponse call
+func ParseListAuthEventsResponse(rsp *http.Response) (*ListAuthEventsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListAuthEventsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AuthEventPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// GetAuthConfig How this install signs people in
@@ -17164,6 +17967,18 @@ type ServerInterface interface {
 	// GetTemplate One version of a template with a preview of its model
 	// (GET /v1/orgs/{org}/templates/{name})
 	GetTemplate(w http.ResponseWriter, r *http.Request, org OrgRef, name string, params GetTemplateParams)
+	// ListPlatformAdmins The install's platform admins, earliest first
+	// (GET /v1/platform/admins)
+	ListPlatformAdmins(w http.ResponseWriter, r *http.Request)
+	// AddPlatformAdmin Make a person a platform admin
+	// (POST /v1/platform/admins)
+	AddPlatformAdmin(w http.ResponseWriter, r *http.Request)
+	// RemovePlatformAdmin Stop a person being a platform admin
+	// (DELETE /v1/platform/admins/{user})
+	RemovePlatformAdmin(w http.ResponseWriter, r *http.Request, user UserRef)
+	// ListAuthEvents The install's security log, newest first
+	// (GET /v1/platform/auth-events)
+	ListAuthEvents(w http.ResponseWriter, r *http.Request, params ListAuthEventsParams)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -20146,6 +20961,119 @@ func (siw *ServerInterfaceWrapper) GetTemplate(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// ListPlatformAdmins operation middleware
+func (siw *ServerInterfaceWrapper) ListPlatformAdmins(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPlatformAdmins(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddPlatformAdmin operation middleware
+func (siw *ServerInterfaceWrapper) AddPlatformAdmin(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddPlatformAdmin(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemovePlatformAdmin operation middleware
+func (siw *ServerInterfaceWrapper) RemovePlatformAdmin(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "user" -------------
+	var user UserRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "user", r.PathValue("user"), &user, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "user", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemovePlatformAdmin(w, r, user)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAuthEvents operation middleware
+func (siw *ServerInterfaceWrapper) ListAuthEvents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAuthEventsParams
+
+	// ------------- Optional query parameter "before" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "before", r.URL.Query(), &params.Before, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "before"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "before", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAuthEvents(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -20269,6 +21197,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/health", wrapper.GetHealth)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/auth/config", wrapper.GetAuthConfig)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/me", wrapper.GetMe)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/platform/admins", wrapper.ListPlatformAdmins)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/platform/admins", wrapper.AddPlatformAdmin)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/platform/admins/{user}", wrapper.RemovePlatformAdmin)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/platform/auth-events", wrapper.ListAuthEvents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs", wrapper.ListOrgs)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs", wrapper.CreateOrg)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}", wrapper.DeleteOrg)
@@ -23119,6 +24051,155 @@ func (response GetTemplatedefaultApplicationProblemPlusJSONResponse) VisitGetTem
 	return err
 }
 
+type ListPlatformAdminsRequestObject struct {
+}
+
+type ListPlatformAdminsResponseObject interface {
+	VisitListPlatformAdminsResponse(w http.ResponseWriter) error
+}
+
+type ListPlatformAdmins200JSONResponse PlatformAdminList
+
+func (response ListPlatformAdmins200JSONResponse) VisitListPlatformAdminsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPlatformAdminsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListPlatformAdminsdefaultApplicationProblemPlusJSONResponse) VisitListPlatformAdminsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddPlatformAdminRequestObject struct {
+	Body *AddPlatformAdminJSONRequestBody
+}
+
+type AddPlatformAdminResponseObject interface {
+	VisitAddPlatformAdminResponse(w http.ResponseWriter) error
+}
+
+type AddPlatformAdmin201JSONResponse PlatformAdmin
+
+func (response AddPlatformAdmin201JSONResponse) VisitAddPlatformAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddPlatformAdmindefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response AddPlatformAdmindefaultApplicationProblemPlusJSONResponse) VisitAddPlatformAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemovePlatformAdminRequestObject struct {
+	User UserRef `json:"user"`
+}
+
+type RemovePlatformAdminResponseObject interface {
+	VisitRemovePlatformAdminResponse(w http.ResponseWriter) error
+}
+
+type RemovePlatformAdmin204Response struct {
+}
+
+func (response RemovePlatformAdmin204Response) VisitRemovePlatformAdminResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RemovePlatformAdmindefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RemovePlatformAdmindefaultApplicationProblemPlusJSONResponse) VisitRemovePlatformAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAuthEventsRequestObject struct {
+	Params ListAuthEventsParams
+}
+
+type ListAuthEventsResponseObject interface {
+	VisitListAuthEventsResponse(w http.ResponseWriter) error
+}
+
+type ListAuthEvents200JSONResponse AuthEventPage
+
+func (response ListAuthEvents200JSONResponse) VisitListAuthEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAuthEventsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListAuthEventsdefaultApplicationProblemPlusJSONResponse) VisitListAuthEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// GetAuthConfig How this install signs people in
@@ -23325,6 +24406,18 @@ type StrictServerInterface interface {
 	// GetTemplate One version of a template with a preview of its model
 	// (GET /v1/orgs/{org}/templates/{name})
 	GetTemplate(ctx context.Context, request GetTemplateRequestObject) (GetTemplateResponseObject, error)
+	// ListPlatformAdmins The install's platform admins, earliest first
+	// (GET /v1/platform/admins)
+	ListPlatformAdmins(ctx context.Context, request ListPlatformAdminsRequestObject) (ListPlatformAdminsResponseObject, error)
+	// AddPlatformAdmin Make a person a platform admin
+	// (POST /v1/platform/admins)
+	AddPlatformAdmin(ctx context.Context, request AddPlatformAdminRequestObject) (AddPlatformAdminResponseObject, error)
+	// RemovePlatformAdmin Stop a person being a platform admin
+	// (DELETE /v1/platform/admins/{user})
+	RemovePlatformAdmin(ctx context.Context, request RemovePlatformAdminRequestObject) (RemovePlatformAdminResponseObject, error)
+	// ListAuthEvents The install's security log, newest first
+	// (GET /v1/platform/auth-events)
+	ListAuthEvents(ctx context.Context, request ListAuthEventsRequestObject) (ListAuthEventsResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -25358,6 +26451,113 @@ func (sh *strictHandler) GetTemplate(w http.ResponseWriter, r *http.Request, org
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetTemplateResponseObject); ok {
 		if err := validResponse.VisitGetTemplateResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListPlatformAdmins operation middleware
+func (sh *strictHandler) ListPlatformAdmins(w http.ResponseWriter, r *http.Request) {
+	var request ListPlatformAdminsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListPlatformAdmins(ctx, request.(ListPlatformAdminsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListPlatformAdmins")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListPlatformAdminsResponseObject); ok {
+		if err := validResponse.VisitListPlatformAdminsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddPlatformAdmin operation middleware
+func (sh *strictHandler) AddPlatformAdmin(w http.ResponseWriter, r *http.Request) {
+	var request AddPlatformAdminRequestObject
+
+	var body AddPlatformAdminJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddPlatformAdmin(ctx, request.(AddPlatformAdminRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddPlatformAdmin")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddPlatformAdminResponseObject); ok {
+		if err := validResponse.VisitAddPlatformAdminResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemovePlatformAdmin operation middleware
+func (sh *strictHandler) RemovePlatformAdmin(w http.ResponseWriter, r *http.Request, user UserRef) {
+	var request RemovePlatformAdminRequestObject
+
+	request.User = user
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemovePlatformAdmin(ctx, request.(RemovePlatformAdminRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemovePlatformAdmin")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemovePlatformAdminResponseObject); ok {
+		if err := validResponse.VisitRemovePlatformAdminResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAuthEvents operation middleware
+func (sh *strictHandler) ListAuthEvents(w http.ResponseWriter, r *http.Request, params ListAuthEventsParams) {
+	var request ListAuthEventsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAuthEvents(ctx, request.(ListAuthEventsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAuthEvents")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAuthEventsResponseObject); ok {
+		if err := validResponse.VisitListAuthEventsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -73,7 +73,7 @@ const usage = `usage:
                                                   run version N again
   goal org list                                   the organizations (* the one commands act in)
   goal org use <slug>                             act in this organization from now on (config file)
-  goal org create <slug> --name N [--mark M]      create an organization
+  goal org create <slug> --name N [--mark M]      create an organization (platform admins only)
   goal org update <slug> [--name N] [--slug S] [--mark M] [--max-slots N]
                                                   rename it, or cap the agents running at once
                                                   across its factories (--max-slots 0: no cap)
@@ -92,6 +92,14 @@ const usage = `usage:
   goal catalog templates list                     the catalog's templates, latest version of each
   goal db init                                    create the database roles goald runs as (goal_owner,
                                                   goal_app) and hand the schema to goal_owner
+  goal db recover-admin <email>                   make the person a platform admin with database access
+                                                  alone (GOAL_DATABASE_ADMIN_URL), creating them if no
+                                                  one has the email; goald may be stopped
+  goal db recover-owner <org> <email>             make the person an owner of the organization, the same way
+  goal admin list                                 the platform admins (platform admins only)
+  goal admin add <email>                          make a person who has signed in a platform admin
+  goal admin remove <email>                       stop them being one (the last one stays)
+  goal admin events [--kind K] [--before N]       the security log, newest first
   goal version                                    print the module version and build info
 
 <item> is goal#2 (factory and number), the item's id, or a bare number such as 2 when one
@@ -161,6 +169,8 @@ func run(ctx context.Context, args []string, out *printer, getenv func(string) s
 		return andon(ctx, out, getenv, rest)
 	case "db", "storage":
 		return setUp(ctx, out, getenv, cmd, rest)
+	case "admin":
+		return adminCommand(ctx, out, getenv, rest)
 	case "catalog":
 		return catalogCommand(ctx, out, getenv, rest)
 	default:

@@ -238,7 +238,13 @@ var probes = map[string]probe{
 	"getMe":         {method: http.MethodGet, path: "/v1/me"},
 	"listOrgs":      {method: http.MethodGet, path: "/v1/orgs"},
 	"createOrg":     {method: http.MethodPost, path: "/v1/orgs", body: `{"name":"Acme Two","slug":"acme-two"}`},
-	"getOrg":        {method: http.MethodGet, path: "/v1/orgs/acme", org: testOrg},
+
+	"listPlatformAdmins":  {method: http.MethodGet, path: "/v1/platform/admins"},
+	"addPlatformAdmin":    {method: http.MethodPost, path: "/v1/platform/admins", body: `{"email":"nobody@example.com"}`},
+	"removePlatformAdmin": {method: http.MethodDelete, path: "/v1/platform/admins/019a3002-0000-7000-8000-000000000001"},
+	"listAuthEvents":      {method: http.MethodGet, path: "/v1/platform/auth-events?kind=sign_in.succeeded"},
+
+	"getOrg": {method: http.MethodGet, path: "/v1/orgs/acme", org: testOrg},
 	// A wrong confirmation, so the probe deletes nothing the later probes need.
 	"deleteOrg":           {method: http.MethodDelete, path: "/v1/orgs/acme", body: `{"confirm":"nope"}`, org: testOrg},
 	"getOrgSettings":      {method: http.MethodGet, path: "/v1/orgs/acme/settings", org: testOrg},

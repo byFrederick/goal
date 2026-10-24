@@ -242,6 +242,9 @@ func (mxAudit) AuditLog(context.Context, ports.AuditQuery) ([]domain.AuditEntry,
 	panic(errReached)
 }
 
+// mxPlatform is every platform route's collaborator: reaching it is passing authorization.
+type mxPlatform struct{ Platform }
+
 type mxDefinitions struct{ Definitions }
 
 func (mxDefinitions) Factory(ctx context.Context, ref string) (ports.FactoryRecord, error) {
@@ -273,7 +276,7 @@ func mxServer(t *testing.T, identity Identity) *httptest.Server {
 	h, err := New(Deps{
 		Engine: struct{ Engine }{}, Items: mxItems{}, Factories: mxFactories{}, Definitions: mxDefinitions{}, Versions: struct{ Versions }{},
 		Orgs: mxOrgs{}, Audit: mxAudit{}, OrgRetention: time.Hour, Authorizer: NewPermissions(clock),
-		Auth: AuthConfig{Mode: AuthSession}, Identity: identity, Feed: NewFeed(porttest.NewItemNotices(), porttest.NewDefinitionNotices(), nil),
+		Auth: AuthConfig{Mode: AuthSession}, Identity: identity, Platform: mxPlatform{}, Feed: NewFeed(porttest.NewItemNotices(), porttest.NewDefinitionNotices(), nil),
 		Builder: struct{ Builder }{}, Clock: clock,
 	})
 	if err != nil {

@@ -33,6 +33,7 @@ var permissionRules = map[string]rule{
 
 // operationScopes is the x-goal-scope of every operation of api/openapi.yaml, by operationId.
 var operationScopes = map[string]string{
+	"addPlatformAdmin":    "platform:manage",
 	"approveItem":         "item:decide",
 	"clearAndon":          "andon:manage",
 	"compareVersions":     "factory:read",
@@ -71,12 +72,14 @@ var operationScopes = map[string]string{
 	"getVersionModel":     "factory:read",
 	"getWeeklyThroughput": "factory:read",
 	"listAudit":           "audit:read",
+	"listAuthEvents":      "platform:read",
 	"listDraftFiles":      "factory:read",
 	"listFactories":       "org:read",
 	"listItemEvents":      "factory:read",
 	"listItemRuns":        "factory:read",
 	"listItems":           "factory:read",
 	"listOrgs":            "authenticated",
+	"listPlatformAdmins":  "platform:read",
 	"listTemplates":       "org:read",
 	"listVersions":        "factory:read",
 	"mergeItem":           "item:decide",
@@ -89,6 +92,7 @@ var operationScopes = map[string]string{
 	"pullAndon":           "andon:manage",
 	"putDraftFile":        "definition:edit",
 	"rejectItem":          "item:decide",
+	"removePlatformAdmin": "platform:manage",
 	"replaceDraftTree":    "definition:edit",
 	"restoreVersion":      "definition:publish",
 	"resumeFactory":       "factory:manage",

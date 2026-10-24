@@ -201,10 +201,13 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// Phase 4 sets the capabilities in its wiring PRs; until then the editor keeps their controls hidden.
 	editor := builder.New(objects, clock, builder.Config{Models: s.Models, Capabilities: builder.Capabilities{}, Logger: log})
 
+	// Platform admins, the security log and the sign-in clean-up: install-level, in no organization.
+	platform := postgres.NewPlatform(store)
+
 	apiHandler, err := api.New(api.Deps{
 		Engine: eng, Items: store, Factories: defs, Definitions: authors, Versions: definitionStore, Orgs: store, Audit: store, OrgRetention: s.OrgRetention,
 		Authorizer: authorizer(s.Auth, clock), Auth: api.AuthConfig{Mode: api.AuthMode(s.Auth), Google: s.Google, SecureCookies: s.strictTransport()},
-		Identity: identity, Feed: feed, Builder: editor, Clock: clock, Logger: log,
+		Identity: identity, Platform: platform, Feed: feed, Builder: editor, Clock: clock, Logger: log,
 	})
 	if err != nil {
 		return err
@@ -215,7 +218,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// Deleted organizations go, rows and bucket objects, once their retention has passed.
 	purger := retention.New(store, objects, clock, s.OrgRetention, log)
 
-	return serve(ctx, log, s, servers, eng, defs, definitionNotices, feed, purger)
+	return serve(ctx, log, s, servers, eng, defs, definitionNotices, feed, jobs{purger: purger, platform: platform, clock: clock})
 }
 
 // httpServers are goald's HTTP servers: the main listener and, with GOAL_GATEWAY_LISTEN, the
@@ -260,11 +263,18 @@ func routes(separate bool, apiHandler, gw, spa http.Handler) (primary, gatewayOn
 	return mux, only
 }
 
+// jobs are goald's scheduled jobs: the purge of deleted organizations and the sign-in clean-up.
+type jobs struct {
+	purger   *retention.Purger
+	platform ports.Platform
+	clock    ports.Clock
+}
+
 // serve runs the HTTP servers, the engine, the stream feed, the definitions reloads and the
-// purge of deleted organizations until ctx ends, then shuts them down: the feed ends every
-// stream, HTTP drains, then the engine releases the items its runs held.
+// scheduled jobs until ctx ends, then shuts them down: the feed ends every stream, HTTP drains,
+// then the engine releases the items its runs held.
 func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Server, eng *engine.Engine, defs *definitions.Cache,
-	notices ports.DefinitionNotices, feed *api.Feed, purger *retention.Purger,
+	notices ports.DefinitionNotices, feed *api.Feed, j jobs,
 ) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -304,7 +314,8 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 	})
 
 	wg.Go(func() { refresh(ctx, log, defs, s.RefreshEvery) })
-	wg.Go(func() { purger.Run(ctx, purgeEvery) })
+	wg.Go(func() { j.purger.Run(ctx, purgeEvery) })
+	wg.Go(func() { cleanUpAuth(ctx, log, j.platform, j.clock, authCleanUpEvery) })
 
 	wg.Go(func() {
 		if err := feed.Run(ctx); err != nil {

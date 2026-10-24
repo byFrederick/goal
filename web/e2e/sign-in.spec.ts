@@ -1,8 +1,16 @@
 // Web sign-in (spec 3 §10, PR 3-10) at every width against the mock with sign-in on: the email
 // code, its states, Google's round trip, returning to the page that asked, the account, signing
 // out (here and everywhere), and confirming it's you before a change that needs a recent sign-in.
-import { type APIRequestContext, expect, type Page, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll, expectToast, isPhone, orgNav, recordToasts } from './support';
+import { type APIRequestContext, expect, type Locator, type Page, test } from '@playwright/test';
+import {
+  expectAccessible,
+  expectNoHorizontalScroll,
+  expectToast,
+  isPhone,
+  orgMarkOf,
+  orgNav,
+  recordToasts,
+} from './support';
 
 const owner = 'f.cruz@example.com';
 
@@ -10,6 +18,7 @@ interface AuthReset {
   signed_in?: 'fresh' | 'stale';
   email?: string;
   google?: 'ok' | 'not-invited' | 'unverified' | 'failed' | 'off';
+  platform_admin?: false;
 }
 
 /** Turns sign-in on. Signed in: the reset goes through the page's own request context, so its cookie lands in the browser. */
@@ -314,6 +323,31 @@ test('cancelling the confirmation leaves the change undone', async ({ page }) =>
   await expect(reauth).toBeHidden();
   await expect(page.getByRole('dialog', { name: 'Delete Acme?' })).toBeVisible();
   expect((await page.request.get('/v1/orgs/acme')).status()).toBe(200);
+});
+
+/** Opens the organization menu, or the phone's sheet, and returns it. */
+async function openOrgMenu(page: Page) {
+  await orgMarkOf(page).click();
+  const menu = isPhone(page) ? page.getByRole('dialog', { name: 'Switch organization' }) : page.getByRole('menu');
+  await expect(menu.getByRole(isPhone(page) ? 'link' : 'menuitem', { name: 'Organization settings' })).toBeVisible();
+  return menu;
+}
+
+const createOrg = (page: Page, menu: Locator) =>
+  menu.getByRole(isPhone(page) ? 'button' : 'menuitem', { name: 'Create organization' });
+
+test('only platform admins are offered Create organization, and goald refuses anyone else', async ({ page }) => {
+  await signInOn(page.request, { signed_in: 'fresh', platform_admin: false });
+  await page.goto('/o/acme');
+  const menu = await openOrgMenu(page);
+  await expect(createOrg(page, menu)).toHaveCount(0);
+  await expectAccessible(page);
+  const refused = await page.request.post('/v1/orgs', { data: { name: 'Acme Two', slug: 'acme-two' } });
+  expect(refused.status()).toBe(403);
+
+  await signInOn(page.request, { signed_in: 'fresh' });
+  await page.goto('/o/acme');
+  await expect(createOrg(page, await openOrgMenu(page))).toBeVisible();
 });
 
 test('with sign-in off there is no sign-in page', async ({ page, request }) => {

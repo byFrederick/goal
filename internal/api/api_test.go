@@ -126,6 +126,9 @@ type harness struct {
 	defs       *porttest.Definitions
 	defNotices *porttest.DefinitionNotices
 	objects    *porttest.ObjectStore
+	// platform keeps the platform admins of the people signed in (an identity of its own under
+	// GOAL_AUTH=none).
+	platform *porttest.Platform
 }
 
 // acme's one prompt and its path.
@@ -380,9 +383,17 @@ func newHarnessWith(t *testing.T, in *signIn) *harness {
 		Models: []builder.Model{{ID: "claude-opus-5-5", Label: "Claude Opus 5.5"}, {ID: "claude-haiku-5-5", Label: "Claude Haiku 5.5"}},
 	})
 
+	people := porttest.NewIdentity(h.clock.Now)
+	if in != nil {
+		people = in.identity
+	}
+
+	h.platform = porttest.NewPlatform(people)
+
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
-		OrgRetention: retention, Authorizer: h.seam, Auth: api.AuthConfig{Mode: api.AuthNone}, Feed: feed, Builder: h.builder, Clock: h.clock,
+		OrgRetention: retention, Authorizer: h.seam, Auth: api.AuthConfig{Mode: api.AuthNone}, Platform: h.platform, Feed: feed, Builder: h.builder,
+		Clock: h.clock,
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity = api.NewPermissions(h.clock), in.identity

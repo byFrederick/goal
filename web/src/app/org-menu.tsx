@@ -1,14 +1,15 @@
 // The organization menu (C §10.4, canvas "Org-Switcher" and "Mobile-Org-Switcher"): every
 // organization on the install (switch by choosing one), the current organization's own pages,
-// and Create organization. A Radix DropdownMenu on the rail; a bottom sheet on phones. Both are
+// and Create organization, for platform admins only (spec 3 §4.2; everyone with sign-in off, the
+// local user creates them). A Radix DropdownMenu on the rail; a bottom sheet on phones. Both are
 // opened by the organization mark (org-mark.tsx) and fed by useOrgMenuModel. The sheet ends with
 // the account (account-menu.tsx). No role per organization and no Members and roles link yet:
 // both arrive with Members (spec 3, PR 3-11).
-import { useSuspenseQuery } from '@tanstack/react-query';
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from '@tanstack/react-router';
 import { Check, Plus } from 'lucide-react';
 import { type ReactNode, type RefObject, useId, useRef } from 'react';
-import { orgsQuery } from '../api/queries';
+import { meQuery, orgsQuery } from '../api/queries';
 import type { OrgSummary } from '../api/types';
 import { orgMark } from '../shared/marks';
 import { factoryCount } from '../shared/org';
@@ -39,6 +40,8 @@ interface OrgMenuModel {
   orgs: OrgChoice[];
   /** The current organization's pages: catalog and credentials (phase 4), settings (C7). */
   links: { screen: OrgScreen; label: string }[];
+  /** Create organization is offered: to platform admins, or to the local user with sign-in off. */
+  canCreate: boolean;
   /**
    * Whether going to `path` leaves the current page. Only then does the new page's heading take
    * focus; otherwise focus returns to the mark as the menu closes.
@@ -53,6 +56,8 @@ function useOrgMenuModel(current: OrgSummary): OrgMenuModel {
   // Already cached: the /o/$org layout resolved the organization from this list.
   const { data } = useSuspenseQuery(orgsQuery);
   const pathname = useLocation({ select: (l) => l.pathname });
+  // Hidden until goald says who this is: only platform admins create organizations.
+  const { data: canCreate = false } = useQuery({ ...meQuery, select: (me) => me.mode === 'none' || me.platform_admin });
   return {
     orgs: data.map((org) => ({
       org,
@@ -65,6 +70,7 @@ function useOrgMenuModel(current: OrgSummary): OrgMenuModel {
       { screen: credentialsScreen, label: credentialsScreen.label },
       { screen: settingsScreen, label: 'Organization settings' },
     ],
+    canCreate,
     leaves: (path) => path !== pathname,
   };
 }
@@ -160,11 +166,15 @@ export function OrgMenuContent({ org, onCreate, navigating }: OrgMenuProps) {
           ),
         )}
       </MenuGroup>
-      <MenuSeparator />
-      <MenuItem onSelect={onCreate}>
-        <Plus {...iconProps} />
-        Create organization
-      </MenuItem>
+      {model.canCreate ? (
+        <>
+          <MenuSeparator />
+          <MenuItem onSelect={onCreate}>
+            <Plus {...iconProps} />
+            Create organization
+          </MenuItem>
+        </>
+      ) : null}
     </MenuContent>
   );
 }
@@ -248,11 +258,15 @@ export function OrgSheetContent({ org, onCreate, onClose, navigating }: OrgSheet
         )}
       </SheetList>
       <div aria-hidden="true" className="my-2 h-px bg-line" />
-      <button type="button" onClick={onCreate} className={sheetRow}>
-        <Plus {...iconProps} />
-        Create organization
-      </button>
-      <div aria-hidden="true" className="my-2 h-px bg-line" />
+      {model.canCreate ? (
+        <>
+          <button type="button" onClick={onCreate} className={sheetRow}>
+            <Plus {...iconProps} />
+            Create organization
+          </button>
+          <div aria-hidden="true" className="my-2 h-px bg-line" />
+        </>
+      ) : null}
       <AccountBlock org={org} onAction={onClose} />
     </SheetContent>
   );

@@ -5,11 +5,12 @@
 // Sign-in is off by default (GOAL_AUTH=none, the mock's seed), so every other screen and test runs
 // as the local user. A reset turns it on: POST /__mock/reset {auth: {mode: "session",
 // signed_in?: "fresh" | "stale", email?, google?: "ok" | "not-invited" | "unverified" | "failed" |
-// "off"}}. Then
+// "off", platform_admin?: false}}. Then
 // every /v1 request but health and the auth config needs the session cookie (else 401
 // unauthenticated), deleting an organization needs a session signed in within 10 minutes (else
-// 403 reauth-required), and the organizations are the person's: f.cruz@example.com (F. Cruz,
-// platform admin) owns every one; j.doe@example.com is a user in none. As the identity service
+// 403 reauth-required), creating one needs a platform admin (else 403 forbidden), and the
+// organizations are the person's: f.cruz@example.com (F. Cruz, platform admin unless the reset
+// says platform_admin: false) owns every one; j.doe@example.com is a user in none. As the identity service
 // does (auth/, spec 3 §8.7), a send answers the same for every address but codes go only to those
 // two (the code is always 000000, valid 5 minutes; the 4th try of one code is TOO_MANY_ATTEMPTS),
 // Google refuses an account without an invitation (SIGN_UP_NOT_ALLOWED) and update-user takes a
@@ -42,6 +43,8 @@ export interface MockAuthSettings {
   /** Who is signed in at the reset, and who Google signs in. */
   email: string;
   google: GoogleOutcome;
+  /** Whether F. Cruz is a platform admin (true unless the reset says false). */
+  ownerIsPlatformAdmin: boolean;
 }
 
 /** The settings of a reset's `auth` member; sign-in off without one. */
@@ -55,6 +58,7 @@ export function authSettings(body: unknown): MockAuthSettings {
     signedIn: b.signed_in === 'fresh' || b.signed_in === 'stale' ? b.signed_in : false,
     email: typeof b.email === 'string' && b.email.includes('@') ? b.email.toLowerCase() : owner.email,
     google,
+    ownerIsPlatformAdmin: b.platform_admin !== false,
   };
 }
 
@@ -145,7 +149,7 @@ export function createMockAuth(clock: () => number): MockAuth {
         id: crypto.randomUUID(),
         email,
         name: isOwner ? owner.name : (email.split('@')[0] ?? email),
-        platformAdmin: isOwner,
+        platformAdmin: isOwner && settings.ownerIsPlatformAdmin,
       };
       users.set(email, user);
     }
@@ -352,6 +356,10 @@ export function createMockAuth(clock: () => number): MockAuth {
       // Only the owner is a member of any organization: to anyone else they do not exist.
       if (path.startsWith('/v1/orgs/') && now.user.email !== owner.email) {
         send(res, 404, { title: 'Organization not found', status: 404, code: 'org-not-found' });
+        return true;
+      }
+      if (path === '/v1/orgs' && method === 'POST' && !now.user.platformAdmin) {
+        send(res, 403, { title: 'Forbidden', status: 403, code: 'forbidden' });
         return true;
       }
       const org = path.match(/^\/v1\/orgs\/([^/]+)$/);
