@@ -42,6 +42,7 @@ const (
 	codeAgentsOverWIP   = "agents-exceed-wip"
 	codeCheckRunMissing = "check-run-missing"
 	codeMergeNeedsRepo  = "merge-needs-repository"
+	codeBufferOffDrum   = "buffer-not-at-constraint"
 
 	codeDuplicateName     = "duplicate-name"
 	codeUnknownAgent      = "unknown-agent"
@@ -299,11 +300,7 @@ func (c *checker) capacity(i int, s Station) {
 }
 
 func (c *checker) flowAndLearning() {
-	if fl := c.f.Spec.Board.Flow; fl != nil && fl.Constraint != "" && fl.Constraint != "auto" &&
-		!slices.Contains(c.stations, fl.Constraint) {
-		c.errorf(checkReferences, codeUnknownStation, at("spec", "board", "flow", "constraint"),
-			"flow.constraint %q is not a station", fl.Constraint)
-	}
+	c.constraint()
 
 	l := c.f.Spec.Learning
 	if l == nil || l.Librarian == nil {
@@ -319,6 +316,30 @@ func (c *checker) flowAndLearning() {
 		if !slices.Contains(c.f.Spec.KnowledgeBase.Collections, w) {
 			c.errorf(checkReferences, codeUnknownCollection, at("spec", "learning", "librarian", "writes", j),
 				"learning.librarian writes %q, which is not a knowledge base collection", w)
+		}
+	}
+}
+
+// constraint checks that flow.constraint names a station and warns about buffers away from it:
+// a buffer is kept only in front of the drum. With a detected constraint (auto) any station
+// may become the drum.
+func (c *checker) constraint() {
+	fl := c.f.Spec.Board.Flow
+	if fl == nil || fl.Constraint == "" || fl.Constraint == "auto" {
+		return
+	}
+
+	if !slices.Contains(c.stations, fl.Constraint) {
+		c.errorf(checkReferences, codeUnknownStation, at("spec", "board", "flow", "constraint"),
+			"flow.constraint %q is not a station", fl.Constraint)
+
+		return
+	}
+
+	for i, s := range c.f.Spec.Board.Stations {
+		if s.Buffer > 0 && s.ID != fl.Constraint {
+			c.warnf(checkLine, codeBufferOffDrum, at("spec", "board", "stations", i, "buffer"),
+				"station %s: a buffer matters only in front of the constraint, %s", s.ID, fl.Constraint)
 		}
 	}
 }

@@ -2,11 +2,73 @@ package config
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/byFrederick/goal/internal/domain"
 )
+
+// The line carries the flow policy and targets the engine and the flow metrics read.
+func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
+	t.Parallel()
+
+	f, err := LoadDir("testdata/support")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	l := f.Line()
+	want := domain.FlowPolicy{
+		Release: domain.ReleaseDBR, Constraint: "respond", ExpediteWIP: 1,
+		Andon:   &domain.AndonPolicy{ReworkRate: 0.5, Window: 10},
+		Targets: domain.Targets{ThroughputPerDay: 8, LeadTime: 6 * time.Hour, ExpediteLeadTime: time.Hour},
+	}
+
+	if !reflect.DeepEqual(l.Flow, want) {
+		t.Errorf("flow = %+v, want %+v", l.Flow, want)
+	}
+
+	if respond, _ := l.Station("respond"); respond.Buffer != 2 {
+		t.Errorf("respond buffer = %d, want 2", respond.Buffer)
+	}
+
+	if got := l.ItemTarget(domain.ClassExpedite); got != time.Hour {
+		t.Errorf("expedite target = %v, want 1h", got)
+	}
+
+	plain, err := LoadDir("testdata/line")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if p := plain.Line().Flow; p.Release != domain.ReleasePush || p.Targets != (domain.Targets{}) {
+		t.Errorf("flow without release or targets = %+v, want push and no targets", p)
+	}
+}
+
+// A target is a positive number; zero or less is no target and is refused.
+func TestLoad_RefusesTargetsThatAreNotPositive(t *testing.T) {
+	t.Parallel()
+
+	for _, targets := range []string{
+		"{ throughputPerDay: 0 }", "{ throughputPerDay: -2 }", "{ leadTimeHours: 0 }",
+		"{ expediteLeadTimeMinutes: 0 }", "{ expediteLeadTimeMinutes: 1.5 }", "{ cycleTime: 3 }",
+	} {
+		doc := baseFactory + "    flow:\n      targets: " + targets + "\n"
+
+		_, problems := Check(checkTree(doc, nil))
+		if !slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool { return p.Check == checkSchema && p.Blocking() }) {
+			t.Errorf("targets %s: problems %+v, want a schema problem", targets, problems)
+		}
+	}
+
+	ok := baseFactory + "    flow:\n      targets: { throughputPerDay: 0.5, leadTimeHours: 6, expediteLeadTimeMinutes: 30 }\n"
+	if _, err := Load(checkTree(ok, nil)); err != nil {
+		t.Errorf("valid targets refused: %v", err)
+	}
+}
 
 func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 	t.Parallel()

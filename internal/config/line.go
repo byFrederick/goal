@@ -3,6 +3,7 @@ package config
 import (
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/byFrederick/goal/internal/domain"
 )
@@ -40,17 +41,49 @@ func (f *Factory) Line() domain.Line {
 		l.Agents = append(l.Agents, agent(a, sources))
 	}
 
-	if fl := s.Board.Flow; fl != nil && fl.Expedite != nil {
+	var fl Flow
+	if s.Board.Flow != nil {
+		fl = *s.Board.Flow
+	}
+
+	l.Flow = flowPolicy(fl)
+	if fl.Expedite != nil {
 		l.ExpediteTypes = slices.Clone(fl.Expedite.Types)
 	}
 
 	return l
 }
 
+// flowPolicy maps board.flow; an unset release is push.
+func flowPolicy(fl Flow) domain.FlowPolicy {
+	p := domain.FlowPolicy{Release: domain.ReleasePush, Constraint: fl.Constraint}
+	if fl.Release != "" {
+		p.Release = domain.ReleasePolicy(fl.Release)
+	}
+
+	if fl.Expedite != nil {
+		p.ExpediteWIP = fl.Expedite.WIP
+	}
+
+	if a := fl.Andon; a != nil {
+		p.Andon = &domain.AndonPolicy{ReworkRate: a.ReworkRate, Window: a.Window}
+	}
+
+	if t := fl.Targets; t != nil {
+		p.Targets = domain.Targets{
+			ThroughputPerDay: t.ThroughputPerDay,
+			LeadTime:         time.Duration(t.LeadTimeHours * float64(time.Hour)),
+			ExpediteLeadTime: time.Duration(t.ExpediteLeadTimeMinutes) * time.Minute,
+		}
+	}
+
+	return p
+}
+
 func station(st Station) domain.Station {
 	out := domain.Station{
 		ID: st.ID, Kind: domain.StationKind(st.Kind), Agent: st.Agent, Route: maps.Clone(st.Route),
-		Agents: st.Agents, WIP: st.WIP, Output: st.Output, Action: domain.StationAction(st.Action),
+		Agents: st.Agents, WIP: st.WIP, Buffer: st.Buffer, Output: st.Output, Action: domain.StationAction(st.Action),
 	}
 
 	for _, c := range st.Checks { // shorthand command lines decode as command checks

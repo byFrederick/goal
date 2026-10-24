@@ -375,6 +375,16 @@
                 "reworkRate": { "type": "number", "minimum": 0, "maximum": 1 },
                 "window": { "type": "integer", "minimum": 1 }
               }
+            },
+            "targets": {
+              "type": "object",
+              "description": "What the line aims for; flow metrics show each against its target. Omit a target to have none.",
+              "additionalProperties": false,
+              "properties": {
+                "throughputPerDay": { "type": "number", "exclusiveMinimum": 0, "description": "Items done per day." },
+                "leadTimeHours": { "type": "number", "exclusiveMinimum": 0, "description": "p85 lead time, created to done, in hours." },
+                "expediteLeadTimeMinutes": { "type": "integer", "minimum": 1, "description": "Lead time of each expedite item, in minutes." }
+              }
             }
           }
         }

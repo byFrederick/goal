@@ -141,6 +141,11 @@ var locatedCases = []struct {
 		code: "unknown-station", section: domain.SectionLine, pointer: "/line/stations/1/gate/on_reject",
 	},
 	{
+		name: "buffer away from the constraint",
+		doc:  edited("        kind: queue\n", "        kind: queue\n        buffer: 2 #here\n") + "    flow: { constraint: work }\n",
+		code: "buffer-not-at-constraint", severity: domain.SeverityWarning, section: domain.SectionLine, pointer: "/line/stations/0/buffer",
+	},
+	{
 		name: "agents beyond wip", doc: edited(workAgentLine, workAgentLine+"        agents: 3 #here\n        wip: 2\n"),
 		code: "agents-exceed-wip", section: domain.SectionLine, pointer: "/line/stations/1/agents", wantFixes: 2,
 	},

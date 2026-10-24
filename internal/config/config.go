@@ -354,7 +354,8 @@ type Gate struct {
 	MaxRework int    `json:"maxRework,omitempty"`
 }
 
-// Flow holds the line's pull policy: expedite lane, constraint, release and andon.
+// Flow holds the line's pull policy (expedite lane, constraint, release and andon) and its
+// targets.
 type Flow struct {
 	Expedite *struct {
 		Types []string `json:"types,omitempty"`
@@ -366,6 +367,15 @@ type Flow struct {
 		ReworkRate float64 `json:"reworkRate,omitempty"`
 		Window     int     `json:"window,omitempty"`
 	} `json:"andon,omitempty"`
+	Targets *Targets `json:"targets,omitempty"`
+}
+
+// Targets are what the line aims for; an unset target is zero.
+type Targets struct {
+	ThroughputPerDay float64 `json:"throughputPerDay,omitempty"`
+	// LeadTimeHours is the target p85 lead time, created to done.
+	LeadTimeHours           float64 `json:"leadTimeHours,omitempty"`
+	ExpediteLeadTimeMinutes int     `json:"expediteLeadTimeMinutes,omitempty"`
 }
 
 // Learning configures the librarian and the kaizen report.

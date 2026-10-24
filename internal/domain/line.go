@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 )
 
 // ErrNoRoute means a routed station has no agent for the item's lane.
@@ -39,6 +40,8 @@ type Line struct {
 	Agents    []AgentSpec
 	// ExpediteTypes are the work types that enter with class of service expedite.
 	ExpediteTypes []string
+	// Flow is the line's flow policy and targets.
+	Flow FlowPolicy
 }
 
 // Runtime is what every agent task of the factory shares.
@@ -72,6 +75,8 @@ type Station struct {
 	// Agents is how many agent slots the station runs; WIP caps items in progress there.
 	Agents int
 	WIP    int
+	// Buffer is how many items are kept ready in front of the station; it matters at the drum.
+	Buffer int
 	// Output names the contract the station's output must satisfy; empty means none.
 	Output string
 	// Checks are commands run against the run's workspace, isolated from the host, after the
@@ -185,6 +190,16 @@ func (l Line) ClassFor(workType string) ClassOfService {
 	}
 
 	return ClassStandard
+}
+
+// ItemTarget is the lead time an item of class c is measured against: the expedite target for
+// expedite items, the line's lead-time target otherwise; 0 means no target.
+func (l Line) ItemTarget(c ClassOfService) time.Duration {
+	if c == ClassExpedite {
+		return l.Flow.Targets.ExpediteLeadTime
+	}
+
+	return l.Flow.Targets.LeadTime
 }
 
 // Capacity is how many items the station may have in progress: min(agents, wip), where an

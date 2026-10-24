@@ -1,5 +1,5 @@
 # Test fixture for config.Load: a small support factory that uses every part of the schema
-# (secrets, each connection type, intake sources, checks, buffer, flow policy, learning).
+# (secrets, each connection type, intake sources, checks, buffer, flow policy and targets, learning).
 # Self-contained: tests never read factory definitions from outside testdata.
 apiVersion: goal/v1
 kind: Factory
@@ -83,6 +83,7 @@ spec:
       constraint: respond
       release: drum-buffer-rope
       andon: { reworkRate: 0.5, window: 10 }
+      targets: { throughputPerDay: 8, leadTimeHours: 6, expediteLeadTimeMinutes: 60 }
   learning:
     librarian: { agent: librarian, after: [done], writes: [answers] }
     kaizen: { schedule: "0 17 * * FRI" }
