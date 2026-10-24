@@ -37,6 +37,21 @@ type AndonPull struct {
 	ClearedAt *time.Time
 }
 
+type AuditLog struct {
+	ID         int64
+	OrgID      uuid.UUID
+	At         time.Time
+	ActorKind  string
+	ActorID    string
+	ActorName  string
+	Action     string
+	TargetKind string
+	TargetID   string
+	FactoryID  *uuid.UUID
+	Data       []byte
+	RequestID  *string
+}
+
 type Factory struct {
 	ID               uuid.UUID
 	Name             string
@@ -70,6 +85,16 @@ type Lease struct {
 	AcquiredAt  time.Time
 	HeartbeatAt time.Time
 	ExpiresAt   time.Time
+}
+
+type Organization struct {
+	ID        uuid.UUID
+	Slug      string
+	Name      string
+	Mark      string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt *time.Time
 }
 
 type StationWip struct {

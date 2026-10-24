@@ -108,6 +108,96 @@ type Store interface {
 	FlowMetrics(ctx context.Context, factory domain.FactoryID, since, until time.Time) (domain.FlowMetrics, error)
 }
 
+// Tenancy keeps the install's organizations. Methods marked (org) act on the organization in
+// ctx (domain.WithOrg) and fail with an error wrapping domain.ErrNoOrg without one. Each
+// mutating method appends its audit entry in the same transaction, so a change is never
+// unaudited. Rule violations (a malformed, reserved or taken slug, a bad name or mark) wrap
+// domain.ErrInvalid.
+type Tenancy interface {
+	// Orgs returns every live organization of the install, by name. It needs no org.
+	Orgs(ctx context.Context) ([]domain.OrgSummary, error)
+	// Org finds a live organization by slug or id; ErrNotFound when unknown or deleted. It
+	// needs no org.
+	Org(ctx context.Context, ref string) (domain.Org, error)
+	// ActiveOrgs returns the ids of every live organization, for jobs that serve them all.
+	ActiveOrgs(ctx context.Context) ([]domain.OrgID, error)
+
+	// CreateOrg creates an organization (the mark defaults to domain.DefaultMark of the name)
+	// and appends org.created to its log. It needs no org.
+	CreateOrg(ctx context.Context, by domain.Actor, n NewOrg) (domain.Org, error)
+	// UpdateOrg changes the fields u sets and appends one org.updated entry with each changed
+	// field's from and to; nothing changed appends nothing. (org)
+	UpdateOrg(ctx context.Context, by domain.Actor, u OrgUpdate) (domain.Org, error)
+	// DeleteOrg soft-deletes the organization: from now on Org, Orgs and ActiveOrgs no longer
+	// see it. It appends org.deleted. (org)
+	DeleteOrg(ctx context.Context, by domain.Actor, now time.Time) error
+	// PurgeDeletedOrgs hard-deletes up to limit organizations deleted before cutoff, with every
+	// row they own, and returns their ids. It needs no org (a system job).
+	PurgeDeletedOrgs(ctx context.Context, cutoff time.Time, limit int) ([]domain.OrgID, error)
+}
+
+// NewOrg is an organization to create.
+type NewOrg struct {
+	Slug, Name, Mark string
+}
+
+// OrgUpdate names the fields to change; nil leaves a field as it is.
+type OrgUpdate struct {
+	Name, Slug, Mark *string
+}
+
+// Apply returns o with u's fields, checked by the domain rules (errors wrap domain.ErrInvalid),
+// and the org.updated audit data: each changed field's {from, to}. Whether a new slug is free
+// is the store's to decide.
+func (u OrgUpdate) Apply(o domain.Org) (domain.Org, map[string]any, error) {
+	changed := map[string]any{}
+
+	for _, f := range []struct {
+		name  string
+		to    *string
+		field *string
+		check func(string) error
+	}{
+		{"name", u.Name, &o.Name, domain.CheckOrgName},
+		{"slug", u.Slug, &o.Slug, domain.CheckSlug},
+		{"mark", u.Mark, &o.Mark, domain.CheckMark},
+	} {
+		if f.to == nil || *f.to == *f.field {
+			continue
+		}
+
+		if err := f.check(*f.to); err != nil {
+			return domain.Org{}, nil, err
+		}
+
+		changed[f.name] = map[string]any{"from": *f.field, "to": *f.to}
+		*f.field = *f.to
+	}
+
+	return o, changed, nil
+}
+
+// Audit reads an organization's audit log and appends entries that come with no other change;
+// other ports append their own entries in their transactions. Both methods act on the
+// organization in ctx (org).
+type Audit interface {
+	// Append appends e; a zero e.At is the time of the append.
+	Append(ctx context.Context, e domain.AuditEntry) error
+	// AuditLog returns up to q.Limit entries that match q, newest first.
+	AuditLog(ctx context.Context, q AuditQuery) ([]domain.AuditEntry, error)
+}
+
+// AuditQuery selects audit entries. Zero fields match everything.
+type AuditQuery struct {
+	// Before, when positive, keeps entries with a smaller id: the cursor of the next page.
+	Before     int64
+	Limit      int
+	Action     string
+	TargetKind string
+	TargetID   string
+	FactoryID  domain.FactoryID
+}
+
 // ItemQuery selects a factory's items for a listing.
 type ItemQuery struct {
 	FactoryID domain.FactoryID
