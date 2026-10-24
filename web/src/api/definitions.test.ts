@@ -1,18 +1,24 @@
 import { describe, expect, test, vi } from 'vitest';
 import { definitionInvalidations } from '../shared/invalidation';
-import { discardDraft, getDraft, openDraft, saveDraftSection } from './definitions';
+import { discardDraft, getDraft, getFileBlob, openDraft, saveDraftSection } from './definitions';
 import { defKeys } from './queries';
 import type { DefinitionEvent } from './types';
 
 // goald's draft routes for one factory, behind the real client: each open starts a draft at
 // revision 1 with a new id, each save adds one revision, a discard closes the draft.
 const goald = vi.hoisted(() => {
-  const state = { drafts: 0, id: '', revision: 0 };
+  const state = { drafts: 0, id: '', revision: 0, urls: [] as string[] };
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
   const draft = () => ({ id: state.id, revision: state.revision, next_number: 9, change_count: 0, sections: [] });
   const fetch = async (request: Request) => {
     const path = new URL(request.url).pathname;
+    state.urls.push(request.url);
+    if (request.method === 'GET' && path.includes('/files/')) {
+      return new Response(new Uint8Array([0x89, 0x50, 0x00, 0xff]), {
+        headers: { 'Content-Type': 'application/octet-stream', ETag: '"abc"' },
+      });
+    }
     if (request.method === 'POST' && path.endsWith('/draft')) {
       state.drafts += 1;
       state.id = `draft-${state.drafts}`;
@@ -84,5 +90,22 @@ describe("the stream's echo of this tab's draft saves", () => {
     expect(definitionInvalidations(acme, draftEvent('draft-elsewhere', revision))).toContainEqual(
       defKeys.draft(acme, goal),
     );
+  });
+});
+
+describe('a file to download', () => {
+  test("is read through goald's client, from its origin, byte for byte", async () => {
+    const blob = await getFileBlob(acme, goal, 'draft', 'skills/logo.png');
+
+    expect(goald.state.urls.at(-1)).toMatch(
+      new RegExp(`^http://goald\\.test/v1/orgs/acme/factories/${goal}/draft/files/skills(/|%2F)logo\\.png$`),
+    );
+    expect([...new Uint8Array(await blob.arrayBuffer())]).toEqual([0x89, 0x50, 0x00, 0xff]);
+  });
+
+  test('of a version is read from that version', async () => {
+    await getFileBlob(acme, goal, 'current', 'skills/logo.png');
+
+    expect(goald.state.urls.at(-1)).toContain(`/factories/${goal}/versions/current/files/`);
   });
 });

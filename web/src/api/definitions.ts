@@ -374,6 +374,24 @@ export async function getVersionFile(
   return { text, sha256: sha256Of((await call).response) };
 }
 
+/**
+ * One file's bytes, for a download: of the draft (`version` 'draft') or of a version. Read through
+ * the client, so it reaches goald on its own origin (VITE_API_URL) as every other request does.
+ */
+export function getFileBlob(org: string, factory: string, version: string, path: string): Promise<Blob> {
+  const call =
+    version === 'draft'
+      ? goal.GET(orgPath('/factories/{factory}/draft/files/{path}'), {
+          params: { path: { org, factory, path } },
+          parseAs: 'blob',
+        })
+      : goal.GET(orgPath('/factories/{factory}/versions/{version}/files/{path}'), {
+          params: { path: { org, factory, version, path } },
+          parseAs: 'blob',
+        });
+  return unwrap(call) as Promise<Blob>;
+}
+
 /** The semantic difference between two versions; the draft against its base by default. */
 export function compareVersions(
   org: string,

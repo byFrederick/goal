@@ -115,3 +115,25 @@ test('a factory.yaml that stops parsing holds Visual until it parses again', asy
   await expect(page.getByRole('textbox', { name: 'Title' })).toHaveValue('Goal');
   await expect(status(page)).not.toContainText('doesn’t parse');
 });
+
+test('a binary file of the draft downloads byte for byte', async ({ page, request }) => {
+  const path = 'skills/acme-conventions/logo.png';
+  const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0xfe, 0xff]);
+  const put = await request.put(`/v1/orgs/acme/factories/goal/draft/files/${encodeURIComponent(path)}`, {
+    data: bytes,
+    headers: { 'If-None-Match': '*', 'Content-Type': 'application/octet-stream' },
+  });
+  expect(put.ok()).toBe(true);
+
+  await page.goto(`${definition}/line?mode=yaml&file=${encodeURIComponent(path)}`);
+  await expect(page.getByText('Binary file, 8 bytes')).toBeVisible();
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download' }).click();
+  const file = await downloaded;
+
+  expect(file.suggestedFilename()).toBe('logo.png');
+  const stream = await file.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(chunk as Buffer);
+  expect([...Buffer.concat(chunks)]).toEqual([...bytes]);
+});

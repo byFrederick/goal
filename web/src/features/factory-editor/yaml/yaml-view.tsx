@@ -17,6 +17,7 @@ import {
   compareVersions,
   deleteDraftFile,
   formatDefinition,
+  getFileBlob,
   putDraftFile,
   validateDraft,
 } from '../../../api/definitions';
@@ -381,14 +382,14 @@ export function YamlView({ search }: SectionViewProps) {
           ) : binary ? (
             <div className="flex flex-wrap items-center justify-between gap-3 bg-surface p-5 text-sm">
               <span>{binarySentence(info?.size ?? text.length)}</span>
-              <Button asChild size="sm" variant="white" className="h-11 md:h-8">
-                <a
-                  href={`/v1/orgs/${encodeURIComponent(org)}/factories/${encodeURIComponent(f)}/${hasDraft ? 'draft' : 'versions/current'}/files/${encodeURIComponent(path)}`}
-                  download={path.split('/').at(-1)}
-                >
-                  <Download size={14} strokeWidth={1.75} aria-hidden="true" />
-                  Download
-                </a>
+              <Button
+                size="sm"
+                variant="white"
+                className="h-11 md:h-8"
+                onClick={() => void download(org, f, hasDraft ? 'draft' : 'current', path)}
+              >
+                <Download size={14} strokeWidth={1.75} aria-hidden="true" />
+                Download
               </Button>
             </div>
           ) : (
@@ -449,4 +450,22 @@ export function YamlView({ search }: SectionViewProps) {
       />
     </div>
   );
+}
+
+/**
+ * Saves a file of the draft or the running version: its bytes come through the API client (goald
+ * may be on another origin, where a link's `download` is ignored), then a link to a blob URL.
+ */
+async function download(org: string, factory: string, version: string, path: string) {
+  try {
+    const url = URL.createObjectURL(await getFileBlob(org, factory, version, path));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = path.split('/').at(-1) ?? path;
+    link.click();
+    // After the click has started the download.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch {
+    toast.error(`${path} couldn’t be downloaded. Try again.`);
+  }
 }
