@@ -1,5 +1,6 @@
 // Query keys and options over client.ts. Keys are hierarchical (factory → resource) so the
-// stream can invalidate exactly what an event touches.
+// stream can invalidate exactly what an event touches. When the routes move under an
+// organization (phase 2.2 A5), every key gains the ['org', org] root of C §10.10.
 import { type QueryClient, queryOptions } from '@tanstack/react-query';
 import { getBoard, getItem, getMetrics, type ItemFilter, listFactories, listItemEvents, listItems } from './client';
 import type { ItemEvent } from './types';

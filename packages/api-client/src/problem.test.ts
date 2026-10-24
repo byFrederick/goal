@@ -1,0 +1,55 @@
+import { describe, expect, test } from "vitest";
+import { createGoalClient } from "./index";
+import { ApiError, unwrap } from "./problem";
+import { orgPath } from "./routes";
+
+// goald behind a fake fetch: each test decides the one response.
+function goaldAnswering(response: Response) {
+  const requests: Request[] = [];
+  const goal = createGoalClient("http://goald.example.com", {
+    fetch: async (request: Request) => {
+      requests.push(request);
+      return response.clone();
+    },
+  });
+  return { goal, requests };
+}
+
+const problemJson = (status: number, body: unknown) =>
+  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/problem+json" } });
+
+describe("unwrap", () => {
+  test("resolves to the data of a success", async () => {
+    const { goal, requests } = goaldAnswering(Response.json({ factories: [] }));
+    await expect(unwrap(goal.GET(orgPath("/factories")))).resolves.toEqual({ factories: [] });
+    expect(requests[0]?.url).toBe("http://goald.example.com/v1/factories");
+  });
+
+  test("throws the Problem goald answered with", async () => {
+    const { goal } = goaldAnswering(problemJson(409, { title: "Item is not blocked", status: 409, detail: "goal#2 is done" }));
+    const call = unwrap(goal.POST(orgPath("/items/{item}/retry"), { params: { path: { item: "goal#2" } }, body: { by: "web" } }));
+
+    const err = await call.catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).problem).toEqual({ title: "Item is not blocked", status: 409, detail: "goal#2 is done" });
+    expect((err as ApiError).message).toBe("Item is not blocked: goal#2 is done");
+  });
+
+  test("percent-encodes an item reference in the path", async () => {
+    const { goal, requests } = goaldAnswering(Response.json({}));
+    await unwrap(goal.GET(orgPath("/items/{item}"), { params: { path: { item: "goal#2" } } }));
+    expect(requests[0]?.url).toBe("http://goald.example.com/v1/items/goal%232");
+  });
+
+  test("takes the status from the response, not the body", async () => {
+    const { goal } = goaldAnswering(problemJson(404, { title: "Factory not found", status: 500 }));
+    const err = await unwrap(goal.GET(orgPath("/factories"))).catch((e: unknown) => e);
+    expect((err as ApiError).status).toBe(404);
+  });
+
+  test("builds a Problem from the status line when the body is not one", async () => {
+    const { goal } = goaldAnswering(new Response("<html>Bad gateway</html>", { status: 502, statusText: "Bad Gateway" }));
+    const err = await unwrap(goal.GET(orgPath("/factories"))).catch((e: unknown) => e);
+    expect((err as ApiError).problem).toEqual({ title: "Bad Gateway", status: 502 });
+  });
+});

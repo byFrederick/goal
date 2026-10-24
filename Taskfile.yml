@@ -175,7 +175,7 @@ tasks:
     desc: Build the web UI into web/dist (embedded into goald by task build)
     deps: [web:install]
     dir: web
-    sources: [src/**/*, public/**/*, index.html, vite.config.ts, package.json, ../pnpm-lock.yaml]
+    sources: [src/**/*, public/**/*, index.html, vite.config.ts, package.json, ../pnpm-lock.yaml, ../packages/api-client/src/**/*]
     generates: [dist/index.html]
     cmds:
       - pnpm run --silent build
@@ -207,12 +207,13 @@ tasks:
       - pnpm run --silent test
 
   api-client:check:
-    desc: TypeScript API client typecheck, and its generated types match api/openapi.yaml
+    desc: TypeScript API client typecheck and Vitest unit tests, and its generated types match api/openapi.yaml
     deps: [worker:install]
     dir: packages/api-client
     cmds:
       - pnpm run --silent check:gen
       - pnpm run --silent typecheck
+      - pnpm run --silent test
 
   worker:image:
     desc: Build the agent worker image locally (WORKER_IMAGE); never pushes

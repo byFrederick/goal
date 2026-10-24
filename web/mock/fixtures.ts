@@ -1,6 +1,6 @@
 // Illustrative data for the mock API: a "goal" factory building itself and a small SRE factory
 // (sample org acme). Times are relative to when the mock starts, so ages read like a live floor.
-import type { ClassOfService, Factory, ItemEvent, ItemState, Metrics } from '../src/api/types.ts';
+import type { ClassOfService, Factory, ItemEvent, ItemState, Metrics } from '@goal/api-client';
 
 export interface MockItem {
   id: string;

@@ -292,7 +292,7 @@ export interface components {
             type: string;
             lane?: string;
             /** @default 0 */
-            priority: number;
+            priority?: number;
         };
         Approval: {
             /** @description Who decided */
@@ -314,7 +314,7 @@ export interface components {
              * @default squash
              * @enum {string}
              */
-            method: "squash";
+            method?: "squash";
         };
         Item: {
             id: string;

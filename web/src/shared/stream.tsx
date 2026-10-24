@@ -1,4 +1,4 @@
-// Live updates: one EventSource per open factory. Each item event invalidates the queries it
+// Live updates: one stream subscription per open factory. Each item event invalidates the queries it
 // can change; invalidations are batched so a burst of tool calls causes one refetch.
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';

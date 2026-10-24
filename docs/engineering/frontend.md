@@ -20,7 +20,7 @@ goal/
   worker/                      apps: the agent container (Node 22 + Claude Agent SDK)
   packages/
     contracts/                 generated: TS types from api/openapi.yaml and schema/*.json
-    api-client/                typed fetch client (openapi-fetch) + SSE subscription helper
+    api-client/                typed fetch client (openapi-fetch), errors as Problem, SSE subscription
     ui/                        design system: tokens from design-system/goal/MASTER.md + shadcn/Radix components
     config/                    shared tsconfig, Biome config, Vitest preset
 ```
@@ -66,7 +66,7 @@ routes/       file-based route files (TanStack Router plugin; routeTree.gen.ts i
                 /f/$factory/board         → Board        (?station= picks the station on phones)
                 /f/$factory/items         → Items list   (?state= filters)
                 /f/$factory/items/$ref    → Item         ($ref: the number, goal#12 or the id)
-api/          the only HTTP code: types.ts (contract shapes), client.ts (fetch + SSE), queries.ts (keys, queryOptions)
+api/          the only HTTP code: types.ts (generated contract shapes), client.ts (requests over @goal/api-client), queries.ts (keys, queryOptions)
 app/          shell (sidebar from 768 px, icon rail 768–1023 px, bottom tabs below 768 px), loading/error/not-found screens
 features/
   floor/  board/  items/        one folder per screen: page, cards, feature-only logic (items/timeline.ts)
@@ -79,7 +79,9 @@ Route files stay thin (loader + component); screens live in `features/`. Feature
 
 ### The API module and `@goal/api-client`
 
-`web/src/api/types.ts` mirrors `api/openapi.yaml` by hand and `client.ts` holds every request (`listFactories`, `getBoard`, `getMetrics`, `listItems`, `getItem`, `listItemEvents`, `submitItem`, `approveItem`, `rejectItem`, `mergeItem`, `retryItem`, `subscribeToFactory`). Nothing else in `src/` calls `fetch` or `EventSource`. Switching to the generated `@goal/api-client` (`createGoalClient`, `subscribe`, schema types) is one change: `types.ts` re-exports the generated schema types under the same names, and `client.ts` reimplements the same functions over `createGoalClient`; `queries.ts` and the screens stay as they are.
+`packages/api-client` is the typed layer over the contract: `createGoalClient` (openapi-fetch over the types `openapi-typescript` generates into `src/schema.ts`, with `--default-non-nullable=false` so request fields with a default stay optional), `unwrap` (data on success, else it throws `ApiError`, which carries the RFC 9457 `Problem`, rebuilt from the status line when a proxy answers with something else), `subscribe(baseUrl, scope, handlers)` for the stream, and the schema types. Organization-owned routes are written relative to the organization with `orgPath("/factories/{factory}/board")`; `routes.ts` holds the one prefix (`orgRoutes`, `/v1` today), so moving the routes under `/v1/orgs/{org}` (phase 2.2 A5) changes that prefix and `StreamScope`, and the compiler names every call that still lacks `org`.
+
+In `web`, `src/api/types.ts` re-exports the generated types under the names the screens use, and `client.ts` holds every request (`listFactories`, `getBoard`, `getMetrics`, `listItems`, `getItem`, `listItemEvents`, `submitItem`, `approveItem`, `rejectItem`, `mergeItem`, `retryItem`, `subscribeToFactory`) over `createGoalClient`. Nothing else in `web/src` touches `fetch` or `EventSource`; `web/mock` is typed with the same generated shapes.
 
 ### Live updates
 

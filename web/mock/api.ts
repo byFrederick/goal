@@ -1,8 +1,9 @@
-// An in-memory stand-in for goald's /v1 API with the phase 2 shapes, mounted into the Vite dev
-// and preview servers when GOAL_API=mock (mock/plugin.ts). It keeps state per process and
-// broadcasts item events on /v1/stream like goald does. POST /__mock/reset restores the seed.
+// An in-memory stand-in for goald's /v1 API, typed with the contract's shapes from
+// @goal/api-client, mounted into the Vite dev and preview servers when GOAL_API=mock
+// (mock/plugin.ts). It keeps state per process and broadcasts item events on /v1/stream like
+// goald does. POST /__mock/reset restores the seed.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { Board, BoardStation, Item, ItemCard, ItemEvent, ItemList, StreamEvent } from '../src/api/types.ts';
+import type { Board, BoardStation, Item, ItemCard, ItemEvent, ItemPage, StreamEvent } from '@goal/api-client';
 import { type MockItem, type MockState, seed } from './fixtures.ts';
 
 type Next = (err?: unknown) => void;
@@ -49,7 +50,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     number: it.number,
     title: it.title,
     type: it.type,
-    lane: it.lane,
+    ...(it.lane ? { lane: it.lane } : {}),
     station: it.station,
     state: it.state,
     class_of_service: it.class_of_service,
@@ -190,7 +191,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
           )
           .sort((a, b) => b.number - a.number)
           .map(card);
-        const body: ItemList = { items, next_after: null };
+        const body: ItemPage = { items, next_after: null };
         return json(res, 200, body);
       }
       if (m[2] === 'items' && method === 'POST') {
