@@ -115,6 +115,18 @@ describe('a sensitive change', () => {
     expect((await member(o.member.member)).role).toBe('member');
   });
 
+  it('is refused from a page of another origin, whatever NODE_ENV says (row 6)', async () => {
+    const res = await o.h.post(
+      '/organization/update-member-role',
+      { organizationId: o.id, memberId: o.member.member, role: 'admin' },
+      as(o.owner, { origin: 'https://attacker.example' }),
+    );
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: 'INVALID_ORIGIN' });
+    expect((await member(o.member.member)).role).toBe('member');
+  });
+
   it.each([
     ['/organization/invite-member', { email: 'x@example.com', role: 'member' }],
     ['/organization/update-member-role', { memberId: randomUUID(), role: 'admin' }],
@@ -125,6 +137,25 @@ describe('a sensitive change', () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: 'ID_REQUIRED' });
   });
+});
+
+describe('an organization', () => {
+  it.each([
+    ['/organization/create', () => ({ name: 'Other', slug: `other-${randomBytes(4).toString('hex')}` })],
+    ['/organization/update', () => ({ organizationId: o.id, data: { name: 'Renamed', slug: 'renamed' } })],
+    ['/organization/delete', () => ({ organizationId: o.id })],
+  ])(
+    'cannot be changed with %s: goald alone creates, renames and deletes organizations (row 17)',
+    async (path, body) => {
+      const res = await o.h.post(path, body(), as(o.owner));
+
+      expect(res.status).toBe(404);
+      const made = await admin.query(`SELECT 1 FROM auth.organization WHERE name IN ('Other', 'Renamed')`);
+      expect(made.rows).toHaveLength(0);
+      const own = await admin.query(`SELECT name FROM auth.organization WHERE id = $1`, [o.id]);
+      expect(own.rows).toEqual([{ name: 'Acme' }]);
+    },
+  );
 });
 
 describe('the owner rules', () => {

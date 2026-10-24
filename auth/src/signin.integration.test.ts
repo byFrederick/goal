@@ -106,6 +106,22 @@ describe('a sign-in code', () => {
     expect(await res.json()).toMatchObject({ code: 'TOO_MANY_ATTEMPTS' });
   });
 
+  it('is never logged, nor its address or the session it signs in (row 24)', async () => {
+    const email = address('quiet');
+    await fx.user(email);
+    const lines: string[] = [];
+    const h = app({ log: { log: (level, event, fields) => lines.push(JSON.stringify({ level, event, ...fields })) } });
+
+    const code = await h.requestCode(email);
+    const res = await h.post('/sign-in/email-otp', { email, otp: code });
+    expect(res.status).toBe(200);
+    const token = /goal\.session_token=([^.;]+)/.exec(cookieHeader(res))?.[1] ?? '';
+    expect(token).not.toBe('');
+
+    expect(lines.length).toBeGreaterThan(0);
+    for (const secret of [code, email, token]) expect(lines.join('\n')).not.toContain(secret);
+  });
+
   it('is sent only for signing in', async () => {
     const email = address('verify');
     await fx.user(email);
@@ -368,6 +384,15 @@ describe('Google', () => {
     expect(rows[0].accessToken).not.toContain('google-access-token');
     expect(rows[0]).toMatchObject({ name: 'Grace', image: null });
   });
+
+  it.each(['https://attacker.example/', 'http://127.0.0.1:9999/'])(
+    'sends nobody to %s afterwards: callbacks stay on GOAL_PUBLIC_URL (row 27)',
+    async (callbackURL) => {
+      const res = await app({ env: google }).post('/sign-in/social', { provider: 'google', callbackURL });
+
+      expect(res.status).toBe(403);
+    },
+  );
 
   it('signs a user of email codes in as the same user', async () => {
     const email = address('linked');

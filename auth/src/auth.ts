@@ -115,6 +115,11 @@ export function createAuth({ settings, pool, log, mailer, clock = () => new Date
       // goald's proxy drops every forwarding header it receives and writes this one itself.
       ipAddress: { ipAddressHeaders: ['x-goal-client-ip'], ipv6Subnet: 64 },
       trustedProxyHeaders: false,
+      // The origin and CSRF checks (Origin and callback URLs against trustedOrigins) stay on
+      // whatever the environment says: Better Auth turns both off by default under NODE_ENV=test
+      // or TEST, and goal up passes NODE_ENV through.
+      disableOriginCheck: false,
+      disableCSRFCheck: false,
       database: { generateId: 'uuid' },
       backgroundTasks: {
         handler: (p) => {
