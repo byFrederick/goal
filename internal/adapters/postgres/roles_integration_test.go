@@ -83,6 +83,8 @@ func TestInitRoles_UpgradesADatabaseFromBeforeTheRoles(t *testing.T) {
 		t.Errorf("the bootstrap user still owns %d objects; want 0", left)
 	}
 
+	checkDatabasePrivileges(t, admin)
+
 	migrate(t, db.owner)
 
 	app := openPool(t, db.app)
@@ -120,5 +122,31 @@ func migrateTo(t *testing.T, pool *pgxpool.Pool, version int64) {
 
 	if _, err := p.UpTo(t.Context(), version); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// checkDatabasePrivileges checks what goal db init leaves on the database: goal_owner and goal_app
+// connect by their own grants, and PUBLIC may neither connect (so no other role of the cluster
+// LISTENs to or NOTIFYs goald's channels) nor create temporary tables (review 2.2 H1, M4).
+func checkDatabasePrivileges(t *testing.T, admin *pgxpool.Pool) {
+	t.Helper()
+
+	for _, c := range []struct {
+		role, priv string
+		want       bool
+	}{
+		{"public", "CONNECT", false},
+		{"public", "TEMPORARY", false},
+		{OwnerRole, "CONNECT", true},
+		{OwnerRole, "CREATE", true},
+		{OwnerRole, "TEMPORARY", false},
+		{AppRole, "CONNECT", true},
+		{AppRole, "TEMPORARY", false},
+	} {
+		var has bool
+		if err := admin.QueryRow(t.Context(), "SELECT has_database_privilege($1, current_database(), $2)", c.role, c.priv).
+			Scan(&has); err != nil || has != c.want {
+			t.Errorf("%s %s on the database = %v, %v; want %v", c.role, c.priv, has, err, c.want)
+		}
 	}
 }

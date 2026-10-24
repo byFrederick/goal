@@ -44,7 +44,7 @@ type Roles struct {
 // as the bootstrap user that owns the database's objects today (compose.yaml's superuser
 // locally). In one transaction it creates goal_owner and goal_app when missing, lets both log in
 // with the given passwords, grants goal_owner the database and the current schema and goal_app
-// their use, and hands every table, view, sequence and function of the current schema that the
+// their use (revoking PUBLIC's CONNECT and TEMPORARY on the database), and hands every table, view, sequence and function of the current schema that the
 // bootstrap user owns to goal_owner (goose_db_version included), so the next migration runs as
 // goal_owner. It returns how many objects changed owner. It is idempotent; passwords are never
 // logged or put into errors.
@@ -106,9 +106,13 @@ func setPassword(ctx context.Context, tx pgx.Tx, role, password string) error {
 }
 
 // grants gives goal_owner the database and the current schema, and goal_app the right to use
-// them. Table privileges come from the migrations, one GRANT per table.
+// them. Table privileges come from the migrations, one GRANT per table. PUBLIC loses what
+// PostgreSQL gives it on a new database: CONNECT, so no other role of the cluster can LISTEN to
+// or NOTIFY goald's channels, and TEMPORARY, so no role can put a temporary table in front of
+// one a definer function reads (review 2.2 H1, M4). Neither role needs a temporary table.
 const grants = `
 DO $$ BEGIN
+  EXECUTE format('REVOKE TEMPORARY, CONNECT ON DATABASE %I FROM PUBLIC', current_database());
   EXECUTE format('GRANT CONNECT, CREATE ON DATABASE %I TO goal_owner', current_database());
   EXECUTE format('GRANT CONNECT ON DATABASE %I TO goal_app', current_database());
   EXECUTE format('GRANT USAGE, CREATE ON SCHEMA %I TO goal_owner', current_schema());

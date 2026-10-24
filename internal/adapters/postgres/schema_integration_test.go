@@ -29,7 +29,8 @@ var withoutOrgID = map[string]string{
 // The tenancy kit, checked on the fully migrated schema: every table with org_id has row-level
 // security with the org_isolation policy on goal_org() and takes the transaction's organization
 // by default; every other table is allowlisted; goal_app owns nothing and cannot rewrite the
-// append-only logs; views run with the caller's rights; definer functions pin their search_path.
+// append-only logs; views run with the caller's rights; definer functions pin their search_path
+// to the schema, with pg_temp last.
 func TestSchema_EveryOrgTableHasRLS(t *testing.T) {
 	t.Parallel()
 
@@ -78,11 +79,15 @@ func TestSchema_EveryOrgTableHasRLS(t *testing.T) {
 		t.Errorf("view %s does not run with the caller's rights (security_invoker)", view)
 	}
 
+	// pg_temp is searched first unless the path names it, so it must come last (review 2.2 H1).
 	for _, fn := range queryStrings(t, admin, `
-		SELECT p.oid::regprocedure::text FROM pg_proc p
+		SELECT p.oid::regprocedure::text || ' (' || coalesce(array_to_string(p.proconfig, ' '), 'no settings') || ')'
+		FROM pg_proc p
 		WHERE p.pronamespace = current_schema()::text::regnamespace AND p.prosecdef
-		  AND NOT EXISTS (SELECT 1 FROM unnest(p.proconfig) c WHERE c LIKE 'search_path=%')`) {
-		t.Errorf("SECURITY DEFINER function %s does not pin its search_path", fn)
+		  AND NOT EXISTS (SELECT 1 FROM unnest(p.proconfig) c
+		                  WHERE c LIKE 'search_path=%' AND c ~ '(^search_path=|, )pg_temp$'
+		                    AND c ~ ('(=|, )' || quote_ident(current_schema()) || ', '))`) {
+		t.Errorf("SECURITY DEFINER function %s does not pin its search_path to the schema with pg_temp last", fn)
 	}
 }
 

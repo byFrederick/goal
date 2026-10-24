@@ -21,7 +21,10 @@ vars:
   MIGRATE_WITH:
     sh: command -v docker >/dev/null 2>&1 && echo docker || echo local
   # What goal db init grants before goald migrates (postgres.InitRoles), for migrate-check.
-  MIGRATE_GRANTS: GRANT USAGE, CREATE ON SCHEMA public TO goal_owner; GRANT USAGE ON SCHEMA public TO goal_app
+  MIGRATE_GRANTS: >-
+    REVOKE TEMPORARY, CONNECT ON DATABASE goal FROM PUBLIC;
+    GRANT CONNECT, CREATE ON DATABASE goal TO goal_owner; GRANT CONNECT ON DATABASE goal TO goal_app;
+    GRANT USAGE, CREATE ON SCHEMA public TO goal_owner; GRANT USAGE ON SCHEMA public TO goal_app
 
 # The storage tasks talk to the local RustFS from compose.yaml unless .env or the shell says
 # otherwise. For an AWS bucket run bin/goal directly with GOAL_S3_BUCKET and AWS credentials.
@@ -129,12 +132,13 @@ tasks:
       - docker run -d --rm --name goal-migrate-check -e POSTGRES_PASSWORD=check -e POSTGRES_DB=goal {{.PG_IMAGE}} >/dev/null
       - defer: docker stop goal-migrate-check >/dev/null
       - until docker exec goal-migrate-check pg_isready -h 127.0.0.1 -U postgres -d goal >/dev/null 2>&1; do sleep 1; done
-      # The roles first (as goal db init does), then every migration as goal_owner, as goald runs them.
+      # The roles first (as goal db init does), then every migration as goal_owner in one
+      # transaction (--single-transaction), as goald runs them with goose.
       - docker exec -i goal-migrate-check psql -U postgres -d goal -v ON_ERROR_STOP=1 -q < internal/adapters/postgres/roles.sql
       - docker exec goal-migrate-check psql -U postgres -d goal -v ON_ERROR_STOP=1 -qc "{{.MIGRATE_GRANTS}}"
       - |
         for f in migrations/*.sql; do
-          docker exec -i -e PGOPTIONS='-c role=goal_owner' goal-migrate-check psql -U postgres -d goal -v ON_ERROR_STOP=1 -q < "$f" || exit 1
+          docker exec -i -e PGOPTIONS='-c role=goal_owner' goal-migrate-check psql -U postgres -d goal -v ON_ERROR_STOP=1 -q --single-transaction < "$f" || exit 1
           echo "applied $f"
         done
 
@@ -153,7 +157,7 @@ tasks:
       - psql -h "{{.PGTMP}}" -U postgres -d goal -v ON_ERROR_STOP=1 -qc "{{.MIGRATE_GRANTS}}"
       - |
         for f in migrations/*.sql; do
-          PGOPTIONS='-c role=goal_owner' psql -h "{{.PGTMP}}" -U postgres -d goal -v ON_ERROR_STOP=1 -q < "$f" || exit 1
+          PGOPTIONS='-c role=goal_owner' psql -h "{{.PGTMP}}" -U postgres -d goal -v ON_ERROR_STOP=1 -q --single-transaction < "$f" || exit 1
           echo "applied $f"
         done
 
