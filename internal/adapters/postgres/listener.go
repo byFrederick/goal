@@ -29,6 +29,10 @@ type listener[N any] struct {
 	resync N
 	// decode reads the payload of a notification on channel.
 	decode func(channel, payload string) (N, error)
+	// readBack replaces a decoded notice with what the database says, read through the row-level
+	// security of the organization it names: any role that may connect can NOTIFY, so a payload
+	// is a claim and never data. It reports false for a notice to drop (nothing to read back).
+	readBack func(ctx context.Context, n N) (N, bool, error)
 }
 
 // Listen delivers notices until ctx ends, then returns nil. Every time it starts listening,
@@ -104,7 +108,19 @@ func (l *listener[N]) serve(ctx context.Context, deliver func(N)) (bool, error) 
 			continue
 		}
 
-		deliver(notice)
+		notice, ok, err := l.readBack(ctx, notice)
+		switch {
+		case err != nil && ctx.Err() != nil:
+			return true, err
+		case err != nil:
+			// The notice is lost, so listeners re-read everything instead.
+			l.log.WarnContext(ctx, l.name+": notification not read back; resyncing", slog.String("channel", msg.Channel), slog.Any("error", err))
+			deliver(l.resync)
+		case !ok:
+			l.log.DebugContext(ctx, l.name+": notification names nothing; dropped", slog.String("channel", msg.Channel))
+		default:
+			deliver(notice)
+		}
 	}
 }
 

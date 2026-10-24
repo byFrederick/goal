@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/google/uuid"
 
+	"github.com/byFrederick/goal/internal/adapters/postgres/db"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
 )
@@ -19,17 +20,19 @@ const definitionChannel = "goal_definitions"
 var _ ports.DefinitionNotices = (*DefinitionNotices)(nil)
 
 // DefinitionNotices implements ports.DefinitionNotices with LISTEN goal_definitions on a
-// connection of its own; it hears every organization's changes, from every goald.
+// connection of its own; it hears every organization's changes, from every goald. Draft and
+// current notices are read back through the row-level security of the organization they name
+// (review 2.2 M4) and carry the version's own fields; a factory or org notice carries ids only.
 type DefinitionNotices struct {
 	l listener[ports.DefinitionNotice]
 }
 
-// NewDefinitionNotices listens with cfg, usually the store pool's connection config
-// (pool.Config().ConnConfig). log may be nil.
-func NewDefinitionNotices(cfg *pgx.ConnConfig, log *slog.Logger) *DefinitionNotices {
+// NewDefinitionNotices listens with the connection config of s's pool and reads notices back
+// through s. log may be nil.
+func NewDefinitionNotices(s *Store, log *slog.Logger) *DefinitionNotices {
 	return &DefinitionNotices{l: listener[ports.DefinitionNotice]{
-		cfg: cfg, log: discardIfNil(log), channels: []string{definitionChannel}, name: "definition notices",
-		resync: ports.DefinitionNotice{Resync: true}, decode: definitionNoticeFrom,
+		cfg: s.pool.Config().ConnConfig, log: discardIfNil(log), channels: []string{definitionChannel}, name: "definition notices",
+		resync: ports.DefinitionNotice{Resync: true}, decode: definitionNoticeFrom, readBack: s.readBackDefinitionNotice,
 	}}
 }
 
@@ -78,4 +81,80 @@ func definitionNoticeFrom(_, raw string) (ports.DefinitionNotice, error) {
 	}
 
 	return n, nil
+}
+
+// readBackDefinitionNotice checks n against the rows of its organization. A version row changes in
+// place (its revision, number and author move on), so a notice cannot be rebuilt from it once a
+// later change committed; instead it must be borne out: a draft notice names a version of the
+// factory, at a revision the version reached and with its number if it has one; a current notice
+// names a published version of the factory with that version's number (or no version, when the
+// factory now has none). A factory or org notice carries ids only (listeners re-read on it).
+// Anything else, and anything the organization cannot see, reports false. By is the claim's:
+// listeners only re-read on it.
+func (s *Store) readBackDefinitionNotice(ctx context.Context, n ports.DefinitionNotice) (ports.DefinitionNotice, bool, error) {
+	// Only the fields the kind carries (ports.NoticeDraft, NoticeCurrent).
+	out := ports.DefinitionNotice{OrgID: n.OrgID, FactoryID: n.FactoryID, Kind: n.Kind, VersionID: n.VersionID, Number: n.Number}
+	if n.Kind == ports.NoticeDraft {
+		out.Revision, out.By = n.Revision, n.By
+	}
+
+	switch n.Kind {
+	case ports.NoticeFactory, ports.NoticeOrg:
+		return ports.DefinitionNotice{OrgID: n.OrgID, FactoryID: n.FactoryID, Kind: n.Kind}, true, nil
+	case ports.NoticeDraft, ports.NoticeCurrent:
+		return readBack(ctx, s, n.OrgID, func(q *db.Queries) (ports.DefinitionNotice, error) { return out, checkDefinitionNotice(ctx, q, n) })
+	default:
+		return ports.DefinitionNotice{}, false, nil
+	}
+}
+
+// checkDefinitionNotice returns errNothingToReadBack (or the read's not-found) unless the rows bear
+// out the draft or current notice n.
+func checkDefinitionNotice(ctx context.Context, q *db.Queries, n ports.DefinitionNotice) error {
+	factory, err := uuid.Parse(string(n.FactoryID))
+	if err != nil {
+		return errNothingToReadBack
+	}
+
+	if n.Kind == ports.NoticeCurrent && n.VersionID == "" {
+		current, err := q.NoticeCurrent(ctx, factory)
+		if err != nil {
+			return err
+		}
+
+		if current != nil {
+			return errNothingToReadBack
+		}
+
+		return nil
+	}
+
+	version, err := uuid.Parse(string(n.VersionID))
+	if err != nil {
+		return errNothingToReadBack
+	}
+
+	r, err := q.NoticeVersion(ctx, version)
+	if err != nil {
+		return err
+	}
+
+	if r.FactoryID != factory || !bearsOut(r, n) {
+		return errNothingToReadBack
+	}
+
+	return nil
+}
+
+// bearsOut reports whether version r of the notice's factory bears out the draft or current
+// notice n: a draft at a revision it reached and with its number if it has one, a current version
+// published with that number.
+func bearsOut(r db.NoticeVersionRow, n ports.DefinitionNotice) bool {
+	numbered := r.Number != nil && int(*r.Number) == n.Number
+
+	if n.Kind == ports.NoticeDraft {
+		return n.Revision >= 1 && n.Revision <= r.Revision && (n.Number == 0 || numbered)
+	}
+
+	return r.State == string(domain.VersionPublished) && numbered
 }

@@ -3,6 +3,8 @@
 package postgres
 
 import (
+	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -29,7 +31,7 @@ func TestDefinitions_Conformance(t *testing.T) {
 
 		return definitionstest.Harness{
 			Definitions: NewDefinitions(pool, objects, nil),
-			Notices:     NewDefinitionNotices(pool.Config().ConnConfig, nil),
+			Notices:     NewDefinitionNotices(s, nil),
 			Objects:     objects,
 			Items:       s,
 			Audit:       s,
@@ -136,6 +138,90 @@ func newUUID(t *testing.T) string {
 	}
 
 	return id.String()
+}
+
+// Definition notifications are claims too (review 2.2 M4): each is checked against the rows of the
+// organization it names, through its row-level security. A draft notice must name a version of
+// the factory at a revision it reached and with its number, if any; a current notice a published
+// version of the factory with that version's number. Anything else is dropped. A factory notice
+// carries ids only and passes, so listeners re-read.
+func TestDefinitionNotices_ForgedPayloadsAreCheckedAgainstTheRows(t *testing.T) {
+	t.Parallel()
+
+	f := newDefinitionsFixture(t)
+	other := newOrgID(t, f.s)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	got := make(chan ports.DefinitionNotice, 100)
+	done := make(chan error, 1)
+
+	go func() {
+		done <- NewDefinitionNotices(f.s, nil).Listen(ctx, func(n ports.DefinitionNotice) {
+			if n.Resync || n.FactoryID == f.factory.ID {
+				got <- n
+			}
+		})
+	}()
+
+	t.Cleanup(func() {
+		cancel()
+
+		if err := <-done; err != nil {
+			t.Errorf("Listen returned %v after its context ended; want nil", err)
+		}
+	})
+
+	receive := func() ports.DefinitionNotice {
+		t.Helper()
+
+		select {
+		case n := <-got:
+			return n
+		case <-time.After(noticeTimeout):
+			t.Fatal("no definition notice")
+
+			return ports.DefinitionNotice{}
+		}
+	}
+
+	if n := receive(); !n.Resync {
+		t.Fatalf("first notice = %+v; want Resync", n)
+	}
+
+	payload := func(org domain.OrgID, kind, version string, number int, revision int64) string {
+		return fmt.Sprintf(`{"org_id":%q,"factory_id":%q,"kind":%q,"version_id":%q,"number":%d,"revision":%d,"by":"user:local"}`,
+			org, f.factory.ID, kind, version, number, revision)
+	}
+
+	draft, v1 := string(f.draft.ID), string(f.v1.ID)
+
+	for _, p := range []string{
+		payload(f.org, ports.NoticeDraft, draft, 0, f.draft.Revision+1), // a revision the draft never reached: dropped
+		payload(f.org, ports.NoticeDraft, draft, 42, f.draft.Revision),  // a number the draft does not have: dropped
+		payload(f.org, ports.NoticeDraft, newUUID(t), 0, 1),             // no such version: dropped
+		payload(other, ports.NoticeCurrent, v1, f.v1.Number, 0),         // another org cannot see it: dropped
+		payload(f.org, ports.NoticeCurrent, draft, 0, 0),                // not a published version: dropped
+		payload(f.org, ports.NoticeCurrent, v1, 42, 0),                  // not v1's number: dropped
+		payload(f.org, ports.NoticeDraft, draft, 0, f.draft.Revision),   // borne out: passes
+		payload(f.org, ports.NoticeCurrent, v1, f.v1.Number, 0),         // borne out: passes
+		payload(f.org, ports.NoticeFactory, "", 0, 0),                   // ids only: passes
+	} {
+		if _, err := f.pool.Exec(t.Context(), "SELECT pg_notify('goal_definitions', $1)", p); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	org, factory := f.org, f.factory.ID
+
+	for i, want := range []ports.DefinitionNotice{
+		{OrgID: org, FactoryID: factory, Kind: ports.NoticeDraft, VersionID: f.draft.ID, Revision: f.draft.Revision, By: domain.LocalUser.Ref()},
+		{OrgID: org, FactoryID: factory, Kind: ports.NoticeCurrent, VersionID: f.v1.ID, Number: f.v1.Number},
+		{OrgID: org, FactoryID: factory, Kind: ports.NoticeFactory},
+	} {
+		if n := receive(); n != want {
+			t.Errorf("notice %d = %+v; want %+v", i, n, want)
+		}
+	}
 }
 
 // Raw SQL as goal_app: without an organization the definition tables refuse every read; bound

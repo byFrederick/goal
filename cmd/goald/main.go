@@ -188,14 +188,13 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	log.InfoContext(ctx, "factories loaded", slog.Int("count", len(loaded)), slog.String("bucket", objects.Bucket()))
 
-	definitionNotices := postgres.NewDefinitionNotices(pool.Config().ConnConfig, log)
+	definitionNotices := postgres.NewDefinitionNotices(store, log)
 
 	reap(ctx, log, runner, workspaces)
 
 	// The engine hears every item notice, so a person's move, pause or send-back of an item this
 	// instance runs stops its run at once.
-	feed := api.NewFeed(postgres.NewNotices(pool.Config().ConnConfig, log),
-		postgres.NewDefinitionNotices(pool.Config().ConnConfig, log), log, eng.Interrupt)
+	feed := api.NewFeed(postgres.NewNotices(store, log), postgres.NewDefinitionNotices(store, log), log, eng.Interrupt)
 
 	// Phase 3 sets the capabilities in its wiring PRs; until then the editor keeps their controls hidden.
 	editor := builder.New(objects, clock, builder.Config{Models: s.Models, Capabilities: builder.Capabilities{}, Logger: log})

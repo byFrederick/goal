@@ -470,7 +470,9 @@ type Transition struct {
 
 // ItemNotices streams a notice of every item event as it is committed, from any goald
 // instance: PostgreSQL LISTEN/NOTIFY. Each instance listens once and fans out to its own
-// clients, so no instance holds state another needs.
+// clients, so no instance holds state another needs. A notification only names what changed:
+// the adapter reads every notice back from the rows of the organization it names, so nothing a
+// notification claims reaches a listener unread (review 2.2 M4).
 type ItemNotices interface {
 	// Listen calls deliver for every item event, and every other organization event (Org),
 	// committed while it listens, in commit order, until ctx ends; it returns nil then. Each time it starts listening (the first time, and

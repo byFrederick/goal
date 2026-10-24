@@ -80,7 +80,7 @@ func TestDeleteOrg_NotifiesTheDefinitionListeners(t *testing.T) {
 	done := make(chan error, 1)
 
 	go func() {
-		done <- NewDefinitionNotices(pool.Config().ConnConfig, nil).Listen(ctx, func(n ports.DefinitionNotice) { got <- n })
+		done <- NewDefinitionNotices(s, nil).Listen(ctx, func(n ports.DefinitionNotice) { got <- n })
 	}()
 
 	t.Cleanup(func() {

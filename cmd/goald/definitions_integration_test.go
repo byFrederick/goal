@@ -294,7 +294,7 @@ func TestDefinitions_AnotherGoaldReloadsWithinASecondOfAPublish(t *testing.T) {
 	done := make(chan error, 1)
 
 	go func() {
-		done <- cache.Listen(listenCtx, postgres.NewDefinitionNotices(db.pool.Config().ConnConfig, nil))
+		done <- cache.Listen(listenCtx, postgres.NewDefinitionNotices(postgres.New(db.pool), nil))
 	}()
 
 	t.Cleanup(func() {

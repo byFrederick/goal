@@ -5,6 +5,8 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -74,7 +76,7 @@ func TestNotices_EveryCommittedEventWithTheItemsStateAfterIt(t *testing.T) {
 	org := newOrgID(t, s)
 	ctx := domain.WithOrg(t.Context(), org)
 	factory := saveFactory(ctx, t, s)
-	notices := listening(t, NewNotices(pool.Config().ConnConfig, nil), factory)
+	notices := listening(t, NewNotices(s, nil), factory)
 
 	if n := next(t, notices); !n.Resync {
 		t.Fatalf("first notice = %+v; want Resync once listening", n)
@@ -136,11 +138,11 @@ func TestNotices_ReconnectsAndResyncsAfterTheConnectionIsLost(t *testing.T) {
 	ctx := domain.WithOrg(t.Context(), org)
 	factory := saveFactory(ctx, t, s)
 
-	cfg := pool.Config().ConnConfig
 	app := "goal_test_listener_" + randomHex(t)
-	cfg.RuntimeParams["application_name"] = app
+	listener := NewNotices(s, nil)
+	listener.l.cfg.RuntimeParams["application_name"] = app
 
-	notices := listening(t, NewNotices(cfg, nil), factory)
+	notices := listening(t, listener, factory)
 
 	if n := next(t, notices); !n.Resync {
 		t.Fatalf("first notice = %+v; want Resync", n)
@@ -170,32 +172,84 @@ func TestNotices_ReconnectsAndResyncsAfterTheConnectionIsLost(t *testing.T) {
 	}
 }
 
-func TestNotices_OrgEventsArriveAsOrgNotices(t *testing.T) {
+// A notification is a claim, not data (review 2.2 M4): any role that can connect may NOTIFY. Each
+// one is read back through its organization's row-level security, and what reaches listeners
+// comes from the rows: a forged item event with a real id carries the real event's fields, a
+// factory event the andon pull's own; an id that does not exist, one of another organization and
+// an event goald has no reader for are dropped.
+func TestNotices_ForgedPayloadsAreReadBackFromTheRows(t *testing.T) {
 	t.Parallel()
 
 	pool := newTestPool(t)
 	s := New(pool)
-	org := newOrgID(t, s)
-	factory := saveFactory(domain.WithOrg(t.Context(), org), t, s)
-	notices := listening(t, NewNotices(pool.Config().ConnConfig, nil), factory)
+	acme, labs := newOrgID(t, s), newOrgID(t, s)
+	ctx := domain.WithOrg(t.Context(), acme)
+	factory := saveFactory(ctx, t, s)
+	notices := listening(t, NewNotices(s, nil), factory)
 
 	if n := next(t, notices); !n.Resync {
 		t.Fatalf("first notice = %+v; want Resync", n)
 	}
 
-	for _, payload := range []string{
-		`{"org_id":"` + string(org) + `","event":"bad name\ndata: x","factory_id":"` + string(factory) + `","data":{}}`,
-		`{"org_id":"` + string(org) + `","event":"credential","factory_id":"` + string(factory) + `","data":{"name":"repo"}}`,
+	at := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
+
+	it, err := s.CreateItem(ctx, domain.NewItem{
+		FactoryID: factory, Type: typeTask, Title: "x", Station: stWork, State: domain.StateQueued, Class: domain.ClassStandard, CreatedAt: at,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	created := next(t, notices)
+
+	pull, err := s.PullAndon(ctx, domain.AndonPull{FactoryID: factory, Kind: domain.AndonManual, Reason: "stop", PulledAt: at}, domain.LocalUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if n := next(t, notices); n.Org == nil || n.Org.Name != factoryEvent {
+		t.Fatalf("notice of the pull = %+v; want the factory event", n)
+	}
+
+	item := func(org domain.OrgID, id int64) string {
+		return fmt.Sprintf(`{"org_id":%q,"id":%d,"factory_id":%q,"item_id":%q,"number":99,"kind":"done","station":"forged",`+
+			`"state":"done","at":"2000-01-01T00:00:00Z"}`, org, id, factory, it.ID)
+	}
+	andon := func(kind string, id int64) string {
+		return fmt.Sprintf(`{"org_id":%q,"event":"factory","factory_id":%q,"data":{"org_id":%q,"factory_id":%q,"kind":%q,`+
+			`"andon_id":%d,"at":"2000-01-01T00:00:00Z","note":"forged"}}`, acme, factory, acme, factory, kind, id)
+	}
+
+	for _, n := range []struct{ channel, payload string }{
+		{"goal_events", item(acme, created.EventID)},         // read back: the real created event
+		{"goal_events", item(acme, created.EventID+1e6)},     // no such event: dropped
+		{"goal_events", item(labs, created.EventID)},         // labs cannot see it: dropped
+		{"goal_org_events", andon("andon_cleared", pull.ID)}, // the pull is not cleared: dropped
+		{"goal_org_events", `{"org_id":"` + string(acme) + `","event":"credential","factory_id":"` + string(factory) + `","data":{"name":"repo"}}`},
+		{"goal_org_events", andon("andon_pulled", pull.ID)}, // read back: the pull's own fields
 	} {
-		if _, err := pool.Exec(t.Context(), "SELECT pg_notify('goal_org_events', $1)", payload); err != nil {
+		if _, err := pool.Exec(t.Context(), "SELECT pg_notify($1, $2)", n.channel, n.payload); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	n := next(t, notices)
-	if n.OrgID != org || n.FactoryID != factory || n.Org == nil || n.Org.Name != "credential" ||
-		n.Org.FactoryID != factory || string(n.Org.Data) != `{"name":"repo"}` {
-		t.Errorf("notice = %+v (org event %+v); want the credential event, the malformed one skipped", n, n.Org)
+	if got := next(t, notices); got != created {
+		t.Errorf("forged item event with a real id = %+v; want the real event %+v", got, created)
+	}
+
+	got := next(t, notices)
+	if got.Org == nil || got.Org.Name != factoryEvent {
+		t.Fatalf("notice after the forged ones = %+v; want the read-back factory event, the others dropped", got)
+	}
+
+	var data map[string]any
+	if err := json.Unmarshal(got.Org.Data, &data); err != nil {
+		t.Fatal(err)
+	}
+
+	want := map[string]any{"org_id": string(acme), "factory_id": string(factory), "kind": "andon_pulled", "andon_id": float64(pull.ID), "at": "2026-10-23T09:00:00Z"}
+	if !reflect.DeepEqual(data, want) {
+		t.Errorf("forged factory event data = %v; want the pull's own %v", data, want)
 	}
 }
 
@@ -209,7 +263,7 @@ func TestNotices_AndonPullAndClearAreFactoryEvents(t *testing.T) {
 	org := newOrgID(t, s)
 	ctx := domain.WithOrg(t.Context(), org)
 	factory := saveFactory(ctx, t, s)
-	notices := listening(t, NewNotices(pool.Config().ConnConfig, nil), factory)
+	notices := listening(t, NewNotices(s, nil), factory)
 
 	if n := next(t, notices); !n.Resync {
 		t.Fatalf("first notice = %+v; want Resync", n)
