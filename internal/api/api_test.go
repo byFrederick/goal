@@ -334,7 +334,12 @@ func newHarness(t *testing.T) *harness {
 
 	go func() { done <- feed.Run(ctx) }()
 
-	// The definition listener's first resync is past before any test subscribes.
+	// Both listeners' first resyncs are past before any test subscribes: the feed starts them in
+	// their own goroutines, and a resync that came after a subscription would reach the stream.
+	if err := h.notices.AwaitListeners(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+
 	if err := h.defNotices.AwaitListeners(ctx, 1); err != nil {
 		t.Fatal(err)
 	}

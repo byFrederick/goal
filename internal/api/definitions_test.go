@@ -789,9 +789,6 @@ func TestDefinitions_StreamSendsDefinitionEvents(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
-	if err := h.defNotices.AwaitListeners(inOrg(t), 1); err != nil {
-		t.Fatal(err)
-	}
 
 	_, _, events := h.stream(t, "?factory=acme")
 	events.next(t) // retry

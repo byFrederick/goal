@@ -740,9 +740,6 @@ func TestAPI_StreamSendsItemEventsAsTheyHappen(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
-	if err := h.notices.AwaitListeners(inOrg(t), 1); err != nil {
-		t.Fatal(err)
-	}
 
 	code, contentType, events := h.stream(t, "?factory=line")
 	if code != http.StatusOK || contentType != "text/event-stream" {
