@@ -1,5 +1,6 @@
 # sqlc compiles queries/ against migrations/ into internal/adapters/postgres/db (`task sqlc`).
-# The generated code is committed; never edit it by hand.
+# The generated code is committed; never edit it by hand. Only the row types queries use are
+# generated, so Better Auth's tables in schema auth (read through definer functions) stay out of Go.
 version: "2"
 sql:
   - engine: postgresql
@@ -11,6 +12,7 @@ sql:
         out: internal/adapters/postgres/db
         sql_package: pgx/v5
         emit_pointers_for_null_types: true
+        omit_unused_structs: true
         overrides:
           - db_type: uuid
             go_type: github.com/google/uuid.UUID

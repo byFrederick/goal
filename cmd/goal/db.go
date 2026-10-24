@@ -13,8 +13,9 @@ type dbSettings struct {
 	// AdminURL connects as the user that owns the database's objects today
 	// (GOAL_DATABASE_ADMIN_URL, default compose.yaml's goal superuser with GOAL_PG_PASSWORD).
 	AdminURL string
-	// Roles are the passwords of goal_owner and goal_app (GOAL_PG_OWNER_PASSWORD and
-	// GOAL_PG_APP_PASSWORD, dev-only defaults); goald's default URLs use the same.
+	// Roles are the passwords of goal_owner, goal_app and goal_auth (GOAL_PG_OWNER_PASSWORD,
+	// GOAL_PG_APP_PASSWORD and GOAL_PG_AUTH_PASSWORD, dev-only defaults); goald's and the auth
+	// service's default URLs use the same.
 	Roles postgres.Roles
 }
 
@@ -37,6 +38,7 @@ func dbSettingsFrom(getenv func(string) string) dbSettings {
 		Roles: postgres.Roles{
 			OwnerPassword: or("GOAL_PG_OWNER_PASSWORD", postgres.DevOwnerPassword),
 			AppPassword:   or("GOAL_PG_APP_PASSWORD", postgres.DevAppPassword),
+			AuthPassword:  or("GOAL_PG_AUTH_PASSWORD", postgres.DevAuthPassword),
 		},
 	}
 }
@@ -55,8 +57,8 @@ func setUp(ctx context.Context, out *printer, getenv func(string) string, what s
 }
 
 // dbInit prepares the database for goald (postgres.InitRoles): goal_owner, which owns the
-// schema and runs the migrations, and goal_app, which goald runs as. goal up runs it every time;
-// it is idempotent.
+// schema and runs the migrations, goal_app, which goald runs as, and goal_auth, which the auth
+// service runs as. goal up runs it every time; it is idempotent.
 func dbInit(ctx context.Context, out *printer, getenv func(string) string) error {
 	s := dbSettingsFrom(getenv)
 
@@ -71,7 +73,7 @@ func dbInit(ctx context.Context, out *printer, getenv func(string) string) error
 		return err
 	}
 
-	out.printf("✓ database roles %s and %s ready", postgres.OwnerRole, postgres.AppRole)
+	out.printf("✓ database roles %s, %s and %s ready", postgres.OwnerRole, postgres.AppRole, postgres.AuthRole)
 
 	if moved > 0 {
 		out.printf(", %d objects handed to %s", moved, postgres.OwnerRole)

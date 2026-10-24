@@ -16,6 +16,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -46,12 +47,25 @@ func Open(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
+// migrationRoles are the roles the migrations grant to. They are cluster-wide, so goal db init
+// creates them (roles.sql), not a migration.
+var migrationRoles = []string{AppRole, AuthRole}
+
 // Migrate applies every pending migration from the migrations package. Instances that start
 // together take turns on a transaction-scoped advisory lock keyed by the schema, so exactly
 // one applies each migration and the lock is freed even if the process dies.
 // The lock is held on one pool connection while goose migrates on others, so the pool needs at
-// least two.
+// least two. It applies nothing while a role the migrations grant to is missing (an install
+// from before goal_auth that was not started with goal up); the error wraps ErrRoleMissing.
 func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
+	return migrateRequiring(ctx, pool, migrationRoles)
+}
+
+func migrateRequiring(ctx context.Context, pool *pgxpool.Pool, roles []string) error {
+	if err := requireRoles(ctx, pool, roles); err != nil {
+		return fmt.Errorf("postgres: migrate: %w", err)
+	}
+
 	sqlDB := stdlib.OpenDBFromPool(pool) // closing it leaves the pool open
 
 	p, err := goose.NewProvider(goose.DialectPostgres, sqlDB, migrations.FS)
@@ -73,6 +87,24 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 	}
 
 	return errors.Join(err, sqlDB.Close())
+}
+
+// requireRoles fails with ErrRoleMissing naming every role of roles the cluster lacks.
+func requireRoles(ctx context.Context, pool *pgxpool.Pool, roles []string) error {
+	var missing []string
+
+	err := pool.QueryRow(ctx, `
+		SELECT coalesce(array_agg(r ORDER BY r), '{}') FROM unnest($1::text[]) r
+		WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r)`, roles).Scan(&missing)
+	if err != nil {
+		return fmt.Errorf("check roles: %w", err)
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf("role %s is missing: %w", strings.Join(missing, ", "), ErrRoleMissing)
+	}
+
+	return nil
 }
 
 var _ ports.Store = (*Store)(nil)

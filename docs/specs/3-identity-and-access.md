@@ -281,10 +281,10 @@ Phase 4 uses `00050–00059`, phase 5 `00060` up.
 ### 6.2 `00040`/`00041`: Better Auth's schema under goose
 
 - Better Auth is configured with `database: { dialect: PostgresDialect(pool), type: "postgres", schemaName: "auth" }` and `advanced.database.generateId: "uuid"`, so its ids and reference columns are `uuid` and PostgreSQL generates them.
-- The SQL of `00041` comes from the pinned CLI, `pnpm --filter @goal/auth exec auth generate --config src/auth.ts --output -`, run against a database migrated to `00040`. The PR adds `-- +goose Up`, sets each id default to `goal_uuidv7()`, and appends the grants. It is never hand-edited after it is applied; `auth migrate` is never run.
+- The SQL of `00041` comes from the pinned CLI, `pnpm --filter @goal/auth exec auth generate --config src/generate.ts --output <file>`, run against a database migrated to `00040`. (As built in 3-4: the CLI reads `auth/src/generate.ts`, which builds `createAuth` of `auth/src/auth.ts` on `GOAL_AUTH_DATABASE_URL` with a throwaway secret, so `auth.ts` itself opens no connection when imported; the CLI writes a file and has no stdout mode, and writes nothing when there is no difference.) The PR adds `-- +goose Up`, sets each id default to `goal_uuidv7()`, leaves out the generated `create schema if not exists "auth"` (`00040` creates it), and appends the grants. It is never hand-edited after it is applied; `auth migrate` is never run.
 - Tables (Better Auth 1.7 with these plugins): `user`, `session`, `account`, `verification`, `organization`, `member`, `invitation`, `deviceCode`, `rateLimit`. Columns are Better Auth's camelCase, quoted (`"userId"`). Goal reads them only inside definer functions, so neither the quoting nor the reserved word `"user"` reaches Go.
 - Additional fields (declared in `auth/src/auth.ts`, therefore generated): `member.changedBy text`, `member.changedAt timestamptz`; `invitation.factoryRoles text` (JSON `[{"factoryId","role"}]`, `input: true`), `invitation.changedBy text`, `invitation.changedAt timestamptz`. `changedBy` holds an actor ref.
-- **Drift check** (`task auth:schema-check`, run by `task migrate-check` and by the pre-push hook whenever pushed commits touch `auth/` or `migrations/`): migrate a scratch database to head, run `auth generate` against it, fail on any non-empty output. Better Auth's `validateSchema` stays on at runtime.
+- **Drift check** (`task auth:schema-check`, run by `task migrate-check` and by the pre-push hook whenever pushed commits touch `auth/` or `migrations/`): migrate a scratch database to head, run `auth generate` against it as `goal_auth` (`task auth:schema-diff DATABASE_URL=…`), fail on any non-empty output. Better Auth's `validateSchema` stays on at runtime, and the service refuses to start when its schema check fails.
 
 ```sql
 -- 00040_auth_schema.sql
@@ -302,7 +302,7 @@ $$;
 GRANT EXECUTE ON FUNCTION goal_uuidv7() TO goal_auth, goal_app;
 ```
 
-If the drift check reports the changed defaults as a difference, 3-4 keeps Better Auth's `gen_random_uuid()` (v4) defaults instead and records it here; ids Goal generates (organizations, owner members, keys) stay UUIDv7 from Go.
+The drift check does not report the changed defaults (checked in 3-4), so Better Auth's ids are UUIDv7 from `goal_uuidv7()`; ids Goal generates (organizations, owner members, keys) stay UUIDv7 from Go. Generated as built: `session."activeOrganizationId"` and `"deviceCode"."userId"` are `text`, every other id and reference column `uuid`.
 
 ### 6.3 `00042_org_lifecycle.sql`
 
@@ -532,7 +532,8 @@ permissions:
   - {name: platform:manage,    level: install, platform_admin: true, fresh: true}
   - {name: org:read,           level: org, org_roles: [owner, admin, member], keys: true}
   - {name: org:manage,         level: org, org_roles: [owner, admin]}
-  - {name: org:delete,         level: org, org_roles: [owner], fresh: true}
+  - {name: org:delete,         level: org, org_roles: [owner], fresh: true,
+     better_auth: {organization: [update, delete]}}   # Better Auth's own paths for both are off
   - {name: org:transfer,       level: org, org_roles: [owner], fresh: true}
   - {name: audit:read,         level: org, org_roles: [owner, admin], keys: true}
   - {name: member:read,        level: org, org_roles: [owner, admin, member]}
@@ -552,7 +553,7 @@ permissions:
   - {name: factory:manage,     level: factory, factory_role: editor,   keys: true}
 ```
 
-The owner role's Better Auth statements also include `organization: [update, delete]` (their paths are disabled; §8.6). The same vocabulary names API key scopes now and OAuth scopes in phase 5.
+The owner role's Better Auth statements also include `organization: [update, delete]` (their paths are disabled; §8.6); as built in 3-4 they are `org:delete`'s `better_auth`, so permgen derives every role from the table alone (a role holds the `better_auth` actions of the permissions it holds; `better_auth` is for org permissions only). The same vocabulary names API key scopes now and OAuth scopes in phase 5.
 
 **Operations by scope** (2.2's and phase 3's; phase 4 adds `credential:*`, `connector:*`, `approval:decide` in its PRs):
 
@@ -946,7 +947,7 @@ Each row is one PR on `goal/3-<n>-<slug>`, passing `task check`, plus `task migr
 | 3-1 | **Permission source:** `api/permissions.yaml` (§8.2), `x-goal-scope` on every current operation (§8.2 table), `cmd/permgen` run by `task api:gen` → `internal/api/permissions_gen.go` (`permissionRules map[string]rule{level, orgRoles, factoryRole, keys, fresh, platformAdmin}` and `operationScopes map[string]string`, both sorted), drift check in `task check`; the TypeScript output arrives with `auth/` in 3-4 | every operation has a known scope and every permission is used; changing the yaml or an `x-goal-scope` without regenerating fails `task check`; no runtime change (`AllowAll` stays wired) | `TestPermissions_EveryOperationHasAKnownScope`, drift check |
 | 3-2 | **Principal and the real Authorizer:** `domain.Principal`, roles, `ActorService`, the two errors; `ports.Identity` and `porttest.Identity`; `AccessRequest.Principal`; `api.Permissions` with the fresh rule; `credential.go` (parsing only, `none` still the only mode); visibility helpers; the fixed 404 bodies | §8.4 rules hold for fabricated principals; matrix and golden file exist; `AllowAll` used only under `none` | `TestPermissions_RoleGrants`, `TestAuthorize_TwoOrgMatrix` (against `Authorize`) |
 | 3-3 | **Task token audience and the gateway listener:** `aud`, `GOAL_GATEWAY_LISTEN`, `GOAL_GATEWAY_URL` following it | tokens without `aud: goal-gateway` refused at `/mcp`; `/v1` refuses task tokens; §5.5's listener rule (still loopback-only `GOAL_LISTEN` until 3-9) | `domain`, gateway and settings tests |
-| 3-4 | **auth service and schema:** `auth/` (Node 22.12+ through mise, Hono with `@hono/node-server`, pinned Better Auth, settings, role check, health, `auth/Dockerfile` for the sidecar, `access.gen.ts` from permgen), pnpm workspace and turbo, `task auth:build` (from 3-9 `goal up` runs `node auth/dist/server.js` and says how to build it when missing), `goal_auth` in `roles.sql` and `goal db init`, goald's role check before migrating, `00040`, generated `00041` (with §6.2's additional fields), `task auth:schema-check`, `task auth:dev`, session format contract | the service starts as `goal_auth` and refuses bad settings; drift check empty at head and fails on a config change; ids are uuid; contract test green; goald without `goal_auth` refuses and applies nothing; `goal up` unchanged under `none` | Vitest, migrate-check, settings test |
+| 3-4 | **auth service and schema:** `auth/` (Node 22.12+ through mise, Hono with `@hono/node-server`, pinned Better Auth, settings, role check, health, `auth/Dockerfile` for the sidecar, `access.gen.ts` from permgen), pnpm workspace (no turbo: the repo has none, `Taskfile.yml` orchestrates), `task auth:build` (from 3-9 `goal up` runs `node auth/dist/server.js` and says how to build it when missing), `goal_auth` in `roles.sql` and `goal db init`, goald's role check before migrating, `00040`, generated `00041` (with §6.2's additional fields), `task auth:schema-check`, `task auth:dev`, session format contract | the service starts as `goal_auth` and refuses bad settings; drift check empty at head and fails on a config change; ids are uuid; contract test green; goald without `goal_auth` refuses and applies nothing; `goal up` unchanged under `none` | Vitest, migrate-check, settings test |
 | 3-5 | **Org lifecycle (00042):** constraints, owner trigger, `goal_provision_org` used by `Tenancy.CreateOrg` (no owner yet), rename and retire triggers, transfer function, purge, backfill | create writes both rows or none; rename syncs; soft delete cancels invitations; purge removes auth rows; two concurrent demotions cannot leave zero owners | `tenancytest`, integration |
 | 3-6 | **Identity tables and auth triggers (00043):** `platform_admins`, `factory_roles`, `auth_events`, `actor_kind` widened, audit and `goal_access` triggers | each audited path writes one entry with the stamped actor; notices sent; RLS guard and isolation test green | integration, `TestSchema_AuthSchemaIsolation` |
 | 3-7 | **Proxy, Host check and SPA headers:** `authproxy.go` (mounted only under `session`, so inert until 3-9), `GOAL_AUTH_UPSTREAM`, `GOAL_TRUSTED_PROXIES`, the `Host` check, `api/` reserved, CSP and related headers, `ownVariables` gains §5.6's variables | every rule of §5.5 holds | proxy tests, `web` handler tests, `TestSettings_ReservedIncludesAuthVariables` |

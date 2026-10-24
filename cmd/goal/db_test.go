@@ -18,7 +18,9 @@ func TestDBSettings_DefaultsMatchGoald(t *testing.T) {
 		t.Errorf("admin url = %s; want compose's superuser", got.AdminURL)
 	}
 
-	if got.Roles != (postgres.Roles{OwnerPassword: postgres.DevOwnerPassword, AppPassword: postgres.DevAppPassword}) {
+	if got.Roles != (postgres.Roles{
+		OwnerPassword: postgres.DevOwnerPassword, AppPassword: postgres.DevAppPassword, AuthPassword: postgres.DevAuthPassword,
+	}) {
 		t.Errorf("role passwords are not the dev defaults")
 	}
 }
@@ -28,12 +30,12 @@ func TestDBSettings_EnvironmentWins(t *testing.T) {
 
 	env := map[string]string{
 		"GOAL_DATABASE_ADMIN_URL": "postgres://admin@db.example.com/goal",
-		"GOAL_PG_OWNER_PASSWORD":  "owner-pw", "GOAL_PG_APP_PASSWORD": "app-pw",
+		"GOAL_PG_OWNER_PASSWORD":  "owner-pw", "GOAL_PG_APP_PASSWORD": "app-pw", "GOAL_PG_AUTH_PASSWORD": "auth-pw",
 	}
 
 	got := dbSettingsFrom(func(k string) string { return env[k] })
 
-	if got.AdminURL != env["GOAL_DATABASE_ADMIN_URL"] || got.Roles != (postgres.Roles{OwnerPassword: "owner-pw", AppPassword: "app-pw"}) {
+	if got.AdminURL != env["GOAL_DATABASE_ADMIN_URL"] || got.Roles != (postgres.Roles{OwnerPassword: "owner-pw", AppPassword: "app-pw", AuthPassword: "auth-pw"}) {
 		t.Errorf("db settings ignore the environment")
 	}
 }

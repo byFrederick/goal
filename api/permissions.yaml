@@ -18,7 +18,10 @@ permissions:
   - {name: platform:manage,    level: install, platform_admin: true, fresh: true}
   - {name: org:read,           level: org, org_roles: [owner, admin, member], keys: true}
   - {name: org:manage,         level: org, org_roles: [owner, admin]}
-  - {name: org:delete,         level: org, org_roles: [owner], fresh: true}
+  # Better Auth's own organization update and delete paths are off (spec 3 §8.6): goald renames
+  # and deletes organizations. Only owners hold their statements, as Better Auth's owner does.
+  - {name: org:delete,         level: org, org_roles: [owner], fresh: true,
+     better_auth: {organization: [update, delete]}}
   - {name: org:transfer,       level: org, org_roles: [owner], fresh: true}
   - {name: audit:read,         level: org, org_roles: [owner, admin], keys: true}
   - {name: member:read,        level: org, org_roles: [owner, admin, member]}

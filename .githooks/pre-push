@@ -2,7 +2,8 @@
 # Local gate for every push (install once: `task hooks:install`). CI on GitHub is disabled for
 # lack of Actions minutes, so this hook is what keeps main green:
 #   - always: task check (lint, race tests, factory validation, terraform fmt/validate)
-#   - when the pushed commits touch migrations/: task migrate-check as well
+#   - when the pushed commits touch migrations/ or auth/: task migrate-check as well (with the
+#     Better Auth schema drift check, task auth:schema-check)
 # It checks the working tree you push from; commit or stash unrelated edits first.
 # Bypass only in an emergency with `git push --no-verify`, and say so in the pull request.
 set -eu
@@ -18,7 +19,7 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
 	*) range="$remote_sha..$local_sha" ;;
 	esac
 	# shellcheck disable=SC2086 # range is intentionally split into git arguments
-	if [ -n "$(git log --format= --name-only $range -- migrations/)" ]; then
+	if [ -n "$(git log --format= --name-only $range -- migrations/ auth/)" ]; then
 		migrations=yes
 	fi
 done
@@ -32,6 +33,6 @@ echo "pre-push: task check" >&2
 task check
 
 if [ -n "$migrations" ]; then
-	echo "pre-push: migrations/ changed, task migrate-check" >&2
+	echo "pre-push: migrations/ or auth/ changed, task migrate-check" >&2
 	task migrate-check
 fi

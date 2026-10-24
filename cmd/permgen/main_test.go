@@ -15,11 +15,12 @@ func TestRun_CheckFailsWhenASourceChangesWithoutRegenerating(t *testing.T) {
 	perms := filepath.Join(dir, "permissions.yaml")
 	openapi := filepath.Join(dir, "openapi.yaml")
 	out := filepath.Join(dir, "permissions_gen.go")
+	ts := filepath.Join(dir, "access.gen.ts")
 
 	write(t, perms, testPermissions)
 	write(t, openapi, testOpenAPI)
 
-	args := []string{"-permissions", perms, "-openapi", openapi, "-go", out}
+	args := []string{"-permissions", perms, "-openapi", openapi, "-go", out, "-ts", ts}
 	check := append([]string{"-check"}, args...)
 
 	if err := run(check); !errors.Is(err, errStale) {
@@ -39,6 +40,7 @@ func TestRun_CheckFailsWhenASourceChangesWithoutRegenerating(t *testing.T) {
 	}{
 		{name: "a rule", path: perms, from: "factory_role: approver", to: "factory_role: editor"},
 		{name: "an operation's scope", path: openapi, from: `x-goal-scope: "org:read"`, to: "x-goal-scope: public"},
+		{name: "a Better Auth statement", path: perms, from: "invitation: [create]", to: "invitation: [cancel]"},
 	}
 
 	for _, c := range changes {

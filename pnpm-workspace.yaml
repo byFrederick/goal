@@ -1,7 +1,14 @@
 packages:
+  - auth
   - web
   - worker
   - packages/*
+
+# Better Auth is pinned exactly, once, for the auth service and (from 3-10) the web client, whose
+# requests must match the server's (ADR 0007); auth is its CLI, which generates the schema.
+catalog:
+  auth: 1.7.12
+  better-auth: 1.7.12
 
 # pnpm holds back releases younger than its minimum release age. The worker pins the newest
 # Claude Agent SDK on purpose; these exact versions (and the SDK's peers) are exempt. Drop an

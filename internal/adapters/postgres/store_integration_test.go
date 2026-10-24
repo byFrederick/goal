@@ -120,7 +120,7 @@ func TestCreateItem_UnsavedFactoryNotFound(t *testing.T) {
 	}
 }
 
-// newTestPool returns a goal_app pool on a fresh schema, migrated from zero as goal_owner: the
+// newTestPool returns a goal_app pool on a fresh database, migrated from zero as goal_owner: the
 // roles goald runs with.
 func newTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
@@ -131,16 +131,20 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 	return openPool(t, db.app)
 }
 
-// testDB is a fresh schema of the database at GOAL_TEST_DATABASE_URL (PostgreSQL 18 from
-// compose.yaml; `task test-integration` sets it up), dropped when the test ends. Its URLs connect
-// as the bootstrap superuser of that URL (admin) or switch to goal_owner or goal_app with the
-// role startup parameter, so the tests never need, set or change the roles' passwords.
+// testDB is a fresh database of the PostgreSQL at GOAL_TEST_DATABASE_URL (PostgreSQL 18 from
+// compose.yaml; `task test-integration` sets it up), dropped when the test ends: a database, not
+// a schema of a shared one, since migration 00040 creates schema auth, which a database holds
+// once. Goal's tables are in its public schema. Its URLs connect as the bootstrap superuser of
+// that URL (admin) or switch to goal_owner, goal_app or goal_auth with the role startup
+// parameter, so the tests never need, set or change the roles' passwords.
 type testDB struct {
-	schema, admin, owner, app string
+	schema, admin, owner, app, auth string
 }
 
-// newTestDB creates the roles (roles.sql: idempotent, without LOGIN) and a schema owned by
-// schemaOwner (OwnerRole as after `goal db init`, or "" for the bootstrap user as before it).
+// newTestDB creates the roles (roles.sql: idempotent, without LOGIN) and a database. With
+// schemaOwner OwnerRole it is as after `goal db init`: goal_owner may create in it and in its
+// public schema, the other roles may use them, and PUBLIC may neither connect nor create
+// temporary tables. With "" it is as before the roles: only the bootstrap user may create there.
 func newTestDB(t *testing.T, schemaOwner string) testDB {
 	t.Helper()
 
@@ -151,25 +155,33 @@ func newTestDB(t *testing.T, schemaOwner string) testDB {
 
 	execSQL(t, base, "BEGIN; SELECT pg_advisory_xact_lock(hashtext('goal.roles')); "+rolesSQL+"; COMMIT")
 
-	schema := "goal_test_" + randomHex(t)
-	create := "CREATE SCHEMA " + schema
+	name := "goal_test_" + randomHex(t)
+	execSQL(t, base, "CREATE DATABASE "+name)
+	t.Cleanup(func() { execSQL(t, base, "DROP DATABASE "+name+" WITH (FORCE)") })
+
+	db := testDB{
+		schema: publicSchema,
+		admin:  withParams(t, base, name, ""),
+		owner:  withParams(t, base, name, OwnerRole),
+		app:    withParams(t, base, name, AppRole),
+		auth:   withParams(t, base, name, AuthRole),
+	}
 
 	if schemaOwner != "" {
-		create += " AUTHORIZATION " + schemaOwner + "; GRANT USAGE ON SCHEMA " + schema + " TO " + AppRole
+		execSQL(t, db.admin, "REVOKE TEMPORARY, CONNECT ON DATABASE "+name+" FROM PUBLIC; "+
+			"GRANT CONNECT, CREATE ON DATABASE "+name+" TO "+schemaOwner+"; "+
+			"GRANT CONNECT ON DATABASE "+name+" TO goal_app, goal_auth; "+
+			"GRANT USAGE, CREATE ON SCHEMA public TO "+schemaOwner+"; GRANT USAGE ON SCHEMA public TO goal_app, goal_auth")
 	}
 
-	execSQL(t, base, create)
-	t.Cleanup(func() { execSQL(t, base, "DROP SCHEMA "+schema+" CASCADE") })
-
-	return testDB{
-		schema: schema,
-		admin:  withParams(t, base, map[string]string{"search_path": schema}),
-		owner:  withParams(t, base, map[string]string{"search_path": schema, "role": OwnerRole}),
-		app:    withParams(t, base, map[string]string{"search_path": schema, "role": AppRole}),
-	}
+	return db
 }
 
-func withParams(t *testing.T, base string, params map[string]string) string {
+// publicSchema holds Goal's tables in every test database.
+const publicSchema = "public"
+
+// withParams is base on database, switching to role unless it is "".
+func withParams(t *testing.T, base, database, role string) string {
 	t.Helper()
 
 	u, err := url.Parse(base)
@@ -177,12 +189,13 @@ func withParams(t *testing.T, base string, params map[string]string) string {
 		t.Fatal(err)
 	}
 
-	q := u.Query()
-	for k, v := range params {
-		q.Set(k, v)
-	}
+	u.Path = "/" + database
 
-	u.RawQuery = q.Encode()
+	if role != "" {
+		q := u.Query()
+		q.Set("role", role)
+		u.RawQuery = q.Encode()
+	}
 
 	return u.String()
 }

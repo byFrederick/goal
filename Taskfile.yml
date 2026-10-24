@@ -16,6 +16,8 @@ vars:
   # The agent images factories name in runtime.image; built locally, never pushed from here.
   WORKER_IMAGE: '{{.WORKER_IMAGE | default "ghcr.io/byfrederick/goal-agent:0.1.0"}}'
   WORKER_DEV_IMAGE: '{{.WORKER_DEV_IMAGE | default "ghcr.io/byfrederick/goal-agent-dev:0.1.0"}}'
+  # The auth service's sidecar image (spec 3 §5.5); built locally, never pushed from here.
+  AUTH_IMAGE: '{{.AUTH_IMAGE | default "ghcr.io/byfrederick/goal-auth:0.1.0"}}'
   # Where migrate-check gets its throwaway PostgreSQL 18: Docker, or a local cluster where there is
   # no Docker (the dev agent image, in which station checks run, ships the server).
   MIGRATE_WITH:
@@ -23,8 +25,14 @@ vars:
   # What goal db init grants before goald migrates (postgres.InitRoles), for migrate-check.
   MIGRATE_GRANTS: >-
     REVOKE TEMPORARY, CONNECT ON DATABASE goal FROM PUBLIC;
-    GRANT CONNECT, CREATE ON DATABASE goal TO goal_owner; GRANT CONNECT ON DATABASE goal TO goal_app;
-    GRANT USAGE, CREATE ON SCHEMA public TO goal_owner; GRANT USAGE ON SCHEMA public TO goal_app
+    GRANT CONNECT, CREATE ON DATABASE goal TO goal_owner; GRANT CONNECT ON DATABASE goal TO goal_app, goal_auth;
+    GRANT USAGE, CREATE ON SCHEMA public TO goal_owner; GRANT USAGE ON SCHEMA public TO goal_app, goal_auth
+  # The auth service's own variables (spec 3 §5.6): task auth:dev passes it these and nothing of
+  # goald's, as goal up does.
+  AUTH_VARIABLES: >-
+    PATH HOME GOAL_PUBLIC_URL GOAL_AUTH_GOOGLE GOAL_AUTH_LISTEN GOAL_AUTH_DATABASE_URL GOAL_PG_AUTH_PASSWORD
+    BETTER_AUTH_SECRET BETTER_AUTH_SECRETS GOAL_BOOTSTRAP_OWNER_EMAIL GOAL_SMTP_URL GOAL_SMTP_FROM
+    GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET NODE_ENV NODE_OPTIONS NODE_EXTRA_CA_CERTS
 
 # The storage tasks talk to the local RustFS from compose.yaml unless .env or the shell says
 # otherwise. For an AWS bucket run bin/goal directly with GOAL_S3_BUCKET and AWS credentials.
@@ -77,10 +85,12 @@ tasks:
   test-integration:
     # The tests connect as compose's superuser and switch to goal_owner and goal_app per
     # connection (internal/adapters/postgres), so they never touch the roles' passwords.
-    desc: Integration tests against PostgreSQL 18 and RustFS from compose.yaml
+    desc: Integration tests against PostgreSQL 18 and RustFS from compose.yaml (Go, and the auth service's Vitest)
+    deps: [worker:install]
     cmds:
       - docker compose up -d --wait postgres rustfs
       - go test -race -tags integration ./...
+      - pnpm --filter @goal/auth run --silent test:integration
     env:
       GOAL_TEST_DATABASE_URL: postgres://goal:{{.GOAL_PG_PASSWORD | default "goal-dev-only"}}@localhost:5432/goal?sslmode=disable
       GOAL_TEST_S3_ENDPOINT: http://127.0.0.1:9000
@@ -135,7 +145,7 @@ tasks:
     internal: true
     cmds:
       - docker rm -f goal-migrate-check >/dev/null 2>&1 || true
-      - docker run -d --rm --name goal-migrate-check -e POSTGRES_PASSWORD=check -e POSTGRES_DB=goal {{.PG_IMAGE}} >/dev/null
+      - docker run -d --rm --name goal-migrate-check -p 127.0.0.1::5432 -e POSTGRES_PASSWORD=check -e POSTGRES_DB=goal {{.PG_IMAGE}} >/dev/null
       - defer: docker stop goal-migrate-check >/dev/null
       - until docker exec goal-migrate-check pg_isready -h 127.0.0.1 -U postgres -d goal >/dev/null 2>&1; do sleep 1; done
       # The roles first (as goal db init does), then every migration as goal_owner in one
@@ -147,6 +157,9 @@ tasks:
           docker exec -i -e PGOPTIONS='-c role=goal_owner' goal-migrate-check psql -U postgres -d goal -v ON_ERROR_STOP=1 -q --single-transaction < "$f" || exit 1
           echo "applied $f"
         done
+      - |
+        port=$(docker port goal-migrate-check 5432/tcp | head -n 1 | sed 's/.*://')
+        "{{.TASK_EXE}}" auth:schema-diff DATABASE_URL="postgres://postgres:check@127.0.0.1:${port}/goal?sslmode=disable&options=-c%20role%3Dgoal_auth"
 
   migrate-check:local:
     internal: true
@@ -166,6 +179,7 @@ tasks:
           PGOPTIONS='-c role=goal_owner' psql -h "{{.PGTMP}}" -U postgres -d goal -v ON_ERROR_STOP=1 -q --single-transaction < "$f" || exit 1
           echo "applied $f"
         done
+      - '"{{.TASK_EXE}}" auth:schema-diff DATABASE_URL="postgres://postgres@localhost/goal?host={{.PGTMP}}&options=-c%20role%3Dgoal_auth"'
 
   check:
     desc: Everything the pre-push hook and CI check except migrations and integration tests
@@ -174,6 +188,7 @@ tasks:
       - task: test
       - task: api:permissions-check
       - task: worker:check
+      - task: auth:check
       - task: api-client:check
       - task: web:check
       - task: validate
@@ -181,7 +196,7 @@ tasks:
 
   worker:install:
     desc: Install the pnpm workspace's dependencies from the lockfile
-    sources: [package.json, pnpm-lock.yaml, pnpm-workspace.yaml, worker/package.json, packages/*/package.json]
+    sources: [package.json, pnpm-lock.yaml, pnpm-workspace.yaml, worker/package.json, auth/package.json, packages/*/package.json]
     cmds:
       - pnpm install --frozen-lockfile
 
@@ -233,6 +248,68 @@ tasks:
       - pnpm run --silent lint
       - pnpm run --silent test
 
+  auth:check:
+    desc: Auth service typecheck, Biome lint, Vitest unit tests (no database) and pnpm audit of its production dependencies
+    deps: [worker:install]
+    dir: auth
+    cmds:
+      - pnpm run --silent typecheck
+      - pnpm run --silent lint
+      - pnpm run --silent test
+      - pnpm audit --prod --filter @goal/auth
+
+  auth:build:
+    desc: Build the auth service into auth/dist (Better Auth on Hono; from 3-9 goal up runs node auth/dist/server.js under GOAL_AUTH=session)
+    deps: [worker:install]
+    dir: auth
+    sources: [src/**/*.ts, package.json, tsconfig.json, tsconfig.build.json, ../pnpm-lock.yaml]
+    generates: [dist/server.js]
+    cmds:
+      - pnpm run --silent build
+
+  auth:dev:
+    desc: Run the auth service from auth/src, rebuilt and restarted on change, with only its own variables from .env (needs goal db init and BETTER_AUTH_SECRET)
+    deps: [auth:build]
+    dir: auth
+    cmds:
+      - |
+        pnpm exec tsc -p tsconfig.build.json --watch --preserveWatchOutput >/dev/null &
+        trap 'kill $! 2>/dev/null' EXIT
+        set --
+        for v in {{.AUTH_VARIABLES}}; do
+          eval "x=\${$v+set}"
+          if [ "$x" = set ]; then eval "set -- \"\$@\" \"$v=\${$v}\""; fi
+        done
+        env -i "$@" node --watch dist/server.js
+
+  auth:schema-check:
+    desc: Better Auth's schema drift check, part of migrate-check - auth generate against a scratch database at the goose head must find nothing to change
+    cmds:
+      - task: migrate-check
+
+  auth:schema-diff:
+    desc: Compare Better Auth's schema with the database at DATABASE_URL (a scratch one at the goose head; migrate-check passes it)
+    requires:
+      vars: [DATABASE_URL]
+    deps: [worker:install]
+    dir: auth
+    vars:
+      OUT:
+        sh: mktemp -d
+    cmds:
+      - defer: rm -rf "{{.OUT}}"
+      # The pinned CLI writes a migration only when the database differs from auth/src/auth.ts;
+      # `auth migrate` is never run.
+      - GOAL_AUTH_DATABASE_URL='{{.DATABASE_URL}}' BETTER_AUTH_TELEMETRY=0 pnpm exec auth generate --config src/generate.ts --output "{{.OUT}}/drift.sql" --yes >/dev/null
+      - |
+        if [ -s "{{.OUT}}/drift.sql" ]; then
+          echo "auth:schema-check: Better Auth's schema differs from migrations/; add a goose migration (spec 3 §6.2) for:" >&2
+          cat "{{.OUT}}/drift.sql" >&2
+          echo >&2
+          exit 1
+        fi
+        echo "auth:schema-check: Better Auth's schema matches migrations/"
+
   api-client:check:
     desc: TypeScript API client typecheck and Vitest unit tests, and its generated types match api/openapi.yaml
     deps: [worker:install]
@@ -246,6 +323,11 @@ tasks:
     desc: Build the agent worker image locally (WORKER_IMAGE); never pushes
     cmds:
       - docker build -f worker/Dockerfile --target runtime -t {{.WORKER_IMAGE}} .
+
+  auth:image:
+    desc: Build the auth service's sidecar image locally (AUTH_IMAGE); never pushes
+    cmds:
+      - docker build -f auth/Dockerfile --target runtime -t {{.AUTH_IMAGE}} .
 
   worker:image-dev:
     desc: Build the dev agent image (WORKER_DEV_IMAGE) with Go, task, golangci-lint, pnpm, Terraform and PostgreSQL 18

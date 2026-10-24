@@ -12,45 +12,54 @@ import (
 )
 
 // The database roles Goal runs as. OwnerRole owns the schema and applies migrations; AppRole
-// runs goald and owns nothing, so row-level security binds it.
+// runs goald and owns nothing, so row-level security binds it; AuthRole runs the identity
+// service (auth/), with DML on Better Auth's tables in schema auth only.
 const (
 	OwnerRole = "goal_owner"
 	AppRole   = "goal_app"
+	AuthRole  = "goal_auth"
 )
 
-// Dev-only passwords for the two roles on a laptop, the defaults of GOAL_PG_OWNER_PASSWORD and
-// GOAL_PG_APP_PASSWORD (like compose.yaml's goal-dev-only for the bootstrap superuser).
+// Dev-only passwords for the roles on a laptop, the defaults of GOAL_PG_OWNER_PASSWORD,
+// GOAL_PG_APP_PASSWORD and GOAL_PG_AUTH_PASSWORD (like compose.yaml's goal-dev-only for the
+// bootstrap superuser).
 const (
 	DevOwnerPassword = "goal-owner-dev-only" //nolint:gosec // a documented dev-only default, as in .env.example
 	DevAppPassword   = "goal-app-dev-only"   //nolint:gosec // a documented dev-only default, as in .env.example
+	DevAuthPassword  = "goal-auth-dev-only"  //nolint:gosec // a documented dev-only default, as in .env.example
 )
+
+// ErrRoleMissing is Migrate's answer when a role the migrations grant to does not exist yet.
+var ErrRoleMissing = errors.New("run goal db init (goal up runs it)")
 
 // ErrRoleBypassesRLS is CheckAppRole's answer for a role that row-level security would not bind.
 var ErrRoleBypassesRLS = errors.New("the role bypasses row-level security")
 
-// rolesSQL creates both roles without LOGIN when they are missing. `task migrate-check` runs the
+// rolesSQL creates the roles without LOGIN when they are missing. `task migrate-check` runs the
 // same file with psql.
 //
 //go:embed roles.sql
 var rolesSQL string
 
-// Roles holds the passwords InitRoles gives the two roles.
+// Roles holds the passwords InitRoles gives the roles.
 type Roles struct {
 	OwnerPassword string
 	AppPassword   string
+	AuthPassword  string
 }
 
 // InitRoles prepares the database pool connects to for goald (`goal db init`). pool must connect
 // as the bootstrap user that owns the database's objects today (compose.yaml's superuser
-// locally). In one transaction it creates goal_owner and goal_app when missing, lets both log in
-// with the given passwords, grants goal_owner the database and the current schema and goal_app
-// their use (revoking PUBLIC's CONNECT and TEMPORARY on the database), and hands every table, view, sequence and function of the current schema that the
-// bootstrap user owns to goal_owner (goose_db_version included), so the next migration runs as
-// goal_owner. It returns how many objects changed owner. It is idempotent; passwords are never
-// logged or put into errors.
+// locally). In one transaction it creates goal_owner, goal_app and goal_auth when missing, lets
+// them log in with the given passwords, grants goal_owner the database and the current schema and
+// goal_app and goal_auth their use (revoking PUBLIC's CONNECT and TEMPORARY on the database), and
+// hands every table, view, sequence and function of the current schema that the bootstrap user
+// owns to goal_owner (goose_db_version included), so the next migration runs as goal_owner. It
+// returns how many objects changed owner. It is idempotent; passwords are never logged or put
+// into errors.
 func InitRoles(ctx context.Context, pool *pgxpool.Pool, r Roles) (moved int, err error) {
-	if r.OwnerPassword == "" || r.AppPassword == "" {
-		return 0, errors.New("postgres: init roles: both role passwords are required")
+	if r.OwnerPassword == "" || r.AppPassword == "" || r.AuthPassword == "" {
+		return 0, errors.New("postgres: init roles: every role password is required")
 	}
 
 	err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
@@ -58,7 +67,9 @@ func InitRoles(ctx context.Context, pool *pgxpool.Pool, r Roles) (moved int, err
 			return err
 		}
 
-		for _, rp := range []struct{ role, password string }{{OwnerRole, r.OwnerPassword}, {AppRole, r.AppPassword}} {
+		for _, rp := range []struct{ role, password string }{
+			{OwnerRole, r.OwnerPassword}, {AppRole, r.AppPassword}, {AuthRole, r.AuthPassword},
+		} {
 			if err := setPassword(ctx, tx, rp.role, rp.password); err != nil {
 				return err
 			}
@@ -105,18 +116,20 @@ func setPassword(ctx context.Context, tx pgx.Tx, role, password string) error {
 	return nil
 }
 
-// grants gives goal_owner the database and the current schema, and goal_app the right to use
-// them. Table privileges come from the migrations, one GRANT per table. PUBLIC loses what
-// PostgreSQL gives it on a new database: CONNECT, so no other role of the cluster can LISTEN to
-// or NOTIFY goald's channels, and TEMPORARY, so no role can put a temporary table in front of
-// one a definer function reads (review 2.2 H1, M4). Neither role needs a temporary table.
+// grants gives goal_owner the database and the current schema (CREATE on the database lets its
+// migrations create schema auth), and goal_app and goal_auth the right to use them. Table
+// privileges come from the migrations, one GRANT per table; goal_auth gets none in the current
+// schema, only the functions granted to it (spec 3 §6.0). PUBLIC loses what PostgreSQL gives it
+// on a new database: CONNECT, so no other role of the cluster can LISTEN to or NOTIFY goald's
+// channels, and TEMPORARY, so no role can put a temporary table in front of one a definer
+// function reads (review 2.2 H1, M4). No role needs a temporary table.
 const grants = `
 DO $$ BEGIN
   EXECUTE format('REVOKE TEMPORARY, CONNECT ON DATABASE %I FROM PUBLIC', current_database());
   EXECUTE format('GRANT CONNECT, CREATE ON DATABASE %I TO goal_owner', current_database());
-  EXECUTE format('GRANT CONNECT ON DATABASE %I TO goal_app', current_database());
+  EXECUTE format('GRANT CONNECT ON DATABASE %I TO goal_app, goal_auth', current_database());
   EXECUTE format('GRANT USAGE, CREATE ON SCHEMA %I TO goal_owner', current_schema());
-  EXECUTE format('GRANT USAGE ON SCHEMA %I TO goal_app', current_schema());
+  EXECUTE format('GRANT USAGE ON SCHEMA %I TO goal_app, goal_auth', current_schema());
 END $$`
 
 // ownedObjects lists an ALTER … OWNER TO goal_owner statement for every relation and function of

@@ -51,6 +51,12 @@ type source struct {
 // permissionName is a permission's form: a word, or resource:action.
 var permissionName = regexp.MustCompile(`^[a-z][a-z_]*(:[a-z][a-z_]*)?$`)
 
+// roleName is a role's form, also a TypeScript identifier.
+var roleName = regexp.MustCompile(`^[a-z][a-z_]*$`)
+
+// betterAuthName is the form of a Better Auth access-control resource or action.
+var betterAuthName = regexp.MustCompile(`^[a-z][a-zA-Z]*$`)
+
 // load reads and checks both sources. Permissions come out sorted by name.
 func load(permissions, openapi []byte) (table, error) {
 	var src source
@@ -125,6 +131,28 @@ func (t table) check(p permission) error {
 
 	if p.Fresh && p.Keys {
 		return errors.New("keys never hold a fresh permission: an API key has no sign-in time")
+	}
+
+	return checkBetterAuth(p)
+}
+
+// checkBetterAuth refuses better_auth statements outside an org permission (Better Auth's roles
+// are the organization roles) and malformed resources or actions.
+func checkBetterAuth(p permission) error {
+	if len(p.BetterAuth) > 0 && p.Level != levelOrg {
+		return errors.New("better_auth is for org permissions: Better Auth's roles are the organization roles")
+	}
+
+	for resource, actions := range p.BetterAuth {
+		if !betterAuthName.MatchString(resource) || len(actions) == 0 {
+			return fmt.Errorf("better_auth resource %q: a lowercase name with at least one action", resource)
+		}
+
+		for _, a := range actions {
+			if !betterAuthName.MatchString(a) {
+				return fmt.Errorf("better_auth %s action %q: a lowercase name", resource, a)
+			}
+		}
 	}
 
 	return nil
@@ -210,8 +238,8 @@ func distinct(field string, names []string) error {
 	}
 
 	for i, n := range names {
-		if n == "" || slices.Contains(names[:i], n) {
-			return fmt.Errorf("permissions: %s: %q is empty or listed twice", field, n)
+		if !roleName.MatchString(n) || slices.Contains(names[:i], n) {
+			return fmt.Errorf("permissions: %s: %q is not a lowercase name or is listed twice", field, n)
 		}
 	}
 

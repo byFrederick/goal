@@ -125,23 +125,30 @@ func migrateTo(t *testing.T, pool *pgxpool.Pool, version int64) {
 	}
 }
 
-// checkDatabasePrivileges checks what goal db init leaves on the database: goal_owner and goal_app
-// connect by their own grants, and PUBLIC may neither connect (so no other role of the cluster
+// publicRole is PostgreSQL's PUBLIC, every role, as the privilege functions name it.
+const publicRole = "public"
+
+// checkDatabasePrivileges checks what goal db init leaves on the database: goal_owner, goal_app
+// and goal_auth connect by their own grants, and PUBLIC may neither connect (so no other role of the cluster
 // LISTENs to or NOTIFYs goald's channels) nor create temporary tables (review 2.2 H1, M4).
 func checkDatabasePrivileges(t *testing.T, admin *pgxpool.Pool) {
 	t.Helper()
+
+	const connect, temporary = "CONNECT", "TEMPORARY"
 
 	for _, c := range []struct {
 		role, priv string
 		want       bool
 	}{
-		{"public", "CONNECT", false},
-		{"public", "TEMPORARY", false},
-		{OwnerRole, "CONNECT", true},
+		{publicRole, connect, false},
+		{publicRole, temporary, false},
+		{OwnerRole, connect, true},
 		{OwnerRole, "CREATE", true},
-		{OwnerRole, "TEMPORARY", false},
-		{AppRole, "CONNECT", true},
-		{AppRole, "TEMPORARY", false},
+		{OwnerRole, temporary, false},
+		{AppRole, connect, true},
+		{AppRole, temporary, false},
+		{AuthRole, connect, true},
+		{AuthRole, temporary, false},
 	} {
 		var has bool
 		if err := admin.QueryRow(t.Context(), "SELECT has_database_privilege($1, current_database(), $2)", c.role, c.priv).

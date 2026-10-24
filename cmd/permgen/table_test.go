@@ -12,6 +12,8 @@ permissions:
   - {name: public, level: install}
   - {name: org:read, level: org, org_roles: [owner, admin, member], keys: true}
   - {name: item:decide, level: factory, factory_role: approver, keys: true}
+  - {name: member:manage, level: org, org_roles: [owner, admin], fresh: true, better_auth: {member: [update, delete], invitation: [create]}}
+  - {name: org:delete, level: org, org_roles: [owner], fresh: true, better_auth: {organization: [delete]}}
 `
 
 const testOpenAPI = `paths:
@@ -69,6 +71,9 @@ func TestLoad_RefusesATableThatDoesNotHoldTogether(t *testing.T) {
 		{name: "fresh permission for keys", permissions: "  - {name: public, level: org, org_roles: [owner], fresh: true, keys: true}", want: "keys never hold a fresh permission"},
 		{name: "listed twice", permissions: "  - {name: org:read, level: install}", want: "listed twice"},
 		{name: "malformed name", permissions: "  - {name: Public, level: install}", want: "lowercase"},
+		{name: "better_auth outside an org permission", permissions: "  - {name: public, level: install, better_auth: {member: [update]}}", want: "better_auth is for org permissions"},
+		{name: "better_auth resource without actions", permissions: "  - {name: public, level: org, org_roles: [owner], better_auth: {member: []}}", want: "at least one action"},
+		{name: "malformed better_auth action", permissions: "  - {name: public, level: org, org_roles: [owner], better_auth: {member: [\"up date\"]}}", want: "a lowercase name"},
 	}
 
 	for _, tt := range tests {
@@ -89,5 +94,44 @@ func TestLoad_RefusesATableThatDoesNotHoldTogether(t *testing.T) {
 				t.Errorf("load: %v, want an error containing %q", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestLoad_RefusesAMalformedRoleName(t *testing.T) {
+	t.Parallel()
+
+	perms := strings.Replace(testPermissions, "org_roles: [owner, admin, member]", "org_roles: [owner, \"site admin\", member]", 1)
+
+	if _, err := load([]byte(perms), []byte(testOpenAPI)); err == nil || !strings.Contains(err.Error(), "not a lowercase name") {
+		t.Errorf("load: %v, want a malformed role refused", err)
+	}
+}
+
+// Better Auth's roles hold the better_auth actions of the permissions each organization role
+// holds: owners those of member:manage and org:delete, admins those of member:manage only,
+// members none.
+func TestRenderTS_EachRoleHoldsTheActionsOfItsPermissions(t *testing.T) {
+	t.Parallel()
+
+	tb, err := load([]byte(testPermissions), []byte(testOpenAPI))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := renderTS(tb)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []string{
+		"  invitation: ['create'],\n  member: ['delete', 'update'],\n  organization: ['delete'],\n} as const;",
+		"  owner: ac.newRole({ invitation: ['create'], member: ['delete', 'update'], organization: ['delete'] }),",
+		"  admin: ac.newRole({ invitation: ['create'], member: ['delete', 'update'] }),",
+		"  member: ac.newRole({}),",
+		"export const factoryRoles = ['viewer', 'approver', 'editor'] as const;",
+	} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("access.gen.ts lacks %q:\n%s", want, out)
+		}
 	}
 }

@@ -3,11 +3,14 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
 	"reflect"
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
@@ -15,7 +18,7 @@ import (
 
 // Migration 00030 rebuilds spans from item events for the items that existed before it. A scripted
 // history is written through the store on the current schema, where the trigger makes its spans;
-// its factories, items and events are copied into a schema at version 11, which then migrates:
+// its factories, items and events are copied into a database at version 11, which then migrates:
 // every item gets the same spans from the backfill.
 func TestMigrate_BackfillMatchesTheTrigger(t *testing.T) {
 	t.Parallel()
@@ -54,19 +57,41 @@ func TestMigrate_BackfillMatchesTheTrigger(t *testing.T) {
 	}
 }
 
-// copyHistory copies the factories, items and events of from into to, a schema before 00030,
-// naming only columns that schema has; event ids are kept, so their order is.
+// copyHistory copies the factories, items and events of from into to, a database before 00030,
+// naming only columns that database has; event ids are kept, so their order is (COPY FROM writes
+// identity columns as given).
 func copyHistory(t *testing.T, to, from testDB) {
 	t.Helper()
 
-	for _, table := range []struct{ name, columns, overriding string }{
-		{"factories", "id, org_id, name, title, definition, definition_sha256, created_at, updated_at, last_item_number", ""},
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	src, err := pgx.Connect(ctx, from.admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = src.Close(context.Background()) }()
+
+	dst, err := pgx.Connect(ctx, to.admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = dst.Close(context.Background()) }()
+
+	for _, table := range []struct{ name, columns string }{
+		{"factories", "id, org_id, name, title, definition, definition_sha256, created_at, updated_at, last_item_number"},
 		{"work_items", "id, org_id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, " +
-			"priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at", ""},
-		{"item_events", "id, org_id, factory_id, item_id, run_id, at, kind, station, actor, data", "OVERRIDING SYSTEM VALUE"},
+			"priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at"},
+		{"item_events", "id, org_id, factory_id, item_id, run_id, at, kind, station, actor, data"},
 	} {
-		execSQL(t, to.admin, "INSERT INTO "+to.schema+"."+table.name+" ("+table.columns+") "+table.overriding+
-			" SELECT "+table.columns+" FROM "+from.schema+"."+table.name)
+		var rows bytes.Buffer
+		if _, err := src.PgConn().CopyTo(ctx, &rows, "COPY (SELECT "+table.columns+" FROM "+table.name+") TO STDOUT"); err != nil {
+			t.Fatalf("copy %s out: %v", table.name, err)
+		}
+
+		if _, err := dst.PgConn().CopyFrom(ctx, &rows, "COPY "+table.name+" ("+table.columns+") FROM STDIN"); err != nil {
+			t.Fatalf("copy %s in: %v", table.name, err)
+		}
 	}
 }
 

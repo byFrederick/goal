@@ -4,7 +4,7 @@ The UI is a static React single-page app. `goald` embeds it for the laptop; the 
 
 ## Monorepo layout
 
-One repository, two toolchains: a Go module at the root and a pnpm workspace for TypeScript, orchestrated by Turborepo. `task check` runs both.
+One repository, two toolchains: a Go module at the root and a pnpm workspace for TypeScript. `Taskfile.yml` orchestrates both (Turborepo is not installed; it earns its place once workspace builds need caching), and `task check` runs both.
 
 ```
 goal/
@@ -13,9 +13,9 @@ goal/
   api/
     openapi.yaml               THE contract between goald and every TypeScript client (incl. the SSE StreamEvent)
   schema/                      factory.schema.json, evals.schema.json
-  package.json                 private root: pnpm + turbo only, no app code
-  pnpm-workspace.yaml          apps/* and packages/*
-  turbo.json                   lint, typecheck, test, build pipelines with caching
+  package.json                 private root: pnpm only, no app code
+  pnpm-workspace.yaml          the apps (auth, web, worker) and packages/*; the catalog pins better-auth once
+  auth/                        apps: the identity service (Node 22, Hono + Better Auth; phase 3, ADR 0007)
   web/                         apps: the UI (React 19 + Vite)
   worker/                      apps: the agent container (Node 22 + Claude Agent SDK)
   packages/

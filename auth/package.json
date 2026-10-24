@@ -1,0 +1,36 @@
+{
+  "name": "@goal/auth",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Goal's identity service: Better Auth on Hono, reached only through goald's /api/auth proxy (ADR 0007)",
+  "type": "module",
+  "main": "dist/server.js",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.5",
+    "better-auth": "catalog:",
+    "hono": "4.13.13",
+    "kysely": "0.29.7",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.2",
+    "@types/node": "22.20.5",
+    "@types/pg": "8.23.1",
+    "auth": "catalog:",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
+  }
+}

@@ -60,13 +60,6 @@ type AuditLog struct {
 	RequestID  *string
 }
 
-type DefinitionBlob struct {
-	OrgID     uuid.UUID
-	Sha256    string
-	Size      int32
-	CreatedAt time.Time
-}
-
 type DefinitionVersion struct {
 	ID            uuid.UUID
 	OrgID         uuid.UUID
@@ -85,24 +78,6 @@ type DefinitionVersion struct {
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 	PublishedAt   *time.Time
-}
-
-type Factory struct {
-	ID                uuid.UUID
-	Name              string
-	Title             *string
-	Definition        []byte
-	DefinitionSha256  *string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
-	LastItemNumber    int64
-	OrgID             uuid.UUID
-	MaxSlots          *int32
-	CurrentVersionID  *uuid.UUID
-	LastVersionNumber int32
-	PausedAt          *time.Time
-	PausedBy          *string
-	CreatedBy         *string
 }
 
 type FactoryRecord struct {
@@ -139,21 +114,6 @@ type ItemEvent struct {
 	OrgID     uuid.UUID
 }
 
-type ItemSpan struct {
-	ID             int64
-	OrgID          uuid.UUID
-	FactoryID      uuid.UUID
-	ItemID         uuid.UUID
-	Type           string
-	ClassOfService string
-	Station        string
-	State          string
-	ReworkRound    int32
-	ReworkBy       *string
-	EnteredAt      time.Time
-	LeftAt         *time.Time
-}
-
 type Lease struct {
 	ItemID      uuid.UUID
 	FactoryID   uuid.UUID
@@ -167,24 +127,6 @@ type Lease struct {
 	OrgID       uuid.UUID
 }
 
-type LeaseSpan struct {
-	ID          int64
-	OrgID       uuid.UUID
-	FactoryID   uuid.UUID
-	ItemID      uuid.UUID
-	Station     string
-	Agent       string
-	Slot        int32
-	ReworkRound int32
-	AcquiredAt  time.Time
-	EndedAt     time.Time
-	Outcome     string
-}
-
-type LegacyImportPending struct {
-	OrgID uuid.UUID
-}
-
 type Organization struct {
 	ID        uuid.UUID
 	Slug      string
@@ -194,14 +136,6 @@ type Organization struct {
 	UpdatedAt time.Time
 	DeletedAt *time.Time
 	MaxSlots  *int32
-}
-
-type StationWip struct {
-	FactoryID          uuid.UUID
-	Station            string
-	InProgress         int64
-	Waiting            int64
-	OldestWaitingSince interface{}
 }
 
 type WorkItem struct {

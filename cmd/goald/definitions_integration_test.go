@@ -55,7 +55,8 @@ spec:
 	}
 }
 
-// database is a migrated schema: pool connects as goal_app, admin as the bootstrap superuser.
+// database is a migrated database of its own (migration 00040 creates schema auth, which a
+// database holds once): pool connects as goal_app, admin as the bootstrap superuser.
 type database struct {
 	pool  *pgxpool.Pool
 	admin *pgxpool.Pool
@@ -75,29 +76,37 @@ func newDatabase(t *testing.T) database {
 	for _, role := range []string{
 		"goal_owner NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB",
 		"goal_app NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT",
+		"goal_auth NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT",
 	} {
 		exec(t, admin, "DO $$ BEGIN CREATE ROLE "+role+"; EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL; END $$")
 	}
 
-	schema := "goal_test_" + strings.ToLower(rand.Text()[:12])
-	exec(t, admin, "CREATE SCHEMA "+schema+" AUTHORIZATION "+postgres.OwnerRole+"; GRANT USAGE ON SCHEMA "+schema+" TO "+postgres.AppRole)
+	name := "goal_test_" + strings.ToLower(rand.Text()[:12])
+	exec(t, admin, "CREATE DATABASE "+name)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		if _, err := admin.Exec(ctx, "DROP SCHEMA "+schema+" CASCADE"); err != nil {
-			t.Errorf("drop %s: %v", schema, err)
+		if _, err := admin.Exec(ctx, "DROP DATABASE "+name+" WITH (FORCE)"); err != nil {
+			t.Errorf("drop %s: %v", name, err)
 		}
 	})
 
-	if err := postgres.Migrate(t.Context(), openPool(t, withParams(t, base, schema, postgres.OwnerRole))); err != nil {
+	// What goal db init grants.
+	db := openPool(t, withParams(t, base, name, ""))
+	exec(t, db, "REVOKE TEMPORARY, CONNECT ON DATABASE "+name+" FROM PUBLIC; "+
+		"GRANT CONNECT, CREATE ON DATABASE "+name+" TO goal_owner; GRANT CONNECT ON DATABASE "+name+" TO goal_app, goal_auth; "+
+		"GRANT USAGE, CREATE ON SCHEMA public TO goal_owner; GRANT USAGE ON SCHEMA public TO goal_app, goal_auth")
+
+	if err := postgres.Migrate(t.Context(), openPool(t, withParams(t, base, name, postgres.OwnerRole))); err != nil {
 		t.Fatal(err)
 	}
 
-	return database{pool: openPool(t, withParams(t, base, schema, postgres.AppRole)), admin: openPool(t, withParams(t, base, schema, ""))}
+	return database{pool: openPool(t, withParams(t, base, name, postgres.AppRole)), admin: db}
 }
 
-func withParams(t *testing.T, base, schema, role string) string {
+// withParams is base on database, switching to role unless it is "".
+func withParams(t *testing.T, base, database, role string) string {
 	t.Helper()
 
 	u, err := url.Parse(base)
@@ -105,14 +114,13 @@ func withParams(t *testing.T, base, schema, role string) string {
 		t.Fatal(err)
 	}
 
-	q := u.Query()
-	q.Set("search_path", schema)
+	u.Path = "/" + database
 
 	if role != "" {
+		q := u.Query()
 		q.Set("role", role)
+		u.RawQuery = q.Encode()
 	}
-
-	u.RawQuery = q.Encode()
 
 	return u.String()
 }
