@@ -215,10 +215,39 @@ linters:
               desc: handlers reach authoring through api.Definitions, which cmd/goald wires with *authoring.Service
             - pkg: github.com/byFrederick/goal/internal/gateway
               desc: the gateway is a sibling HTTP component, mounted by cmd/goald
+            - pkg: github.com/byFrederick/goal/internal/builder
+              desc: handlers reach the editor's metadata and the skills catalog through api.Builder, which cmd/goald wires with *builder.Service
             - pkg: github.com/aws
               desc: AWS access belongs in internal/adapters
             - pkg: github.com/jackc/pgx
               desc: database access belongs in internal/adapters/postgres
+            - pkg: github.com/moby
+              desc: container access belongs in internal/adapters/docker
+        builder:
+          files: ["**/internal/builder/**"]
+          deny:
+            - pkg: github.com/byFrederick/goal/internal/adapters
+              desc: the builder reads the bucket through ports.ObjectStore and skills.sh through ports.SkillSource
+            - pkg: github.com/byFrederick/goal/internal/engine
+              desc: the builder serves the editor; it never drives the engine
+            - pkg: github.com/byFrederick/goal/internal/api
+              desc: the HTTP API calls the builder through api.Builder, never the reverse
+            - pkg: github.com/byFrederick/goal/internal/authoring
+              desc: drafts are authoring's; the builder only serves the catalog drafts vendor from
+            - pkg: github.com/byFrederick/goal/internal/factorymodel
+              desc: the factory model is authoring's
+            - pkg: github.com/byFrederick/goal/internal/definitions
+              desc: goald's definitions cache is a sibling
+            - pkg: github.com/byFrederick/goal/internal/factorystore
+              desc: the legacy bucket layout is read once by the import, never by the builder
+            - pkg: github.com/byFrederick/goal/internal/gateway
+              desc: the gateway is a sibling HTTP component
+            - pkg: github.com/aws
+              desc: AWS access belongs in internal/adapters
+            - pkg: github.com/jackc/pgx
+              desc: database access belongs in internal/adapters/postgres
+            - pkg: github.com/docker
+              desc: container access belongs in internal/adapters/docker
             - pkg: github.com/moby
               desc: container access belongs in internal/adapters/docker
         sqlc:

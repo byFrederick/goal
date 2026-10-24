@@ -1,7 +1,8 @@
 // Command goal is the Goal CLI: it validates factory definitions and moves them between a
 // local working copy and the bucket where they live, starts the local platform (goal up),
 // manages organizations, and submits, follows and decides on work items through goald's HTTP
-// API, always within one organization (org.go resolves which).
+// API, always within one organization (org.go resolves which). goal catalog skills keeps the
+// install's skills catalog in the bucket (catalog.go).
 //
 // Object storage comes from the environment: GOAL_S3_BUCKET, and for a local S3-compatible
 // server (RustFS) GOAL_S3_ENDPOINT, GOAL_S3_ACCESS_KEY and GOAL_S3_SECRET_KEY. On AWS the
@@ -53,6 +54,11 @@ const usage = `usage:
   goal org delete <slug> [--yes]                  delete it after typing its name (--yes: no prompt);
                                                   it is purged after GOAL_ORG_RETENTION
   goal storage init                               create the bucket if missing and enable versioning
+  goal catalog skills sync --file <sources.yaml> [--search <q>]... [--top <n>]
+                                                  fetch skills.sh skills (a YAML list of
+                                                  owner/repo@skill[#commit], plus the top n of each
+                                                  search) into the bucket's skills catalog
+  goal catalog skills list [q]                    the catalog's skills: key, commit, installs
   goal db init                                    create the database roles goald runs as (goal_owner,
                                                   goal_app) and hand the schema to goal_owner
   goal version                                    print the module version and build info
@@ -112,6 +118,8 @@ func run(ctx context.Context, args []string, out *printer, getenv func(string) s
 		return orgCommand(ctx, out, getenv, rest)
 	case "db", "storage":
 		return setUp(ctx, out, getenv, cmd, rest)
+	case "catalog":
+		return catalogCommand(ctx, out, getenv, rest)
 	default:
 		return errUsage
 	}

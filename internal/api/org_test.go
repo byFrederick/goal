@@ -255,6 +255,9 @@ var probes = map[string]probe{
 	"rejectItem":         {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/reject", body: `{"reason":"no"}`, org: testOrg, factory: acmeID},
 	"retryItem":          {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/retry", org: testOrg, factory: acmeID},
 	"mergeItem":          {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/merge", org: testOrg, factory: acmeID},
+	"getBuilderMeta":     {method: http.MethodGet, path: "/v1/orgs/acme/builder/meta", org: testOrg},
+	"searchSkills":       {method: http.MethodGet, path: "/v1/orgs/acme/builder/skills?q=lint", org: testOrg},
+	"getSkillFiles":      {method: http.MethodGet, path: "/v1/orgs/acme/builder/skills/acme/skills/lint/files", org: testOrg},
 }
 
 // operations reads every operationId of the contract.

@@ -424,6 +424,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/builder/meta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * What the factory editor needs to know about the install
+         * @description The models agents may run on (from goald's GOAL_MODELS; exactly one is the default, the model a factory runs when it names none), which later phases are wired (their controls stay hidden or read-only until then) and the limits of one skill folder.
+         */
+        get: operations["getBuilderMeta"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/builder/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One page of the skills catalog
+         * @description Skills the operator synced from skills.sh (goal catalog skills sync), each at the commit it is pinned at. q matches the key, the skill's name or its description, ignoring case; results are most installed first, then by key. The catalog is the install's, the same for every organization; it is empty until the operator syncs it. A limit outside 1 to 50 is 400; a bucket that cannot be read is 503 catalog-unavailable.
+         */
+        get: operations["searchSkills"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                owner: components["schemas"]["SkillName"];
+                repo: components["schemas"]["SkillName"];
+                skill: components["schemas"]["SkillName"];
+            };
+            cookie?: never;
+        };
+        /**
+         * A catalog skill's files at its pinned commit, to vendor into a draft
+         * @description The folder as the sync stored it, checked against the catalog's index (limits, paths and hash) before it is served. Paths are relative to the skill's folder; SKILL.md is at its root. A draft adds them under skills/<skill>/ with skills[].origin set to skills.sh:<owner>/<repo>@<skill>#<commit>. The content is third-party: show it as plain text. An unknown skill is 404 skill-not-found; a bucket that cannot be read, or a folder that does not match the index, 503 catalog-unavailable.
+         */
+        get: operations["getSkillFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -901,6 +973,76 @@ export interface components {
             station: string | null;
             /** @description merge for a decision at a merge station (POST /v1/orgs/{org}/items/{item}/merge), else null */
             action: components["schemas"]["StationAction"] | null;
+        };
+        BuilderMeta: {
+            models: components["schemas"]["BuilderModel"][];
+            capabilities: components["schemas"]["BuilderCapabilities"];
+            limits: components["schemas"]["BuilderLimits"];
+        };
+        BuilderModel: {
+            /** @description The model id, as runtime.model and agents[].model take it */
+            id: string;
+            label: string;
+            /** @description The model a factory runs when it names none */
+            default: boolean;
+        };
+        /** @description Which later phases are wired; the editor hides or shows their controls read-only until then */
+        BuilderCapabilities: {
+            /** @description Phase 3.1: credential selects and factory credentials */
+            credentials: boolean;
+            /** @description Phase 3.2: the connector catalog and connector panel */
+            connectors: boolean;
+            /** @description "Ask me" on built-in tools is enforced */
+            tool_approvals: boolean;
+        };
+        BuilderLimits: {
+            /** @description The most bytes one skill folder holds */
+            skill_bytes: number;
+            /** @description The most files one skill folder holds */
+            skill_files: number;
+        };
+        /** @description An owner, repository or skill name of skills.sh (never . or ..) */
+        SkillName: string;
+        /** @description One skill of the catalog, at the commit it is pinned at */
+        SkillListing: {
+            /** @description <owner>/<repo>/<skill> */
+            key: string;
+            owner: string;
+            repo: string;
+            skill: string;
+            commit: string;
+            /** @description From SKILL.md's front matter; plain text */
+            description: string;
+            /**
+             * Format: int64
+             * @description skills.sh installs when the operator last synced it
+             */
+            installs: number;
+            files: number;
+            /** Format: int64 */
+            bytes: number;
+        };
+        SkillPage: {
+            skills: components["schemas"]["SkillListing"][];
+            /** @description Pass as `after` for the next page; null on the last one */
+            next_after: string | null;
+        };
+        SkillFiles: {
+            skill: components["schemas"]["SkillListing"];
+            files: components["schemas"]["FileMap"];
+        };
+        /** @description Files by slash-separated relative path */
+        FileMap: {
+            [key: string]: components["schemas"]["FileContent"];
+        };
+        /** @description A file's content, as text when it is UTF-8 without NUL bytes, else in base64 */
+        FileContent: components["schemas"]["TextFile"] | components["schemas"]["Base64File"];
+        TextFile: {
+            text: string;
+        };
+        Base64File: {
+            /** Format: byte */
+            base64: string;
         };
     };
     responses: {
@@ -1544,6 +1686,86 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Item"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getBuilderMeta: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The editor's metadata */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuilderMeta"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    searchSkills: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+                /** @description The next_after of the previous page */
+                after?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Skills */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getSkillFiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                owner: components["schemas"]["SkillName"];
+                repo: components["schemas"]["SkillName"];
+                skill: components["schemas"]["SkillName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The skill and its files */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillFiles"];
                 };
             };
             default: components["responses"]["Problem"];

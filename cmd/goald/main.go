@@ -34,6 +34,7 @@ import (
 	"github.com/byFrederick/goal/internal/adapters/s3store"
 	"github.com/byFrederick/goal/internal/adapters/sysclock"
 	"github.com/byFrederick/goal/internal/api"
+	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/engine"
@@ -183,9 +184,12 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	feed := api.NewFeed(postgres.NewNotices(pool.Config().ConnConfig, log), log)
 
+	// Phase 3 sets the capabilities in its wiring PRs; until then the editor keeps their controls hidden.
+	editor := builder.New(objects, clock, builder.Config{Models: s.Models, Capabilities: builder.Capabilities{}, Logger: log})
+
 	apiHandler, err := api.New(api.Deps{
 		Engine: eng, Items: store, Factories: defs, Orgs: store, Audit: store, OrgRetention: s.OrgRetention,
-		Authorizer: api.AllowAll{}, Feed: feed, Clock: clock, Logger: log,
+		Authorizer: api.AllowAll{}, Feed: feed, Builder: editor, Clock: clock, Logger: log,
 	})
 	if err != nil {
 		return err

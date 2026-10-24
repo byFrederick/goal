@@ -211,6 +211,9 @@ func Pinned(image string) bool {
 type Skill struct {
 	Name   string `json:"name"`
 	Source string `json:"source"`
+	// Origin is where a vendored skill came from (skills.sh:<owner>/<repo>@<skill>#<commit>);
+	// Source is then the local folder it was copied into.
+	Origin string `json:"origin,omitempty"`
 }
 
 // Local reports whether the skill ships inside the factory folder rather than from skills.sh.

@@ -1,7 +1,8 @@
 // Package api serves goald's HTTP API, the contract in api/openapi.yaml: health, the install's
 // organizations and, under /v1/orgs/{org}, each organization's factories, their boards and flow
 // metrics, submitting and listing work items, reading items and their history, human decisions
-// (approve, reject, retry, merge) and a Server-Sent Events stream of the organization's events.
+// (approve, reject, retry, merge), a Server-Sent Events stream of the organization's events, and
+// the factory editor's metadata and skills catalog (builder.go).
 //
 // The handlers implement the strict server interface generated into internal/api/gen
 // (`task api:gen`). They reach the engine, the store, the organizations and the factory
@@ -93,6 +94,8 @@ type Deps struct {
 	// InboxSources add entries to /v1/orgs/{org}/inbox after the built-in decisions (shell.go);
 	// later phases register theirs here.
 	InboxSources []InboxSource
+	// Builder serves the factory editor's metadata and the skills catalog.
+	Builder Builder
 	// Clock dates ages and metric windows and paces stream heartbeats.
 	Clock  ports.Clock
 	Logger *slog.Logger
@@ -111,8 +114,8 @@ var errInvalid = errors.New("invalid request")
 // New returns the API's handler for the /v1/ routes.
 func New(d Deps) (http.Handler, error) {
 	if d.Engine == nil || d.Items == nil || d.Factories == nil || d.Orgs == nil || d.Audit == nil || d.Authorizer == nil ||
-		d.Feed == nil || d.Clock == nil || d.OrgRetention <= 0 {
-		return nil, errors.New("api: Engine, Items, Factories, Orgs, Audit, Authorizer, Feed, Clock and a positive OrgRetention are required")
+		d.Feed == nil || d.Builder == nil || d.Clock == nil || d.OrgRetention <= 0 {
+		return nil, errors.New("api: Engine, Items, Factories, Orgs, Audit, Authorizer, Feed, Builder, Clock and a positive OrgRetention are required")
 	}
 
 	log := d.Logger
@@ -122,7 +125,7 @@ func New(d Deps) (http.Handler, error) {
 
 	s := &server{
 		engine: d.Engine, items: d.Items, factories: d.Factories, orgs: d.Orgs, audit: d.Audit, retention: d.OrgRetention,
-		authz: d.Authorizer, feed: d.Feed, clock: d.Clock, log: log,
+		authz: d.Authorizer, feed: d.Feed, builder: d.Builder, clock: d.Clock, log: log,
 	}
 	s.inbox = append([]InboxSource{decisions{s: s}}, d.InboxSources...)
 
@@ -171,6 +174,7 @@ type server struct {
 	authz     Authorizer
 	feed      *Feed
 	inbox     []InboxSource
+	builder   Builder
 	clock     ports.Clock
 	log       *slog.Logger
 }
@@ -332,7 +336,7 @@ func (s *server) decide(ctx context.Context, ref string) (domain.Actor, domain.I
 // problem writes err as problem details with the status its kind maps to.
 func (s *server) problem(w http.ResponseWriter, r *http.Request, err error) {
 	p := problemOf(err)
-	if p.Status == http.StatusInternalServerError {
+	if p.Status >= http.StatusInternalServerError {
 		s.log.ErrorContext(r.Context(), "api request failed", slog.String("method", r.Method),
 			slog.String("path", r.URL.Path), slog.String("request_id", w.Header().Get(requestIDHeader)), slog.Any("error", err))
 	}
@@ -353,6 +357,18 @@ func problemOf(err error) gen.Problem {
 	switch {
 	case errors.Is(err, errOrgNotFound):
 		return gen.Problem{Title: "Organization not found", Status: http.StatusNotFound, Code: optional("org-not-found")}
+	case errors.Is(err, domain.ErrSkillNotFound):
+		p := detailed(http.StatusNotFound, err)
+		p.Code = optional("skill-not-found")
+
+		return p
+	case errors.Is(err, domain.ErrCatalogUnavailable):
+		detail := "the skills catalog cannot be read now; see goald's log"
+
+		return gen.Problem{
+			Title: http.StatusText(http.StatusServiceUnavailable), Status: http.StatusServiceUnavailable, Detail: &detail,
+			Code: optional("catalog-unavailable"),
+		}
 	case errors.Is(err, ports.ErrNotFound):
 		return detailed(http.StatusNotFound, err)
 	case errors.Is(err, errForbidden), errors.Is(err, errCrossOrigin):

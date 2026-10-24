@@ -2,9 +2,12 @@ package main
 
 import (
 	"maps"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/byFrederick/goal/internal/builder"
 )
 
 func envOf(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
@@ -42,6 +45,36 @@ func TestSettings_Defaults(t *testing.T) {
 	}
 }
 
+// The editor's models: the current Claude models by default, the first being the default;
+// GOAL_MODELS replaces them, a label after = or one made from the id.
+func TestSettings_Models(t *testing.T) {
+	t.Parallel()
+
+	s, err := settingsFrom(envOf(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []builder.Model{
+		{ID: "claude-opus-5-5", Label: "Claude Opus 5.5"},
+		{ID: "claude-sonnet-5-5", Label: "Claude Sonnet 5.5"},
+		{ID: "claude-haiku-5-5", Label: "Claude Haiku 5.5"},
+	}
+	if !slices.Equal(s.Models, want) {
+		t.Errorf("default models = %+v, want %+v", s.Models, want)
+	}
+
+	s, err = settingsFrom(envOf(map[string]string{modelsEnv: " claude-sonnet-5-5 , claude-fable-5-1=Fable (preview)"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want = []builder.Model{{ID: "claude-sonnet-5-5", Label: "Claude Sonnet 5.5"}, {ID: "claude-fable-5-1", Label: "Fable (preview)"}}
+	if !slices.Equal(s.Models, want) {
+		t.Errorf("models = %+v, want %+v", s.Models, want)
+	}
+}
+
 func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 	t.Parallel()
 
@@ -58,6 +91,9 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 		{name: "negative run cap", env: map[string]string{"GOAL_MAX_RUNS": "-2"}, want: "GOAL_MAX_RUNS"},
 		{name: "no retention", env: map[string]string{"GOAL_ORG_RETENTION": "0d"}, want: "GOAL_ORG_RETENTION"},
 		{name: "GitHub API in clear text", env: map[string]string{"GOAL_GITHUB_API_URL": "http://api.example.com"}, want: "must be https"},
+		{name: "not a model id", env: map[string]string{modelsEnv: "claude-opus-5-5,gpt-5"}, want: "not a model id"},
+		{name: "a model twice", env: map[string]string{modelsEnv: "claude-opus-5-5,claude-opus-5-5"}, want: "twice"},
+		{name: "an empty model", env: map[string]string{modelsEnv: "claude-opus-5-5,"}, want: "not a model id"},
 	}
 
 	for _, tt := range tests {

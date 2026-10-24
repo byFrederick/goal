@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -8,11 +9,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/byFrederick/goal/internal/adapters/postgres"
+	"github.com/byFrederick/goal/internal/builder"
 )
 
 // settings is goald's configuration, read from the environment (12-factor). Secrets appear here
@@ -55,6 +59,9 @@ type settings struct {
 	// GitHubAPIURL is the GitHub REST API goald merges pull requests through
 	// (GOAL_GITHUB_API_URL, default https://api.github.com; http only on a loopback address).
 	GitHubAPIURL string
+	// Models are the models the factory editor offers (GOAL_MODELS: comma-separated model ids,
+	// each optionally id=Label; the first is the default; default defaultModels).
+	Models []builder.Model
 	// LogLevel (GOAL_LOG_LEVEL: debug, info, warn, error) and LogFormat (GOAL_LOG_FORMAT: json or
 	// text) shape the structured log on stdout.
 	LogLevel  slog.Level
@@ -62,6 +69,10 @@ type settings struct {
 }
 
 const (
+	// modelsEnv lists the editor's models; defaultModels are the current Claude models, the most
+	// capable first.
+	modelsEnv      = "GOAL_MODELS"
+	defaultModels  = "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5"
 	defaultListen  = "127.0.0.1:8080"
 	defaultTaskEnv = "CLAUDE_CODE_OAUTH_TOKEN=env:CLAUDE_CODE_OAUTH_TOKEN"
 	defaultKeyRef  = "env:GOAL_GATEWAY_KEY"
@@ -134,7 +145,10 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 		errs = append(errs, fmt.Errorf("GOAL_LOG_FORMAT %q is not json or text", s.LogFormat))
 	}
 
-	return s, errors.Join(errs...)
+	// errors.Join drops a nil error.
+	s.Models, err = models(or(modelsEnv, defaultModels))
+
+	return s, errors.Join(append(errs, err)...)
 }
 
 // localDatabase is compose.yaml's database as role.
@@ -221,4 +235,54 @@ func duration(s string) (time.Duration, error) {
 	}
 
 	return d, err
+}
+
+// modelID is the shape of runtime.model and agents[].model in schema/factory.schema.json.
+var modelID = regexp.MustCompile(`^claude-[a-z0-9-]+$`)
+
+// models parses GOAL_MODELS: comma-separated model ids, each optionally followed by =Label. A
+// model without a label gets one from its id (claude-opus-5-5 is Claude Opus 5.5).
+func models(raw string) ([]builder.Model, error) {
+	var out []builder.Model
+
+	for item := range strings.SplitSeq(raw, ",") {
+		id, label, _ := strings.Cut(strings.TrimSpace(item), "=")
+		id, label = strings.TrimSpace(id), strings.TrimSpace(label)
+
+		if !modelID.MatchString(id) {
+			return nil, fmt.Errorf("GOAL_MODELS: %q is not a model id (claude-...)", id)
+		}
+
+		if slices.ContainsFunc(out, func(m builder.Model) bool { return m.ID == id }) {
+			return nil, fmt.Errorf("GOAL_MODELS: %s is listed twice", id)
+		}
+
+		out = append(out, builder.Model{ID: id, Label: cmp.Or(label, modelLabel(id))})
+	}
+
+	return out, nil
+}
+
+// modelLabel names a model from its id: words capitalized, version digits joined by dots.
+func modelLabel(id string) string {
+	var words, version []string
+
+	for part := range strings.SplitSeq(id, "-") {
+		if part == "" {
+			continue
+		}
+
+		if strings.Trim(part, "0123456789") == "" {
+			version = append(version, part)
+			continue
+		}
+
+		words = append(words, strings.ToUpper(part[:1])+part[1:])
+	}
+
+	if len(version) > 0 {
+		words = append(words, strings.Join(version, "."))
+	}
+
+	return strings.Join(words, " ")
 }

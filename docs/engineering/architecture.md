@@ -29,7 +29,8 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object s
 | `internal/gateway` | `domain`, `ports`, `config`, the MCP Go SDK | adapters, engine, `factorystore`, `authoring`, cloud SDKs |
 | `internal/definitions` | `domain`, `ports`, `config`, `factorystore` | adapters, engine, cloud SDKs |
 | `internal/retention` | `domain`, `ports`, `factorystore` | adapters, engine, `api`, cloud SDKs |
-| `internal/api` (+ generated `api/gen`) | `domain`, `ports`, `config`, `engine` | adapters, `factorystore`, `definitions`, `factorymodel`, `authoring`, `gateway`, cloud SDKs |
+| `internal/builder` | `domain`, `ports`, `config`, `go.yaml.in/yaml/v3` | adapters, engine, `api`, `authoring`, `factorymodel`, `definitions`, `factorystore`, `gateway`, cloud SDKs |
+| `internal/api` (+ generated `api/gen`) | `domain`, `ports`, `config`, `engine` | adapters, `factorystore`, `definitions`, `factorymodel`, `authoring`, `builder`, `gateway`, cloud SDKs |
 | `cmd/*` | everything | — (wiring only) |
 
 `depguard` in `.golangci.yml` enforces every row but the last. A new external system is a new adapter behind an existing or new port; it never adds an import to the engine.
@@ -55,6 +56,7 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object s
 | `DefinitionStore` | Factory definitions: content-addressed blobs, drafts and published versions (manifests), the current-version pointer; publish and restore in one transaction, each change audited | `postgres` over `ObjectStore` (blobs at `orgs/<org-id>/blobs/<sha256>`) |
 | `DefinitionNotices` | A notice of every committed definition change, so every goald reloads and editors refresh | `postgres` (`LISTEN goal_definitions`) |
 | `CodeHost` | Read, merge and clean up the pull requests of a factory's repository, on the host | `github` (REST API) |
+| `SkillSource` | The skills.sh directory (`Search`) and a skill's folder at one commit (`Fetch`), for the operator's `goal catalog skills sync` only; goald never fetches third-party content | `skillssh` (skills.sh API + GitHub REST API) |
 
 #### Phase 1 signatures
 
@@ -115,6 +117,9 @@ Every route but `/v1/health` and `/v1/orgs` lives under `/v1/orgs/{org}` (the or
 | `POST /v1/orgs/{org}/items/{item}/reject` | `{reason}`: sends it back for rework |
 | `POST /v1/orgs/{org}/items/{item}/retry` | a blocked item goes back to its station's queue; its rework count is unchanged |
 | `POST /v1/orgs/{org}/items/{item}/merge` | `{method?: squash}`: merge the item's pull request, then approve it (below) |
+| `GET /v1/orgs/{org}/builder/meta` | the factory editor's metadata: models (`GOAL_MODELS`, the first the default), capabilities of later phases, skill limits |
+| `GET /v1/orgs/{org}/builder/skills?q=&limit=&after=` | one page of the skills catalog, most installed first; `limit` 1–50, else 400; 503 `catalog-unavailable` when the bucket cannot be read |
+| `GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files` | a catalog skill's files at its pinned commit (text, or base64 for binary files), checked against the index; 404 `skill-not-found`, 503 `catalog-unavailable` |
 
 A decision's event names the decider (`actor`, the display name) and records `data.actor`, its ref (`user:local`).
 
@@ -172,6 +177,7 @@ PostgreSQL
 - `internal/adapters/s3store` implements `ObjectStore` with the AWS SDK for Go v2: a custom endpoint with path-style addressing for RustFS, the standard credential chain on AWS. `EnsureBucket` (used by `goal storage init`) creates the bucket and turns versioning on, which stays as protection against deletes, no longer as the version mechanism. `PutIfAbsent` is a conditional `PutObject` (`If-None-Match: *`, which S3 and RustFS support; 412 means the object is there and `HeadObject` reports it); a server answering 501 gets `HeadObject` then `PutObject`, harmless for content-addressed keys.
 - `internal/adapters/postgres` implements `DefinitionStore` as `postgres.Definitions` (`NewDefinitions(pool, objects, log)`, over the `ObjectStore` port) and `DefinitionNotices` as `NewDefinitionNotices(connConfig, log)`. Blob objects are written before and outside the transaction that records them in `definition_blobs`; every other change locks the factory row first (then its versions, then its items) and checks that every manifest hash is one of the organization's blobs. Triggers keep published versions immutable and undeletable (except by `goal_purge_org`), the pointer on a published version of the same factory, and NOTIFY `goal_definitions` with `{org_id, factory_id, kind, version_id, number, revision, by}` (migration 00010).
 - Editing goes through goald's API: the builder and the CLI (`goal factory pull/push/validate/publish`) write the draft.
+- **Skills catalog** (`internal/builder`, 2.2-D). `catalog/skills/index.json` lists every skill (`owner/repo/skill`, the commit it is pinned at, its description from SKILL.md, installs, file and byte counts, and a sha256 over its files); `catalog/skills/<owner>/<repo>/<skill>/<commit>/` holds that commit's folder, written once, never overwritten or deleted (drafts may have vendored it). Only the operator's `goal catalog skills sync --file <sources.yaml> [--search q]… [--top n]` writes it, through `ports.SkillSource`: the folder is read from GitHub's git objects of the resolved commit (regular files only, at most 200 files and 1 MiB, valid relative paths, hidden files left out, each blob checked against its tree entry; only the configured hosts, no redirect off them, timeouts, tokens scrubbed from errors), checked again by the builder, then stored. goald only reads it: the parsed index is cached per object version and re-checked at most every 5 minutes, a malformed index reads as empty (logged `builder.skills_index_invalid`), and every folder served is checked against its index entry's hash. A draft vendors a skill under `skills/<skill>/` with `skills[].origin` (`skills.sh:<owner>/<repo>@<skill>#<commit>`).
 - **Transition (2.2-B).** The pre-2.2 layout, one prefix of mutable files per factory read by `internal/factorystore` (`factories/<id>/`, moved by 2.2-A to the interim `orgs/<org-id>/factories/<id>/`), is imported once as v1 of each factory and then ignored. Until that import ships (B7), goald and the CLI still read and write that prefix.
 
 ### Wiring

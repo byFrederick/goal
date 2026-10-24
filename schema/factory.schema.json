@@ -223,6 +223,11 @@
           "type": "string",
           "description": "A local folder (./skills/x) or a skills.sh reference (skills.sh:owner/repo@skill), pinned by the lockfile.",
           "pattern": "^(\\./.+|skills\\.sh:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+)$"
+        },
+        "origin": {
+          "type": "string",
+          "description": "Where a vendored skill came from: the skills.sh skill and the commit it was copied at. The source stays the local folder (./skills/<name>) it was copied into. Written by the builder; read-only in the UI.",
+          "pattern": "^skills\\.sh:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+#[0-9a-f]{40}$"
         }
       }
     },

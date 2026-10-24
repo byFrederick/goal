@@ -16,6 +16,7 @@ import (
 
 	"github.com/byFrederick/goal/internal/api"
 	"github.com/byFrederick/goal/internal/api/gen"
+	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/engine"
@@ -99,6 +100,10 @@ type harness struct {
 	notices  *porttest.ItemNotices
 	seam     *seam
 	tenancy  *porttest.Tenancy
+	// skills is the bucket the skills catalog is read from; skillSource what it is synced from.
+	skills      *flakyObjects
+	skillSource *porttest.SkillSource
+	builder     *builder.Service
 }
 
 // seam is the harness's Authorizer: it records every question in order, together with the
@@ -281,10 +286,14 @@ func newHarness(t *testing.T) *harness {
 	go func() { done <- feed.Run(ctx) }()
 
 	h.seam, h.tenancy = &seam{}, tenancy
+	h.skills, h.skillSource = &flakyObjects{ObjectStore: porttest.NewObjectStore()}, porttest.NewSkillSource()
+	h.builder = builder.New(h.skills, h.clock, builder.Config{
+		Models: []builder.Model{{ID: "claude-opus-5-5", Label: "Claude Opus 5.5"}, {ID: "claude-haiku-5-5", Label: "Claude Haiku 5.5"}},
+	})
 
 	handler, err := api.New(api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Orgs: tenancy, Audit: tenancy,
-		OrgRetention: retention, Authorizer: h.seam, Feed: feed, Clock: h.clock,
+		OrgRetention: retention, Authorizer: h.seam, Feed: feed, Builder: h.builder, Clock: h.clock,
 	})
 	if err != nil {
 		t.Fatal(err)

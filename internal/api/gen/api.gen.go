@@ -252,6 +252,11 @@ type AuditTarget struct {
 	Kind string `json:"kind"`
 }
 
+// Base64File defines model for Base64File.
+type Base64File struct {
+	Base64 []byte `json:"base64"`
+}
+
 // Board defines model for Board.
 type Board struct {
 	// Constraint The id of the agent station with the most work per slot now, or null
@@ -283,6 +288,45 @@ type BoardStation struct {
 
 	// WipLimit The station's wip setting, or null when it has none
 	WipLimit *int `json:"wip_limit"`
+}
+
+// BuilderCapabilities Which later phases are wired; the editor hides or shows their controls read-only until then
+type BuilderCapabilities struct {
+	// Connectors Phase 3.2: the connector catalog and connector panel
+	Connectors bool `json:"connectors"`
+
+	// Credentials Phase 3.1: credential selects and factory credentials
+	Credentials bool `json:"credentials"`
+
+	// ToolApprovals "Ask me" on built-in tools is enforced
+	ToolApprovals bool `json:"tool_approvals"`
+}
+
+// BuilderLimits defines model for BuilderLimits.
+type BuilderLimits struct {
+	// SkillBytes The most bytes one skill folder holds
+	SkillBytes int `json:"skill_bytes"`
+
+	// SkillFiles The most files one skill folder holds
+	SkillFiles int `json:"skill_files"`
+}
+
+// BuilderMeta defines model for BuilderMeta.
+type BuilderMeta struct {
+	// Capabilities Which later phases are wired; the editor hides or shows their controls read-only until then
+	Capabilities BuilderCapabilities `json:"capabilities"`
+	Limits       BuilderLimits       `json:"limits"`
+	Models       []BuilderModel      `json:"models"`
+}
+
+// BuilderModel defines model for BuilderModel.
+type BuilderModel struct {
+	// Default The model a factory runs when it names none
+	Default bool `json:"default"`
+
+	// Id The model id, as runtime.model and agents[].model take it
+	Id    string `json:"id"`
+	Label string `json:"label"`
 }
 
 // ClassOfService defines model for ClassOfService.
@@ -406,6 +450,14 @@ type FactorySlotsPatch struct {
 	FactoryId string `json:"factory_id"`
 	Max       *int   `json:"max"`
 }
+
+// FileContent A file's content, as text when it is UTF-8 without NUL bytes, else in base64
+type FileContent struct {
+	union json.RawMessage
+}
+
+// FileMap Files by slash-separated relative path
+type FileMap map[string]FileContent
 
 // Health defines model for Health.
 type Health struct {
@@ -670,6 +722,44 @@ type Rejection struct {
 	Reason string `json:"reason"`
 }
 
+// SkillFiles defines model for SkillFiles.
+type SkillFiles struct {
+	// Files Files by slash-separated relative path
+	Files FileMap `json:"files"`
+
+	// Skill One skill of the catalog, at the commit it is pinned at
+	Skill SkillListing `json:"skill"`
+}
+
+// SkillListing One skill of the catalog, at the commit it is pinned at
+type SkillListing struct {
+	Bytes  int64  `json:"bytes"`
+	Commit string `json:"commit"`
+
+	// Description From SKILL.md's front matter; plain text
+	Description string `json:"description"`
+	Files       int    `json:"files"`
+
+	// Installs skills.sh installs when the operator last synced it
+	Installs int64 `json:"installs"`
+
+	// Key <owner>/<repo>/<skill>
+	Key   string `json:"key"`
+	Owner string `json:"owner"`
+	Repo  string `json:"repo"`
+	Skill string `json:"skill"`
+}
+
+// SkillName An owner, repository or skill name of skills.sh (never . or ..)
+type SkillName = string
+
+// SkillPage defines model for SkillPage.
+type SkillPage struct {
+	// NextAfter Pass as `after` for the next page; null on the last one
+	NextAfter *string        `json:"next_after"`
+	Skills    []SkillListing `json:"skills"`
+}
+
 // Station defines model for Station.
 type Station struct {
 	// Action What goald does when a human acts at this human station (merge → POST /v1/orgs/{org}/items/{item}/merge)
@@ -698,6 +788,11 @@ type StreamEvent struct {
 	Ref     string    `json:"ref"`
 	State   ItemState `json:"state"`
 	Station *string   `json:"station,omitempty"`
+}
+
+// TextFile defines model for TextFile.
+type TextFile struct {
+	Text string `json:"text"`
 }
 
 // Throughput defines model for Throughput.
@@ -755,6 +850,15 @@ type ListAuditParams struct {
 
 	// Factory Only entries about this factory (its metadata.id or metadata.name)
 	Factory *string `form:"factory,omitempty" json:"factory,omitempty"`
+}
+
+// SearchSkillsParams defines parameters for SearchSkills.
+type SearchSkillsParams struct {
+	Q     *string `form:"q,omitempty" json:"q,omitempty"`
+	Limit *int    `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// After The next_after of the previous page
+	After *string `form:"after,omitempty" json:"after,omitempty"`
 }
 
 // ListItemsParams defines parameters for ListItems.
@@ -819,6 +923,68 @@ type RejectItemJSONRequestBody = Rejection
 
 // UpdateOrgSettingsJSONRequestBody defines body for UpdateOrgSettings for application/json ContentType.
 type UpdateOrgSettingsJSONRequestBody = OrgSettingsPatch
+
+// AsTextFile returns the union data inside the FileContent as a TextFile
+func (t FileContent) AsTextFile() (TextFile, error) {
+	var body TextFile
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromTextFile overwrites any union data inside the FileContent as the provided TextFile
+func (t *FileContent) FromTextFile(v TextFile) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeTextFile performs a merge with any union data inside the FileContent, using the provided TextFile
+func (t *FileContent) MergeTextFile(v TextFile) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsBase64File returns the union data inside the FileContent as a Base64File
+func (t FileContent) AsBase64File() (Base64File, error) {
+	var body Base64File
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromBase64File overwrites any union data inside the FileContent as the provided Base64File
+func (t *FileContent) FromBase64File(v Base64File) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeBase64File performs a merge with any union data inside the FileContent, using the provided Base64File
+func (t *FileContent) MergeBase64File(v Base64File) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t FileContent) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *FileContent) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -956,6 +1122,27 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/audit (the `ListAudit` operationId).
 	ListAudit(ctx context.Context, org OrgRef, params *ListAuditParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetBuilderMeta What the factory editor needs to know about the install
+	//
+	// The models agents may run on (from goald's GOAL_MODELS; exactly one is the default, the model a factory runs when it names none), which later phases are wired (their controls stay hidden or read-only until then) and the limits of one skill folder.
+	//
+	// Corresponds with GET /v1/orgs/{org}/builder/meta (the `GetBuilderMeta` operationId).
+	GetBuilderMeta(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SearchSkills One page of the skills catalog
+	//
+	// Skills the operator synced from skills.sh (goal catalog skills sync), each at the commit it is pinned at. q matches the key, the skill's name or its description, ignoring case; results are most installed first, then by key. The catalog is the install's, the same for every organization; it is empty until the operator syncs it. A limit outside 1 to 50 is 400; a bucket that cannot be read is 503 catalog-unavailable.
+	//
+	// Corresponds with GET /v1/orgs/{org}/builder/skills (the `SearchSkills` operationId).
+	SearchSkills(ctx context.Context, org OrgRef, params *SearchSkillsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSkillFiles A catalog skill's files at its pinned commit, to vendor into a draft
+	//
+	// The folder as the sync stored it, checked against the catalog's index (limits, paths and hash) before it is served. Paths are relative to the skill's folder; SKILL.md is at its root. A draft adds them under skills/<skill>/ with skills[].origin set to skills.sh:<owner>/<repo>@<skill>#<commit>. The content is third-party: show it as plain text. An unknown skill is 404 skill-not-found; a bucket that cannot be read, or a folder that does not match the index, 503 catalog-unavailable.
+	//
+	// Corresponds with GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files (the `GetSkillFiles` operationId).
+	GetSkillFiles(ctx context.Context, org OrgRef, owner SkillName, repo SkillName, skill SkillName, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListFactories The organization's factories goald runs, from the bucket
 	//
@@ -1231,6 +1418,57 @@ func (c *Client) GetOrgAttention(ctx context.Context, org OrgRef, reqEditors ...
 // Corresponds with GET /v1/orgs/{org}/audit (the `ListAudit` operationId).
 func (c *Client) ListAudit(ctx context.Context, org OrgRef, params *ListAuditParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListAuditRequest(c.Server, org, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetBuilderMeta What the factory editor needs to know about the install
+//
+// The models agents may run on (from goald's GOAL_MODELS; exactly one is the default, the model a factory runs when it names none), which later phases are wired (their controls stay hidden or read-only until then) and the limits of one skill folder.
+//
+// Corresponds with GET /v1/orgs/{org}/builder/meta (the `GetBuilderMeta` operationId).
+func (c *Client) GetBuilderMeta(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetBuilderMetaRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SearchSkills One page of the skills catalog
+//
+// Skills the operator synced from skills.sh (goal catalog skills sync), each at the commit it is pinned at. q matches the key, the skill's name or its description, ignoring case; results are most installed first, then by key. The catalog is the install's, the same for every organization; it is empty until the operator syncs it. A limit outside 1 to 50 is 400; a bucket that cannot be read is 503 catalog-unavailable.
+//
+// Corresponds with GET /v1/orgs/{org}/builder/skills (the `SearchSkills` operationId).
+func (c *Client) SearchSkills(ctx context.Context, org OrgRef, params *SearchSkillsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSearchSkillsRequest(c.Server, org, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetSkillFiles A catalog skill's files at its pinned commit, to vendor into a draft
+//
+// The folder as the sync stored it, checked against the catalog's index (limits, paths and hash) before it is served. Paths are relative to the skill's folder; SKILL.md is at its root. A draft adds them under skills/<skill>/ with skills[].origin set to skills.sh:<owner>/<repo>@<skill>#<commit>. The content is third-party: show it as plain text. An unknown skill is 404 skill-not-found; a bucket that cannot be read, or a folder that does not match the index, 503 catalog-unavailable.
+//
+// Corresponds with GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files (the `GetSkillFiles` operationId).
+func (c *Client) GetSkillFiles(ctx context.Context, org OrgRef, owner SkillName, repo SkillName, skill SkillName, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSkillFilesRequest(c.Server, org, owner, repo, skill)
 	if err != nil {
 		return nil, err
 	}
@@ -1891,6 +2129,180 @@ func NewListAuditRequest(server string, org OrgRef, params *ListAuditParams) (*h
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
 		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetBuilderMetaRequest constructs an http.Request for the GetBuilderMeta method
+func NewGetBuilderMetaRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/builder/meta", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSearchSkillsRequest constructs an http.Request for the SearchSkills method
+func NewSearchSkillsRequest(server string, org OrgRef, params *SearchSkillsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/builder/skills", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Q != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "q", *params.Q, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.After != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetSkillFilesRequest constructs an http.Request for the GetSkillFiles method
+func NewGetSkillFilesRequest(server string, org OrgRef, owner SkillName, repo SkillName, skill SkillName) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam3 string
+
+	pathParam3, err = runtime.StyleParamWithOptions("simple", false, "skill", skill, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/builder/skills/%s/%s/%s/files", pathParam0, pathParam1, pathParam2, pathParam3)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
@@ -2906,6 +3318,33 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/audit (the `ListAudit` operationId).
 	ListAuditWithResponse(ctx context.Context, org OrgRef, params *ListAuditParams, reqEditors ...RequestEditorFn) (*ListAuditResponse, error)
 
+	// GetBuilderMetaWithResponse What the factory editor needs to know about the install
+	//
+	// The models agents may run on (from goald's GOAL_MODELS; exactly one is the default, the model a factory runs when it names none), which later phases are wired (their controls stay hidden or read-only until then) and the limits of one skill folder.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/builder/meta (the `GetBuilderMeta` operationId).
+	GetBuilderMetaWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetBuilderMetaResponse, error)
+
+	// SearchSkillsWithResponse One page of the skills catalog
+	//
+	// Skills the operator synced from skills.sh (goal catalog skills sync), each at the commit it is pinned at. q matches the key, the skill's name or its description, ignoring case; results are most installed first, then by key. The catalog is the install's, the same for every organization; it is empty until the operator syncs it. A limit outside 1 to 50 is 400; a bucket that cannot be read is 503 catalog-unavailable.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/builder/skills (the `SearchSkills` operationId).
+	SearchSkillsWithResponse(ctx context.Context, org OrgRef, params *SearchSkillsParams, reqEditors ...RequestEditorFn) (*SearchSkillsResponse, error)
+
+	// GetSkillFilesWithResponse A catalog skill's files at its pinned commit, to vendor into a draft
+	//
+	// The folder as the sync stored it, checked against the catalog's index (limits, paths and hash) before it is served. Paths are relative to the skill's folder; SKILL.md is at its root. A draft adds them under skills/<skill>/ with skills[].origin set to skills.sh:<owner>/<repo>@<skill>#<commit>. The content is third-party: show it as plain text. An unknown skill is 404 skill-not-found; a bucket that cannot be read, or a folder that does not match the index, 503 catalog-unavailable.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files (the `GetSkillFiles` operationId).
+	GetSkillFilesWithResponse(ctx context.Context, org OrgRef, owner SkillName, repo SkillName, skill SkillName, reqEditors ...RequestEditorFn) (*GetSkillFilesResponse, error)
+
 	// ListFactoriesWithResponse The organization's factories goald runs, from the bucket
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -3384,6 +3823,150 @@ func (r ListAuditResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ListAuditResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetBuilderMetaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *BuilderMeta
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetBuilderMetaResponse) GetJSON200() *BuilderMeta {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetBuilderMetaResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetBuilderMetaResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetBuilderMetaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetBuilderMetaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetBuilderMetaResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SearchSkillsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SkillPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SearchSkillsResponse) GetJSON200() *SkillPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SearchSkillsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SearchSkillsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SearchSkillsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SearchSkillsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SearchSkillsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetSkillFilesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SkillFiles
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetSkillFilesResponse) GetJSON200() *SkillFiles {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetSkillFilesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetSkillFilesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSkillFilesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSkillFilesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetSkillFilesResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -4278,6 +4861,51 @@ func (c *ClientWithResponses) ListAuditWithResponse(ctx context.Context, org Org
 	return ParseListAuditResponse(rsp)
 }
 
+// GetBuilderMetaWithResponse What the factory editor needs to know about the install
+//
+// The models agents may run on (from goald's GOAL_MODELS; exactly one is the default, the model a factory runs when it names none), which later phases are wired (their controls stay hidden or read-only until then) and the limits of one skill folder.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/builder/meta (the `GetBuilderMeta` operationId).
+func (c *ClientWithResponses) GetBuilderMetaWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetBuilderMetaResponse, error) {
+	rsp, err := c.GetBuilderMeta(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetBuilderMetaResponse(rsp)
+}
+
+// SearchSkillsWithResponse One page of the skills catalog
+//
+// Skills the operator synced from skills.sh (goal catalog skills sync), each at the commit it is pinned at. q matches the key, the skill's name or its description, ignoring case; results are most installed first, then by key. The catalog is the install's, the same for every organization; it is empty until the operator syncs it. A limit outside 1 to 50 is 400; a bucket that cannot be read is 503 catalog-unavailable.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/builder/skills (the `SearchSkills` operationId).
+func (c *ClientWithResponses) SearchSkillsWithResponse(ctx context.Context, org OrgRef, params *SearchSkillsParams, reqEditors ...RequestEditorFn) (*SearchSkillsResponse, error) {
+	rsp, err := c.SearchSkills(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSearchSkillsResponse(rsp)
+}
+
+// GetSkillFilesWithResponse A catalog skill's files at its pinned commit, to vendor into a draft
+//
+// The folder as the sync stored it, checked against the catalog's index (limits, paths and hash) before it is served. Paths are relative to the skill's folder; SKILL.md is at its root. A draft adds them under skills/<skill>/ with skills[].origin set to skills.sh:<owner>/<repo>@<skill>#<commit>. The content is third-party: show it as plain text. An unknown skill is 404 skill-not-found; a bucket that cannot be read, or a folder that does not match the index, 503 catalog-unavailable.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files (the `GetSkillFiles` operationId).
+func (c *ClientWithResponses) GetSkillFilesWithResponse(ctx context.Context, org OrgRef, owner SkillName, repo SkillName, skill SkillName, reqEditors ...RequestEditorFn) (*GetSkillFilesResponse, error) {
+	rsp, err := c.GetSkillFiles(ctx, org, owner, repo, skill, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSkillFilesResponse(rsp)
+}
+
 // ListFactoriesWithResponse The organization's factories goald runs, from the bucket
 //
 // Returns a wrapper object for the known response body format(s).
@@ -4759,6 +5387,105 @@ func ParseListAuditResponse(rsp *http.Response) (*ListAuditResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest AuditPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetBuilderMetaResponse parses an HTTP response from a GetBuilderMetaWithResponse call
+func ParseGetBuilderMetaResponse(rsp *http.Response) (*GetBuilderMetaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetBuilderMetaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest BuilderMeta
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSearchSkillsResponse parses an HTTP response from a SearchSkillsWithResponse call
+func ParseSearchSkillsResponse(rsp *http.Response) (*SearchSkillsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SearchSkillsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SkillPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetSkillFilesResponse parses an HTTP response from a GetSkillFilesWithResponse call
+func ParseGetSkillFilesResponse(rsp *http.Response) (*GetSkillFilesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSkillFilesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SkillFiles
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -5320,6 +6047,15 @@ type ServerInterface interface {
 	// ListAudit The organization's audit log, newest first
 	// (GET /v1/orgs/{org}/audit)
 	ListAudit(w http.ResponseWriter, r *http.Request, org OrgRef, params ListAuditParams)
+	// GetBuilderMeta What the factory editor needs to know about the install
+	// (GET /v1/orgs/{org}/builder/meta)
+	GetBuilderMeta(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// SearchSkills One page of the skills catalog
+	// (GET /v1/orgs/{org}/builder/skills)
+	SearchSkills(w http.ResponseWriter, r *http.Request, org OrgRef, params SearchSkillsParams)
+	// GetSkillFiles A catalog skill's files at its pinned commit, to vendor into a draft
+	// (GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files)
+	GetSkillFiles(w http.ResponseWriter, r *http.Request, org OrgRef, owner SkillName, repo SkillName, skill SkillName)
 	// ListFactories The organization's factories goald runs, from the bucket
 	// (GET /v1/orgs/{org}/factories)
 	ListFactories(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -5597,6 +6333,153 @@ func (siw *ServerInterfaceWrapper) ListAudit(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListAudit(w, r, org, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetBuilderMeta operation middleware
+func (siw *ServerInterfaceWrapper) GetBuilderMeta(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetBuilderMeta(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SearchSkills operation middleware
+func (siw *ServerInterfaceWrapper) SearchSkills(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SearchSkillsParams
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "after" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SearchSkills(w, r, org, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSkillFiles operation middleware
+func (siw *ServerInterfaceWrapper) GetSkillFiles(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "owner" -------------
+	var owner SkillName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "owner", r.PathValue("owner"), &owner, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "owner", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "repo" -------------
+	var repo SkillName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "repo", r.PathValue("repo"), &repo, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "repo", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "skill" -------------
+	var skill SkillName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "skill", r.PathValue("skill"), &skill, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "skill", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSkillFiles(w, r, org, owner, repo, skill)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6416,6 +7299,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/reject", wrapper.RejectItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/retry", wrapper.RetryItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/merge", wrapper.MergeItem)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/builder/meta", wrapper.GetBuilderMeta)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/builder/skills", wrapper.SearchSkills)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files", wrapper.GetSkillFiles)
 
 	return m
 }
@@ -6667,6 +7553,127 @@ type ListAuditdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ListAuditdefaultApplicationProblemPlusJSONResponse) VisitListAuditResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBuilderMetaRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type GetBuilderMetaResponseObject interface {
+	VisitGetBuilderMetaResponse(w http.ResponseWriter) error
+}
+
+type GetBuilderMeta200JSONResponse BuilderMeta
+
+func (response GetBuilderMeta200JSONResponse) VisitGetBuilderMetaResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBuilderMetadefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetBuilderMetadefaultApplicationProblemPlusJSONResponse) VisitGetBuilderMetaResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchSkillsRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params SearchSkillsParams
+}
+
+type SearchSkillsResponseObject interface {
+	VisitSearchSkillsResponse(w http.ResponseWriter) error
+}
+
+type SearchSkills200JSONResponse SkillPage
+
+func (response SearchSkills200JSONResponse) VisitSearchSkillsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchSkillsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response SearchSkillsdefaultApplicationProblemPlusJSONResponse) VisitSearchSkillsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSkillFilesRequestObject struct {
+	Org   OrgRef    `json:"org"`
+	Owner SkillName `json:"owner"`
+	Repo  SkillName `json:"repo"`
+	Skill SkillName `json:"skill"`
+}
+
+type GetSkillFilesResponseObject interface {
+	VisitGetSkillFilesResponse(w http.ResponseWriter) error
+}
+
+type GetSkillFiles200JSONResponse SkillFiles
+
+func (response GetSkillFiles200JSONResponse) VisitGetSkillFilesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSkillFilesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetSkillFilesdefaultApplicationProblemPlusJSONResponse) VisitGetSkillFilesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -7374,6 +8381,15 @@ type StrictServerInterface interface {
 	// ListAudit The organization's audit log, newest first
 	// (GET /v1/orgs/{org}/audit)
 	ListAudit(ctx context.Context, request ListAuditRequestObject) (ListAuditResponseObject, error)
+	// GetBuilderMeta What the factory editor needs to know about the install
+	// (GET /v1/orgs/{org}/builder/meta)
+	GetBuilderMeta(ctx context.Context, request GetBuilderMetaRequestObject) (GetBuilderMetaResponseObject, error)
+	// SearchSkills One page of the skills catalog
+	// (GET /v1/orgs/{org}/builder/skills)
+	SearchSkills(ctx context.Context, request SearchSkillsRequestObject) (SearchSkillsResponseObject, error)
+	// GetSkillFiles A catalog skill's files at its pinned commit, to vendor into a draft
+	// (GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files)
+	GetSkillFiles(ctx context.Context, request GetSkillFilesRequestObject) (GetSkillFilesResponseObject, error)
 	// ListFactories The organization's factories goald runs, from the bucket
 	// (GET /v1/orgs/{org}/factories)
 	ListFactories(ctx context.Context, request ListFactoriesRequestObject) (ListFactoriesResponseObject, error)
@@ -7647,6 +8663,88 @@ func (sh *strictHandler) ListAudit(w http.ResponseWriter, r *http.Request, org O
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListAuditResponseObject); ok {
 		if err := validResponse.VisitListAuditResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetBuilderMeta operation middleware
+func (sh *strictHandler) GetBuilderMeta(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request GetBuilderMetaRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetBuilderMeta(ctx, request.(GetBuilderMetaRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetBuilderMeta")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetBuilderMetaResponseObject); ok {
+		if err := validResponse.VisitGetBuilderMetaResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SearchSkills operation middleware
+func (sh *strictHandler) SearchSkills(w http.ResponseWriter, r *http.Request, org OrgRef, params SearchSkillsParams) {
+	var request SearchSkillsRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SearchSkills(ctx, request.(SearchSkillsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SearchSkills")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SearchSkillsResponseObject); ok {
+		if err := validResponse.VisitSearchSkillsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSkillFiles operation middleware
+func (sh *strictHandler) GetSkillFiles(w http.ResponseWriter, r *http.Request, org OrgRef, owner SkillName, repo SkillName, skill SkillName) {
+	var request GetSkillFilesRequestObject
+
+	request.Org = org
+	request.Owner = owner
+	request.Repo = repo
+	request.Skill = skill
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSkillFiles(ctx, request.(GetSkillFilesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSkillFiles")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSkillFilesResponseObject); ok {
+		if err := validResponse.VisitGetSkillFilesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

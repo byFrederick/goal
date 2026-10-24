@@ -12,7 +12,8 @@ info:
   version: 0.3.0
   description: >-
     Organizations, their factories, boards and flow metrics, work items, their history, human
-    decisions and a realtime stream of an organization's events.
+    decisions, a realtime stream of an organization's events, and the factory editor's metadata
+    and skills catalog.
 servers:
   - url: http://127.0.0.1:8080
 tags:
@@ -23,6 +24,11 @@ tags:
       What the app's chrome reads about an organization: attention badges, factory overviews and
       the inbox of what waits for a person. Phase 2.2 has no identity, so "waiting on you" is
       every decision waiting on a person.
+  - name: builder
+    description: >-
+      The factory editor's metadata (the install's models, which later phases are wired, the
+      skill limits) and the skills catalog, skills.sh skills kept in the bucket at a pinned
+      commit so a draft can vendor them
 paths:
   /v1/health:
     get:
@@ -477,6 +483,79 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/builder/meta:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: getBuilderMeta
+      tags: [builder]
+      summary: What the factory editor needs to know about the install
+      description: >-
+        The models agents may run on (from goald's GOAL_MODELS; exactly one is the default, the
+        model a factory runs when it names none), which later phases are wired (their controls
+        stay hidden or read-only until then) and the limits of one skill folder.
+      responses:
+        "200":
+          description: The editor's metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BuilderMeta" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/builder/skills:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: searchSkills
+      tags: [builder]
+      summary: One page of the skills catalog
+      description: >-
+        Skills the operator synced from skills.sh (goal catalog skills sync), each at the commit
+        it is pinned at. q matches the key, the skill's name or its description, ignoring case;
+        results are most installed first, then by key. The catalog is the install's, the same for
+        every organization; it is empty until the operator syncs it. A limit outside 1 to 50 is
+        400; a bucket that cannot be read is 503 catalog-unavailable.
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 200 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+        - name: after
+          in: query
+          description: The next_after of the previous page
+          schema: { type: string, maxLength: 320 }
+      responses:
+        "200":
+          description: Skills
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SkillPage" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - { name: owner, in: path, required: true, schema: { $ref: "#/components/schemas/SkillName" } }
+      - { name: repo, in: path, required: true, schema: { $ref: "#/components/schemas/SkillName" } }
+      - { name: skill, in: path, required: true, schema: { $ref: "#/components/schemas/SkillName" } }
+    get:
+      operationId: getSkillFiles
+      tags: [builder]
+      summary: A catalog skill's files at its pinned commit, to vendor into a draft
+      description: >-
+        The folder as the sync stored it, checked against the catalog's index (limits, paths and
+        hash) before it is served. Paths are relative to the skill's folder; SKILL.md is at its
+        root. A draft adds them under skills/<skill>/ with skills[].origin set to
+        skills.sh:<owner>/<repo>@<skill>#<commit>. The content is third-party: show it as plain
+        text. An unknown skill is 404 skill-not-found; a bucket that cannot be read, or a folder
+        that does not match the index, 503 catalog-unavailable.
+      responses:
+        "200":
+          description: The skill and its files
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SkillFiles" }
         default: { $ref: "#/components/responses/Problem" }
 components:
   parameters:
@@ -1057,3 +1136,89 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/StationAction"
+    BuilderMeta:
+      type: object
+      required: [models, capabilities, limits]
+      properties:
+        models:
+          type: array
+          items: { $ref: "#/components/schemas/BuilderModel" }
+        capabilities: { $ref: "#/components/schemas/BuilderCapabilities" }
+        limits: { $ref: "#/components/schemas/BuilderLimits" }
+    BuilderModel:
+      type: object
+      required: [id, label, default]
+      properties:
+        id: { type: string, description: "The model id, as runtime.model and agents[].model take it" }
+        label: { type: string }
+        default: { type: boolean, description: The model a factory runs when it names none }
+    BuilderCapabilities:
+      type: object
+      description: Which later phases are wired; the editor hides or shows their controls read-only until then
+      required: [credentials, connectors, tool_approvals]
+      properties:
+        credentials: { type: boolean, description: "Phase 3.1: credential selects and factory credentials" }
+        connectors: { type: boolean, description: "Phase 3.2: the connector catalog and connector panel" }
+        tool_approvals: { type: boolean, description: '"Ask me" on built-in tools is enforced' }
+    BuilderLimits:
+      type: object
+      required: [skill_bytes, skill_files]
+      properties:
+        skill_bytes: { type: integer, description: The most bytes one skill folder holds }
+        skill_files: { type: integer, description: The most files one skill folder holds }
+    SkillName:
+      type: string
+      pattern: "^[A-Za-z0-9_.-]{1,100}$"
+      description: An owner, repository or skill name of skills.sh (never . or ..)
+    SkillListing:
+      type: object
+      description: One skill of the catalog, at the commit it is pinned at
+      required: [key, owner, repo, skill, commit, description, installs, files, bytes]
+      properties:
+        key: { type: string, description: "<owner>/<repo>/<skill>" }
+        owner: { type: string }
+        repo: { type: string }
+        skill: { type: string }
+        commit: { type: string, pattern: "^[0-9a-f]{40}$" }
+        description: { type: string, description: "From SKILL.md's front matter; plain text" }
+        installs: { type: integer, format: int64, description: skills.sh installs when the operator last synced it }
+        files: { type: integer }
+        bytes: { type: integer, format: int64 }
+    SkillPage:
+      type: object
+      required: [skills, next_after]
+      properties:
+        skills:
+          type: array
+          items: { $ref: "#/components/schemas/SkillListing" }
+        next_after:
+          type: string
+          nullable: true
+          description: Pass as `after` for the next page; null on the last one
+    SkillFiles:
+      type: object
+      required: [skill, files]
+      properties:
+        skill: { $ref: "#/components/schemas/SkillListing" }
+        files: { $ref: "#/components/schemas/FileMap" }
+    FileMap:
+      type: object
+      description: Files by slash-separated relative path
+      additionalProperties: { $ref: "#/components/schemas/FileContent" }
+    FileContent:
+      description: A file's content, as text when it is UTF-8 without NUL bytes, else in base64
+      oneOf:
+        - { $ref: "#/components/schemas/TextFile" }
+        - { $ref: "#/components/schemas/Base64File" }
+    TextFile:
+      type: object
+      required: [text]
+      additionalProperties: false
+      properties:
+        text: { type: string }
+    Base64File:
+      type: object
+      required: [base64]
+      additionalProperties: false
+      properties:
+        base64: { type: string, format: byte }

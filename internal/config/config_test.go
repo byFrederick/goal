@@ -3,9 +3,12 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/byFrederick/goal/internal/domain"
 )
 
 func TestLoad_AcceptsEveryFixtureFactory(t *testing.T) {
@@ -219,6 +222,37 @@ func TestLoad_AcceptsTheBuilderKeys(t *testing.T) {
 
 	if b := f.Spec.Runtime.Budget; b.WeeklyUSD != 50 || b.OnExhausted != "stop" || f.Metadata.Purpose == "" {
 		t.Errorf("budget = %+v, purpose %q", b, f.Metadata.Purpose)
+	}
+}
+
+// A vendored skill records its skills.sh origin pinned at a full commit; anything else there is
+// a schema problem.
+func TestLoad_SkillOriginIsAPinnedSkillsShReference(t *testing.T) {
+	t.Parallel()
+
+	commit := strings.Repeat("0a", 20)
+	skill := func(origin string) fstest.MapFS {
+		return checkTree(edited(specAgents, "  skills:\n    - { name: lint, source: ./skills/lint, origin: \""+origin+"\" }\n"+specAgents),
+			map[string]string{"skills/lint/SKILL.md": "# lint\n"})
+	}
+
+	f, err := Load(skill("skills.sh:acme/skills@lint#" + commit))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := f.Spec.Skills[0]; got.Origin != "skills.sh:acme/skills@lint#"+commit || !got.Local() {
+		t.Errorf("skill = %+v, want the origin kept beside the local source", got)
+	}
+
+	for _, origin := range []string{
+		"skills.sh:acme/skills@lint", "skills.sh:acme/skills@lint#abc123", "skills.sh:acme/skills@lint#" + strings.ToUpper(commit),
+		"github:acme/skills@lint#" + commit, "skills.sh:acme/skills/lint#" + commit,
+	} {
+		_, problems := Check(skill(origin))
+		if !slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool { return p.Check == checkSchema && p.Blocking() }) {
+			t.Errorf("origin %q: problems %+v, want a schema problem", origin, problems)
+		}
 	}
 }
 
