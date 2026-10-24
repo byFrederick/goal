@@ -3,6 +3,7 @@ package api_test
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -151,6 +152,33 @@ func TestAPI_OverviewWindowsAndBudgets(t *testing.T) {
 		if code := h.call(t, http.MethodGet, "/v1/orgs/acme/overview?window="+w, "", nil); code != http.StatusBadRequest {
 			t.Errorf("window %s = %d, want 400", w, code)
 		}
+	}
+}
+
+// A factory never published is on the Factories home as a draft (the wizard resumes from there),
+// with nothing to measure yet.
+func TestAPI_OverviewListsFactoriesNeverPublishedAsDrafts(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.submit(t) // loads both factories
+
+	if r := h.request(t, http.MethodPost, factoriesPath, `{"name":"support","start":{"kind":"blank"}}`, nil); r.status != http.StatusCreated {
+		t.Fatalf("create = %d %s", r.status, r.body)
+	}
+
+	var got gen.FactoryOverviewList
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/overview", "", &got); code != http.StatusOK {
+		t.Fatalf("overview = %d", code)
+	}
+
+	lines := overviewLines(got)
+	if want := "support draft; 0.00/day vs 0.00, 7 days; constraint none; 0 waiting []; $0.00 of none"; !slices.Contains(lines, want) {
+		t.Errorf("overview\n  %s\nwant a line %q", strings.Join(lines, "\n  "), want)
+	}
+
+	if len(got.Factories) != 3 {
+		t.Errorf("overview lists %d factories, want acme, line and the draft", len(got.Factories))
 	}
 }
 

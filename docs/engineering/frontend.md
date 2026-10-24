@@ -76,7 +76,7 @@ routes/       file-based route files (TanStack Router plugin; routeTree.gen.ts i
                   /o/$org/f/$factory/definition → D's editor: frame + draft session; its index → /definition/line
                   /o/$org/f/$factory/definition/$section → basics|line|agents|connections|review|versions (?mode=yaml, ?station=, ?agent=, …)
                   /o/$org/f/$factory/agents/$agent → Agent     (E12: header, the last 7 days, send-back reasons; D12: Skills, Tool policy, Edit in Definition)
-                  /o/$org/new/$step             → D's New factory wizard (rail only, no sidebar; ?factory= from step 2)
+                  /o/$org/new/$step             → D's New factory wizard (rail only, no sidebar; ?factory= from step 2; start?factory= resumes a draft factory)
 api/          the only HTTP code: types.ts (generated contract shapes), client.ts (requests over @goal/api-client), definitions.ts and builder.ts (B's and D's routes), queries.ts (keys, queryOptions)
 app/          the shell: AppShell and ShellFrame, Rail, PhoneTopRow, PhoneCrumb, TabBar, FactorySidebar,
               OrgSidebar, OrgMark (the organization menu's trigger: OrgMenu on the rail, OrgSheet on

@@ -2,7 +2,14 @@
 // id (['org', org, …], C §10.10, so a slug rename does not split the cache), then factory (by id,
 // as stream events name it) → resource, so the stream can invalidate exactly what an event
 // touches and a resync everything of one organization. Requests name the factory by id too.
-import { keepPreviousData, type QueryClient, queryOptions } from '@tanstack/react-query';
+import {
+  type EnsureQueryDataOptions,
+  isCancelledError,
+  keepPreviousData,
+  type QueryClient,
+  type QueryKey,
+  queryOptions,
+} from '@tanstack/react-query';
 import { getBuilderMeta, getSkillFiles, type SkillKey, searchSkills } from './builder';
 import {
   ApiError,
@@ -43,6 +50,24 @@ import {
   validateDraft,
 } from './definitions';
 import type { AuditFilter, ItemEvent } from './types';
+
+/**
+ * A route loader's ensureQueryData that survives a fetch it shares being cancelled: when the
+ * page being left was the fetch's only observer (the wizard's Review reading the board of the
+ * factory it just published), unmounting it cancels the request the next page's loader awaits.
+ * Loading again starts a fresh one.
+ */
+export async function ensureLoaded<T, K extends QueryKey>(
+  client: QueryClient,
+  options: EnsureQueryDataOptions<T, Error, T, K>,
+): Promise<T> {
+  try {
+    return await client.ensureQueryData(options);
+  } catch (err) {
+    if (isCancelledError(err)) return client.ensureQueryData(options);
+    throw err;
+  }
+}
 
 export const keys = {
   orgs: ['orgs'] as const,

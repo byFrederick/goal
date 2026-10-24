@@ -42,7 +42,7 @@ test('the root returns to the organization used last', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveURL(/\/o\/example-labs$/);
   await expect(page.getByRole('article')).toHaveCount(1);
-  await expect(orgNav(page).getByRole('link', { name: /factory/ })).toHaveCount(1);
+  await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(1);
 });
 
 test('the factories home shows each factory’s week and what waits on you', async ({ page, request }) => {
@@ -61,12 +61,15 @@ test('the factories home shows each factory’s week and what waits on you', asy
     await expect(card('goal').getByRole('img', { name: /^Items done per day, .+: (\d+, ){6}\d+$/ })).toBeVisible();
     await expect(card('goal').getByText(/^[+−]\d\.\d vs last week$|^Same as last week$/)).toBeVisible();
     await expect(card('support').getByText('No budget set')).toBeVisible();
-    // The definition editor is linked; the wizard arrives later (D13): said, not linked.
+    // The definition editor and the New factory wizard are linked.
     await expect(card('goal').getByRole('link', { name: 'Definition' })).toHaveAttribute(
       'href',
       '/o/acme/f/goal/definition',
     );
-    await expect(page.getByRole('button', { name: 'New factory Later' })).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.getByRole('main').getByRole('link', { name: 'Import YAML' }).first()).toHaveAttribute(
+      'href',
+      '/o/acme/new/start?from=yaml',
+    );
   }
 
   const waiting = page.getByRole('region', { name: 'Waiting on you', exact: true });
@@ -90,7 +93,10 @@ test('on a phone: the banner leads to what waits, a card to its floor', async ({
   const banner = page.getByRole('link', { name: /^5 waiting on you/ });
   await expect(banner).toContainText('goal 2, sre 3');
   await expect(page.getByText(/^\$\d+\.\d\d of Acme’s \$80 weekly budget spent$/)).toBeVisible();
-  await expect(page.getByRole('button', { name: 'New factory Later' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByRole('main').getByRole('link', { name: 'New factory' })).toHaveAttribute(
+    'href',
+    '/o/acme/new/start',
+  );
 
   await banner.click();
   await expect(page).toHaveURL(/\/o\/acme#waiting$/);
@@ -117,7 +123,10 @@ test('an organization without budgets or factories says so', async ({ page, requ
   await request.post('/v1/orgs', { data: { name: 'Empty Co', slug: 'empty-co' } });
   await page.goto('/o/empty-co');
   await expect(page.getByRole('heading', { level: 2, name: 'No factories in Empty Co yet' })).toBeVisible();
-  await expect(page.getByText('goal factory push <dir>')).toBeVisible();
+  await expect(page.getByRole('main').getByRole('link', { name: 'New factory' })).toHaveAttribute(
+    'href',
+    '/o/empty-co/new/start',
+  );
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
@@ -609,7 +618,7 @@ test('switch organization from the menu by keyboard', async ({ page }) => {
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/o\/example-labs$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeFocused();
-  await expect(orgNav(page).getByRole('link', { name: /factory/ })).toHaveCount(1);
+  await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(1);
   await expect(orgMarkOf(page, 'EL, Example Labs organization, switch organization')).toBeVisible();
 
   // The organization used last is where / returns.
@@ -643,7 +652,7 @@ test('switch organization from the sheet on a phone', async ({ page }) => {
   await expect(page).toHaveURL(/\/o\/example-labs$/);
   await expect(sheet).toBeHidden();
   await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeFocused();
-  await expect(orgNav(page).getByRole('link', { name: /factory/ })).toHaveCount(1);
+  await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(1);
 });
 
 /** Opens Create organization from the menu, or from the sheet on a phone. */
@@ -683,7 +692,7 @@ test('create an organization and land on its empty factories', async ({ page }) 
   await expect(page).toHaveURL(/\/o\/acme-two$/);
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeVisible();
-  await expect(orgNav(page).getByRole('link', { name: /factory/ })).toHaveCount(0);
+  await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(0);
   const newMark = orgMarkOf(page, 'AT, Acme Two organization, switch organization');
   await expect(newMark).toBeVisible();
   await expectNoHorizontalScroll(page);

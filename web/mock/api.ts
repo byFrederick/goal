@@ -481,7 +481,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const weekly = state.weeklyBudget[f.name] ?? null;
     return {
       factory: f,
-      health: andon ? 'stopped' : 'running',
+      // Never published: a draft goald does not run (the wizard resumes it from the Factories home).
+      health: f.current === null ? 'draft' : andon ? 'stopped' : 'running',
       andon,
       throughput: {
         per_day: metrics.throughput_per_day,

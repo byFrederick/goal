@@ -100,12 +100,13 @@ export const settingsScreen: OrgScreen = {
 /** The organization sidebar, top to bottom. */
 export const orgScreens: readonly OrgScreen[] = [factoriesScreen, catalogScreen, credentialsScreen, settingsScreen];
 
-/** The rail's dashed square. D: /o/:org/new/:step (no sidebar). */
-export const newFactoryScreen: Screen & { available: false } = {
+/** The rail's dashed square: D's New factory wizard, /o/:org/new/:step (no sidebar), from Start. */
+export const newFactoryScreen: Screen & { available: true; to: '/o/$org/new/$step' } = {
   id: 'new-factory',
   label: 'New factory',
   icon: Plus,
-  available: false,
+  available: true,
+  to: '/o/$org/new/$step',
 };
 
 /** Shown beside a screen a later phase builds. */

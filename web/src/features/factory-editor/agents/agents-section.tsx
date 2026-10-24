@@ -69,7 +69,7 @@ export function AgentsSection({ place, search }: SectionViewProps) {
             </ul>
           ) : null}
           <AddAgentButton />
-          {place === 'definition' ? <CopyAgentButton /> : null}
+          <CopyAgentButton />
         </nav>
 
         <div className={cn('flex min-w-0 flex-col gap-3', !search.agent && 'max-md:hidden')}>

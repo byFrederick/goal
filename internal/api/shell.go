@@ -134,6 +134,8 @@ func (s *server) GetFactoryOverview(ctx context.Context, req gen.GetFactoryOverv
 		out.Factories = append(out.Factories, o)
 	}
 
+	out.Factories = append(out.Factories, drafts(recs, w)...)
+
 	if took := time.Since(started); took > slowOverview || len(fs) > overviewFactories {
 		s.log.WarnContext(ctx, "slow factory overview", slog.String("org_id", string(orgOf(ctx).ID)),
 			slog.Int("factories", len(fs)), slog.Duration("took", took))
@@ -208,6 +210,37 @@ func (s *server) overview(
 	}
 
 	return o, nil
+}
+
+// drafts are the factories never published, which goald does not run: on the Factories home as
+// drafts (the wizard resumes from there), with nothing measured, waiting or spent.
+func drafts(recs map[domain.FactoryID]ports.FactoryRecord, w dayRange) []gen.FactoryOverview {
+	out := []gen.FactoryOverview{}
+
+	for _, rec := range recs {
+		if rec.Current != nil {
+			continue
+		}
+
+		out = append(out, gen.FactoryOverview{
+			Factory: factoryOut(rec, nil), Health: gen.FactoryHealthDraft,
+			Throughput: gen.Throughput{Days: donePerDay(w, domain.FlowMetrics{})},
+			Waiting: gen.WaitingSummary{
+				ItemsByType: []struct {
+					Count int    `json:"count"`
+					Type  string `json:"type"`
+				}{},
+				ToolApprovals: []struct {
+					Connection string `json:"connection"`
+					Count      int    `json:"count"`
+				}{},
+			},
+		})
+	}
+
+	slices.SortFunc(out, func(a, b gen.FactoryOverview) int { return cmp.Compare(a.Factory.Name, b.Factory.Name) })
+
+	return out
 }
 
 func (s *server) GetInbox(ctx context.Context, req gen.GetInboxRequestObject) (gen.GetInboxResponseObject, error) {

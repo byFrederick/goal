@@ -1,6 +1,7 @@
 package authoring_test
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -8,6 +9,9 @@ import (
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/domain"
 )
+
+// blankName names the factories the blank-start tests create.
+const blankName = "acme-new"
 
 // putTemplate stores a template version in the catalog.
 func (h *harness) putTemplate(t *testing.T, name, version, meta string, files map[string][]byte) {
@@ -96,7 +100,7 @@ func TestCreateFactory_BlankSkeletonNamesNoStationOrAgent(t *testing.T) {
 
 	h := newHarness(t)
 
-	c, err := h.svc.CreateFactory(h.ctx, authoring.NewFactoryRequest{Name: "acme-new", Start: authoring.Start{Kind: authoring.StartBlank}})
+	c, err := h.svc.CreateFactory(h.ctx, authoring.NewFactoryRequest{Name: blankName, Start: authoring.Start{Kind: authoring.StartBlank}})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -106,7 +110,7 @@ func TestCreateFactory_BlankSkeletonNamesNoStationOrAgent(t *testing.T) {
 		t.Fatalf("model: %v", err)
 	}
 
-	if m.Model.Basics["name"] != "acme-new" || len(m.Model.Line) != 0 || len(m.Model.Agents) != 0 {
+	if m.Model.Basics["name"] != blankName || len(m.Model.Line) != 0 || len(m.Model.Agents) != 0 {
 		t.Errorf("blank model = %+v", m.Model)
 	}
 
@@ -119,13 +123,62 @@ func TestCreateFactory_BlankSkeletonNamesNoStationOrAgent(t *testing.T) {
 	}
 }
 
+// A blank start is publishable with what the wizard's Visual sections write (a line and an agent):
+// nothing it needs is YAML-only, so the skeleton's missing knowledge base is not an error.
+func TestCreateFactory_BlankSkeletonPublishesWithALineAndAnAgent(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	c, err := h.svc.CreateFactory(h.ctx, authoring.NewFactoryRequest{Name: blankName, Start: authoring.Start{Kind: authoring.StartBlank}})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	f := c.Factory.ID
+
+	m, err := h.svc.DraftModel(h.ctx, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.svc.SaveSection(h.ctx, f, authoring.SectionSave{
+		Section: authoring.Agents, IfMatch: m.ETags[authoring.Agents],
+		Value: json.RawMessage(`{"agents":[{"name":"engineer","prompt":{"path":"./agents/engineer.md"}}]}`),
+		Files: map[string][]byte{promptFile: []byte(enginePrompt)},
+	}); err != nil {
+		t.Fatalf("add an agent: %v", err)
+	}
+
+	if _, err := h.svc.SaveSection(h.ctx, f, authoring.SectionSave{
+		Section: authoring.Line, IfMatch: m.ETags[authoring.Line],
+		Value: lineValue(`{"id":"inbox","kind":"queue"}`, `{"id":"build","kind":"agent","agent":"engineer","wip":1}`,
+			`{"id":"done","kind":"done"}`),
+	}); err != nil {
+		t.Fatalf("add the line: %v", err)
+	}
+
+	v, err := h.svc.Publish(h.ctx, f, h.publishRequest(t, f))
+	if err != nil {
+		if invalid, ok := errors.AsType[*authoring.InvalidError](err); ok {
+			t.Fatalf("publish refused: %v", codes(invalid.Problems))
+		}
+
+		t.Fatalf("publish: %v", err)
+	}
+
+	if v.Number != 1 {
+		t.Errorf("published %+v, want v1", v)
+	}
+}
+
 func TestCreateFactory_BlankUsesTheBlankTemplate(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
 	h.putTemplate(t, authoring.BlankTemplate, "1", "title: Blank\n", acmeFiles(acmeYAML))
 
-	c, err := h.svc.CreateFactory(h.ctx, authoring.NewFactoryRequest{Name: "acme-new", Start: authoring.Start{Kind: authoring.StartBlank}})
+	c, err := h.svc.CreateFactory(h.ctx, authoring.NewFactoryRequest{Name: blankName, Start: authoring.Start{Kind: authoring.StartBlank}})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}

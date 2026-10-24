@@ -1,7 +1,8 @@
 // One factory on the Factories home (C §10.7, canvas "Factories" and "Mobile-Factories"). From
 // 768 px: name, health, purpose, the 2×2 stats (throughput with a 7-day sparkline and its delta,
 // the constraint, what waits on you, the week's spend against the budget) and Open/Definition.
-// On a phone the card is compact (three stats) and is one link to the factory's floor.
+// On a phone the card is compact (three stats) and is one link to the factory's floor. A factory
+// never published is a draft: its card resumes the New factory wizard instead (D13).
 import { Link } from '@tanstack/react-router';
 import type { FactoryOverview } from '../../api/types';
 import { factoryScreens } from '../../app/screens';
@@ -11,7 +12,6 @@ import { Stat, StatGrid } from '../../ui/card';
 import { Chip, Dot } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { HatchBars, Meter } from '../../ui/hatch';
-import { LaterButton } from './later';
 import { constraintNote, spendNote, throughputDelta, waitingBreakdown } from './sentences';
 
 // Numbers are tabular (MASTER.md); the words around them stay proportional.
@@ -24,6 +24,8 @@ export function FactoryCard({ org, overview, mark }: { org: string; overview: Fa
   const { factory } = overview;
   const params = { org, factory: factory.name };
   const headingId = `factory-${factory.id}`;
+  const draft = overview.health === 'draft';
+  const resume = { to: '/o/$org/new/$step', params: { org, step: 'start' }, search: { factory: factory.id } } as const;
 
   return (
     <article
@@ -47,8 +49,7 @@ export function FactoryCard({ org, overview, mark }: { org: string; overview: Fa
           className="m-0 min-w-0 flex-1 text-xl leading-tight font-normal tracking-[-0.02em] break-words md:text-[26px] md:leading-[1.1] md:tracking-display"
         >
           <Link
-            to="/o/$org/f/$factory"
-            params={params}
+            {...(draft ? resume : { to: '/o/$org/f/$factory', params })}
             className="no-underline hover:underline max-md:after:absolute max-md:after:inset-0 max-md:focus-visible:outline-none"
           >
             {factory.name}
@@ -63,14 +64,26 @@ export function FactoryCard({ org, overview, mark }: { org: string; overview: Fa
         </p>
       ) : null}
 
-      <WeekStats overview={overview} />
-      <PhoneStats overview={overview} />
+      {draft ? (
+        <p className="m-0 text-sm leading-normal text-muted">
+          Not published yet. Continue its setup, then publish v1 to start the line.
+        </p>
+      ) : (
+        <>
+          <WeekStats overview={overview} />
+          <PhoneStats overview={overview} />
+        </>
+      )}
 
       <div className="mt-auto hidden flex-wrap gap-2 md:flex">
         <Button asChild variant="primary" size="sm">
-          <Link to="/o/$org/f/$factory" params={params}>
-            Open {factory.name}
-          </Link>
+          {draft ? (
+            <Link {...resume}>Continue setup</Link>
+          ) : (
+            <Link to="/o/$org/f/$factory" params={params}>
+              Open {factory.name}
+            </Link>
+          )}
         </Button>
         {definition?.available ? (
           <Button asChild size="sm">
@@ -78,9 +91,7 @@ export function FactoryCard({ org, overview, mark }: { org: string; overview: Fa
               {definition.label}
             </Link>
           </Button>
-        ) : (
-          <LaterButton size="sm" label={definition?.label ?? 'Definition'} />
-        )}
+        ) : null}
       </div>
     </article>
   );

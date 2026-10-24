@@ -1,71 +1,73 @@
-// The New factory wizard's route skeleton (D §10.1): /o/$org/new/$step on the rail, with no
-// sidebar. D13 adds the Start step, the step nav, "Draft saved" and Save and exit; until then the
-// rail's New factory stays "Later" and nothing links here. From step 2 on, `?factory=` names the
-// new factory's id and the step renders the same section view as Definition (place "wizard").
-import { Link } from '@tanstack/react-router';
+// The New factory wizard (D §10.1, §10.3, §10.11): /o/$org/new/$step on the rail, with no
+// sidebar. Start chooses how to begin and creates the factory; from then on `?factory=` names the
+// new factory's id and the steps edit its draft in the editor's section views. `start` with a
+// factory resumes it (the Factories home's "Continue setup"): it opens the first step not done.
+import { useQuery } from '@tanstack/react-query';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { useEffect } from 'react';
+import { ApiError } from '../../api/client';
+import { draftModelQuery } from '../../api/queries';
 import { ShellFrame } from '../../app/app-shell';
 import { useOrg } from '../../shared/org';
-import { EmptyState } from '../../ui/empty-state';
-import { SectionView } from './definition-page';
-import { DraftSessionProvider } from './draft/use-draft';
-import { type DefinitionSearch, validateDefinitionSearch } from './sections';
-
-/** The wizard's steps: Start, then the editor's five sections. */
-export const wizardSteps = ['start', 'basics', 'line', 'agents', 'connections', 'review'] as const;
-
-export type WizardStep = (typeof wizardSteps)[number];
-
-export function isWizardStep(value: string): value is WizardStep {
-  return (wizardSteps as readonly string[]).includes(value);
-}
-
-export interface WizardSearch extends DefinitionSearch {
-  /** The new factory's id, from step 2 on. */
-  factory?: string;
-  /** How to start, from the Factories home's cards. */
-  from?: 'blank' | 'template' | 'clone' | 'yaml';
-  template?: string;
-}
-
-export function validateWizardSearch(search: Record<string, unknown>): WizardSearch {
-  const out: WizardSearch = validateDefinitionSearch(search);
-  if (typeof search.factory === 'string' && search.factory !== '') out.factory = search.factory;
-  if (search.from === 'blank' || search.from === 'template' || search.from === 'clone' || search.from === 'yaml') {
-    out.from = search.from;
-  }
-  if (typeof search.template === 'string' && search.template !== '') out.template = search.template;
-  return out;
-}
+import { DraftSessionProvider, useDraft, useModel } from './draft/use-draft';
+import { StartStep } from './start/start-step';
+import { WizardEditor } from './wizard-editor';
+import { doneSteps, readProgress, resumeStep, type WizardStep, wizardStorage } from './wizard-progress';
+import type { WizardSearch } from './wizard-search';
 
 export function WizardPage({ step, search }: { step: WizardStep; search: WizardSearch }) {
   const org = useOrg();
+  const { factory, from: _from, template: _template, ...section } = search;
 
   return (
     <ShellFrame sidebar={null}>
-      <header className="flex flex-col gap-2.5">
-        <nav aria-label="Breadcrumb" className="text-sm text-muted">
-          <ol className="m-0 flex list-none gap-1.5 p-0">
-            <li>
-              <Link to="/o/$org" params={{ org: org.slug }} className="text-muted hover:text-run">
-                Factories
-              </Link>
-            </li>
-            <li aria-hidden="true">/</li>
-            <li aria-current="page">New factory</li>
-          </ol>
-        </nav>
-        <h1 className="m-0 text-[34px] leading-[1.05] font-normal tracking-display md:text-[44px]">New factory</h1>
-      </header>
-      {step !== 'start' && search.factory ? (
-        <DraftSessionProvider key={search.factory} org={org.id} factory={search.factory}>
-          <SectionView place="wizard" section={step} search={search} />
+      {factory ? (
+        <DraftSessionProvider key={factory} org={org.id} factory={factory}>
+          {step === 'start' ? (
+            <Resume factory={factory} />
+          ) : (
+            <WizardEditor step={step} factory={factory} search={section} />
+          )}
         </DraftSessionProvider>
       ) : (
-        <EmptyState title="Start a factory">
-          Starting a factory in the browser arrives later. Until then, push a definition from a working copy with{' '}
-          <code className="font-mono text-[13px] text-ink">goal factory push &lt;dir&gt;</code>.
-        </EmptyState>
+        <StartStep search={search} />
       )}
     </ShellFrame>
+  );
+}
+
+/** Opens a draft factory's first step not done, once its draft has loaded. */
+function Resume({ factory }: { factory: string }) {
+  const org = useOrg();
+  const navigate = useNavigate();
+  const ready = useDraft((s) => s.ready);
+  const model = useModel();
+  const draft = useQuery(draftModelQuery(org.id, factory));
+  const failed = draft.error instanceof ApiError && draft.error.code !== 'no-draft' ? draft.error : null;
+
+  useEffect(() => {
+    if (!ready) return;
+    const step = resumeStep(doneSteps(readProgress(wizardStorage(), factory), model));
+    void navigate({ to: '/o/$org/new/$step', params: { org: org.slug, step }, search: { factory }, replace: true });
+  }, [ready, model, factory, navigate, org.slug]);
+
+  if (failed) {
+    return (
+      <div
+        role="alert"
+        className="flex max-w-xl flex-col gap-3 rounded-card border border-rework-line bg-rework-tint p-5"
+      >
+        <h1 className="m-0 text-xl font-medium text-rework-ink">This draft factory can’t be opened</h1>
+        <p className="m-0 text-[15px] leading-relaxed">{failed.detail ?? failed.title}</p>
+        <Link to="/o/$org" params={{ org: org.slug }} className="text-ink underline underline-offset-3 hover:text-run">
+          Back to the factories
+        </Link>
+      </div>
+    );
+  }
+  return (
+    <p role="status" aria-busy="true" className="m-0 text-sm text-muted">
+      Opening the draft…
+    </p>
   );
 }

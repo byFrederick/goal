@@ -3,18 +3,16 @@
 // the ways to start a new factory. Everything comes from GET /overview (7 days) and GET /inbox,
 // which the organization's stream keeps fresh.
 import { useSuspenseQuery } from '@tanstack/react-query';
-import { Factory as FactoryIcon, Plus, Upload } from 'lucide-react';
+import { Factory as FactoryIcon } from 'lucide-react';
 import { useId } from 'react';
 import { inboxQuery, overviewQuery } from '../../api/queries';
-import { newFactoryScreen } from '../../app/screens';
 import { factoryMark } from '../../shared/marks';
 import { useOrg } from '../../shared/org';
 import { cn } from '../../ui/cn';
 import { EmptyState } from '../../ui/empty-state';
 import { actionsClass, descriptionClass, eyebrowClass, PageHeader } from '../../ui/page-header';
 import { FactoryCard } from './factory-card';
-import { LaterButton } from './later';
-import { NewFactoryButton, NewFactoryCard, PushHint } from './new-factory';
+import { NewFactoryButton, NewFactoryButtons, NewFactoryCard } from './new-factory';
 import { budgetLine, headerSentence, possessive } from './sentences';
 import { WaitingBanner, WaitingList } from './waiting';
 
@@ -31,8 +29,7 @@ export function FactoriesPage() {
 
   const actions = (
     <div className={cn(actionsClass, 'hidden md:flex')}>
-      <LaterButton variant="white" icon={Upload} label="Import YAML" />
-      <LaterButton variant="primary" icon={Plus} label={newFactoryScreen.label} />
+      <NewFactoryButtons variant="header" />
     </div>
   );
 
@@ -55,15 +52,10 @@ export function FactoriesPage() {
         <EmptyState
           icon={<FactoryIcon size={20} strokeWidth={1.5} />}
           title={`No factories in ${org.name} yet`}
-          actions={
-            <>
-              <LaterButton variant="primary" icon={Plus} label={newFactoryScreen.label} />
-              <LaterButton variant="white" icon={Upload} label="Import YAML" />
-            </>
-          }
+          actions={<NewFactoryButtons variant="empty" />}
         >
-          A factory runs from a definition: its line, agents and connections. Building one in the browser arrives later.{' '}
-          <PushHint />
+          A factory runs from a definition: its line, agents and connections. Start one blank, from a template or from a
+          factory.yaml.
         </EmptyState>
       ) : (
         <>

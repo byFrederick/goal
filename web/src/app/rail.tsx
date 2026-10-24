@@ -6,8 +6,8 @@ import { Plus } from 'lucide-react';
 import type { OrgSummary } from '../api/types';
 import { useFactorySquares } from './factory-squares';
 import { OrgMark } from './org-mark';
-import { AccountMenu, FactorySquareLink, LaterRailItem, useRailKeys } from './rail-items';
-import { catalogScreen, credentialsScreen, newFactoryScreen } from './screens';
+import { AccountMenu, FactorySquareLink, LaterRailItem, NewFactoryLink, useRailKeys } from './rail-items';
+import { catalogScreen, credentialsScreen } from './screens';
 
 const iconProps = { size: 20, strokeWidth: 1.5, 'aria-hidden': true } as const;
 
@@ -33,9 +33,9 @@ export function Rail({ org }: { org: OrgSummary }) {
           </li>
         ))}
         <li>
-          <LaterRailItem label={newFactoryScreen.label} kind="add" size="rail">
+          <NewFactoryLink org={org} size="rail">
             <Plus size={18} strokeWidth={1.5} aria-hidden="true" />
-          </LaterRailItem>
+          </NewFactoryLink>
         </li>
       </ul>
       <div className="mt-auto flex flex-col items-center gap-1.5 pt-3">

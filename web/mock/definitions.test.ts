@@ -234,6 +234,45 @@ describe('the draft', () => {
   });
 });
 
+describe('a blank factory', () => {
+  it('starts from goald’s skeleton and publishes once the line and an agent are added', async () => {
+    const { body: f } = await call<Factory>('/v1/orgs/acme/factories', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'blank-one', start: { kind: 'blank' } }),
+    });
+    const path = `/v1/orgs/acme/factories/${f.id}`;
+    const { body: draft } = await call<Draft>(`${path}/draft`);
+    expect(draft.source).toEqual({ kind: 'blank' });
+
+    const before = await call<Validation>(`${path}/draft/validate`, { method: 'POST', body: '{}' });
+    expect(before.body.problems.filter((p) => p.code === 'schema-required').map((p) => p.pointer)).toEqual([
+      '/line/stations',
+      '/agents/agents',
+    ]);
+
+    const { body: m } = await call<DraftModel>(`${path}/draft/model`);
+    const agents = { agents: [{ name: 'worker', prompt: { path: './agents/worker.md' } }] };
+    const files = { 'agents/worker.md': { text: '# worker\n' } };
+    expect((await call(`${path}/draft/model/agents`, put({ value: agents, files }, m.etags.agents))).status).toBe(200);
+    const line = {
+      stations: [
+        { id: 'inbox', kind: 'queue' },
+        { id: 'work', kind: 'agent', agent: 'worker', wip: 1 },
+        { id: 'done', kind: 'done' },
+      ],
+    };
+    const saved = await call<SaveResult>(`${path}/draft/model/line`, put({ value: line }, m.etags.line));
+    expect(saved.status).toBe(200);
+
+    const published = await call<Version>(`${path}/draft/publish`, {
+      method: 'POST',
+      body: JSON.stringify({ revision: saved.body.revision }),
+    });
+    expect(published.status).toBe(201);
+    expect(published.body.number).toBe(1);
+  });
+});
+
 describe('the seed', () => {
   it('writes every factory.yaml the way a Visual save keeps it', () => {
     const trees = [

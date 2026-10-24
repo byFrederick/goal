@@ -190,6 +190,22 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? `1 ${one}` :
 const stationKinds = new Set(['queue', 'agent', 'human', 'done']);
 const builtinKeys = ['read', 'edit', 'run', 'web', 'subagents'];
 
+/** The catalog template a blank factory starts from when there is one (B's `blank`). */
+const blankTemplate = 'blank';
+
+/** goald's blank skeleton (authoring.skeleton): apiVersion, kind, metadata and the runtime only. */
+const blankSkeleton = `apiVersion: goal/v1
+kind: Factory
+metadata:
+  id: 00000000-0000-0000-0000-000000000000
+  name: new-factory
+spec:
+  runtime:
+    runner: docker
+    image: "ghcr.io/byfrederick/goal-agent:0.1.0"
+    auth: claude-subscription
+`;
+
 function validate(t: Tree, opts: { org: string; factory?: string; state: MockState; changes: number }): Checked {
   const problems: DefinitionProblem[] = [];
   const counts: DefinitionCounts = {
@@ -288,6 +304,11 @@ function validate(t: Tree, opts: { org: string; factory?: string; state: MockSta
   // schema
   const name = typeof basics.name === 'string' ? basics.name : '';
   if (!name) add('schema-required', 'error', 'schema', '/basics/name', 'metadata.name is required');
+  // A blank skeleton has neither until the Line and Agents sections add them.
+  if (stations.length === 0)
+    add('schema-required', 'error', 'schema', '/line/stations', 'spec.board.stations is required');
+  if (agents.length === 0)
+    add('schema-required', 'error', 'schema', '/agents/agents', 'spec.agents needs at least one agent');
   else if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(name))
     add('schema-invalid', 'error', 'schema', '/basics/name', `name "${name}" is not a slug`);
   stations.forEach((s, i) => {
@@ -1034,16 +1055,24 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
     switch (start.kind) {
       case 'blank':
       case 'template': {
-        const name = start.kind === 'blank' ? 'blank' : String(start.template ?? '');
+        const name = start.kind === 'blank' ? blankTemplate : String(start.template ?? '');
         const versions = st().templates.filter((t) => t.name === name);
         const t =
           start.version !== undefined
             ? versions.find((v) => v.version === start.version)
             : versions.sort((a, b) => b.version - a.version)[0];
+        if (!t && start.kind === 'blank') {
+          // goald's skeleton when the catalog has no blank template: no station or agent names.
+          files = new Map([[yamlFile, encode(blankSkeleton)]]);
+          source = { kind: 'blank' };
+          break;
+        }
         if (!t) refuse(404, 'Template not found', 'template-not-found', {}, name);
         files = new Map((t as NonNullable<typeof t>).files);
         source =
-          start.kind === 'blank' ? { kind: 'blank' } : { kind: 'template', template: `${t?.name}@${t?.version}` };
+          start.kind === 'blank'
+            ? { kind: 'blank', template: `${t?.name}@${t?.version}` }
+            : { kind: 'template', template: `${t?.name}@${t?.version}` };
         break;
       }
       case 'clone': {

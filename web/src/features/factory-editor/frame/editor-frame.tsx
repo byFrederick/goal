@@ -54,7 +54,7 @@ const modelOfSession = (s: SessionState): Model =>
   Object.fromEntries(sections.map((k) => [k, s.sections[k].local])) as unknown as Model;
 
 /** Ctrl/Cmd+Z (and Shift for redo) outside text fields steps through the session's edits. */
-function useUndoKeys(session: DraftSession): void {
+export function useUndoKeys(session: DraftSession): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== 'z') return;

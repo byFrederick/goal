@@ -9,8 +9,8 @@ import { cn } from '../ui/cn';
 import { Sheet, SheetContent, SheetLabel, SheetTrigger } from '../ui/sheet';
 import { useFactorySquares } from './factory-squares';
 import { OrgMark } from './org-mark';
-import { AccountMenu, FactorySquareLink, LaterRailItem, useRailKeys } from './rail-items';
-import { factoriesScreen, factoryScreens, laterText, newFactoryScreen } from './screens';
+import { AccountMenu, FactorySquareLink, NewFactoryLink, useRailKeys } from './rail-items';
+import { factoriesScreen, factoryScreens, laterText } from './screens';
 
 export function PhoneTopRow({ org }: { org: OrgSummary }) {
   const squares = useFactorySquares(org);
@@ -32,9 +32,9 @@ export function PhoneTopRow({ org }: { org: OrgSummary }) {
           </li>
         ))}
         <li>
-          <LaterRailItem label={newFactoryScreen.label} kind="add" size="phone">
+          <NewFactoryLink org={org} size="phone">
             <Plus size={16} strokeWidth={1.5} aria-hidden="true" />
-          </LaterRailItem>
+          </NewFactoryLink>
         </li>
       </ul>
       <AccountMenu size="phone" />

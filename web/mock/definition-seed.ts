@@ -403,6 +403,8 @@ interface TemplateSpec {
   connectors: string[];
   changed: string;
   workTypes: string[];
+  /** Inline connections, as flow mappings. */
+  connections?: string[];
   agents: { name: string; description: string; prompt: string }[];
   stations: TemplateLine[];
 }
@@ -427,7 +429,7 @@ metadata:
   title: ${t.title}
   purpose: ${t.purpose}
 spec:
-  agents:
+${t.connections ? `  connections:\n${t.connections.map((c) => `    - ${c}`).join('\n')}\n` : ''}  agents:
 ${t.agents.map((a) => `    - name: ${a.name}\n      description: ${a.description}\n      prompt: ./agents/${a.name}.md`).join('\n')}
   board:
     workTypes: [${t.workTypes.join(', ')}]
@@ -454,19 +456,20 @@ function template(t: TemplateSpec): MockTemplate {
 
 const templateSpecs: TemplateSpec[] = [
   {
-    name: 'blank',
+    name: 'support-desk',
     version: 1,
-    title: 'Blank',
-    summary: 'An inbox, one agent station and done',
-    description: 'The smallest line that runs: people and the API add work, one agent does it.',
-    purpose: 'Describe what this factory makes.',
+    title: 'Support desk',
+    summary: 'Drafts replies to tickets, a person sends them',
+    description: 'An agent drafts each reply from the runbooks; a person reads it and sends it.',
+    purpose: 'Drafts replies to support tickets for a person to send.',
     connectors: [],
     changed: '2026-09-02',
-    workTypes: ['task'],
-    agents: [{ name: 'worker', description: 'Does the work.', prompt: 'Do the work the item asks for.' }],
+    workTypes: ['ticket'],
+    agents: [{ name: 'drafter', description: 'Drafts the reply.', prompt: 'Draft a reply to the ticket.' }],
     stations: [
       { id: 'inbox', name: 'Inbox', kind: 'queue' },
-      { id: 'work', name: 'Work', kind: 'agent', agent: 'worker', wip: 1 },
+      { id: 'draft', name: 'Draft', kind: 'agent', agent: 'drafter', wip: 2 },
+      { id: 'send', name: 'Send', kind: 'human' },
       { id: 'done', name: 'Done', kind: 'done' },
     ],
   },
@@ -481,6 +484,9 @@ const templateSpecs: TemplateSpec[] = [
     connectors: ['aws', 'github'],
     changed: '2026-10-09',
     workTypes: ['cost-review'],
+    connections: [
+      '{ name: github, type: mcp, transport: http, url: "https://api.example.com/mcp/", headers: { Authorization: env:GOAL_GITHUB_TOKEN } }',
+    ],
     agents: [
       { name: 'cost-analyst', description: 'Reads the cost report.', prompt: 'Find the largest avoidable costs.' },
       {

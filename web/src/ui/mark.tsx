@@ -6,7 +6,7 @@ const kinds = {
   org: 'rounded-[12px] bg-ink font-semibold text-white',
   /** A factory: a white square, ink-filled when it is the current one. */
   factory: 'rounded-control border border-rule bg-surface font-medium text-ink group-hover:border-rule-strong',
-  /** New factory: a dashed square. */
+  /** New factory: a dashed square; ink while the wizard is open. */
   add: 'rounded-control border border-dashed border-rule-strong bg-transparent text-ink-soft',
   /** An icon on the rail (catalog, credentials). */
   icon: 'rounded-control text-ink-soft group-hover:bg-nav-hover',
@@ -49,7 +49,7 @@ export function Mark({ kind, size = 'rail', current = false, badge = 0, dot = fa
         kinds[kind],
         current && kind === 'org' && 'shadow-[0_0_0_2px_var(--color-shell),0_0_0_4px_var(--color-ink)]',
         current && kind === 'factory' && 'border-ink bg-ink text-white group-hover:border-ink',
-        current && kind === 'add' && 'border-solid',
+        current && kind === 'add' && 'border-solid border-ink bg-ink text-white',
         current && kind === 'icon' && 'bg-ink text-white group-hover:bg-ink',
       )}
     >

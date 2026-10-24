@@ -1,6 +1,6 @@
 // The pieces the rail and the phone's top row share: one stop of the arrow-key movement, a
 // factory's square, a screen a later phase builds, and the account menu.
-import { Link } from '@tanstack/react-router';
+import { Link, useRouterState } from '@tanstack/react-router';
 import { type KeyboardEvent, type ReactNode, useCallback } from 'react';
 import type { OrgSummary } from '../api/types';
 import { cn } from '../ui/cn';
@@ -9,7 +9,7 @@ import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } fr
 import { Tooltip } from '../ui/tooltip';
 import type { FactorySquare } from './factory-squares';
 import { type RailAxis, railFocusTarget } from './rail-focus';
-import { laterText } from './screens';
+import { laterText, newFactoryScreen } from './screens';
 
 /** A 44px target around a mark; `group` passes hover to the mark. */
 export const railItemClass =
@@ -71,9 +71,32 @@ export function FactorySquareLink({ org, square, size }: { org: OrgSummary; squa
   );
 }
 
+/** New factory: the dashed square, solid and ink while the wizard is open. */
+export function NewFactoryLink({ org, size, children }: { org: OrgSummary; size: Size; children: ReactNode }) {
+  const open = useIsWizard();
+  const link = (
+    <Link
+      to={newFactoryScreen.to}
+      params={{ org: org.slug, step: 'start' }}
+      aria-label={newFactoryScreen.label}
+      className={railItemClass}
+      {...railItem}
+    >
+      <Mark kind="add" size={size} current={open}>
+        {children}
+      </Mark>
+    </Link>
+  );
+  return size === 'rail' ? <Tooltip label={newFactoryScreen.label}>{link}</Tooltip> : link;
+}
+
+/** Whether a page of the New factory wizard is open (any of its steps). */
+function useIsWizard(): boolean {
+  return useRouterState({ select: (s) => s.matches.some((m) => m.routeId === '/o/$org/new/$step') });
+}
+
 /**
- * A screen a later phase builds (New factory, Connector catalog, Credentials): marked disabled,
- * going nowhere.
+ * A screen a later phase builds (Connector catalog, Credentials): marked disabled, going nowhere.
  */
 export function LaterRailItem({
   label,
