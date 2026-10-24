@@ -249,6 +249,11 @@ var probes = map[string]probe{
 	// A wrong confirmation, so the probe deletes nothing the later probes need.
 	"deleteOrg":           {method: http.MethodDelete, path: "/v1/orgs/acme", body: `{"confirm":"nope"}`, org: testOrg},
 	"getOrgSettings":      {method: http.MethodGet, path: "/v1/orgs/acme/settings", org: testOrg},
+	"listMembers":         {method: http.MethodGet, path: "/v1/orgs/acme/members", org: testOrg},
+	"listInvitations":     {method: http.MethodGet, path: "/v1/orgs/acme/invitations", org: testOrg},
+	"setFactoryRole":      {method: http.MethodPut, path: "/v1/orgs/acme/members/x/factory-roles/acme", body: viewerRole, org: testOrg, factory: acmeID},
+	"removeFactoryRole":   {method: http.MethodDelete, path: "/v1/orgs/acme/members/x/factory-roles/acme", org: testOrg, factory: acmeID},
+	"transferOwnership":   {method: http.MethodPost, path: "/v1/orgs/acme/transfer", body: `{"to":"x","confirm":"nope"}`, org: testOrg},
 	"updateOrgSettings":   {method: http.MethodPatch, path: "/v1/orgs/acme/settings", body: `{"mark":"AC"}`, org: testOrg},
 	"listAudit":           {method: http.MethodGet, path: "/v1/orgs/acme/audit?factory=acme", org: testOrg, factory: acmeID},
 	"listFactories":       {method: http.MethodGet, path: "/v1/orgs/acme/factories", org: testOrg},

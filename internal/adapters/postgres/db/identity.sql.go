@@ -33,6 +33,30 @@ func (q *Queries) IdentityReady(ctx context.Context) (bool, error) {
 	return ready, err
 }
 
+const invitations = `-- name: Invitations :one
+SELECT goal_invitations()::jsonb AS invitations
+`
+
+// The pending, unexpired invitations of the transaction's organization (goal_invitations, 00045).
+func (q *Queries) Invitations(ctx context.Context) ([]byte, error) {
+	row := q.db.QueryRow(ctx, invitations)
+	var invitations []byte
+	err := row.Scan(&invitations)
+	return invitations, err
+}
+
+const members = `-- name: Members :one
+SELECT goal_members()::jsonb AS members
+`
+
+// The members of the transaction's organization, by name (goal_members, 00045).
+func (q *Queries) Members(ctx context.Context) ([]byte, error) {
+	row := q.db.QueryRow(ctx, members)
+	var members []byte
+	err := row.Scan(&members)
+	return members, err
+}
+
 const orgsFor = `-- name: OrgsFor :one
 SELECT goal_orgs_for($1::uuid)::jsonb AS orgs
 `
@@ -71,4 +95,27 @@ func (q *Queries) Principal(ctx context.Context, arg PrincipalParams) ([]byte, e
 	var principal []byte
 	err := row.Scan(&principal)
 	return principal, err
+}
+
+const transferOwnership = `-- name: TransferOwnership :exec
+SELECT goal_transfer_ownership($1::uuid, $2::uuid, $3::text, $4::text)
+`
+
+type TransferOwnershipParams struct {
+	FromUser  uuid.UUID
+	ToUser    uuid.UUID
+	ByRef     string
+	RequestID *string
+}
+
+// Makes the admin to_user an owner and the owner from_user an admin of the transaction's
+// organization, audited (goal_transfer_ownership, 00042).
+func (q *Queries) TransferOwnership(ctx context.Context, arg TransferOwnershipParams) error {
+	_, err := q.db.Exec(ctx, transferOwnership,
+		arg.FromUser,
+		arg.ToUser,
+		arg.ByRef,
+		arg.RequestID,
+	)
+	return err
 }

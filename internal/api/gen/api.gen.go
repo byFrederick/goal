@@ -574,19 +574,19 @@ func (e NoteReceiptDelivery) Valid() bool {
 
 // Defines values for OrgRole.
 const (
-	Admin  OrgRole = "admin"
-	Member OrgRole = "member"
-	Owner  OrgRole = "owner"
+	OrgRoleAdmin  OrgRole = "admin"
+	OrgRoleMember OrgRole = "member"
+	OrgRoleOwner  OrgRole = "owner"
 )
 
 // Valid indicates whether the value is a known member of the OrgRole enum.
 func (e OrgRole) Valid() bool {
 	switch e {
-	case Admin:
+	case OrgRoleAdmin:
 		return true
-	case Member:
+	case OrgRoleMember:
 		return true
-	case Owner:
+	case OrgRoleOwner:
 		return true
 	default:
 		return false
@@ -1693,6 +1693,20 @@ type FactoryOverviewList struct {
 // FactoryRole A ladder, each including the one before
 type FactoryRole string
 
+// FactoryRoleChange defines model for FactoryRoleChange.
+type FactoryRoleChange struct {
+	// Role A ladder, each including the one before
+	Role FactoryRole `json:"role"`
+}
+
+// FactoryRoleGrant A member's role on one factory
+type FactoryRoleGrant struct {
+	FactoryId string `json:"factory_id"`
+
+	// Role A ladder, each including the one before
+	Role FactoryRole `json:"role"`
+}
+
 // FactorySlots defines model for FactorySlots.
 type FactorySlots struct {
 	FactoryId string `json:"factory_id"`
@@ -1840,6 +1854,30 @@ type InboxEntry struct {
 
 // InboxEntryKind What waits; later phases add kinds, which clients that do not know them show as a generic row
 type InboxEntryKind string
+
+// Invitation A pending invitation
+type Invitation struct {
+	CreatedAt time.Time `json:"created_at"`
+	Email     string    `json:"email"`
+	ExpiresAt time.Time `json:"expires_at"`
+
+	// FactoryRoles Given when the invitation is accepted, to a member only
+	FactoryRoles []FactoryRoleGrant `json:"factory_roles"`
+	Id           string             `json:"id"`
+	Inviter      Inviter            `json:"inviter"`
+	Role         OrgRole            `json:"role"`
+}
+
+// InvitationList defines model for InvitationList.
+type InvitationList struct {
+	Invitations []Invitation `json:"invitations"`
+}
+
+// Inviter defines model for Inviter.
+type Inviter struct {
+	Id   string `json:"id"`
+	Name string `json:"name"`
+}
 
 // Item defines model for Item.
 type Item struct {
@@ -2099,6 +2137,35 @@ type MeSession struct {
 
 	// FreshUntil Until when changes that need a recent sign-in pass (10 minutes after created_at)
 	FreshUntil time.Time `json:"fresh_until"`
+}
+
+// Member defines model for Member.
+type Member struct {
+	// CanChangeRole Whether the caller may change this member's organization role: they hold member:manage, sign-in is on, and the member is not an owner, unless the caller is an owner too and the organization keeps another owner.
+	CanChangeRole bool `json:"can_change_role"`
+
+	// CanRemove As can_change_role, and not the caller themself (who leaves instead)
+	CanRemove bool `json:"can_remove"`
+
+	// FactoryRoles By factory id, on the factories the caller sees. Owners and admins have none: they are editors in every factory by their organization role.
+	FactoryRoles []FactoryRoleGrant `json:"factory_roles"`
+	JoinedAt     time.Time          `json:"joined_at"`
+
+	// LastActiveAt When their newest session was last used; null when they never signed in
+	LastActiveAt *time.Time `json:"last_active_at"`
+
+	// MemberId The membership's id, which the identity service's update-member-role and remove-member name
+	MemberId string  `json:"member_id"`
+	Role     OrgRole `json:"role"`
+	User     User    `json:"user"`
+
+	// You This member is the caller
+	You bool `json:"you"`
+}
+
+// MemberList defines model for MemberList.
+type MemberList struct {
+	Members []Member `json:"members"`
 }
 
 // MergeRequest defines model for MergeRequest.
@@ -2408,7 +2475,7 @@ type PlatformAdminList struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold. api-key-name-taken (409): another live key of the organization has the name. An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found.
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold. api-key-name-taken (409): another live key of the organization has the name. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found.
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
@@ -2771,6 +2838,15 @@ type Throughput struct {
 
 	// PreviousPerDay The same over the previous window
 	PreviousPerDay float64 `json:"previous_per_day"`
+}
+
+// TransferRequest defines model for TransferRequest.
+type TransferRequest struct {
+	// Confirm The organization's name, typed to confirm
+	Confirm string `json:"confirm"`
+
+	// To The user id of the admin who becomes an owner
+	To string `json:"to"`
 }
 
 // User defines model for User.
@@ -3224,8 +3300,14 @@ type PauseItemJSONRequestBody = PauseRequest
 // RejectItemJSONRequestBody defines body for RejectItem for application/json ContentType.
 type RejectItemJSONRequestBody = Rejection
 
+// SetFactoryRoleJSONRequestBody defines body for SetFactoryRole for application/json ContentType.
+type SetFactoryRoleJSONRequestBody = FactoryRoleChange
+
 // UpdateOrgSettingsJSONRequestBody defines body for UpdateOrgSettings for application/json ContentType.
 type UpdateOrgSettingsJSONRequestBody = OrgSettingsPatch
+
+// TransferOwnershipJSONRequestBody defines body for TransferOwnership for application/json ContentType.
+type TransferOwnershipJSONRequestBody = TransferRequest
 
 // AddPlatformAdminJSONRequestBody defines body for AddPlatformAdmin for application/json ContentType.
 type AddPlatformAdminJSONRequestBody = NewPlatformAdmin
@@ -4069,6 +4151,13 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/inbox (the `GetInbox` operationId).
 	GetInbox(ctx context.Context, org OrgRef, params *GetInboxParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListInvitations The organization's pending invitations, oldest first
+	//
+	// Expired, accepted, declined and cancelled invitations are left out.
+	//
+	// Corresponds with GET /v1/orgs/{org}/invitations (the `ListInvitations` operationId).
+	ListInvitations(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetItem One work item
 	//
 	// Corresponds with GET /v1/orgs/{org}/items/{item} (the `GetItem` operationId).
@@ -4184,6 +4273,38 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
 	ListItemRuns(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListMembers The organization's members, by name
+	//
+	// Each member with their organization role, their factory roles (on the factories the caller sees), when they joined and were last active, and what the caller may change about them. Inviting, changing an organization role and removing go to the identity service (/api/auth/organization/*, Better Auth's contract), whose owner rules apply; can_change_role and can_remove say in advance what it would refuse.
+	//
+	// Corresponds with GET /v1/orgs/{org}/members (the `ListMembers` operationId).
+	ListMembers(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RemoveFactoryRole Take a member's role on a factory away
+	//
+	// The member no longer sees the factory (unless they are an owner or an admin). Audited as factory_role.removed; nothing to remove is no change. Needs a sign-in from the last 10 minutes.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/members/{user}/factory-roles/{factory} (the `RemoveFactoryRole` operationId).
+	RemoveFactoryRole(ctx context.Context, org OrgRef, user UserRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetFactoryRoleWithBody Give a member a role on a factory
+	//
+	// Replaces the member's role on the factory; applies at once (their next request and their open streams) and is audited as factory_role.granted or factory_role.changed. 404 when the user is not a member or the factory not one of the organization's; 409 editor-everywhere for an owner or an admin, who hold every factory role by their organization role. Needs a sign-in from the last 10 minutes (403 reauth-required).
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/members/{user}/factory-roles/{factory} (the `SetFactoryRole` operationId).
+	SetFactoryRoleWithBody(ctx context.Context, org OrgRef, user UserRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetFactoryRole Give a member a role on a factory
+	//
+	// Replaces the member's role on the factory; applies at once (their next request and their open streams) and is audited as factory_role.granted or factory_role.changed. 404 when the user is not a member or the factory not one of the organization's; 409 editor-everywhere for an owner or an admin, who hold every factory role by their organization role. Needs a sign-in from the last 10 minutes (403 reauth-required).
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/members/{user}/factory-roles/{factory} (the `SetFactoryRole` operationId).
+	SetFactoryRole(ctx context.Context, org OrgRef, user UserRef, factory FactoryRef, body SetFactoryRoleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetFactoryOverview Every factory of the organization summarized for the Factories home, ordered by name
 	//
 	// Corresponds with GET /v1/orgs/{org}/overview (the `GetFactoryOverview` operationId).
@@ -4235,6 +4356,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/templates/{name} (the `GetTemplate` operationId).
 	GetTemplate(ctx context.Context, org OrgRef, name string, params *GetTemplateParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TransferOwnershipWithBody Hand the organization to an admin
+	//
+	// One atomic change: the admin `to` becomes an owner and the caller an admin, audited as org.ownership_transferred. `confirm` must be the organization's name exactly (409 confirmation-mismatch); `to` must be an admin (409 not-an-admin). Owners only, with a sign-in from the last 10 minutes. Answers the organization as the caller now sees it.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/transfer (the `TransferOwnership` operationId).
+	TransferOwnershipWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TransferOwnership Hand the organization to an admin
+	//
+	// One atomic change: the admin `to` becomes an owner and the caller an admin, audited as org.ownership_transferred. `confirm` must be the organization's name exactly (409 confirmation-mismatch); `to` must be an admin (409 not-an-admin). Owners only, with a sign-in from the last 10 minutes. Answers the organization as the caller now sees it.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/transfer (the `TransferOwnership` operationId).
+	TransferOwnership(ctx context.Context, org OrgRef, body TransferOwnershipJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListPlatformAdmins The install's platform admins, earliest first
 	//
@@ -5506,6 +5645,23 @@ func (c *Client) GetInbox(ctx context.Context, org OrgRef, params *GetInboxParam
 	return c.Client.Do(req)
 }
 
+// ListInvitations The organization's pending invitations, oldest first
+//
+// Expired, accepted, declined and cancelled invitations are left out.
+//
+// Corresponds with GET /v1/orgs/{org}/invitations (the `ListInvitations` operationId).
+func (c *Client) ListInvitations(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListInvitationsRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetItem One work item
 //
 // Corresponds with GET /v1/orgs/{org}/items/{item} (the `GetItem` operationId).
@@ -5771,6 +5927,78 @@ func (c *Client) ListItemRuns(ctx context.Context, org OrgRef, item ItemRef, req
 	return c.Client.Do(req)
 }
 
+// ListMembers The organization's members, by name
+//
+// Each member with their organization role, their factory roles (on the factories the caller sees), when they joined and were last active, and what the caller may change about them. Inviting, changing an organization role and removing go to the identity service (/api/auth/organization/*, Better Auth's contract), whose owner rules apply; can_change_role and can_remove say in advance what it would refuse.
+//
+// Corresponds with GET /v1/orgs/{org}/members (the `ListMembers` operationId).
+func (c *Client) ListMembers(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListMembersRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RemoveFactoryRole Take a member's role on a factory away
+//
+// The member no longer sees the factory (unless they are an owner or an admin). Audited as factory_role.removed; nothing to remove is no change. Needs a sign-in from the last 10 minutes.
+//
+// Corresponds with DELETE /v1/orgs/{org}/members/{user}/factory-roles/{factory} (the `RemoveFactoryRole` operationId).
+func (c *Client) RemoveFactoryRole(ctx context.Context, org OrgRef, user UserRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoveFactoryRoleRequest(c.Server, org, user, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetFactoryRoleWithBody Give a member a role on a factory
+//
+// Replaces the member's role on the factory; applies at once (their next request and their open streams) and is audited as factory_role.granted or factory_role.changed. 404 when the user is not a member or the factory not one of the organization's; 409 editor-everywhere for an owner or an admin, who hold every factory role by their organization role. Needs a sign-in from the last 10 minutes (403 reauth-required).
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/members/{user}/factory-roles/{factory} (the `SetFactoryRole` operationId).
+func (c *Client) SetFactoryRoleWithBody(ctx context.Context, org OrgRef, user UserRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetFactoryRoleRequestWithBody(c.Server, org, user, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetFactoryRole Give a member a role on a factory
+//
+// Replaces the member's role on the factory; applies at once (their next request and their open streams) and is audited as factory_role.granted or factory_role.changed. 404 when the user is not a member or the factory not one of the organization's; 409 editor-everywhere for an owner or an admin, who hold every factory role by their organization role. Needs a sign-in from the last 10 minutes (403 reauth-required).
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/members/{user}/factory-roles/{factory} (the `SetFactoryRole` operationId).
+func (c *Client) SetFactoryRole(ctx context.Context, org OrgRef, user UserRef, factory FactoryRef, body SetFactoryRoleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetFactoryRoleRequest(c.Server, org, user, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetFactoryOverview Every factory of the organization summarized for the Factories home, ordered by name
 //
 // Corresponds with GET /v1/orgs/{org}/overview (the `GetFactoryOverview` operationId).
@@ -5893,6 +6121,44 @@ func (c *Client) ListTemplates(ctx context.Context, org OrgRef, reqEditors ...Re
 // Corresponds with GET /v1/orgs/{org}/templates/{name} (the `GetTemplate` operationId).
 func (c *Client) GetTemplate(ctx context.Context, org OrgRef, name string, params *GetTemplateParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetTemplateRequest(c.Server, org, name, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TransferOwnershipWithBody Hand the organization to an admin
+//
+// One atomic change: the admin `to` becomes an owner and the caller an admin, audited as org.ownership_transferred. `confirm` must be the organization's name exactly (409 confirmation-mismatch); `to` must be an admin (409 not-an-admin). Owners only, with a sign-in from the last 10 minutes. Answers the organization as the caller now sees it.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/transfer (the `TransferOwnership` operationId).
+func (c *Client) TransferOwnershipWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTransferOwnershipRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TransferOwnership Hand the organization to an admin
+//
+// One atomic change: the admin `to` becomes an owner and the caller an admin, audited as org.ownership_transferred. `confirm` must be the organization's name exactly (409 confirmation-mismatch); `to` must be an admin (409 not-an-admin). Owners only, with a sign-in from the last 10 minutes. Answers the organization as the caller now sees it.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/transfer (the `TransferOwnership` operationId).
+func (c *Client) TransferOwnership(ctx context.Context, org OrgRef, body TransferOwnershipJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTransferOwnershipRequest(c.Server, org, body)
 	if err != nil {
 		return nil, err
 	}
@@ -9082,6 +9348,40 @@ func NewGetInboxRequest(server string, org OrgRef, params *GetInboxParams) (*htt
 	return req, nil
 }
 
+// NewListInvitationsRequest constructs an http.Request for the ListInvitations method
+func NewListInvitationsRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/invitations", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetItemRequest constructs an http.Request for the GetItem method
 func NewGetItemRequest(server string, org OrgRef, item ItemRef) (*http.Request, error) {
 	var err error
@@ -9596,6 +9896,149 @@ func NewListItemRunsRequest(server string, org OrgRef, item ItemRef) (*http.Requ
 	return req, nil
 }
 
+// NewListMembersRequest constructs an http.Request for the ListMembers method
+func NewListMembersRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/members", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRemoveFactoryRoleRequest constructs an http.Request for the RemoveFactoryRole method
+func NewRemoveFactoryRoleRequest(server string, org OrgRef, user UserRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "user", user, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/members/%s/factory-roles/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSetFactoryRoleRequest calls the generic SetFactoryRole builder with application/json body
+func NewSetFactoryRoleRequest(server string, org OrgRef, user UserRef, factory FactoryRef, body SetFactoryRoleJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSetFactoryRoleRequestWithBody(server, org, user, factory, "application/json", bodyReader)
+}
+
+// NewSetFactoryRoleRequestWithBody constructs an http.Request for the SetFactoryRole method, with any body, and a specified content type
+func NewSetFactoryRoleRequestWithBody(server string, org OrgRef, user UserRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "user", user, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/members/%s/factory-roles/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetFactoryOverviewRequest constructs an http.Request for the GetFactoryOverview method
 func NewGetFactoryOverviewRequest(server string, org OrgRef, params *GetFactoryOverviewParams) (*http.Request, error) {
 	var err error
@@ -9938,6 +10381,53 @@ func NewGetTemplateRequest(server string, org OrgRef, name string, params *GetTe
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewTransferOwnershipRequest calls the generic TransferOwnership builder with application/json body
+func NewTransferOwnershipRequest(server string, org OrgRef, body TransferOwnershipJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTransferOwnershipRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewTransferOwnershipRequestWithBody constructs an http.Request for the TransferOwnership method, with any body, and a specified content type
+func NewTransferOwnershipRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/transfer", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -10771,6 +11261,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/inbox (the `GetInbox` operationId).
 	GetInboxWithResponse(ctx context.Context, org OrgRef, params *GetInboxParams, reqEditors ...RequestEditorFn) (*GetInboxResponse, error)
 
+	// ListInvitationsWithResponse The organization's pending invitations, oldest first
+	//
+	// Expired, accepted, declined and cancelled invitations are left out.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/invitations (the `ListInvitations` operationId).
+	ListInvitationsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListInvitationsResponse, error)
+
 	// GetItemWithResponse One work item
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -10896,6 +11395,42 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
 	ListItemRunsWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*ListItemRunsResponse, error)
 
+	// ListMembersWithResponse The organization's members, by name
+	//
+	// Each member with their organization role, their factory roles (on the factories the caller sees), when they joined and were last active, and what the caller may change about them. Inviting, changing an organization role and removing go to the identity service (/api/auth/organization/*, Better Auth's contract), whose owner rules apply; can_change_role and can_remove say in advance what it would refuse.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/members (the `ListMembers` operationId).
+	ListMembersWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListMembersResponse, error)
+
+	// RemoveFactoryRoleWithResponse Take a member's role on a factory away
+	//
+	// The member no longer sees the factory (unless they are an owner or an admin). Audited as factory_role.removed; nothing to remove is no change. Needs a sign-in from the last 10 minutes.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/members/{user}/factory-roles/{factory} (the `RemoveFactoryRole` operationId).
+	RemoveFactoryRoleWithResponse(ctx context.Context, org OrgRef, user UserRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*RemoveFactoryRoleResponse, error)
+
+	// SetFactoryRoleWithBodyWithResponse Give a member a role on a factory
+	//
+	// Replaces the member's role on the factory; applies at once (their next request and their open streams) and is audited as factory_role.granted or factory_role.changed. 404 when the user is not a member or the factory not one of the organization's; 409 editor-everywhere for an owner or an admin, who hold every factory role by their organization role. Needs a sign-in from the last 10 minutes (403 reauth-required).
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/members/{user}/factory-roles/{factory} (the `SetFactoryRole` operationId).
+	SetFactoryRoleWithBodyWithResponse(ctx context.Context, org OrgRef, user UserRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetFactoryRoleResponse, error)
+
+	// SetFactoryRoleWithResponse Give a member a role on a factory
+	//
+	// Replaces the member's role on the factory; applies at once (their next request and their open streams) and is audited as factory_role.granted or factory_role.changed. 404 when the user is not a member or the factory not one of the organization's; 409 editor-everywhere for an owner or an admin, who hold every factory role by their organization role. Needs a sign-in from the last 10 minutes (403 reauth-required).
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/members/{user}/factory-roles/{factory} (the `SetFactoryRole` operationId).
+	SetFactoryRoleWithResponse(ctx context.Context, org OrgRef, user UserRef, factory FactoryRef, body SetFactoryRoleJSONRequestBody, reqEditors ...RequestEditorFn) (*SetFactoryRoleResponse, error)
+
 	// GetFactoryOverviewWithResponse Every factory of the organization summarized for the Factories home, ordered by name
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -10959,6 +11494,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/templates/{name} (the `GetTemplate` operationId).
 	GetTemplateWithResponse(ctx context.Context, org OrgRef, name string, params *GetTemplateParams, reqEditors ...RequestEditorFn) (*GetTemplateResponse, error)
+
+	// TransferOwnershipWithBodyWithResponse Hand the organization to an admin
+	//
+	// One atomic change: the admin `to` becomes an owner and the caller an admin, audited as org.ownership_transferred. `confirm` must be the organization's name exactly (409 confirmation-mismatch); `to` must be an admin (409 not-an-admin). Owners only, with a sign-in from the last 10 minutes. Answers the organization as the caller now sees it.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/transfer (the `TransferOwnership` operationId).
+	TransferOwnershipWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TransferOwnershipResponse, error)
+
+	// TransferOwnershipWithResponse Hand the organization to an admin
+	//
+	// One atomic change: the admin `to` becomes an owner and the caller an admin, audited as org.ownership_transferred. `confirm` must be the organization's name exactly (409 confirmation-mismatch); `to` must be an admin (409 not-an-admin). Owners only, with a sign-in from the last 10 minutes. Answers the organization as the caller now sees it.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/transfer (the `TransferOwnership` operationId).
+	TransferOwnershipWithResponse(ctx context.Context, org OrgRef, body TransferOwnershipJSONRequestBody, reqEditors ...RequestEditorFn) (*TransferOwnershipResponse, error)
 
 	// ListPlatformAdminsWithResponse The install's platform admins, earliest first
 	//
@@ -13633,6 +14186,54 @@ func (r GetInboxResponse) ContentType() string {
 	return ""
 }
 
+type ListInvitationsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *InvitationList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListInvitationsResponse) GetJSON200() *InvitationList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListInvitationsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListInvitationsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListInvitationsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListInvitationsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListInvitationsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetItemResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -14113,6 +14714,143 @@ func (r ListItemRunsResponse) ContentType() string {
 	return ""
 }
 
+type ListMembersResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *MemberList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListMembersResponse) GetJSON200() *MemberList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListMembersResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListMembersResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListMembersResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListMembersResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListMembersResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RemoveFactoryRoleResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RemoveFactoryRoleResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RemoveFactoryRoleResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RemoveFactoryRoleResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RemoveFactoryRoleResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RemoveFactoryRoleResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SetFactoryRoleResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *FactoryRoleGrant
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SetFactoryRoleResponse) GetJSON200() *FactoryRoleGrant {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SetFactoryRoleResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SetFactoryRoleResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SetFactoryRoleResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SetFactoryRoleResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SetFactoryRoleResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetFactoryOverviewResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -14436,6 +15174,54 @@ func (r GetTemplateResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetTemplateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type TransferOwnershipResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Org
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TransferOwnershipResponse) GetJSON200() *Org {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TransferOwnershipResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TransferOwnershipResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TransferOwnershipResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TransferOwnershipResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TransferOwnershipResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -15653,6 +16439,21 @@ func (c *ClientWithResponses) GetInboxWithResponse(ctx context.Context, org OrgR
 	return ParseGetInboxResponse(rsp)
 }
 
+// ListInvitationsWithResponse The organization's pending invitations, oldest first
+//
+// Expired, accepted, declined and cancelled invitations are left out.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/invitations (the `ListInvitations` operationId).
+func (c *ClientWithResponses) ListInvitationsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListInvitationsResponse, error) {
+	rsp, err := c.ListInvitations(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListInvitationsResponse(rsp)
+}
+
 // GetItemWithResponse One work item
 //
 // Returns a wrapper object for the known response body format(s).
@@ -15868,6 +16669,66 @@ func (c *ClientWithResponses) ListItemRunsWithResponse(ctx context.Context, org 
 	return ParseListItemRunsResponse(rsp)
 }
 
+// ListMembersWithResponse The organization's members, by name
+//
+// Each member with their organization role, their factory roles (on the factories the caller sees), when they joined and were last active, and what the caller may change about them. Inviting, changing an organization role and removing go to the identity service (/api/auth/organization/*, Better Auth's contract), whose owner rules apply; can_change_role and can_remove say in advance what it would refuse.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/members (the `ListMembers` operationId).
+func (c *ClientWithResponses) ListMembersWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListMembersResponse, error) {
+	rsp, err := c.ListMembers(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListMembersResponse(rsp)
+}
+
+// RemoveFactoryRoleWithResponse Take a member's role on a factory away
+//
+// The member no longer sees the factory (unless they are an owner or an admin). Audited as factory_role.removed; nothing to remove is no change. Needs a sign-in from the last 10 minutes.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/members/{user}/factory-roles/{factory} (the `RemoveFactoryRole` operationId).
+func (c *ClientWithResponses) RemoveFactoryRoleWithResponse(ctx context.Context, org OrgRef, user UserRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*RemoveFactoryRoleResponse, error) {
+	rsp, err := c.RemoveFactoryRole(ctx, org, user, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoveFactoryRoleResponse(rsp)
+}
+
+// SetFactoryRoleWithBodyWithResponse Give a member a role on a factory
+//
+// Replaces the member's role on the factory; applies at once (their next request and their open streams) and is audited as factory_role.granted or factory_role.changed. 404 when the user is not a member or the factory not one of the organization's; 409 editor-everywhere for an owner or an admin, who hold every factory role by their organization role. Needs a sign-in from the last 10 minutes (403 reauth-required).
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/members/{user}/factory-roles/{factory} (the `SetFactoryRole` operationId).
+func (c *ClientWithResponses) SetFactoryRoleWithBodyWithResponse(ctx context.Context, org OrgRef, user UserRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetFactoryRoleResponse, error) {
+	rsp, err := c.SetFactoryRoleWithBody(ctx, org, user, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetFactoryRoleResponse(rsp)
+}
+
+// SetFactoryRoleWithResponse Give a member a role on a factory
+//
+// Replaces the member's role on the factory; applies at once (their next request and their open streams) and is audited as factory_role.granted or factory_role.changed. 404 when the user is not a member or the factory not one of the organization's; 409 editor-everywhere for an owner or an admin, who hold every factory role by their organization role. Needs a sign-in from the last 10 minutes (403 reauth-required).
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/members/{user}/factory-roles/{factory} (the `SetFactoryRole` operationId).
+func (c *ClientWithResponses) SetFactoryRoleWithResponse(ctx context.Context, org OrgRef, user UserRef, factory FactoryRef, body SetFactoryRoleJSONRequestBody, reqEditors ...RequestEditorFn) (*SetFactoryRoleResponse, error) {
+	rsp, err := c.SetFactoryRole(ctx, org, user, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetFactoryRoleResponse(rsp)
+}
+
 // GetFactoryOverviewWithResponse Every factory of the organization summarized for the Factories home, ordered by name
 //
 // Returns a wrapper object for the known response body format(s).
@@ -15978,6 +16839,36 @@ func (c *ClientWithResponses) GetTemplateWithResponse(ctx context.Context, org O
 		return nil, err
 	}
 	return ParseGetTemplateResponse(rsp)
+}
+
+// TransferOwnershipWithBodyWithResponse Hand the organization to an admin
+//
+// One atomic change: the admin `to` becomes an owner and the caller an admin, audited as org.ownership_transferred. `confirm` must be the organization's name exactly (409 confirmation-mismatch); `to` must be an admin (409 not-an-admin). Owners only, with a sign-in from the last 10 minutes. Answers the organization as the caller now sees it.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/transfer (the `TransferOwnership` operationId).
+func (c *ClientWithResponses) TransferOwnershipWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TransferOwnershipResponse, error) {
+	rsp, err := c.TransferOwnershipWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTransferOwnershipResponse(rsp)
+}
+
+// TransferOwnershipWithResponse Hand the organization to an admin
+//
+// One atomic change: the admin `to` becomes an owner and the caller an admin, audited as org.ownership_transferred. `confirm` must be the organization's name exactly (409 confirmation-mismatch); `to` must be an admin (409 not-an-admin). Owners only, with a sign-in from the last 10 minutes. Answers the organization as the caller now sees it.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/transfer (the `TransferOwnership` operationId).
+func (c *ClientWithResponses) TransferOwnershipWithResponse(ctx context.Context, org OrgRef, body TransferOwnershipJSONRequestBody, reqEditors ...RequestEditorFn) (*TransferOwnershipResponse, error) {
+	rsp, err := c.TransferOwnership(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTransferOwnershipResponse(rsp)
 }
 
 // ListPlatformAdminsWithResponse The install's platform admins, earliest first
@@ -17902,6 +18793,39 @@ func ParseGetInboxResponse(rsp *http.Response) (*GetInboxResponse, error) {
 	return response, nil
 }
 
+// ParseListInvitationsResponse parses an HTTP response from a ListInvitationsWithResponse call
+func ParseListInvitationsResponse(rsp *http.Response) (*ListInvitationsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListInvitationsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest InvitationList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetItemResponse parses an HTTP response from a GetItemWithResponse call
 func ParseGetItemResponse(rsp *http.Response) (*GetItemResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -18232,6 +19156,101 @@ func ParseListItemRunsResponse(rsp *http.Response) (*ListItemRunsResponse, error
 	return response, nil
 }
 
+// ParseListMembersResponse parses an HTTP response from a ListMembersWithResponse call
+func ParseListMembersResponse(rsp *http.Response) (*ListMembersResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListMembersResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MemberList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRemoveFactoryRoleResponse parses an HTTP response from a RemoveFactoryRoleWithResponse call
+func ParseRemoveFactoryRoleResponse(rsp *http.Response) (*RemoveFactoryRoleResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RemoveFactoryRoleResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSetFactoryRoleResponse parses an HTTP response from a SetFactoryRoleWithResponse call
+func ParseSetFactoryRoleResponse(rsp *http.Response) (*SetFactoryRoleResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SetFactoryRoleResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest FactoryRoleGrant
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetFactoryOverviewResponse parses an HTTP response from a GetFactoryOverviewWithResponse call
 func ParseGetFactoryOverviewResponse(rsp *http.Response) (*GetFactoryOverviewResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -18439,6 +19458,39 @@ func ParseGetTemplateResponse(rsp *http.Response) (*GetTemplateResponse, error) 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Template
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTransferOwnershipResponse parses an HTTP response from a TransferOwnershipWithResponse call
+func ParseTransferOwnershipResponse(rsp *http.Response) (*TransferOwnershipResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TransferOwnershipResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Org
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -18751,6 +19803,9 @@ type ServerInterface interface {
 	// GetInbox What waits for a person across the organization's factories
 	// (GET /v1/orgs/{org}/inbox)
 	GetInbox(w http.ResponseWriter, r *http.Request, org OrgRef, params GetInboxParams)
+	// ListInvitations The organization's pending invitations, oldest first
+	// (GET /v1/orgs/{org}/invitations)
+	ListInvitations(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// GetItem One work item
 	// (GET /v1/orgs/{org}/items/{item})
 	GetItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
@@ -18781,6 +19836,15 @@ type ServerInterface interface {
 	// ListItemRuns An item's agent runs, oldest first (at most 200)
 	// (GET /v1/orgs/{org}/items/{item}/runs)
 	ListItemRuns(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// ListMembers The organization's members, by name
+	// (GET /v1/orgs/{org}/members)
+	ListMembers(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// RemoveFactoryRole Take a member's role on a factory away
+	// (DELETE /v1/orgs/{org}/members/{user}/factory-roles/{factory})
+	RemoveFactoryRole(w http.ResponseWriter, r *http.Request, org OrgRef, user UserRef, factory FactoryRef)
+	// SetFactoryRole Give a member a role on a factory
+	// (PUT /v1/orgs/{org}/members/{user}/factory-roles/{factory})
+	SetFactoryRole(w http.ResponseWriter, r *http.Request, org OrgRef, user UserRef, factory FactoryRef)
 	// GetFactoryOverview Every factory of the organization summarized for the Factories home, ordered by name
 	// (GET /v1/orgs/{org}/overview)
 	GetFactoryOverview(w http.ResponseWriter, r *http.Request, org OrgRef, params GetFactoryOverviewParams)
@@ -18802,6 +19866,9 @@ type ServerInterface interface {
 	// GetTemplate One version of a template with a preview of its model
 	// (GET /v1/orgs/{org}/templates/{name})
 	GetTemplate(w http.ResponseWriter, r *http.Request, org OrgRef, name string, params GetTemplateParams)
+	// TransferOwnership Hand the organization to an admin
+	// (POST /v1/orgs/{org}/transfer)
+	TransferOwnership(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// ListPlatformAdmins The install's platform admins, earliest first
 	// (GET /v1/platform/admins)
 	ListPlatformAdmins(w http.ResponseWriter, r *http.Request)
@@ -21282,6 +22349,32 @@ func (siw *ServerInterfaceWrapper) GetInbox(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// ListInvitations operation middleware
+func (siw *ServerInterfaceWrapper) ListInvitations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListInvitations(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetItem operation middleware
 func (siw *ServerInterfaceWrapper) GetItem(w http.ResponseWriter, r *http.Request) {
 
@@ -21661,6 +22754,120 @@ func (siw *ServerInterfaceWrapper) ListItemRuns(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// ListMembers operation middleware
+func (siw *ServerInterfaceWrapper) ListMembers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListMembers(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveFactoryRole operation middleware
+func (siw *ServerInterfaceWrapper) RemoveFactoryRole(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "user" -------------
+	var user UserRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "user", r.PathValue("user"), &user, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "user", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveFactoryRole(w, r, org, user, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetFactoryRole operation middleware
+func (siw *ServerInterfaceWrapper) SetFactoryRole(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "user" -------------
+	var user UserRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "user", r.PathValue("user"), &user, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "user", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetFactoryRole(w, r, org, user, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetFactoryOverview operation middleware
 func (siw *ServerInterfaceWrapper) GetFactoryOverview(w http.ResponseWriter, r *http.Request) {
 
@@ -21900,6 +23107,32 @@ func (siw *ServerInterfaceWrapper) GetTemplate(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetTemplate(w, r, org, name, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TransferOwnership operation middleware
+func (siw *ServerInterfaceWrapper) TransferOwnership(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TransferOwnership(w, r, org)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -22160,6 +23393,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/api-keys", wrapper.ListAPIKeys)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/api-keys", wrapper.CreateAPIKey)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/api-keys/{key}", wrapper.RevokeAPIKey)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/members", wrapper.ListMembers)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/invitations", wrapper.ListInvitations)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/members/{user}/factory-roles/{factory}", wrapper.RemoveFactoryRole)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/members/{user}/factory-roles/{factory}", wrapper.SetFactoryRole)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/transfer", wrapper.TransferOwnership)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/attention", wrapper.GetOrgAttention)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/overview", wrapper.GetFactoryOverview)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/inbox", wrapper.GetInbox)
@@ -24449,6 +25687,45 @@ func (response GetInboxdefaultApplicationProblemPlusJSONResponse) VisitGetInboxR
 	return err
 }
 
+type ListInvitationsRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type ListInvitationsResponseObject interface {
+	VisitListInvitationsResponse(w http.ResponseWriter) error
+}
+
+type ListInvitations200JSONResponse InvitationList
+
+func (response ListInvitations200JSONResponse) VisitListInvitationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListInvitationsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListInvitationsdefaultApplicationProblemPlusJSONResponse) VisitListInvitationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetItemRequestObject struct {
 	Org  OrgRef  `json:"org"`
 	Item ItemRef `json:"item"`
@@ -24855,6 +26132,122 @@ func (response ListItemRunsdefaultApplicationProblemPlusJSONResponse) VisitListI
 	return err
 }
 
+type ListMembersRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type ListMembersResponseObject interface {
+	VisitListMembersResponse(w http.ResponseWriter) error
+}
+
+type ListMembers200JSONResponse MemberList
+
+func (response ListMembers200JSONResponse) VisitListMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMembersdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListMembersdefaultApplicationProblemPlusJSONResponse) VisitListMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveFactoryRoleRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	User    UserRef    `json:"user"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type RemoveFactoryRoleResponseObject interface {
+	VisitRemoveFactoryRoleResponse(w http.ResponseWriter) error
+}
+
+type RemoveFactoryRole204Response struct {
+}
+
+func (response RemoveFactoryRole204Response) VisitRemoveFactoryRoleResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RemoveFactoryRoledefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RemoveFactoryRoledefaultApplicationProblemPlusJSONResponse) VisitRemoveFactoryRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetFactoryRoleRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	User    UserRef    `json:"user"`
+	Factory FactoryRef `json:"factory"`
+	Body    *SetFactoryRoleJSONRequestBody
+}
+
+type SetFactoryRoleResponseObject interface {
+	VisitSetFactoryRoleResponse(w http.ResponseWriter) error
+}
+
+type SetFactoryRole200JSONResponse FactoryRoleGrant
+
+func (response SetFactoryRole200JSONResponse) VisitSetFactoryRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetFactoryRoledefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response SetFactoryRoledefaultApplicationProblemPlusJSONResponse) VisitSetFactoryRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetFactoryOverviewRequestObject struct {
 	Org    OrgRef `json:"org"`
 	Params GetFactoryOverviewParams
@@ -25152,6 +26545,46 @@ type GetTemplatedefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetTemplatedefaultApplicationProblemPlusJSONResponse) VisitGetTemplateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TransferOwnershipRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *TransferOwnershipJSONRequestBody
+}
+
+type TransferOwnershipResponseObject interface {
+	VisitTransferOwnershipResponse(w http.ResponseWriter) error
+}
+
+type TransferOwnership200JSONResponse Org
+
+func (response TransferOwnership200JSONResponse) VisitTransferOwnershipResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TransferOwnershipdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response TransferOwnershipdefaultApplicationProblemPlusJSONResponse) VisitTransferOwnershipResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -25479,6 +26912,9 @@ type StrictServerInterface interface {
 	// GetInbox What waits for a person across the organization's factories
 	// (GET /v1/orgs/{org}/inbox)
 	GetInbox(ctx context.Context, request GetInboxRequestObject) (GetInboxResponseObject, error)
+	// ListInvitations The organization's pending invitations, oldest first
+	// (GET /v1/orgs/{org}/invitations)
+	ListInvitations(ctx context.Context, request ListInvitationsRequestObject) (ListInvitationsResponseObject, error)
 	// GetItem One work item
 	// (GET /v1/orgs/{org}/items/{item})
 	GetItem(ctx context.Context, request GetItemRequestObject) (GetItemResponseObject, error)
@@ -25509,6 +26945,15 @@ type StrictServerInterface interface {
 	// ListItemRuns An item's agent runs, oldest first (at most 200)
 	// (GET /v1/orgs/{org}/items/{item}/runs)
 	ListItemRuns(ctx context.Context, request ListItemRunsRequestObject) (ListItemRunsResponseObject, error)
+	// ListMembers The organization's members, by name
+	// (GET /v1/orgs/{org}/members)
+	ListMembers(ctx context.Context, request ListMembersRequestObject) (ListMembersResponseObject, error)
+	// RemoveFactoryRole Take a member's role on a factory away
+	// (DELETE /v1/orgs/{org}/members/{user}/factory-roles/{factory})
+	RemoveFactoryRole(ctx context.Context, request RemoveFactoryRoleRequestObject) (RemoveFactoryRoleResponseObject, error)
+	// SetFactoryRole Give a member a role on a factory
+	// (PUT /v1/orgs/{org}/members/{user}/factory-roles/{factory})
+	SetFactoryRole(ctx context.Context, request SetFactoryRoleRequestObject) (SetFactoryRoleResponseObject, error)
 	// GetFactoryOverview Every factory of the organization summarized for the Factories home, ordered by name
 	// (GET /v1/orgs/{org}/overview)
 	GetFactoryOverview(ctx context.Context, request GetFactoryOverviewRequestObject) (GetFactoryOverviewResponseObject, error)
@@ -25530,6 +26975,9 @@ type StrictServerInterface interface {
 	// GetTemplate One version of a template with a preview of its model
 	// (GET /v1/orgs/{org}/templates/{name})
 	GetTemplate(ctx context.Context, request GetTemplateRequestObject) (GetTemplateResponseObject, error)
+	// TransferOwnership Hand the organization to an admin
+	// (POST /v1/orgs/{org}/transfer)
+	TransferOwnership(ctx context.Context, request TransferOwnershipRequestObject) (TransferOwnershipResponseObject, error)
 	// ListPlatformAdmins The install's platform admins, earliest first
 	// (GET /v1/platform/admins)
 	ListPlatformAdmins(ctx context.Context, request ListPlatformAdminsRequestObject) (ListPlatformAdminsResponseObject, error)
@@ -27188,6 +28636,32 @@ func (sh *strictHandler) GetInbox(w http.ResponseWriter, r *http.Request, org Or
 	}
 }
 
+// ListInvitations operation middleware
+func (sh *strictHandler) ListInvitations(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request ListInvitationsRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListInvitations(ctx, request.(ListInvitationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListInvitations")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListInvitationsResponseObject); ok {
+		if err := validResponse.VisitListInvitationsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetItem operation middleware
 func (sh *strictHandler) GetItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
 	var request GetItemRequestObject
@@ -27500,6 +28974,95 @@ func (sh *strictHandler) ListItemRuns(w http.ResponseWriter, r *http.Request, or
 	}
 }
 
+// ListMembers operation middleware
+func (sh *strictHandler) ListMembers(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request ListMembersRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListMembers(ctx, request.(ListMembersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListMembers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListMembersResponseObject); ok {
+		if err := validResponse.VisitListMembersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemoveFactoryRole operation middleware
+func (sh *strictHandler) RemoveFactoryRole(w http.ResponseWriter, r *http.Request, org OrgRef, user UserRef, factory FactoryRef) {
+	var request RemoveFactoryRoleRequestObject
+
+	request.Org = org
+	request.User = user
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemoveFactoryRole(ctx, request.(RemoveFactoryRoleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemoveFactoryRole")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemoveFactoryRoleResponseObject); ok {
+		if err := validResponse.VisitRemoveFactoryRoleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetFactoryRole operation middleware
+func (sh *strictHandler) SetFactoryRole(w http.ResponseWriter, r *http.Request, org OrgRef, user UserRef, factory FactoryRef) {
+	var request SetFactoryRoleRequestObject
+
+	request.Org = org
+	request.User = user
+	request.Factory = factory
+
+	var body SetFactoryRoleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetFactoryRole(ctx, request.(SetFactoryRoleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetFactoryRole")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetFactoryRoleResponseObject); ok {
+		if err := validResponse.VisitSetFactoryRoleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetFactoryOverview operation middleware
 func (sh *strictHandler) GetFactoryOverview(w http.ResponseWriter, r *http.Request, org OrgRef, params GetFactoryOverviewParams) {
 	var request GetFactoryOverviewRequestObject
@@ -27687,6 +29250,39 @@ func (sh *strictHandler) GetTemplate(w http.ResponseWriter, r *http.Request, org
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetTemplateResponseObject); ok {
 		if err := validResponse.VisitGetTemplateResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TransferOwnership operation middleware
+func (sh *strictHandler) TransferOwnership(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request TransferOwnershipRequestObject
+
+	request.Org = org
+
+	var body TransferOwnershipJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TransferOwnership(ctx, request.(TransferOwnershipRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TransferOwnership")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TransferOwnershipResponseObject); ok {
+		if err := validResponse.VisitTransferOwnershipResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -81,7 +81,13 @@ test.describe('a viewer', () => {
     await expect(name).toHaveAttribute('readonly', '');
     await expect(page.getByRole('button', { name: /^Remove work type/ })).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Who approves' })).toBeVisible();
-    await expect(page.getByText('Owners and admins of Acme, and this factory’s approvers and editors.')).toBeVisible();
+    await expect(
+      page.getByText(
+        'Owners and admins of Acme, and this factory’s approvers and editors: F. Cruz, M. Okafor, S. Lee.',
+      ),
+    ).toBeVisible();
+    // Only whoever manages people changes it.
+    await expect(page.getByRole('link', { name: 'Change in Members' })).toHaveCount(0);
     await expectAccessible(page);
     await expectNoHorizontalScroll(page);
 

@@ -292,6 +292,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's members, by name
+         * @description Each member with their organization role, their factory roles (on the factories the caller sees), when they joined and were last active, and what the caller may change about them. Inviting, changing an organization role and removing go to the identity service (/api/auth/organization/*, Better Auth's contract), whose owner rules apply; can_change_role and can_remove say in advance what it would refuse.
+         */
+        get: operations["listMembers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's pending invitations, oldest first
+         * @description Expired, accepted, declined and cancelled invitations are left out.
+         */
+        get: operations["listInvitations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/members/{user}/factory-roles/{factory}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description A person's user id */
+                user: components["parameters"]["UserRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Give a member a role on a factory
+         * @description Replaces the member's role on the factory; applies at once (their next request and their open streams) and is audited as factory_role.granted or factory_role.changed. 404 when the user is not a member or the factory not one of the organization's; 409 editor-everywhere for an owner or an admin, who hold every factory role by their organization role. Needs a sign-in from the last 10 minutes (403 reauth-required).
+         */
+        put: operations["setFactoryRole"];
+        post?: never;
+        /**
+         * Take a member's role on a factory away
+         * @description The member no longer sees the factory (unless they are an owner or an admin). Audited as factory_role.removed; nothing to remove is no change. Needs a sign-in from the last 10 minutes.
+         */
+        delete: operations["removeFactoryRole"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/transfer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hand the organization to an admin
+         * @description One atomic change: the admin `to` becomes an owner and the caller an admin, audited as org.ownership_transferred. `confirm` must be the organization's name exactly (409 confirmation-mismatch); `to` must be an admin (409 not-an-admin). Owners only, with a sign-in from the last 10 minutes. Answers the organization as the caller now sees it.
+         */
+        post: operations["transferOwnership"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/attention": {
         parameters: {
             query?: never;
@@ -1537,7 +1637,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold. api-key-name-taken (409): another live key of the organization has the name. An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold. api-key-name-taken (409): another live key of the organization has the name. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -1751,6 +1851,64 @@ export interface components {
         FactoryRole: "viewer" | "approver" | "editor";
         /** @description One permission of api/permissions.yaml, such as org:read or item:decide */
         Permission: string;
+        /** @description A member's role on one factory */
+        FactoryRoleGrant: {
+            factory_id: string;
+            role: components["schemas"]["FactoryRole"];
+        };
+        FactoryRoleChange: {
+            role: components["schemas"]["FactoryRole"];
+        };
+        MemberList: {
+            members: components["schemas"]["Member"][];
+        };
+        Member: {
+            /** @description The membership's id, which the identity service's update-member-role and remove-member name */
+            member_id: string;
+            user: components["schemas"]["User"];
+            role: components["schemas"]["OrgRole"];
+            /** @description By factory id, on the factories the caller sees. Owners and admins have none: they are editors in every factory by their organization role. */
+            factory_roles: components["schemas"]["FactoryRoleGrant"][];
+            /** Format: date-time */
+            joined_at: string;
+            /**
+             * Format: date-time
+             * @description When their newest session was last used; null when they never signed in
+             */
+            last_active_at: string | null;
+            /** @description This member is the caller */
+            you: boolean;
+            /** @description Whether the caller may change this member's organization role: they hold member:manage, sign-in is on, and the member is not an owner, unless the caller is an owner too and the organization keeps another owner. */
+            can_change_role: boolean;
+            /** @description As can_change_role, and not the caller themself (who leaves instead) */
+            can_remove: boolean;
+        };
+        InvitationList: {
+            invitations: components["schemas"]["Invitation"][];
+        };
+        /** @description A pending invitation */
+        Invitation: {
+            id: string;
+            email: string;
+            role: components["schemas"]["OrgRole"];
+            /** @description Given when the invitation is accepted, to a member only */
+            factory_roles: components["schemas"]["FactoryRoleGrant"][];
+            inviter: components["schemas"]["Inviter"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        Inviter: {
+            id: string;
+            name: string;
+        };
+        TransferRequest: {
+            /** @description The user id of the admin who becomes an owner */
+            to: string;
+            /** @description The organization's name, typed to confirm */
+            confirm: string;
+        };
         NewOrg: {
             name: string;
             slug: string;
@@ -3805,6 +3963,140 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The members */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listInvitations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The pending invitations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    setFactoryRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description A person's user id */
+                user: components["parameters"]["UserRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FactoryRoleChange"];
+            };
+        };
+        responses: {
+            /** @description The member's role on the factory now */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactoryRoleGrant"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    removeFactoryRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description A person's user id */
+                user: components["parameters"]["UserRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    transferOwnership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferRequest"];
+            };
+        };
+        responses: {
+            /** @description The organization, the caller now its admin */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Org"];
+                };
             };
             default: components["responses"]["Problem"];
         };

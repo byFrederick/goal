@@ -40,7 +40,7 @@ func newIdentity(t *testing.T, clock *porttest.Clock) *porttest.Identity {
 	must(id.AddUser(porttest.IdentityUser{ID: idAda, Name: "Ada", Email: "ada@example.com"}))
 	id.AddSession("ada-session", idAda, domain.Session{ID: "s", CreatedAt: idNow, ExpiresAt: idNow.Add(time.Hour)})
 	must(id.SetOrgRole(idAcme, idAda, domain.OrgMember))
-	must(id.SetFactoryRole(idAcme, idAda, idF, domain.FactoryApprover))
+	must(id.GrantFactoryRole(idAcme, idAda, idF, domain.FactoryApprover))
 	id.AddKey("acme-key", porttest.IdentityKey{ID: "k1", Org: idAcme, Name: "ci", ExpiresAt: idNow.Add(48 * time.Hour)})
 
 	return id

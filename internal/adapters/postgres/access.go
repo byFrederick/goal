@@ -17,9 +17,10 @@ import (
 
 var _ ports.Access = (*Access)(nil)
 
-// Access implements ports.Access over 00046's api_keys and api_key_factories, as goal_app under
-// row-level security: every statement sees the organization in ctx only, and every change
-// appends its audit entry in its transaction.
+// Access implements ports.Access: the organization's API keys over 00046's api_keys and
+// api_key_factories, as goal_app under row-level security (every statement sees the organization
+// in ctx only, and every change appends its audit entry in its transaction), and its people
+// (members.go).
 type Access struct {
 	s *Store
 }

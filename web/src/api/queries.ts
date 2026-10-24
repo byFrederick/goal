@@ -30,9 +30,11 @@ import {
   getWeekly,
   type ItemFilter,
   listFactories,
+  listInvitations,
   listItemEvents,
   listItemRuns,
   listItems,
+  listMembers,
   listOrgs,
 } from './client';
 import {
@@ -106,6 +108,9 @@ export const keys = {
   attention: (org: string) => ['org', org, 'attention'] as const,
   settings: (org: string) => ['org', org, 'settings'] as const,
   apiKeys: (org: string) => ['org', org, 'api-keys'] as const,
+  /** Its members (spec 3 §10.1); identity service changes invalidate members and invitations. */
+  members: (org: string) => ['org', org, 'members'] as const,
+  invitations: (org: string) => ['org', org, 'invitations'] as const,
   factories: (org: string) => ['org', org, 'factories'] as const,
   /** The prefix of every factory overview window. */
   overviews: (org: string) => ['org', org, 'overview'] as const,
@@ -192,6 +197,20 @@ export const settingsQuery = (org: string) =>
   queryOptions({
     queryKey: keys.settings(org),
     queryFn: ({ signal }) => getOrgSettings(org, signal),
+    staleTime: 30_000,
+  });
+
+export const membersQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.members(org),
+    queryFn: ({ signal }) => listMembers(org, signal),
+    staleTime: 30_000,
+  });
+
+export const invitationsQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.invitations(org),
+    queryFn: ({ signal }) => listInvitations(org, signal),
     staleTime: 30_000,
   });
 

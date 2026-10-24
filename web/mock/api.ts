@@ -10,6 +10,10 @@
 // (auth.ts: /v1/auth/config, /v1/me and the identity service's /api/auth/*), and its {role} makes
 // the caller an owner, admin, member, editor, approver or viewer (roles.ts): Org.can and
 // Factory.can follow, and an operation the role lacks is refused 403 forbidden, as goald does.
+// Under sign-in the organizations are the caller's (people.ts), with their role and what it
+// allows (Org.can); the people routes (members, invitations, factory roles, transfer) answer as
+// goald does, a fresh-only change asking for a recent sign-in (the factory routes do not filter by
+// factory role under sign-in).
 // The organizations' API keys are keys.ts's.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
@@ -26,6 +30,7 @@ import type {
   FactoryEvent,
   FactoryOverview,
   FactoryOverviewList,
+  FactoryRole,
   Inbox,
   InboxEntry,
   Item,
@@ -36,6 +41,7 @@ import type {
   NoteReceipt,
   Org,
   OrgAttention,
+  OrgRole,
   OrgSettings,
   RunList,
   StreamEvent,
@@ -55,6 +61,7 @@ import {
 } from './fixtures.ts';
 import { constraintOf, type DayRange, type FlowInput, leadTimeOf, metricsOf, rangeOf, weeklyOf } from './flow.ts';
 import { createKeys } from './keys.ts';
+import { membersFor, orgCanOf } from './people.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
 
 type Next = (err?: unknown) => void;
@@ -134,7 +141,11 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   const levels = levelsOf(sources.table);
   let grants: Grants | undefined;
   // Sign-in: off until a reset turns it on (auth.ts).
-  const auth = createMockAuth(clock);
+  const auth = createMockAuth(clock, {
+    people: () => state.people,
+    org: (id) => state.orgs.find((o) => o.id === id),
+    factories: (org) => state.factories.filter((f) => f.org_id === org).map((f) => ({ id: f.id, name: f.name })),
+  });
   const subscribers = new Set<Subscriber>();
   const definitions = createDefinitions({
     state: () => state,
@@ -263,6 +274,33 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     ...o,
     factory_count: state.factories.filter((f) => f.org_id === o.id).length,
   });
+
+  /**
+   * The caller's role in an organization: null for the local user of sign-in off (who may do
+   * everything), undefined when they are not a member (the organization is unknown to them).
+   */
+  const roleIn = (req: IncomingMessage, orgId: string): OrgRole | null | undefined => {
+    const who = auth.who(req);
+    if (!who) return null;
+    return state.people.members[orgId]?.find((m) => m.userId === who.person.id)?.role;
+  };
+
+  /** The organization as the caller sees it: their role, and what it allows. */
+  const forCaller = (req: IncomingMessage, o: Org): Org => {
+    const role = roleIn(req, o.id);
+    return role ? { ...o, role, can: orgCanOf(role, orgCan) } : o;
+  };
+
+  /**
+   * Refuses a fresh-only change to a signed-in caller whose session is older than 10 minutes (403
+   * reauth-required), as goald does once the permission itself holds; true when it answered.
+   */
+  const stale = (req: IncomingMessage, res: ServerResponse) => {
+    const who = auth.who(req);
+    if (!who || who.fresh) return false;
+    json(res, 403, { title: 'Sign in again to do this', status: 403, code: 'reauth-required' });
+    return true;
+  };
 
   /** A factory by id or name; within org when given. Names are unique across the mock's orgs. */
   const findFactory = (key: string, org?: string) =>
@@ -835,6 +873,86 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return factory !== undefined && !factory.can.includes(scope.permission);
   };
 
+  /**
+   * goald's people routes of an organization (spec 3 §8.9): its members, pending invitations,
+   * factory roles and the transfer of its ownership. True when it answered.
+   */
+  async function people(req: IncomingMessage, res: ServerResponse, org: Org, rest: string, method: string) {
+    const caller = auth.who(req)?.person.id ?? null;
+    /** Each answer below ends the request: the route answered. */
+    const answered = (_written: unknown) => true;
+    if (rest === '/members' && method === 'GET') {
+      return answered(json(res, 200, { members: membersFor(state.people, org.id, caller, () => true) }));
+    }
+    if (rest === '/invitations' && method === 'GET') {
+      const pending = state.people.invitations.filter(
+        (i) => i.orgId === org.id && i.status === 'pending' && i.expiresAt > clock(),
+      );
+      const invitations = pending
+        .sort((a, b) => a.createdAt - b.createdAt)
+        .map((i) => ({
+          id: i.id,
+          email: i.email,
+          role: i.role,
+          factory_roles: i.factoryRoles.map((g) => ({ factory_id: g.factoryId, role: g.role })),
+          inviter: {
+            id: i.inviterId,
+            name: state.people.people.find((p) => p.id === i.inviterId)?.name ?? '',
+          },
+          created_at: new Date(i.createdAt).toISOString(),
+          expires_at: new Date(i.expiresAt).toISOString(),
+        }));
+      return answered(json(res, 200, { invitations }));
+    }
+    const role = rest.match(/^\/members\/([^/]+)\/factory-roles\/([^/]+)$/);
+    if (role && (method === 'PUT' || method === 'DELETE')) {
+      if (stale(req, res)) return true;
+      const factory = findFactory(decodeURIComponent(role[2] ?? ''), org.id);
+      if (!factory)
+        return answered(json(res, 404, { title: 'Factory not found', status: 404, code: 'factory-not-found' }));
+      const member = state.people.members[org.id]?.find((m) => m.userId === decodeURIComponent(role[1] ?? ''));
+      if (!member) return answered(problem(res, 404, 'Not Found', 'not a member of the organization'));
+      if (member.role !== 'member') {
+        return answered(
+          problem(res, 409, 'Conflict', 'owners and admins are editors in every factory', 'editor-everywhere'),
+        );
+      }
+      if (method === 'DELETE') {
+        delete member.factoryRoles[factory.id];
+        res.statusCode = 204;
+        return answered(res.end());
+      }
+      const next = (await readBody(req)).role as FactoryRole;
+      if (!['viewer', 'approver', 'editor'].includes(next)) {
+        return answered(problem(res, 400, 'Bad Request', 'role is viewer, approver or editor'));
+      }
+      member.factoryRoles[factory.id] = next;
+      return answered(json(res, 200, { factory_id: factory.id, role: next }));
+    }
+    if (rest === '/transfer' && method === 'POST') {
+      if (stale(req, res)) return true;
+      if (caller === null)
+        return answered(problem(res, 403, 'Forbidden', 'only a signed-in owner can do this', 'forbidden'));
+      const body = await readBody(req);
+      if (body.confirm !== org.name) {
+        return answered(
+          problem(res, 409, 'Conflict', "the confirmation is not the organization's name", 'confirmation-mismatch'),
+        );
+      }
+      const members = state.people.members[org.id] ?? [];
+      const to = members.find((m) => m.userId === body.to && m.role === 'admin');
+      const from = members.find((m) => m.userId === caller);
+      if (!to || !from) {
+        return answered(problem(res, 409, 'Conflict', 'only an admin can become the owner', 'not-an-admin'));
+      }
+      to.role = 'owner';
+      from.role = 'admin';
+      audit(org, 'org.ownership_transferred', { from: caller, to: to.userId });
+      return answered(json(res, 200, forCaller(req, withCount(org))));
+    }
+    return false;
+  }
+
   async function route(req: IncomingMessage, res: ServerResponse, next: Next) {
     const url = new URL(req.url ?? '/', 'http://mock');
     const path = url.pathname;
@@ -891,8 +1009,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (path === '/v1/orgs' && method === 'GET') {
       const orgs = [...state.orgs].sort((a, b) => a.name.localeCompare(b.name)).map(withCount);
       return json(res, 200, {
-        orgs: auth
-          .visible(req, orgs)
+        orgs: orgs
+          .filter((o) => roleIn(req, o.id) !== undefined)
+          .map((o) => forCaller(req, o))
           .map(({ created_at: _created, can: _can, ...summary }) =>
             grants ? { ...summary, role: grants.orgRole } : summary,
           ),
@@ -925,16 +1044,21 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const scoped = path.match(/^\/v1\/orgs\/([^/]+)(\/.*)?$/);
     if (!scoped) return problem(res, 404, 'Not Found', path);
     const org = findOrg(decodeURIComponent(scoped[1] ?? ''));
-    if (!org) return json(res, 404, { title: 'Organization not found', status: 404, code: 'org-not-found' });
+    // An organization the caller is not a member of answers as an unknown one.
+    if (!org || roleIn(req, org.id) === undefined) {
+      return json(res, 404, { title: 'Organization not found', status: 404, code: 'org-not-found' });
+    }
     const rest = scoped[2] ?? '';
-    if (refused(method, path, org)) {
+    // What the caller may do here: their membership under sign-in, the reset's role, else all.
+    if (refused(method, path, forCaller(req, org))) {
       return json(res, 403, { title: 'Forbidden', status: 403, code: 'forbidden' });
     }
     if (await definitions.handle(org, rest, method, url, req, res)) return;
     if (await apiKeys.handle(org, rest, method, req, res, () => readBody(req))) return;
 
-    if (rest === '' && method === 'GET') return json(res, 200, withCount(org));
+    if (rest === '' && method === 'GET') return json(res, 200, forCaller(req, withCount(org)));
     if (rest === '' && method === 'DELETE') {
+      if (stale(req, res)) return;
       const body = await readBody(req);
       if (body.confirm !== org.name) {
         return problem(
@@ -950,7 +1074,10 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return json(res, 202, { purge_after: new Date(clock() + retentionMs).toISOString() });
     }
     if (rest === '/settings' && method === 'GET') return json(res, 200, settingsOf(org));
-    if (rest === '/settings' && method === 'PATCH') return patchSettings(org, await readBody(req), res);
+    if (rest === '/settings' && method === 'PATCH') {
+      return patchSettings(org, await readBody(req), res);
+    }
+    if (await people(req, res, org, rest, method)) return;
     if (rest === '/audit' && method === 'GET') {
       const q = url.searchParams;
       const limit = Number(q.get('limit') ?? 100);

@@ -70,7 +70,7 @@ func (s fakeSeed) SetRole(t *testing.T, org domain.OrgID, user domain.UserID, ro
 func (s fakeSeed) SetFactoryRole(t *testing.T, org domain.OrgID, user domain.UserID, f domain.FactoryID, role domain.FactoryRole) {
 	t.Helper()
 
-	if err := s.id.SetFactoryRole(org, user, f, role); err != nil {
+	if err := s.id.GrantFactoryRole(org, user, f, role); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -106,5 +106,40 @@ func TestPlatform_Conformance(t *testing.T) {
 		id := porttest.NewIdentity(time.Now)
 
 		return porttest.NewPlatform(id), fakeSeed{id: id, n: new(int)}
+	})
+}
+
+func (s fakeSeed) Invite(t *testing.T, org domain.OrgID, inviter domain.UserID, email string, role domain.OrgRole,
+	grants []domain.FactoryGrant, status string, expires time.Time,
+) string {
+	t.Helper()
+
+	id := s.next("019a3004")
+
+	err := s.id.Invite(org, domain.Invitation{
+		ID: id, Email: email, Role: role, FactoryRoles: grants, Inviter: domain.User{ID: inviter}, ExpiresAt: expires,
+	}, status)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return id
+}
+
+func (s fakeSeed) Accept(t *testing.T, invitation string, user domain.UserID) {
+	t.Helper()
+
+	if err := s.id.Accept(invitation, user); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAccess_Conformance(t *testing.T) {
+	t.Parallel()
+
+	identitytest.RunAccess(t, func(*testing.T) (ports.Identity, ports.Access, identitytest.AccessSeed) {
+		id := porttest.NewIdentity(time.Now)
+
+		return id, id, fakeSeed{id: id, n: new(int)}
 	})
 }

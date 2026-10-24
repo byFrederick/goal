@@ -77,7 +77,7 @@ export function BasicsSection({ place }: SectionViewProps) {
         </Field>
         <WorkTypes basics={basics} />
         <RepositoryField basics={basics} />
-        <WhoApproves place={place} />
+        <WhoApproves place={place} factory={basics.id} />
         <AdvancedFields />
         {place === 'definition' && basics.id ? <FactoryId id={basics.id} /> : null}
       </div>

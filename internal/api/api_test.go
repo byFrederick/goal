@@ -407,7 +407,7 @@ func newHarnessWith(t *testing.T, in *signIn) *harness {
 		Clock:   h.clock,
 	}
 	if in != nil {
-		deps.Authorizer, deps.Identity = api.NewPermissions(h.clock), in.identity
+		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity
 		deps.Auth = api.AuthConfig{Mode: api.AuthSession, Google: in.google}
 	}
 

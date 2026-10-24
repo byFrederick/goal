@@ -1,23 +1,27 @@
 // The mock's sign-in (spec 3 §10.1): goald's /v1/auth/config and /v1/me, and the subset of the
 // identity service's /api/auth/* the SPA calls, with Better Auth's own shapes (email codes, Google
-// as a redirect round trip, get-session, sign-out, revoke-sessions, update-user, and the device
-// grant of goal login with goald's /v1/auth/device/{user_code}).
+// as a redirect round trip, get-session, sign-out, revoke-sessions, update-user, the device
+// grant of goal login with goald's /v1/auth/device/{user_code}, and the organization endpoints
+// of Members and Invite-Accept over the people of people.ts).
 //
 // Sign-in is off by default (GOAL_AUTH=none, the mock's seed), so every other screen and test runs
 // as the local user. A reset turns it on: POST /__mock/reset {auth: {mode: "session",
 // signed_in?: "fresh" | "stale", email?, google?: "ok" | "not-invited" | "unverified" | "failed" |
-// "off", platform_admin?: false}}. Then
-// every /v1 request but health and the auth config needs the session cookie (else 401
-// unauthenticated), deleting an organization needs a session signed in within 10 minutes (else
-// 403 reauth-required), creating one needs a platform admin (else 403 forbidden), and the
-// organizations are the person's: f.cruz@example.com (F. Cruz, platform admin unless the reset
-// says platform_admin: false) owns every one; j.doe@example.com is a user in none. As the identity service
-// does (auth/, spec 3 §8.7), a send answers the same for every address but codes go only to those
-// two (the code is always 000000, valid 5 minutes; the 4th try of one code is TOO_MANY_ATTEMPTS),
-// Google refuses an account without an invitation (SIGN_UP_NOT_ALLOWED) and update-user takes a
-// name only (NAME_ONLY).
+// "off", platform_admin?: false}}. Then every /v1 request but health and the auth config needs the session cookie (else
+// 401 unauthenticated), changes that need a recent sign-in check the session's age (api.ts),
+// creating an organization needs a platform admin (else 403 forbidden), and
+// the organizations are the person's (people.ts): f.cruz@example.com (F. Cruz, platform admin
+// unless the reset says platform_admin: false)
+// owns every one, acme has an admin and members, j.doe@example.com is a user in none. As the
+// identity service does (auth/, spec 3 §8.7), a send answers the same for every address but codes
+// go only to people and pending invitees (the code is always 000000, valid 5 minutes; the 4th try
+// of one code is TOO_MANY_ATTEMPTS), Google refuses an account without an invitation
+// (SIGN_UP_NOT_ALLOWED) and update-user takes a name only (NAME_ONLY). The organization endpoints
+// keep Better Auth's and Goal's rules: a fresh session for changes (REAUTH_REQUIRED), only owners
+// touch or make an owner, an organization keeps an owner, an invitation is its recipient's only.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { Actor, AuthConfig, DeviceRequest, Me, Org } from '@goal/api-client';
+import type { Actor, AuthConfig, DeviceRequest, FactoryRole, Me, OrgRole } from '@goal/api-client';
+import { invitationLifetimeMs, type MockInvitation, type MockPeople, type MockPerson } from './people.ts';
 
 type Json = Record<string, unknown>;
 
@@ -31,9 +35,8 @@ const allowedAttempts = 3;
 const sessionLifetimeMs = 7 * 86_400_000;
 const freshMs = 10 * 60_000;
 
-const owner = { email: 'f.cruz@example.com', name: 'F. Cruz' };
-/** The people who may sign in: the owner, and a user every invitation of whom was used or cancelled. */
-const people = new Set([owner.email, 'j.doe@example.com']);
+/** Who a reset signs in unless it names someone else. */
+const ownerEmail = 'f.cruz@example.com';
 
 export type GoogleOutcome = 'ok' | 'not-invited' | 'unverified' | 'failed' | 'off';
 
@@ -57,17 +60,10 @@ export function authSettings(body: unknown): MockAuthSettings {
   return {
     mode: b.mode === 'session' ? 'session' : 'none',
     signedIn: b.signed_in === 'fresh' || b.signed_in === 'stale' ? b.signed_in : false,
-    email: typeof b.email === 'string' && b.email.includes('@') ? b.email.toLowerCase() : owner.email,
+    email: typeof b.email === 'string' && b.email.includes('@') ? b.email.toLowerCase() : ownerEmail,
     google,
     ownerIsPlatformAdmin: b.platform_admin !== false,
   };
-}
-
-interface MockUser {
-  id: string;
-  email: string;
-  name: string;
-  platformAdmin: boolean;
 }
 
 interface MockSession {
@@ -112,14 +108,24 @@ export interface MockAuth {
   /** Serves /v1/auth/config, /v1/me and /api/auth/*; false for any other path. */
   handle: (req: IncomingMessage, res: ServerResponse, path: string, method: string) => Promise<boolean>;
   /**
-   * Under sign-in, refuses a /v1 request without a session (401) or a change that needs a fresh
-   * one (403); true when it answered.
+   * Under sign-in, refuses a /v1 request without a session (401), and creating an organization
+   * to someone who is not a platform admin (403); true when it answered.
    */
   refuse: (req: IncomingMessage, res: ServerResponse, path: string, method: string) => boolean;
-  /** The organizations the caller sees, with their role (none under sign-in off). */
-  visible: (req: IncomingMessage, orgs: Org[]) => Org[];
   /** Who the request acts for, as goald records it: the signed-in person, else the local user. */
   actor: (req: IncomingMessage) => Actor;
+  /**
+   * Who sends the request: null under sign-in off (the local user, who may do everything) or without
+   * a session, else the signed-in person and whether their session is fresh (within 10 minutes).
+   */
+  who: (req: IncomingMessage) => { person: MockPerson; fresh: boolean } | null;
+}
+
+/** What the identity service reads of the people and of goald's organizations and factories. */
+export interface MockDirectory {
+  people: () => MockPeople;
+  org: (id: string) => { id: string; name: string; slug: string } | undefined;
+  factories: (org: string) => { id: string; name: string }[];
 }
 
 const alnum = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -161,25 +167,24 @@ const setCookie = (token: string) =>
   `${sessionCookie}=${encodeURIComponent(`${token}.${randomToken().slice(0, 22)}`)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${sessionLifetimeMs / 1000}`;
 const clearCookie = `${sessionCookie}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 
-export function createMockAuth(clock: () => number): MockAuth {
+export function createMockAuth(clock: () => number, dir: MockDirectory): MockAuth {
   let settings = authSettings(undefined);
-  let users = new Map<string, MockUser>();
   let sessions = new Map<string, MockSession>();
   let codes = new Map<string, MockCode>();
   let googleStates = new Map<string, { callbackURL: string; errorCallbackURL: string }>();
   let devices = new Map<string, MockDevice>();
 
-  const userFor = (email: string): MockUser => {
-    let user = users.get(email);
+  const pendingFor = (email: string) =>
+    dir.people().invitations.filter((i) => i.email === email && i.status === 'pending' && i.expiresAt > clock());
+  /** Who may get a code: people with a user, and pending invitees (who get one at their first sign-in). */
+  const maySignIn = (email: string) =>
+    dir.people().people.some((p) => p.email === email) || pendingFor(email).length > 0;
+  const userFor = (email: string): MockPerson => {
+    const people = dir.people().people;
+    let user = people.find((p) => p.email === email);
     if (!user) {
-      const isOwner = email === owner.email;
-      user = {
-        id: crypto.randomUUID(),
-        email,
-        name: isOwner ? owner.name : (email.split('@')[0] ?? email),
-        platformAdmin: isOwner && settings.ownerIsPlatformAdmin,
-      };
-      users.set(email, user);
+      user = { id: crypto.randomUUID(), email, name: email.split('@')[0] ?? email, platformAdmin: false };
+      people.push(user);
     }
     return user;
   };
@@ -196,7 +201,7 @@ export function createMockAuth(clock: () => number): MockAuth {
     const token = cookieValue(req, sessionCookie)?.split('.')[0];
     const session = token ? sessions.get(token) : undefined;
     if (!session || session.expiresAt <= clock()) return undefined;
-    const user = [...users.values()].find((u) => u.id === session.userId);
+    const user = dir.people().people.find((u) => u.id === session.userId);
     return user ? { session, user } : undefined;
   };
 
@@ -229,7 +234,7 @@ export function createMockAuth(clock: () => number): MockAuth {
 
     if (route === '/email-otp/send-verification-otp' && method === 'POST') {
       // The same answer for every address; the code goes only to people who may sign in.
-      if (people.has(email) && body.type === 'sign-in') codes.set(email, { sentAt: clock(), attempts: 0 });
+      if (maySignIn(email) && body.type === 'sign-in') codes.set(email, { sentAt: clock(), attempts: 0 });
       return ok({ success: true });
     }
     if (route === '/sign-in/email-otp' && method === 'POST') {
@@ -321,6 +326,7 @@ export function createMockAuth(clock: () => number): MockAuth {
       return ok({ status: true });
     }
     if (route.startsWith('/device')) return deviceGrant(req, res, route, method, body);
+    if (route.startsWith('/organization/')) return organization(req, res, route, method, body, ok);
     // goald's proxy answers anything off its allowlist with a 404 problem.
     return send(res, 404, { title: 'Not Found', status: 404, code: 'not-found' });
   };
@@ -404,6 +410,184 @@ export function createMockAuth(clock: () => number): MockAuth {
     return send(res, 404, { title: 'Not Found', status: 404, code: 'not-found' });
   };
 
+  /**
+   * The identity service's organization endpoints (Better Auth's organization plugin with Goal's
+   * hooks): each names its target, changes need a fresh session, only owners touch or make an
+   * owner, an organization keeps an owner, an invitation is its recipient's only.
+   */
+  const organization = async (
+    req: IncomingMessage,
+    res: ServerResponse,
+    route: string,
+    method: string,
+    body: Json,
+    ok: (data: unknown) => void,
+  ) => {
+    const now = current(req);
+    if (!now) return authError(res, 401, 'UNAUTHORIZED', 'Unauthorized');
+    const people = dir.people();
+    const fresh = clock() - now.session.createdAt <= freshMs;
+    const membersOf = (org: string) => people.members[org] ?? [];
+    const roleOf = (org: string, user: string) => membersOf(org).find((m) => m.userId === user)?.role;
+    const mine = (org: string) => roleOf(org, now.user.id);
+    const manages = (org: string) => mine(org) === 'owner' || mine(org) === 'admin';
+    const invitationById = (id: unknown) => people.invitations.find((i) => i.id === id);
+    const usable = (i: MockInvitation | undefined): i is MockInvitation =>
+      i !== undefined && i.status === 'pending' && i.expiresAt > clock();
+    const stale = () => authError(res, 403, 'REAUTH_REQUIRED', 'Sign in again to do this');
+    const notRecipient = () =>
+      authError(res, 403, 'YOU_ARE_NOT_THE_RECIPIENT_OF_THE_INVITATION', 'You are not the recipient of the invitation');
+    const orgId = typeof body.organizationId === 'string' ? body.organizationId : '';
+    const owners = (org: string) => membersOf(org).filter((m) => m.role === 'owner').length;
+
+    if (route === '/organization/get-invitation' && method === 'GET') {
+      const i = invitationById(new URL(req.url ?? '/', 'http://mock').searchParams.get('id'));
+      // Better Auth's own answer for an unknown, used, cancelled or expired one: no code.
+      if (!usable(i)) return send(res, 400, { message: 'Invitation not found!' });
+      if (i.email !== now.user.email) return notRecipient();
+      const org = dir.org(i.orgId);
+      const inviter = people.people.find((p) => p.id === i.inviterId);
+      const names = new Map(dir.factories(i.orgId).map((f) => [f.id, f.name]));
+      return ok({
+        id: i.id,
+        email: i.email,
+        role: i.role,
+        organizationId: i.orgId,
+        inviterId: i.inviterId,
+        status: i.status,
+        expiresAt: new Date(i.expiresAt).toISOString(),
+        organizationName: org?.name ?? '',
+        organizationSlug: org?.slug ?? '',
+        inviterEmail: inviter?.email ?? '',
+        inviterName: inviter?.name ?? null,
+        factories: i.factoryRoles.flatMap((g) => {
+          const name = names.get(g.factoryId);
+          return name ? [{ id: g.factoryId, name, role: g.role }] : [];
+        }),
+      });
+    }
+    if (method !== 'POST') return send(res, 404, { title: 'Not Found', status: 404, code: 'not-found' });
+
+    if (route === '/organization/accept-invitation' || route === '/organization/reject-invitation') {
+      const i = invitationById(body.invitationId);
+      if (!usable(i)) return authError(res, 400, 'INVITATION_NOT_FOUND', 'Invitation not found');
+      if (i.email !== now.user.email) return notRecipient();
+      if (route === '/organization/reject-invitation') {
+        i.status = 'rejected';
+        return ok({ invitation: i, member: null });
+      }
+      if (roleOf(i.orgId, now.user.id)) {
+        return authError(res, 400, 'USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION', 'Already a member');
+      }
+      i.status = 'accepted';
+      // goal_apply_invitation_roles: the factory roles of factories that still exist, members only.
+      const factories = new Set(dir.factories(i.orgId).map((f) => f.id));
+      const grants = i.role === 'member' ? i.factoryRoles.filter((g) => factories.has(g.factoryId)) : [];
+      const member = {
+        memberId: crypto.randomUUID(),
+        userId: now.user.id,
+        role: i.role,
+        joinedAt: clock(),
+        lastActiveAt: clock(),
+        factoryRoles: Object.fromEntries(grants.map((g) => [g.factoryId, g.role])) as Record<string, FactoryRole>,
+      };
+      people.members[i.orgId] = [...membersOf(i.orgId), member];
+      return ok({ invitation: i, member: { id: member.memberId, role: member.role } });
+    }
+
+    if (route === '/organization/invite-member') {
+      const role = body.role as OrgRole;
+      if (!['owner', 'admin', 'member'].includes(role)) return authError(res, 400, 'ONE_ROLE', 'One role');
+      if (!fresh) return stale();
+      if (!manages(orgId)) {
+        return authError(res, 403, 'YOU_ARE_NOT_ALLOWED_TO_INVITE_USERS_TO_THIS_ORGANIZATION', 'Not allowed');
+      }
+      if (role === 'owner' && mine(orgId) !== 'owner') {
+        return authError(res, 403, 'YOU_ARE_NOT_ALLOWED_TO_INVITE_USER_WITH_THIS_ROLE', 'Only owners invite owners');
+      }
+      const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+      let grants: { factoryId: string; role: FactoryRole }[];
+      try {
+        grants = typeof body.factoryRoles === 'string' ? JSON.parse(body.factoryRoles) : [];
+      } catch {
+        return authError(res, 400, 'FACTORY_ROLES', 'factoryRoles must be JSON');
+      }
+      if (grants.length > 0 && role !== 'member') {
+        return authError(res, 400, 'FACTORY_ROLES_FOR_MEMBERS', 'Owners and admins hold every factory role already');
+      }
+      const known = new Set(dir.factories(orgId).map((f) => f.id));
+      if (grants.some((g) => !known.has(g.factoryId))) {
+        return authError(res, 400, 'UNKNOWN_FACTORY', 'No such factory here');
+      }
+      const existing = people.people.find((p) => p.email === email);
+      if (existing && roleOf(orgId, existing.id)) {
+        return authError(res, 400, 'USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION', 'Already a member');
+      }
+      // cancelPendingInvitationsOnReInvite: a new invitation (Resend too) replaces a pending one.
+      for (const i of people.invitations) {
+        if (i.orgId === orgId && i.email === email && i.status === 'pending') i.status = 'canceled';
+      }
+      const invitation: MockInvitation = {
+        id: crypto.randomUUID(),
+        orgId,
+        email,
+        role,
+        factoryRoles: grants,
+        inviterId: now.user.id,
+        createdAt: clock(),
+        expiresAt: clock() + invitationLifetimeMs,
+        status: 'pending',
+      };
+      people.invitations.push(invitation);
+      return ok({ id: invitation.id, email, role, organizationId: orgId, status: 'pending' });
+    }
+
+    if (route === '/organization/cancel-invitation') {
+      if (!fresh) return stale();
+      const i = invitationById(body.invitationId);
+      if (!i || !manages(i.orgId)) {
+        return authError(res, 403, 'YOU_ARE_NOT_ALLOWED_TO_CANCEL_THIS_INVITATION', 'Not allowed');
+      }
+      i.status = 'canceled';
+      return ok(i);
+    }
+
+    if (route === '/organization/update-member-role' || route === '/organization/remove-member') {
+      if (!fresh) return stale();
+      const removing = route === '/organization/remove-member';
+      const target = membersOf(orgId).find((m) => m.memberId === (removing ? body.memberIdOrEmail : body.memberId));
+      if (!target) return authError(res, 400, 'MEMBER_NOT_FOUND', 'Member not found');
+      if (!manages(orgId)) return authError(res, 403, 'YOU_ARE_NOT_ALLOWED_TO_UPDATE_THIS_MEMBER', 'Not allowed');
+      const role = body.role as OrgRole;
+      if (!removing && !['owner', 'admin', 'member'].includes(role)) {
+        return authError(res, 400, 'ONE_ROLE', 'One role');
+      }
+      if ((target.role === 'owner' || (!removing && role === 'owner')) && mine(orgId) !== 'owner') {
+        return authError(res, 403, 'OWNERS_ONLY', 'Only an owner can change an owner');
+      }
+      if (target.role === 'owner' && owners(orgId) === 1 && (removing || role !== 'owner')) {
+        return authError(res, 400, 'YOU_CANNOT_LEAVE_THE_ORGANIZATION_WITHOUT_AN_OWNER', 'Keep an owner');
+      }
+      if (removing) {
+        people.members[orgId] = membersOf(orgId).filter((m) => m !== target);
+        return ok({ member: { id: target.memberId } });
+      }
+      target.role = role;
+      return ok({ id: target.memberId, role });
+    }
+
+    if (route === '/organization/leave') {
+      const me = membersOf(orgId).find((m) => m.userId === now.user.id);
+      if (!me) return authError(res, 400, 'MEMBER_NOT_FOUND', 'Member not found');
+      if (me.role === 'owner' && owners(orgId) === 1) {
+        return authError(res, 400, 'YOU_CANNOT_LEAVE_THE_ORGANIZATION_AS_THE_ONLY_OWNER', 'The only owner');
+      }
+      people.members[orgId] = membersOf(orgId).filter((m) => m !== me);
+      return ok({ id: me.memberId });
+    }
+    return send(res, 404, { title: 'Not Found', status: 404, code: 'not-found' });
+  };
+
   /** goald's GET /v1/auth/device/{user_code}: a pending code, with whether it came from this browser's network. */
   const deviceRequest = (req: IncomingMessage, res: ServerResponse, typed: string) => {
     const device = devices.get(normalUserCode(typed));
@@ -424,7 +608,8 @@ export function createMockAuth(clock: () => number): MockAuth {
   return {
     reset(next) {
       settings = next;
-      users = new Map();
+      const owner = dir.people().people.find((p) => p.email === ownerEmail);
+      if (owner) owner.platformAdmin = settings.ownerIsPlatformAdmin;
       sessions = new Map();
       codes = new Map();
       googleStates = new Map();
@@ -490,19 +675,13 @@ export function createMockAuth(clock: () => number): MockAuth {
         unauthenticated(res);
         return true;
       }
-      // Only the owner is a member of any organization: to anyone else they do not exist.
-      if (path.startsWith('/v1/orgs/') && now.user.email !== owner.email) {
-        send(res, 404, { title: 'Organization not found', status: 404, code: 'org-not-found' });
-        return true;
-      }
       if (path === '/v1/orgs' && method === 'POST' && !now.user.platformAdmin) {
         send(res, 403, { title: 'Forbidden', status: 403, code: 'forbidden' });
         return true;
       }
-      // Deleting the organization and managing its API keys need a sign-in from the last 10 minutes.
-      const fresh =
-        (method === 'DELETE' && /^\/v1\/orgs\/[^/]+$/.test(path)) ||
-        ((method === 'POST' || method === 'DELETE') && /^\/v1\/orgs\/[^/]+\/api-keys(\/[^/]+)?$/.test(path));
+      // Managing API keys needs a sign-in from the last 10 minutes (the people routes and deleting
+      // the organization ask in api.ts, once the caller's role holds the permission).
+      const fresh = (method === 'POST' || method === 'DELETE') && /^\/v1\/orgs\/[^/]+\/api-keys(\/[^/]+)?$/.test(path);
       if (fresh && clock() - now.session.createdAt > freshMs) {
         send(res, 403, { title: 'Sign in again', status: 403, code: 'reauth-required' });
         return true;
@@ -517,10 +696,10 @@ export function createMockAuth(clock: () => number): MockAuth {
         : { kind: 'user', id: 'local', name: 'Local user' };
     },
 
-    visible(req, orgs) {
-      if (settings.mode === 'none') return orgs;
+    who(req) {
+      if (settings.mode === 'none') return null;
       const now = current(req);
-      return now?.user.email === owner.email ? orgs.map((o) => ({ ...o, role: 'owner' as const })) : [];
+      return now ? { person: now.user, fresh: clock() - now.session.createdAt <= freshMs } : null;
     },
   };
 }

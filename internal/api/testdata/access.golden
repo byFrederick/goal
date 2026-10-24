@@ -675,6 +675,21 @@ listFactories        key-restricted   200                      404 org-not-found
 listFactories        key-other-org    404 org-not-found        200
 listFactories        key-expired      401 unauthenticated      401 unauthenticated
 listFactories        key-revoked      401 unauthenticated      401 unauthenticated
+listInvitations      anonymous        401 unauthenticated      401 unauthenticated
+listInvitations      owner            200                      404 org-not-found
+listInvitations      admin            200                      404 org-not-found
+listInvitations      viewer           403 forbidden            404 org-not-found
+listInvitations      approver         403 forbidden            404 org-not-found
+listInvitations      editor           403 forbidden            404 org-not-found
+listInvitations      member-no-roles  403 forbidden            404 org-not-found
+listInvitations      other-org-owner  404 org-not-found        200
+listInvitations      platform-admin   404 org-not-found        404 org-not-found
+listInvitations      stale-owner      200                      404 org-not-found
+listInvitations      key-scoped       403 forbidden            404 org-not-found
+listInvitations      key-restricted   403 forbidden            404 org-not-found
+listInvitations      key-other-org    404 org-not-found        403 forbidden
+listInvitations      key-expired      401 unauthenticated      401 unauthenticated
+listInvitations      key-revoked      401 unauthenticated      401 unauthenticated
 listItemEvents       anonymous        401 unauthenticated      401 unauthenticated
 listItemEvents       owner            200                      404 org-not-found
 listItemEvents       admin            200                      404 org-not-found
@@ -720,6 +735,21 @@ listItems            key-restricted   404 factory-not-found    404 org-not-found
 listItems            key-other-org    404 org-not-found        200
 listItems            key-expired      401 unauthenticated      401 unauthenticated
 listItems            key-revoked      401 unauthenticated      401 unauthenticated
+listMembers          anonymous        401 unauthenticated      401 unauthenticated
+listMembers          owner            200                      404 org-not-found
+listMembers          admin            200                      404 org-not-found
+listMembers          viewer           200                      404 org-not-found
+listMembers          approver         200                      404 org-not-found
+listMembers          editor           200                      404 org-not-found
+listMembers          member-no-roles  200                      404 org-not-found
+listMembers          other-org-owner  404 org-not-found        200
+listMembers          platform-admin   404 org-not-found        404 org-not-found
+listMembers          stale-owner      200                      404 org-not-found
+listMembers          key-scoped       403 forbidden            404 org-not-found
+listMembers          key-restricted   403 forbidden            404 org-not-found
+listMembers          key-other-org    404 org-not-found        403 forbidden
+listMembers          key-expired      401 unauthenticated      401 unauthenticated
+listMembers          key-revoked      401 unauthenticated      401 unauthenticated
 listOrgs             anonymous        install: 401 unauthenticated
 listOrgs             owner            install: 200
 listOrgs             admin            install: 200
@@ -930,6 +960,21 @@ rejectItem           key-restricted   404 item-not-found       404 org-not-found
 rejectItem           key-other-org    404 org-not-found        200
 rejectItem           key-expired      401 unauthenticated      401 unauthenticated
 rejectItem           key-revoked      401 unauthenticated      401 unauthenticated
+removeFactoryRole    anonymous        401 unauthenticated      401 unauthenticated
+removeFactoryRole    owner            200                      404 org-not-found
+removeFactoryRole    admin            200                      404 org-not-found
+removeFactoryRole    viewer           403 forbidden            404 org-not-found
+removeFactoryRole    approver         403 forbidden            404 org-not-found
+removeFactoryRole    editor           403 forbidden            404 org-not-found
+removeFactoryRole    member-no-roles  403 forbidden            404 org-not-found
+removeFactoryRole    other-org-owner  404 org-not-found        200
+removeFactoryRole    platform-admin   404 org-not-found        404 org-not-found
+removeFactoryRole    stale-owner      403 reauth-required      404 org-not-found
+removeFactoryRole    key-scoped       403 forbidden            404 org-not-found
+removeFactoryRole    key-restricted   403 forbidden            404 org-not-found
+removeFactoryRole    key-other-org    404 org-not-found        403 forbidden
+removeFactoryRole    key-expired      401 unauthenticated      401 unauthenticated
+removeFactoryRole    key-revoked      401 unauthenticated      401 unauthenticated
 removePlatformAdmin  anonymous        install: 401 unauthenticated
 removePlatformAdmin  owner            install: 403 forbidden
 removePlatformAdmin  admin            install: 403 forbidden
@@ -1065,6 +1110,21 @@ searchSkills         key-restricted   200                      404 org-not-found
 searchSkills         key-other-org    404 org-not-found        200
 searchSkills         key-expired      401 unauthenticated      401 unauthenticated
 searchSkills         key-revoked      401 unauthenticated      401 unauthenticated
+setFactoryRole       anonymous        401 unauthenticated      401 unauthenticated
+setFactoryRole       owner            200                      404 org-not-found
+setFactoryRole       admin            200                      404 org-not-found
+setFactoryRole       viewer           403 forbidden            404 org-not-found
+setFactoryRole       approver         403 forbidden            404 org-not-found
+setFactoryRole       editor           403 forbidden            404 org-not-found
+setFactoryRole       member-no-roles  403 forbidden            404 org-not-found
+setFactoryRole       other-org-owner  404 org-not-found        200
+setFactoryRole       platform-admin   404 org-not-found        404 org-not-found
+setFactoryRole       stale-owner      403 reauth-required      404 org-not-found
+setFactoryRole       key-scoped       403 forbidden            404 org-not-found
+setFactoryRole       key-restricted   403 forbidden            404 org-not-found
+setFactoryRole       key-other-org    404 org-not-found        403 forbidden
+setFactoryRole       key-expired      401 unauthenticated      401 unauthenticated
+setFactoryRole       key-revoked      401 unauthenticated      401 unauthenticated
 streamEvents         anonymous        401 unauthenticated      401 unauthenticated
 streamEvents         owner            200                      404 org-not-found
 streamEvents         admin            200                      404 org-not-found
@@ -1095,6 +1155,21 @@ submitItem           key-restricted   404 factory-not-found    404 org-not-found
 submitItem           key-other-org    404 org-not-found        200
 submitItem           key-expired      401 unauthenticated      401 unauthenticated
 submitItem           key-revoked      401 unauthenticated      401 unauthenticated
+transferOwnership    anonymous        401 unauthenticated      401 unauthenticated
+transferOwnership    owner            200                      404 org-not-found
+transferOwnership    admin            403 forbidden            404 org-not-found
+transferOwnership    viewer           403 forbidden            404 org-not-found
+transferOwnership    approver         403 forbidden            404 org-not-found
+transferOwnership    editor           403 forbidden            404 org-not-found
+transferOwnership    member-no-roles  403 forbidden            404 org-not-found
+transferOwnership    other-org-owner  404 org-not-found        200
+transferOwnership    platform-admin   404 org-not-found        404 org-not-found
+transferOwnership    stale-owner      403 reauth-required      404 org-not-found
+transferOwnership    key-scoped       403 forbidden            404 org-not-found
+transferOwnership    key-restricted   403 forbidden            404 org-not-found
+transferOwnership    key-other-org    404 org-not-found        403 forbidden
+transferOwnership    key-expired      401 unauthenticated      401 unauthenticated
+transferOwnership    key-revoked      401 unauthenticated      401 unauthenticated
 updateOrgSettings    anonymous        401 unauthenticated      401 unauthenticated
 updateOrgSettings    owner            200                      404 org-not-found
 updateOrgSettings    admin            200                      404 org-not-found

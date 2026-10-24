@@ -224,6 +224,12 @@ func problemCode(err error) string {
 		return "confirmation-mismatch"
 	case errors.Is(err, errLastPlatformAdmin):
 		return "last-platform-admin"
+	case errors.Is(err, domain.ErrNotAnAdmin):
+		return "not-an-admin"
+	case errors.Is(err, domain.ErrLastOwner):
+		return "last-owner"
+	case errors.Is(err, domain.ErrRoleFromOrg):
+		return "editor-everywhere"
 	case errors.Is(err, engine.ErrItemClosed):
 		return "item-closed"
 	case errors.Is(err, engine.ErrAndonPulled):

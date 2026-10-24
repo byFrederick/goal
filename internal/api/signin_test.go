@@ -76,7 +76,7 @@ func newSignedIn(t *testing.T) signedIn {
 		}
 	}
 
-	if err := id.SetFactoryRole(testOrg, viewerID, acmeID, domain.FactoryViewer); err != nil {
+	if err := id.GrantFactoryRole(testOrg, viewerID, acmeID, domain.FactoryViewer); err != nil {
 		t.Fatal(err)
 	}
 
@@ -171,7 +171,7 @@ func TestAPI_SignIn_OrgsByMembership(t *testing.T) {
 	h := newSignedIn(t)
 
 	orgs := decode[gen.OrgList](t, h.as(t, viewerToken, http.MethodGet, "/v1/orgs", ""), http.StatusOK)
-	if len(orgs.Orgs) != 1 || orgs.Orgs[0].Slug != acmeSlug || orgs.Orgs[0].Role == nil || *orgs.Orgs[0].Role != gen.Member || orgs.Orgs[0].FactoryCount != 1 {
+	if len(orgs.Orgs) != 1 || orgs.Orgs[0].Slug != acmeSlug || orgs.Orgs[0].Role == nil || *orgs.Orgs[0].Role != gen.OrgRoleMember || orgs.Orgs[0].FactoryCount != 1 {
 		t.Errorf("viewer's orgs = %+v, want acme alone, as a member seeing 1 factory", orgs.Orgs)
 	}
 
@@ -180,7 +180,7 @@ func TestAPI_SignIn_OrgsByMembership(t *testing.T) {
 	}
 
 	org := decode[gen.Org](t, h.as(t, viewerToken, http.MethodGet, acmePath, ""), http.StatusOK)
-	if org.Role == nil || *org.Role != gen.Member || !slices.Equal(org.Can, []string{"member:read", "org:read"}) || org.FactoryCount != 1 {
+	if org.Role == nil || *org.Role != gen.OrgRoleMember || !slices.Equal(org.Can, []string{"member:read", "org:read"}) || org.FactoryCount != 1 {
 		t.Errorf("acme for its viewer = role %v can %v count %d, want member, member:read and org:read, 1", org.Role, org.Can, org.FactoryCount)
 	}
 }
@@ -238,7 +238,7 @@ func TestAPI_SignIn_RemovalHoldsAtOnce(t *testing.T) {
 		t.Fatalf("before = %d", res.status)
 	}
 
-	if err := h.identity.SetFactoryRole(testOrg, viewerID, acmeID, ""); err != nil {
+	if err := h.identity.GrantFactoryRole(testOrg, viewerID, acmeID, ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -270,7 +270,7 @@ func TestAPI_SignIn_CreateOrgOwnedByTheCaller(t *testing.T) {
 	created := h.as(t, ownerToken, http.MethodPost, "/v1/orgs", `{"slug":"beta-labs","name":"Beta Labs"}`)
 	o := decode[gen.Org](t, created, http.StatusCreated)
 
-	if h.tenancy.Owner(domain.OrgID(o.Id)) != ownerID || o.Role == nil || *o.Role != gen.Owner || !slices.Contains(o.Can, "org:delete") {
+	if h.tenancy.Owner(domain.OrgID(o.Id)) != ownerID || o.Role == nil || *o.Role != gen.OrgRoleOwner || !slices.Contains(o.Can, "org:delete") {
 		t.Errorf("created org = %+v (owner %s), want it owned by the caller", o, h.tenancy.Owner(domain.OrgID(o.Id)))
 	}
 

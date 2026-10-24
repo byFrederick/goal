@@ -254,6 +254,27 @@ describe('an invitation', () => {
     expect(res.status).toBe(400);
   });
 
+  it('shows its recipient who sent it and the factories it gives, by name, and nobody else', async () => {
+    const email = `shown-${o.id}@example.com`;
+    const created = await invite({ email, factoryRoles: JSON.stringify([{ factoryId: o.factory, role: 'viewer' }]) });
+    const { id: invitation } = (await created.json()) as { id: string };
+    const invitee = await harness(pool, { mailer: o.mailer }).signIn(email);
+
+    const res = await o.h.get(`/organization/get-invitation?id=${invitation}`, { cookie: invitee.cookie });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      id: invitation,
+      organizationId: o.id,
+      organizationName: 'Acme',
+      role: 'member',
+      inviterName: 'Olu',
+      factories: [{ id: o.factory, name: 'Main line', role: 'viewer' }],
+    });
+
+    const other = await o.h.get(`/organization/get-invitation?id=${invitation}`, as(o.member));
+    expect(other.status).toBe(403);
+  });
+
   it('is accepted by its recipient only, who then holds its factory roles', async () => {
     const email = `invitee-${o.id}@example.com`;
     const created = await invite({ email, factoryRoles: JSON.stringify([{ factoryId: o.factory, role: 'editor' }]) });

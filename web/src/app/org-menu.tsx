@@ -3,8 +3,8 @@
 // and Create organization, for platform admins only (spec 3 §4.2; everyone with sign-in off, the
 // local user creates them). A Radix DropdownMenu on the rail; a bottom sheet on phones. Both are
 // opened by the organization mark (org-mark.tsx) and fed by useOrgMenuModel. The sheet ends with
-// the account (account-menu.tsx). No role per organization and no Members and roles link yet:
-// both arrive with Members (spec 3, PR 3-11).
+// the account (account-menu.tsx). Each organization says the caller's role there ("3 factories,
+// owner"; nothing with sign-in off), and Members and roles opens the current one's people.
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from '@tanstack/react-router';
 import { Check, Plus } from 'lucide-react';
@@ -31,6 +31,7 @@ import {
   catalogScreen,
   credentialsScreen,
   laterText,
+  membersScreen,
   type OrgScreen,
   screensFor,
   settingsScreen,
@@ -39,14 +40,14 @@ import {
 interface OrgChoice {
   org: OrgSummary;
   mark: string;
-  /** "3 factories" */
+  /** "3 factories", "3 factories, owner" */
   detail: string;
   current: boolean;
 }
 
 interface OrgMenuModel {
   orgs: OrgChoice[];
-  /** The current organization's pages: API keys (with api_key:read), catalog and credentials (phase 4), settings (C7). */
+  /** The current organization's pages: members, API keys (with api_key:read), catalog and credentials (phase 4), settings (C7). */
   links: { screen: OrgScreen; label: string }[];
   /** Create organization is offered: to platform admins, or to the local user with sign-in off. */
   canCreate: boolean;
@@ -67,13 +68,13 @@ function useOrgMenuModel(current: OrgSummary): OrgMenuModel {
   // Hidden until goald says who this is: only platform admins create organizations.
   const { data: canCreate = false } = useQuery({ ...meQuery, select: (me) => me.mode === 'none' || me.platform_admin });
   const can = useOrgGrants()?.can;
-  const shown = screensFor([apiKeysScreen, catalogScreen, credentialsScreen, settingsScreen], can);
+  const shown = screensFor([membersScreen, apiKeysScreen, catalogScreen, credentialsScreen, settingsScreen], can);
   const labels: Record<string, string> = { [settingsScreen.id]: 'Organization settings' };
   return {
     orgs: data.map((org) => ({
       org,
       mark: orgMark(org),
-      detail: factoryCount(org.factory_count),
+      detail: org.role ? `${factoryCount(org.factory_count)}, ${org.role}` : factoryCount(org.factory_count),
       current: org.id === current.id,
     })),
     links: shown.map((screen) => ({ screen, label: labels[screen.id] ?? screen.label })),

@@ -29,6 +29,7 @@ import {
 } from './definition-seed.ts';
 import type { MockFault } from './faults.ts';
 import { type MockDone, seedHistory } from './flow.ts';
+import { type MockPeople, seedPeople } from './people.ts';
 
 export interface MockItem {
   id: string;
@@ -130,6 +131,8 @@ export interface MockSlots {
 export interface MockState {
   /** Organizations by name; factory_count is computed from factories. */
   orgs: Org[];
+  /** Who exists and belongs where, and the invitations (people.ts). */
+  people: MockPeople;
   slots: Record<string, MockSlots>;
   /** Every organization's audit log, oldest first. */
   audit: { org: string; entry: AuditEntry }[];
@@ -1235,6 +1238,11 @@ export function seed(now = Date.now()): MockState {
       },
     ],
     factories: [goalFactory, sreFactory, supportFactory, researchFactory].map((f) => structuredClone(f)),
+    people: seedPeople(now, {
+      acme: acmeOrg,
+      labs: labsOrg,
+      factories: { goal: goalFactory.id, sre: sreFactory.id, support: supportFactory.id },
+    }),
     // Acme shares 6 slots, at most 3 for goal and 2 for sre (Org-Settings board); labs has no caps.
     slots: {
       [acmeOrg]: { max: 6, factories: { [goalFactory.id]: 3, [sreFactory.id]: 2 } },

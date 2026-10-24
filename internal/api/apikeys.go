@@ -20,6 +20,7 @@ import (
 // Access keeps the organization's people and keys; ports.Access (the PostgreSQL adapter)
 // satisfies it.
 type Access interface {
+	People
 	APIKeys(ctx context.Context) ([]domain.APIKey, error)
 	CreateAPIKey(ctx context.Context, by domain.Actor, k domain.NewAPIKey) (domain.APIKey, error)
 	RevokeAPIKey(ctx context.Context, by domain.Actor, id domain.APIKeyID) error

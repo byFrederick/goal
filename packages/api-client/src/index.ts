@@ -70,6 +70,10 @@ export type Permission = Schemas["Permission"];
 export type ApiKey = Schemas["ApiKey"];
 export type NewApiKey = Schemas["NewApiKey"];
 export type CreatedApiKey = Schemas["CreatedApiKey"];
+export type Member = Schemas["Member"];
+export type FactoryRoleGrant = Schemas["FactoryRoleGrant"];
+export type Invitation = Schemas["Invitation"];
+export type TransferRequest = Schemas["TransferRequest"];
 
 // Definitions (B §8): factories' drafts, versions, validation and templates.
 export type VersionRef = Schemas["VersionRef"];

@@ -434,6 +434,108 @@ paths:
         "204":
           description: Revoked
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/members:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listMembers
+      x-goal-scope: member:read
+      tags: [identity]
+      summary: The organization's members, by name
+      description: >-
+        Each member with their organization role, their factory roles (on the factories the
+        caller sees), when they joined and were last active, and what the caller may change about
+        them. Inviting, changing an organization role and removing go to the identity service
+        (/api/auth/organization/*, Better Auth's contract), whose owner rules apply; can_change_role
+        and can_remove say in advance what it would refuse.
+      responses:
+        "200":
+          description: The members
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberList" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/invitations:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listInvitations
+      x-goal-scope: invitation:read
+      tags: [identity]
+      summary: The organization's pending invitations, oldest first
+      description: Expired, accepted, declined and cancelled invitations are left out.
+      responses:
+        "200":
+          description: The pending invitations
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvitationList" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/members/{user}/factory-roles/{factory}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/UserRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    put:
+      operationId: setFactoryRole
+      x-goal-scope: member:manage
+      tags: [identity]
+      summary: Give a member a role on a factory
+      description: >-
+        Replaces the member's role on the factory; applies at once (their next request and their
+        open streams) and is audited as factory_role.granted or factory_role.changed. 404 when the
+        user is not a member or the factory not one of the organization's; 409 editor-everywhere
+        for an owner or an admin, who hold every factory role by their organization role. Needs a
+        sign-in from the last 10 minutes (403 reauth-required).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FactoryRoleChange" }
+      responses:
+        "200":
+          description: The member's role on the factory now
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FactoryRoleGrant" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: removeFactoryRole
+      x-goal-scope: member:manage
+      tags: [identity]
+      summary: Take a member's role on a factory away
+      description: >-
+        The member no longer sees the factory (unless they are an owner or an admin). Audited as
+        factory_role.removed; nothing to remove is no change. Needs a sign-in from the last 10
+        minutes.
+      responses:
+        "204": { description: Removed }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/transfer:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    post:
+      operationId: transferOwnership
+      x-goal-scope: org:transfer
+      tags: [identity]
+      summary: Hand the organization to an admin
+      description: >-
+        One atomic change: the admin `to` becomes an owner and the caller an admin, audited as
+        org.ownership_transferred. `confirm` must be the organization's name exactly (409
+        confirmation-mismatch); `to` must be an admin (409 not-an-admin). Owners only, with a
+        sign-in from the last 10 minutes. Answers the organization as the caller now sees it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TransferRequest" }
+      responses:
+        "200":
+          description: The organization, the caller now its admin
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Org" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/attention:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -1896,7 +1998,9 @@ components:
             confirms it's you and retries once. last-platform-admin (409): the install keeps at
             least one platform admin. scope-not-allowed (400): an API key scope keys may not carry,
             or that its creator or its ceiling does not hold. api-key-name-taken (409): another live
-            key of the organization has the name. An unknown
+            key of the organization has the name. Members and roles (409): not-an-admin
+            (ownership goes to an admin only), last-owner (an organization keeps an owner),
+            editor-everywhere (owners and admins hold every factory role already). An unknown
             organization, factory, item or run and one the caller may not see answer the same
             fixed body without detail: org-not-found, factory-not-found, item-not-found,
             run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found.
@@ -2164,6 +2268,90 @@ components:
       type: string
       description: One permission of api/permissions.yaml, such as org:read or item:decide
       pattern: "^[a-z_]+(:[a-z_]+)?$"
+    FactoryRoleGrant:
+      type: object
+      description: A member's role on one factory
+      required: [factory_id, role]
+      properties:
+        factory_id: { type: string }
+        role: { $ref: "#/components/schemas/FactoryRole" }
+    FactoryRoleChange:
+      type: object
+      required: [role]
+      properties:
+        role: { $ref: "#/components/schemas/FactoryRole" }
+    MemberList:
+      type: object
+      required: [members]
+      properties:
+        members:
+          type: array
+          items: { $ref: "#/components/schemas/Member" }
+    Member:
+      type: object
+      required: [member_id, user, role, factory_roles, joined_at, last_active_at, you, can_change_role, can_remove]
+      properties:
+        member_id:
+          type: string
+          description: The membership's id, which the identity service's update-member-role and remove-member name
+        user: { $ref: "#/components/schemas/User" }
+        role: { $ref: "#/components/schemas/OrgRole" }
+        factory_roles:
+          type: array
+          description: >-
+            By factory id, on the factories the caller sees. Owners and admins have none: they
+            are editors in every factory by their organization role.
+          items: { $ref: "#/components/schemas/FactoryRoleGrant" }
+        joined_at: { type: string, format: date-time }
+        last_active_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When their newest session was last used; null when they never signed in
+        you: { type: boolean, description: This member is the caller }
+        can_change_role:
+          type: boolean
+          description: >-
+            Whether the caller may change this member's organization role: they hold
+            member:manage, sign-in is on, and the member is not an owner, unless the caller is an
+            owner too and the organization keeps another owner.
+        can_remove:
+          type: boolean
+          description: As can_change_role, and not the caller themself (who leaves instead)
+    InvitationList:
+      type: object
+      required: [invitations]
+      properties:
+        invitations:
+          type: array
+          items: { $ref: "#/components/schemas/Invitation" }
+    Invitation:
+      type: object
+      description: A pending invitation
+      required: [id, email, role, factory_roles, inviter, created_at, expires_at]
+      properties:
+        id: { type: string }
+        email: { type: string }
+        role: { $ref: "#/components/schemas/OrgRole" }
+        factory_roles:
+          type: array
+          description: Given when the invitation is accepted, to a member only
+          items: { $ref: "#/components/schemas/FactoryRoleGrant" }
+        inviter: { $ref: "#/components/schemas/Inviter" }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+    Inviter:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+    TransferRequest:
+      type: object
+      required: [to, confirm]
+      properties:
+        to: { type: string, description: The user id of the admin who becomes an owner }
+        confirm: { type: string, description: "The organization's name, typed to confirm" }
     NewOrg:
       type: object
       required: [name, slug]

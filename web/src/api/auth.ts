@@ -23,7 +23,9 @@ const auth = createAuthClient({
  * with the seconds to wait); a wrong code (also when sign-in by code is locked for the address,
  * which the service answers the same way); an expired code; a code used up after 3 tries; an
  * address that may not sign up (no invitation); a change that needed a recent sign-in the person
- * did not confirm; a name that is not just a name; or anything else the service refused.
+ * did not confirm; a name that is not just a name; a change only an owner may make; an invitation
+ * for another address than the signed-in one; someone already a member; the only owner leaving; or
+ * anything else the service refused (an invitation that expired, was used or cancelled among them).
  */
 export type AuthFailureKind =
   | 'unreachable'
@@ -34,6 +36,10 @@ export type AuthFailureKind =
   | 'not-invited'
   | 'reauth-required'
   | 'name-refused'
+  | 'owners-only'
+  | 'not-recipient'
+  | 'already-member'
+  | 'only-owner'
   | 'refused';
 
 export class AuthFailure extends Error {
@@ -61,6 +67,12 @@ const codeFailures: Record<string, AuthFailureKind> = {
   SIGN_UP_NOT_ALLOWED: 'not-invited',
   REAUTH_REQUIRED: 'reauth-required',
   NAME_ONLY: 'name-refused',
+  OWNERS_ONLY: 'owners-only',
+  YOU_ARE_NOT_ALLOWED_TO_INVITE_USER_WITH_THIS_ROLE: 'owners-only',
+  YOU_ARE_NOT_THE_RECIPIENT_OF_THE_INVITATION: 'not-recipient',
+  USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION: 'already-member',
+  YOU_CANNOT_LEAVE_THE_ORGANIZATION_AS_THE_ONLY_OWNER: 'only-owner',
+  YOU_CANNOT_LEAVE_THE_ORGANIZATION_WITHOUT_AN_OWNER: 'only-owner',
 };
 
 interface BetterAuthError {
@@ -183,6 +195,87 @@ export async function approveDevice(userCode: string): Promise<void> {
 /** Denies the code: the CLI stops waiting and is not signed in. */
 export async function denyDevice(userCode: string): Promise<void> {
   await call((fetchOptions) => auth.$fetch('/device/deny', { method: 'POST', body: { userCode }, ...fetchOptions }));
+}
+
+/**
+ * A call of the organization endpoints. Every one names its organization, invitation or member
+ * explicitly: the identity service refuses one that relies on an active organization (ID_REQUIRED).
+ */
+function organization<T>(
+  path: string,
+  init: { method: 'GET' | 'POST'; body?: object; query?: Record<string, string> },
+) {
+  return call<T>((fetchOptions) => auth.$fetch<T>(path, { ...init, ...fetchOptions }) as Promise<BetterAuthResult<T>>);
+}
+
+/** A member's organization role, as the identity service takes it. */
+export type OrgRoleName = 'owner' | 'admin' | 'member';
+
+export interface InviteRequest {
+  organizationId: string;
+  email: string;
+  role: OrgRoleName;
+  /** The factory roles joining gives (members only), by factory id. */
+  factoryRoles: { factoryId: string; role: 'viewer' | 'approver' | 'editor' }[];
+  /** Sends the invitation again: the earlier one is cancelled and the link is new. */
+  resend?: boolean;
+}
+
+/** Invites one person; the service emails them a link to /invite/<id> that expires in 3 days. */
+export async function invite({ factoryRoles, ...rest }: InviteRequest): Promise<void> {
+  await organization('/organization/invite-member', {
+    method: 'POST',
+    body: { ...rest, ...(factoryRoles.length > 0 ? { factoryRoles: JSON.stringify(factoryRoles) } : {}) },
+  });
+}
+
+export async function cancelInvitation(invitationId: string): Promise<void> {
+  await organization('/organization/cancel-invitation', { method: 'POST', body: { invitationId } });
+}
+
+export async function updateMemberRole(organizationId: string, memberId: string, role: OrgRoleName): Promise<void> {
+  await organization('/organization/update-member-role', { method: 'POST', body: { organizationId, memberId, role } });
+}
+
+export async function removeMember(organizationId: string, memberId: string): Promise<void> {
+  await organization('/organization/remove-member', {
+    method: 'POST',
+    body: { organizationId, memberIdOrEmail: memberId },
+  });
+}
+
+/** Leaves the organization (the only owner cannot). */
+export async function leaveOrganization(organizationId: string): Promise<void> {
+  await organization('/organization/leave', { method: 'POST', body: { organizationId } });
+}
+
+/**
+ * An invitation as its recipient sees it: Better Auth's (pending, unexpired, for the signed-in
+ * address only) with who sent it and the factories it gives, which the identity service adds.
+ */
+export interface InvitationDetails {
+  id: string;
+  email: string;
+  role: OrgRoleName;
+  organizationId: string;
+  organizationName: string;
+  organizationSlug: string;
+  inviterEmail: string;
+  inviterName?: string | null;
+  expiresAt: string;
+  factories?: { id: string; name: string; role: string }[];
+}
+
+export function getInvitation(id: string): Promise<InvitationDetails> {
+  return organization<InvitationDetails>('/organization/get-invitation', { method: 'GET', query: { id } });
+}
+
+export async function acceptInvitation(invitationId: string): Promise<void> {
+  await organization('/organization/accept-invitation', { method: 'POST', body: { invitationId } });
+}
+
+export async function rejectInvitation(invitationId: string): Promise<void> {
+  await organization('/organization/reject-invitation', { method: 'POST', body: { invitationId } });
 }
 
 /** The calls as TanStack mutations. */

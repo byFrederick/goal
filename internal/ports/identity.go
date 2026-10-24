@@ -25,8 +25,11 @@ type Identity interface {
 	DeviceRequest(ctx context.Context, userCode string) (domain.DeviceRequest, error)
 }
 
-// Access keeps the people and keys of the organization in ctx (spec 3 §5.1). Every change
-// appends its audit entry in its transaction.
+// Access keeps the people and keys of the organization in ctx (spec 3 §5.1): its members and
+// pending invitations as the identity service keeps them, Goal's factory roles, the transfer
+// of its ownership, and its API keys. Membership itself (inviting, changing an organization
+// role, removing) changes only through the identity service, so its owner rules hold. Every
+// change appends its audit entry in its transaction; nothing is cached.
 type Access interface {
 	// APIKeys lists the organization's live keys and those revoked in the last 30 days, live
 	// ones first, newest first.
@@ -38,6 +41,20 @@ type Access interface {
 	// RevokeAPIKey revokes a key at once (api_key.revoked): it stops resolving on the next
 	// request. Revoking a revoked key changes nothing; an unknown one is ErrNotFound.
 	RevokeAPIKey(ctx context.Context, by domain.Actor, id domain.APIKeyID) error
+	// Members lists the organization's members by name, with their factory roles and last
+	// activity.
+	Members(ctx context.Context) ([]domain.Member, error)
+	// Invitations lists the organization's pending, unexpired invitations, oldest first.
+	Invitations(ctx context.Context) ([]domain.Invitation, error)
+	// SetFactoryRole gives member user role on factory f; "" removes it (nothing to remove is no
+	// change). ErrNotFound when user is not a member or f not a factory of the organization;
+	// domain.ErrRoleFromOrg for an owner or an admin, who are editors everywhere;
+	// domain.ErrInvalid for an unknown role. Audit: factory_role.granted, changed or removed.
+	SetFactoryRole(ctx context.Context, by domain.Actor, user domain.UserID, f domain.FactoryID, role domain.FactoryRole) error
+	// TransferOwnership makes the admin to an owner and the owner from an admin, at once.
+	// domain.ErrNotAnAdmin when to is not an admin, domain.ErrNotAnOwner when from is not an
+	// owner; nothing changes then. Audit: org.ownership_transferred (and both role changes).
+	TransferOwnership(ctx context.Context, by domain.Actor, from, to domain.UserID) error
 }
 
 // AccessNotices streams the access changes committed by anyone (PostgreSQL LISTEN goal_access):

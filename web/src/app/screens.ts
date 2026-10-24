@@ -16,6 +16,7 @@ import {
   Settings,
   SquareTerminal,
   TextAlignStart,
+  Users,
 } from 'lucide-react';
 
 interface Screen {
@@ -31,7 +32,7 @@ export type FactoryPath =
   | '/o/$org/f/$factory/items'
   | '/o/$org/f/$factory/definition';
 /** Paths of the organization's screens; their only param is its slug. */
-export type OrgPath = '/o/$org' | '/o/$org/settings' | '/o/$org/api-keys';
+export type OrgPath = '/o/$org' | '/o/$org/members' | '/o/$org/settings' | '/o/$org/api-keys';
 
 type Availability<Path> = { available: true; to: Path; exact?: boolean } | { available: false };
 
@@ -82,6 +83,15 @@ export const factoriesScreen: OrgScreen = {
   to: '/o/$org',
   exact: true,
 };
+/** Members and roles (spec 3, PR 3-11): every member reaches it; owners and admins change people. */
+export const membersScreen: OrgScreen = {
+  id: 'members',
+  label: 'Members and roles',
+  icon: Users,
+  available: true,
+  to: '/o/$org/members',
+};
+
 /** The organization's API keys (spec 3 §10.2 "Api-Keys"), for owners and admins. */
 export const apiKeysScreen: OrgScreen = {
   id: 'api-keys',
@@ -111,6 +121,7 @@ export const settingsScreen: OrgScreen = {
 /** The organization sidebar, top to bottom. */
 export const orgScreens: readonly OrgScreen[] = [
   factoriesScreen,
+  membersScreen,
   apiKeysScreen,
   catalogScreen,
   credentialsScreen,

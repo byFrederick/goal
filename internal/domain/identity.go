@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"time"
 )
@@ -15,6 +16,21 @@ var (
 	// ErrReauthRequired means a sensitive operation (fresh: true in api/permissions.yaml) came
 	// with a session signed in longer ago than FreshFor. The API answers 403 reauth-required.
 	ErrReauthRequired = errors.New("a recent sign-in is required")
+)
+
+// Errors of the people of an organization (phase 3). Each wraps ErrInvalid: the API answers 409
+// with the rule's code.
+var (
+	// ErrLastOwner means a change would leave an organization without an owner.
+	ErrLastOwner = fmt.Errorf("an organization keeps at least one owner: %w", ErrInvalid)
+	// ErrNotAnAdmin means ownership was transferred to someone who is not an admin of the
+	// organization: only an admin becomes its owner.
+	ErrNotAnAdmin = fmt.Errorf("only an admin of the organization can become its owner: %w", ErrInvalid)
+	// ErrNotAnOwner means ownership was transferred away from someone who is not an owner.
+	ErrNotAnOwner = fmt.Errorf("only an owner can transfer the organization: %w", ErrInvalid)
+	// ErrRoleFromOrg means a factory role was given to an owner or an admin, who are editors in
+	// every factory by their organization role.
+	ErrRoleFromOrg = fmt.Errorf("owners and admins are editors in every factory: %w", ErrInvalid)
 )
 
 // FreshFor is how long after signing in a session may make sensitive changes.
@@ -162,6 +178,51 @@ type OrgMembership struct {
 	Role         OrgRole
 	FactoryCount int
 }
+
+// FactoryGrant is a role on one factory.
+type FactoryGrant struct {
+	Factory FactoryID
+	Role    FactoryRole
+}
+
+// Member is a person's membership of an organization: their role there, their factory roles (by
+// factory id), when they joined and when they were last active (zero: never signed in).
+type Member struct {
+	// ID is the membership's own id (Better Auth's member id), which the identity service's
+	// role changes and removals name.
+	ID           string
+	User         User
+	Role         OrgRole
+	FactoryRoles []FactoryGrant
+	JoinedAt     time.Time
+	LastActiveAt time.Time
+}
+
+// Invitation is a pending invitation to an organization: who it is for, the role and factory
+// roles joining gives, who sent it (Inviter's ID and Name) and until when it can be used.
+type Invitation struct {
+	ID                   string
+	Email                string
+	Role                 OrgRole
+	FactoryRoles         []FactoryGrant
+	Inviter              User
+	CreatedAt, ExpiresAt time.Time
+}
+
+// Audit actions of goald's changes to an organization's people (the identity service's
+// membership changes are audited by the database's triggers on its rows, with the same target).
+const (
+	AuditFactoryRoleGranted = "factory_role.granted"
+	AuditFactoryRoleChanged = "factory_role.changed"
+	AuditFactoryRoleRemoved = "factory_role.removed"
+	// AuditOrgOwnershipTransferred is written by the database's goal_transfer_ownership.
+	AuditOrgOwnershipTransferred = "org.ownership_transferred"
+	// AuditTargetMember is a member, by their user id.
+	AuditTargetMember = "member"
+)
+
+// Valid reports whether r is one of the factory roles.
+func (r FactoryRole) Valid() bool { return slices.Contains(factoryLadder, r) }
 
 // DeviceRequest is a pending CLI sign-in (the device authorization flow), as the person who
 // approves it sees it.

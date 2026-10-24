@@ -15,16 +15,20 @@ import (
 	"github.com/byFrederick/goal/internal/ports"
 )
 
-var _ ports.Identity = (*Identity)(nil)
+var (
+	_ ports.Identity = (*Identity)(nil)
+	_ ports.Access   = (*Identity)(nil)
+)
 
 // keyTouchEvery is how often an API key's last use is recorded at most.
 const keyTouchEvery = time.Minute
 
-// Identity keeps people, sessions, memberships, factory roles and API keys in memory behind one
-// mutex, with the database's rules: expired sessions and revoked, expired or deleted-org keys do
-// not resolve; a member of a deleted organization has no role there; an organization never
-// loses its last owner and the install never its last platform admin (ErrConflict). Tests set it
-// up with the Add and Set methods.
+// Identity keeps people, sessions, memberships, invitations, factory roles and API keys in memory
+// behind one mutex, with the database's rules: expired sessions and revoked, expired or
+// deleted-org keys do not resolve; a member of a deleted organization has no role there; an
+// organization never loses its last owner and the install never its last platform admin
+// (ErrConflict). It is the organization's Access too, over the same people, so a change made
+// through it holds on the next lookup. Tests set it up with the Add, Set and Invite methods.
 type Identity struct {
 	mu       sync.Mutex
 	now      func() time.Time
@@ -62,7 +66,14 @@ type identityOrg struct {
 	deleted      bool
 	factories    []domain.FactoryID
 	members      map[domain.UserID]domain.OrgRole
+	joined       map[domain.UserID]time.Time
 	factoryRoles map[domain.UserID]map[domain.FactoryID]domain.FactoryRole
+	invitations  []*identityInvitation
+}
+
+type identityInvitation struct {
+	invitation domain.Invitation
+	status     string
 }
 
 type identitySession struct {
@@ -84,7 +95,8 @@ func (i *Identity) AddOrg(o domain.Org) {
 	defer i.mu.Unlock()
 
 	i.orgs[o.ID] = &identityOrg{
-		org: o, members: map[domain.UserID]domain.OrgRole{}, factoryRoles: map[domain.UserID]map[domain.FactoryID]domain.FactoryRole{},
+		org: o, members: map[domain.UserID]domain.OrgRole{}, joined: map[domain.UserID]time.Time{},
+		factoryRoles: map[domain.UserID]map[domain.FactoryID]domain.FactoryRole{},
 	}
 }
 
@@ -162,9 +174,14 @@ func (i *Identity) SetOrgRole(org domain.OrgID, user domain.UserID, role domain.
 
 	if role == "" {
 		delete(o.members, user)
+		delete(o.joined, user)
 		delete(o.factoryRoles, user)
 
 		return nil
+	}
+
+	if o.members[user] == "" {
+		o.joined[user] = i.now()
 	}
 
 	o.members[user] = role
@@ -172,8 +189,9 @@ func (i *Identity) SetOrgRole(org domain.OrgID, user domain.UserID, role domain.
 	return nil
 }
 
-// SetFactoryRole gives a member a role on factory f of org; "" removes it.
-func (i *Identity) SetFactoryRole(org domain.OrgID, user domain.UserID, f domain.FactoryID, role domain.FactoryRole) error {
+// GrantFactoryRole gives a member a role on factory f of org, whatever their organization role
+// and whether f was added; "" removes it. The Access method SetFactoryRole keeps the rules.
+func (i *Identity) GrantFactoryRole(org domain.OrgID, user domain.UserID, f domain.FactoryID, role domain.FactoryRole) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -182,17 +200,7 @@ func (i *Identity) SetFactoryRole(org domain.OrgID, user domain.UserID, f domain
 		return fmt.Errorf("member %s of %s: %w", user, org, ports.ErrNotFound)
 	}
 
-	if role == "" {
-		delete(o.factoryRoles[user], f)
-
-		return nil
-	}
-
-	if o.factoryRoles[user] == nil {
-		o.factoryRoles[user] = map[domain.FactoryID]domain.FactoryRole{}
-	}
-
-	o.factoryRoles[user][f] = role
+	o.grant(user, f, role)
 
 	return nil
 }

@@ -1,12 +1,16 @@
 // The organization's sidebar on its own pages: "Organization" as eyebrow, its name and factory
-// count, then Factories, API keys (with api_key:read), Connector catalog, Credentials and Settings
-// (C §10.5, canvas "Factories" and "Api-Keys").
+// count, then Factories, Members and roles, API keys (with api_key:read), Connector catalog,
+// Credentials and Settings (C §10.5, canvas "Factories", "Members" and "Api-Keys"), with the
+// caller's role under the count.
 import { Link } from '@tanstack/react-router';
 import type { OrgSummary } from '../api/types';
 import { factoryCount, useOrgGrants } from '../shared/org';
 import { Count } from '../ui/count';
 import { orgScreens, screensFor } from './screens';
 import { entryClass, iconProps, LaterEntry, Sidebar, SidebarGroup } from './sidebar';
+
+/** "You’re an owner." */
+const roleArticle = { owner: 'an owner', admin: 'an admin', member: 'a member' } as const;
 
 export function OrgSidebar({ org }: { org: OrgSummary }) {
   const can = useOrgGrants()?.can;
@@ -15,7 +19,7 @@ export function OrgSidebar({ org }: { org: OrgSummary }) {
       label={`${org.name} organization`}
       eyebrow="Organization"
       title={org.name}
-      subtitle={`${factoryCount(org.factory_count)}.`}
+      subtitle={`${factoryCount(org.factory_count)}.${org.role ? ` You’re ${roleArticle[org.role]}.` : ''}`}
     >
       <SidebarGroup>
         {screensFor(orgScreens, can).map((s) =>

@@ -103,6 +103,12 @@ export class GoalDatabase {
     return rows.length > 0;
   }
 
+  /** userName is the name of the user with this id; null for none. */
+  async userName(id: string): Promise<string | null> {
+    const { rows } = await this.pool.query<{ name: string }>('SELECT name FROM auth."user" WHERE id = $1', [id]);
+    return rows[0]?.name ?? null;
+  }
+
   /** isUser is true when an account has this email. */
   async isUser(email: string): Promise<boolean> {
     const { rows } = await this.pool.query('SELECT 1 FROM auth."user" WHERE email = lower($1)', [email.trim()]);

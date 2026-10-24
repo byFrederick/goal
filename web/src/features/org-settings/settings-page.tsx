@@ -4,14 +4,15 @@
 // Leaving with unsaved changes asks first. A new address moves the page to it: links with the
 // old one stop working (review decision 2). What the caller may do comes from the organization's
 // `can` (spec 3 §10.2): without org:manage the form is shown read-only, with who changes it; the
-// Danger zone shows only with org:delete (owners).
+// Danger zone shows only to owners: Transfer ownership (org:transfer, with sign-in on) and Delete
+// (org:delete).
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { useBlocker, useNavigate, useRouter } from '@tanstack/react-router';
 import { TriangleAlert } from 'lucide-react';
 import { type FormEvent, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError, patchOrgSettings } from '../../api/client';
-import { keys, settingsQuery } from '../../api/queries';
+import { authConfigQuery, keys, settingsQuery } from '../../api/queries';
 import type { OrgSettings, OrgSettingsPatch, OrgSummary } from '../../api/types';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { reasons } from '../../shared/permissions';
@@ -50,6 +51,9 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
   const navigate = useNavigate();
   const mayManage = useOrgHolds('org:manage');
   const mayDelete = useOrgHolds('org:delete');
+  // Ownership goes from one signed-in person to another: nobody owns anything with sign-in off.
+  const signIn = useSuspenseQuery(authConfigQuery).data.mode === 'session';
+  const mayTransfer = useOrgHolds('org:transfer') && signIn;
 
   // The settings as goald last answered them, and the form over them.
   const [saved, setSaved] = useState(settings);
@@ -279,10 +283,12 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
           </form>
         </ReadOnly>
 
-        {mayDelete ? (
+        {mayDelete || mayTransfer ? (
           <DangerZone
             org={org}
             name={saved.name}
+            deletes={mayDelete}
+            transfers={mayTransfer}
             onLeave={() => {
               leaving.current = true;
             }}

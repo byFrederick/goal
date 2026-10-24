@@ -10,6 +10,7 @@ import type { FactoryRole } from '../api/types';
 export type OrgPermission =
   | 'org:manage'
   | 'org:delete'
+  | 'org:transfer'
   | 'factory:create'
   | 'member:manage'
   | 'api_key:read'
@@ -46,6 +47,7 @@ export const reasons = {
   definition: (factory: string) => `View only. Editors of ${factory} change its definition.`,
   publish: (factory: string) => `Editors of ${factory} review and publish its definition.`,
   settings: (org: string) => `View only. Owners and admins of ${org} change its settings.`,
+  members: (org: string) => `View only. Owners and admins of ${org} invite people and change roles.`,
   newFactory: (org: string) => `Owners and admins of ${org} create factories.`,
 } as const;
 

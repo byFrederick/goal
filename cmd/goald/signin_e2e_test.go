@@ -52,7 +52,8 @@ type e2eStack struct {
 // Spec 3 §13 and §15 (3-9): with GOAL_AUTH=session, the bootstrap owner signs in with the code
 // Mailpit received, through goald's /api/auth proxy; goald then answers as them (platform admin,
 // owner of every organization), creates organizations owned by them, refuses anyone without a
-// session, and when they sign out ends their stream and their access at once. With
+// session, lets them invite someone who joins and to whom they hand that organization (3-11,
+// members_e2e_test.go), and when they sign out ends their stream and their access at once. With
 // GOAL_E2E_WEB=1, task web:e2e-auth (3-10's Playwright flow) runs against the same stack.
 func TestE2E_SignInWithAnEmailedCode(t *testing.T) {
 	t.Parallel()
@@ -66,6 +67,7 @@ func TestE2E_SignInWithAnEmailedCode(t *testing.T) {
 	s.signIn(t)
 	s.checkTheOwner(t)
 	s.checkTheirOrganizations(t)
+	s.membersFlow(t)
 	s.checkAPIKeys(t)
 	s.cliLogsIn(t)
 	s.signOutEndsTheStream(t)
@@ -436,7 +438,7 @@ func (s *e2eStack) codeFromMailpit(t *testing.T, since time.Time) string {
 			} `json:"messages"`
 		}
 
-		res, err := http.Get(e2eMailpit + "/api/v1/search?query=" + url.QueryEscape(`to:"`+s.owner+`"`)) //nolint:noctx // a bounded poll
+		res, err := http.Get(e2eMailpit + "/api/v1/search?query=" + url.QueryEscape(`to:"`+s.owner+`" subject:"sign-in code"`)) //nolint:noctx // a bounded poll
 		if err == nil && json.NewDecoder(res.Body).Decode(&search) == nil {
 			for _, m := range search.Messages {
 				if m.Created.After(since) {

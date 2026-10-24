@@ -17,7 +17,7 @@ func TestAPI_SignIn_InboxAndAttentionByPermission(t *testing.T) {
 	h := newSignedIn(t)
 	h.seedInboxItems(t) // line's decision, blocked, paused and expedite items
 
-	if err := h.identity.SetFactoryRole(testOrg, viewerID, lineID, domain.FactoryViewer); err != nil {
+	if err := h.identity.GrantFactoryRole(testOrg, viewerID, lineID, domain.FactoryViewer); err != nil {
 		t.Fatal(err)
 	}
 
@@ -46,7 +46,7 @@ func TestAPI_SignIn_InboxAndAttentionByPermission(t *testing.T) {
 		t.Errorf("waiting on the owner %d, on the viewer %d; want 1 and 0", owner, viewer)
 	}
 
-	if err := h.identity.SetFactoryRole(testOrg, viewerID, lineID, ""); err != nil {
+	if err := h.identity.GrantFactoryRole(testOrg, viewerID, lineID, ""); err != nil {
 		t.Fatal(err)
 	}
 

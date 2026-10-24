@@ -27,12 +27,7 @@ var updateGolden = flag.Bool("update", false, "rewrite testdata/access.golden fr
 // awaitingOperations are the permissions of api/permissions.yaml whose operations later phase 3
 // PRs add (spec 3, §8.2 and §15). Remove a permission here in the PR that gives it an operation;
 // the test fails while one is both listed and used.
-var awaitingOperations = map[string]string{
-	"org:transfer":    "3-11: transferOwnership",
-	"member:read":     "3-11: listMembers",
-	"invitation:read": "3-11: listInvitations",
-	"member:manage":   "3-11: setFactoryRole, removeFactoryRole",
-}
+var awaitingOperations = map[string]string{}
 
 // contractOp is one operation of api/openapi.yaml as the permission tests see it.
 type contractOp struct {
@@ -289,7 +284,7 @@ func mxIdentity(t *testing.T) (*porttest.Identity, []mxPrincipal) {
 		}
 
 		if p.factory != "" {
-			must(id.SetFactoryRole(p.org, p.user, mxF, p.factory))
+			must(id.GrantFactoryRole(p.org, p.user, mxF, p.factory))
 		}
 
 		out = append(out, mxPrincipal{name: p.name, header: p.cookie(), resolve: func(org domain.OrgID) (domain.Principal, error) {

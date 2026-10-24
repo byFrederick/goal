@@ -161,6 +161,13 @@ export function goalHooks({ db, signIn, mailer, log, clock, publicURL }: HookDep
           });
           return;
         }
+        case '/organization/get-invitation': {
+          // Better Auth answered only its recipient (the session's email matches) about a pending
+          // invitation: Invite-Accept also shows them who sent it and the factories it gives.
+          if (failed) return;
+          const r = (returned instanceof Response ? await returned.clone().json() : returned) as Body;
+          return ctx.json({ ...r, ...(await invitationDetails(db, r)) });
+        }
         case '/device/approve':
         case '/device/deny': {
           if (failed || typeof b.userCode !== 'string') return;
@@ -229,6 +236,30 @@ export function goalHooks({ db, signIn, mailer, log, clock, publicURL }: HookDep
   } satisfies Pick<OrganizationOptions, 'sendInvitationEmail' | 'organizationHooks'>;
 
   return { before, after, organization };
+}
+
+/**
+ * invitationDetails names, for its recipient, who sent an invitation (inviterName) and the factories
+ * it gives with their roles (factories: [{id, name, role}], of factories that still exist).
+ */
+async function invitationDetails(
+  db: GoalDatabase,
+  invitation: Body,
+): Promise<{ inviterName: string | null; factories: { id: string; name: string; role: string }[] }> {
+  const inviter = typeof invitation.inviterId === 'string' ? await db.userName(invitation.inviterId) : null;
+  let grants: FactoryRoleGrant[] = [];
+  try {
+    grants = parseFactoryRoles(invitation.factoryRoles);
+  } catch {
+    // The hook checked them when the invitation was made; anything else shows no factory.
+  }
+  const org = typeof invitation.organizationId === 'string' ? invitation.organizationId : '';
+  const names = new Map((grants.length > 0 ? await db.orgFactories(org) : []).map((f) => [f.id, f.name]));
+  const factories = grants.flatMap((g) => {
+    const name = names.get(g.factoryId);
+    return name === undefined ? [] : [{ id: g.factoryId, name, role: g.role }];
+  });
+  return { inviterName: inviter, factories };
 }
 
 export interface FactoryRoleGrant {

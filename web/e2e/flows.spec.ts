@@ -619,7 +619,7 @@ test('switch organization from the menu by keyboard', async ({ page }) => {
     'href',
     '/o/acme/settings',
   );
-  await expect(menu.getByRole('menuitem', { name: /Members/ })).toHaveCount(0);
+  await expect(menu.getByRole('menuitem', { name: 'Members and roles' })).toHaveAttribute('href', '/o/acme/members');
   await expectAccessible(page);
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
@@ -653,7 +653,7 @@ test('switch organization from the sheet on a phone', async ({ page }) => {
   const acme = sheet.getByRole('link', { name: /^Acme\s?3 factories/ });
   await expect(acme).toHaveAttribute('aria-current', 'true');
   await expect(acme).toBeFocused();
-  await expect(sheet.getByRole('link', { name: /Members/ })).toHaveCount(0);
+  await expect(sheet.getByRole('link', { name: 'Members and roles' })).toHaveAttribute('href', '/o/acme/members');
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 

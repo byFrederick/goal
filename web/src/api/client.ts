@@ -23,12 +23,15 @@ import type {
   EventPage,
   Factory,
   FactoryOverviewList,
+  FactoryRole,
   Inbox,
+  Invitation,
   Item,
   ItemList,
   ItemState,
   LeadTimeBridge,
   Me,
+  Member,
   MergeMethod,
   Metrics,
   NewItem,
@@ -137,6 +140,38 @@ export function patchOrgSettings(org: string, patch: OrgSettingsPatch): Promise<
 /** Deletes the organization; `confirm` must be its name. It 404s at once and is purged after purge_after. */
 export function deleteOrg(org: string, confirm: string): Promise<OrgDeleted> {
   return unwrap(goal.DELETE('/v1/orgs/{org}', { params: { path: { org } }, body: { confirm } }));
+}
+
+/** The organization's members by name, with what the caller may change about each. */
+export async function listMembers(org: string, signal?: AbortSignal): Promise<Member[]> {
+  const body = await unwrap(goal.GET(orgPath('/members'), { params: { path: { org } }, ...cancel(signal) }));
+  return body.members;
+}
+
+/** The organization's pending invitations (owners and admins). */
+export async function listInvitations(org: string, signal?: AbortSignal): Promise<Invitation[]> {
+  const body = await unwrap(goal.GET(orgPath('/invitations'), { params: { path: { org } }, ...cancel(signal) }));
+  return body.invitations;
+}
+
+/** Gives member `user` `role` on the factory (by id); null takes the role away. */
+export async function setFactoryRole(
+  org: string,
+  user: string,
+  factory: string,
+  role: FactoryRole | null,
+): Promise<void> {
+  const path = { org, user, factory };
+  if (role === null) {
+    await unwrap(goal.DELETE(orgPath('/members/{user}/factory-roles/{factory}'), { params: { path } }));
+    return;
+  }
+  await unwrap(goal.PUT(orgPath('/members/{user}/factory-roles/{factory}'), { params: { path }, body: { role } }));
+}
+
+/** Hands the organization to the admin `to`; `confirm` is its name. The caller becomes an admin. */
+export function transferOwnership(org: string, to: string, confirm: string): Promise<Org> {
+  return unwrap(goal.POST(orgPath('/transfer'), { params: { path: { org } }, body: { to, confirm } }));
 }
 
 export async function listFactories(org: string, signal?: AbortSignal): Promise<Factory[]> {
