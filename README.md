@@ -5,9 +5,10 @@ Goal runs AI agent factories on your machine. A factory is a definition: `factor
 Factory definitions are content, not code. goald keeps them, not this repository: file content in one versioned S3-compatible bucket, drafts and published versions in PostgreSQL (ADR 0005 and its 2.2 amendment). The first factory, `goal`, builds this repository; others (`sre`, `university`) run the same engine on other work.
 
 ```
-cmd/goal/              CLI: goal up, run, follow, item, approve, reject, retry, merge; goal factory pull|validate|push|publish|list|versions|restore; goal org list|use|create; goal storage init; goal catalog skills|templates; goal db init
+cmd/goal/              CLI: goal up, run, follow, item, approve, reject, retry, merge; goal factory pull|validate|push|publish|list|versions|restore; goal org list|use|create; goal login|logout|whoami; goal key; goal admin; goal storage init; goal catalog skills|templates; goal db init|recover-admin|recover-owner
 cmd/goald/             daemon: flow engine, HTTP API (/v1/orgs/{org}/..., with an SSE stream per organization), MCP gateway (/mcp), Docker agent runs
 api/                   openapi.yaml: the HTTP API contract (Go types in internal/api/gen, TypeScript in packages/api-client)
+auth/                  identity service (Better Auth on Hono): sign-in, sessions, members and invitations, behind goald's /api/auth
 internal/engine/       flow engine: pull, WIP, gates, workspaces and command checks per run
 internal/config/       loader and cross-reference validation (reads a folder or a bucket prefix)
 internal/authoring/    definition authoring behind the API: drafts, validation, publish, restore, the template catalog
@@ -17,9 +18,9 @@ packages/api-client/   @goal/api-client: typed TypeScript client of the API (gen
 schema/                factory.schema.json, evals.schema.json (editor autocompletion + validation)
 migrations/            PostgreSQL schema (goose, forward-only)
 queries/               SQL for sqlc (pgx/v5)
-compose.yaml           local PostgreSQL 18 and RustFS (S3-compatible object storage)
+compose.yaml           local PostgreSQL 18, RustFS (S3-compatible object storage) and Mailpit (the dev inbox)
 worker/                agent container images (TypeScript, Claude Agent SDK): runtime and dev (Go, task, Terraform, PostgreSQL)
-web/                   UI (React) — phase 2
+web/                   UI (React)
 terraform/             AWS infrastructure: bucket, KMS, S3 Vectors, one Bedrock KB per factory (later, unscheduled)
 design-system/         UI rules generated with ui-ux-pro-max, plus the user's overrides (MASTER.md)
 docs/adr/              decisions (0001 stack, 0002 Jonah evals, 0003 hexagonal architecture, 0004 frontend, 0005 definitions in object storage, 0006 workspaces and command checks)
@@ -62,7 +63,22 @@ bin/goal merge goal#2                              # at the merge station: goald
 bin/goal retry goal#2                              # a blocked item goes back to its station's queue
 ```
 
-Every factory, item and run belongs to an organization; what existed before organizations is in `default`. Commands act in one: `--org <slug>`, else `GOAL_ORG`, else `org` in `~/.config/goal/config.json` (`goal org use <slug>` writes it), else the install's only organization. `goal org list` shows them and `goal org create <slug> --name N` adds one. Decisions are recorded as the local user's: there is no sign-in yet.
+### Sign in
+
+People sign in (`GOAL_AUTH=session`, the default): by a six-digit code mailed to them, or with Google. The identity service (`auth/`, Better Auth) runs beside goald and is reached only through goald's `/api/auth`.
+
+```bash
+# .env: BETTER_AUTH_SECRET (openssl rand -hex 32, not GOAL_GATEWAY_KEY) and
+#       GOAL_BOOTSTRAP_OWNER_EMAIL (the first owner's address); .env.example lists every sign-in variable
+task up                    # also builds auth/ and starts it and Mailpit (codes at http://127.0.0.1:8025)
+open http://127.0.0.1:8080 # sign in as the bootstrap owner with the code Mailpit received
+bin/goal login             # the CLI: approve the code it shows in the browser; kept in the OS keychain
+bin/goal whoami
+```
+
+The bootstrap owner becomes a platform admin and owner of every organization (`default` included), then invites people from Members; rows from before sign-in stay as they were and read "Local user (before sign-in)". For scripts and CI, create an API key or a personal token on the organization's API keys page and set `GOAL_API_KEY`, or store it with `goal login --token` (from stdin); either acts in its own organization. Locked out: `goal db recover-admin <email>` or `goal db recover-owner <org> <email>` need only the database. `GOAL_AUTH=none` turns sign-in off again (loopback only, one developer's laptop: every request, agents' included, is the single local user) without losing data. Upgrading a 2.2 install: `pg_dump` first, add the two variables, `goal up` ([spec 3 §14](docs/specs/3-identity-and-access.md#14-rollout-and-migration)).
+
+Every factory, item and run belongs to an organization; what existed before organizations is in `default`. Commands act in one: `--org <slug>`, else `GOAL_ORG`, else `org` in `~/.config/goal/config.json` (`goal org use <slug>` writes it), else the install's only organization (a key's or token's own). `goal org list` shows them and `goal org create <slug> --name N` adds one (platform admins). Decisions are recorded as the person signed in.
 
 An item is `<factory>#<number>` (`goal#2`), its id, or a bare number when only one factory of the organization has an item with it (`--factory` picks one otherwise). `goal merge` works at a human station marked `action: merge` in `factory.yaml`: goald squash-merges the pull request named by the item's latest `pull_request` output on `runtime.repository`, with that repository's token, only if GitHub reports it open and mergeable; it never forces, and deletes only the pull request's head branch afterwards.
 

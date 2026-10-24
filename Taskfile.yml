@@ -59,8 +59,8 @@ tasks:
       - go build -trimpath -tags webui -o bin/ ./cmd/...
 
   up:
-    desc: Start PostgreSQL and RustFS, prepare the database roles and the bucket, run goald in the foreground (goal up)
-    deps: [build]
+    desc: Start PostgreSQL and RustFS, prepare the database roles and the bucket, run goald in the foreground with, under GOAL_AUTH=session, the auth service and Mailpit (goal up)
+    deps: [build, auth:build]
     cmds:
       - bin/goal up
 
