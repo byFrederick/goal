@@ -8,7 +8,7 @@ import { type Clock, type GoalDatabase, userCodeSubject } from './goal.js';
 import type { Logger } from './log.js';
 import type { Mailer } from './mail/mailer.js';
 import { invitationMail } from './mail/messages.js';
-import { client, deliver, type SignIn } from './signin.js';
+import { browserSignIn, client, deliver, type SignIn } from './signin.js';
 
 /** Sensitive changes need a session signed in within this long (spec 3 §8.4, freshAge). */
 export const freshFor = 10 * 60_000;
@@ -18,6 +18,24 @@ const factoryRoles = ['viewer', 'approver', 'editor'];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type HookContext = Parameters<Parameters<typeof createAuthMiddleware>[0]>[0];
+
+/**
+ * The endpoints whose rules read the caller's session. Better Auth runs this before-hook ahead of
+ * the bearer plugin's, which turns a bearer token into the session cookie, so the hook would see no
+ * session there and hold it to none of the rules (fresh, owners, the stamp): a bearer credential is
+ * refused on them (review M1). The browser sends its cookie; the CLI never calls them.
+ */
+const cookieOnly = new Set([
+  '/update-user',
+  '/device/approve',
+  '/organization/invite-member',
+  '/organization/cancel-invitation',
+  '/organization/accept-invitation',
+  '/organization/reject-invitation',
+  '/organization/remove-member',
+  '/organization/update-member-role',
+  '/organization/leave',
+]);
 type Body = Record<string, unknown>;
 
 export interface HookDeps {
@@ -75,6 +93,9 @@ export function goalHooks({ db, signIn, mailer, log, clock, publicURL }: HookDep
 
   const before: AuthMiddleware = createAuthMiddleware(async (ctx) => {
     const b = body(ctx);
+    if (cookieOnly.has(ctx.path) && (ctx.request?.headers.has('authorization') || ctx.headers?.has('authorization'))) {
+      throw refuse('BROWSER_SESSION_REQUIRED', 'Do this in the browser, signed in there', 'FORBIDDEN');
+    }
     switch (ctx.path) {
       case '/email-otp/send-verification-otp':
         if (b.type !== 'sign-in') throw refuse('SIGN_IN_ONLY', 'Goal sends codes for signing in only');
@@ -89,9 +110,21 @@ export function goalHooks({ db, signIn, mailer, log, clock, publicURL }: HookDep
         }
         return { context: { body: { name } } };
       }
-      case '/device/approve':
+      case '/device/approve': {
+        // Only a person signed in through the browser approves a CLI sign-in: a goal login session never
+        // does, fresh as it is, or it could keep itself fresh by approving codes of its own (rows 20,
+        // 30). Checked before freshness, so it is not told to sign in again.
+        const s = await session(ctx);
+        if (s && !browserSignIn(s.session)) {
+          throw refuse(
+            'BROWSER_SESSION_REQUIRED',
+            'Approve a CLI sign-in through the browser, signed in there',
+            'FORBIDDEN',
+          );
+        }
         await fresh(ctx);
         return;
+      }
       case '/organization/invite-member':
         id(b, 'organizationId');
         oneRole(b.role);

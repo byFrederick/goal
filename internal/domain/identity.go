@@ -120,12 +120,14 @@ type Principal struct {
 	KeyExpiresAt time.Time
 }
 
-// Session is a user's sign-in. Bearer: the session came as an Authorization bearer value (the
-// CLI's goal login), not the browser's cookie.
+// Session is a user's sign-in. Browser: the person signed in through the browser, by an email code or
+// Google, as the auth service recorded when it created the session; false for goal login's device
+// flow and for a session it did not tag. It is the session's own record, never how its token
+// arrived: goald does not check the cookie's signature, so the transport proves nothing.
 type Session struct {
 	ID                   string
 	CreatedAt, ExpiresAt time.Time
-	Bearer               bool
+	Browser              bool
 }
 
 // LocalPrincipal is the one person of GOAL_AUTH=none: its Actor is LocalUser.

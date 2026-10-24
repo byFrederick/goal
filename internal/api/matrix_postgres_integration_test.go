@@ -154,8 +154,8 @@ func (d mxDatabase) seed(t *testing.T) {
 	for _, p := range mxPeople() {
 		s := p.session()
 		d.exec(t, d.auth, `INSERT INTO auth."user" (id, name, email, "emailVerified") VALUES ($1, $2, $3, true)`, string(p.user), p.name, p.name+"@example.com")
-		d.exec(t, d.auth, `INSERT INTO auth.session (token, "userId", "createdAt", "updatedAt", "expiresAt") VALUES ($1, $2, $3, $3, $4)`,
-			p.token, string(p.user), s.CreatedAt, time.Now().Add(7*24*time.Hour))
+		d.exec(t, d.auth, `INSERT INTO auth.session (token, "userId", "createdAt", "updatedAt", "expiresAt", "signInMethod")
+			VALUES ($1, $2, $3, $3, $4, 'email_code')`, p.token, string(p.user), s.CreatedAt, time.Now().Add(7*24*time.Hour))
 
 		if p.platformAdmin {
 			d.exec(t, d.admin, `INSERT INTO platform_admins (user_id, added_by) VALUES ($1, 'system:test')`, string(p.user))
@@ -184,8 +184,8 @@ func (d mxDatabase) seedTokens(t *testing.T) {
 	t.Helper()
 
 	owner := mxPeople()[0]
-	d.exec(t, d.auth, `INSERT INTO auth.session (token, "userId", "createdAt", "updatedAt", "expiresAt") VALUES ($1, $2, $3, $3, $4)`,
-		mxBearerSession, string(owner.user), owner.session().CreatedAt, time.Now().Add(7*24*time.Hour))
+	d.exec(t, d.auth, `INSERT INTO auth.session (token, "userId", "createdAt", "updatedAt", "expiresAt", "signInMethod")
+		VALUES ($1, $2, $3, $3, $4, 'device')`, mxBearerSession, string(owner.user), owner.session().CreatedAt, time.Now().Add(7*24*time.Hour))
 	d.inOrg(t, mxGone, "SELECT * FROM goal_provision_org($1, 'gone', 'Gone', 'Go', $2, $3, 'system:test', $4)", string(mxGone),
 		nil, nil, nil) // no owner, no request
 
@@ -297,12 +297,7 @@ func TestAPI_TwoOrgMatrixOverHTTPWithPostgres(t *testing.T) {
 
 	principals = append(principals, mxPrincipal{
 		name: mxBearerName, header: fakeBy[mxBearerName].header, resolve: func(org domain.OrgID) (domain.Principal, error) {
-			p, err := identity.Session(t.Context(), mxBearerSession, org)
-			if p.Session != nil {
-				p.Session.Bearer = true
-			}
-
-			return p, err
+			return identity.Session(t.Context(), mxBearerSession, org)
 		},
 	})
 

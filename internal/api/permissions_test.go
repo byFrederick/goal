@@ -51,7 +51,7 @@ var grantsNow = time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
 func grantUser(role domain.OrgRole, factoryRoles map[domain.FactoryID]domain.FactoryRole) domain.Principal {
 	return domain.Principal{
 		Kind: domain.PrincipalUser, User: "019a0000-0000-7000-8000-0000000000aa", Name: "Ada", Org: grantsOrg, OrgRole: role,
-		FactoryRoles: factoryRoles, Session: &domain.Session{ID: "s", CreatedAt: grantsNow.Add(-time.Minute), ExpiresAt: grantsNow.Add(time.Hour)},
+		FactoryRoles: factoryRoles, Session: &domain.Session{ID: "s", CreatedAt: grantsNow.Add(-time.Minute), ExpiresAt: grantsNow.Add(time.Hour), Browser: true},
 	}
 }
 
@@ -165,7 +165,7 @@ func TestPermissions_RoleGrants(t *testing.T) {
 
 // TestPermissions_PersonalTokenGrants pins spec 3 §4.5 and §8.4 on fabricated principals: a
 // personal token holds its scopes within its owner's roles now, never a fresh, member, key,
-// device or platform permission; only the browser's cookie session creates one.
+// device or platform permission; only a session signed in through the browser creates one.
 func TestPermissions_PersonalTokenGrants(t *testing.T) {
 	t.Parallel()
 
@@ -175,7 +175,7 @@ func TestPermissions_PersonalTokenGrants(t *testing.T) {
 	viewer := grantUser(domain.OrgMember, map[domain.FactoryID]domain.FactoryRole{grantsF: domain.FactoryViewer})
 	approver := grantUser(domain.OrgMember, map[domain.FactoryID]domain.FactoryRole{grantsF: domain.FactoryApprover})
 	stale := grantUser(domain.OrgOwner, nil)
-	stale.Session = &domain.Session{CreatedAt: grantsNow.Add(-domain.FreshFor - time.Second), ExpiresAt: grantsNow.Add(time.Hour)}
+	stale.Session = &domain.Session{CreatedAt: grantsNow.Add(-domain.FreshFor - time.Second), ExpiresAt: grantsNow.Add(time.Hour), Browser: true}
 	key := grantKey(domain.FactoryApprover, nil, scopeOrgRead, "factory:read", "item:decide")
 	everything := []domain.Permission{
 		scopeOrgRead, "factory:read", "item:create", "item:decide", "item:operate", "andon:manage", "definition:edit",
@@ -185,8 +185,10 @@ func TestPermissions_PersonalTokenGrants(t *testing.T) {
 	ownerToken := grantToken(owner, everything...)
 	adminOfPlatform := grantUser(domain.OrgOwner, nil)
 	adminOfPlatform.PlatformAdmin = true
+	// The CLI's session: signed in by goal login's device flow (Session.Browser false), however
+	// its token is sent.
 	bearer := grantUser(domain.OrgOwner, nil)
-	bearer.Session.Bearer = true
+	bearer.Session.Browser = false
 
 	checkGrants(t, []grant{
 		{name: "token decides within its scopes", p: grantToken(approver, "item:decide"), operation: opApprove, org: grantsOrg, factory: grantsF, want: wantAllow},

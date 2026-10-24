@@ -12,7 +12,7 @@ import { freshFor } from './hooks.js';
 import type { Logger } from './log.js';
 import { MemoryMailer } from './mail/memory.js';
 import { createTestDatabase, type TestDatabase } from './testing/database.js';
-import { Fixtures, type Harness, harness } from './testing/service.js';
+import { cookieHeader, Fixtures, type Harness, harness } from './testing/service.js';
 
 let db: TestDatabase;
 let pool: pg.Pool;
@@ -112,6 +112,29 @@ describe('a sensitive change', () => {
 
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ code: 'REAUTH_REQUIRED' });
+    expect((await member(o.member.member)).role).toBe('member');
+  });
+
+  it.each([
+    ['/organization/invite-member', () => ({ organizationId: o.id, email: 'x@example.com', role: 'member' })],
+    ['/organization/cancel-invitation', () => ({ invitationId: randomUUID() })],
+    ['/organization/accept-invitation', () => ({ invitationId: randomUUID() })],
+    ['/organization/reject-invitation', () => ({ invitationId: randomUUID() })],
+    ['/organization/remove-member', () => ({ organizationId: o.id, memberIdOrEmail: o.member.member })],
+    ['/organization/update-member-role', () => ({ organizationId: o.id, memberId: o.member.member, role: 'admin' })],
+    ['/organization/leave', () => ({ organizationId: o.id })],
+    ['/update-user', () => ({ name: 'Olu B.' })],
+    ['/device/approve', () => ({ userCode: 'ABCD1234' })],
+  ])('%s takes the browser’s cookie only: a bearer token, stale or not, is refused (review M1)', async (path, body) => {
+    // Goal's before-hook runs before the bearer plugin turns a bearer token into a cookie, so it
+    // could not see that session to hold it to the rules above.
+    await fx.age(o.owner.id, freshFor + 60_000);
+    const token = /session_token=([A-Za-z0-9]{32})\./.exec(decodeURIComponent(o.owner.cookie))?.[1];
+
+    const res = await o.h.post(path, body(), { authorization: `Bearer ${token}` });
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: 'BROWSER_SESSION_REQUIRED' });
     expect((await member(o.member.member)).role).toBe('member');
   });
 
@@ -383,11 +406,11 @@ describe('an invitation', () => {
       [token, user],
     );
 
-    const res = await o.h.post(
-      '/organization/accept-invitation',
-      { invitationId: invitation },
-      { authorization: `Bearer ${token}` },
-    );
+    // The session is a day from expiry, so get-session extends it and answers its signed cookie.
+    const cookie = cookieHeader(await o.h.get('/get-session', { authorization: `Bearer ${token}` }));
+    expect(cookie).toContain(token);
+
+    const res = await o.h.post('/organization/accept-invitation', { invitationId: invitation }, { cookie });
 
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({

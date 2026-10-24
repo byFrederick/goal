@@ -36,8 +36,8 @@ func keyedWith(t *testing.T, logs io.Writer) signedIn {
 	t.Helper()
 
 	h := newSignedInWith(t, logs)
-	h.identity.AddSession(freshToken, ownerID, domain.Session{ID: "fresh-owner", CreatedAt: t0, ExpiresAt: t0.Add(7 * 24 * time.Hour)})
-	h.identity.AddSession(freshViewerToken, viewerID, domain.Session{ID: "fresh-viewer", CreatedAt: t0, ExpiresAt: t0.Add(7 * 24 * time.Hour)})
+	h.identity.AddSession(freshToken, ownerID, domain.Session{ID: "fresh-owner", CreatedAt: t0, ExpiresAt: t0.Add(7 * 24 * time.Hour), Browser: true})
+	h.identity.AddSession(freshViewerToken, viewerID, domain.Session{ID: "fresh-viewer", CreatedAt: t0, ExpiresAt: t0.Add(7 * 24 * time.Hour), Browser: true})
 
 	return h
 }

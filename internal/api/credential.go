@@ -15,9 +15,16 @@ import (
 )
 
 // The credentials of a request (spec 3, §8.3): a bearer value, a Goal API key, a personal token
-// or a Better Auth session token (from goal login), or else Better Auth's session cookie. goald
-// holds no Better Auth secret and does not check the cookie's signature: the token is the
-// credential, looked up in the database per request (ports.Identity).
+// or a Better Auth session token (from goal login), or else Better Auth's session cookie.
+//
+// goald does not check the cookie's signature, on purpose: the signature is an HMAC under
+// BETTER_AUTH_SECRET, which only the auth service holds (rule 7), and checking it would put that
+// secret in goald and in every process goald's environment reaches. It would prove nothing either:
+// the token is the credential, looked up in the database per request (ports.Identity), and the
+// signature only says the auth service issued that token, which the lookup says too. What the
+// transport cannot say is how the person signed in: anyone holding a token can send it as a
+// cookie with any signature. So nothing here decides by transport; whether a session was signed
+// in through the browser is the session's own record (domain.Session.Browser, review M1).
 const (
 	// sessionCookie is Better Auth's session cookie over http (a loopback GOAL_PUBLIC_URL);
 	// secureSessionCookie over https. Only the one of the install's scheme counts.
@@ -46,12 +53,10 @@ const (
 )
 
 // credential is a request's credential. secret is the session token, the API key or the personal
-// token; it is never logged and never part of an error. bearer: it came as an Authorization
-// bearer value, not the browser's cookie.
+// token; it is never logged and never part of an error.
 type credential struct {
 	kind   credentialKind
 	secret string
-	bearer bool
 }
 
 // parseCredential reads the request's credential: an Authorization bearer value wins over
@@ -109,11 +114,11 @@ func bearer(auth []string) (credential, error) {
 
 	switch {
 	case apiKeyForm.MatchString(value):
-		return credential{kind: credentialAPIKey, secret: value, bearer: true}, nil
+		return credential{kind: credentialAPIKey, secret: value}, nil
 	case personalTokenForm.MatchString(value):
-		return credential{kind: credentialPersonalToken, secret: value, bearer: true}, nil
+		return credential{kind: credentialPersonalToken, secret: value}, nil
 	case sessionTokenForm.MatchString(value):
-		return credential{kind: credentialSession, secret: value, bearer: true}, nil
+		return credential{kind: credentialSession, secret: value}, nil
 	default:
 		return credential{}, fmt.Errorf("authorization: neither an API key, a personal token nor a session token: %w", domain.ErrUnauthenticated)
 	}

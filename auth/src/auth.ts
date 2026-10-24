@@ -41,6 +41,9 @@ export interface AuthDeps {
 const changedBy = { type: 'string', required: false, input: false } as const;
 const changedAt = { type: 'date', required: false, input: false } as const;
 const factoryRoles = { type: 'string', required: false, input: true } as const;
+// How a session was signed in (migration 00048): email_code, google, device or other, written by
+// the session-create hook, never accepted from a request.
+const signInMethod = { type: 'string', required: false, input: false } as const;
 
 /**
  * createAuth configures Better Auth for Goal (spec 3 §8.6): passwordless sign-in by email code or
@@ -84,7 +87,13 @@ export function createAuth({ settings, pool, log, mailer, clock = () => new Date
       '/email-otp/change-email',
       '/forget-password/email-otp',
     ],
-    session: { expiresIn: 7 * 86400, updateAge: 86400, freshAge: 600, cookieCache: { enabled: false } },
+    session: {
+      expiresIn: 7 * 86400,
+      updateAge: 86400,
+      freshAge: 600,
+      cookieCache: { enabled: false },
+      additionalFields: { signInMethod },
+    },
     account: {
       accountLinking: { enabled: true, trustedProviders: ['google'], allowDifferentEmails: false },
       encryptOAuthTokens: true,
@@ -145,7 +154,7 @@ export function createAuth({ settings, pool, log, mailer, clock = () => new Date
     databaseHooks: {
       user: { create: { before: signIn.allowOnlyInvitedOrBootstrap, after: signIn.recordUser } },
       session: {
-        create: { after: signIn.recordSignInAndClaimBootstrap },
+        create: { before: signIn.tagSignInMethod, after: signIn.recordSignInAndClaimBootstrap },
         delete: {
           after: async (session, ctx) => {
             if (!ctx?.path || !revocations.has(ctx.path)) return;

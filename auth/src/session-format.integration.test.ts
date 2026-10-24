@@ -92,6 +92,22 @@ describe('the session cookie', () => {
   });
 });
 
+/** goalLogin runs goal login's device grant, approved in the browser with cookie: its access token. */
+async function goalLogin(s: ReturnType<typeof service>, cookie: Cookie): Promise<string> {
+  const code = await s.post('/device/code', { client_id: cliClientId });
+  const { device_code: deviceCode, user_code: userCode } = (await code.json()) as Record<string, string>;
+  const signedIn = { cookie: `${cookie.name}=${cookie.value}` };
+  await s.app.request(`/api/auth/device?user_code=${userCode}`, { headers: signedIn });
+  const approve = await s.post('/device/approve', { userCode }, signedIn);
+  if (approve.status !== 200) throw new Error(`device/approve: ${approve.status}`);
+  const token = await s.post('/device/token', {
+    grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+    device_code: deviceCode,
+    client_id: cliClientId,
+  });
+  return ((await token.json()) as Record<string, string>).access_token as string;
+}
+
 describe('the device grant', () => {
   it('gives `goal login` the raw 32-character session token, which bearer accepts', async () => {
     const s = service('http://127.0.0.1:8080');
@@ -122,6 +138,50 @@ describe('the device grant', () => {
 
     const session = await s.get('/get-session', { authorization: `Bearer ${accessToken}` });
     expect(((await session.json()) as { user: { email: string } }).user.email).toBe(email);
+  });
+
+  it('tags each session with how it was signed in: a code in the browser, or goal login (review M1)', async () => {
+    const s = service('http://127.0.0.1:8080');
+    const cookie = sessionCookie(await s.signIn());
+    const browser = /^([A-Za-z0-9]{32})\./.exec(decodeURIComponent(cookie.value))?.[1];
+    const device = await goalLogin(s, cookie);
+
+    const { rows } = await pool.query<{ token: string; method: string | null }>(
+      `SELECT token, "signInMethod" AS method FROM auth.session WHERE token = ANY ($1)`,
+      [[browser, device]],
+    );
+    expect(new Map(rows.map((r) => [r.token, r.method]))).toEqual(
+      new Map([
+        [browser, 'email_code'],
+        [device, 'device'],
+      ]),
+    );
+  });
+
+  it('never lets a goal login session approve another code, fresh as it is (rows 20, 30)', async () => {
+    const s = service('http://127.0.0.1:8080');
+    const device = await goalLogin(s, sessionCookie(await s.signIn()));
+
+    const code = await s.post('/device/code', { client_id: cliClientId });
+    const { user_code: userCode } = (await code.json()) as Record<string, string>;
+    const bearer = { authorization: `Bearer ${device}` };
+    await s.app.request(`/api/auth/device?user_code=${userCode}`, { headers: bearer });
+    const approve = await s.post('/device/approve', { userCode }, bearer);
+
+    expect(approve.status).toBe(403);
+    expect(await approve.json()).toMatchObject({ code: 'BROWSER_SESSION_REQUIRED' });
+
+    // Nor as a cookie Better Auth signed: extending the session (get-session, due within a day of
+    // expiry) answers one to any holder of the token.
+    await pool.query(`UPDATE auth.session SET "expiresAt" = now() + interval '1 hour' WHERE token = $1`, [device]);
+    const refreshed = sessionCookie(await s.app.request('/api/auth/get-session', { headers: bearer }));
+    expect(decodeURIComponent(refreshed.value).split('.')[0]).toBe(device);
+    const asCookie = await s.post('/device/approve', { userCode }, { cookie: `${refreshed.name}=${refreshed.value}` });
+
+    expect(asCookie.status).toBe(403);
+    expect(await asCookie.json()).toMatchObject({ code: 'BROWSER_SESSION_REQUIRED' });
+    const { rows } = await pool.query(`SELECT status FROM auth."deviceCode" WHERE "userCode" = $1`, [userCode]);
+    expect(rows).toEqual([{ status: 'pending' }]);
   });
 
   it('expires a code after 10 minutes, approved or not (row 20)', async () => {
@@ -164,6 +224,7 @@ describe('auth.session', () => {
       { name: 'expiresAt', type: 'timestamp with time zone', nullable: 'NO' },
       { name: 'id', type: 'uuid', nullable: 'NO' },
       { name: 'ipAddress', type: 'text', nullable: 'YES' },
+      { name: 'signInMethod', type: 'text', nullable: 'YES' },
       { name: 'token', type: 'text', nullable: 'NO' },
       { name: 'updatedAt', type: 'timestamp with time zone', nullable: 'NO' },
       { name: 'userAgent', type: 'text', nullable: 'YES' },

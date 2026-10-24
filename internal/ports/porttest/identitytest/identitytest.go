@@ -25,6 +25,10 @@ type Seed interface {
 	// Session signs user in with a session created at created and expiring at expires, and
 	// returns its token (32 letters and digits).
 	Session(t *testing.T, user domain.UserID, created, expires time.Time) string
+	// SignedInWith signs user in now, for an hour, as the auth service records how (method:
+	// email_code, google, device, other, or "" for a session it did not tag), and returns its
+	// token.
+	SignedInWith(t *testing.T, user domain.UserID, method string) string
 	// EndSession signs the session out.
 	EndSession(t *testing.T, token string)
 	// SetRole makes user a member of org with role; "" removes them.
@@ -45,6 +49,7 @@ func Run(t *testing.T, setup func(t *testing.T) (ports.Identity, Seed)) {
 	}{
 		{"SessionCarriesTheRolesOfTheOrgAsked", testSessionRoles},
 		{"UnknownExpiredAndEndedSessionsDoNotResolve", testSessionRefused},
+		{"OnlyABrowserSignInIsABrowserSession", testBrowserSession},
 		{"ChangesHoldOnTheNextLookup", testChangesHoldAtOnce},
 		{"ADeletedOrgGivesNoRole", testDeletedOrg},
 		{"OrgsForListsTheLiveMembershipsByName", testOrgsFor},
@@ -127,6 +132,22 @@ func testSessionRefused(t *testing.T, id ports.Identity, s Seed) {
 	} {
 		if p, err := id.Session(t.Context(), token, acme); !errors.Is(err, domain.ErrUnauthenticated) {
 			t.Errorf("%s session = %+v, %v; want ErrUnauthenticated", name, p, err)
+		}
+	}
+}
+
+// testBrowserSession: a session is the browser's only when the person signed in there, by an
+// email code or Google; goal login's device flow, any other way and an untagged session are not,
+// however their token is later sent (review M1).
+func testBrowserSession(t *testing.T, id ports.Identity, s Seed) {
+	t.Helper()
+
+	ada := s.User(t, "Ada", "ada@example.com", false)
+
+	for method, browser := range map[string]bool{"email_code": true, "google": true, "device": false, "other": false, "": false} {
+		p := session(t, id, s.SignedInWith(t, ada, method), "")
+		if p.Session == nil || p.Session.Browser != browser {
+			t.Errorf("signed in with %q: session %+v; want Browser %v", method, p.Session, browser)
 		}
 	}
 }

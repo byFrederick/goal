@@ -28,7 +28,8 @@ const (
 	mxBearerName     = "bearer-owner"
 )
 
-// mxBearerSession is the owner's session as goal login stores it: sent as a bearer value.
+// mxBearerSession is the owner's goal login session (signed in by the device flow, so not the
+// browser's), sent as a bearer value as the CLI does.
 const mxBearerSession = "mxbearer000000000000000000000001"
 
 // What happens to a token's owner, membership or organization after the token is made.
@@ -134,16 +135,13 @@ func mxTokenPrincipals(t *testing.T, id *porttest.Identity) []mxPrincipal {
 	}
 
 	owner := mxPeople()[0]
-	id.AddSession(mxBearerSession, owner.user, owner.session())
+	device := owner.session()
+	device.Browser = false
+	id.AddSession(mxBearerSession, owner.user, device)
 	out := []mxPrincipal{{
 		name: mxBearerName, header: http.Header{"Authorization": {"Bearer " + mxBearerSession}},
 		resolve: func(org domain.OrgID) (domain.Principal, error) {
-			p, err := id.Session(t.Context(), mxBearerSession, org)
-			if p.Session != nil {
-				p.Session.Bearer = true
-			}
-
-			return p, err
+			return id.Session(t.Context(), mxBearerSession, org)
 		},
 	}}
 

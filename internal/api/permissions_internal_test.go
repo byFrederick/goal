@@ -277,7 +277,7 @@ func (p mxPerson) session() domain.Session {
 		created = mxNow.Add(-domain.FreshFor - time.Minute)
 	}
 
-	return domain.Session{ID: "session-" + p.name, CreatedAt: created, ExpiresAt: mxNow.Add(7 * 24 * time.Hour)}
+	return domain.Session{ID: "session-" + p.name, CreatedAt: created, ExpiresAt: mxNow.Add(7 * 24 * time.Hour), Browser: true}
 }
 
 // cookie is the person's session cookie as Better Auth signs it.

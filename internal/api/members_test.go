@@ -39,7 +39,7 @@ func withPeople(t *testing.T, h signedIn) {
 	must(t, h.identity.SetOrgRole(testOrg, nairID, domain.OrgMember))
 	must(t, h.identity.GrantFactoryRole(testOrg, nairID, lineID, domain.FactoryApprover))
 
-	fresh := domain.Session{CreatedAt: t0, ExpiresAt: t0.Add(time.Hour)}
+	fresh := domain.Session{CreatedAt: t0, ExpiresAt: t0.Add(time.Hour), Browser: true}
 	fresh.ID = "fresh-owner"
 	h.identity.AddSession(freshOwnerToken, ownerID, fresh)
 	fresh.ID = "fresh-admin"

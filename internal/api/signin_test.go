@@ -75,7 +75,7 @@ func newSignedInWith(t *testing.T, logs io.Writer) signedIn {
 			t.Fatal(err)
 		}
 
-		session := domain.Session{ID: "019a4000-0000-7000-8000-0000000000b" + string(rune('1'+i)), CreatedAt: t0.Add(-time.Hour), ExpiresAt: t0.Add(7 * 24 * time.Hour)}
+		session := domain.Session{ID: "019a4000-0000-7000-8000-0000000000b" + string(rune('1'+i)), CreatedAt: t0.Add(-time.Hour), ExpiresAt: t0.Add(7 * 24 * time.Hour), Browser: true}
 		id.AddSession(p.token, p.user, session)
 
 		if err := id.SetOrgRole(p.org, p.user, p.role); err != nil {

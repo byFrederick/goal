@@ -41,9 +41,9 @@ const (
 	permAuthenticated domain.Permission = "authenticated"
 	permFactoryRead   domain.Permission = "factory:read"
 	permItemDecide    domain.Permission = "item:decide"
-	// permTokenCreate creates a personal token: a lasting credential, so only the browser's
-	// cookie session may (spec 3 §4.5), never a CLI session, whose device approval may have been
-	// phished.
+	// permTokenCreate creates a personal token: a lasting credential, so only a session signed
+	// in through the browser may (spec 3 §4.5), never a CLI session, whose device approval may have
+	// been phished.
 	permTokenCreate domain.Permission = "personal_token:manage"
 )
 
@@ -54,8 +54,8 @@ var errDenied = errors.New("the principal does not hold the permission")
 // among the token's scopes (403 forbidden). It is decided from the token alone.
 var errTokenScope = fmt.Errorf("not a scope of the personal token: %w", errDenied)
 
-// errBrowserSessionRequired is creating a personal token with anything but the browser's cookie
-// session (403 browser-session-required).
+// errBrowserSessionRequired is creating a personal token with anything but a session signed in
+// through the browser (403 browser-session-required).
 var errBrowserSessionRequired = errors.New("personal tokens are created in the browser, signed in there")
 
 // errHidden is a resource the principal may not see: it answers as the unknown one (404).
@@ -83,7 +83,7 @@ func NewPermissions(clock ports.Clock) *Permissions { return &Permissions{clock:
 //     factory permission needs only membership;
 //  5. fresh permissions need a session signed in within domain.FreshFor
 //     (domain.ErrReauthRequired); keys never hold them. Creating a personal token also needs
-//     the browser's cookie session (errBrowserSessionRequired).
+//     a session signed in through the browser (errBrowserSessionRequired).
 //
 // A personal token's principal (Token set) takes authorizeToken instead, which fails closed.
 func (p *Permissions) Authorize(_ context.Context, r AccessRequest) error {
@@ -228,10 +228,11 @@ func holds(p domain.Principal, name domain.Permission, ru rule, f domain.Factory
 }
 
 // fresh refuses a fresh permission to a session signed in longer ago than domain.FreshFor, and
-// to a principal without a session; creating a personal token, also to a session that is not
-// the browser's cookie, whatever its age (signing in again would not help).
+// to a principal without a session; creating a personal token, also to a session not signed in
+// through the browser (Session.Browser: goal login's included, however its token is sent), whatever
+// its age (signing in again would not help).
 func (p *Permissions) fresh(pr domain.Principal, name domain.Permission, ru rule) error {
-	if name == permTokenCreate && (pr.Session == nil || pr.Session.Bearer) {
+	if name == permTokenCreate && (pr.Session == nil || !pr.Session.Browser) {
 		return errBrowserSessionRequired
 	}
 

@@ -49,8 +49,21 @@ export function client(ctx: EndpointContext | undefined): Pick<AuthEvent, 'ip' |
   return { ip: headers?.get('x-goal-client-ip'), userAgent: headers?.get('user-agent') };
 }
 
+/** SignInMethod is how a session or user came to be (auth.session."signInMethod", 00048's CHECK). */
+export type SignInMethod = 'email_code' | 'google' | 'device' | 'other';
+
+/**
+ * browserSignIn is whether a session was signed in through the browser, by an email code or Google, as
+ * recorded when it was created (review M1): goal login's device flow, other and an untagged session
+ * are not, however their token is sent. goald reads the same column (domain.Session.Browser).
+ */
+export function browserSignIn(session: object): boolean {
+  const m = (session as { signInMethod?: unknown }).signInMethod;
+  return m === 'email_code' || m === 'google';
+}
+
 /** method names how a session or user came to be, from the endpoint that made it. */
-function method(ctx: EndpointContext | undefined): string {
+function method(ctx: EndpointContext | undefined): SignInMethod {
   switch (ctx?.path) {
     case '/sign-in/email-otp':
       return 'email_code';
@@ -164,6 +177,15 @@ export class SignIn {
     if (ctx) await ctx.context.runInBackgroundOrAwait(notify());
     else await notify();
   }
+
+  /**
+   * tagSignInMethod records on every new session how the person signed in (signInMethod), so goald
+   * and the before-hook tell the browser from goal login by the session, never by how its token
+   * arrives (review M1).
+   */
+  tagSignInMethod: NonNullable<SessionCreate['before']> = async (session, ctx) => ({
+    data: { ...session, signInMethod: method(ctx ?? undefined) },
+  });
 
   /**
    * recordSignInAndClaimBootstrap logs every new session and, for the bootstrap owner's email,

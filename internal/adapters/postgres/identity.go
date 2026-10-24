@@ -43,6 +43,7 @@ type principalRow struct {
 	SessionID     string    `json:"session_id"`
 	CreatedAt     time.Time `json:"created_at"`
 	ExpiresAt     time.Time `json:"expires_at"`
+	SignInMethod  *string   `json:"sign_in_method"`
 	PlatformAdmin bool      `json:"platform_admin"`
 	OrgRole       *string   `json:"org_role"`
 	FactoryRoles  []struct {
@@ -75,7 +76,10 @@ func (i *Identity) Session(ctx context.Context, token string, org domain.OrgID) 
 
 	p := domain.Principal{
 		Kind: domain.PrincipalUser, User: domain.UserID(r.UserID), Name: r.Name, Email: r.Email, PlatformAdmin: r.PlatformAdmin,
-		Session: &domain.Session{ID: r.SessionID, CreatedAt: r.CreatedAt.UTC(), ExpiresAt: r.ExpiresAt.UTC()}, Org: org,
+		Session: &domain.Session{
+			ID: r.SessionID, CreatedAt: r.CreatedAt.UTC(), ExpiresAt: r.ExpiresAt.UTC(), Browser: browserSignIn(r.SignInMethod),
+		},
+		Org: org,
 	}
 
 	if r.OrgRole != nil {
@@ -88,6 +92,13 @@ func (i *Identity) Session(ctx context.Context, token string, org domain.OrgID) 
 	}
 
 	return p, nil
+}
+
+// browserSignIn is whether a session's "signInMethod" (00048, written by the auth service) is a
+// sign-in through the browser: an email code or Google. goal login's device flow, other and an
+// untagged session are not.
+func browserSignIn(method *string) bool {
+	return method != nil && (*method == "email_code" || *method == "google")
 }
 
 // apiKeyRow is goal_api_key's jsonb.

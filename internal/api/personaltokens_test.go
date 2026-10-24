@@ -200,6 +200,9 @@ func TestAPI_PersonalTokens_Refusals(t *testing.T) {
 		code   string
 	}{
 		{"the CLI's fresh session", bearer(freshCLIToken), orgReadToken, 403, "browser-session-required"},
+		// goald does not check the cookie's signature (it holds no Better Auth secret): how the
+		// session was signed in decides, not how its token arrives (review M1).
+		{"the CLI's fresh session as a cookie with a forged signature", cookie(freshCLIToken), orgReadToken, 403, "browser-session-required"},
 		{"an API key", bearer(key.Secret), orgReadToken, 403, codeForbidden},
 		{"a personal token", bearer(pat.Secret), orgReadToken, 403, codeForbidden},
 		{"a stale browser session", cookie(ownerToken), orgReadToken, 403, codeReauth},

@@ -57,6 +57,15 @@ func (s fakeSeed) Session(_ *testing.T, user domain.UserID, created, expires tim
 	return token
 }
 
+func (s fakeSeed) SignedInWith(_ *testing.T, user domain.UserID, method string) string {
+	id := s.next("019a3003")
+	token := fmt.Sprintf("tok%029d", *s.n)
+	browser := method == "email_code" || method == "google"
+	s.id.AddSession(token, user, domain.Session{ID: id, CreatedAt: time.Now(), ExpiresAt: time.Now().Add(time.Hour), Browser: browser})
+
+	return token
+}
+
 func (s fakeSeed) EndSession(_ *testing.T, token string) { s.id.EndSession(token) }
 
 func (s fakeSeed) SetRole(t *testing.T, org domain.OrgID, user domain.UserID, role domain.OrgRole) {

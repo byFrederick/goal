@@ -93,7 +93,7 @@ func (s *server) CreatePersonalToken(ctx context.Context, req gen.CreatePersonal
 		return nil, errTokensNeedSignIn
 	}
 
-	if p := principalOf(ctx); p.Token != nil || p.Session == nil || p.Session.Bearer {
+	if p := principalOf(ctx); p.Token != nil || p.Session == nil || !p.Session.Browser {
 		return nil, errBrowserSessionRequired
 	}
 

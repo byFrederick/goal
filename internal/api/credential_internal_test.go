@@ -34,10 +34,10 @@ func TestParseCredential_ReadsBearerValuesAndTheSessionCookie(t *testing.T) {
 		refused bool
 	}{
 		{name: "nothing", want: credential{}},
-		{name: "api key", headers: map[string][]string{authHeader: {"Bearer " + testAPIKey}}, want: credential{kind: credentialAPIKey, secret: testAPIKey, bearer: true}},
-		{name: "personal token", headers: map[string][]string{authHeader: {"Bearer " + testPAT}}, want: credential{kind: credentialPersonalToken, secret: testPAT, bearer: true}},
-		{name: "session token from goal login", headers: map[string][]string{authHeader: {"Bearer " + testToken}}, want: credential{kind: credentialSession, secret: testToken, bearer: true}},
-		{name: "scheme in any case", headers: map[string][]string{authHeader: {"bearer " + testToken}}, want: credential{kind: credentialSession, secret: testToken, bearer: true}},
+		{name: "api key", headers: map[string][]string{authHeader: {"Bearer " + testAPIKey}}, want: credential{kind: credentialAPIKey, secret: testAPIKey}},
+		{name: "personal token", headers: map[string][]string{authHeader: {"Bearer " + testPAT}}, want: credential{kind: credentialPersonalToken, secret: testPAT}},
+		{name: "session token from goal login", headers: map[string][]string{authHeader: {"Bearer " + testToken}}, want: credential{kind: credentialSession, secret: testToken}},
+		{name: "scheme in any case", headers: map[string][]string{authHeader: {"bearer " + testToken}}, want: credential{kind: credentialSession, secret: testToken}},
 		{name: "agent task token", headers: map[string][]string{authHeader: {"Bearer " + taskToken}}, refused: true},
 		{name: "api key one character short", headers: map[string][]string{authHeader: {"Bearer " + testAPIKey[:len(testAPIKey)-1]}}, refused: true},
 		{name: "personal token one character short", headers: map[string][]string{authHeader: {"Bearer " + testPAT[:len(testPAT)-1]}}, refused: true},
@@ -56,7 +56,7 @@ func TestParseCredential_ReadsBearerValuesAndTheSessionCookie(t *testing.T) {
 		{
 			name:    "bearer wins over the cookie",
 			headers: map[string][]string{authHeader: {"Bearer " + testAPIKey}}, cookies: map[string]string{sessionCookie: signed},
-			want: credential{kind: credentialAPIKey, secret: testAPIKey, bearer: true},
+			want: credential{kind: credentialAPIKey, secret: testAPIKey},
 		},
 		{
 			name:    "a malformed bearer is not saved by a good cookie",

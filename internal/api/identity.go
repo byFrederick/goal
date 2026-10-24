@@ -90,9 +90,6 @@ func (s *server) bindRequest(ctx context.Context, op, ref string) (context.Conte
 		s.countVerification(ctx, "pat", err)
 	case credentialSession:
 		p, err = s.identity.Session(ctx, c.secret, prior.org.ID)
-		if err == nil && p.Session != nil {
-			p.Session.Bearer = c.bearer
-		}
 	case credentialNone:
 		err = domain.ErrUnauthenticated
 	}

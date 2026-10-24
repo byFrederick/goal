@@ -82,6 +82,21 @@ func (s pgSeed) Session(t *testing.T, user domain.UserID, created, expires time.
 	return token
 }
 
+func (s pgSeed) SignedInWith(t *testing.T, user domain.UserID, method string) string {
+	t.Helper()
+
+	var tag *string
+	if method != "" {
+		tag = &method
+	}
+
+	token := sessionToken(t)
+	s.d.exec(s.d.auth, `INSERT INTO auth.session (token, "userId", "createdAt", "updatedAt", "expiresAt", "signInMethod")
+		VALUES ($1, $2, $3, $3, $4, $5)`, token, string(user), time.Now(), time.Now().Add(time.Hour), tag)
+
+	return token
+}
+
 func (s pgSeed) EndSession(t *testing.T, token string) {
 	t.Helper()
 
