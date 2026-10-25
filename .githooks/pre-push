@@ -1,6 +1,6 @@
 #!/bin/sh
-# Local gate for every push (install once: `task hooks:install`). CI on GitHub is disabled for
-# lack of Actions minutes, so this hook is what keeps main green:
+# Local gate for every push (install once: `task hooks:install`). CI (.github/workflows/ci.yml)
+# runs the same gate on every pull request and push to main; this hook catches it before the push:
 #   - always: task check (lint, race tests, factory validation, task tf:check)
 #   - when the pushed commits touch migrations/ or auth/: task migrate-check as well (with the
 #     Better Auth schema drift check, task auth:schema-check)
