@@ -17,7 +17,7 @@ Goal itself becomes an MCP server at `/v1/mcp` for outside MCP clients such as C
 - The same routes on Cloudflare (phase 4 topology), with no Worker code of their own.
 
 **Out**
-- Agents' access to outside tools (phase 4's gateway at `/mcp`, unchanged).
+- Agents' tools in runs (phase 4, unchanged: connections direct from the box, Goal's own tools through the gateway at `/mcp`).
 - Client credentials grants (API keys cover machines), tokens for several organizations, dynamic client registration, MCP resources and prompts (tools only), elicitation, organization-wide restrictions on which clients may connect.
 - Tools for definitions, publishing, merging, the andon cord, connections, knowledge management, members and keys: those stay in the UI and CLI.
 - The CLI keeps phase 3's device-authorization session; it does not move to OAuth tokens.

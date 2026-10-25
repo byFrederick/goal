@@ -2,7 +2,7 @@
 
 Status: owner-approved design (2026-10-24), not built · follows phase 3 · migrations `00050–00059` (`00050–00053` planned) · OpenAPI tags `connections` and `knowledge` (touch metrics under `work`) · PRs `4-1…4-25` · decision records [ADR 0008](../adr/0008-portable-runs-connections-and-knowledge.md), [ADR 0009](../adr/0009-agent-network-isolation.md) (amended), [ADR 0005](../adr/0005-factory-definitions-in-object-storage.md) (amended)
 
-(phase 4 redesign) This file was `4-credentials-and-connectors.md` (parts 4.1 vault and credentials, 4.2 connectors and MCP gateway, PRs `4.1-n`/`4.2-n`). The design pass replaced it. Kept, simplified: credentials encrypted in PostgreSQL, write-only values, RLS, audit, AWS STS, remote MCP through the gateway, the merge station. Cut: the Credentials page, credential grants, the connector catalog and `kind: Connector` files, scopes, CLI exec sidecars, stdio sidecar containers, `ModelAuth`, `CredentialProbe`, per-org data keys, vault settings, the MCP Registry import, multi-instance forwarding. Deferred: approval-gated tool calls, OAuth connections, the GitHub App. References to "4.1 §x" or "4.2 §x" in older text point at retired parts.
+(phase 4 redesign) This file was `4-credentials-and-connectors.md` (parts 4.1 vault and credentials, 4.2 connectors and MCP gateway, PRs `4.1-n`/`4.2-n`). The design pass replaced it. Kept, simplified: credentials encrypted in PostgreSQL, write-only values, RLS, audit, AWS STS, the merge station. Cut: remote MCP through the gateway (connections go direct from the box), the Credentials page, credential grants, the connector catalog and `kind: Connector` files, scopes, CLI exec sidecars, stdio sidecar containers, `ModelAuth`, `CredentialProbe`, per-org data keys, vault settings, the MCP Registry import, multi-instance forwarding. Deferred: approval-gated tool calls, OAuth connections, the GitHub App. References to "4.1 §x" or "4.2 §x" in older text point at retired parts.
 
 Security here is proportionate to a personal platform that is multi-organization by design: give agents the freedom of a developer on their own laptop, keep organizations apart, keep secrets out of logs and responses, and write the accepted risks down (§11.3).
 
@@ -14,7 +14,8 @@ An organization's admins add **connections** on one Connections page: a GitHub, 
 
 **In**
 - Connection kinds as data (platform kinds shipped with goald, org kinds through the API), connections with write-only credentials sealed under one platform master key (`ports.MasterKey`), audit of create, update, delete, test and use.
-- Runs that receive their connections as environment variables (API and CLI use, stdio MCP servers inside the box); remote MCP servers through the gateway, which adds the header; AWS credentials minted per run with STS (`ports.Minter`).
+- Runs that receive their connections as environment variables and use them directly from the box: API calls, CLIs, stdio MCP servers and remote MCP servers (a header rendered from those variables); AWS credentials minted per run with STS (`ports.Minter`).
+- The gateway as Goal's MCP server for runs: Goal's own tools and the run bundle (`GET /run`), authorized by the task token. It proxies no connection.
 - `ports.Sandboxes` replacing `Runner`, `Workspaces`, `Checker`, `Sidecars` and `Reaper`; adapters `docker` and `cloudflare`; one base image `goal-agent`; tools from the repository's `mise.toml`/`.tool-versions` and `runtime.tools`; `runtime.image` removed.
 - Agents with public internet; private, loopback and metadata addresses refused (ADR 0009 amendment); `GOAL_AGENT_EGRESS` removed.
 - Definition schema: `spec.connections` as org connection names, `runtime.modelConnection`, `runtime.repository: {url, connection}`, `runtime.tools`, `runtime.size`, `spec.knowledge.sources`; removal of `runtime.image`, `runtime.runner`, `runtime.auth`, `spec.secrets`, `spec.knowledgeBase` and inline `type:` connections, with quick fixes.
@@ -26,7 +27,7 @@ An organization's admins add **connections** on one Connections page: a GitHub, 
 - **Human touches per item** (§4.9), measurement only: derived from existing item events; touches per finished item, touchless rate, by station, kind, reason and definition version, planned gates apart from unplanned interventions; a reason field on each touch (§4.10); on the Floor, the Board header, each Item, the API and `goal status`.
 
 **Out**
-- Approval-gated tool calls, OAuth connections (MCP authorization to outside servers), the GitHub App: deferred, unscheduled. Their designs in the retired parts remain valid inputs.
+- Approval-gated tool calls, OAuth connections (MCP authorization to outside servers), the GitHub App: deferred, unscheduled. Their designs in the retired parts remain valid inputs; OAuth connections and approval-gated calls may route through the gateway when they arrive.
 - Per-factory grants of connections and knowledge sources, repository allow-lists, a git proxy, branch rules, gateway-only egress, per-run egress allow-lists, a shared tool cache, placeholder credentials: rejected as disproportionate (ADR 0008).
 - TCP sidecars (a shared PostgreSQL next to the box): a run starts its own services inside its box.
 - Per-organization quotas on runs, storage or embeddings: unscheduled (§17).
@@ -52,7 +53,7 @@ A designer updates the boards from the same decisions in parallel; names may be 
 | `Board.dc.html`, `Mobile-Board.dc.html` | the header's touches per finished item and touchless rate over the board's window; a card's touch count | 4-24 |
 | `Item.dc.html`, `Mobile-Item.dc.html` | the item's touch count and list (who, what, station, when, planned or not, reason with an edit select) | 4-24 |
 
-Retired: `Credentials.dc.html`, `Credential-New.dc.html`, `Catalog.dc.html` (the Connections page owns credentials; kinds replace the catalog), `Approval.dc.html` (approvals deferred). Not delivered: the factory Connections board's per-tool usage panel beyond the gateway's existing `gateway_tool_call` counts, and Knowledge's "Recently written" (agents do not write to the knowledge base in phase 4).
+Retired: `Credentials.dc.html`, `Credential-New.dc.html`, `Catalog.dc.html` (the Connections page owns credentials; kinds replace the catalog), `Approval.dc.html` (approvals deferred). Not delivered: the factory Connections board's per-tool usage panel (connections' tool calls go direct from the box, so goald sees them only in the run's tool events), and Knowledge's "Recently written" (agents do not write to the knowledge base in phase 4).
 
 ## 4. Domain and engine changes
 
@@ -75,23 +76,23 @@ spec:
   fields:                          # what an admin fills in; secret fields are write-only
     - {name: token, title: Token, secret: true, required: true}
     - {name: host, title: Host, default: github.com}
-  env:                             # what a run's box gets: API and CLI use, stdio MCP servers
+  env:                             # what a run's box gets: API and CLI use, MCP servers
     GH_TOKEN: "{{token}}"
     GH_HOST: "{{host}}"
   git:                             # optional: git over https to this host, user and password from env
     host: "{{host}}"
     username: x-access-token
     passwordEnv: GH_TOKEN
-  mcp:                             # optional: a remote MCP server, reached through the gateway
+  mcp:                             # optional: a remote MCP server, reached from the box
     url: https://api.githubcopilot.com/mcp/
-    headers: {Authorization: "Bearer {{token}}"}
+    headers: {Authorization: "Bearer ${GH_TOKEN}"}   # expanded by Claude Code from the box's env
   codeHost: github                 # optional: the CodeHost adapter that reads and merges its pull requests
   test: {method: GET, url: "https://api.{{host}}/user", headers: {Authorization: "Bearer {{token}}"}, expect: 200}
   docs: Use gh and git; GH_TOKEN is set. Open a pull request for every change.
 ```
 
-- **Template grammar** (closed): `{{field}}` and, for minted kinds, `{{minted.<name>}}`. Nothing else is evaluated. A kind that names an unknown field is invalid.
-- **Modes.** `env` serves API calls and CLIs (`cli: {tool: "<mise tool spec>"}` installs one at prepare); `mcp.url` + `headers` is a remote MCP server served by the gateway; `mcp.command` (an argv, for example `[npx, -y, "@acme/jira-mcp@2.1.0"]`) is a stdio MCP server the worker starts inside the box with the kind's `env`. A kind may combine them.
+- **Template grammar** (closed): `{{field}}` and, for minted kinds, `{{minted.<name>}}`. Nothing else is evaluated. `mcp.headers` values may also hold `${NAME}`, a variable of the kind's own `env`, which goald leaves as written for Claude Code to expand in the box, so no value is in the bundle or on disk. A kind that names an unknown field or variable is invalid.
+- **Modes.** `env` serves API calls and CLIs (`cli: {tool: "<mise tool spec>"}` installs one at prepare); `mcp.url` + `headers` is a remote MCP server the worker configures in Claude Code, called directly from the box like any API; `mcp.command` (an argv, for example `[npx, -y, "@acme/jira-mcp@2.1.0"]`) is a stdio MCP server the worker starts inside the box with the kind's `env`. A kind may combine them.
 - **Model access.** `model: true` marks a kind that gives Claude Code its model (`anthropic`: `ANTHROPIC_API_KEY`; `claude-subscription`: `CLAUDE_CODE_OAUTH_TOKEN`, for one person's own use; `bedrock`: `CLAUDE_CODE_USE_BEDROCK=1` and minted AWS credentials). Only such a kind may be `runtime.modelConnection`.
 - **Adapter hooks**, the only provider code: `codeHost` (`github`, `gitlab`), `mint` (`aws-sts`), `sync` (`gitdocs`, `confluence`). Absent means the kind needs no Go code at all.
 - **Reserved names.** A kind's `env` may not set `GOAL_*`, `HOME`, `PATH`, `USER`, `SHELL`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` (any case), `NODE_USE_ENV_PROXY`, `CLAUDE_CONFIG_DIR`, `LD_*` or `MISE_*` (`domain.ReservedRunEnv`).
@@ -398,10 +399,13 @@ Platform settings only (`env:` and literals), as today's `envsecrets`; factory d
 
 ### 5.9 Gateway (`internal/gateway`)
 
-- Remote MCP servers come from connections: an agent's connections whose kind has `mcp.url` are served as today (`<connection>__<tool>`, `tools.allow/deny`, `gateway_tool_call` events), with the kind's rendered headers added on the host and scrubbed from results and errors. Stdio servers run inside the box (the worker starts them from the `/run` bundle's MCP config), so `sidecars.go`, `ports.Sidecars`, `MaxSidecars`, `SidecarIdle`, `RunEnded` for sidecars and the docker sidecar code are deleted. With them goes the gateway's only in-memory state.
-- Builtin tools of every run whose factory lists knowledge sources: `knowledge__search {query, limit?: 1–20 (8), source?}` and `knowledge__read {document}`, filtered by the run's version's sources. The served names follow the gateway's `<connection>__<tool>` rule (Claude's tool names allow no dots); decisions call it `knowledge.search`.
+The gateway becomes **Goal's MCP server for runs**: Goal's own tools and the run bundle, authorized by the run's task token. It proxies no connection and adds no header: remote MCP servers, like stdio ones, API calls and CLIs, are used directly from the box with the env the run received.
+
+- **Connections' MCP servers are the worker's.** The `/run` bundle's MCP config lists each of the agent's connections whose kind has `mcp.url` (URL, headers as `${NAME}` references) or `mcp.command`; Claude Code connects to them from the box. The worker applies `tools.allow/deny` (`<connection>__<pattern>`, deny wins) in Claude Code's permission check, and their calls show in the run's tool events, not `gateway_tool_call`. The sidecars (`sidecars.go`, `ports.Sidecars`, `MaxSidecars`, `SidecarIdle`, `RunEnded` for sidecars, the docker sidecar code) are deleted in 4-11, and with them the gateway's only in-memory state; upstream forwarding, header resolution on the host and the per-connection host checks (`upstream.go`, `policy.go`) serve only legacy inline connections until the cutover deletes them (4-14).
+- **Goal's tools**, served to every run whose factory lists knowledge sources: `knowledge__search {query, limit?: 1–20 (8), source?}` and `knowledge__read {document}`, filtered by the run's version's sources; item tools join them later. The names keep the `<server>__<tool>` form (Claude's tool names allow no dots); decisions call it `knowledge.search`. Every call appends `gateway_tool_call` as today.
 - `GET /run`: the task's bundle (spec, prompt, skills, output schema, MCP config, tools, repository, connection docs) for the run in the token, from the definitions cache.
-- Every request goald makes for a connection (remote MCP, tests, sync, STS, embeddings) dials public addresses only, through one shared dialer from `internal/egress` (`egress.PublicDialer`); `GOAL_ALLOW_PRIVATE_UPSTREAMS=true` lifts it for a laptop's own test servers and is refused when goald listens off loopback.
+- OAuth connections and approval-gated calls (deferred, §2) may route through the gateway when they arrive.
+- Every request goald makes for a connection (tests, sync, STS, embeddings) dials public addresses only, through one shared dialer from `internal/egress` (`egress.PublicDialer`); `GOAL_ALLOW_PRIVATE_UPSTREAMS=true` lifts it for a laptop's own test servers and is refused when goald listens off loopback.
 - `domain.SecretPolicy` and the `env:` host bindings are deleted with the `env:` references (4-14).
 
 ### 5.10 Egress (`internal/egress`, `cmd/goal-egress`)
@@ -416,7 +420,7 @@ One policy (ADR 0009 amendment): any client on the agents' network reaches any d
 | `internal/knowledge` | `domain`, `ports`, `golang.org/x/net/html` | `knowledge`: no adapters, engine, `api` |
 | `internal/adapters/masterkey`, `awssts`, `openaiembed`, `gitdocs`, `confluence`, `gitlab`, `cloudflare` | own deps | adapters rule |
 
-Deleted: `internal/factorystore`, `internal/adapters/gitworkspace`, the docker adapter's `task.go`, `checks.go`, `sidecars.go`, `egress.go` and `protocol.go`, `internal/gateway/sidecars.go`. The `engine` rule becomes the allow-list `domain`, `ports` (README recommendation). The `api` rule denies `connkind` and `knowledge`; handlers reach them through interfaces declared in `internal/api`.
+Deleted: `internal/factorystore`, `internal/adapters/gitworkspace`, the docker adapter's `task.go`, `checks.go`, `sidecars.go`, `egress.go` and `protocol.go`, `internal/gateway/sidecars.go`, `upstream.go` and `policy.go`. The `engine` rule becomes the allow-list `domain`, `ports` (README recommendation). The `api` rule denies `connkind` and `knowledge`; handlers reach them through interfaces declared in `internal/api`.
 
 ### 5.12 Topology
 
@@ -692,7 +696,7 @@ On `/v1/orgs/{org}/stream`, through `goal_org_events`: `connection` (`{connectio
 | 1 | Org B reads org A's connection or chunks | RLS, composite FKs | `TestConnections_RLSAcrossOrgs`, `TestKnowledge_RLSAcrossOrgsWithVectorScan` |
 | 2 | Database dump reveals credentials | sealed values, AAD | `TestConnections_NoPlaintextInAnyColumn`, `TestConnections_AADMismatchRefused` |
 | 3 | A member or key changes or reads a credential | `connection:manage`, fresh, write-only | access golden matrix rows; `TestAPI_ConnectionResponsesHoldNoSecret` |
-| 4 | A connection URL reaches goald's network (auth, RustFS, Mailpit) | public-only dialer | `TestGateway_RefusesPrivateUpstream`, `TestConnectionTest_RefusesPrivateURL` |
+| 4 | A connection URL reaches goald's network (auth, RustFS, Mailpit) | public-only dialer for goald's requests (tests, sync, STS); a remote MCP URL is dialed from the box under row 5 | `TestConnectionTest_RefusesPrivateURL` |
 | 5 | An agent reaches the host or a private address | egress policy (local), Cloudflare networking (prototype) | `egress` table tests; `sandboxtest` "no private address"; 4-1 report |
 | 6 | An agent forges a passing check | runtime exit codes | `TestEngine_CheckResultFromExitStatus` |
 | 7 | Stored AWS keys reach a box | minting | `TestEngine_AWSStoredKeysNeverInEnv` |
@@ -704,7 +708,7 @@ On `/v1/orgs/{org}/stream`, through `goal_org_events`: `connection` (`{connectio
 
 ### 11.3 Accepted risks
 
-1. **An agent holds its connections' credentials** as environment variables for the run's life. A prompt-injected agent can use or send them anywhere on the internet. The limit is each token's own scope: use fine-grained, narrow tokens (chosen repositories, read-only API keys, a narrow AWS role) and separate connections for factories that read untrusted input.
+1. **An agent holds its connections' credentials** as environment variables for the run's life, remote MCP servers' included. A prompt-injected agent can use or send them anywhere on the internet, and can call a connection's MCP server or API past `tools.allow/deny`, which only the worker enforces. The limit is each token's own scope: use fine-grained, narrow tokens (chosen repositories, read-only API keys, a narrow AWS role) and separate connections for factories that read untrusted input.
 2. **Agents have the public internet**, so code and data their tokens reach can leave.
 3. **Any editor of a factory can use any connection of the organization** by naming it; admins own the values, editors choose their use. Separate organizations separate people who must not share credentials.
 4. **Pushes run the repository's CI.** Protect default branches and CI secrets at the code host.
@@ -712,7 +716,7 @@ On `/v1/orgs/{org}/stream`, through `goal_org_events`: `connection` (`{connectio
 6. **The master key opens every organization's credentials**; backups keep ciphertext of deleted credentials until they expire. Escrow the key offline (on Cloudflare it cannot be read back from Secrets Store); revoke a leaked credential at its provider too.
 7. **goald in local Compose holds the Docker socket**, which is root on that machine: for one's own laptop, never a shared host.
 8. **Boxes on the local agents' network can reach each other's listening ports** (another run's PostgreSQL).
-9. **A task token stays valid until its expiry** (task timeout + lease TTL) after its run; it reaches only the gateway's tools for that run.
+9. **A task token stays valid until its expiry** (task timeout + lease TTL) after its run; it reaches only Goal's tools and bundle for that run.
 10. **A goald redeploy on Cloudflare ends runs in flight**; they are claimed again.
 11. **The Claude subscription kind is for one person's own runs**; a shared install uses an API key or Bedrock.
 12. **The embedding provider sees indexed text** (choose a local model to avoid it).
@@ -729,9 +733,9 @@ On `/v1/orgs/{org}/stream`, through `goal_org_events`: `connection` (`{connectio
 
 - **Engine** with `porttest.Sandboxes` and `porttest.Connections`: lifecycle order, prepare failure fails the run, contract retry in the same box, checks through exec with no connection env, minting, env conflicts, delete on every path, reaping by `RunsOver`, autoscaling (no box while nothing is claimable), merge across repositories with partial failure and retry.
 - **Conformance suites**: `sandboxtest` (fake; `docker` integration; `cloudflare` against a staging account in 4-21, not in `task check`), `connectiontest` and `knowledgetest` (fake and PostgreSQL 18 with pgvector), `objectstoretest` on RustFS with versioning off.
-- **Gateway**: remote MCP with kind headers (httptest upstream), knowledge tools, `/run` bundle, refusal of private upstreams.
+- **Gateway**: task-token auth, knowledge tools, `/run` bundle; no connection's tools are served.
 - **Units**: kind schema and template rendering (`connkind`, table-driven, every refusal), chunker, HTML extraction, RRF fusion, settings.
-- **Worker** (Vitest): prepare (bundle, git credential helper reads env, mise invocation, clone and branch), MCP config with stdio servers, connections section of the prompt.
+- **Worker** (Vitest): prepare (bundle, git credential helper reads env, mise invocation, clone and branch), MCP config with stdio and remote servers (headers as `${NAME}`, never values), `tools.allow/deny` in the permission check, connections section of the prompt.
 - **Control Worker** (Vitest with the Workers runtime): routing, sandbox API auth, env allow-list, alarm destroy.
 - **Web** (Playwright on the mock API, 375/768/1440 px, axe): create, test, replace secret and delete a connection; add a source, upload, search.
 - **Touches** (`storetest`, fake and PostgreSQL): one action counted once (merge, a send-back with its `lease_taken`), the naming precedence, agents, the engine and API keys never counted, `created` excluded, planned against unplanned with and without `data.planned`, touchless rate, by definition version, by station and kind, the window by finish time, two-org RLS; the trigger's label rows.
@@ -769,10 +773,10 @@ Each row is one PR on `goal/4-<n>-<slug>`, passing `task check`, plus `task migr
 | 4-8 | **Connections core**: `ports.MasterKey` + `masterkey`, `schema/connection-kind.schema.json`, `internal/connkind` with the platform kinds, `domain` kinds and `Render`, `00051`, `ports.Connections` + postgres adapter + fake + `connectiontest`, `goal db rekey` | threat rows 1, 2, 12; rekey reseals all; platform kinds synced at start | conformance, integration |
 | 4-9 | **Connections API, permissions, CLI, test probe**, public-only dialer, SSE `connection` | §8.1–8.3; row 3, 4 | handler tests, golden matrix, CLI tests |
 | 4-10 | **Definition schema** (§4.4): new fields, removals with quick fixes, connections check through `authoring.Credentials` | every code of §4.4 with its fix; fixtures updated | config and authoring tests |
-| 4-11 | **Runs get their connections**: resolve, render, env per exec, stdio MCP in the worker, connections section in the prompt, remote MCP from connections in the gateway; delete `ports.Sidecars`, `gateway/sidecars.go`, docker sidecars; scrubbing | rows 6, 9; a run with a remote and a stdio MCP connection | engine, gateway, worker tests |
+| 4-11 | **Runs get their connections**: resolve, render, env per exec, stdio and remote MCP in the worker (direct from the box, headers from env), `tools.allow/deny` in the worker, connections section in the prompt; delete `ports.Sidecars`, `gateway/sidecars.go`, docker sidecars; scrubbing | rows 6, 9; a run with a remote and a stdio MCP connection, neither through the gateway | engine, worker tests |
 | 4-12 | **AWS STS**: `ports.Minter`, `awssts`, kinds `aws` and `bedrock` | row 7; AssumeRole and GetSessionToken paths | stub STS endpoint |
 | 4-13 | **CodeHost per kind** (`github` changed, `gitlab` new) + merge of every pull request of the item (§4.7) | partial merge then retry; host mismatch refused | engine tests, httptest code hosts |
-| 4-14 | **Cutover**: remove `GOAL_TASK_ENV`, `GOAL_GITHUB_*`, `env:` references, `domain.SecretPolicy`; `goal connection import-env`; README interim rule ended | §14 step 5; the goal factory runs on connections only | e2e, settings tests |
+| 4-14 | **Cutover**: remove `GOAL_TASK_ENV`, `GOAL_GITHUB_*`, `env:` references, `domain.SecretPolicy`, the gateway's upstream forwarding (`upstream.go`, `policy.go`); `goal connection import-env`; README interim rule ended | §14 step 5; the goal factory runs on connections only | e2e, settings tests |
 | 4-15 | **Web: Connections** (list, new, detail; Define-Basics runtime, Define-Connections, New-Connections; phone) | §10; boards of §3 | Playwright 375/768/1440 + axe, Vitest |
 | 4-16 | **Knowledge core**: `00052`, `ports.Knowledge` + postgres + `knowledgetest`, `ports.Embedder` + `openaiembed`, `internal/knowledge` (extract, chunk, fuse, ingestion loop with leases), uploads in the bucket; compose PostgreSQL on pgvector | row 1, 8; leases survive a killed goald; keyword-only without an embedder | conformance, integration, unit |
 | 4-17 | **Knowledge API, CLI, gateway tools** `knowledge__search`, `knowledge__read`, SSE `knowledge` | §8; row 11 | handler and gateway tests |
@@ -791,6 +795,7 @@ Migration numbers rise with PR order (4-3 → `00050`, 4-8 → `00051`, 4-16 →
 
 **Phase 4 provides**
 - `ports.Sandboxes`, `Connections`, `MasterKey`, `Minter`, `Knowledge`, `Embedder`, `SourceReader`; `CodeHost` per kind; `ObjectStore` without versions.
+- The gateway as Goal's MCP server for runs (Goal's tools and `GET /run`, task token, no connection proxied), where phase 5's eval tokens and later item tools plug in; connections' MCP servers are configured by the worker in the box.
 - Permissions `connection:read|manage`, `knowledge:read|manage`; endpoints and events of §8; query keys of §10.
 - `Knowledge.Search` with an explicit sources list, which phase 6's `search_knowledge` tool calls with every source the person may read and phase 5 reuses for the Learned source.
 - The Cloudflare topology (§5.12) phase 6's OAuth endpoints route through.
