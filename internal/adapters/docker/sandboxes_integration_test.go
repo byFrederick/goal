@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -187,39 +188,51 @@ func TestSandboxes_CancelAndTimeoutKillTheCommandAndItsChildren(t *testing.T) {
 	}
 }
 
-// A cancelled command whose stdout nobody reads any more still ends: Wait returns.
+// A cancelled command whose stdout nobody reads any more still ends: Wait returns. Cancelled
+// right after Exec, Docker may not have started it yet (it answers the attach first), so
+// several at once make sure a kill that comes too early still kills.
 func TestSandboxes_CancelEndsACommandNobodyReads(t *testing.T) {
 	t.Parallel()
 
 	s, _, _ := newTestSandboxes(t, "")
 	b := newBox(t, s, time.Now().Add(time.Hour))
 
-	ctx, cancel := context.WithCancel(t.Context())
+	const commands = 8
 
-	p, err := b.Exec(ctx, ports.Exec{Argv: []string{"yes"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	var wg sync.WaitGroup
 
-	cancel()
+	for i := range commands {
+		ctx, cancel := context.WithCancel(t.Context())
 
-	done := make(chan error, 1)
-
-	go func() {
-		_, err := p.Wait()
-		done <- err
-	}()
-
-	select {
-	case err := <-done:
-		if !errors.Is(err, context.Canceled) {
-			t.Errorf("Wait = %v; want context.Canceled", err)
+		p, err := b.Exec(ctx, ports.Exec{Argv: []string{"yes", "goal-it-" + strconv.Itoa(i)}})
+		if err != nil {
+			t.Fatal(err)
 		}
-	case <-time.After(time.Minute):
-		t.Fatal("Wait did not return for a cancelled command nobody reads")
+
+		cancel()
+
+		wg.Go(func() {
+			done := make(chan error, 1)
+
+			go func() {
+				_, err := p.Wait()
+				done <- err
+			}()
+
+			select {
+			case err := <-done:
+				if !errors.Is(err, context.Canceled) {
+					t.Errorf("command %d: Wait = %v; want context.Canceled", i, err)
+				}
+			case <-time.After(time.Minute):
+				t.Errorf("command %d: Wait did not return for a cancelled command nobody reads", i)
+			}
+		})
 	}
 
-	if ps := processes(t, b); strings.Contains(ps, "yes") {
+	wg.Wait()
+
+	if ps := processes(t, b); strings.Contains(ps, "goal-it-") {
 		t.Errorf("yes still runs in the box:\n%s", ps)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
@@ -240,7 +241,7 @@ type box struct {
 func (b *box) Delete(ctx context.Context) error { return b.s.Delete(ctx, b.run) }
 
 // Exec implements ports.Sandbox: docker exec with stdout streamed and stderr's tail kept.
-// Cancelling ctx or passing e.Timeout kills the command and its children.
+// Cancelling ctx or passing e.Timeout ends stdout and kills the command and its children.
 func (b *box) Exec(ctx context.Context, e ports.Exec) (ports.Process, error) {
 	if len(e.Argv) == 0 {
 		return nil, errors.New("exec without a command")
@@ -277,7 +278,7 @@ func (b *box) Exec(ctx context.Context, e ports.Exec) (ports.Process, error) {
 	stdoutR, stdoutW := io.Pipe()
 	p := &process{b: b, execID: created.ID, marker: id, stdout: stdoutR, done: make(chan struct{})}
 
-	go p.supervise(ctx, attach.HijackedResponse, stdoutW, e.Timeout)
+	go p.supervise(ctx, attach.HijackedResponse, &cutWriter{w: stdoutW}, e.Timeout)
 
 	return p, nil
 }
@@ -306,7 +307,7 @@ func (p *process) Wait() (ports.ExitStatus, error) {
 
 // supervise copies the command's output until it ends, kills the command when ctx ends or the
 // timeout passes, then records how it ended.
-func (p *process) supervise(ctx context.Context, attach client.HijackedResponse, stdout *io.PipeWriter, timeout time.Duration) {
+func (p *process) supervise(ctx context.Context, attach client.HijackedResponse, stdout *cutWriter, timeout time.Duration) {
 	defer close(p.done)
 	defer attach.Close()
 
@@ -316,7 +317,7 @@ func (p *process) supervise(ctx context.Context, attach client.HijackedResponse,
 		defer close(copied)
 
 		_, err := stdcopy.StdCopy(stdout, &p.stderr, attach.Reader)
-		stdout.CloseWithError(err)
+		stdout.w.CloseWithError(err)
 	}()
 
 	var expired <-chan time.Time
@@ -373,13 +374,17 @@ func (p *process) supervise(ctx context.Context, attach client.HijackedResponse,
 	}
 }
 
-// stop kills the command and its children and waits for its output to end, cutting the stream
-// (and the caller's stdout) when it has not after killGrace.
-func (p *process) stop(ctx context.Context, attach client.HijackedResponse, stdout *io.PipeWriter, copied <-chan struct{}) {
+// stop ends the caller's stdout, kills the command and its children, and waits for the command's
+// output to end, closing the stream when it has not after killGrace. The output drains meanwhile,
+// read or not: Docker ends no exec in the box, the kill's included, while the output of one that
+// exited waits for a reader.
+func (p *process) stop(ctx context.Context, attach client.HijackedResponse, stdout *cutWriter, copied <-chan struct{}) {
+	stdout.cut()
+
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), callLimit)
 	defer cancel()
 
-	if err := p.b.kill(ctx, p.marker); err != nil {
+	if err := p.kill(ctx); err != nil {
 		p.b.s.log.WarnContext(ctx, "kill a sandbox command", slog.String("run", string(p.b.run)), slog.Any("error", err))
 	}
 
@@ -389,9 +394,7 @@ func (p *process) stop(ctx context.Context, attach client.HijackedResponse, stdo
 	case <-time.After(killGrace):
 	}
 
-	// Unblocks the copy too when nothing reads stdout any more.
 	attach.Close()
-	stdout.CloseWithError(io.ErrClosedPipe)
 	<-copied
 }
 
@@ -403,8 +406,42 @@ func (p *process) inspect(ctx context.Context) (client.ExecInspectResult, error)
 	return p.b.s.docker.ExecInspect(ctx, p.execID, client.ExecInspectOptions{})
 }
 
-// kill ends every process of the Exec marked marker.
-func (b *box) kill(ctx context.Context, marker string) error {
+// kill kills the command and its children until Docker says it exited. One scan is not enough:
+// Docker answers the attach before it starts the command, and a process being started carries
+// the marker only once it runs the command, so a scan right after Exec can find nothing.
+func (p *process) kill(ctx context.Context) error {
+	for {
+		res, err := p.b.s.docker.ExecInspect(ctx, p.execID, client.ExecInspectOptions{})
+		if cerrdefs.IsNotFound(err) { // the box is gone, and its commands with it
+			return nil
+		}
+
+		if err != nil {
+			return err
+		}
+
+		// Not running and not about to: it started and exited, or failed to start (no PID, and
+		// the 126 or 127 of a command Docker could not run).
+		if !res.Running && (res.PID != 0 || res.ExitCode != 0) {
+			return nil
+		}
+
+		if res.Running {
+			if err := p.b.killMarked(ctx, p.marker); err != nil {
+				return err
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(pollEvery):
+		}
+	}
+}
+
+// killMarked ends every process of the Exec marked marker that runs now.
+func (b *box) killMarked(ctx context.Context, marker string) error {
 	created, err := b.s.docker.ExecCreate(ctx, b.name, client.ExecCreateOptions{
 		AttachStdout: true, AttachStderr: true, Cmd: []string{"sh", "-c", killScript, "goal-kill", marker},
 	})
@@ -422,9 +459,37 @@ func (b *box) kill(ctx context.Context, marker string) error {
 	}
 	defer attach.Close()
 
-	_, err = io.Copy(io.Discard, attach.Reader)
+	// The stream ends once Docker handled the script's exit, which can wait behind the exit of a
+	// command whose output nobody reads; the hijacked stream ignores ctx, so close it when ctx ends.
+	defer context.AfterFunc(ctx, attach.Close)()
 
-	return err
+	if _, err := io.Copy(io.Discard, attach.Reader); err != nil {
+		return errors.Join(err, ctx.Err())
+	}
+
+	return nil
+}
+
+// cutWriter writes to the caller's stdout until cut, then drops what it is given.
+type cutWriter struct {
+	w   *io.PipeWriter
+	off atomic.Bool
+}
+
+func (c *cutWriter) Write(b []byte) (int, error) {
+	if !c.off.Load() {
+		if n, err := c.w.Write(b); err == nil || !c.off.Load() {
+			return n, err
+		}
+	}
+
+	return len(b), nil
+}
+
+// cut ends the caller's stdout where it is; a write waiting for the caller returns.
+func (c *cutWriter) cut() {
+	c.off.Store(true)
+	_ = c.w.Close()
 }
 
 // tailWriter keeps the last ports.MaxStderrTail bytes written to it.
