@@ -267,13 +267,13 @@ The CSP itself (`web/csp.txt`, with `worker-src 'self'`) and `X-Frame-Options: D
 | `GOAL_TRUSTED_PROXIES` | goald | empty · comma-separated CIDRs (or single addresses) of proxies whose `X-Forwarded-For` is believed; on Cloudflare the control Worker sets every address (spec 4 §5.12), and goald refuses `GOAL_SANDBOX=cloudflare` under `session` without it |
 | `GOAL_GATEWAY_LISTEN` | goald | the main listener · required and different when `GOAL_LISTEN` is not loopback (§5.5) |
 | `GOAL_AUTH_GOOGLE` | goald, auth | `off` · `on` needs `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (auth) |
-| `GOAL_AUTH_LISTEN` | auth | `127.0.0.1:8081` · loopback only |
+| `GOAL_AUTH_LISTEN` | auth | `127.0.0.1:8081` · loopback, or every interface (`0.0.0.0`, `[::]`) only beside an https `GOAL_PUBLIC_URL`, for a container of its own on Cloudflare (spec 4 §5.12; phase 4 review, L4) |
 | `GOAL_AUTH_DATABASE_URL` | auth | compose database as `goal_auth` with `GOAL_PG_AUTH_PASSWORD` |
 | `BETTER_AUTH_SECRETS` or `BETTER_AUTH_SECRET` | auth | none · required, ≥ 32 bytes |
 | `GOAL_AUTH_PROXY_SECRET` | goald, auth | `goal up` generates one per start when unset · required under `session`, ≥ 32 bytes, not a Better Auth secret; goald sends it as `X-Goal-Proxy-Secret` with every forwarded request and the auth service answers nothing else but `GET /api/auth/ok` (review of phase 3, L4; row 54) |
 | `GOAL_BOOTSTRAP_OWNER_EMAIL` | auth | none · used only while no user exists |
 | `GOAL_SMTP_URL`, `GOAL_SMTP_FROM` | auth | `smtp://127.0.0.1:1025`, `Goal <goal@localhost>` · `smtp://` to a host other than loopback must offer STARTTLS |
-| `GOAL_SMTP_PLAINTEXT` | auth | `off` · `on` lets `smtp://` stay unencrypted to a host name without dots (a compose service) and is refused for any other host; set only by compose's stack profile, for Mailpit (fix in 4-6) |
+| `GOAL_SMTP_PLAINTEXT` | auth | `off` · `on` lets `smtp://` stay unencrypted to compose's Mailpit by its service name, `mailpit`, and is refused for any other host (another name without dots may be a LAN host through a DNS search domain; phase 4 review, L4); set only by compose's stack profile (fix in 4-6) |
 
 `compose.yaml` gains `mailpit` (`axllent/mailpit`, pinned) with `127.0.0.1:1025` (SMTP) and `127.0.0.1:8025` (inbox UI); it never appears in cloud configuration.
 

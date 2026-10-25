@@ -32,7 +32,7 @@ export interface Settings {
   /**
    * GOAL_SMTP_URL (it may hold the server's credentials) and GOAL_SMTP_FROM: where mail goes.
    * plaintext: smtp:// may stay unencrypted, as to a loopback host or, with GOAL_SMTP_PLAINTEXT=on,
-   * to a compose service (Mailpit in the stack profile); any other server must offer STARTTLS.
+   * to compose's Mailpit (mailpit, in the stack profile); any other server must offer STARTTLS.
    */
   smtp: { url: string; from: string; plaintext: boolean };
   /**
@@ -58,6 +58,7 @@ const defaultPublicURL = 'http://127.0.0.1:8080'; // goald's default GOAL_LISTEN
 const devAuthPassword = 'goal-auth-dev-only'; // GOAL_PG_AUTH_PASSWORD's documented dev-only default
 const minSecretBytes = 32;
 const defaultSMTPURL = 'smtp://127.0.0.1:1025'; // Mailpit from compose.yaml
+const composeMailpit = 'mailpit'; // its service name in compose.yaml, for the stack profile
 const defaultSMTPFrom = 'Goal <goal@localhost>';
 const emailPattern = /^[^\s@<>]+@[^\s@<>]+$/;
 
@@ -70,6 +71,14 @@ export function loadSettings(env: Env): Settings {
 
   const listen = parseListen(get('GOAL_AUTH_LISTEN') ?? defaultListen, problems);
   const publicURL = parseOrigin('GOAL_PUBLIC_URL', get('GOAL_PUBLIC_URL') ?? defaultPublicURL, problems);
+  // Every interface is for a container of the service's own that only goald reaches (Cloudflare,
+  // through the control Worker), always a deployment behind https; never this machine's network.
+  if (listen && everyInterface(listen.host) && publicURL && !publicURL.startsWith('https:')) {
+    problems.push(
+      'GOAL_AUTH_LISTEN on every interface needs an https GOAL_PUBLIC_URL: it is for a container of the ' +
+        'service’s own that only goald reaches; beside goald on this machine, listen on loopback',
+    );
+  }
 
   const betterAuthURL = get('BETTER_AUTH_URL');
   if (betterAuthURL !== undefined && publicURL !== undefined) {
@@ -130,9 +139,9 @@ function parseListen(value: string, problems: string[]): Settings['listen'] | un
     return undefined;
   }
   const host = m[1].replace(/^\[(.*)\]$/, '$1');
-  // Every interface is for a container of the service's own that only goald reaches (on
-  // Cloudflare, through the control Worker); there the proxy secret is what keeps all else out.
-  if (!isLoopback(host) && host !== '0.0.0.0' && host !== '::') {
+  // Every interface (only behind an https public URL, loadSettings) is for a container of the
+  // service's own; there the proxy secret is what keeps all but goald out.
+  if (!isLoopback(host) && !everyInterface(host)) {
     problems.push(
       'GOAL_AUTH_LISTEN must be loopback (127.0.0.1, [::1] or localhost), or every interface (0.0.0.0, [::]) in a ' +
         'container that only goald reaches: goald proxies to it',
@@ -228,12 +237,12 @@ function parseSMTP(get: (name: string) => string | undefined, problems: string[]
   const mode = get('GOAL_SMTP_PLAINTEXT') ?? 'off';
   if (mode !== 'on' && mode !== 'off') problems.push('GOAL_SMTP_PLAINTEXT must be on or off');
   const plaintextOn = mode === 'on';
-  // A name without dots is a compose service (or this machine's own name): never a mail server
-  // across the internet.
-  if (plaintextOn && !(smtp && (isLoopback(host) || /^[a-z]([a-z0-9-]*[a-z0-9])?$/i.test(host)))) {
+  // Compose's Mailpit by its service name, which compose's DNS answers: any other name without
+  // dots may be a host of the LAN through a DNS search domain, and sign-in codes would cross it.
+  if (plaintextOn && !(smtp && (isLoopback(host) || host === composeMailpit))) {
     problems.push(
-      'GOAL_SMTP_PLAINTEXT=on needs an smtp:// GOAL_SMTP_URL on loopback or a compose service ' +
-        '(a host name without dots, such as mailpit); any other server must offer STARTTLS',
+      `GOAL_SMTP_PLAINTEXT=on needs an smtp:// GOAL_SMTP_URL on loopback or compose's Mailpit (${composeMailpit}); ` +
+        'any other server must offer STARTTLS',
     );
   }
   return { url, from, plaintext: smtp && (isLoopback(host) || plaintextOn) };
@@ -246,6 +255,11 @@ function parseSMTP(get: (name: string) => string | undefined, problems: string[]
  */
 export function localhostName(host: string): boolean {
   return /^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+localhost$/.test(host.toLowerCase());
+}
+
+/** everyInterface is true for the unspecified addresses, 0.0.0.0 and ::. */
+function everyInterface(host: string): boolean {
+  return host === '0.0.0.0' || host === '::';
 }
 
 /** isLoopback is true for localhost, 127.0.0.0/8 and ::1. */

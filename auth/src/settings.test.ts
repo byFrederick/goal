@@ -145,6 +145,17 @@ describe('loadSettings', () => {
       'GOAL_SMTP_PLAINTEXT=on needs',
     ],
     [
+      // A dotless name other than compose's Mailpit may be a LAN host through a DNS search domain.
+      'plaintext to any other name without dots',
+      { ...base, GOAL_SMTP_URL: 'smtp://mail:25', GOAL_SMTP_PLAINTEXT: 'on' },
+      'GOAL_SMTP_PLAINTEXT=on needs',
+    ],
+    [
+      'every interface beside an http public URL, as on a laptop',
+      { ...base, GOAL_AUTH_LISTEN: '0.0.0.0:8081' },
+      'GOAL_AUTH_LISTEN on every interface needs an https GOAL_PUBLIC_URL',
+    ],
+    [
       'plaintext with smtps',
       { ...base, GOAL_SMTP_URL: 'smtps://mailpit:465', GOAL_SMTP_PLAINTEXT: 'on' },
       'GOAL_SMTP_PLAINTEXT=on needs',
@@ -186,9 +197,14 @@ describe('loadSettings', () => {
 
   // On Cloudflare the service is a container of its own that only goald reaches, through the
   // control Worker: it listens on every interface there, and the proxy secret keeps all else out.
-  it('accepts every interface for a container of its own', () => {
-    expect(loadSettings({ ...base, GOAL_AUTH_LISTEN: '0.0.0.0:8081' }).listen).toEqual({ host: '0.0.0.0', port: 8081 });
-    expect(loadSettings({ ...base, GOAL_AUTH_LISTEN: '[::]:8081' }).listen).toEqual({ host: '::', port: 8081 });
+  // A deployment's public URL is https; a laptop's or compose's (http on loopback) never is.
+  it('accepts every interface for a container of its own, behind an https public URL', () => {
+    const deployed = { ...base, GOAL_PUBLIC_URL: 'https://goal.example.com' };
+    expect(loadSettings({ ...deployed, GOAL_AUTH_LISTEN: '0.0.0.0:8081' }).listen).toEqual({
+      host: '0.0.0.0',
+      port: 8081,
+    });
+    expect(loadSettings({ ...deployed, GOAL_AUTH_LISTEN: '[::]:8081' }).listen).toEqual({ host: '::', port: 8081 });
   });
 
   it('lists every problem at once and never a secret value', () => {

@@ -179,7 +179,7 @@ services:
   # The auth service (auth/, profile stack) in goald's network namespace, as beside goald in any
   # deployment: it listens on loopback and goald's /api/auth proxy is the only way in. Only its
   # own variables reach it. It mails Mailpit, which speaks no TLS, across this network:
-  # GOAL_SMTP_PLAINTEXT=on allows that for a compose service's name and nothing else.
+  # GOAL_SMTP_PLAINTEXT=on allows that for the name mailpit and nothing else.
   auth:
     profiles: [stack]
     image: ghcr.io/byfrederick/goal-auth:0.1.0
