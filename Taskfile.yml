@@ -375,6 +375,28 @@ tasks:
       - task: validate
       - task: tf:check
 
+  check:changed:
+    desc: >-
+      The tasks of task check that the parts this branch changed since its merge base with BASE (default origin/main)
+      need, committed, staged, unstaged or untracked (cmd/checkplan); shared or unknown files and a missing BASE run
+      everything. Not a substitute for the pre-push hook
+    vars:
+      BASE: '{{.BASE | default "origin/main"}}'
+    silent: true
+    cmds:
+      - |
+        set -eu
+        # An empty plan means nothing needs a check only when checkplan succeeded.
+        plan="$(go run ./cmd/checkplan -base '{{.BASE}}')" || { echo "check:changed: checkplan failed" >&2; exit 1; }
+        if [ -z "$plan" ]; then
+          echo "check:changed: nothing to run" >&2
+          exit 0
+        fi
+        for t in $plan; do
+          echo "check:changed: task $t" >&2
+          "{{.TASK_EXE}}" "$t"
+        done
+
   worker:install:
     desc: Install the pnpm workspace's dependencies from the lockfile
     sources: [package.json, pnpm-lock.yaml, pnpm-workspace.yaml, worker/package.json, auth/package.json, deploy/cloudflare/package.json, packages/*/package.json]

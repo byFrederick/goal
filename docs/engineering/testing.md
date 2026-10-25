@@ -46,4 +46,5 @@ Tests exist to stop real regressions. A test that would still pass if the behavi
 task test               # unit tests with -race
 task test-integration   # starts PostgreSQL 18 and RustFS via compose, runs integration-tagged tests
 task check              # everything the pre-push hook (and CI, when enabled) runs
+task check:changed      # only the checks of the parts this branch changed since origin/main (README, Development)
 ```
