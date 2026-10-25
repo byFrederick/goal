@@ -764,7 +764,7 @@ On `/v1/orgs/{org}/stream`, through `goal_org_events`: `connection` (`{connectio
 | 6 | An agent forges a passing check | runtime exit codes | `TestEngine_CheckResultFromExitStatus` |
 | 7 | Stored AWS keys reach a box | minting | `TestEngine_AWSStoredKeysNeverInEnv` |
 | 8 | A search returns sources the factory does not list | filter in the one query | `TestKnowledge_Conformance/SearchOnlyListedSources` (fake and PostgreSQL), `TestGateway_KnowledgeSearchOnlyTheFactorysSources`, `TestGateway_KnowledgeReadOnlyTheFactorysSources` |
-| 9 | Secrets in events or logs | scrubbing | `TestEngine_RelayScrubsConnectionValues`, log capture test |
+| 9 | Secrets in events, outputs or logs | scrubbing | `TestEngine_RelayScrubsConnectionValues`, `TestEngine_OutputScrubsConnectionValues`, log capture test |
 | 10 | The master key on Cloudflare leaks into a box | Worker env allow-list | Worker test `box start carries only goald's env` |
 | 11 | Uploaded content served as active HTML | attachment + nosniff | `TestAPI_DocumentContentIsAttachment` |
 | 12 | Wrong or missing master key | startup check | `TestGoald_RefusesUnknownMasterKeyID` |

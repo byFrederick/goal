@@ -415,6 +415,33 @@ func TestEngine_RelayScrubsConnectionValues(t *testing.T) {
 	}
 }
 
+// Threat row 9 too: an agent that succeeds with a secret value in its output (one asked to report
+// the config it used) leaves it in neither its run's result nor the item's output, which the next
+// station's agent gets. The scrubber matches exact values: an encoded one gets through.
+func TestEngine_OutputScrubsConnectionValues(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, connLine(), func(_ context.Context, run porttest.ExecCall, _ io.Writer) domain.RunResult {
+		return ok(`{"config":{"token":"` + run.Env[envTrackerToken] + `"},"notes":["the model key is ` + run.Env[envModelKey] + `"]}`)
+	})
+	it := h.submit(t, domain.NewItem{})
+
+	h.step(t)
+
+	runs := h.runs(t, testOrg, it.ID)
+	if len(runs) != 1 || runs[0].Result.Status != domain.RunSucceeded {
+		t.Fatalf("runs %+v, want one that succeeded", runs)
+	}
+
+	want := `{"config":{"token":"[redacted]"},"notes":["the model key is [redacted]"]}`
+
+	for where, got := range map[string]json.RawMessage{"run": runs[0].Result.Output, "item": h.item(t, it.ID).Outputs[stWork]} {
+		if string(got) != want {
+			t.Errorf("%s output %s, want %s", where, got, want)
+		}
+	}
+}
+
 // Threat row 7 (spec 4 §11.2): a connection whose kind mints gets credentials minted for the run,
 // from its stored keys with its kind's defaults, living the task timeout and 15 minutes more, in
 // the agent's env only. The stored keys reach no sandbox and no exec, and the minted values are

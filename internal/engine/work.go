@@ -302,7 +302,7 @@ func (e *Engine) agent(ctx context.Context, c claimed, runID domain.RunID, b *bo
 		}
 	}
 
-	res.Error = scrub.string(res.Error)
+	res.Error, res.Output = scrub.string(res.Error), scrub.json(res.Output)
 
 	e.log.InfoContext(ctx, "sandbox exec", slog.String("run", string(runID)), slog.String("step", "agent"),
 		slog.Int("exit", st.Code), slog.Float64("seconds", e.since(started)))

@@ -201,7 +201,7 @@ func eachLine(r io.Reader, limit int, fn func([]byte)) error {
 }
 
 // scrubber replaces secret values with a marker wherever they appear in what a sandbox reports:
-// events, errors and logs (exact strings, best effort).
+// events, errors, outputs and logs (exact strings, best effort: an encoded value gets through).
 type scrubber struct {
 	r *strings.Replacer
 }
@@ -243,6 +243,33 @@ func (s scrubber) value(v any) any {
 	}
 
 	return v
+}
+
+// json scrubs every string inside a JSON document. A document that does not parse, which the
+// output check then refuses, is scrubbed as text.
+func (s scrubber) json(doc json.RawMessage) json.RawMessage {
+	if len(doc) == 0 {
+		return doc
+	}
+
+	d := json.NewDecoder(bytes.NewReader(doc))
+	d.UseNumber()
+
+	var v any
+	if err := d.Decode(&v); err != nil || d.More() {
+		return json.RawMessage(s.string(string(doc)))
+	}
+
+	var out bytes.Buffer
+
+	enc := json.NewEncoder(&out)
+	enc.SetEscapeHTML(false)
+
+	if err := enc.Encode(s.value(v)); err != nil {
+		return json.RawMessage(s.string(string(doc)))
+	}
+
+	return bytes.TrimSuffix(out.Bytes(), []byte("\n"))
 }
 
 // tail keeps the last max bytes of the lines added to it.
