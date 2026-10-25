@@ -1,6 +1,6 @@
 # ADR 0008 — Portable deployment, sandboxes, connections and the knowledge base
 
-Status: accepted · 2026-10-24 · Supersedes the deployment targets of [ADR 0003](0003-hexagonal-architecture-and-deployment.md) (decisions 4, 5 and 7) and decisions 2–5 of [ADR 0006](0006-workspaces-and-command-checks.md) · Amends [ADR 0009](0009-agent-network-isolation.md) and [ADR 0005](0005-factory-definitions-in-object-storage.md) · Spec: [phase 4](../specs/4-connections-runs-and-knowledge.md)
+Status: accepted · 2026-10-24 · Supersedes the deployment targets of [ADR 0003](0003-hexagonal-architecture-and-deployment.md) (decisions 4, 5 and 7) and decisions 2–5 of [ADR 0006](0006-workspaces-and-command-checks.md) · Amends [ADR 0009](0009-agent-network-isolation.md) and [ADR 0005](0005-factory-definitions-in-object-storage.md) · Spec: [phase 4](../specs/4-connections-runs-and-knowledge.md) · Amended in phase 6: decision 7 is changed by the [amendment](#amendment--phase-6-one-mcp-server-for-agents-and-clients) at the end ([spec 6](../specs/6-goal-mcp-server.md))
 
 ## Context
 
@@ -41,3 +41,9 @@ Constraints found while designing (research of 2026-10-24): Cloudflare Container
 - The definition's `evals/` folder, reserved since ADR 0002, gets its phase: phase 5 (continuous learning, Jonah) runs eval cases as ordinary runs in sandboxes pinned to a version, and ADR 0002 is amended to that smaller loop. Goal's own MCP server moves to phase 6.
 - Prototypes come first: a real run on Cloudflare Containers (start, exec, internet, private addresses unreachable) and our migrations on a managed PostgreSQL (PlanetScale Postgres or Neon), which also chooses the provider.
 - Rough cost of the lean Cloudflare install, model tokens excluded: Workers $5, goald container $10–30, auth $3–8, PostgreSQL $0–5, R2 about $0, about $0.04 per 15-minute run: $25–50 a month.
+
+## Amendment — phase 6: one MCP server for agents and clients
+
+Owner decision, 2026-10-25. Decision 7 changes: the gateway's MCP endpoint and Goal's MCP server for outside clients ([spec 6](../specs/6-goal-mcp-server.md)) become one server with one tool registry, one permission check and one audit, in `internal/api`. Callers decide what they may use: people and outside apps (OAuth through Better Auth, MCP-audience keys and personal tokens) act with their organization role at `/v1/mcp`; a run's task token is a restricted principal at `/mcp` (its organization, factory and item, its factory's `knowledge.sources`, the tools an agent may call, only while the run is live). The gateway's own registry and token check go; its listener (`gateway.internal` on Cloudflare, `goal-egress` locally), `GET /run` and goald minting one task token per run stay, so boxes still reach Goal only through their own route and never hold an OAuth token. Tool names keep the `<server>__<tool>` form agents use (`knowledge__search`).
+
+Rejected: two servers with two registries (each tool written and permission-checked twice, and the agents' set drifting from the people's); OAuth tokens for runs (a run's rights come from its definition and its item, not a person's consent, and must end with the run).

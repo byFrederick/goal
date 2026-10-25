@@ -33,7 +33,7 @@ An organization's admins add **connections** on one Connections page: a GitHub, 
 - Per-organization quotas on runs, storage or embeddings: unscheduled (§17).
 - PDF and Office extraction for uploads (text, Markdown, HTML, JSON and YAML only in phase 4).
 - The learning loop (Learned knowledge, retros, standard-work proposals, evals, repeat-guidance flags, the knowledge-first prompt): [phase 5, continuous learning](5-continuous-learning.md).
-- Goal's own MCP server for outside clients: [phase 6](6-goal-mcp-server.md).
+- Goal's own MCP server for outside clients, which then also serves the agents' tools in place of the gateway's endpoint: [phase 6](6-goal-mcp-server.md).
 
 ## 3. Canvas boards covered
 
@@ -433,6 +433,7 @@ The gateway becomes **Goal's MCP server for runs**: Goal's own tools and the run
 - **Goal's tools**, served to every run whose factory lists knowledge sources: `knowledge__search {query, limit?: 1–20 (8), source?}` and `knowledge__read {document}`, filtered by the run's version's sources; item tools join them later. The names keep the `<server>__<tool>` form (Claude's tool names allow no dots); decisions call it `knowledge.search`. Every call appends `gateway_tool_call` as today. (As built in 4-17: through `gateway.Knowledge`, `knowledge.Searcher`; a `source` the version does not list, an empty query or a limit out of range is a tool error, one naming the sources it may search; a document of an unlisted source or of another organization answers as one that does not exist; `knowledge__search` answers JSON `{hits: [{document, source, title, url?, heading, snippet, score}]}`, `knowledge__read` the title, the link and the text, cut at 200 KiB with a note; calls record connection `knowledge`.)
 - `GET /run`: the task's bundle (spec, prompt, skills, output schema, MCP config, tools, repository, connection docs) for the run in the token, from the definitions cache. As built in 4-17 its `spec.knowledge_sources` names the sources the knowledge tools search, and the worker's system prompt ends with `## Knowledge` naming them and `mcp__goal__knowledge__search` / `__read` (phase 5 adds the knowledge-first instruction).
 - OAuth connections and approval-gated calls (deferred, §2) may route through the gateway when they arrive.
+- **Phase 6** ([spec 6](6-goal-mcp-server.md) §4.5, owner decision 2026-10-25): the gateway's MCP endpoint, tool registry and task-token check fold into Goal's one MCP server (`internal/api`), where a task token is a restricted run principal (its organization, factory and item, its version's `knowledge.sources`, the agent tools only, while the run is live). The tools keep their names and outputs; the agents' listener, `gateway.internal`, the egress proxy's `/mcp` and `/run`, `GET /run` and per-run task tokens stay.
 - Every request goald makes for a connection (tests, sync, STS, embeddings) dials public addresses only, through one shared dialer from `internal/egress` (`egress.PublicDialer`); `GOAL_ALLOW_PRIVATE_UPSTREAMS=true` lifts it for a laptop's own test servers and is refused when goald listens off loopback.
 - `domain.SecretPolicy` and the `env:` host bindings are deleted with the `env:` references (4-14, as built).
 
@@ -861,9 +862,9 @@ Migration numbers rise with landing order (4-3 → `00050`, 4-8 → `00051`, 4-2
 
 **Phase 4 provides**
 - `ports.Sandboxes`, `Connections`, `MasterKey`, `Minter`, `Knowledge`, `Embedder`, `SourceReader`; `CodeHost` per kind; `ObjectStore` without versions.
-- The gateway as Goal's MCP server for runs (Goal's tools and `GET /run`, task token, no connection proxied), where phase 5's eval tokens and later item tools plug in; connections' MCP servers are configured by the worker in the box.
+- The gateway as Goal's MCP server for runs (Goal's tools and `GET /run`, task token, no connection proxied), where phase 5's eval tokens plug in; connections' MCP servers are configured by the worker in the box. Phase 6 folds its MCP endpoint, tools and token check into Goal's one MCP server and keeps its listener, `GET /run` and task tokens (§5.9).
 - Permissions `connection:read|manage`, `knowledge:read|manage`; endpoints and events of §8; query keys of §10.
-- `Knowledge.Search` with an explicit sources list, which phase 6's `search_knowledge` tool calls with every source the person may read and phase 5 reuses for the Learned source.
+- `Knowledge.Search` with an explicit sources list, which phase 6's `knowledge__search` calls with a run's sources or every source a person may read, and phase 5 reuses for the Learned source.
 - The Cloudflare topology (§5.12) phase 6's OAuth endpoints route through.
 - Human touches per item (§4.9) per definition version, `item_touch_labels` (§4.10), `getTouchMetrics`, `getOrgTouchMetrics`, `Item.touches`: phase 5's retro trigger and its "check after publish".
 - For the canvas designer: the boards of §3.

@@ -142,7 +142,7 @@ SuggestTouchReasons(run, []domain.TouchReasonSuggestion) // never over a person'
 - `internal/engine`: `RunTask(ctx, domain.RunRequest{Version, Station, Agent, Kind, Brief, Inputs, RepositoryRef, Connections})`, the run lifecycle extracted from `runOnce` (lines call it under their lease; Jonah without one). `domain.RunKind`: `station`, `retro`, `eval`.
 - `internal/jonah` (new core package: `domain`, `ports`; depguard like `knowledge`): the retro and eval loops, grading (pure: assertions, pass^k, the no-regression rule), the auto-publish rule. It calls `RunTask` and authoring's draft and publish through interfaces it declares; `cmd/goald` wires the engine and `authoring.Service` into it.
 - Worker: modes `goal-agent retro` (retro schema) and `goal-agent judge`; `prepared` reports `repository_sha`; the bundle's `learned` entries and the knowledge-first instruction.
-- Gateway: tokens with `kind: eval` serve only the knowledge tools.
+- Gateway: tokens with `kind: eval` serve only the knowledge tools. Phase 6 folds the gateway's tools into Goal's one MCP server, where an eval token is a run principal holding the knowledge rows only (spec 6 §4.2); the rule does not change.
 
 ## 6. Data model
 
@@ -232,7 +232,7 @@ Migration numbers rise with PR order (5-1 → `00060`, 5-2 → `00061`, 5-4 → 
 
 **Phase 5 needs** from phase 4: human touches per item by definition version and `item_touch_labels` (§4.9–4.10), the knowledge port and ingestion loop, `ports.Sandboxes` and the run lifecycle, the `/run` bundle, the embedder; from 2.2-B: drafts, publish, restore and versions; from phase 3: `definition:edit`, `definition:publish`, `factory:read`, `knowledge:read`.
 
-**Phase 5 provides**: `engine.RunTask` and `agent_runs.kind`; the Learned source; `EvalCase` files; eval runs as rows; `system:jonah` as an actor. Phase 6's MCP tools may later expose the review list read-only.
+**Phase 5 provides**: `engine.RunTask` and `agent_runs.kind`; the Learned source; `EvalCase` files; eval runs as rows; `system:jonah` as an actor; eval tokens limited to the knowledge tools and the factory's own Learned entries in a run's search, both of which phase 6's run principals carry over. Phase 6 makes the gateway and Goal's MCP server one server with one tool registry: agent tools that come later (asking a person, a note on the item) are rows there marked for runs, and the review list may later be a read-only row for people (spec 6 §4.3).
 
 ## 17. Open questions
 

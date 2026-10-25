@@ -26,7 +26,7 @@ internal/engine/     flow engine: pull, WIP, drum-buffer-rope, andon. Imports do
 internal/ports/      interfaces: Store, Sandboxes, Secrets, Contracts, ObjectStore, ItemNotices, CodeHost, Clock, Tenancy, Audit, DefinitionStore, DefinitionNotices, SkillSource, Identity, Access, Platform, Connections, MasterKey, Minter (phase 4: new Knowledge, Embedder, SourceReader)
 internal/adapters/   s3store/ postgres/ docker/ github/ gitlab/ envsecrets/ sysclock/ skillssh/ masterkey/ awssts/ (phase 4: cloudflare/ openaiembed/ gitdocs/ confluence/)
 internal/api/        HTTP API handlers for api/openapi.yaml (generated types in internal/api/gen); no adapter imports
-internal/gateway/    MCP gateway inside goald: task-token auth, per-agent tools, credentials added on the host (phase 4: Goal's MCP server for runs, its own tools and `/run` only; connections go direct from the box)
+internal/gateway/    MCP gateway inside goald: Goal's MCP server for runs, task-token auth, Goal's own tools and the run bundle (`GET /run`); connections go direct from the box (phase 6: its MCP endpoint, tools and token check fold into Goal's one MCP server in internal/api; it keeps `/run`, the agents' listener stays)
 internal/egress/     the egress proxy's policy: agents to the model API and the gateway's path, tools to public hosts, nothing private (phase 4: public hosts for every box, and the public-only dialer goald uses for connections). Standard library only
 internal/definitions/ goald's cache of published definition versions (current and pinned by runs): lines, contracts, agent files, gateway lookups
 internal/config/     loads and validates one factory definition from an fs.FS (bucket prefix or local folder)
