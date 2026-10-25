@@ -78,8 +78,8 @@ run "every_secret_reaches_the_store_under_its_env_name" {
   command = plan
 
   assert {
-    condition     = length(module.secrets.names) == 18
-    error_message = "Want 18 store secrets, got ${length(module.secrets.names)}."
+    condition     = length(module.secrets.names) == 14
+    error_message = "Want 14 store secrets, got ${length(module.secrets.names)}."
   }
 
   assert {
@@ -112,11 +112,25 @@ run "each_container_gets_only_its_own_secrets" {
   }
 }
 
+run "the_database_administrator_stays_out_of_the_store" {
+  command = plan
+
+  assert {
+    condition     = length(setintersection(keys(module.secrets.names), ["GOAL_DATABASE_ADMIN_URL", "GOAL_PG_OWNER_PASSWORD", "GOAL_PG_APP_PASSWORD", "GOAL_PG_AUTH_PASSWORD"])) == 0
+    error_message = "goal db init's administrator and role passwords are sensitive outputs for task db:production only: any Worker of the account could bind a store secret."
+  }
+
+  assert {
+    condition     = keys(output.secret_consumers) == ["auth", "goald", "worker"]
+    error_message = "Only goald, the auth service and the control Worker consume store secrets."
+  }
+}
+
 run "the_database_urls_follow_the_planetscale_rules" {
   command = plan
 
   assert {
-    condition     = local.secret_values.GOAL_DATABASE_ADMIN_URL == "postgres://pscale_api_test.br4nch:pscale_pw_test%2B%2F%3D@db.example.com:5432/goal?sslmode=verify-full&sslrootcert=system"
+    condition     = output.goal_database_admin_url == "postgres://pscale_api_test.br4nch:pscale_pw_test%2B%2F%3D@db.example.com:5432/goal?sslmode=verify-full&sslrootcert=system"
     error_message = "The admin URL: the Terraform-managed role's own user and password (URL-encoded), port 5432, database goal, verify-full."
   }
 
@@ -136,7 +150,7 @@ run "the_database_urls_follow_the_planetscale_rules" {
   }
 
   assert {
-    condition     = local.secret_values.GOAL_PG_APP_PASSWORD == random_password.generated["goal_app"].result
+    condition     = output.goal_pg_app_password == random_password.generated["goal_app"].result
     error_message = "goal db init sets the very password goald's URL carries."
   }
 }

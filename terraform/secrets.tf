@@ -6,12 +6,17 @@
 #   Cloudflare tokens (tokens.tf).
 # - secrets/<workspace>.sops.yaml, age-encrypted (.sops.yaml), holds only what comes from outside
 #   and the master keys: the Google OAuth client (made in Google's console), the mail provider's
-#   SMTP URL, and GOAL_MASTER_KEYS. The master keys stay in SOPS on purpose: they must be escrowed
-#   outside the state (a lost key loses every organization's credentials), they rotate as a list
-#   (k2:<new>,k1:<old>, then goal db rekey), and a generated one would be replaced, unrecoverably,
-#   by any -replace or recreation of its resource.
+#   SMTP URL, and GOAL_MASTER_KEYS. The master keys stay in SOPS on purpose: they must have an
+#   escrowed copy that no state loss or damage can take (a lost key loses every organization's
+#   credentials), they rotate as a list (k2:<new>,k1:<old>, then goal db rekey), and a generated
+#   one would be replaced, unrecoverably, by any -replace or recreation of its resource.
+# The state holds every value below in plain text too, the master keys included (data sources and
+# store secret values are saved there): the state bucket is as sensitive as the master key.
 # Provider tokens are never in either (providers.tf). Organization credentials are never platform
 # secrets: they are connections, sealed in PostgreSQL under GOAL_MASTER_KEYS.
+# goal db init's administrator and the role passwords are not store secrets: nothing on Cloudflare
+# runs goal db init, and any Worker of the account could bind one. They are sensitive outputs, read
+# by task db:production only (outputs.tf).
 data "sops_file" "secrets" {
   source_file = "${path.module}/secrets/${local.environment}.sops.yaml"
 }
@@ -35,16 +40,11 @@ locals {
     GOAL_DATABASE_URL         = module.database_urls.app_url
     GOAL_MIGRATE_DATABASE_URL = module.database_urls.migrate_url
     GOAL_AUTH_DATABASE_URL    = module.database_urls.auth_url
-    GOAL_DATABASE_ADMIN_URL   = module.database_urls.admin_url
-    GOAL_PG_OWNER_PASSWORD    = random_password.generated["goal_owner"].result
-    GOAL_PG_APP_PASSWORD      = random_password.generated["goal_app"].result
-    GOAL_PG_AUTH_PASSWORD     = random_password.generated["goal_auth"].result
   }
 
   # Who reads which secret, as environment variables: the control Worker passes each container
   # exactly its own (spec 4 §11.1) and uses GOAL_SANDBOX_KEY itself to check goald's sandbox calls.
-  # db_init is whatever runs `goal db init` on Cloudflare (4-21): only it holds the administrator
-  # and the role passwords. goald never gets the auth service's secrets, and no box gets any.
+  # goald never gets the auth service's secrets, and no box gets any.
   secret_consumers = {
     goald = [
       "GOAL_MASTER_KEYS", "GOAL_GATEWAY_KEY", "GOAL_SANDBOX_KEY", "GOAL_AUTH_PROXY_SECRET",
@@ -54,9 +54,6 @@ locals {
     auth = [
       "BETTER_AUTH_SECRET", "GOAL_AUTH_PROXY_SECRET", "GOAL_AUTH_DATABASE_URL",
       "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOAL_SMTP_URL",
-    ]
-    db_init = [
-      "GOAL_DATABASE_ADMIN_URL", "GOAL_PG_OWNER_PASSWORD", "GOAL_PG_APP_PASSWORD", "GOAL_PG_AUTH_PASSWORD",
     ]
     worker = ["GOAL_SANDBOX_KEY"]
   }

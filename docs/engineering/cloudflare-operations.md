@@ -58,7 +58,8 @@ Every secret comes from the one place that makes it, and nobody copies one by ha
 | `GOAL_EMBED_KEY` | the Workers AI account token | goald |
 | `GOAL_DATABASE_URL`, `GOAL_MIGRATE_DATABASE_URL` | `modules/database-urls` | goald |
 | `GOAL_AUTH_DATABASE_URL` | `modules/database-urls` | auth |
-| `GOAL_DATABASE_ADMIN_URL`, `GOAL_PG_OWNER_PASSWORD`, `GOAL_PG_APP_PASSWORD`, `GOAL_PG_AUTH_PASSWORD` | the PlanetScale role and `random_password` | db_init: whatever runs `goal db init` on Cloudflare (4-21); `task db:production` reads the same from the state |
+
+`goal db init`'s administrator URL (`GOAL_DATABASE_ADMIN_URL`: BYPASSRLS, CREATEROLE) and the role passwords (`GOAL_PG_OWNER_PASSWORD`, `GOAL_PG_APP_PASSWORD`, `GOAL_PG_AUTH_PASSWORD`; the PlanetScale role and `random_password`) are not store secrets: nothing on Cloudflare runs `goal db init`, and the store is account-wide, so any other Worker of the account (or a token that may edit Workers scripts) could bind one. They are sensitive Terraform outputs that only `task db:production` reads. A Cloudflare-side `goal db init` runner, if one is ever built, adds them back with that runner as their one consumer.
 
 The master keys stay in SOPS, not `random_password`, on purpose: they must be escrowed outside the state (losing them loses every organization's credentials), they rotate as a list (`k2:<new>,k1:<old>`, then `goal db rekey`), and a generated one would be replaced, with no way back, by any `-replace` or recreation of its resource. Everything else Goal can make again: a lost generated secret is rotated, not recovered.
 
