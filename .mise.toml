@@ -11,3 +11,9 @@ tflint = "0.64.0"
 sops = "3.13.3"
 golangci-lint = "2"
 sqlc = "1"
+
+[settings]
+# npm: tools install with npm itself, on every machine (the worker image sets the same). The auto
+# choice (aube) writes bin shims that run every bin through node, so pnpm 12's native bin fails to
+# start with "SyntaxError: Invalid or unexpected token".
+npm.package_manager = "npm"

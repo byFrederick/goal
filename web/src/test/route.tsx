@@ -32,19 +32,23 @@ export function renderBoardPage({
   page,
   org,
   factory,
+  factories = [factory],
   board,
   station,
 }: {
   page: () => ReactNode;
   org: OrgSummary;
   factory: Factory;
-  board: Board;
+  /** The organization's factories, for rows about another factory; `factory` alone by default. */
+  factories?: Factory[];
+  /** The board the page reads; left out for a page that does not read it. */
+  board?: Board;
   station?: string;
 }) {
   polyfillLayout();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
-  queryClient.setQueryData(factoriesQuery(org.id).queryKey, [factory]);
-  queryClient.setQueryData(boardQuery(org.id, factory.id).queryKey, board);
+  queryClient.setQueryData(factoriesQuery(org.id).queryKey, factories);
+  if (board) queryClient.setQueryData(boardQuery(org.id, factory.id).queryKey, board);
 
   const rootRoute = createRootRoute();
   const orgRoute = createRoute({

@@ -8,6 +8,7 @@ import type { Board, BoardStation, ItemCard, TouchHeadline } from '../../api/typ
 import { AndonButton, LineStatus } from '../../shared/andon';
 import { factoryTitle, itemKey, useFactory, useFactoryParams } from '../../shared/factory';
 import { formatPercent, humanize } from '../../shared/format';
+import { InboxButton } from '../../shared/inbox-drawer';
 import { waitingOnYou } from '../../shared/item-state';
 import { MoveDialog } from '../../shared/move-menu';
 import { NewItemButton } from '../../shared/new-item';
@@ -368,6 +369,7 @@ export function BoardPage() {
           {role ? <Chip tone="plain">{role}</Chip> : null}
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <InboxButton factory={factory} />
           <TouchesChip touches={board.line.touches} />
           <span className="hidden h-10 max-w-[360px] items-center rounded-control bg-surface px-3.5 shadow-raise md:inline-flex">
             <LineStatus andon={board.line.andon} className="text-sm text-ink" />
