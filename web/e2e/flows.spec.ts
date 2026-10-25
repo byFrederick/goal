@@ -523,9 +523,7 @@ test('the board shows how each station is doing and who works each card', async 
   await expect(page.getByRole('region', { name: 'Approve', exact: true }).getByText('Needs your OK')).toHaveCount(3);
   await expect(page.getByRole('region', { name: 'Done', exact: true })).toContainText('1 today');
   await expect(page.getByRole('region', { name: 'Done', exact: true })).toContainText('Postmortem filed');
-  await expect(page.getByRole('region', { name: 'Expedite lane' })).toContainText(
-    'sre#12, incident sev2, investigator-2 on turn 2',
-  );
+  await expect(investigate.getByRole('article').filter({ hasText: 'Checkout API p95' })).toContainText('Expedite');
   await expectAccessible(page);
 });
 
@@ -541,7 +539,7 @@ test('the line shows its rope, not enforced yet, its work in progress and the ex
   const line = page.getByRole('region', { name: 'The line' });
   await expect(line).toContainText('New work enters only when Investigate’s buffer drops below 2 Not enforced yet');
   await expect(line).toContainText('WIP 7 of 12');
-  await expect(page.getByRole('region', { name: 'Expedite lane' })).toContainText('Expedite lane1 of 1 in use');
+  await expect(line).toContainText('Expedite 1 of 1 in use');
 
   // A push line names its constraint and has no rope.
   await page.goto('/o/acme/f/goal/board');
@@ -567,8 +565,8 @@ test('on a phone the board opens where a person is needed, then picks any statio
   await expect(page.getByRole('article').filter({ hasText: 'billing-svc' })).toContainText(
     'sre#8, Incident, 1 hbilling-svc deploy rolled back twiceinvestigator-1, turn 3',
   );
-  await expect(page.getByRole('article').filter({ hasText: 'Expedite lane' })).toContainText(
-    'Expedite laneCheckout API p95 above 900 ms since 14:05sre#12, investigator-2,',
+  await expect(page.getByRole('tabpanel').getByRole('article').filter({ hasText: 'Checkout API p95' })).toContainText(
+    'Expedite',
   );
 
   await picker.getByRole('tab', { name: 'Done 1 today' }).click();

@@ -18,14 +18,15 @@ import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { Meter } from '../../ui/hatch';
-import { BoardCard, ExpediteCard, ExpediteRow } from './board-card';
+import { BoardCard } from './board-card';
 import { CardDnd, DraggableCard, DropColumn } from './board-dnd';
 import {
   budgetNote,
   columnCount,
   constraintNote,
-  expediteUse,
+  expediteHeader,
   firstStation,
+  isExpedite,
   lineSentence,
   stationMeter,
   stationNote,
@@ -39,9 +40,6 @@ type OnMove = ((item: ItemCard, to?: string) => void) | undefined;
 /** A card's Move, bound to the card. */
 const moveOf = (onMove: OnMove, item: ItemCard) => (onMove ? () => onMove(item) : undefined);
 
-const live = (it: ItemCard) => it.state !== 'done' && it.state !== 'cancelled';
-const isExpedite = (it: ItemCard) => it.class_of_service === 'expedite' && live(it);
-
 const constraintRing = 'border-amber shadow-[inset_0_3px_0_var(--color-amber)]';
 
 /** A station's touches per finished item over the board's week; null when no item finished. */
@@ -53,7 +51,18 @@ function stationTouches(rateOf: RateOf, s: BoardStation): string | null {
   return rate === null ? null : `${perItem(rate, 2)} touches per item`;
 }
 
-function LineCard({ board, decides, rateOf }: { board: Board; decides: boolean; rateOf: RateOf }) {
+function LineCard({
+  board,
+  decides,
+  rateOf,
+  expedite,
+}: {
+  board: Board;
+  decides: boolean;
+  rateOf: RateOf;
+  /** The expedite count for the header, null when there is none to show. */
+  expedite: string | null;
+}) {
   const sentence = lineSentence(board.line);
   const budget = budgetNote(board.line);
 
@@ -76,7 +85,12 @@ function LineCard({ board, decides, rateOf }: { board: Board; decides: boolean; 
           ) : null}
         </>
       }
-      aside={<span className="text-sm whitespace-nowrap text-muted">{wipText(board.line)}</span>}
+      aside={
+        <span className="flex flex-wrap justify-end gap-x-3 text-sm text-muted">
+          <span className="whitespace-nowrap">{wipText(board.line)}</span>
+          {expedite ? <span className="whitespace-nowrap">{expedite}</span> : null}
+        </span>
+      }
     >
       {budget ? <p className="m-0 -mt-1 text-sm text-rework-ink">{budget}</p> : null}
       {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a scroll container must take focus so keyboards can scroll it (axe scrollable-region-focusable) */}
@@ -170,28 +184,6 @@ function PhoneTouches({ touches }: { touches: TouchHeadline }) {
   );
 }
 
-function ExpediteLane({ line, items, onMove }: { line: Board['line']; items: ItemCard[]; onMove: OnMove }) {
-  if (items.length === 0) return null;
-  return (
-    <section
-      aria-labelledby="expedite-h"
-      className="hidden flex-col gap-3 rounded-card border border-rework-line bg-rework-tint p-3 md:flex @[720px]:flex-row @[720px]:flex-wrap @[720px]:items-center @[720px]:gap-4 @[720px]:px-3.5"
-    >
-      <div className="@[720px]:w-[140px] @[720px]:shrink-0">
-        <h2 id="expedite-h" className="m-0 text-[15px] font-medium text-rework-ink">
-          Expedite lane
-        </h2>
-        <p className="m-0 mt-0.5 text-[13px] text-rework-ink">{expediteUse(line, items.length)}</p>
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-2 md:max-w-[680px]">
-        {items.map((it) => (
-          <ExpediteCard key={it.id} item={it} onMove={moveOf(onMove, it)} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function Columns({ board, onMove }: { board: Board; onMove: OnMove }) {
   const columns = <ColumnGrid board={board} onMove={onMove} />;
   // Cards are dragged only by someone who may move them.
@@ -214,7 +206,7 @@ function ColumnGrid({ board, onMove }: { board: Board; onMove: OnMove }) {
       >
         {board.stations.map((s) => {
           const drum = s.id === board.constraint;
-          const items = s.items.filter((it) => !isExpedite(it));
+          const { items } = s;
           return (
             <DropColumn
               key={s.id}
@@ -257,13 +249,11 @@ function ColumnGrid({ board, onMove }: { board: Board; onMove: OnMove }) {
 function StationTabs({
   board,
   selected,
-  expedite,
   onMove,
   rateOf,
 }: {
   board: Board;
   selected: string;
-  expedite: ItemCard[];
   onMove: OnMove;
   rateOf: RateOf;
 }) {
@@ -303,13 +293,10 @@ function StationTabs({
           );
         })}
       </Tabs.List>
-      {expedite.map((it) => (
-        <ExpediteRow key={it.id} item={it} onMove={moveOf(onMove, it)} />
-      ))}
       <PhoneTouches touches={board.line.touches} />
       {board.stations.map((s) => {
         const drum = s.id === board.constraint;
-        const items = s.items.filter((it) => !isExpedite(it));
+        const { items } = s;
         return (
           <Tabs.Content key={s.id} value={s.id} className="outline-none">
             <section
@@ -365,7 +352,7 @@ export function BoardPage() {
   const rates = touches ? stationRates(touches) : undefined;
   const rateOf: RateOf = (s) => (!rates || touches?.finished === 0 ? null : (rates.get(s.id) ?? 0));
   const search = useSearch({ from: '/o/$org/f/$factory/board' });
-  const expedite = board.stations.flatMap((s) => s.items.filter(isExpedite));
+  const expedite = expediteHeader(board.line, board.stations.flatMap((s) => s.items).filter(isExpedite).length);
   const selected = board.stations.find((s) => s.id === search.station)?.id ?? firstStation(board);
   const [moving, setMoving] = useState<{ item: ItemCard; to?: string | undefined } | null>(null);
   const onMove: OnMove = holds(factory, 'item:operate') ? (item, to) => setMoving({ item, to }) : undefined;
@@ -401,6 +388,11 @@ export function BoardPage() {
           suffix={
             <>
               , <span className="whitespace-nowrap">{wipText(board.line)}</span>
+              {expedite ? (
+                <>
+                  , <span className="whitespace-nowrap">{expedite}</span>
+                </>
+              ) : null}
             </>
           }
           wrap
@@ -409,11 +401,10 @@ export function BoardPage() {
       </div>
 
       <div className="hidden md:block">
-        <LineCard board={board} decides={holds(factory, 'item:decide')} rateOf={rateOf} />
+        <LineCard board={board} decides={holds(factory, 'item:decide')} rateOf={rateOf} expedite={expedite} />
       </div>
-      <ExpediteLane line={board.line} items={expedite} onMove={onMove} />
       <Columns board={board} onMove={onMove} />
-      <StationTabs board={board} selected={selected} expedite={expedite} onMove={onMove} rateOf={rateOf} />
+      <StationTabs board={board} selected={selected} onMove={onMove} rateOf={rateOf} />
       {onMove ? (
         <>
           <p className="m-0 hidden text-[13px] text-muted md:block">
