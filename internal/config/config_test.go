@@ -61,7 +61,8 @@ spec:
 
 // A merge action merges the item's pull requests at a human's word, so it belongs only on a human
 // station. Whether a connection can merge them is the connections check's (merge-needs-code-host).
-func TestLoad_MergeActionOnlyOnAHumanStation(t *testing.T) {
+// action: merge is for a human station and for an agent station with a gate, whose approval merges.
+func TestLoad_MergeActionOnAHumanOrGateStation(t *testing.T) {
 	t.Parallel()
 
 	factory := func(repository, station string) fstest.MapFS {
@@ -88,7 +89,11 @@ spec:
 	}{
 		{"human station with a repository", repo, "{ id: merge, kind: human, action: merge }", ""},
 		{"human station without a repository", "", "{ id: merge, kind: human, action: merge }", ""},
-		{"agent station", repo, "{ id: merge, kind: agent, agent: worker, action: merge }", "schema"},
+		{"gate station", repo, "{ id: merge, kind: agent, agent: worker, gate: { onReject: work }, action: merge }", ""},
+		{"agent station without a gate", repo, "{ id: merge, kind: agent, agent: worker, action: merge }", "schema"},
+		{"queue station", repo, "{ id: merge, kind: queue, action: merge }", "schema"},
+		{"done station", repo, "{ id: merge, kind: done, action: merge }", "schema"},
+		{"unknown action on a gate station", repo, "{ id: merge, kind: agent, agent: worker, gate: { onReject: work }, action: deploy }", "schema"},
 		{"unknown action", repo, "{ id: merge, kind: human, action: deploy }", "schema"},
 	}
 

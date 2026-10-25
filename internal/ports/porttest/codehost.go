@@ -20,8 +20,22 @@ var _ ports.CodeHost = (*CodeHost)(nil)
 type CodeHost struct {
 	mu       sync.Mutex
 	prs      map[string]*ports.PullRequest
+	moves    map[string]string // url → the head a push moves it to once it is next read
 	merges   []MergeCall
 	branches []string
+}
+
+// MoveHeadAfterRead pushes sha to the pull request at url right after it is next read, as a push
+// landing between a merger's read and its merge.
+func (c *CodeHost) MoveHeadAfterRead(url, sha string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.moves == nil {
+		c.moves = map[string]string{}
+	}
+
+	c.moves[url] = sha
 }
 
 // MergeCall is one merge asked of the fake: the pull request, the connection it came with and how.
@@ -72,7 +86,14 @@ func (c *CodeHost) PullRequest(_ context.Context, conn domain.ResolvedConnection
 		return ports.PullRequest{}, fmt.Errorf("pull request %s does not exist: %w", url, ports.ErrNotMergeable)
 	}
 
-	return *pr, nil
+	read := *pr
+
+	if sha, ok := c.moves[url]; ok {
+		pr.HeadSHA = sha
+		delete(c.moves, url)
+	}
+
+	return read, nil
 }
 
 // Merge implements ports.CodeHost.

@@ -22,10 +22,12 @@ const (
 	KindDone  StationKind = "done"
 )
 
-// StationAction is what goald does on a human's behalf when they act at a human station.
+// StationAction is what goald does when an item is approved at a station: on a human's behalf at
+// a human station, as the engine when a gate approves.
 type StationAction string
 
-// ActionMerge marks the human station where approving an item means merging its pull request.
+// ActionMerge marks the human or gate station where approving an item means merging its pull
+// requests.
 const ActionMerge StationAction = "merge"
 
 // Line is the part of a factory definition the engine needs: its stations in order, its
@@ -143,8 +145,9 @@ type Station struct {
 	// output satisfies its contract; each must exit 0 before the item moves on.
 	Checks []string
 	Gate   *Gate
-	// Action is set on human stations where goald acts for the human (ActionMerge); empty
-	// means the human acts outside Goal and only records the decision.
+	// Action is set on human stations where goald acts for the human, and on agent stations with
+	// a gate where goald acts as the engine on the gate's approval (ActionMerge); empty means
+	// the approval only records the decision.
 	Action StationAction
 }
 

@@ -106,6 +106,17 @@ func TestConnectionsCheck_ReportsEachProblemWithItsFixes(t *testing.T) {
 			code: "merge-needs-code-host", pointer: "/line/stations/2/action", fixes: []string{"Remove the merge step"},
 			inPlaces: []string{"review", "GitHub"},
 		},
+		{
+			name: "a gate merge without a code host connection",
+			edits: []string{
+				", connection: code }", " }",
+				"{ id: build, kind: agent, agent: engineer, wip: 1 }",
+				"{ id: build, kind: agent, agent: engineer, wip: 1, gate: { onReject: inbox }, action: merge }",
+				agentsKey, "  connections: [docs]\n" + agentsKey,
+			},
+			code: "merge-needs-code-host", pointer: "/line/stations/1/action", fixes: []string{"Remove the merge step"},
+			inPlaces: []string{"build", "GitHub"},
+		},
 	}
 
 	for _, tt := range tests {
