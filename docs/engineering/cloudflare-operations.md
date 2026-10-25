@@ -53,7 +53,7 @@ The workflows that plan and apply `terraform/` run the same `task tf:plan` and `
 | Environment | Rules | Used by |
 | --- | --- | --- |
 | `production-plan` | Read-only credentials. Optional required reviewers (the owner). | The plan of a pull request from this repository, never a fork: `task tf:plan -- -lock=false -input=false` (a read-only state token cannot take the lock). |
-| `production` | Deployment branches: `main` only. Write credentials. | The apply on merge to main: `task tf:plan -- -input=false -out=tfplan`, then `task tf:apply -- -input=false tfplan`. |
+| `production` | Deployment branches: `main` only. Write credentials. | The apply on merge to main, [`.github/workflows/terraform-apply.yml`](../../.github/workflows/terraform-apply.yml): `task -x tf:plan -- -input=false -out=tfplan`, `task -x tf:apply -- -input=false tfplan`, then `task -x tf:plan -- -input=false -detailed-exitcode`, which fails the job if anything is left. |
 
 | Secret | `production-plan` (read-only) | `production` (write) | Where its value comes from |
 | --- | --- | --- | --- |
@@ -63,7 +63,7 @@ The workflows that plan and apply `terraform/` run the same `task tf:plan` and `
 | `PLANETSCALE_SERVICE_TOKEN_ID`, `PLANETSCALE_SERVICE_TOKEN` | A service token with only the read access of the database `goal`: the database, its branches and the branch's roles | The access of the table above (read the database and branches; create, read, delete the branch's roles) | PlanetScale console › organization `freddycruz5227` › Settings › Service tokens › New, named `goal-terraform-ci-plan` / `-ci-apply`; the id and the token, shown once |
 | `SOPS_AGE_KEY` | The age private key (`AGE-SECRET-KEY-1…`) | the same | The escrowed copy (Master key: escrow), pasted into the secret, never through a file in the repository. The workflow writes it to a mode-0600 file under `$RUNNER_TEMP` and exports `SOPS_AGE_KEY_FILE` to it; it is never echoed. A decryption key cannot be read-only: it opens the master keys in both environments |
 
-Google needs no secret: the workflow's `google-github-actions/auth` step (`workload_identity_provider`, `service_account`, `token_format: access_token`) exchanges the job's OIDC token for the service account's access token and exports it as `GOOGLE_OAUTH_ACCESS_TOKEN`. Both values are environment **variables**, not secrets, from `terraform output`: `GOAL_GCP_WORKLOAD_IDENTITY_PROVIDER` (`ci_workload_identity_provider`, both environments) and `GOAL_GCP_SERVICE_ACCOUNT` (`ci_plan_service_account` in `production-plan`, `ci_apply_service_account` in `production`). The provider admits a token only from this repository (by repository and owner id) and these two environments; each environment can impersonate only its own account.
+Google needs no secret: the workflow's `google-github-actions/auth` step (`workload_identity_provider`, `service_account`, `token_format: access_token`) exchanges the job's OIDC token for the service account's access token (a masked step output, valid one hour), which the workflow passes to the `tf:*` steps as `GOOGLE_OAUTH_ACCESS_TOKEN`. Both values are environment **variables**, not secrets, from `terraform output`: `GOAL_GCP_WORKLOAD_IDENTITY_PROVIDER` (`ci_workload_identity_provider`, both environments) and `GOAL_GCP_SERVICE_ACCOUNT` (`ci_plan_service_account` in `production-plan`, `ci_apply_service_account` in `production`). The provider admits a token only from this repository (by repository and owner id) and these two environments; each environment can impersonate only its own account.
 
 No secret reaches a log: GitHub masks every environment secret in the job's output, the tasks pass them only as environment variables, and plans show sensitive values as `(sensitive value)`. Never `terraform output -raw`, `sops decrypt` or `env` in a workflow.
 
@@ -123,9 +123,11 @@ Rules: never `sops decrypt` or `terraform output -raw` to the terminal; after ev
 
 ## Deploys
 
-- **Infrastructure:** a pull request changing `terraform/` passes `task check` (it runs `task tf:check`: fmt, validate, tflint, `terraform test` on mock providers), carries the output of `task tf:plan`, and the owner (or the authorized coordinator) runs `task tf:apply` on main after reviewing the same plan. Do not merge a change whose plan needs fixes.
+- **Infrastructure** (ADR 0010): a pull request changing `terraform/` passes `task check` (it runs `task tf:check`: fmt, validate, tflint, `terraform test` on mock providers) and carries its plan (`task tf:plan`). A person reviews the plan and merges; do not merge a change whose plan needs fixes. The merge starts the apply-on-merge workflow, [`.github/workflows/terraform-apply.yml`](../../.github/workflows/terraform-apply.yml), in the `production` environment: it plans the merged commit to a saved file, applies that file, then plans again with `-detailed-exitcode` and fails if anything is left. Runs go one at a time; one in flight is never cancelled. Only a push touching `terraform/**` starts it. Agents never run `task tf:apply`.
+  - **A failed run** (a red `terraform-apply` on main) may have applied part of the plan; its last step names what is left (changes, or the error). The fix is a new pull request, merged like any other, never a manual apply by an agent. An auth error or a 403 at its first steps is usually an expired CI token or a missing environment value (GitHub environments).
+  - **The owner applies by hand** (`task tf:apply` from a laptop, as before) only in these cases: the bootstrap's targeted applies (Bootstrap, step 13 included); a `-replace` the workflow cannot pass (Other rotations); and break-glass, when the workflow itself cannot run (its credentials are broken or Actions is down) and the change cannot wait. Even then the change is on main first, and the next merge's workflow run must show nothing left.
 - **Code:** build and push the images, then deploy the Worker with wrangler (4-21); a change to the boxes' networking passes the network gate (bootstrap step 9) first. goald migrates at start as goal_owner. A goald redeploy ends its runs in flight; their leases expire and the items are claimed again (spec 4 §11.3).
-- **A secret's new value** reaches a container when it starts: `task tf:apply`, then redeploy (or restart) the containers that consume it.
+- **A secret's new value** reaches a container when it starts: once the workflow has applied it, redeploy (or restart) the containers that consume it.
 
 ## What the first deploy showed
 
@@ -141,17 +143,19 @@ Rules: never `sops decrypt` or `terraform output -raw` to the terminal; after ev
 - **Escrow.** Before a key is first used, keep it offline in two places (the owner's password manager and a printed or hardware copy). Escrow the age private key the same way: it is what opens `production.sops.yaml`, which holds every master key in use.
 - **Rotation** (yearly, or at once if a key may have leaked):
   1. `task secrets:edit`: put the new key first, `k2:<new>,k1:<old>`; escrow `k2`.
-  2. `task tf:apply`, then restart goald so it seals with `k2` and still opens `k1`.
+  2. Open a pull request with the re-encrypted SOPS file; once a person merges it and the apply-on-merge workflow has applied it, restart goald so it seals with `k2` and still opens `k1`.
   3. `task db:production -- rekey`: reseals every credential under `k2`.
-  4. Remove `k1` from the value, `task tf:apply`, restart goald. Backups keep `k1`'s ciphertext until they expire; keep `k1` escrowed until then.
+  4. Remove `k1` from the value in a second pull request; once it is merged and applied, restart goald. Backups keep `k1`'s ciphertext until they expire; keep `k1` escrowed until then.
   5. If a key leaked, also revoke the credentials it protected at their providers: the ciphertext may have leaked with it.
 
 ## Other rotations
 
-- **A generated secret:** `task tf:apply -- -replace='random_password.generated["<name>"]'`, then redeploy its consumers in one go. `gateway_key` ends the task tokens in flight (their runs fail and are claimed again); `better_auth_secret` signs everyone out; `sandbox_key` and `auth_proxy_secret` change for both consumers at once. A role password (`goal_owner`, `goal_app`, `goal_auth`): replace it, `task db:production -- init` (sets it), then redeploy goald and auth.
-- **The administrator:** only the role that created goal_owner, goal_app and goal_auth may alter them, so the old one hands them over before it goes: add a second role resource (`admin_next`, another `name`), apply it, connect as the old administrator and `GRANT goal_owner, goal_app, goal_auth TO <the new base user name> WITH ADMIN OPTION;`, point `module.database_urls` at `admin_next` and apply (the URLs change), `task db:production -- init`, then remove the old resource and apply (what it owns goes to `postgres`).
-- **A Cloudflare token:** `task tf:apply -- -replace='module.r2_token.cloudflare_account_token.this'` (or `module.workers_ai_token`), then restart goald.
-- **From outside:** SMTP (when there is one) and the Google client secret: make the new one at the provider, `task secrets:edit`, `task tf:apply`, redeploy auth, then revoke the old one.
+Each change below that edits `terraform/` or its SOPS file goes in a pull request with its plan; a person merges it and the apply-on-merge workflow applies it. A `-replace` is no change to the files, so the workflow cannot make it: the owner runs those from a laptop on main (Deploys), and the next workflow run must show nothing left.
+
+- **A generated secret:** the owner runs `task tf:apply -- -replace='random_password.generated["<name>"]'`, then redeploy its consumers in one go. `gateway_key` ends the task tokens in flight (their runs fail and are claimed again); `better_auth_secret` signs everyone out; `sandbox_key` and `auth_proxy_secret` change for both consumers at once. A role password (`goal_owner`, `goal_app`, `goal_auth`): replace it, `task db:production -- init` (sets it), then redeploy goald and auth.
+- **The administrator:** only the role that created goal_owner, goal_app and goal_auth may alter them, so the old one hands them over before it goes: add a second role resource (`admin_next`, another `name`), apply it, connect as the old administrator and `GRANT goal_owner, goal_app, goal_auth TO <the new base user name> WITH ADMIN OPTION;`, point `module.database_urls` at `admin_next` and apply (the URLs change), `task db:production -- init`, then remove the old resource and apply (what it owns goes to `postgres`). Each "apply" is a merged pull request applied by the workflow.
+- **A Cloudflare token:** the owner runs `task tf:apply -- -replace='module.r2_token.cloudflare_account_token.this'` (or `module.workers_ai_token`), then restart goald.
+- **From outside:** SMTP (when there is one) and the Google client secret: make the new one at the provider, `task secrets:edit`, a pull request with the SOPS file, merged and applied by the workflow, redeploy auth, then revoke the old one.
 
 ## Restore
 
@@ -163,4 +167,4 @@ Rules: never `sops decrypt` or `terraform output -raw` to the terminal; after ev
 
 ## Validation checklist
 
-Before committing a change to `terraform/`: `task tf:check`; `git diff --check`; `git diff terraform/secrets/` shows only intended keys; the lock file changed only if a provider changed. Before applying: `task tf:plan` reviewed, in the `production` workspace, from `terraform/`.
+Before committing a change to `terraform/`: `task tf:check`; `git diff --check`; `git diff terraform/secrets/` shows only intended keys; the lock file changed only if a provider changed. Before merging: the pull request's `task tf:plan` reviewed, in the `production` workspace, from `terraform/`; the merge applies it.

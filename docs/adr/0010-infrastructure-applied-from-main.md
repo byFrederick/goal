@@ -1,6 +1,6 @@
 # ADR 0010 — Infrastructure applied from main by CI
 
-Status: accepted · 2026-10-25 · Builds on [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (the Cloudflare install and `terraform/`) · Changes AGENTS.md rule 8 when the apply workflow lands (below)
+Status: accepted · 2026-10-25 · Builds on [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (the Cloudflare install and `terraform/`) · Changed AGENTS.md rule 8 on 2026-10-25, when the apply workflow landed (Rollout step 3): the apply-on-merge workflow applies, agents never run `tf:apply`
 
 ## Context
 
@@ -38,11 +38,11 @@ Read-only tokens limit what a leak can **change**, not what it can **read**. Any
 
 Three changes, in order:
 
-1. The federation, the CI credential path of the `tf:*` tasks, the runbook's list of GitHub environment secrets, and this ADR. AGENTS.md rule 8 still says only the owner applies, and the owner applies the federation resources.
+1. *Done 2026-10-25 (PR #9).* The federation, the CI credential path of the `tf:*` tasks, the runbook's list of GitHub environment secrets, and this ADR. AGENTS.md rule 8 still says only the owner applies, and the owner applies the federation resources.
 2. The plan workflow (`.github/workflows/terraform-plan.yml`).
-3. The apply workflow (`.github/workflows/terraform-apply.yml`). In the same pull request, AGENTS.md rule 8, the runbook's Deploys section and the `tf:apply` comments in `Taskfile.yml` change to say that the apply-on-merge workflow applies and that agents never run `tf:apply`.
+3. *Done 2026-10-25.* The apply workflow (`.github/workflows/terraform-apply.yml`). In the same pull request, AGENTS.md rule 8, the runbook's Deploys section and the `tf:apply` comments in `Taskfile.yml` change to say that the apply-on-merge workflow applies and that agents never run `tf:apply`.
 
-Until step 3 merges, the rule in force is today's: only the owner applies, or the coordinating agent the owner authorizes for that change.
+Until step 3 merged, the rule in force was the old one: only the owner applied, or the coordinating agent the owner authorized for that change. Step 3 merged before step 2, so until the plan workflow lands a pull request's plan is the one its author pastes in. The workflow applies nothing until the owner has done bootstrap step 13 and filled the `production` environment (runbook, GitHub environments).
 
 ## Rejected
 
