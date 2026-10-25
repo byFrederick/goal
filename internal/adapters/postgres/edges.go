@@ -39,26 +39,9 @@ func (s *Store) AddEdge(ctx context.Context, n domain.NewEdge) (domain.Edge, err
 	var e domain.Edge
 
 	err = s.inTx(ctx, func(q *db.Queries) error {
-		it, err := q.GetItem(ctx, item)
-		if notFound(err) {
-			return fmt.Errorf("item %s: %w", n.Item, ports.ErrNotFound)
-		}
-
+		it, err := edgeItems(ctx, q, n, item, needs)
 		if err != nil {
-			return fmt.Errorf("item %s: %w", n.Item, err)
-		}
-
-		need, err := q.GetItem(ctx, needs)
-		if notFound(err) {
-			return fmt.Errorf("needed item %s: %w", n.Needs, ports.ErrNotFound)
-		}
-
-		if err != nil {
-			return fmt.Errorf("needed item %s: %w", n.Needs, err)
-		}
-
-		if it.FactoryID != need.FactoryID {
-			return fmt.Errorf("item %s and %s are of different factories: %w", n.Item, n.Needs, domain.ErrInvalid)
+			return err
 		}
 
 		if _, err := q.LockFactory(ctx, it.FactoryID); err != nil {
@@ -94,6 +77,34 @@ func (s *Store) AddEdge(ctx context.Context, n domain.NewEdge) (domain.Edge, err
 	}
 
 	return e, nil
+}
+
+// edgeItems reads an edge's two items and returns the dependent one: ErrNotFound when either is
+// missing (or of another organization), domain.ErrInvalid when they are of different factories.
+func edgeItems(ctx context.Context, q *db.Queries, n domain.NewEdge, item, needs uuid.UUID) (db.WorkItem, error) {
+	it, err := q.GetItem(ctx, item)
+	if notFound(err) {
+		return db.WorkItem{}, fmt.Errorf("item %s: %w", n.Item, ports.ErrNotFound)
+	}
+
+	if err != nil {
+		return db.WorkItem{}, fmt.Errorf("item %s: %w", n.Item, err)
+	}
+
+	need, err := q.GetItem(ctx, needs)
+	if notFound(err) {
+		return db.WorkItem{}, fmt.Errorf("needed item %s: %w", n.Needs, ports.ErrNotFound)
+	}
+
+	if err != nil {
+		return db.WorkItem{}, fmt.Errorf("needed item %s: %w", n.Needs, err)
+	}
+
+	if it.FactoryID != need.FactoryID {
+		return db.WorkItem{}, fmt.Errorf("item %s and %s are of different factories: %w", n.Item, n.Needs, domain.ErrInvalid)
+	}
+
+	return it, nil
 }
 
 // RemoveEdge implements ports.Store.
@@ -193,6 +204,6 @@ func edgesFrom(rows []db.ItemEdge) []domain.Edge {
 func edgeEvent(kind domain.EventKind, it db.WorkItem, e domain.Edge, by domain.Actor, at time.Time) domain.Event {
 	return domain.Event{
 		FactoryID: domain.FactoryID(it.FactoryID.String()), ItemID: e.Item, At: at, Kind: kind, Station: it.Station,
-		Actor: by.Name, Data: map[string]any{"needs": string(e.Needs), "kind": string(e.Kind), "actor": by.Ref()},
+		Actor: by.Name, Data: map[string]any{"needs": string(e.Needs), auditKind: string(e.Kind), "actor": by.Ref()},
 	}
 }

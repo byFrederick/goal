@@ -152,6 +152,6 @@ func (s *Store) heldByNeeds(it *domain.Item) bool {
 func edgeEvent(kind domain.EventKind, it *domain.Item, e domain.Edge, by domain.Actor, at time.Time) domain.Event {
 	return domain.Event{
 		FactoryID: it.FactoryID, ItemID: it.ID, At: at, Kind: kind, Station: it.Station, Actor: by.Name,
-		Data: map[string]any{"needs": string(e.Needs), "kind": string(e.Kind), "actor": by.Ref()},
+		Data: map[string]any{"needs": string(e.Needs), auditKind: string(e.Kind), "actor": by.Ref()},
 	}
 }
