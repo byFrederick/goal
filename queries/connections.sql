@@ -46,12 +46,13 @@ WHERE c.name = sqlc.arg(name);
 
 -- name: SealedConnections :many
 -- The named connections with their kinds and sealed values, locked: an update, or a run's use.
+-- Locked in id order, as goal db rekey locks them (StaleSealedConnections), so the two never deadlock.
 SELECT c.id, c.name, k.name AS kind, k.org_id AS kind_org_id, k.spec AS kind_spec, c.description, c.fields, c.secret_fields,
        c.key_id, c.nonce, c.ciphertext, c.created_by, c.created_at, c.updated_by, c.updated_at, c.last_used_at,
        c.last_test_at, c.last_test_ok, c.last_test_error
 FROM connections c JOIN connection_kinds k ON k.id = c.kind_id
 WHERE c.name = ANY (sqlc.arg(names)::text[])
-ORDER BY c.name
+ORDER BY c.id
 FOR NO KEY UPDATE OF c;
 
 -- name: InsertConnection :one
