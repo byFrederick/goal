@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://goal.local/schema/connection-kind.schema.json",
   "title": "Goal connection kind",
-  "description": "A template for an organization's connections (spec 4 §4.2): the fields an admin fills in, which are secret, and what a run's box gets. Strings may hold {{field}} and, in a kind with mint, {{minted.<name>}}; MCP header values may also hold ${NAME}, one of the kind's env variables, which Claude Code expands in the box; nothing else is evaluated. Secret fields may appear only in env values, a test's headers and its basic password.",
+  "description": "A template for an organization's connections (spec 4 §4.2): the fields an admin fills in, which are secret, and what a run's box gets. Strings may hold {{field}} and, in a kind with mint, {{minted.<name>}}; MCP header values may also hold ${NAME}, one of the kind's env variables, which Claude Code expands in the box; nothing else is evaluated. Secret fields may appear only in env values, a test's headers and its basic password; minted values only in env values.",
   "type": "object",
   "required": ["apiVersion", "kind", "metadata", "spec"],
   "additionalProperties": false,

@@ -147,6 +147,30 @@ func newConnections(t *testing.T, audit ports.Audit) *porttest.Connections {
 	return c
 }
 
+// mintedPrefix starts every value porttest.Minter mints.
+const mintedPrefix = "minted-"
+
+// staleKinds resolve connections as Connections do, but each kind with a minter as change makes
+// it: a kind stored before a rule its Check now enforces.
+type staleKinds struct {
+	ports.Connections
+
+	change func(*domain.ConnectionKind)
+}
+
+func (s staleKinds) Resolve(ctx context.Context, names []string, use domain.ConnectionUse) ([]domain.ResolvedConnection, error) {
+	resolved, err := s.Connections.Resolve(ctx, names, use)
+
+	for i := range resolved {
+		if k := &resolved[i].Kind; k.Spec.Mint != "" {
+			k.Spec.Env = maps.Clone(k.Spec.Env)
+			s.change(k)
+		}
+	}
+
+	return resolved, err
+}
+
 // connLine is repoLine with more connections: the worker is given connTracker and legacy, a
 // name the factory does not list, which it does not get.
 func connLine() domain.Line {
@@ -267,6 +291,8 @@ func TestRun_ConnectionsThatCannotBeGivenBlockTheRun(t *testing.T) {
 		want   string
 		// mintErr, when set, fails every mint.
 		mintErr error
+		// stale, when set, changes every resolved connection's kind with a minter.
+		stale func(*domain.ConnectionKind)
 	}{
 		{
 			name: "an unknown connection", want: "gone",
@@ -296,6 +322,13 @@ func TestRun_ConnectionsThatCannotBeGivenBlockTheRun(t *testing.T) {
 			change:  func(l *domain.Line) { l.Agents = agentConnections(l.Agents, agWorker, connCloud) },
 			mintErr: errors.New("AccessDenied for " + cloudKey),
 		},
+		{
+			// A kind stored before Check confined minted values to env values: its render error
+			// quotes the minted value it made an env name of.
+			name: "a minted env name", want: "connection cloud: render cloud: env \"[redacted]\" is not a variable name",
+			change: func(l *domain.Line) { l.Agents = agentConnections(l.Agents, agWorker, connCloud) },
+			stale:  func(k *domain.ConnectionKind) { k.Spec.Env["{{minted.secret_access_key}}"] = "x" },
+		},
 	}
 
 	for _, tt := range tests {
@@ -306,6 +339,12 @@ func TestRun_ConnectionsThatCannotBeGivenBlockTheRun(t *testing.T) {
 			tt.change(&line)
 			h := newHarness(t, line, porttest.Succeed(`{}`))
 			h.minter.Fail(tt.mintErr)
+
+			if tt.stale != nil {
+				h.connections = staleKinds{Connections: h.connections, change: tt.stale}
+				h.e = h.engine(t, h.store)
+			}
+
 			it := h.submit(t, domain.NewItem{})
 
 			h.step(t)
@@ -319,7 +358,7 @@ func TestRun_ConnectionsThatCannotBeGivenBlockTheRun(t *testing.T) {
 				t.Errorf("blocked reason %q does not mention %q", reason, tt.want)
 			}
 
-			for _, secret := range []string{modelKey, codeToken, trackerToken, otherToken, cloudKey, cloudSecret, leasedKey} {
+			for _, secret := range []string{modelKey, codeToken, trackerToken, otherToken, cloudKey, cloudSecret, leasedKey, mintedPrefix} {
 				if strings.Contains(reason, secret) {
 					t.Errorf("blocked reason %q holds a connection's secret", reason)
 				}

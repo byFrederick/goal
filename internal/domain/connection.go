@@ -291,56 +291,69 @@ func refs(s string) ([]ref, error) {
 	return out, nil
 }
 
-// template is one templated string of a kind and where it may name secret fields.
+// template is one templated string of a kind and the secret values it may name.
 type template struct {
 	where   string
 	s       string
-	secrets bool
+	carries carries
 }
 
-// templates are every templated string of k with whether it may name a secret field: only env
-// values, test headers and the test's basic password carry secrets, so none reaches a URL, a
-// command line, the run's bundle (MCP headers name env variables instead), a log or a prompt.
+// carries is which secret values a templated string may name.
+type carries int
+
+const (
+	carriesNone carries = iota
+	// carriesStored is a connection's secret fields: a test's headers and basic password (goald
+	// tests a connection without minting).
+	carriesStored
+	// carriesAll is secret fields and minted values: env values.
+	carriesAll
+)
+
+// templates are every templated string of k with the secret values it may name: env values carry
+// secret fields and minted values, a test's headers and basic password secret fields, and nothing
+// else carries either, so none reaches a URL, a command line, a git login, the run's bundle (MCP
+// headers name env variables instead), a log or a prompt.
 func (k ConnectionKind) templates() []template {
 	s := k.Spec
 
 	var out []template
 
 	for _, name := range slices.Sorted(maps.Keys(s.Env)) {
-		out = append(out, template{"env name", name, false}, template{"env " + name, s.Env[name], true})
+		out = append(out, template{"env name", name, carriesNone}, template{"env " + name, s.Env[name], carriesAll})
 	}
 
 	if s.Git != nil {
-		out = append(out, template{"git.host", s.Git.Host, false}, template{"git.username", s.Git.Username, false})
+		out = append(out, template{"git.host", s.Git.Host, carriesNone}, template{"git.username", s.Git.Username, carriesNone})
 	}
 
 	if s.MCP != nil {
-		out = append(out, template{"mcp.url", s.MCP.URL, false})
-		out = append(out, headerTemplates("mcp.headers", s.MCP.Headers, false)...)
+		out = append(out, template{"mcp.url", s.MCP.URL, carriesNone})
+		out = append(out, headerTemplates("mcp.headers", s.MCP.Headers, carriesNone)...)
 
 		for _, word := range s.MCP.Command {
-			out = append(out, template{"mcp.command", word, false})
+			out = append(out, template{"mcp.command", word, carriesNone})
 		}
 	}
 
 	if s.Test != nil {
-		out = append(out, template{"test.url", s.Test.URL, false})
-		out = append(out, headerTemplates("test.headers", s.Test.Headers, true)...)
+		out = append(out, template{"test.url", s.Test.URL, carriesNone})
+		out = append(out, headerTemplates("test.headers", s.Test.Headers, carriesStored)...)
 
 		if s.Test.Basic != nil {
-			out = append(out, template{"test.basic.username", s.Test.Basic.Username, false},
-				template{"test.basic.password", s.Test.Basic.Password, true})
+			out = append(out, template{"test.basic.username", s.Test.Basic.Username, carriesNone},
+				template{"test.basic.password", s.Test.Basic.Password, carriesStored})
 		}
 	}
 
 	return out
 }
 
-func headerTemplates(where string, headers map[string]string, secrets bool) []template {
+func headerTemplates(where string, headers map[string]string, values carries) []template {
 	out := make([]template, 0, 2*len(headers))
 
 	for _, name := range slices.Sorted(maps.Keys(headers)) {
-		out = append(out, template{where + " name", name, false}, template{where + " " + name, headers[name], secrets})
+		out = append(out, template{where + " name", name, carriesNone}, template{where + " " + name, headers[name], values})
 	}
 
 	return out
@@ -443,8 +456,11 @@ func (k ConnectionKind) checkTemplate(t template) error {
 
 	for _, r := range rs {
 		if r.minted {
-			if k.Spec.Mint == "" {
+			switch {
+			case k.Spec.Mint == "":
 				errs = append(errs, fmt.Errorf("%s: {{minted.%s}} in a kind that mints nothing: %w", t.where, r.name, ErrInvalid))
+			case t.carries != carriesAll:
+				errs = append(errs, fmt.Errorf("%s: minted value {{minted.%s}} may appear only in env values: %w", t.where, r.name, ErrInvalid))
 			}
 
 			continue
@@ -455,7 +471,7 @@ func (k ConnectionKind) checkTemplate(t template) error {
 		switch {
 		case !ok:
 			errs = append(errs, fmt.Errorf("%s: {{%s}} names no field of the kind: %w", t.where, r.name, ErrInvalid))
-		case f.Secret && !t.secrets:
+		case f.Secret && t.carries == carriesNone:
 			errs = append(errs, fmt.Errorf("%s: secret field {{%s}} may appear only in env values, a test's headers and its basic password (an MCP header names an env variable, ${NAME}): %w",
 				t.where, r.name, ErrInvalid))
 		}

@@ -76,6 +76,17 @@ func TestConnectionKind_Check(t *testing.T) {
 		return k
 	}
 
+	// minting is the example kind minting, with change placing a minted value somewhere.
+	minting := func(change func(*ConnectionKind)) ConnectionKind {
+		return with(func(k *ConnectionKind) {
+			k.Spec.Mint = mintAWSSTS
+			k.Spec.Test.Basic = &KindBasicAuth{Username: "x"}
+			change(k)
+		})
+	}
+
+	const minted, mintedOnlyInEnv = "{{minted.token}}", "may appear only in env values"
+
 	tests := []struct {
 		name string
 		kind ConnectionKind
@@ -92,6 +103,13 @@ func TestConnectionKind_Check(t *testing.T) {
 		{name: "unknown field", kind: with(func(k *ConnectionKind) { k.Spec.Env["GH_X"] = "{{nope}}" }), want: "{{nope}} names no field"},
 		{name: "outside the grammar", kind: with(func(k *ConnectionKind) { k.Spec.Env["GH_X"] = "{{token | base64}}" }), want: "neither"},
 		{name: "unclosed template", kind: with(func(k *ConnectionKind) { k.Spec.Env["GH_X"] = "{{token" }), want: "unclosed"},
+		{name: "minted in an env name", kind: minting(func(k *ConnectionKind) { k.Spec.Env[minted] = "x" }), want: mintedOnlyInEnv},
+		{name: "minted in an mcp url", kind: minting(func(k *ConnectionKind) { k.Spec.MCP.URL = "https://x.example.com/?k=" + minted }), want: mintedOnlyInEnv},
+		{name: "minted in an mcp header", kind: minting(func(k *ConnectionKind) { k.Spec.MCP.Headers["X-Token"] = minted }), want: mintedOnlyInEnv},
+		{name: "minted in an mcp command", kind: minting(func(k *ConnectionKind) { k.Spec.MCP.Command = []string{"tool", minted} }), want: mintedOnlyInEnv},
+		{name: "minted in a git login", kind: minting(func(k *ConnectionKind) { k.Spec.Git.Username = minted }), want: mintedOnlyInEnv},
+		{name: "minted in a test header", kind: minting(func(k *ConnectionKind) { k.Spec.Test.Headers[headerAuthorization] = minted }), want: mintedOnlyInEnv},
+		{name: "minted in a test password", kind: minting(func(k *ConnectionKind) { k.Spec.Test.Basic.Password = minted }), want: mintedOnlyInEnv},
 		{name: "minted without mint", kind: with(func(k *ConnectionKind) { k.Spec.Env["GH_X"] = "{{minted.token}}" }), want: "mints nothing"},
 		{name: "secret in a url", kind: with(func(k *ConnectionKind) { k.Spec.MCP.URL = "https://x.example.com/?k={{token}}" }), want: "secret field {{token}}"},
 		{name: "secret in an mcp header", kind: with(func(k *ConnectionKind) { k.Spec.MCP.Headers["X-Token"] = tmplToken }), want: "secret field"},

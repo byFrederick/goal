@@ -71,7 +71,7 @@ type harness struct {
 	codehost  *porttest.CodeHost // the github code host
 	gitlab    *porttest.CodeHost // the gitlab code host
 	// connections hold the test organization's connections (connections_test.go).
-	connections *porttest.Connections
+	connections ports.Connections
 	// minter mints the credentials of connections whose kind mints with mintAWS.
 	minter *porttest.Minter
 	line   domain.Line

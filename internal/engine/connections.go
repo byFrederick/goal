@@ -149,7 +149,8 @@ func (e *Engine) resolve(ctx context.Context, names []string, run domain.RunID) 
 		}
 
 		if rc.RunConnection, err = r.Kind.Render(r.Values, minted); err != nil {
-			return nil, fmt.Errorf("connection %s: %w", rc.name, err)
+			// A kind stored before Check refused it can make a value an env name the error quotes.
+			return nil, fmt.Errorf("connection %s: %w", rc.name, newScrubber(rc.secrets...).err(err))
 		}
 
 		out[rc.name] = rc
