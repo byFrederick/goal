@@ -339,6 +339,8 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 			want: "must be https",
 		},
 		{name: "Google neither on nor off", env: map[string]string{googleEnv: "yes"}, want: googleEnv},
+		{name: "email codes neither on nor off", env: map[string]string{emailEnv: "yes"}, want: emailEnv},
+		{name: "no way to sign in", env: map[string]string{authEnv: string(authSession), emailEnv: "off"}, want: emailEnv + "=off needs " + googleEnv + "=on"},
 		{name: "unknown auth mode", env: map[string]string{authEnv: "off"}, want: authEnv},
 		{name: "auth service off this machine", env: map[string]string{upstreamEnv: "http://auth.example.com:8081"}, want: upstreamEnv},
 		{name: "auth service on a name that only ends in internal", env: map[string]string{upstreamEnv: "http://authinternal"}, want: upstreamEnv},
@@ -426,6 +428,20 @@ func TestSettings_GatewayURLFollowsTheGatewayListener(t *testing.T) {
 	}
 }
 
+// A Google-only install (production for now) turns email codes off.
+func TestSettings_GoogleOnly(t *testing.T) {
+	t.Parallel()
+
+	s, err := settingsFrom(envOf(map[string]string{authEnv: string(authSession), googleEnv: "on", emailEnv: "off"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if s.EmailCodes || !s.Google {
+		t.Errorf("settings = %+v; want Google without email codes", s)
+	}
+}
+
 // Under GOAL_AUTH=session goald may listen off loopback, behind its public URL, with the gateway
 // on a listener of its own; it then answers only the names it listens and is opened by.
 func TestSettings_SignInMayListenOffLoopback(t *testing.T) {
@@ -439,8 +455,8 @@ func TestSettings_SignInMayListenOffLoopback(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if s.Auth != authSession || !s.Google || s.GatewayURL != "http://172.17.0.1:8090/mcp" || !s.strictTransport() {
-		t.Errorf("settings = %+v; want session with Google, the gateway's own URL and strict transport", s)
+	if s.Auth != authSession || !s.Google || !s.EmailCodes || s.GatewayURL != "http://172.17.0.1:8090/mcp" || !s.strictTransport() {
+		t.Errorf("settings = %+v; want session with email codes and Google, the gateway's own URL and strict transport", s)
 	}
 
 	if got, want := s.hosts(), []string{"0.0.0.0", "goal.example.com"}; !slices.Equal(got, want) {

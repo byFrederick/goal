@@ -9,4 +9,12 @@ describe('the deployed wrangler config', () => {
     expect(config).toMatch(/"preview_urls":\s*false/);
     expect(config).not.toMatch(/"routes?":/);
   });
+
+  // The install has no mail server for now: Google is the only way in, and the auth service binds
+  // no SMTP URL, which Terraform makes no store secret for (cloudflare-operations.md).
+  it('signs in with Google only, with no mail server', () => {
+    expect(config).toMatch(/"GOAL_AUTH_GOOGLE":\s*"on"/);
+    expect(config).toMatch(/"GOAL_AUTH_EMAIL":\s*"off"/);
+    expect(config).not.toMatch(/GOAL_SMTP_/);
+  });
 });

@@ -55,15 +55,15 @@ describe('loadSettings', () => {
   it('sends without TLS off loopback only when GOAL_SMTP_PLAINTEXT=on, to a compose service', () => {
     const mailpit = { ...base, GOAL_SMTP_URL: 'smtp://mailpit:1025' };
 
-    expect(loadSettings(mailpit).smtp.plaintext).toBe(false);
-    expect(loadSettings({ ...mailpit, GOAL_SMTP_PLAINTEXT: 'on' }).smtp.plaintext).toBe(true);
-    expect(loadSettings({ ...mailpit, GOAL_SMTP_PLAINTEXT: 'off' }).smtp.plaintext).toBe(false);
+    expect(loadSettings(mailpit).smtp?.plaintext).toBe(false);
+    expect(loadSettings({ ...mailpit, GOAL_SMTP_PLAINTEXT: 'on' }).smtp?.plaintext).toBe(true);
+    expect(loadSettings({ ...mailpit, GOAL_SMTP_PLAINTEXT: 'off' }).smtp?.plaintext).toBe(false);
   });
 
   it('requires STARTTLS from a mail server off loopback', () => {
-    expect(loadSettings({ ...base, GOAL_SMTP_URL: 'smtp://mail.example.com:587' }).smtp.plaintext).toBe(false);
-    expect(loadSettings({ ...base, GOAL_SMTP_URL: 'smtp://[::1]:1025' }).smtp.plaintext).toBe(true);
-    expect(loadSettings({ ...base, GOAL_SMTP_URL: 'smtp://127.0.0.2:1025' }).smtp.plaintext).toBe(true);
+    expect(loadSettings({ ...base, GOAL_SMTP_URL: 'smtp://mail.example.com:587' }).smtp?.plaintext).toBe(false);
+    expect(loadSettings({ ...base, GOAL_SMTP_URL: 'smtp://[::1]:1025' }).smtp?.plaintext).toBe(true);
+    expect(loadSettings({ ...base, GOAL_SMTP_URL: 'smtp://127.0.0.2:1025' }).smtp?.plaintext).toBe(true);
   });
 
   it('builds the default database URL from GOAL_PG_AUTH_PASSWORD, escaped', () => {
@@ -101,6 +101,32 @@ describe('loadSettings', () => {
     expect(s.google).toEqual({ clientId: 'id.apps.example.com', clientSecret: 'test-only' });
   });
 
+  // Google-only installs (production for now): no mail server, so no email codes and no mail.
+  it('turns email codes off, with no mail server at all', () => {
+    const s = loadSettings({
+      ...base,
+      GOAL_AUTH_EMAIL: 'off',
+      GOAL_AUTH_GOOGLE: 'on',
+      GOOGLE_CLIENT_ID: 'id.apps.example.com',
+      GOOGLE_CLIENT_SECRET: 'test-only',
+    });
+
+    expect(s.smtp).toBeUndefined();
+  });
+
+  it('ignores the mail settings while email codes are off', () => {
+    const s = loadSettings({
+      ...base,
+      GOAL_AUTH_EMAIL: 'off',
+      GOAL_AUTH_GOOGLE: 'on',
+      GOOGLE_CLIENT_ID: 'id.apps.example.com',
+      GOOGLE_CLIENT_SECRET: 'test-only',
+      GOAL_SMTP_URL: 'not a url',
+    });
+
+    expect(s.smtp).toBeUndefined();
+  });
+
   it.each([
     ['no secret', {}, 'BETTER_AUTH_SECRET or BETTER_AUTH_SECRETS is required'],
     ['a short secret', { BETTER_AUTH_SECRET: 'short' }, 'BETTER_AUTH_SECRET must be at least 32 bytes'],
@@ -130,6 +156,8 @@ describe('loadSettings', () => {
     ['extra trusted origins', { ...base, BETTER_AUTH_TRUSTED_ORIGINS: '*' }, 'BETTER_AUTH_TRUSTED_ORIGINS'],
     ['Google without its client', { ...base, GOAL_AUTH_GOOGLE: 'on' }, 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET'],
     ['an unknown Google mode', { ...base, GOAL_AUTH_GOOGLE: 'yes' }, 'GOAL_AUTH_GOOGLE must be on or off'],
+    ['an unknown email mode', { ...base, GOAL_AUTH_EMAIL: 'yes' }, 'GOAL_AUTH_EMAIL must be on or off'],
+    ['no way to sign in', { ...base, GOAL_AUTH_EMAIL: 'off' }, 'GOAL_AUTH_EMAIL=off needs GOAL_AUTH_GOOGLE=on'],
     ['a bootstrap owner that is no address', { ...base, GOAL_BOOTSTRAP_OWNER_EMAIL: 'ada' }, 'an email address'],
     ['a mail server that is not SMTP', { ...base, GOAL_SMTP_URL: 'http://127.0.0.1:1025' }, 'GOAL_SMTP_URL must be'],
     ['a sender that is no address', { ...base, GOAL_SMTP_FROM: 'Goal' }, 'GOAL_SMTP_FROM must be'],

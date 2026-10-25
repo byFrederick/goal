@@ -37,16 +37,18 @@ export function harness(pool: pg.Pool, opts: HarnessOptions = {}) {
   const publicURL = opts.publicURL ?? 'http://127.0.0.1:8080';
   const mailer = opts.mailer ?? new MemoryMailer();
   const ip = `198.51.100.${++clients}`;
+  const settings = loadSettings({
+    GOAL_PUBLIC_URL: publicURL,
+    BETTER_AUTH_SECRET: secret,
+    GOAL_AUTH_PROXY_SECRET: proxySecret,
+    ...opts.env,
+  });
   const auth = createAuth({
-    settings: loadSettings({
-      GOAL_PUBLIC_URL: publicURL,
-      BETTER_AUTH_SECRET: secret,
-      GOAL_AUTH_PROXY_SECRET: proxySecret,
-      ...opts.env,
-    }),
+    settings,
     pool,
     log: opts.log ?? silent,
-    mailer,
+    // As startService: no mail at all while email codes are off.
+    ...(settings.smtp ? { mailer } : {}),
     ...(opts.clock ? { clock: opts.clock } : {}),
   });
   const app = createApp(auth, proxySecret);

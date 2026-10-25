@@ -53,6 +53,7 @@ const goaldSettings = [
   'GOAL_PUBLIC_URL',
   'GOAL_AUTH',
   'GOAL_AUTH_GOOGLE',
+  'GOAL_AUTH_EMAIL',
   'GOAL_DATABASE_URL',
   'GOAL_MIGRATE_DATABASE_URL',
   'GOAL_S3_BUCKET',
@@ -84,6 +85,7 @@ const authTopology = { GOAL_AUTH_LISTEN: `0.0.0.0:${ports.auth}` };
 const authSettings = [
   'GOAL_PUBLIC_URL',
   'GOAL_AUTH_GOOGLE',
+  'GOAL_AUTH_EMAIL',
   'GOAL_AUTH_DATABASE_URL',
   'BETTER_AUTH_SECRET',
   'BETTER_AUTH_SECRETS',

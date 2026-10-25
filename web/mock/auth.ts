@@ -7,7 +7,8 @@
 // Sign-in is off by default (GOAL_AUTH=none, the mock's seed), so every other screen and test runs
 // as the local user. A reset turns it on: POST /__mock/reset {auth: {mode: "session",
 // signed_in?: "fresh" | "stale", email?, google?: "ok" | "not-invited" | "unverified" | "failed" |
-// "off", platform_admin?: false}}. Then every /v1 request but health and the auth config needs the session cookie (else
+// "off", email_codes?: "off" (a Google-only install, GOAL_AUTH_EMAIL=off: no code endpoints),
+// platform_admin?: false}}. Then every /v1 request but health and the auth config needs the session cookie (else
 // 401 unauthenticated), changes that need a recent sign-in check the session's age (api.ts),
 // creating an organization needs a platform admin (else 403 forbidden), and
 // the organizations are the person's (people.ts): f.cruz@example.com (F. Cruz, platform admin
@@ -47,6 +48,8 @@ export interface MockAuthSettings {
   /** Who is signed in at the reset, and who Google signs in. */
   email: string;
   google: GoogleOutcome;
+  /** Sign-in by emailed code (GOAL_AUTH_EMAIL); off, Google is the only way in. */
+  emailCodes: boolean;
   /** Whether F. Cruz is a platform admin (true unless the reset says false). */
   ownerIsPlatformAdmin: boolean;
 }
@@ -62,6 +65,7 @@ export function authSettings(body: unknown): MockAuthSettings {
     signedIn: b.signed_in === 'fresh' || b.signed_in === 'stale' ? b.signed_in : false,
     email: typeof b.email === 'string' && b.email.includes('@') ? b.email.toLowerCase() : ownerEmail,
     google,
+    emailCodes: b.email_codes !== 'off',
     ownerIsPlatformAdmin: b.platform_admin !== false,
   };
 }
@@ -215,7 +219,13 @@ export function createMockAuth(clock: () => number, dir: MockDirectory): MockAut
 
   const config = (): AuthConfig => ({
     mode: settings.mode,
-    methods: settings.mode === 'none' ? [] : settings.google === 'off' ? ['email_code'] : ['email_code', 'google'],
+    methods:
+      settings.mode === 'none'
+        ? []
+        : [
+            ...(settings.emailCodes ? ['email_code' as const] : []),
+            ...(settings.google === 'off' ? [] : ['google' as const]),
+          ],
   });
 
   const iso = (ms: number) => new Date(ms).toISOString();
@@ -239,6 +249,8 @@ export function createMockAuth(clock: () => number, dir: MockDirectory): MockAut
       res.end(JSON.stringify(data));
     };
     const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    // Better Auth without its email OTP plugin knows none of its paths.
+    if (!settings.emailCodes && route.startsWith('/email-otp/')) return authError(res, 404, 'NOT_FOUND', 'Not found');
 
     if (route === '/email-otp/send-verification-otp' && method === 'POST') {
       // The same answer for every address; the code goes only to people who may sign in.

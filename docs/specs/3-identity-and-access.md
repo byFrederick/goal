@@ -267,6 +267,7 @@ The CSP itself (`web/csp.txt`, with `worker-src 'self'`) and `X-Frame-Options: D
 | `GOAL_TRUSTED_PROXIES` | goald | empty · comma-separated CIDRs (or single addresses) of proxies whose `X-Forwarded-For` is believed; on Cloudflare the control Worker sets every address (spec 4 §5.12), and goald refuses `GOAL_SANDBOX=cloudflare` under `session` without it |
 | `GOAL_GATEWAY_LISTEN` | goald | the main listener · required and different when `GOAL_LISTEN` is not loopback (§5.5) |
 | `GOAL_AUTH_GOOGLE` | goald, auth | `off` · `on` needs `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (auth) |
+| `GOAL_AUTH_EMAIL` | goald, auth | `on` · `off` for an install without a mail server: no email codes (Better Auth's email OTP plugin is left out, the sign-in page and the re-auth dialog offer Google alone), invitations are made but mailed to nobody, the `GOAL_SMTP_*` settings are ignored; needs `GOAL_AUTH_GOOGLE=on` (the Cloudflare install for now) |
 | `GOAL_AUTH_LISTEN` | auth | `127.0.0.1:8081` · loopback, or every interface (`0.0.0.0`, `[::]`) only beside an https `GOAL_PUBLIC_URL`, for a container of its own on Cloudflare (spec 4 §5.12; phase 4 review, L4) |
 | `GOAL_AUTH_DATABASE_URL` | auth | compose database as `goal_auth` with `GOAL_PG_AUTH_PASSWORD` |
 | `BETTER_AUTH_SECRETS` or `BETTER_AUTH_SECRET` | auth | none · required, ≥ 32 bytes |
@@ -828,7 +829,7 @@ Under `/v1`; problems as §8.5; F = fresh session required.
 
 | Method and path | operationId · scope | Request → response |
 | --- | --- | --- |
-| `GET /auth/config` | getAuthConfig · public | → `AuthConfig{mode: session\|none, methods: [email_code, google?]}` (`google` when `GOAL_AUTH_GOOGLE=on`) |
+| `GET /auth/config` | getAuthConfig · public | → `AuthConfig{mode: session\|none, methods: [email_code?, google?]}` (`email_code` unless `GOAL_AUTH_EMAIL=off`, `google` when `GOAL_AUTH_GOOGLE=on`) |
 | `GET /auth/device/{user_code}` | getDeviceRequest · device:read | → `DeviceRequest{client_id, client_name: "Goal CLI", requested_at, expires_at, ip, user_agent, same_ip: bool}`; 404 unknown or expired |
 | `GET /me` | getMe · authenticated | → `Me{kind: user\|service, mode, user?: User, key?: {id, name, org_id}, token?: {id, name, org_id, scopes, expires_at}, platform_admin, session?: {created_at, expires_at, fresh_until}}`; under `mode: none` the local user; with a personal token `token` is set, `session` absent and `platform_admin` false |
 | `GET /orgs` | listOrgs · authenticated | → `{orgs: OrgSummary[]}`: the user's organizations with `role`; a key's or personal token's own org |

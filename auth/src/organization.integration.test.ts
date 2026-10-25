@@ -286,6 +286,35 @@ describe('an invitation', () => {
     expect(o.mailer.to(email)).toEqual([]);
   });
 
+  it('is made without mail on a Google-only install (GOAL_AUTH_EMAIL=off)', async () => {
+    const errors: string[] = [];
+    const googleOnly = harness(pool, {
+      mailer: o.mailer,
+      log: { log: (level, event) => (level === 'error' ? errors.push(event) : undefined) },
+      env: {
+        GOAL_AUTH_EMAIL: 'off',
+        GOAL_AUTH_GOOGLE: 'on',
+        GOOGLE_CLIENT_ID: 'goal-test.apps.example.com',
+        GOOGLE_CLIENT_SECRET: 'test-only',
+      },
+    });
+    const email = `google-only-${o.id}@example.com`;
+
+    const res = await googleOnly.post(
+      '/organization/invite-member',
+      { organizationId: o.id, role: 'member', email },
+      as(o.owner),
+    );
+
+    expect(res.status).toBe(200);
+    const { rows } = await admin.query(`SELECT status FROM auth.invitation WHERE email = $1`, [email]);
+    expect(rows).toEqual([{ status: 'pending' }]);
+    // Nothing tried to mail it, so nothing failed: no mail.failed in the log.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(errors).toEqual([]);
+    expect(o.mailer.to(email)).toEqual([]);
+  });
+
   it('ends when its inviter is removed, in the same change (review L2)', async () => {
     const sent = async (email: string, role: string) => {
       const res = await o.h.post('/organization/invite-member', { organizationId: o.id, email, role }, as(o.admin));

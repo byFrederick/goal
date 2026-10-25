@@ -357,9 +357,9 @@ describe('Google', () => {
   }
 
   /** signInWithGoogle runs the redirect flow: start, then Google's callback with a code. */
-  async function signInWithGoogle(claims: Record<string, unknown>) {
+  async function signInWithGoogle(claims: Record<string, unknown>, env: Record<string, string> = google) {
     stubGoogle(claims);
-    const h = app({ env: google });
+    const h = app({ env });
     const start = await h.post('/sign-in/social', { provider: 'google', callbackURL: '/' });
     expect(start.status).toBe(200);
     const { url } = (await start.json()) as { url: string };
@@ -391,6 +391,20 @@ describe('Google', () => {
     expect(rows[0].refreshToken).toBeNull();
     expect(rows[0].accessToken).not.toContain('google-access-token');
     expect(rows[0]).toMatchObject({ name: 'Grace', image: null });
+  });
+
+  it('is the only way in under GOAL_AUTH_EMAIL=off: no code is ever sent, an invitee still signs up', async () => {
+    const googleOnly = { ...google, GOAL_AUTH_EMAIL: 'off' };
+    const email = address('google-only');
+    await fx.invitation(org, email, inviter);
+
+    const send = await app({ env: googleOnly }).post('/email-otp/send-verification-otp', { email, type: 'sign-in' });
+    const { callback } = await signInWithGoogle({ sub: `g-${n}`, email, email_verified: true }, googleOnly);
+
+    expect(send.status).toBe(404);
+    expect(callback.status).toBe(302);
+    expect(cookieHeader(callback)).toContain('goal.session_token=');
+    expect(await users(email)).toBe(1);
   });
 
   it.each(['https://attacker.example/', 'http://127.0.0.1:9999/'])(

@@ -79,7 +79,8 @@ function method(ctx: EndpointContext | undefined): SignInMethod {
 
 export interface SignInDeps {
   db: GoalDatabase;
-  mailer: Mailer;
+  /** Mails codes and the lockout notice; none while email codes are off (GOAL_AUTH_EMAIL=off). */
+  mailer: Mailer | undefined;
   log: Logger;
   clock: Clock;
   /** GOAL_BOOTSTRAP_OWNER_EMAIL, lower case. */
@@ -145,7 +146,7 @@ export class SignIn {
       log.log('info', 'otp.suppressed', { subject, reason });
       return;
     }
-    if (!(await deliver(mailer, log, signInCodeMail(email, otp), { mail: 'sign_in_code', subject }))) return;
+    if (!mailer || !(await deliver(mailer, log, signInCodeMail(email, otp), { mail: 'sign_in_code', subject }))) return;
     await db.record({ kind: 'otp.sent', subject, ...from });
     log.log('info', 'otp.sent', { subject });
   };
@@ -172,7 +173,8 @@ export class SignIn {
     log.log('warn', 'otp.locked', { subject });
 
     const notify = async () => {
-      if (await this.known(email)) await deliver(mailer, log, lockoutMail(email), { mail: 'lockout', subject });
+      if (mailer && (await this.known(email)))
+        await deliver(mailer, log, lockoutMail(email), { mail: 'lockout', subject });
     };
     if (ctx) await ctx.context.runInBackgroundOrAwait(notify());
     else await notify();

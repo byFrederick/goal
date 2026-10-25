@@ -2163,7 +2163,7 @@ export interface components {
         SignInMethod: "email_code" | "google";
         AuthConfig: {
             mode: components["schemas"]["AuthMode"];
-            /** @description How people sign in; email_code always under session, google when GOAL_AUTH_GOOGLE=on; empty under none */
+            /** @description How people sign in under session; email_code unless GOAL_AUTH_EMAIL=off, google when GOAL_AUTH_GOOGLE=on; empty under none */
             methods: components["schemas"]["SignInMethod"][];
         };
         /** @description A pending CLI sign-in (the device authorization grant, RFC 8628), as the person who approves it sees it */

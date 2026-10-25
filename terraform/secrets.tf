@@ -6,7 +6,8 @@
 #   Cloudflare tokens (tokens.tf).
 # - secrets/<workspace>.sops.yaml, age-encrypted (.sops.yaml), holds only what comes from outside
 #   and the master keys: the Google OAuth client (made in Google's console), the mail provider's
-#   SMTP URL, and GOAL_MASTER_KEYS. The master keys stay in SOPS on purpose: they must have an
+#   SMTP URL (optional: empty on an install that signs in with Google only, whose auth service runs
+#   with GOAL_AUTH_EMAIL=off and gets no GOAL_SMTP_URL), and GOAL_MASTER_KEYS. The master keys stay in SOPS on purpose: they must have an
 #   escrowed copy that no state loss or damage can take (a lost key loses every organization's
 #   credentials), they rotate as a list (k2:<new>,k1:<old>, then goal db rekey), and a generated
 #   one would be replaced, unrecoverably, by any -replace or recreation of its resource.
@@ -24,12 +25,16 @@ data "sops_file" "secrets" {
 locals {
   sops = yamldecode(data.sops_file.secrets.raw)
 
+  # Whether the install mails sign-in codes and invitations: only with an SMTP URL. Whether it has
+  # one is no secret (the Worker's GOAL_AUTH_EMAIL says as much); the URL itself is.
+  smtp_url = local.sops.smtp.GOAL_SMTP_URL
+  mail     = nonsensitive(local.smtp_url != "")
+
   # Every key becomes one store secret, named by the environment variable its consumers read.
-  secret_values = {
+  secret_values = merge({
     GOAL_MASTER_KEYS          = local.sops.master_key.GOAL_MASTER_KEYS
     GOOGLE_CLIENT_ID          = local.sops.google.GOOGLE_CLIENT_ID
     GOOGLE_CLIENT_SECRET      = local.sops.google.GOOGLE_CLIENT_SECRET
-    GOAL_SMTP_URL             = local.sops.smtp.GOAL_SMTP_URL
     GOAL_GATEWAY_KEY          = random_password.generated["gateway_key"].result
     GOAL_SANDBOX_KEY          = random_password.generated["sandbox_key"].result
     GOAL_AUTH_PROXY_SECRET    = random_password.generated["auth_proxy_secret"].result
@@ -40,7 +45,7 @@ locals {
     GOAL_DATABASE_URL         = module.database_urls.app_url
     GOAL_MIGRATE_DATABASE_URL = module.database_urls.migrate_url
     GOAL_AUTH_DATABASE_URL    = module.database_urls.auth_url
-  }
+  }, local.mail ? { GOAL_SMTP_URL = local.smtp_url } : {})
 
   # Who reads which secret, as environment variables: the control Worker passes each container
   # exactly its own (spec 4 §11.1) and uses GOAL_SANDBOX_KEY itself to check goald's sandbox calls.
@@ -51,10 +56,10 @@ locals {
       "GOAL_DATABASE_URL", "GOAL_MIGRATE_DATABASE_URL", "GOAL_S3_ACCESS_KEY", "GOAL_S3_SECRET_KEY",
       "GOAL_EMBED_KEY",
     ]
-    auth = [
+    auth = concat([
       "BETTER_AUTH_SECRET", "GOAL_AUTH_PROXY_SECRET", "GOAL_AUTH_DATABASE_URL",
-      "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOAL_SMTP_URL",
-    ]
+      "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
+    ], local.mail ? ["GOAL_SMTP_URL"] : [])
     worker = ["GOAL_SANDBOX_KEY"]
   }
 

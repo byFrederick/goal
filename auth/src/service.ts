@@ -19,19 +19,20 @@ export interface Service {
  * Better Auth's schema mismatch) before it serves anything: its settings must hold, it must
  * connect as a role that can do no more than Better Auth's DML, and the database must hold the
  * schema this Better Auth expects (goose migrations 00040 on). It then serves on GOAL_AUTH_LISTEN. Mail goes
- * through mailer, or else the SMTP server of GOAL_SMTP_URL.
+ * through mailer, or else the SMTP server of GOAL_SMTP_URL; under GOAL_AUTH_EMAIL=off nothing is
+ * mailed and Google is the only way in.
  */
 export async function startService(env: Env, log: Logger, mailer?: Mailer): Promise<Service> {
   const settings = loadSettings(env);
-  const smtp = mailer ? undefined : new SMTPMailer(settings.smtp);
-  const mail: Mailer = mailer ?? (smtp as SMTPMailer);
+  const smtp = mailer || !settings.smtp ? undefined : new SMTPMailer(settings.smtp);
+  const mail = settings.smtp ? (mailer ?? smtp) : undefined;
   const pool = openPool(settings.databaseURL);
   pool.on('error', (e) => log.log('error', 'database.error', { error: e }));
 
   let server: ServerType;
   try {
     await checkRole(pool);
-    const auth = createAuth({ settings, pool, log, mailer: mail });
+    const auth = createAuth({ settings, pool, log, ...(mail ? { mailer: mail } : {}) });
     await (await auth.$context).explicitSchemaCheck?.();
 
     server = await new Promise<ServerType>((resolve, reject) => {

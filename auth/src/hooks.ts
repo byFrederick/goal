@@ -41,7 +41,8 @@ type Body = Record<string, unknown>;
 export interface HookDeps {
   db: GoalDatabase;
   signIn: SignIn;
-  mailer: Mailer;
+  /** Mails invitations; none on a Google-only install (GOAL_AUTH_EMAIL=off), which mails nothing. */
+  mailer: Mailer | undefined;
   log: Logger;
   clock: Clock;
   publicURL: string;
@@ -222,9 +223,13 @@ export function goalHooks({ db, signIn, mailer, log, clock, publicURL }: HookDep
     }
   });
 
-  /** The organization plugin's hooks and invitation mail (spec 3 §8.6). */
+  /**
+   * The organization plugin's hooks and invitation mail (spec 3 §8.6). Without a mailer an
+   * invitation is made and mailed to nobody: its recipient signs in with Google to see it.
+   */
   const organization = {
     sendInvitationEmail: async (data) => {
+      if (!mailer) return;
       await deliver(
         mailer,
         log,

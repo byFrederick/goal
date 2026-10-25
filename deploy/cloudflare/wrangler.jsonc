@@ -53,17 +53,18 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Goald", "Auth", "RunBox", "BoxIndex"] }],
   // Settings that are not secrets; src/env.ts lists which reach goald and which the auth service.
   // GOAL_S3_ENDPOINT is `terraform output s3_endpoint`. Add GOAL_BOOTSTRAP_OWNER_EMAIL, the one
-  // address that may sign in first, before the first deploy.
+  // address that may sign in first, before the first deploy. Sign-in is Google only (no mail
+  // server, so GOAL_AUTH_EMAIL is off); cloudflare-operations.md says how to add email codes.
   "vars": {
     "GOAL_PUBLIC_URL": "https://goal.byfrederick.work",
     "GOAL_AUTH": "session",
     "GOAL_AUTH_GOOGLE": "on",
+    "GOAL_AUTH_EMAIL": "off",
     "GOAL_AGENT_IMAGE": "goal-agent",
     "GOAL_S3_BUCKET": "goal-production",
     "GOAL_S3_ENDPOINT": "https://<account-id>.r2.cloudflarestorage.com",
     "AWS_REGION": "auto",
     "GOAL_EMBED_URL": "https://api.cloudflare.com/client/v4/accounts/<account-id>/ai/v1",
-    "GOAL_SMTP_FROM": "Goal <goal@byfrederick.work>",
     "GOAL_LOG_FORMAT": "json"
   },
   // Platform secrets only (AGENTS.md rule 7): Terraform's goal-production-<NAME>, in the store of
@@ -103,7 +104,6 @@
       "binding": "GOOGLE_CLIENT_SECRET",
       "store_id": "<secrets-store-id>",
       "secret_name": "goal-production-GOOGLE_CLIENT_SECRET"
-    },
-    { "binding": "GOAL_SMTP_URL", "store_id": "<secrets-store-id>", "secret_name": "goal-production-GOAL_SMTP_URL" }
+    }
   ]
 }

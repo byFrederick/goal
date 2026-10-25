@@ -28,8 +28,11 @@ export interface AuthDeps {
   /** The database as goal_auth (checkRole has passed). */
   pool: pg.Pool;
   log: Logger;
-  /** Sends sign-in codes, invitations and the lockout notice. */
-  mailer: Mailer;
+  /**
+   * Sends sign-in codes, invitations and the lockout notice. Without one (GOAL_AUTH_EMAIL=off)
+   * there is no sign-in by email code at all, Google is the only way in, and nothing is mailed.
+   */
+  mailer?: Mailer;
   /** The time Goal's rules use (send caps, lockout, invitation expiry, fresh sessions). */
   clock?: Clock;
 }
@@ -174,16 +177,20 @@ export function createAuth({ settings, pool, log, mailer, clock = () => new Date
     onAPIError: { errorURL: `${settings.publicURL}/sign-in` },
     telemetry: { enabled: false },
     plugins: [
-      emailOTP({
-        otpLength: 6,
-        expiresIn: 300,
-        allowedAttempts: 3,
-        storeOTP: 'hashed',
-        // false on purpose: an invitee has no user until their first sign-in. The user-create hook
-        // is the single gate (spec 3 §8.7).
-        disableSignUp: false,
-        sendVerificationOTP: signIn.sendCodeIfAllowed,
-      }),
+      ...(mailer
+        ? [
+            emailOTP({
+              otpLength: 6,
+              expiresIn: 300,
+              allowedAttempts: 3,
+              storeOTP: 'hashed',
+              // false on purpose: an invitee has no user until their first sign-in. The user-create
+              // hook is the single gate (spec 3 §8.7).
+              disableSignUp: false,
+              sendVerificationOTP: signIn.sendCodeIfAllowed,
+            }),
+          ]
+        : []),
       organization({
         ac,
         roles,

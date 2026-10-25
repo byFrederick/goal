@@ -57,6 +57,9 @@ type settings struct {
 	// Google offers signing in with Google beside email codes (GOAL_AUTH_GOOGLE: on or off,
 	// default off); the identity service holds the client and its secret.
 	Google bool
+	// EmailCodes offers signing in by an emailed code (GOAL_AUTH_EMAIL: on or off, default on);
+	// off, on an install without a mail server, Google is the only way in.
+	EmailCodes bool
 	// AuthUpstream is the identity service that /api/auth/* is proxied to under session
 	// (GOAL_AUTH_UPSTREAM, default http://127.0.0.1:8081; http on a loopback address only).
 	AuthUpstream *url.URL
@@ -139,6 +142,7 @@ const (
 	upstreamEnv    = "GOAL_AUTH_UPSTREAM"
 	proxiesEnv     = "GOAL_TRUSTED_PROXIES"
 	googleEnv      = "GOAL_AUTH_GOOGLE"
+	emailEnv       = "GOAL_AUTH_EMAIL"
 	defaultAuthURL = "http://127.0.0.1:8081"
 	schemeHTTP     = "http"
 	schemeHTTPS    = "https"
@@ -403,7 +407,8 @@ const (
 // user (none) is only ever asked for, and only on a loopback listen.
 const defaultAuth = authSession
 
-// authSettings reads GOAL_AUTH, GOAL_AUTH_GOOGLE, GOAL_AUTH_UPSTREAM and GOAL_TRUSTED_PROXIES.
+// authSettings reads GOAL_AUTH, GOAL_AUTH_GOOGLE, GOAL_AUTH_EMAIL, GOAL_AUTH_UPSTREAM and
+// GOAL_TRUSTED_PROXIES.
 func authSettings(s *settings, or func(name, def string) string) []error {
 	var errs []error
 
@@ -419,6 +424,17 @@ func authSettings(s *settings, or func(name, def string) string) []error {
 		s.Google = google == "on"
 	default:
 		errs = append(errs, fmt.Errorf("%s %q is not on or off", googleEnv, google))
+	}
+
+	switch email := or(emailEnv, "on"); email {
+	case "on", "off":
+		s.EmailCodes = email == "on"
+	default:
+		errs = append(errs, fmt.Errorf("%s %q is not on or off", emailEnv, email))
+	}
+
+	if s.Auth == authSession && !s.EmailCodes && !s.Google {
+		errs = append(errs, fmt.Errorf("%s=off needs %s=on: there is no other way to sign in", emailEnv, googleEnv))
 	}
 
 	var err error

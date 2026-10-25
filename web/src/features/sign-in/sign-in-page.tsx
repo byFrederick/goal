@@ -22,6 +22,7 @@ const emailRule = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const googleText = {
   'not-invited': 'That Google account isn’t invited to Goal.',
   unverified: 'Google didn’t share a verified email for that account. Sign in with an email code instead.',
+  unverifiedOnly: 'Google didn’t share a verified email for that account. Try another Google account.',
   failed: 'Google sign-in didn’t finish. Try again.',
 } as const;
 
@@ -76,57 +77,66 @@ export function SignInPage({ next, googleError }: SignInPageProps) {
     : send.isError && !rateLimited
       ? sendFailureText(send.error)
       : undefined;
+  const withGoogle = config.methods.includes('google');
+  // A Google-only install (GOAL_AUTH_EMAIL=off) has no mail server: no code to ask for.
+  const withCodes = config.methods.includes('email_code');
+  const googleFailed = googleError ? googleFailure(googleError) : undefined;
   const googleProblem = google.isError
     ? googleText.failed
-    : googleError
-      ? googleText[googleFailure(googleError)]
-      : undefined;
-  const withGoogle = config.methods.includes('google');
+    : googleFailed === 'unverified' && !withCodes
+      ? googleText.unverifiedOnly
+      : googleFailed
+        ? googleText[googleFailed]
+        : undefined;
 
   return (
     <AuthPage>
       {googleProblem ? <Callout tone="rework">{googleProblem}</Callout> : null}
       <AuthHeading>Sign in to Goal</AuthHeading>
-      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-3.5">
-        <Field label="Email" error={invalid}>
-          <Input
-            type="email"
-            name="email"
-            autoComplete="email"
-            placeholder="you@example.com"
-            spellCheck={false}
-            autoCapitalize="off"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </Field>
-        <Button
-          type="submit"
-          variant="primary"
-          size="lg"
-          aria-busy={send.isPending || undefined}
-          disabled={blocked}
-          className="h-12 w-full justify-center aria-busy:cursor-progress"
-        >
-          {send.isPending ? (
-            <>
-              <Spinner />
-              Sending code…
-            </>
-          ) : (
-            'Email me a code'
-          )}
-        </Button>
-        <LiveMessage>{sendError ? <Callout tone="rework">{sendError}</Callout> : null}</LiveMessage>
-      </form>
+      {withCodes ? (
+        <form onSubmit={onSubmit} noValidate className="flex flex-col gap-3.5">
+          <Field label="Email" error={invalid}>
+            <Input
+              type="email"
+              name="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              spellCheck={false}
+              autoCapitalize="off"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </Field>
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            aria-busy={send.isPending || undefined}
+            disabled={blocked}
+            className="h-12 w-full justify-center aria-busy:cursor-progress"
+          >
+            {send.isPending ? (
+              <>
+                <Spinner />
+                Sending code…
+              </>
+            ) : (
+              'Email me a code'
+            )}
+          </Button>
+          <LiveMessage>{sendError ? <Callout tone="rework">{sendError}</Callout> : null}</LiveMessage>
+        </form>
+      ) : null}
       {withGoogle ? (
         <>
-          <div
-            aria-hidden="true"
-            className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 text-[13px] text-muted before:h-px before:bg-rule after:h-px after:bg-rule"
-          >
-            or
-          </div>
+          {withCodes ? (
+            <div
+              aria-hidden="true"
+              className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 text-[13px] text-muted before:h-px before:bg-rule after:h-px after:bg-rule"
+            >
+              or
+            </div>
+          ) : null}
           <GoogleButton pending={google.isPending} onClick={continueWithGoogle} />
         </>
       ) : null}

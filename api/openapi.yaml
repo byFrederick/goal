@@ -2753,7 +2753,7 @@ components:
         mode: { $ref: "#/components/schemas/AuthMode" }
         methods:
           type: array
-          description: How people sign in; email_code always under session, google when GOAL_AUTH_GOOGLE=on; empty under none
+          description: How people sign in under session; email_code unless GOAL_AUTH_EMAIL=off, google when GOAL_AUTH_GOOGLE=on; empty under none
           items: { $ref: "#/components/schemas/SignInMethod" }
     DeviceRequest:
       type: object

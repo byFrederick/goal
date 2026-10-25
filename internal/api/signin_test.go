@@ -170,6 +170,20 @@ func TestAPI_SignIn_CredentialFirstThenOrganization(t *testing.T) {
 	}
 }
 
+// A Google-only install (GOAL_AUTH_EMAIL=off) offers no email codes: the sign-in page shows Google
+// alone.
+func TestAPI_SignIn_GoogleOnly(t *testing.T) {
+	t.Parallel()
+
+	in := &signIn{identity: porttest.NewIdentity(time.Now), access: porttest.NewAccessNotices(), google: true, noEmailCodes: true}
+	h := newHarnessWith(t, in)
+
+	config := decode[gen.AuthConfig](t, h.request(t, http.MethodGet, "/v1/auth/config", "", nil), http.StatusOK)
+	if config.Mode != gen.Session || !slices.Equal(config.Methods, []gen.SignInMethod{gen.Google}) {
+		t.Errorf("auth config = %+v, want session by Google only", config)
+	}
+}
+
 // A member sees their organizations with their role, what they may do there and the factories
 // they see, and who they are.
 func TestAPI_SignIn_OrgsByMembership(t *testing.T) {

@@ -74,7 +74,7 @@ const (
 // authVariables are the auth service's own variables, and the only ones it is started with: the
 // Taskfile's AUTH_VARIABLES (task auth:dev), kept equal by TestUp_AuthVariablesAreTheTaskfiles.
 var authVariables = []string{
-	"PATH", "HOME", "GOAL_PUBLIC_URL", "GOAL_AUTH_GOOGLE", "GOAL_AUTH_LISTEN", "GOAL_AUTH_DATABASE_URL", "GOAL_PG_AUTH_PASSWORD",
+	"PATH", "HOME", "GOAL_PUBLIC_URL", "GOAL_AUTH_GOOGLE", "GOAL_AUTH_EMAIL", "GOAL_AUTH_LISTEN", "GOAL_AUTH_DATABASE_URL", "GOAL_PG_AUTH_PASSWORD",
 	"BETTER_AUTH_SECRET", "BETTER_AUTH_SECRETS", "GOAL_BOOTSTRAP_OWNER_EMAIL", "GOAL_SMTP_URL", "GOAL_SMTP_FROM",
 	"GOAL_SMTP_PLAINTEXT", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "NODE_ENV", "NODE_OPTIONS", "NODE_EXTRA_CA_CERTS", proxySecretEnv,
 }

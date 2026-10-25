@@ -18,6 +18,8 @@ interface AuthReset {
   signed_in?: 'fresh' | 'stale';
   email?: string;
   google?: 'ok' | 'not-invited' | 'unverified' | 'failed' | 'off';
+  /** off: a Google-only install, with no mail server (GOAL_AUTH_EMAIL=off). */
+  email_codes?: 'off';
   platform_admin?: false;
 }
 
@@ -217,6 +219,28 @@ test('Continue with Google returns to the page that asked; an account without an
   await page.goto('/sign-in');
   await expect(sendCode(page)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue with Google' })).toHaveCount(0);
+});
+
+test('a Google-only install offers Google alone, to sign in and to confirm it’s you', async ({ page }) => {
+  await signInOn(page.request, { email_codes: 'off' });
+  await page.goto('/sign-in');
+  await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeVisible();
+  await expect(emailField(page)).toHaveCount(0);
+  await expect(sendCode(page)).toHaveCount(0);
+  await expect(page.getByText('or', { exact: true })).toHaveCount(0);
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+
+  await signInOn(page.request, { email_codes: 'off', signed_in: 'stale' });
+  await page.goto('/o/acme/settings');
+  await page.getByRole('button', { name: 'Delete organization…' }).click();
+  await page.getByLabel('Type Acme to confirm').fill('Acme');
+  await page.getByRole('button', { name: 'Delete organization', exact: true }).click();
+  const reauth = page.getByRole('dialog', { name: 'Confirm it’s you' });
+  await expect(reauth.getByText('This change needs a recent sign-in. Sign in with Google again.')).toBeVisible();
+  await expect(reauth.getByRole('button', { name: 'Continue with Google' })).toBeVisible();
+  await expect(reauth.getByRole('button', { name: 'Email me a code' })).toHaveCount(0);
+  await expectAccessible(page);
 });
 
 test('an address that may not sign in gets the same answer, and no code works for it', async ({ page, request }) => {

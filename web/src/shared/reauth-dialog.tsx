@@ -1,6 +1,6 @@
 // The re-auth dialog itself (reauth.tsx opens it). Two steps: how to confirm (an emailed code, or
-// Google when the install has it), then the code, entered here so the page underneath keeps its
-// state.
+// Google, each when the install has it), then the code, entered here so the page underneath keeps
+// its state.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouterState } from '@tanstack/react-router';
 import { type FormEvent, useState } from 'react';
@@ -30,6 +30,7 @@ export default function ReauthDialog({ onDone }: { onDone: (signedIn: boolean) =
           <AskStep
             email={email}
             google={config.data?.methods.includes('google') ?? false}
+            codes={config.data?.methods.includes('email_code') ?? true}
             onSent={() => setStep('code')}
             onCancel={() => onDone(false)}
           />
@@ -44,11 +45,14 @@ export default function ReauthDialog({ onDone }: { onDone: (signedIn: boolean) =
 function AskStep({
   email,
   google,
+  codes,
   onSent,
   onCancel,
 }: {
   email: string;
   google: boolean;
+  /** Whether the install sends codes; a Google-only one (GOAL_AUTH_EMAIL=off) does not. */
+  codes: boolean;
   onSent: () => void;
   onCancel: () => void;
 }) {
@@ -68,31 +72,34 @@ function AskStep({
   return (
     <div className="flex flex-col gap-4">
       <p className="m-0 text-[15px] leading-normal text-ink-soft">
-        This change needs a recent sign-in. We’ll email a code to {email || 'your address'}.
+        This change needs a recent sign-in.{' '}
+        {codes ? `We’ll email a code to ${email || 'your address'}.` : 'Sign in with Google again.'}
       </p>
       <div aria-live="polite" className="empty:-mt-4">
         {send.isError ? <Callout tone="rework">{sendFailureText(send.error)}</Callout> : null}
         {withGoogle.isError ? <Callout tone="rework">Google sign-in didn’t finish. Try again.</Callout> : null}
       </div>
       <div className="flex flex-col gap-2">
-        <Button
-          variant="primary"
-          size="lg"
-          aria-busy={send.isPending || undefined}
-          onClick={() => {
-            if (!send.isPending && email) send.mutate(email);
-          }}
-          className="h-12 w-full justify-center aria-busy:cursor-progress"
-        >
-          {send.isPending ? (
-            <>
-              <Spinner />
-              Sending code…
-            </>
-          ) : (
-            'Email me a code'
-          )}
-        </Button>
+        {codes ? (
+          <Button
+            variant="primary"
+            size="lg"
+            aria-busy={send.isPending || undefined}
+            onClick={() => {
+              if (!send.isPending && email) send.mutate(email);
+            }}
+            className="h-12 w-full justify-center aria-busy:cursor-progress"
+          >
+            {send.isPending ? (
+              <>
+                <Spinner />
+                Sending code…
+              </>
+            ) : (
+              'Email me a code'
+            )}
+          </Button>
+        ) : null}
         {google ? <GoogleButton pending={withGoogle.isPending} onClick={continueWithGoogle} /> : null}
         <Button variant="secondary" size="lg" onClick={onCancel} className="h-12 w-full justify-center">
           Cancel

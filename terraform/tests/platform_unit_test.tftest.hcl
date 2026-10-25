@@ -215,3 +215,34 @@ run "the_bucket_is_goal_production_near_the_database" {
     error_message = "s3store's endpoint is the account's R2 S3 API."
   }
 }
+
+# Production signs in with Google only for now: no mail server, so no SMTP URL in SOPS, no store
+# secret for it and nothing of it for the auth service (GOAL_AUTH_EMAIL=off, a Worker var).
+run "a_google_only_install_needs_no_smtp_url" {
+  command = plan
+
+  override_data {
+    target = data.sops_file.secrets
+    values = {
+      raw = <<-EOT
+        master_key:
+          GOAL_MASTER_KEYS: k1:test-master-key
+        google:
+          GOOGLE_CLIENT_ID: test-client.apps.googleusercontent.com
+          GOOGLE_CLIENT_SECRET: test-client-secret
+        smtp:
+          GOAL_SMTP_URL: ""
+      EOT
+    }
+  }
+
+  assert {
+    condition     = length(module.secrets.names) == 13 && !contains(keys(module.secrets.names), "GOAL_SMTP_URL")
+    error_message = "Without an SMTP URL there is no GOAL_SMTP_URL store secret."
+  }
+
+  assert {
+    condition     = !contains(output.secret_consumers.auth, "GOAL_SMTP_URL")
+    error_message = "Without an SMTP URL the auth service is handed none."
+  }
+}

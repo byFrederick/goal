@@ -1201,7 +1201,7 @@ type AuditTarget struct {
 
 // AuthConfig defines model for AuthConfig.
 type AuthConfig struct {
-	// Methods How people sign in; email_code always under session, google when GOAL_AUTH_GOOGLE=on; empty under none
+	// Methods How people sign in under session; email_code unless GOAL_AUTH_EMAIL=off, google when GOAL_AUTH_GOOGLE=on; empty under none
 	Methods []SignInMethod `json:"methods"`
 
 	// Mode session: people sign in and every request carries a session or an API key. none: sign-in is off (GOAL_AUTH=none, a loopback install), every request acts as the local user.

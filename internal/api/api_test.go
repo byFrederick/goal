@@ -310,6 +310,8 @@ type signIn struct {
 	identity *porttest.Identity
 	access   *porttest.AccessNotices
 	google   bool
+	// noEmailCodes: a Google-only install (GOAL_AUTH_EMAIL=off).
+	noEmailCodes bool
 }
 
 // newHarnessWith is the harness under GOAL_AUTH=none, or under session with in.
@@ -436,7 +438,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity
-		deps.Auth = api.AuthConfig{Mode: api.AuthSession, Google: in.google}
+		deps.Auth = api.AuthConfig{Mode: api.AuthSession, EmailCodes: !in.noEmailCodes, Google: in.google}
 	}
 
 	handler, err := api.New(deps)

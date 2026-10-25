@@ -27,7 +27,10 @@ const (
 // AuthConfig is the install's sign-in, as goald was started with it.
 type AuthConfig struct {
 	Mode AuthMode
-	// Google: people may sign in with Google too (GOAL_AUTH_GOOGLE=on).
+	// EmailCodes: people may sign in by an emailed code (GOAL_AUTH_EMAIL, on unless the install
+	// has no mail server).
+	EmailCodes bool
+	// Google: people may sign in with Google (GOAL_AUTH_GOOGLE=on).
 	Google bool
 	// SecureCookies: people open goald over https (GOAL_PUBLIC_URL), so Better Auth's cookie is
 	// __Secure-goal.session_token and the plain name is ignored.
@@ -174,15 +177,19 @@ func principalOf(ctx context.Context) domain.Principal {
 	return p
 }
 
-// GetAuthConfig tells the sign-in page how this install signs people in: by email code, and with
-// Google when it is on, under GOAL_AUTH=session; not at all under none (the UI shows no sign-in
-// page).
+// GetAuthConfig tells the sign-in page how this install signs people in: by email code and with
+// Google, each when it is on, under GOAL_AUTH=session; not at all under none (the UI shows no
+// sign-in page).
 func (s *server) GetAuthConfig(context.Context, gen.GetAuthConfigRequestObject) (gen.GetAuthConfigResponseObject, error) {
 	if s.auth.Mode == AuthNone {
 		return gen.GetAuthConfig200JSONResponse{Mode: gen.None, Methods: []gen.SignInMethod{}}, nil
 	}
 
-	out := gen.GetAuthConfig200JSONResponse{Mode: gen.Session, Methods: []gen.SignInMethod{gen.EmailCode}}
+	out := gen.GetAuthConfig200JSONResponse{Mode: gen.Session, Methods: []gen.SignInMethod{}}
+	if s.auth.EmailCodes {
+		out.Methods = append(out.Methods, gen.EmailCode)
+	}
+
 	if s.auth.Google {
 		out.Methods = append(out.Methods, gen.Google)
 	}

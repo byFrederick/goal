@@ -33,8 +33,9 @@ export interface Settings {
    * GOAL_SMTP_URL (it may hold the server's credentials) and GOAL_SMTP_FROM: where mail goes.
    * plaintext: smtp:// may stay unencrypted, as to a loopback host or, with GOAL_SMTP_PLAINTEXT=on,
    * to compose's Mailpit (mailpit, in the stack profile); any other server must offer STARTTLS.
+   * undefined under GOAL_AUTH_EMAIL=off: no email codes and no mail at all (Google only).
    */
-  smtp: { url: string; from: string; plaintext: boolean };
+  smtp: { url: string; from: string; plaintext: boolean } | undefined;
   /**
    * GOAL_AUTH_PROXY_SECRET: goald sends it with every request it forwards (X-Goal-Proxy-Secret),
    * and the service answers nothing else but its health check, so a process that reaches its
@@ -117,7 +118,7 @@ export function loadSettings(env: Env): Settings {
   if (bootstrapOwnerEmail !== undefined && !emailPattern.test(bootstrapOwnerEmail)) {
     problems.push('GOAL_BOOTSTRAP_OWNER_EMAIL must be an email address');
   }
-  const smtp = parseSMTP(get, problems);
+  const smtp = parseEmail(get, google !== undefined, problems);
 
   const password = get('GOAL_PG_AUTH_PASSWORD') ?? devAuthPassword;
   const databaseURL =
@@ -214,7 +215,19 @@ function parseGoogle(get: (name: string) => string | undefined, problems: string
   return { clientId, clientSecret };
 }
 
-function parseSMTP(get: (name: string) => string | undefined, problems: string[]): Settings['smtp'] {
+/**
+ * parseEmail reads GOAL_AUTH_EMAIL (on by default): email codes and the mail behind them. Off, the
+ * mail settings are ignored and Google must be on, the only other way in.
+ */
+function parseEmail(get: (name: string) => string | undefined, google: boolean, problems: string[]): Settings['smtp'] {
+  const mode = get('GOAL_AUTH_EMAIL') ?? 'on';
+  if (mode === 'on') return parseSMTP(get, problems);
+  if (mode !== 'off') problems.push('GOAL_AUTH_EMAIL must be on or off');
+  else if (!google) problems.push('GOAL_AUTH_EMAIL=off needs GOAL_AUTH_GOOGLE=on: there is no other way to sign in');
+  return undefined;
+}
+
+function parseSMTP(get: (name: string) => string | undefined, problems: string[]): NonNullable<Settings['smtp']> {
   const url = get('GOAL_SMTP_URL') ?? defaultSMTPURL;
   let parsed: URL | undefined;
   try {
