@@ -74,6 +74,11 @@ override_module {
   outputs = { id = "ai-token-id", value = "ai-token-value" }
 }
 
+override_module {
+  target  = module.deploy_token
+  outputs = { id = "deploy-token-id", value = "deploy-token-value" }
+}
+
 run "every_secret_reaches_the_store_under_its_env_name" {
   command = plan
 
@@ -244,5 +249,24 @@ run "a_google_only_install_needs_no_smtp_url" {
   assert {
     condition     = !contains(output.secret_consumers.auth, "GOAL_SMTP_URL")
     error_message = "Without an SMTP URL the auth service is handed none."
+  }
+}
+
+run "deploy_token_holds_only_what_wrangler_deploy_needs" {
+  command = plan
+
+  assert {
+    condition     = local.deploy_token_permission_groups == toset(["Workers Scripts Write", "Workers Containers Write", "Account Settings Read", "Secrets Store Write"])
+    error_message = "The deploy token holds exactly what wrangler deploy needs: Workers Scripts, Workers Containers and Secrets Store Write, Account Settings Read."
+  }
+
+  assert {
+    condition     = !contains(nonsensitive([for value in values(local.secret_values) : value == "deploy-token-value"]), true)
+    error_message = "No container gets the deploy token: it is only the deploy_api_token output for task deploy:token."
+  }
+
+  assert {
+    condition     = output.deploy_api_token == "deploy-token-value"
+    error_message = "deploy_api_token is the deploy token's value."
   }
 }

@@ -10,10 +10,15 @@ variable "name" {
   nullable    = false
 }
 
-variable "permission_group" {
-  description = "The one permission group the token holds, by name (such as Workers AI Read)."
-  type        = string
+variable "permission_groups" {
+  description = "The permission groups the token holds, by their names in the API's list (such as Workers AI Read)."
+  type        = set(string)
   nullable    = false
+
+  validation {
+    condition     = length(var.permission_groups) > 0
+    error_message = "A token holds at least one permission group."
+  }
 }
 
 variable "resources" {
