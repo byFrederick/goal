@@ -1,8 +1,8 @@
 import type { SDKMessage, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 
 /**
- * The worker's stdout protocol: one JSON object per line. goald's Docker runner parses it
- * (internal/adapters/docker/protocol.go); keep both sides in step.
+ * The worker's stdout protocol: one JSON object per line. goald decodes it with
+ * domain.DecodeWorkerLine (internal/domain/worker.go); keep both sides in step.
  */
 export type WorkerEvent =
   | {

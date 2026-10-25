@@ -40,7 +40,7 @@ func TestRelay_RecordsEachDeniedCallAsAnEvent(t *testing.T) {
 		}
 	}
 
-	if want := []domain.EventKind{KindToolCall, domain.EventToolDenied, domain.EventToolDenied}; !reflect.DeepEqual(kinds, want) {
+	if want := []domain.EventKind{domain.EventToolCall, domain.EventToolDenied, domain.EventToolDenied}; !reflect.DeepEqual(kinds, want) {
 		t.Fatalf("events %v; want %v", kinds, want)
 	}
 

@@ -59,7 +59,7 @@ Environment: only the task's `Env` from goald (which carries `CLAUDE_CODE_OAUTH_
 
 ## stdout protocol
 
-One JSON object per line, each with `type` and `at` (RFC 3339). Logs go to stderr. goald parses it in `internal/adapters/docker/protocol.go` and redacts secret values from every event.
+One JSON object per line, each with `type` and `at` (RFC 3339). Logs go to stderr. goald decodes it with `domain.DecodeWorkerLine` (`internal/domain/worker.go`) and redacts secret values from every event.
 
 | `type` | Fields | goald event kind |
 | --- | --- | --- |

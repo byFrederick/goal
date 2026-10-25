@@ -168,7 +168,7 @@ func run(ctx context.Context, t *testing.T, r *Runner, spec ports.TaskSpec, onSt
 
 	drain.Go(func() {
 		for ev := range task.Events() {
-			if ev.Kind == KindAgentStarted && onStart != nil {
+			if ev.Kind == domain.EventAgentStarted && onStart != nil {
 				onStart(ev)
 			}
 
@@ -215,7 +215,7 @@ func TestRunner_StreamsEventsAndReturnsResult(t *testing.T) {
 		kinds = append(kinds, ev.Kind)
 	}
 
-	if want := []domain.EventKind{KindAgentStarted, KindToolCall, KindToolResult, KindAgentMessage, KindUsage}; !slices.Equal(kinds, want) {
+	if want := []domain.EventKind{domain.EventAgentStarted, domain.EventToolCall, domain.EventToolResult, domain.EventAgentMessage, domain.EventUsage}; !slices.Equal(kinds, want) {
 		t.Fatalf("event kinds = %v; want %v", kinds, want)
 	}
 

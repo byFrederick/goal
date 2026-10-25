@@ -4,126 +4,26 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
 )
 
-// The worker writes one JSON object per line to stdout; every line has "type" and "at"
-// (RFC 3339). worker/README.md documents the fields of each type. Progress lines become
-// RunEvents with these kinds; the finished line becomes the run's result.
-const (
-	KindAgentStarted domain.EventKind = "agent_started"
-	KindToolCall     domain.EventKind = "tool_call"
-	KindToolResult   domain.EventKind = "tool_result"
-	KindAgentMessage domain.EventKind = "agent_message"
-	KindUsage                         = domain.EventUsage
-)
-
-var eventKinds = map[string]domain.EventKind{
-	"started":     KindAgentStarted,
-	"tool_use":    KindToolCall,
-	"tool_result": KindToolResult,
-	"message":     KindAgentMessage,
-	"usage":       KindUsage,
-}
-
-const typeFinished = "finished"
-
 // maxLine bounds one stdout line; the finished line carries the whole output.
 const maxLine = 16 << 20
 
-// finished is the worker's last line: how the agent ended and what it cost.
-type finished struct {
-	// Status is "succeeded" or "failed".
-	Status string `json:"status"`
-	// Subtype is the SDK's result subtype, for example error_max_turns.
-	Subtype      string          `json:"subtype"`
-	Output       json.RawMessage `json:"output"`
-	Error        string          `json:"error"`
-	CostUSD      float64         `json:"cost_usd"`
-	Turns        int             `json:"turns"`
-	InputTokens  int64           `json:"input_tokens"`
-	OutputTokens int64           `json:"output_tokens"`
-	SessionID    string          `json:"session_id"`
-	// At is when the worker wrote the line.
-	At string `json:"at"`
-	// PermissionDenials are the tool calls the agent's policy refused, by tool and call id.
-	PermissionDenials []struct {
-		Tool string `json:"tool"`
-		ID   string `json:"id"`
-	} `json:"permission_denials"`
-}
-
-// denials are the run's refused tool calls as tool_denied events, at the finished line's time
-// (now when it has none).
-func (f *finished) denials(now time.Time) []ports.RunEvent {
-	at, err := time.Parse(time.RFC3339Nano, f.At)
-	if err != nil {
-		at = now
-	}
-
-	out := make([]ports.RunEvent, 0, len(f.PermissionDenials))
-	for _, d := range f.PermissionDenials {
-		out = append(out, ports.RunEvent{Kind: domain.EventToolDenied, At: at, Data: map[string]any{"tool": d.Tool, "id": d.ID}})
-	}
-
-	return out
-}
-
-var errUnknownLine = errors.New("not a worker protocol line")
-
-// parseLine reads one stdout line: a progress event, the finished record, or errUnknownLine.
-// Events without a valid "at" are stamped with now.
-func parseLine(line []byte, now time.Time) (*ports.RunEvent, *finished, error) {
-	var head struct {
-		Type string `json:"type"`
-		At   string `json:"at"`
-	}
-
-	if err := json.Unmarshal(line, &head); err != nil {
-		return nil, nil, fmt.Errorf("%w: %w", errUnknownLine, err)
-	}
-
-	if head.Type == typeFinished {
-		var f finished
-		if err := json.Unmarshal(line, &f); err != nil {
-			return nil, nil, fmt.Errorf("finished line: %w", err)
-		}
-
-		return nil, &f, nil
-	}
-
-	kind, ok := eventKinds[head.Type]
-	if !ok {
-		return nil, nil, fmt.Errorf("%w: type %q", errUnknownLine, head.Type)
-	}
-
-	var data map[string]any
-	if err := json.Unmarshal(line, &data); err != nil {
-		return nil, nil, fmt.Errorf("%s line: %w", head.Type, err)
-	}
-
-	delete(data, "type")
-	delete(data, "at")
-
-	at, err := time.Parse(time.RFC3339Nano, head.At)
-	if err != nil {
-		at = now
-	}
-
-	return &ports.RunEvent{Kind: kind, At: at, Data: data}, nil, nil
+// runEvent is a decoded worker event as the runner streams it.
+func runEvent(ev domain.Event) ports.RunEvent {
+	return ports.RunEvent{Kind: ev.Kind, At: ev.At, Data: ev.Data}
 }
 
 // outcome is everything known about a task once its container has exited.
 type outcome struct {
-	fin      *finished
+	fin      *domain.WorkerFinished
 	exitCode int64
 	// stopped is why the runner stopped the container: a context.Canceled error or a timeout.
 	// It is nil when the container ran to its end.
@@ -139,46 +39,20 @@ var errTimeout = errors.New("timed out")
 // worker reported, so a cancelled task reads as cancelled and a killed one as timed out.
 func resultOf(o outcome) domain.RunResult {
 	var res domain.RunResult
-	if f := o.fin; f != nil {
-		res = domain.RunResult{
-			CostUSD: f.CostUSD, Turns: f.Turns, InputTokens: f.InputTokens, OutputTokens: f.OutputTokens, SessionID: f.SessionID,
-		}
+	if o.fin != nil {
+		res = o.fin.Result()
 	}
 
 	switch {
 	case o.stopped != nil && errors.Is(o.stopped, context.Canceled):
-		res.Status, res.Error = domain.RunCancelled, o.stopped.Error()
+		res.Status, res.Output, res.Error = domain.RunCancelled, nil, o.stopped.Error()
 	case o.stopped != nil:
-		res.Status, res.Error = domain.RunFailed, o.stopped.Error()
+		res.Status, res.Output, res.Error = domain.RunFailed, nil, o.stopped.Error()
 	case o.fin == nil:
 		res.Status, res.Error = domain.RunFailed, exitError(o.exitCode, o.stderr)
-	case o.fin.Status == string(domain.RunSucceeded) && hasValue(o.fin.Output):
-		res.Status, res.Output = domain.RunSucceeded, o.fin.Output
-	case o.fin.Status == string(domain.RunSucceeded):
-		res.Status, res.Error = domain.RunFailed, "worker finished without output"
-	default:
-		res.Status, res.Error = domain.RunFailed, failure(o.fin)
 	}
 
 	return res
-}
-
-func hasValue(raw json.RawMessage) bool {
-	v := bytes.TrimSpace(raw)
-	return len(v) > 0 && !bytes.Equal(v, []byte("null"))
-}
-
-func failure(f *finished) string {
-	switch {
-	case f.Error != "" && f.Subtype != "":
-		return f.Subtype + ": " + f.Error
-	case f.Error != "":
-		return f.Error
-	case f.Subtype != "":
-		return f.Subtype
-	}
-
-	return "worker reported a failure without a reason"
 }
 
 func exitError(code int64, stderr string) string {

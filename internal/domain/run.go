@@ -10,6 +10,17 @@ import (
 // RunID identifies one agent run (one container working one item at one station).
 type RunID string
 
+// SandboxSize is how much CPU and memory a run's sandbox gets; each sandbox backend maps it to
+// its own limits (spec 4 §4.6). Empty is medium, the default.
+type SandboxSize string
+
+// Sandbox sizes.
+const (
+	SandboxSmall  SandboxSize = "small"
+	SandboxMedium SandboxSize = "medium"
+	SandboxLarge  SandboxSize = "large"
+)
+
 // Lease is an agent slot's hold on an item. It expires unless heartbeated, so work held by a
 // crashed instance returns to the queue.
 type Lease struct {

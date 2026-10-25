@@ -66,7 +66,7 @@ func (t *task) supervise(ctx context.Context, attach client.HijackedResponse, wa
 
 	var (
 		streams sync.WaitGroup
-		fin     *finished
+		fin     *domain.WorkerFinished
 		stderr  = &tail{max: stderrLines}
 	)
 
@@ -182,11 +182,11 @@ func (t *task) remove(ctx context.Context) {
 
 // relay turns stdout lines into events until the stream ends and returns the finished record;
 // the tool calls it lists as denied become tool_denied events.
-func (t *task) relay(ctx context.Context, r io.Reader) *finished {
-	var fin *finished
+func (t *task) relay(ctx context.Context, r io.Reader) *domain.WorkerFinished {
+	var fin *domain.WorkerFinished
 
 	err := eachLine(r, maxLine, func(line []byte) {
-		ev, f, err := parseLine(line, time.Now())
+		ev, f, err := domain.DecodeWorkerLine(line, time.Now())
 
 		switch {
 		case err != nil:
@@ -194,15 +194,15 @@ func (t *task) relay(ctx context.Context, r io.Reader) *finished {
 		case f != nil:
 			fin = f
 
-			for _, ev := range f.denials(time.Now()) {
+			for _, ev := range f.Denials(time.Now()) {
 				t.redact.value(ev.Data)
 
-				t.events <- ev
+				t.events <- runEvent(ev)
 			}
 		default:
 			t.redact.value(ev.Data)
 
-			t.events <- *ev
+			t.events <- runEvent(*ev)
 		}
 	})
 	if err != nil && !errors.Is(err, io.ErrClosedPipe) {

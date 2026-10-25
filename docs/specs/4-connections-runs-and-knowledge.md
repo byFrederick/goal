@@ -210,7 +210,8 @@ type Sandboxes interface {
 	Create(ctx context.Context, s SandboxSpec) (Sandbox, error)
 	// List returns every sandbox this backend holds, live ones included, with run and org.
 	List(ctx context.Context) ([]Leftover, error)
-	// Delete removes a run's sandbox; one that is already gone is not an error.
+	// Delete removes a run's sandbox, ending its running commands; one that is already gone is
+	// not an error.
 	Delete(ctx context.Context, run domain.RunID) error
 }
 
@@ -237,24 +238,25 @@ type Sandbox interface {
 type Exec struct {
 	Argv    []string
 	Env     map[string]string // adapters never log it
-	Dir     string
-	Timeout time.Duration
+	Dir     string            // empty: the image's
+	Timeout time.Duration     // 0: none
 }
 
 type Process interface {
-	Stdout() io.Reader // the caller drains it
-	// Wait returns how the command ended; an error means the outcome is unknown.
+	Stdout() io.Reader // the caller drains it to its end, then calls Wait
+	// Wait returns how the command ended; an error means the outcome is unknown. A command
+	// killed because its ctx ended returns that ctx's error.
 	Wait() (ExitStatus, error)
 }
 
 type ExitStatus struct {
-	Code       int
+	Code       int // meaningless when TimedOut
 	TimedOut   bool
-	StderrTail string // last 8 KiB
+	StderrTail string // last MaxStderrTail (8 KiB) bytes
 }
 ```
 
-`Leftover` keeps its shape. The worker's stdout protocol decoder moves from `adapters/docker/protocol.go` to `internal/domain/worker.go` (`domain.DecodeWorkerLine`), so the engine relays events with no adapter-specific code. `porttest.Sandboxes` is the in-memory fake (scripted exec results) and `porttest/sandboxtest` the conformance suite every adapter passes: idempotent create, exec output and exit codes, timeout, env per exec, delete idempotent, list by labels, no private address reachable, public HTTPS reachable.
+`Leftover` keeps its shape. The worker's stdout protocol decoder moves from `adapters/docker/protocol.go` to `internal/domain/worker.go` (`domain.DecodeWorkerLine(line, now) (*domain.Event, *domain.WorkerFinished, error)`, `domain.ErrNotWorkerLine` for other lines, `WorkerFinished.Result()` and `.Denials(now)`; event kinds `domain.EventAgentStarted|ToolCall|ToolResult|AgentMessage`), so the engine relays events with no adapter-specific code. `porttest.Sandboxes` is the in-memory fake (`porttest.NewSandboxes(ExecFunc)`: a scripted function plays each command and sees the merged env; the fake enforces timeouts, kills on cancel and delete, and keeps the stderr tail) and `porttest/sandboxtest` the conformance suite every adapter passes (`sandboxtest.Run(t, func(*testing.T) sandboxtest.Harness)`; `sandboxtest.Script()` answers its commands on the fake): idempotent create, exec output and exit codes, stderr tail, streaming and kill on cancel, timeout, env per exec, working directory, delete ends commands and is idempotent, list by run and org, and, when the harness gives a `Network`, no private address reachable and public HTTPS reachable.
 
 **`internal/adapters/docker`** keeps today's hardening (non-root uid 1000, every capability dropped, no new privileges, init, CPU, memory and PID limits per size, labels `goal.org/factory/item/run/station/agent`) and drops the read-only root (the box's filesystem is writable; `/tmp` stays tmpfs). No mounts. It attaches the container to the agents' network (`GOAL_SANDBOX_NETWORK`, default `goal_agents`, created by compose) and sets the proxy variables to `goal-egress`. Exec is `docker exec` with stdout and stderr attached; `Delete` is `rm -f`.
 

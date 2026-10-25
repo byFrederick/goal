@@ -7,7 +7,7 @@
 // secrets) into it, has AgentFiles write the agent's prompt, skills and output schema into its
 // agent/ folder, and mounts the folder read-only at /goal. The run's workspace (an already
 // prepared git checkout) is mounted read-write at /workspace. The worker reports progress and
-// its result as JSON lines on stdout (protocol.go). worker/README.md describes the whole
+// its result as JSON lines on stdout (domain.DecodeWorkerLine). worker/README.md describes the whole
 // contract from the container's side.
 //
 // Networking (egress.go, ADR 0009): agent containers run on an internal network (<egress>-agents),

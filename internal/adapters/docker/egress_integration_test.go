@@ -227,7 +227,7 @@ func probes(events []ports.RunEvent) map[string]string {
 	out := map[string]string{}
 
 	for _, ev := range events {
-		if name, result, ok := strings.Cut(strings.TrimPrefix(fmt.Sprint(ev.Data["text"]), "probe "), "="); ok && ev.Kind == KindAgentMessage {
+		if name, result, ok := strings.Cut(strings.TrimPrefix(fmt.Sprint(ev.Data["text"]), "probe "), "="); ok && ev.Kind == domain.EventAgentMessage {
 			out[name] = result
 		}
 	}
