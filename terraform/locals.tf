@@ -21,6 +21,19 @@ locals {
       r2_location = "enam"
       # Google Cloud project of the sign-in OAuth client; project ids are global and permanent.
       google_project_id = "goal-byfrederick"
+      # The one repository whose workflows may plan and apply this stack (ci.tf, ADR 0010), by the
+      # ids GitHub puts in its OIDC tokens: a renamed or transferred repository keeps its id, and
+      # a new one with the old name gets another. The two GitHub environments of its workflows:
+      # plan holds read-only credentials, apply the write ones (deployable from main only).
+      github = {
+        repository    = "byFrederick/goal"
+        repository_id = "1431390907"
+        owner_id      = "43914037"
+        environments = {
+          plan  = "production-plan"
+          apply = "production"
+        }
+      }
       # The PlanetScale Postgres database (PS-5, one node, us-east), made in the Cloudflare
       # dashboard and billed through Cloudflare: its production branch is adopted, never created.
       # Goal's tables live in the PostgreSQL database `goal` on it (CREATE DATABASE goal OWNER
