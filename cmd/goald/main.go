@@ -30,6 +30,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/byFrederick/goal/internal/adapters/awssts"
+	"github.com/byFrederick/goal/internal/adapters/confluence"
 	"github.com/byFrederick/goal/internal/adapters/docker"
 	"github.com/byFrederick/goal/internal/adapters/envsecrets"
 	"github.com/byFrederick/goal/internal/adapters/gitdocs"
@@ -241,8 +242,8 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 // knowledgeIngestor is the knowledge base's ingestion loop (spec 4 §4.8): GOAL_KB_WORKERS
 // workers syncing due sources, uploads read from the bucket, embeddings from GOAL_EMBED_URL's
 // model or, without one, keyword search only. A synced source is read by its connection kind's
-// sync reader: gitdocs (GitHub and GitLab repositories) through the public-only transport;
-// confluence joins it in 4-19, until when such a source fails saying so.
+// sync reader through the public-only transport: gitdocs (GitHub and GitLab repositories) or
+// confluence (the spaces of a Confluence Cloud site).
 func knowledgeIngestor(s settings, store *postgres.Store, connections *postgres.Connections, objects ports.ObjectStore,
 	clock ports.Clock, log *slog.Logger,
 ) *knowledge.Ingestor {
@@ -266,10 +267,14 @@ func knowledgeIngestor(s settings, store *postgres.Store, connections *postgres.
 		}
 	}
 
+	readers := map[string]ports.SourceReader{
+		"gitdocs":    gitdocs.New(gitdocs.Config{Transport: connectionTransport(s.AllowPrivateUpstreams)}),
+		"confluence": confluence.New(confluence.Config{Transport: connectionTransport(s.AllowPrivateUpstreams)}),
+	}
+
 	return knowledge.NewIngestor(knowledge.IngestorConfig{
 		Knowledge: kb, Orgs: store, Connections: connections, Uploads: knowledge.NewUploads(kb, objects, 0),
-		Readers:  map[string]ports.SourceReader{"gitdocs": gitdocs.New(gitdocs.Config{Transport: connectionTransport(s.AllowPrivateUpstreams)})},
-		Embedder: embedder, Clock: clock, Log: log, Workers: s.KBWorkers,
+		Readers: readers, Embedder: embedder, Clock: clock, Log: log, Workers: s.KBWorkers,
 	})
 }
 
