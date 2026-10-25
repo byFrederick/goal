@@ -38,13 +38,16 @@ import type {
   ItemEvent,
   ItemFlow,
   ItemPage,
+  ItemTouches,
   NoteReceipt,
   Org,
   OrgAttention,
   OrgRole,
   OrgSettings,
+  OrgTouchMetrics,
   RunList,
   StreamEvent,
+  TouchMetrics,
 } from '@goal/api-client';
 import { authSettings, createMockAuth } from './auth.ts';
 import { createDefinitions } from './definitions.ts';
@@ -63,6 +66,7 @@ import { constraintOf, type DayRange, type FlowInput, leadTimeOf, metricsOf, ran
 import { createKeys } from './keys.ts';
 import { membersFor, orgCanOf } from './people.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
+import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
 
 type Next = (err?: unknown) => void;
 
@@ -88,6 +92,8 @@ const dayMs = 86_400_000;
 
 /** The UTC date `offset` days before `now`'s day. */
 const utcDay = (offset: number, now: number) => new Date(now - offset * dayMs).toISOString().slice(0, 10);
+/** The UTC day of a midnight in ms, as YYYY-MM-DD. */
+const utcDayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
 const cents = (usd: number) => Math.round(usd * 100) / 100;
 
@@ -222,6 +228,129 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       summary: summaryOf(it),
       in_buffer: (it.state === 'queued' || it.state === 'ready') && it.station === state.constraint[it.factory],
       rope_held: false,
+      touch_count: itemTouches(it).length,
+    };
+  };
+
+  /** An item's human touches, from its events and the reasons people set. */
+  const itemTouches = (it: MockItem) =>
+    touchesOf(
+      state.events.filter((e) => e.item_id === it.id),
+      state.touchReasons,
+    );
+
+  /** Item.touches, as GET of one item has it. */
+  const itemTouchesOf = (it: MockItem): ItemTouches => {
+    const list = itemTouches(it);
+    const planned = list.filter((t) => t.planned).length;
+    return { count: list.length, planned, unplanned: list.length - planned, list };
+  };
+
+  /** The factory's published version that ran at `at`: the newest published by then, else the first. */
+  const versionAt = (f: Factory, at: number): MockFinished['version'] => {
+    const published = (state.definitions[f.id]?.versions ?? []).filter((v) => v.number !== null && v.published_at);
+    const v = published.findLast((p) => Date.parse(p.published_at ?? '') <= at) ?? published[0];
+    return v?.number ? { id: v.id, number: v.number } : null;
+  };
+
+  /** The factory's finished items of type ("" for every type) as the touch metrics read them. */
+  const finishedOf = (f: Factory, type = ''): MockFinished[] => {
+    const history = (state.history[f.name] ?? []).map(
+      (d): MockFinished => ({
+        type: d.type,
+        done_at: d.done_at,
+        version: versionAt(f, d.done_at),
+        touches: d.touches ?? [],
+      }),
+    );
+    const own = state.items
+      .filter((it) => it.factory === f.name && it.done_at)
+      .map((it): MockFinished => {
+        const done = Date.parse(it.done_at ?? '');
+        return { type: it.type, done_at: done, version: versionAt(f, done), touches: itemTouches(it) };
+      });
+    return [...history, ...own].filter((d) => !type || d.type === type);
+  };
+
+  /** The andon pulls people made on f in [from, until). */
+  const lineStopsOf = (f: Factory, from: number, until: number) =>
+    (state.andon[f.name] ?? []).filter(
+      (p) => p.pulled_by.startsWith('user:') && Date.parse(p.pulled_at) >= from && Date.parse(p.pulled_at) < until,
+    ).length;
+
+  /** GET …/metrics/touches of f, or why it is refused. */
+  const touchMetricsOf = (f: Factory, params: URLSearchParams): TouchMetrics | { status: number; detail: string } => {
+    const now = clock();
+    const range = rangeOf(params, now);
+    if (typeof range === 'string' || params.has('window'))
+      return { status: 400, detail: typeof range === 'string' ? range : 'a range is from and to' };
+    const weeks = params.has('weeks') ? Number(params.get('weeks')) : 12;
+    if (!Number.isInteger(weeks) || weeks < 1 || weeks > 26) return { status: 400, detail: 'weeks must be in [1, 26]' };
+    const type = params.get('type') ?? '';
+    if (type && f.work_types.length > 0 && !f.work_types.includes(type)) {
+      return { status: 400, detail: `factory ${f.name} has no work type "${type}"` };
+    }
+    const asked = params.get('version');
+    let version: number | null = null;
+    if (asked !== null) {
+      const def = state.definitions[f.id];
+      const number = asked === 'current' ? def?.versions.find((v) => v.id === def.current)?.number : Number(asked);
+      if (asked !== 'current' && (!Number.isInteger(number) || (number ?? 0) < 1)) {
+        return { status: 400, detail: `version "${asked}" is not a number or current` };
+      }
+      if (!number || !def?.versions.some((v) => v.number === number))
+        return { status: 404, detail: `version ${asked} not found` };
+      version = number;
+    }
+    const items = finishedOf(f, type).filter((d) => version === null || d.version?.number === version);
+    const until = Math.min(range.to + dayMs, now);
+    const end = range.to + dayMs;
+    return {
+      from: utcDayOf(range.from),
+      to: utcDayOf(range.to),
+      type: type || null,
+      version,
+      stats: touchStatsOf(finishedIn(items, range.from, until), lineStopsOf(f, range.from, until)),
+      weekly: Array.from({ length: weeks }, (_, i) => {
+        const from = end - (weeks - i) * 7 * dayMs;
+        const h = touchHeadlineOf(finishedIn(items, from, from + 7 * dayMs));
+        return {
+          from: utcDayOf(from),
+          to: utcDayOf(from + 6 * dayMs),
+          finished: h.finished,
+          per_item_mean: h.per_item_mean,
+          touchless_rate: h.touchless_rate,
+        };
+      }),
+    };
+  };
+
+  /** GET /metrics/touches of org: its total and each factory, in name order. */
+  const orgTouchMetricsOf = (orgId: string, params: URLSearchParams): OrgTouchMetrics | string => {
+    const now = clock();
+    const range = rangeOf(params, now);
+    if (typeof range === 'string') return range;
+    if (params.has('window')) return 'a range is from and to';
+    const until = Math.min(range.to + dayMs, now);
+    const fs = factoriesOf(orgId).sort((x, y) => x.name.localeCompare(y.name));
+    const each = fs.map((f) => ({
+      f,
+      items: finishedIn(finishedOf(f), range.from, until),
+      stops: lineStopsOf(f, range.from, until),
+    }));
+    return {
+      from: utcDayOf(range.from),
+      to: utcDayOf(range.to),
+      total: touchStatsOf(
+        each.flatMap((e) => e.items),
+        each.reduce((n, e) => n + e.stops, 0),
+      ),
+      factories: each.map(({ f, items, stops }) => ({
+        factory_id: f.id,
+        name: f.name,
+        ...(f.title ? { title: f.title } : {}),
+        stats: touchStatsOf(items, stops),
+      })),
     };
   };
 
@@ -586,6 +715,12 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       },
       spend_usd: metrics.spend_usd,
       budget_usd: weekly === null ? null : cents((weekly * days) / 7),
+      touches: {
+        current: touchHeadlineOf(finishedIn(finishedOf(f), today - (days - 1) * dayMs, clock())),
+        previous: touchHeadlineOf(
+          finishedIn(finishedOf(f), today - (2 * days - 1) * dayMs, today - (days - 1) * dayMs),
+        ),
+      },
     };
   };
 
@@ -831,6 +966,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return {
       status: andon ? 'stopped' : 'running',
       andon,
+      touches: touchHeadlineOf(finishedIn(finishedOf(factory), today - 6 * dayMs, clock())),
       wip: {
         in_progress: limited.reduce((n, s) => n + s.in_progress, 0),
         limit: limited.length > 0 ? limited.reduce((n, s) => n + (s.wip_limit ?? 0), 0) : null,
@@ -1135,6 +1271,11 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return json(res, 200, body);
     }
 
+    if (rest === '/metrics/touches' && method === 'GET') {
+      const body = orgTouchMetricsOf(org.id, url.searchParams);
+      return typeof body === 'string' ? problem(res, 400, 'Bad Request', body) : json(res, 200, body);
+    }
+
     if (rest === '/inbox' && method === 'GET') {
       const limit = Number(url.searchParams.get('limit') ?? 200);
       if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
@@ -1186,7 +1327,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     }
 
     m = rest.match(
-      /^\/factories\/([^/]+)\/(board|items|constraint|metrics|metrics\/weekly|metrics\/lead-time|andon|andon\/clear)$/,
+      /^\/factories\/([^/]+)\/(board|items|constraint|metrics|metrics\/weekly|metrics\/lead-time|metrics\/touches|andon|andon\/clear)$/,
     );
     if (m) {
       const key = decodeURIComponent(m[1] ?? '');
@@ -1202,6 +1343,12 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         return typeof range === 'string'
           ? problem(res, 400, 'Bad Request', range)
           : json(res, 200, constraintReport(factory, range));
+      }
+      if (m[2] === 'metrics/touches' && method === 'GET') {
+        const body = touchMetricsOf(factory, url.searchParams);
+        if ('status' in body)
+          return problem(res, body.status, body.status === 404 ? 'Not Found' : 'Bad Request', body.detail);
+        return json(res, 200, body);
       }
       if (m[2]?.startsWith('metrics') && method === 'GET') {
         const type = url.searchParams.get('type') ?? '';
@@ -1286,6 +1433,36 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return json(res, 200, run);
     }
 
+    m = rest.match(/^\/items\/([^/]+)\/touches\/([^/]+)\/reason$/);
+    if (m) {
+      const of = findItem(decodeURIComponent(m[1] ?? ''), org.id);
+      if (!of) return problem(res, 404, 'Item not found', decodeURIComponent(m[1] ?? ''), 'item-not-found');
+      if (method !== 'PUT') return problem(res, 405, 'Method not allowed');
+      const body = await readBody(req);
+      const reason = touchReasons.find((r) => r === body.reason);
+      if (!reason)
+        return problem(res, 400, 'Bad Request', 'reason is missing_knowledge, wrong_decision, required_gate or other');
+      const event = Number(m[2]);
+      if (!itemTouches(of).some((t) => t.event_id === event)) {
+        return problem(res, 404, 'Not Found', `event ${m[2]} is no touch of ${ref(of)}`, 'touch-not-found');
+      }
+      state.touchReasons[event] = { reason, by: 'user:local' };
+      state.audit.push({
+        org: org.id,
+        entry: {
+          id: state.nextAuditId++,
+          at: new Date(clock()).toISOString(),
+          actor: { kind: 'user', id: 'local', name: localUser },
+          action: 'touch.labelled',
+          target: { kind: 'item', id: of.id },
+          factory_id: findFactory(of.factory)?.id ?? '',
+          data: { event_id: event, reason },
+        },
+      });
+      res.writeHead(204);
+      return res.end();
+    }
+
     m = rest.match(/^\/items\/([^/]+)(?:\/(events|runs|notes|approve|reject|merge|retry|move|pause))?$/);
     if (!m) return problem(res, 404, 'Not found', path);
 
@@ -1293,7 +1470,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (!it) return problem(res, 404, 'Item not found', decodeURIComponent(m[1] ?? ''));
     const action = m[2];
 
-    if (!action && method === 'GET') return json(res, 200, { ...full(it), flow: flowOf(it) });
+    if (!action && method === 'GET')
+      return json(res, 200, { ...full(it), flow: flowOf(it), touches: itemTouchesOf(it) });
     if (action === 'events' && method === 'GET') {
       const after = Number(url.searchParams.get('after') ?? 0);
       const limit = Math.min(1000, Number(url.searchParams.get('limit') ?? 200));
@@ -1327,7 +1505,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       if (it.state !== 'blocked') return problem(res, 409, 'Item is not blocked', `${ref(it)} is ${it.state}`);
       const kind = stations[index]?.kind;
       it.state = kind === 'human' ? 'waiting_human' : 'queued';
-      emit(it, 'retried', by);
+      emit(it, 'retried', by, { actor: 'user:local' });
       return json(res, 200, full(it));
     }
 
@@ -1378,7 +1556,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         return problem(res, 409, 'Conflict', `${ref(it)} cannot be sent back now`, 'cannot-send-back');
       }
       take('reject');
-      emit(it, 'rejected', by, { reason });
+      emit(it, 'rejected', by, { reason, planned: false, actor: 'user:local' });
       it.rework_count += 1;
       moveTo(it, back.id, by);
       return json(res, 200, full(it));
@@ -1394,11 +1572,12 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         if (station?.action !== 'merge')
           return problem(res, 409, 'Not a merge station', `${it.station} does not merge`);
         if (!it.pr_url) return problem(res, 409, 'Nothing to merge', `${ref(it)} has no pull request`);
-        emit(it, 'merged', by, { pull_request: it.pr_url, method: 'squash' });
+        emit(it, 'merged', by, { pull_request: it.pr_url, method: 'squash', planned: true, actor: 'user:local' });
       } else if (station?.action === 'merge') {
         return problem(res, 409, 'Merge, do not approve', `${it.station} merges the pull request; use merge`);
       }
-      emit(it, 'approved', by);
+      // At a human station the line requires the approval; a gate's escalation it does not.
+      emit(it, 'approved', by, { planned: station?.kind === 'human', actor: 'user:local' });
       moveTo(it, stations[index + 1]?.id ?? it.station, by);
       return json(res, 200, full(it));
     }

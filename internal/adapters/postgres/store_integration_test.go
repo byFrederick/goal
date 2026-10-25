@@ -56,6 +56,11 @@ func TestStore_Conformance(t *testing.T) {
 					t.Fatalf("UpdateOrg slot caps: %v", err)
 				}
 			},
+			NewVersion: func(t *testing.T, org domain.OrgID, factory domain.FactoryID) domain.DefinitionVersionID {
+				t.Helper()
+
+				return newPublishedVersion(t, s.pool, org, factory)
+			},
 		}
 	})
 }
@@ -313,6 +318,28 @@ func legacyFactory(t *testing.T, pool *pgxpool.Pool, org domain.OrgID, id domain
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// newPublishedVersion inserts the next published definition version of factory in org, with an
+// empty manifest: what a run's definition_version_id references.
+func newPublishedVersion(t *testing.T, pool *pgxpool.Pool, org domain.OrgID, factory domain.FactoryID) domain.DefinitionVersionID {
+	t.Helper()
+
+	id := newUUID(t)
+
+	err := inOrgTx(t, pool, org, func(tx pgx.Tx) error {
+		_, err := tx.Exec(t.Context(), `
+			INSERT INTO definition_versions (id, factory_id, state, number, manifest, created_by, updated_by, published_by, published_at)
+			SELECT $1, $2, 'published', coalesce(max(number), 0) + 1, '{}', 'user:local', 'user:local', 'user:local', now()
+			FROM definition_versions WHERE factory_id = $2`, id, string(factory))
+
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return domain.DefinitionVersionID(id)
 }
 
 // leaseSpans reads an item's lease spans straight from lease_spans in the organization of ctx, in

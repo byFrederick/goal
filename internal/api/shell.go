@@ -114,6 +114,12 @@ func (s *server) GetFactoryOverview(ctx context.Context, req gen.GetFactoryOverv
 	}
 
 	fs := s.visibleFactories(ctx)
+
+	touches, err := s.overviewTouches(ctx, fs, w, now)
+	if err != nil {
+		return nil, err
+	}
+
 	out := gen.GetFactoryOverview200JSONResponse{
 		Window: w.name(), Since: openapi_types.Date{Time: w.from}, Until: openapi_types.Date{Time: w.to},
 		Factories: make([]gen.FactoryOverview, 0, len(fs)),
@@ -124,6 +130,8 @@ func (s *server) GetFactoryOverview(ctx context.Context, req gen.GetFactoryOverv
 		if err != nil {
 			return nil, err
 		}
+
+		o.Touches = touches[domain.FactoryID(f.Metadata.ID)]
 
 		out.WaitingOnYou += o.Waiting.OnYou
 		out.SpendUsd += o.SpendUsd
@@ -140,6 +148,31 @@ func (s *server) GetFactoryOverview(ctx context.Context, req gen.GetFactoryOverv
 	if took := time.Since(started); took > slowOverview || len(fs) > overviewFactories {
 		s.log.WarnContext(ctx, "slow factory overview", slog.String("org_id", string(orgOf(ctx).ID)),
 			slog.Int("factories", len(fs)), slog.Duration("took", took))
+	}
+
+	return out, nil
+}
+
+// overviewTouches is the touch headline of each of fs over the window w against the window before.
+func (s *server) overviewTouches(ctx context.Context, fs []*config.Factory, w dayRange, now time.Time) (map[domain.FactoryID]gen.TouchTrend, error) {
+	ids := make([]domain.FactoryID, 0, len(fs))
+	for _, f := range fs {
+		ids = append(ids, domain.FactoryID(f.Metadata.ID))
+	}
+
+	_, cur, err := s.items.OrgTouches(ctx, ids, w.query("", "", now))
+	if err != nil {
+		return nil, err
+	}
+
+	_, prev, err := s.items.OrgTouches(ctx, ids, w.before().query("", "", now))
+	if err != nil {
+		return nil, err
+	}
+
+	out := make(map[domain.FactoryID]gen.TouchTrend, len(ids))
+	for i, id := range ids {
+		out[id] = gen.TouchTrend{Current: touchHeadline(cur[i].TouchStats), Previous: touchHeadline(prev[i].TouchStats)}
 	}
 
 	return out, nil

@@ -49,7 +49,8 @@ func (e *Engine) Merge(ctx context.Context, id domain.ItemID, by domain.Actor, m
 		return domain.Item{}, fmt.Errorf("merge %s: %w", id, err)
 	}
 
-	merged := map[string]any{"pull_request": url, "sha": pr.MergeSHA, "method": method, "branch_deleted": false}
+	// A merge at a merge station is a decision the line requires (spec 4 §4.9).
+	merged := map[string]any{"pull_request": url, "sha": pr.MergeSHA, "method": method, "branch_deleted": false, domain.KeyPlanned: true}
 
 	// Only the pull request's own branch, never a fork's or the branch it merged into.
 	if pr.SameRepository && pr.HeadBranch != "" && pr.HeadBranch != pr.BaseBranch {
@@ -64,7 +65,10 @@ func (e *Engine) Merge(ctx context.Context, id domain.ItemID, by domain.Actor, m
 	now := e.clock.Now()
 	t := ports.Transition{
 		ItemID: it.ID, From: it.Position(), At: now,
-		Events: []domain.Event{decision(it, domain.EventMerged, now, by, merged), decision(it, domain.EventApproved, now, by, nil)},
+		Events: []domain.Event{
+			decision(it, domain.EventMerged, now, by, merged),
+			decision(it, domain.EventApproved, now, by, map[string]any{domain.KeyPlanned: true}),
+		},
 	}
 
 	if err := e.advance(l, it, by.Name, &t); err != nil {

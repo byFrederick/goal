@@ -167,6 +167,20 @@ export type Inbox = Schemas["Inbox"];
 export type InboxEntry = Schemas["InboxEntry"];
 export type InboxEntryKind = Schemas["InboxEntryKind"];
 export type ApprovalBrief = Schemas["ApprovalBrief"];
+export type Touch = Schemas["Touch"];
+export type TouchReason = Schemas["TouchReason"];
+export type TouchReasonChange = Schemas["TouchReasonChange"];
+export type ItemTouches = Schemas["ItemTouches"];
+export type TouchHeadline = Schemas["TouchHeadline"];
+export type TouchTrend = Schemas["TouchTrend"];
+export type TouchCount = Schemas["TouchCount"];
+export type TouchReasonCount = Schemas["TouchReasonCount"];
+export type VersionTouches = Schemas["VersionTouches"];
+export type TouchStats = Schemas["TouchStats"];
+export type TouchWeek = Schemas["TouchWeek"];
+export type TouchMetrics = Schemas["TouchMetrics"];
+export type OrgTouchMetrics = Schemas["OrgTouchMetrics"];
+export type FactoryTouchMetrics = Schemas["FactoryTouchMetrics"];
 
 /** createGoalClient returns a typed fetch client for goald at baseUrl ("" for the same origin). */
 export function createGoalClient(baseUrl: string, options: Omit<ClientOptions, "baseUrl"> = {}) {

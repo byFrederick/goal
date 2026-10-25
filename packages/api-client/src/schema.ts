@@ -535,6 +535,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/metrics/touches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Human touches per finished item across the factories the caller may read
+         * @description A touch is one action by a person on an item: its events with the same person and the same time (one transition) count once; API keys, agents and the engine never touch, and the submission (created) is not one. Planned touches are decisions the line requires (an approval or merge at a human station); every other touch is unplanned. Over a range of UTC days as for getMetrics: the items finished (done) in the range, the organization's total and each factory the caller may read, in name order. 400 for a bad range.
+         */
+        get: operations["getOrgTouchMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/inbox": {
         parameters: {
             query?: never;
@@ -1295,6 +1318,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/metrics/touches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Human touches per finished item of the line, over a range of UTC days
+         * @description A touch is one action by a person on an item: its events with the same person and the same time (one transition) count once; API keys, agents and the engine never touch, and the submission (created) is not one. Planned touches are decisions the line requires (an approval or merge at a human station); every other touch is unplanned. The items count when they reached done in the range (as for getMetrics); an item counts for the definition version of its last agent run. weekly is the same headline in each of the `weeks` seven-day weeks ending on `to`. 400 for a bad range, weeks outside 1 to 26, a type the factory does not declare or a version that is no number nor current; 404 for a version the factory never published.
+         */
+        get: operations["getTouchMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/agents/{agent}/stats": {
         parameters: {
             query?: never;
@@ -1481,6 +1529,33 @@ export interface paths {
          * @description The note is recorded as the item's event (kind note) and carried by the brief of the item's next run, at whatever station, under "Notes from people". A note on a done or cancelled item is refused with 409 item-closed.
          */
         post: operations["noteItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/items/{item}/touches/{event}/reason": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+                /** @description The touch's event_id, as Item.touches lists it */
+                event: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Say why a person had to act on an item
+         * @description Sets or changes the reason of one of the item's touches, audited as touch.labelled; it is no item event, so it is not a touch itself. 404 touch-not-found for an event that is not one of the item's touches.
+         */
+        put: operations["setTouchReason"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1737,7 +1812,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -2254,6 +2329,167 @@ export interface components {
             /** Format: date-time */
             done_at?: string;
             flow?: components["schemas"]["ItemFlow"];
+            /** @description The item's human touches; getItem only */
+            touches?: components["schemas"]["ItemTouches"];
+        };
+        ItemTouches: {
+            count: number;
+            /** @description Decisions the line requires (an approval or merge at a human station) */
+            planned: number;
+            unplanned: number;
+            /** @description The touches in time order */
+            list: components["schemas"]["Touch"][];
+        };
+        /** @description One action by a person on an item, named by its most specific event */
+        Touch: {
+            /**
+             * Format: int64
+             * @description The naming event; its reason is set by setTouchReason
+             */
+            event_id: number;
+            /** @description The naming event's kind: merged, rejected, approved, moved, paused, retried, note, ... */
+            kind: string;
+            station: string | null;
+            /** Format: date-time */
+            at: string;
+            actor: components["schemas"]["Actor"];
+            planned: boolean;
+            /** @description Why the person had to act; planned touches start as required_gate, others with none */
+            reason: components["schemas"]["TouchReason"] | null;
+            /** @description Who set the reason (user:<id>); null for the planned default or none */
+            reason_by: string | null;
+        };
+        /** @enum {string} */
+        TouchReason: "missing_knowledge" | "wrong_decision" | "required_gate" | "other";
+        TouchReasonChange: {
+            reason: components["schemas"]["TouchReason"];
+        };
+        /** @description Human touches of the items finished in a window, in brief */
+        TouchHeadline: {
+            /** @description Items finished (done) in the window */
+            finished: number;
+            /**
+             * Format: double
+             * @description Touches per finished item; 0 when none finished
+             */
+            per_item_mean: number;
+            /** Format: double */
+            per_item_median: number;
+            /**
+             * Format: double
+             * @description Share of the finished items no person touched
+             */
+            touchless_rate: number;
+        };
+        TouchTrend: {
+            current: components["schemas"]["TouchHeadline"];
+            /** @description The window of the same length just before */
+            previous: components["schemas"]["TouchHeadline"];
+        };
+        TouchCount: {
+            /** @description A station or an event kind; "" for touches with no station */
+            key: string;
+            touches: number;
+            planned: number;
+            unplanned: number;
+        };
+        TouchReasonCount: {
+            /** @description null for the touches no reason was set on */
+            reason: components["schemas"]["TouchReason"] | null;
+            touches: number;
+            planned: number;
+            unplanned: number;
+        };
+        /** @description The items whose last agent run ran on one definition version */
+        VersionTouches: {
+            /** @description null for the items no agent ran */
+            version_id: string | null;
+            number: number | null;
+            finished: number;
+            touches: number;
+            /** Format: double */
+            touchless_rate: number;
+            /** Format: double */
+            per_item_mean: number;
+            /** Format: double */
+            planned_per_item: number;
+            /** Format: double */
+            unplanned_per_item: number;
+        };
+        TouchStats: {
+            /** @description Items finished (done) in the range */
+            finished: number;
+            touches: number;
+            planned: number;
+            unplanned: number;
+            /**
+             * Format: double
+             * @description Share of the finished items no person touched; 0 when none finished
+             */
+            touchless_rate: number;
+            /** Format: double */
+            per_item_mean: number;
+            /** Format: double */
+            per_item_median: number;
+            /** Format: double */
+            planned_per_item: number;
+            /** Format: double */
+            unplanned_per_item: number;
+            /** @description By the station the touch happened at, the most touches first */
+            by_station: components["schemas"]["TouchCount"][];
+            /** @description By the touch's kind, the most touches first */
+            by_kind: components["schemas"]["TouchCount"][];
+            /** @description By reason, the most touches first */
+            by_reason: components["schemas"]["TouchReasonCount"][];
+            /** @description By the definition version of each item's last agent run, newest version first, items no agent ran last */
+            by_version: components["schemas"]["VersionTouches"][];
+            /** @description Andon pulls people made in the range: the line's, not an item's */
+            line_stops: number;
+        };
+        TouchWeek: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            finished: number;
+            /** Format: double */
+            per_item_mean: number;
+            /** Format: double */
+            touchless_rate: number;
+        };
+        TouchMetrics: {
+            /**
+             * Format: date
+             * @description The range's first UTC day
+             */
+            from: string;
+            /**
+             * Format: date
+             * @description The range's last UTC day
+             */
+            to: string;
+            /** @description The work type asked for; null for every type */
+            type: string | null;
+            /** @description The version number asked for; null for every version */
+            version: number | null;
+            stats: components["schemas"]["TouchStats"];
+            /** @description The headline in each of the weeks ending on to, oldest first */
+            weekly: components["schemas"]["TouchWeek"][];
+        };
+        OrgTouchMetrics: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            total: components["schemas"]["TouchStats"];
+            /** @description Each factory the caller may read, in name order */
+            factories: components["schemas"]["FactoryTouchMetrics"][];
+        };
+        FactoryTouchMetrics: {
+            factory_id: string;
+            name: string;
+            title?: string;
+            stats: components["schemas"]["TouchStats"];
         };
         /** @description How the item flows, on GET of one item only */
         ItemFlow: {
@@ -2346,6 +2582,8 @@ export interface components {
             in_buffer: boolean;
             /** @description Held at a queue station by the drum-buffer-rope release; always false until it is enforced */
             rope_held: boolean;
+            /** @description The item's human touches so far */
+            touch_count: number;
         };
         ItemPage: {
             items: components["schemas"]["ItemCard"][];
@@ -2374,6 +2612,8 @@ export interface components {
         ConstraintSource: "configured" | "detected" | "snapshot";
         /** @description The line as a whole: its work in progress against its limits, how work is released into it, its expedite lane and its weekly budget. The release policy and the expedite limit are shown as configured; goald does not enforce them yet (it releases as push). */
         BoardLine: {
+            /** @description Human touches of the items finished in the board's window */
+            touches: components["schemas"]["TouchHeadline"];
             /**
              * @description stopped while an andon pull is open: the line releases and claims nothing. A running line may still be paused (the factory's paused) or claim nothing over its budget (budget.exhausted).
              * @enum {string}
@@ -2947,6 +3187,8 @@ export interface components {
             factories: components["schemas"]["FactoryOverview"][];
         };
         FactoryOverview: {
+            /** @description Human touches of the items finished in the window against the window before */
+            touches: components["schemas"]["TouchTrend"];
             factory: components["schemas"]["Factory"];
             health: components["schemas"]["FactoryHealth"];
             /** @description The open andon pull, or null while the line runs */
@@ -4431,6 +4673,35 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    getOrgTouchMetrics: {
+        parameters: {
+            query?: {
+                /** @description The first UTC day of the range; 6 days before `to` when absent */
+                from?: components["parameters"]["RangeFrom"];
+                /** @description The last UTC day of the range, included; today when absent */
+                to?: components["parameters"]["RangeTo"];
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The organization's touch metrics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgTouchMetrics"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     getInbox: {
         parameters: {
             query?: {
@@ -5533,6 +5804,42 @@ export interface operations {
             };
         };
     };
+    getTouchMetrics: {
+        parameters: {
+            query?: {
+                /** @description The first UTC day of the range; 6 days before `to` when absent */
+                from?: components["parameters"]["RangeFrom"];
+                /** @description The last UTC day of the range, included; today when absent */
+                to?: components["parameters"]["RangeTo"];
+                /** @description Only items of this work type (one the factory declares); every type when absent */
+                type?: components["parameters"]["WorkTypeFilter"];
+                weeks?: number;
+                /** @description Only the items whose last agent run ran on this version, by number (12) or current */
+                version?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The line's touch metrics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TouchMetrics"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     getAgentStats: {
         parameters: {
             query?: {
@@ -5790,6 +6097,36 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["NoteReceipt"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    setTouchReason: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+                /** @description The touch's event_id, as Item.touches lists it */
+                event: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TouchReasonChange"];
+            };
+        };
+        responses: {
+            /** @description The reason is set */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };

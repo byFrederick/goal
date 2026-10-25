@@ -884,6 +884,32 @@ getOrgSettings       pat-demoted      200                      404 org-not-found
 getOrgSettings       pat-removed      401 unauthenticated      401 unauthenticated
 getOrgSettings       pat-platform     200                      404 org-not-found
 getOrgSettings       pat-deleted-org  401 unauthenticated      401 unauthenticated
+getOrgTouchMetrics   anonymous        401 unauthenticated      401 unauthenticated
+getOrgTouchMetrics   owner            200                      404 org-not-found
+getOrgTouchMetrics   admin            200                      404 org-not-found
+getOrgTouchMetrics   viewer           200                      404 org-not-found
+getOrgTouchMetrics   approver         200                      404 org-not-found
+getOrgTouchMetrics   editor           200                      404 org-not-found
+getOrgTouchMetrics   member-no-roles  200                      404 org-not-found
+getOrgTouchMetrics   other-org-owner  404 org-not-found        200
+getOrgTouchMetrics   platform-admin   404 org-not-found        404 org-not-found
+getOrgTouchMetrics   stale-owner      200                      404 org-not-found
+getOrgTouchMetrics   key-scoped       200                      404 org-not-found
+getOrgTouchMetrics   key-restricted   200                      404 org-not-found
+getOrgTouchMetrics   key-other-org    404 org-not-found        200
+getOrgTouchMetrics   key-expired      401 unauthenticated      401 unauthenticated
+getOrgTouchMetrics   key-revoked      401 unauthenticated      401 unauthenticated
+getOrgTouchMetrics   bearer-owner     200                      404 org-not-found
+getOrgTouchMetrics   pat-approver     403 forbidden            404 org-not-found
+getOrgTouchMetrics   pat-owner        200                      404 org-not-found
+getOrgTouchMetrics   pat-viewer       200                      404 org-not-found
+getOrgTouchMetrics   pat-other-org    404 org-not-found        200
+getOrgTouchMetrics   pat-expired      401 unauthenticated      401 unauthenticated
+getOrgTouchMetrics   pat-revoked      401 unauthenticated      401 unauthenticated
+getOrgTouchMetrics   pat-demoted      200                      404 org-not-found
+getOrgTouchMetrics   pat-removed      401 unauthenticated      401 unauthenticated
+getOrgTouchMetrics   pat-platform     200                      404 org-not-found
+getOrgTouchMetrics   pat-deleted-org  401 unauthenticated      401 unauthenticated
 getRun               anonymous        401 unauthenticated      401 unauthenticated
 getRun               owner            200                      404 org-not-found
 getRun               admin            200                      404 org-not-found
@@ -962,6 +988,32 @@ getTemplate          pat-demoted      200                      404 org-not-found
 getTemplate          pat-removed      401 unauthenticated      401 unauthenticated
 getTemplate          pat-platform     200                      404 org-not-found
 getTemplate          pat-deleted-org  401 unauthenticated      401 unauthenticated
+getTouchMetrics      anonymous        401 unauthenticated      401 unauthenticated
+getTouchMetrics      owner            200                      404 org-not-found
+getTouchMetrics      admin            200                      404 org-not-found
+getTouchMetrics      viewer           200                      404 org-not-found
+getTouchMetrics      approver         200                      404 org-not-found
+getTouchMetrics      editor           200                      404 org-not-found
+getTouchMetrics      member-no-roles  404 factory-not-found    404 org-not-found
+getTouchMetrics      other-org-owner  404 org-not-found        200
+getTouchMetrics      platform-admin   404 org-not-found        404 org-not-found
+getTouchMetrics      stale-owner      200                      404 org-not-found
+getTouchMetrics      key-scoped       200                      404 org-not-found
+getTouchMetrics      key-restricted   404 factory-not-found    404 org-not-found
+getTouchMetrics      key-other-org    404 org-not-found        200
+getTouchMetrics      key-expired      401 unauthenticated      401 unauthenticated
+getTouchMetrics      key-revoked      401 unauthenticated      401 unauthenticated
+getTouchMetrics      bearer-owner     200                      404 org-not-found
+getTouchMetrics      pat-approver     200                      404 org-not-found
+getTouchMetrics      pat-owner        200                      404 org-not-found
+getTouchMetrics      pat-viewer       200                      404 org-not-found
+getTouchMetrics      pat-other-org    404 org-not-found        200
+getTouchMetrics      pat-expired      401 unauthenticated      401 unauthenticated
+getTouchMetrics      pat-revoked      401 unauthenticated      401 unauthenticated
+getTouchMetrics      pat-demoted      404 factory-not-found    404 org-not-found
+getTouchMetrics      pat-removed      401 unauthenticated      401 unauthenticated
+getTouchMetrics      pat-platform     200                      404 org-not-found
+getTouchMetrics      pat-deleted-org  401 unauthenticated      401 unauthenticated
 getVersion           anonymous        401 unauthenticated      401 unauthenticated
 getVersion           owner            200                      404 org-not-found
 getVersion           admin            200                      404 org-not-found
@@ -2080,6 +2132,32 @@ setFactoryRole       pat-demoted      403 forbidden            404 org-not-found
 setFactoryRole       pat-removed      401 unauthenticated      401 unauthenticated
 setFactoryRole       pat-platform     403 forbidden            404 org-not-found
 setFactoryRole       pat-deleted-org  401 unauthenticated      401 unauthenticated
+setTouchReason       anonymous        401 unauthenticated      401 unauthenticated
+setTouchReason       owner            200                      404 org-not-found
+setTouchReason       admin            200                      404 org-not-found
+setTouchReason       viewer           403 forbidden            404 org-not-found
+setTouchReason       approver         200                      404 org-not-found
+setTouchReason       editor           200                      404 org-not-found
+setTouchReason       member-no-roles  404 item-not-found       404 org-not-found
+setTouchReason       other-org-owner  404 org-not-found        200
+setTouchReason       platform-admin   404 org-not-found        404 org-not-found
+setTouchReason       stale-owner      200                      404 org-not-found
+setTouchReason       key-scoped       403 forbidden            404 org-not-found
+setTouchReason       key-restricted   404 item-not-found       404 org-not-found
+setTouchReason       key-other-org    404 org-not-found        200
+setTouchReason       key-expired      401 unauthenticated      401 unauthenticated
+setTouchReason       key-revoked      401 unauthenticated      401 unauthenticated
+setTouchReason       bearer-owner     200                      404 org-not-found
+setTouchReason       pat-approver     403 forbidden            404 org-not-found
+setTouchReason       pat-owner        200                      404 org-not-found
+setTouchReason       pat-viewer       403 forbidden            404 org-not-found
+setTouchReason       pat-other-org    404 org-not-found        200
+setTouchReason       pat-expired      401 unauthenticated      401 unauthenticated
+setTouchReason       pat-revoked      401 unauthenticated      401 unauthenticated
+setTouchReason       pat-demoted      404 item-not-found       404 org-not-found
+setTouchReason       pat-removed      401 unauthenticated      401 unauthenticated
+setTouchReason       pat-platform     200                      404 org-not-found
+setTouchReason       pat-deleted-org  401 unauthenticated      401 unauthenticated
 streamEvents         anonymous        401 unauthenticated      401 unauthenticated
 streamEvents         owner            200                      404 org-not-found
 streamEvents         admin            200                      404 org-not-found

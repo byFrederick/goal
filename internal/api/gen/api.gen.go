@@ -758,6 +758,30 @@ func (e TemplateStartKind) Valid() bool {
 	}
 }
 
+// Defines values for TouchReason.
+const (
+	TouchReasonMissingKnowledge TouchReason = "missing_knowledge"
+	TouchReasonOther            TouchReason = "other"
+	TouchReasonRequiredGate     TouchReason = "required_gate"
+	TouchReasonWrongDecision    TouchReason = "wrong_decision"
+)
+
+// Valid indicates whether the value is a known member of the TouchReason enum.
+func (e TouchReason) Valid() bool {
+	switch e {
+	case TouchReasonMissingKnowledge:
+		return true
+	case TouchReasonOther:
+		return true
+	case TouchReasonRequiredGate:
+		return true
+	case TouchReasonWrongDecision:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for VersionSourceKind.
 const (
 	VersionSourceKindBlank    VersionSourceKind = "blank"
@@ -1100,6 +1124,9 @@ type BoardLine struct {
 
 	// Status stopped while an andon pull is open: the line releases and claims nothing. A running line may still be paused (the factory's paused) or claim nothing over its budget (budget.exhausted).
 	Status BoardLineStatus `json:"status"`
+
+	// Touches Human touches of the items finished in the board's window
+	Touches TouchHeadline `json:"touches"`
 
 	// Wip Items in progress or waiting on a person at the stations with a wip limit, and the sum of those limits (null when no station has one)
 	Wip LineWip `json:"wip"`
@@ -1672,9 +1699,12 @@ type FactoryOverview struct {
 	Health FactoryHealth `json:"health"`
 
 	// SpendUsd Cost of the agent runs started in the window
-	SpendUsd   float64        `json:"spend_usd"`
-	Throughput Throughput     `json:"throughput"`
-	Waiting    WaitingSummary `json:"waiting"`
+	SpendUsd   float64    `json:"spend_usd"`
+	Throughput Throughput `json:"throughput"`
+
+	// Touches Human touches of the items finished in the window against the window before
+	Touches TouchTrend     `json:"touches"`
+	Waiting WaitingSummary `json:"waiting"`
 }
 
 // FactoryOverviewList defines model for FactoryOverviewList.
@@ -1733,6 +1763,14 @@ type FactorySlotsPatch struct {
 // FactoryStart Where the new factory's first draft comes from
 type FactoryStart struct {
 	union json.RawMessage
+}
+
+// FactoryTouchMetrics defines model for FactoryTouchMetrics.
+type FactoryTouchMetrics struct {
+	FactoryId string     `json:"factory_id"`
+	Name      string     `json:"name"`
+	Stats     TouchStats `json:"stats"`
+	Title     *string    `json:"title,omitempty"`
 }
 
 // FileChange defines model for FileChange.
@@ -1914,8 +1952,11 @@ type Item struct {
 	State       ItemState `json:"state"`
 	Station     string    `json:"station"`
 	Title       string    `json:"title"`
-	Type        string    `json:"type"`
-	UpdatedAt   time.Time `json:"updated_at"`
+
+	// Touches The item's human touches; getItem only
+	Touches   *ItemTouches `json:"touches,omitempty"`
+	Type      string       `json:"type"`
+	UpdatedAt time.Time    `json:"updated_at"`
 }
 
 // ItemAt defines model for ItemAt.
@@ -1968,6 +2009,9 @@ type ItemCard struct {
 	Summary *string `json:"summary"`
 	Title   string  `json:"title"`
 
+	// TouchCount The item's human touches so far
+	TouchCount int `json:"touch_count"`
+
 	// Turn The turns its running run has reported so far, while one runs; else null
 	Turn      *int      `json:"turn"`
 	Type      string    `json:"type"`
@@ -2018,6 +2062,18 @@ type ItemSpan struct {
 
 // ItemState defines model for ItemState.
 type ItemState string
+
+// ItemTouches defines model for ItemTouches.
+type ItemTouches struct {
+	Count int `json:"count"`
+
+	// List The touches in time order
+	List []Touch `json:"list"`
+
+	// Planned Decisions the line requires (an approval or merge at a human station)
+	Planned   int `json:"planned"`
+	Unplanned int `json:"unplanned"`
+}
 
 // ItemsAtRemovedStations The open items that keep a publish or restore from dropping stations
 type ItemsAtRemovedStations struct {
@@ -2463,6 +2519,15 @@ type OrgSummary struct {
 	Slug string `json:"slug"`
 }
 
+// OrgTouchMetrics defines model for OrgTouchMetrics.
+type OrgTouchMetrics struct {
+	// Factories Each factory the caller may read, in name order
+	Factories []FactoryTouchMetrics `json:"factories"`
+	From      openapi_types.Date    `json:"from"`
+	To        openapi_types.Date    `json:"to"`
+	Total     TouchStats            `json:"total"`
+}
+
 // ParseError Where factory.yaml stops parsing
 type ParseError struct {
 	Column int `json:"column"`
@@ -2536,7 +2601,7 @@ type PlatformAdminList struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found.
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches.
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
@@ -2901,6 +2966,135 @@ type Throughput struct {
 	PreviousPerDay float64 `json:"previous_per_day"`
 }
 
+// Touch One action by a person on an item, named by its most specific event
+type Touch struct {
+	// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	Actor Actor     `json:"actor"`
+	At    time.Time `json:"at"`
+
+	// EventId The naming event; its reason is set by setTouchReason
+	EventId int64 `json:"event_id"`
+
+	// Kind The naming event's kind: merged, rejected, approved, moved, paused, retried, note, ...
+	Kind    string `json:"kind"`
+	Planned bool   `json:"planned"`
+
+	// Reason Why the person had to act; planned touches start as required_gate, others with none
+	Reason *TouchReason `json:"reason"`
+
+	// ReasonBy Who set the reason (user:<id>); null for the planned default or none
+	ReasonBy *string `json:"reason_by"`
+	Station  *string `json:"station"`
+}
+
+// TouchCount defines model for TouchCount.
+type TouchCount struct {
+	// Key A station or an event kind; "" for touches with no station
+	Key       string `json:"key"`
+	Planned   int    `json:"planned"`
+	Touches   int    `json:"touches"`
+	Unplanned int    `json:"unplanned"`
+}
+
+// TouchHeadline Human touches of the items finished in a window, in brief
+type TouchHeadline struct {
+	// Finished Items finished (done) in the window
+	Finished int `json:"finished"`
+
+	// PerItemMean Touches per finished item; 0 when none finished
+	PerItemMean   float64 `json:"per_item_mean"`
+	PerItemMedian float64 `json:"per_item_median"`
+
+	// TouchlessRate Share of the finished items no person touched
+	TouchlessRate float64 `json:"touchless_rate"`
+}
+
+// TouchMetrics defines model for TouchMetrics.
+type TouchMetrics struct {
+	// From The range's first UTC day
+	From  openapi_types.Date `json:"from"`
+	Stats TouchStats         `json:"stats"`
+
+	// To The range's last UTC day
+	To openapi_types.Date `json:"to"`
+
+	// Type The work type asked for; null for every type
+	Type *string `json:"type"`
+
+	// Version The version number asked for; null for every version
+	Version *int `json:"version"`
+
+	// Weekly The headline in each of the weeks ending on to, oldest first
+	Weekly []TouchWeek `json:"weekly"`
+}
+
+// TouchReason defines model for TouchReason.
+type TouchReason string
+
+// TouchReasonChange defines model for TouchReasonChange.
+type TouchReasonChange struct {
+	Reason TouchReason `json:"reason"`
+}
+
+// TouchReasonCount defines model for TouchReasonCount.
+type TouchReasonCount struct {
+	Planned int `json:"planned"`
+
+	// Reason null for the touches no reason was set on
+	Reason    *TouchReason `json:"reason"`
+	Touches   int          `json:"touches"`
+	Unplanned int          `json:"unplanned"`
+}
+
+// TouchStats defines model for TouchStats.
+type TouchStats struct {
+	// ByKind By the touch's kind, the most touches first
+	ByKind []TouchCount `json:"by_kind"`
+
+	// ByReason By reason, the most touches first
+	ByReason []TouchReasonCount `json:"by_reason"`
+
+	// ByStation By the station the touch happened at, the most touches first
+	ByStation []TouchCount `json:"by_station"`
+
+	// ByVersion By the definition version of each item's last agent run, newest version first, items no agent ran last
+	ByVersion []VersionTouches `json:"by_version"`
+
+	// Finished Items finished (done) in the range
+	Finished int `json:"finished"`
+
+	// LineStops Andon pulls people made in the range: the line's, not an item's
+	LineStops      int     `json:"line_stops"`
+	PerItemMean    float64 `json:"per_item_mean"`
+	PerItemMedian  float64 `json:"per_item_median"`
+	Planned        int     `json:"planned"`
+	PlannedPerItem float64 `json:"planned_per_item"`
+	Touches        int     `json:"touches"`
+
+	// TouchlessRate Share of the finished items no person touched; 0 when none finished
+	TouchlessRate    float64 `json:"touchless_rate"`
+	Unplanned        int     `json:"unplanned"`
+	UnplannedPerItem float64 `json:"unplanned_per_item"`
+}
+
+// TouchTrend defines model for TouchTrend.
+type TouchTrend struct {
+	// Current Human touches of the items finished in a window, in brief
+	Current TouchHeadline `json:"current"`
+
+	// Previous The window of the same length just before
+	Previous TouchHeadline `json:"previous"`
+}
+
+// TouchWeek defines model for TouchWeek.
+type TouchWeek struct {
+	Finished      int                `json:"finished"`
+	From          openapi_types.Date `json:"from"`
+	PerItemMean   float64            `json:"per_item_mean"`
+	To            openapi_types.Date `json:"to"`
+	TouchlessRate float64            `json:"touchless_rate"`
+}
+
 // TransferRequest defines model for TransferRequest.
 type TransferRequest struct {
 	// Confirm The organization's name, typed to confirm
@@ -3024,6 +3218,20 @@ type VersionSourceKind string
 
 // VersionState defines model for VersionState.
 type VersionState string
+
+// VersionTouches The items whose last agent run ran on one definition version
+type VersionTouches struct {
+	Finished         int     `json:"finished"`
+	Number           *int    `json:"number"`
+	PerItemMean      float64 `json:"per_item_mean"`
+	PlannedPerItem   float64 `json:"planned_per_item"`
+	Touches          int     `json:"touches"`
+	TouchlessRate    float64 `json:"touchless_rate"`
+	UnplannedPerItem float64 `json:"unplanned_per_item"`
+
+	// VersionId null for the items no agent ran
+	VersionId *string `json:"version_id"`
+}
 
 // WaitingSummary defines model for WaitingSummary.
 type WaitingSummary struct {
@@ -3242,6 +3450,22 @@ type GetLeadTimeBridgeParams struct {
 	Type *WorkTypeFilter `form:"type,omitempty" json:"type,omitempty"`
 }
 
+// GetTouchMetricsParams defines parameters for GetTouchMetrics.
+type GetTouchMetricsParams struct {
+	// From The first UTC day of the range; 6 days before `to` when absent
+	From *RangeFrom `form:"from,omitempty" json:"from,omitempty"`
+
+	// To The last UTC day of the range, included; today when absent
+	To *RangeTo `form:"to,omitempty" json:"to,omitempty"`
+
+	// Type Only items of this work type (one the factory declares); every type when absent
+	Type  *WorkTypeFilter `form:"type,omitempty" json:"type,omitempty"`
+	Weeks *int            `form:"weeks,omitempty" json:"weeks,omitempty"`
+
+	// Version Only the items whose last agent run ran on this version, by number (12) or current
+	Version *string `form:"version,omitempty" json:"version,omitempty"`
+}
+
 // GetWeeklyThroughputParams defines parameters for GetWeeklyThroughput.
 type GetWeeklyThroughputParams struct {
 	// To The last UTC day of the last week; today when absent
@@ -3271,6 +3495,15 @@ type ListItemEventsParams struct {
 	// After Return events with an id greater than this (0 for the start)
 	After *int64 `form:"after,omitempty" json:"after,omitempty"`
 	Limit *int   `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetOrgTouchMetricsParams defines parameters for GetOrgTouchMetrics.
+type GetOrgTouchMetricsParams struct {
+	// From The first UTC day of the range; 6 days before `to` when absent
+	From *RangeFrom `form:"from,omitempty" json:"from,omitempty"`
+
+	// To The last UTC day of the range, included; today when absent
+	To *RangeTo `form:"to,omitempty" json:"to,omitempty"`
 }
 
 // GetFactoryOverviewParams defines parameters for GetFactoryOverview.
@@ -3360,6 +3593,9 @@ type PauseItemJSONRequestBody = PauseRequest
 
 // RejectItemJSONRequestBody defines body for RejectItem for application/json ContentType.
 type RejectItemJSONRequestBody = Rejection
+
+// SetTouchReasonJSONRequestBody defines body for SetTouchReason for application/json ContentType.
+type SetTouchReasonJSONRequestBody = TouchReasonChange
 
 // SetFactoryRoleJSONRequestBody defines body for SetFactoryRole for application/json ContentType.
 type SetFactoryRoleJSONRequestBody = FactoryRoleChange
@@ -4147,6 +4383,13 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics/lead-time (the `GetLeadTimeBridge` operationId).
 	GetLeadTimeBridge(ctx context.Context, org OrgRef, factory FactoryRef, params *GetLeadTimeBridgeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetTouchMetrics Human touches per finished item of the line, over a range of UTC days
+	//
+	// A touch is one action by a person on an item: its events with the same person and the same time (one transition) count once; API keys, agents and the engine never touch, and the submission (created) is not one. Planned touches are decisions the line requires (an approval or merge at a human station); every other touch is unplanned. The items count when they reached done in the range (as for getMetrics); an item counts for the definition version of its last agent run. weekly is the same headline in each of the `weeks` seven-day weeks ending on `to`. 400 for a bad range, weeks outside 1 to 26, a type the factory does not declare or a version that is no number nor current; 404 for a version the factory never published.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics/touches (the `GetTouchMetrics` operationId).
+	GetTouchMetrics(ctx context.Context, org OrgRef, factory FactoryRef, params *GetTouchMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetWeeklyThroughput Items finished in each of the last weeks
 	//
 	// Seven-day buckets ending on `to` (included), oldest first. 400 for a `to` after today, weeks outside 1 to 26 or a type the factory does not declare.
@@ -4337,6 +4580,24 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
 	ListItemRuns(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// SetTouchReasonWithBody Say why a person had to act on an item
+	//
+	// Sets or changes the reason of one of the item's touches, audited as touch.labelled; it is no item event, so it is not a touch itself. 404 touch-not-found for an event that is not one of the item's touches.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason (the `SetTouchReason` operationId).
+	SetTouchReasonWithBody(ctx context.Context, org OrgRef, item ItemRef, event int64, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetTouchReason Say why a person had to act on an item
+	//
+	// Sets or changes the reason of one of the item's touches, audited as touch.labelled; it is no item event, so it is not a touch itself. 404 touch-not-found for an event that is not one of the item's touches.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason (the `SetTouchReason` operationId).
+	SetTouchReason(ctx context.Context, org OrgRef, item ItemRef, event int64, body SetTouchReasonJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListMemberTokens Every member's personal tokens in the organization
 	//
 	// For owners and admins: every member's live tokens and those revoked in the last 30 days, with their owner, live ones first, newest first. Never a secret.
@@ -4382,6 +4643,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /v1/orgs/{org}/members/{user}/factory-roles/{factory} (the `SetFactoryRole` operationId).
 	SetFactoryRole(ctx context.Context, org OrgRef, user UserRef, factory FactoryRef, body SetFactoryRoleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetOrgTouchMetrics Human touches per finished item across the factories the caller may read
+	//
+	// A touch is one action by a person on an item: its events with the same person and the same time (one transition) count once; API keys, agents and the engine never touch, and the submission (created) is not one. Planned touches are decisions the line requires (an approval or merge at a human station); every other touch is unplanned. Over a range of UTC days as for getMetrics: the items finished (done) in the range, the organization's total and each factory the caller may read, in name order. 400 for a bad range.
+	//
+	// Corresponds with GET /v1/orgs/{org}/metrics/touches (the `GetOrgTouchMetrics` operationId).
+	GetOrgTouchMetrics(ctx context.Context, org OrgRef, params *GetOrgTouchMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetFactoryOverview Every factory of the organization summarized for the Factories home, ordered by name
 	//
@@ -5587,6 +5855,23 @@ func (c *Client) GetLeadTimeBridge(ctx context.Context, org OrgRef, factory Fact
 	return c.Client.Do(req)
 }
 
+// GetTouchMetrics Human touches per finished item of the line, over a range of UTC days
+//
+// A touch is one action by a person on an item: its events with the same person and the same time (one transition) count once; API keys, agents and the engine never touch, and the submission (created) is not one. Planned touches are decisions the line requires (an approval or merge at a human station); every other touch is unplanned. The items count when they reached done in the range (as for getMetrics); an item counts for the definition version of its last agent run. weekly is the same headline in each of the `weeks` seven-day weeks ending on `to`. 400 for a bad range, weeks outside 1 to 26, a type the factory does not declare or a version that is no number nor current; 404 for a version the factory never published.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics/touches (the `GetTouchMetrics` operationId).
+func (c *Client) GetTouchMetrics(ctx context.Context, org OrgRef, factory FactoryRef, params *GetTouchMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetTouchMetricsRequest(c.Server, org, factory, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetWeeklyThroughput Items finished in each of the last weeks
 //
 // Seven-day buckets ending on `to` (included), oldest first. 400 for a `to` after today, weeks outside 1 to 26 or a type the factory does not declare.
@@ -6037,6 +6322,44 @@ func (c *Client) ListItemRuns(ctx context.Context, org OrgRef, item ItemRef, req
 	return c.Client.Do(req)
 }
 
+// SetTouchReasonWithBody Say why a person had to act on an item
+//
+// Sets or changes the reason of one of the item's touches, audited as touch.labelled; it is no item event, so it is not a touch itself. 404 touch-not-found for an event that is not one of the item's touches.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason (the `SetTouchReason` operationId).
+func (c *Client) SetTouchReasonWithBody(ctx context.Context, org OrgRef, item ItemRef, event int64, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetTouchReasonRequestWithBody(c.Server, org, item, event, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetTouchReason Say why a person had to act on an item
+//
+// Sets or changes the reason of one of the item's touches, audited as touch.labelled; it is no item event, so it is not a touch itself. 404 touch-not-found for an event that is not one of the item's touches.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason (the `SetTouchReason` operationId).
+func (c *Client) SetTouchReason(ctx context.Context, org OrgRef, item ItemRef, event int64, body SetTouchReasonJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetTouchReasonRequest(c.Server, org, item, event, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // ListMemberTokens Every member's personal tokens in the organization
 //
 // For owners and admins: every member's live tokens and those revoked in the last 30 days, with their owner, live ones first, newest first. Never a secret.
@@ -6133,6 +6456,23 @@ func (c *Client) SetFactoryRoleWithBody(ctx context.Context, org OrgRef, user Us
 // Corresponds with PUT /v1/orgs/{org}/members/{user}/factory-roles/{factory} (the `SetFactoryRole` operationId).
 func (c *Client) SetFactoryRole(ctx context.Context, org OrgRef, user UserRef, factory FactoryRef, body SetFactoryRoleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSetFactoryRoleRequest(c.Server, org, user, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetOrgTouchMetrics Human touches per finished item across the factories the caller may read
+//
+// A touch is one action by a person on an item: its events with the same person and the same time (one transition) count once; API keys, agents and the engine never touch, and the submission (created) is not one. Planned touches are decisions the line requires (an approval or merge at a human station); every other touch is unplanned. Over a range of UTC days as for getMetrics: the items finished (done) in the range, the organization's total and each factory the caller may read, in name order. 400 for a bad range.
+//
+// Corresponds with GET /v1/orgs/{org}/metrics/touches (the `GetOrgTouchMetrics` operationId).
+func (c *Client) GetOrgTouchMetrics(ctx context.Context, org OrgRef, params *GetOrgTouchMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetOrgTouchMetricsRequest(c.Server, org, params)
 	if err != nil {
 		return nil, err
 	}
@@ -9025,6 +9365,122 @@ func NewGetLeadTimeBridgeRequest(server string, org OrgRef, factory FactoryRef, 
 	return req, nil
 }
 
+// NewGetTouchMetricsRequest constructs an http.Request for the GetTouchMetrics method
+func NewGetTouchMetricsRequest(server string, org OrgRef, factory FactoryRef, params *GetTouchMetricsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/metrics/touches", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.From != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "from", *params.From, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.To != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "to", *params.To, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Type != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "type", *params.Type, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Weeks != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "weeks", *params.Weeks, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Version != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "version", *params.Version, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetWeeklyThroughputRequest constructs an http.Request for the GetWeeklyThroughput method
 func NewGetWeeklyThroughputRequest(server string, org OrgRef, factory FactoryRef, params *GetWeeklyThroughputParams) (*http.Request, error) {
 	var err error
@@ -10112,6 +10568,67 @@ func NewListItemRunsRequest(server string, org OrgRef, item ItemRef) (*http.Requ
 	return req, nil
 }
 
+// NewSetTouchReasonRequest calls the generic SetTouchReason builder with application/json body
+func NewSetTouchReasonRequest(server string, org OrgRef, item ItemRef, event int64, body SetTouchReasonJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSetTouchReasonRequestWithBody(server, org, item, event, "application/json", bodyReader)
+}
+
+// NewSetTouchReasonRequestWithBody constructs an http.Request for the SetTouchReason method, with any body, and a specified content type
+func NewSetTouchReasonRequestWithBody(server string, org OrgRef, item ItemRef, event int64, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "event", event, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: "int64"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/touches/%s/reason", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewListMemberTokensRequest constructs an http.Request for the ListMemberTokens method
 func NewListMemberTokensRequest(server string, org OrgRef) (*http.Request, error) {
 	var err error
@@ -10326,6 +10843,79 @@ func NewSetFactoryRoleRequestWithBody(server string, org OrgRef, user UserRef, f
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetOrgTouchMetricsRequest constructs an http.Request for the GetOrgTouchMetrics method
+func NewGetOrgTouchMetricsRequest(server string, org OrgRef, params *GetOrgTouchMetricsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/metrics/touches", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.From != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "from", *params.From, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.To != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "to", *params.To, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -11590,6 +12180,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics/lead-time (the `GetLeadTimeBridge` operationId).
 	GetLeadTimeBridgeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetLeadTimeBridgeParams, reqEditors ...RequestEditorFn) (*GetLeadTimeBridgeResponse, error)
 
+	// GetTouchMetricsWithResponse Human touches per finished item of the line, over a range of UTC days
+	//
+	// A touch is one action by a person on an item: its events with the same person and the same time (one transition) count once; API keys, agents and the engine never touch, and the submission (created) is not one. Planned touches are decisions the line requires (an approval or merge at a human station); every other touch is unplanned. The items count when they reached done in the range (as for getMetrics); an item counts for the definition version of its last agent run. weekly is the same headline in each of the `weeks` seven-day weeks ending on `to`. 400 for a bad range, weeks outside 1 to 26, a type the factory does not declare or a version that is no number nor current; 404 for a version the factory never published.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics/touches (the `GetTouchMetrics` operationId).
+	GetTouchMetricsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetTouchMetricsParams, reqEditors ...RequestEditorFn) (*GetTouchMetricsResponse, error)
+
 	// GetWeeklyThroughputWithResponse Items finished in each of the last weeks
 	//
 	// Seven-day buckets ending on `to` (included), oldest first. 400 for a `to` after today, weeks outside 1 to 26 or a type the factory does not declare.
@@ -11808,6 +12407,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
 	ListItemRunsWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*ListItemRunsResponse, error)
 
+	// SetTouchReasonWithBodyWithResponse Say why a person had to act on an item
+	//
+	// Sets or changes the reason of one of the item's touches, audited as touch.labelled; it is no item event, so it is not a touch itself. 404 touch-not-found for an event that is not one of the item's touches.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason (the `SetTouchReason` operationId).
+	SetTouchReasonWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, event int64, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetTouchReasonResponse, error)
+
+	// SetTouchReasonWithResponse Say why a person had to act on an item
+	//
+	// Sets or changes the reason of one of the item's touches, audited as touch.labelled; it is no item event, so it is not a touch itself. 404 touch-not-found for an event that is not one of the item's touches.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason (the `SetTouchReason` operationId).
+	SetTouchReasonWithResponse(ctx context.Context, org OrgRef, item ItemRef, event int64, body SetTouchReasonJSONRequestBody, reqEditors ...RequestEditorFn) (*SetTouchReasonResponse, error)
+
 	// ListMemberTokensWithResponse Every member's personal tokens in the organization
 	//
 	// For owners and admins: every member's live tokens and those revoked in the last 30 days, with their owner, live ones first, newest first. Never a secret.
@@ -11861,6 +12478,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PUT /v1/orgs/{org}/members/{user}/factory-roles/{factory} (the `SetFactoryRole` operationId).
 	SetFactoryRoleWithResponse(ctx context.Context, org OrgRef, user UserRef, factory FactoryRef, body SetFactoryRoleJSONRequestBody, reqEditors ...RequestEditorFn) (*SetFactoryRoleResponse, error)
+
+	// GetOrgTouchMetricsWithResponse Human touches per finished item across the factories the caller may read
+	//
+	// A touch is one action by a person on an item: its events with the same person and the same time (one transition) count once; API keys, agents and the engine never touch, and the submission (created) is not one. Planned touches are decisions the line requires (an approval or merge at a human station); every other touch is unplanned. Over a range of UTC days as for getMetrics: the items finished (done) in the range, the organization's total and each factory the caller may read, in name order. 400 for a bad range.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/metrics/touches (the `GetOrgTouchMetrics` operationId).
+	GetOrgTouchMetricsWithResponse(ctx context.Context, org OrgRef, params *GetOrgTouchMetricsParams, reqEditors ...RequestEditorFn) (*GetOrgTouchMetricsResponse, error)
 
 	// GetFactoryOverviewWithResponse Every factory of the organization summarized for the Factories home, ordered by name
 	//
@@ -14220,6 +14846,54 @@ func (r GetLeadTimeBridgeResponse) ContentType() string {
 	return ""
 }
 
+type GetTouchMetricsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *TouchMetrics
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetTouchMetricsResponse) GetJSON200() *TouchMetrics {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetTouchMetricsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetTouchMetricsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetTouchMetricsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetTouchMetricsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetTouchMetricsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetWeeklyThroughputResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -15181,6 +15855,47 @@ func (r ListItemRunsResponse) ContentType() string {
 	return ""
 }
 
+type SetTouchReasonResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SetTouchReasonResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SetTouchReasonResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SetTouchReasonResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SetTouchReasonResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SetTouchReasonResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListMemberTokensResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -15401,6 +16116,54 @@ func (r SetFactoryRoleResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r SetFactoryRoleResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetOrgTouchMetricsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *OrgTouchMetrics
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetOrgTouchMetricsResponse) GetJSON200() *OrgTouchMetrics {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetOrgTouchMetricsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetOrgTouchMetricsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetOrgTouchMetricsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetOrgTouchMetricsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetOrgTouchMetricsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -16995,6 +17758,21 @@ func (c *ClientWithResponses) GetLeadTimeBridgeWithResponse(ctx context.Context,
 	return ParseGetLeadTimeBridgeResponse(rsp)
 }
 
+// GetTouchMetricsWithResponse Human touches per finished item of the line, over a range of UTC days
+//
+// A touch is one action by a person on an item: its events with the same person and the same time (one transition) count once; API keys, agents and the engine never touch, and the submission (created) is not one. Planned touches are decisions the line requires (an approval or merge at a human station); every other touch is unplanned. The items count when they reached done in the range (as for getMetrics); an item counts for the definition version of its last agent run. weekly is the same headline in each of the `weeks` seven-day weeks ending on `to`. 400 for a bad range, weeks outside 1 to 26, a type the factory does not declare or a version that is no number nor current; 404 for a version the factory never published.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics/touches (the `GetTouchMetrics` operationId).
+func (c *ClientWithResponses) GetTouchMetricsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetTouchMetricsParams, reqEditors ...RequestEditorFn) (*GetTouchMetricsResponse, error) {
+	rsp, err := c.GetTouchMetrics(ctx, org, factory, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetTouchMetricsResponse(rsp)
+}
+
 // GetWeeklyThroughputWithResponse Items finished in each of the last weeks
 //
 // Seven-day buckets ending on `to` (included), oldest first. 400 for a `to` after today, weeks outside 1 to 26 or a type the factory does not declare.
@@ -17369,6 +18147,36 @@ func (c *ClientWithResponses) ListItemRunsWithResponse(ctx context.Context, org 
 	return ParseListItemRunsResponse(rsp)
 }
 
+// SetTouchReasonWithBodyWithResponse Say why a person had to act on an item
+//
+// Sets or changes the reason of one of the item's touches, audited as touch.labelled; it is no item event, so it is not a touch itself. 404 touch-not-found for an event that is not one of the item's touches.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason (the `SetTouchReason` operationId).
+func (c *ClientWithResponses) SetTouchReasonWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, event int64, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetTouchReasonResponse, error) {
+	rsp, err := c.SetTouchReasonWithBody(ctx, org, item, event, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetTouchReasonResponse(rsp)
+}
+
+// SetTouchReasonWithResponse Say why a person had to act on an item
+//
+// Sets or changes the reason of one of the item's touches, audited as touch.labelled; it is no item event, so it is not a touch itself. 404 touch-not-found for an event that is not one of the item's touches.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason (the `SetTouchReason` operationId).
+func (c *ClientWithResponses) SetTouchReasonWithResponse(ctx context.Context, org OrgRef, item ItemRef, event int64, body SetTouchReasonJSONRequestBody, reqEditors ...RequestEditorFn) (*SetTouchReasonResponse, error) {
+	rsp, err := c.SetTouchReason(ctx, org, item, event, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetTouchReasonResponse(rsp)
+}
+
 // ListMemberTokensWithResponse Every member's personal tokens in the organization
 //
 // For owners and admins: every member's live tokens and those revoked in the last 30 days, with their owner, live ones first, newest first. Never a secret.
@@ -17457,6 +18265,21 @@ func (c *ClientWithResponses) SetFactoryRoleWithResponse(ctx context.Context, or
 		return nil, err
 	}
 	return ParseSetFactoryRoleResponse(rsp)
+}
+
+// GetOrgTouchMetricsWithResponse Human touches per finished item across the factories the caller may read
+//
+// A touch is one action by a person on an item: its events with the same person and the same time (one transition) count once; API keys, agents and the engine never touch, and the submission (created) is not one. Planned touches are decisions the line requires (an approval or merge at a human station); every other touch is unplanned. Over a range of UTC days as for getMetrics: the items finished (done) in the range, the organization's total and each factory the caller may read, in name order. 400 for a bad range.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/metrics/touches (the `GetOrgTouchMetrics` operationId).
+func (c *ClientWithResponses) GetOrgTouchMetricsWithResponse(ctx context.Context, org OrgRef, params *GetOrgTouchMetricsParams, reqEditors ...RequestEditorFn) (*GetOrgTouchMetricsResponse, error) {
+	rsp, err := c.GetOrgTouchMetrics(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetOrgTouchMetricsResponse(rsp)
 }
 
 // GetFactoryOverviewWithResponse Every factory of the organization summarized for the Factories home, ordered by name
@@ -19273,6 +20096,39 @@ func ParseGetLeadTimeBridgeResponse(rsp *http.Response) (*GetLeadTimeBridgeRespo
 	return response, nil
 }
 
+// ParseGetTouchMetricsResponse parses an HTTP response from a GetTouchMetricsWithResponse call
+func ParseGetTouchMetricsResponse(rsp *http.Response) (*GetTouchMetricsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetTouchMetricsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TouchMetrics
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetWeeklyThroughputResponse parses an HTTP response from a GetWeeklyThroughputWithResponse call
 func ParseGetWeeklyThroughputResponse(rsp *http.Response) (*GetWeeklyThroughputResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -19946,6 +20802,35 @@ func ParseListItemRunsResponse(rsp *http.Response) (*ListItemRunsResponse, error
 	return response, nil
 }
 
+// ParseSetTouchReasonResponse parses an HTTP response from a SetTouchReasonWithResponse call
+func ParseSetTouchReasonResponse(rsp *http.Response) (*SetTouchReasonResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SetTouchReasonResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListMemberTokensResponse parses an HTTP response from a ListMemberTokensWithResponse call
 func ParseListMemberTokensResponse(rsp *http.Response) (*ListMemberTokensResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -20086,6 +20971,39 @@ func ParseSetFactoryRoleResponse(rsp *http.Response) (*SetFactoryRoleResponse, e
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest FactoryRoleGrant
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetOrgTouchMetricsResponse parses an HTTP response from a GetOrgTouchMetricsWithResponse call
+func ParseGetOrgTouchMetricsResponse(rsp *http.Response) (*GetOrgTouchMetricsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetOrgTouchMetricsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OrgTouchMetrics
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -20736,6 +21654,9 @@ type ServerInterface interface {
 	// GetLeadTimeBridge Why the p85 lead time is over its target, over a range of UTC days
 	// (GET /v1/orgs/{org}/factories/{factory}/metrics/lead-time)
 	GetLeadTimeBridge(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetLeadTimeBridgeParams)
+	// GetTouchMetrics Human touches per finished item of the line, over a range of UTC days
+	// (GET /v1/orgs/{org}/factories/{factory}/metrics/touches)
+	GetTouchMetrics(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetTouchMetricsParams)
 	// GetWeeklyThroughput Items finished in each of the last weeks
 	// (GET /v1/orgs/{org}/factories/{factory}/metrics/weekly)
 	GetWeeklyThroughput(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetWeeklyThroughputParams)
@@ -20796,6 +21717,9 @@ type ServerInterface interface {
 	// ListItemRuns An item's agent runs, oldest first (at most 200)
 	// (GET /v1/orgs/{org}/items/{item}/runs)
 	ListItemRuns(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// SetTouchReason Say why a person had to act on an item
+	// (PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason)
+	SetTouchReason(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, event int64)
 	// ListMemberTokens Every member's personal tokens in the organization
 	// (GET /v1/orgs/{org}/member-tokens)
 	ListMemberTokens(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -20811,6 +21735,9 @@ type ServerInterface interface {
 	// SetFactoryRole Give a member a role on a factory
 	// (PUT /v1/orgs/{org}/members/{user}/factory-roles/{factory})
 	SetFactoryRole(w http.ResponseWriter, r *http.Request, org OrgRef, user UserRef, factory FactoryRef)
+	// GetOrgTouchMetrics Human touches per finished item across the factories the caller may read
+	// (GET /v1/orgs/{org}/metrics/touches)
+	GetOrgTouchMetrics(w http.ResponseWriter, r *http.Request, org OrgRef, params GetOrgTouchMetricsParams)
 	// GetFactoryOverview Every factory of the organization summarized for the Factories home, ordered by name
 	// (GET /v1/orgs/{org}/overview)
 	GetFactoryOverview(w http.ResponseWriter, r *http.Request, org OrgRef, params GetFactoryOverviewParams)
@@ -22873,6 +23800,109 @@ func (siw *ServerInterfaceWrapper) GetLeadTimeBridge(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// GetTouchMetrics operation middleware
+func (siw *ServerInterfaceWrapper) GetTouchMetrics(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetTouchMetricsParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "weeks" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "weeks", r.URL.Query(), &params.Weeks, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "weeks"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "weeks", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "version" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "version", r.URL.Query(), &params.Version, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "version"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "version", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTouchMetrics(w, r, org, factory, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetWeeklyThroughput operation middleware
 func (siw *ServerInterfaceWrapper) GetWeeklyThroughput(w http.ResponseWriter, r *http.Request) {
 
@@ -23729,6 +24759,50 @@ func (siw *ServerInterfaceWrapper) ListItemRuns(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// SetTouchReason operation middleware
+func (siw *ServerInterfaceWrapper) SetTouchReason(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "event" -------------
+	var event int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "event", r.PathValue("event"), &event, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "event", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetTouchReason(w, r, org, item, event)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListMemberTokens operation middleware
 func (siw *ServerInterfaceWrapper) ListMemberTokens(w http.ResponseWriter, r *http.Request) {
 
@@ -23895,6 +24969,61 @@ func (siw *ServerInterfaceWrapper) SetFactoryRole(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SetFactoryRole(w, r, org, user, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOrgTouchMetrics operation middleware
+func (siw *ServerInterfaceWrapper) GetOrgTouchMetrics(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetOrgTouchMetricsParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOrgTouchMetrics(w, r, org, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -24528,6 +25657,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/member-tokens/{token}", wrapper.RevokeMemberToken)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/attention", wrapper.GetOrgAttention)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/overview", wrapper.GetFactoryOverview)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/metrics/touches", wrapper.GetOrgTouchMetrics)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/inbox", wrapper.GetInbox)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories", wrapper.ListFactories)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories", wrapper.CreateFactory)
@@ -24565,6 +25695,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/weekly", wrapper.GetWeeklyThroughput)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/constraint", wrapper.GetConstraintReport)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/lead-time", wrapper.GetLeadTimeBridge)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/touches", wrapper.GetTouchMetrics)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/agents/{agent}/stats", wrapper.GetAgentStats)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.GetAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.PullAndon)
@@ -24574,6 +25705,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/events", wrapper.ListItemEvents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/runs", wrapper.ListItemRuns)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/notes", wrapper.NoteItem)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/touches/{event}/reason", wrapper.SetTouchReason)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs/{run}", wrapper.GetRun)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/approve", wrapper.ApproveItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/reject", wrapper.RejectItem)
@@ -26433,6 +27565,47 @@ func (response GetLeadTimeBridge200JSONResponse) VisitGetLeadTimeBridgeResponse(
 	return err
 }
 
+type GetTouchMetricsRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Params  GetTouchMetricsParams
+}
+
+type GetTouchMetricsResponseObject interface {
+	VisitGetTouchMetricsResponse(w http.ResponseWriter) error
+}
+
+type GetTouchMetrics200JSONResponse TouchMetrics
+
+func (response GetTouchMetrics200JSONResponse) VisitGetTouchMetricsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTouchMetricsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetTouchMetricsdefaultApplicationProblemPlusJSONResponse) VisitGetTouchMetricsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetWeeklyThroughputRequestObject struct {
 	Org     OrgRef     `json:"org"`
 	Factory FactoryRef `json:"factory"`
@@ -27260,6 +28433,42 @@ func (response ListItemRunsdefaultApplicationProblemPlusJSONResponse) VisitListI
 	return err
 }
 
+type SetTouchReasonRequestObject struct {
+	Org   OrgRef  `json:"org"`
+	Item  ItemRef `json:"item"`
+	Event int64   `json:"event"`
+	Body  *SetTouchReasonJSONRequestBody
+}
+
+type SetTouchReasonResponseObject interface {
+	VisitSetTouchReasonResponse(w http.ResponseWriter) error
+}
+
+type SetTouchReason204Response struct {
+}
+
+func (response SetTouchReason204Response) VisitSetTouchReasonResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type SetTouchReasondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response SetTouchReasondefaultApplicationProblemPlusJSONResponse) VisitSetTouchReasonResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListMemberTokensRequestObject struct {
 	Org OrgRef `json:"org"`
 }
@@ -27438,6 +28647,46 @@ type SetFactoryRoledefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response SetFactoryRoledefaultApplicationProblemPlusJSONResponse) VisitSetFactoryRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOrgTouchMetricsRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params GetOrgTouchMetricsParams
+}
+
+type GetOrgTouchMetricsResponseObject interface {
+	VisitGetOrgTouchMetricsResponse(w http.ResponseWriter) error
+}
+
+type GetOrgTouchMetrics200JSONResponse OrgTouchMetrics
+
+func (response GetOrgTouchMetrics200JSONResponse) VisitGetOrgTouchMetricsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOrgTouchMetricsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetOrgTouchMetricsdefaultApplicationProblemPlusJSONResponse) VisitGetOrgTouchMetricsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -28207,6 +29456,9 @@ type StrictServerInterface interface {
 	// GetLeadTimeBridge Why the p85 lead time is over its target, over a range of UTC days
 	// (GET /v1/orgs/{org}/factories/{factory}/metrics/lead-time)
 	GetLeadTimeBridge(ctx context.Context, request GetLeadTimeBridgeRequestObject) (GetLeadTimeBridgeResponseObject, error)
+	// GetTouchMetrics Human touches per finished item of the line, over a range of UTC days
+	// (GET /v1/orgs/{org}/factories/{factory}/metrics/touches)
+	GetTouchMetrics(ctx context.Context, request GetTouchMetricsRequestObject) (GetTouchMetricsResponseObject, error)
 	// GetWeeklyThroughput Items finished in each of the last weeks
 	// (GET /v1/orgs/{org}/factories/{factory}/metrics/weekly)
 	GetWeeklyThroughput(ctx context.Context, request GetWeeklyThroughputRequestObject) (GetWeeklyThroughputResponseObject, error)
@@ -28267,6 +29519,9 @@ type StrictServerInterface interface {
 	// ListItemRuns An item's agent runs, oldest first (at most 200)
 	// (GET /v1/orgs/{org}/items/{item}/runs)
 	ListItemRuns(ctx context.Context, request ListItemRunsRequestObject) (ListItemRunsResponseObject, error)
+	// SetTouchReason Say why a person had to act on an item
+	// (PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason)
+	SetTouchReason(ctx context.Context, request SetTouchReasonRequestObject) (SetTouchReasonResponseObject, error)
 	// ListMemberTokens Every member's personal tokens in the organization
 	// (GET /v1/orgs/{org}/member-tokens)
 	ListMemberTokens(ctx context.Context, request ListMemberTokensRequestObject) (ListMemberTokensResponseObject, error)
@@ -28282,6 +29537,9 @@ type StrictServerInterface interface {
 	// SetFactoryRole Give a member a role on a factory
 	// (PUT /v1/orgs/{org}/members/{user}/factory-roles/{factory})
 	SetFactoryRole(ctx context.Context, request SetFactoryRoleRequestObject) (SetFactoryRoleResponseObject, error)
+	// GetOrgTouchMetrics Human touches per finished item across the factories the caller may read
+	// (GET /v1/orgs/{org}/metrics/touches)
+	GetOrgTouchMetrics(ctx context.Context, request GetOrgTouchMetricsRequestObject) (GetOrgTouchMetricsResponseObject, error)
 	// GetFactoryOverview Every factory of the organization summarized for the Factories home, ordered by name
 	// (GET /v1/orgs/{org}/overview)
 	GetFactoryOverview(ctx context.Context, request GetFactoryOverviewRequestObject) (GetFactoryOverviewResponseObject, error)
@@ -29716,6 +30974,34 @@ func (sh *strictHandler) GetLeadTimeBridge(w http.ResponseWriter, r *http.Reques
 	}
 }
 
+// GetTouchMetrics operation middleware
+func (sh *strictHandler) GetTouchMetrics(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetTouchMetricsParams) {
+	var request GetTouchMetricsRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTouchMetrics(ctx, request.(GetTouchMetricsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTouchMetrics")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetTouchMetricsResponseObject); ok {
+		if err := validResponse.VisitGetTouchMetricsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetWeeklyThroughput operation middleware
 func (sh *strictHandler) GetWeeklyThroughput(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetWeeklyThroughputParams) {
 	var request GetWeeklyThroughputRequestObject
@@ -30311,6 +31597,41 @@ func (sh *strictHandler) ListItemRuns(w http.ResponseWriter, r *http.Request, or
 	}
 }
 
+// SetTouchReason operation middleware
+func (sh *strictHandler) SetTouchReason(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, event int64) {
+	var request SetTouchReasonRequestObject
+
+	request.Org = org
+	request.Item = item
+	request.Event = event
+
+	var body SetTouchReasonJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetTouchReason(ctx, request.(SetTouchReasonRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetTouchReason")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetTouchReasonResponseObject); ok {
+		if err := validResponse.VisitSetTouchReasonResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListMemberTokens operation middleware
 func (sh *strictHandler) ListMemberTokens(w http.ResponseWriter, r *http.Request, org OrgRef) {
 	var request ListMemberTokensRequestObject
@@ -30446,6 +31767,33 @@ func (sh *strictHandler) SetFactoryRole(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SetFactoryRoleResponseObject); ok {
 		if err := validResponse.VisitSetFactoryRoleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetOrgTouchMetrics operation middleware
+func (sh *strictHandler) GetOrgTouchMetrics(w http.ResponseWriter, r *http.Request, org OrgRef, params GetOrgTouchMetricsParams) {
+	var request GetOrgTouchMetricsRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetOrgTouchMetrics(ctx, request.(GetOrgTouchMetricsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetOrgTouchMetrics")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetOrgTouchMetricsResponseObject); ok {
+		if err := validResponse.VisitGetOrgTouchMetricsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

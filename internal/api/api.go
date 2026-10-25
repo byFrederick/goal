@@ -71,9 +71,9 @@ type Engine interface {
 }
 
 // Items reads items, their history and runs, the leases on them, a factory's flow and its
-// stations' times, an item's spans and run in progress, the turns of the runs in progress, and
-// what the organization's factories need from people; a store
-// that implements ports.Store and ports.FlowStats satisfies it.
+// stations' times, an item's spans and run in progress, the turns of the runs in progress, the
+// human touches, and what the organization's factories need from people, and sets a touch's
+// reason; a store that implements ports.Store and ports.FlowStats satisfies it.
 type Items interface {
 	Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
 	ItemByNumber(ctx context.Context, factory domain.FactoryID, number int64) (domain.Item, error)
@@ -97,6 +97,12 @@ type Items interface {
 	AndonPulls(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.AndonPull, error)
 	GateDecisions(ctx context.Context, factory domain.FactoryID, station string, after time.Time, n int) (domain.GateTally, error)
 	AgentStats(ctx context.Context, factory domain.FactoryID, agent string, since, until time.Time) (domain.AgentStats, error)
+	Touches(ctx context.Context, q ports.FlowQuery) (domain.TouchStats, error)
+	OrgTouches(ctx context.Context, factories []domain.FactoryID, q ports.FlowQuery) (domain.TouchStats, []domain.FactoryTouchStats, error)
+	TouchesByBucket(ctx context.Context, q ports.FlowQuery, d time.Duration, n int) ([]domain.TouchStats, error)
+	ItemTouches(ctx context.Context, item domain.ItemID) ([]domain.Touch, error)
+	TouchCounts(ctx context.Context, items []domain.ItemID) (map[domain.ItemID]int, error)
+	LabelTouch(ctx context.Context, event int64, reason domain.TouchReason, by domain.Actor) error
 }
 
 // Factories are the definitions goald runs; *definitions.Cache satisfies it.
@@ -360,6 +366,13 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 		return nil, err
 	}
 
+	touches, err := s.items.ItemTouches(ctx, it.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	out.Touches = s.itemTouchesOf(touches)
+
 	return gen.GetItem200JSONResponse(out), nil
 }
 
@@ -515,6 +528,11 @@ func problemOf(err error) gen.Problem {
 	case errors.Is(err, errPreconditionRequired):
 		p := detailed(http.StatusPreconditionRequired, err)
 		p.Code = optional("precondition-required")
+
+		return p
+	case errors.Is(err, errTouchNotFound):
+		p := detailed(http.StatusNotFound, err)
+		p.Code = optional("touch-not-found")
 
 		return p
 	case errors.Is(err, ports.ErrNotFound):

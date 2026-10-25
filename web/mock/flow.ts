@@ -10,10 +10,13 @@ import type {
   LeadTimeBridge,
   Metrics,
   MetricsSummary,
+  Station,
   Targets,
+  TouchReason,
   WeeklyThroughput,
 } from '@goal/api-client';
 import type { MockFlow, MockItem, MockStationStats } from './fixtures.ts';
+import type { MockTouch } from './touches.ts';
 
 const dayMs = 86_400_000;
 const maxRangeDays = 90;
@@ -31,6 +34,8 @@ export interface MockDone {
   cost_usd: number;
   /** Its hours in each component of the lead-time bridge, by `<kind>:<station>` (domain.Component). */
   times: Record<string, number>;
+  /** The seeded history's human touches; the mock's own items have theirs in their events. */
+  touches?: MockTouch[];
 }
 
 /** How a factory's history looks: items a day, the longest wait at its drum, rework share, cost per item. */
@@ -48,6 +53,33 @@ const profiles: Record<string, Profile> = {
 
 /** The key of a bridge component: `waiting:build`, `waiting_on_you:`. */
 export const componentKey = (kind: string, station = '') => `${kind}:${station}`;
+
+/** The reasons of the seeded history's unplanned touches; null: none set yet. */
+const unplannedReasons: (TouchReason | null)[] = [
+  'missing_knowledge',
+  'missing_knowledge',
+  'wrong_decision',
+  'other',
+  null,
+];
+
+/**
+ * A history item's touches: a planned decision at each human station (merged at a merge station,
+ * else approved), and now and then a note at the drum or a send-back at the first human station.
+ */
+function seedTouches(rand: () => number, humans: readonly Station[], drum: string): MockTouch[] {
+  const reason = () => unplannedReasons[Math.floor(rand() * unplannedReasons.length)] ?? null;
+  const out: MockTouch[] = humans.map((s) => ({
+    kind: s.action === 'merge' ? 'merged' : 'approved',
+    station: s.id,
+    planned: true,
+    reason: 'required_gate',
+  }));
+  if (rand() < 0.25) out.push({ kind: 'note', station: drum, planned: false, reason: reason() });
+  const first = humans[0];
+  if (first && rand() < 0.12) out.push({ kind: 'rejected', station: first.id, planned: false, reason: reason() });
+  return out;
+}
 
 /** A small seeded generator (mulberry32), so the history is the same on every reset. */
 function random(seed: string): () => number {
@@ -70,6 +102,9 @@ export function seedHistory(f: Factory, now: number, drum: string | null): MockD
   const profile = profiles[f.name];
   if (!profile || f.work_types.length === 0 || !drum) return [];
   const rand = random(f.id);
+  // Touches have a generator of their own, so the rest of the history stays as it was.
+  const touchRand = random(`${f.id}:touches`);
+  const humans = f.stations.filter((s) => s.kind === 'human');
   const today = Math.floor(now / dayMs) * dayMs;
   const queue = f.stations.find((s) => s.kind === 'queue')?.id;
   const human = f.stations.find((s) => s.kind === 'human')?.id;
@@ -99,6 +134,7 @@ export function seedHistory(f: Factory, now: number, drum: string | null): MockD
         reworked,
         cost_usd: Math.round(profile.costUsd * (0.4 + rand() * 1.2) * 100) / 100,
         times,
+        touches: seedTouches(touchRand, humans, drum),
       });
     }
   }

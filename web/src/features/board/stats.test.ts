@@ -118,6 +118,7 @@ const line = (over: Partial<BoardLine> = {}): BoardLine => ({
   release: { policy: 'push', enforced: false, drum: 'investigate', buffer: 2, in_buffer: 2 },
   expedite: null,
   budget: null,
+  touches: { finished: 0, per_item_mean: 0, per_item_median: 0, touchless_rate: 0 },
   ...over,
 });
 
@@ -204,6 +205,7 @@ const card = (over: Partial<ItemCard>): ItemCard => ({
   summary: null,
   in_buffer: false,
   rope_held: false,
+  touch_count: 0,
   ...over,
 });
 

@@ -30,6 +30,7 @@ import {
 import type { MockFault } from './faults.ts';
 import { type MockDone, seedHistory } from './flow.ts';
 import { type MockPeople, seedPeople } from './people.ts';
+import type { MockReason } from './touches.ts';
 
 export interface MockItem {
   id: string;
@@ -161,6 +162,8 @@ export interface MockState {
   items: MockItem[];
   events: ItemEvent[];
   nextEventId: number;
+  /** The reasons people set on touches, by event id (goald's item_touch_labels, but defaults). */
+  touchReasons: Record<number, MockReason>;
   /** Every agent run, in start order; goald's agent_runs. */
   runs: Run[];
   /** Each factory's versions and draft, by factory id. */
@@ -1401,6 +1404,7 @@ export function seed(now = Date.now()): MockState {
     items: [],
     events: [],
     nextEventId: 1,
+    touchReasons: {},
     runs: [],
     definitions: seedDefinitions(),
     templates: seedTemplates(),

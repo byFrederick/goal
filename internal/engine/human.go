@@ -41,10 +41,14 @@ func (e *Engine) Approve(ctx context.Context, id domain.ItemID, by domain.Actor)
 		return domain.Item{}, err
 	}
 
+	// The line requires an approval at a human station; a gate's escalation is no decision it
+	// planned for (spec 4 §4.9).
+	st, _ := l.Station(it.Station)
+	planned := map[string]any{domain.KeyPlanned: st.Kind == domain.KindHuman}
 	now := e.clock.Now()
 	t := ports.Transition{
 		ItemID: it.ID, From: it.Position(), At: now,
-		Events: []domain.Event{decision(it, domain.EventApproved, now, by, nil)},
+		Events: []domain.Event{decision(it, domain.EventApproved, now, by, planned)},
 	}
 
 	if err := e.advance(l, it, by.Name, &t); err != nil {
@@ -84,7 +88,7 @@ func (e *Engine) Reject(ctx context.Context, id domain.ItemID, by domain.Actor, 
 	pos, events, doneAt := e.arrive(it, target, by.Name)
 	t := ports.Transition{
 		ItemID: it.ID, From: it.Position(), To: pos, Rework: true, At: now, DoneAt: doneAt,
-		Events: append([]domain.Event{decision(it, domain.EventRejected, now, by, map[string]any{keyReason: reason})}, events...),
+		Events: append([]domain.Event{decision(it, domain.EventRejected, now, by, map[string]any{keyReason: reason, domain.KeyPlanned: false})}, events...),
 		Audit:  itemAudit(it, now, by, domain.AuditItemRejected, map[string]any{keyFrom: it.Station, keyTo: target.ID, keyReason: reason}),
 	}
 

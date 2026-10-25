@@ -129,7 +129,21 @@ func TestMerge_MergesThePullRequestThenApproves(t *testing.T) {
 			if approved := h.eventsOf(it.ID, domain.EventApproved); len(approved) != 1 || approved[0].Actor != human.Name {
 				t.Errorf("approved events %+v, want one by fcruz", approved)
 			}
+
+			// A merge at a merge station is a decision the line requires.
+			plannedAll(t, append(merged, h.eventsOf(it.ID, domain.EventApproved)...))
 		})
+	}
+}
+
+// plannedAll fails unless every one of events carries data.planned true.
+func plannedAll(t *testing.T, events []domain.Event) {
+	t.Helper()
+
+	for _, e := range events {
+		if e.Data[domain.KeyPlanned] != true {
+			t.Errorf("%s event data %v, want planned true", e.Kind, e.Data)
+		}
 	}
 }
 

@@ -17,7 +17,7 @@ func TestStore_Conformance(t *testing.T) {
 	storetest.Run(t, func(*testing.T) storetest.Harness {
 		s := porttest.NewStore()
 
-		var orgs, factories atomic.Int64
+		var orgs, factories, versions atomic.Int64
 
 		return storetest.Harness{
 			Store: s,
@@ -36,6 +36,9 @@ func TestStore_Conformance(t *testing.T) {
 			},
 			SetSlotCaps: func(_ *testing.T, org domain.OrgID, maxSlots int, factories map[domain.FactoryID]int) {
 				s.SetSlotCaps(org, maxSlots, factories)
+			},
+			NewVersion: func(*testing.T, domain.OrgID, domain.FactoryID) domain.DefinitionVersionID {
+				return domain.DefinitionVersionID(fmt.Sprintf("00000000-0000-4000-a000-%012d", versions.Add(1)))
 			},
 		}
 	})

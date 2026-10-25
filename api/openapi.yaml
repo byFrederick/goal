@@ -693,6 +693,28 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/FactoryOverviewList" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/metrics/touches:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: getOrgTouchMetrics
+      x-goal-scope: org:read
+      tags: [work]
+      summary: Human touches per finished item across the factories the caller may read
+      description: >-
+        A touch is one action by a person on an item: its events with the same person and the same time (one transition) count once; API keys, agents and the engine never touch, and the submission (created) is not one. Planned touches are decisions the line requires (an approval or merge at a human station); every other touch is unplanned. Over a range of UTC days as for getMetrics: the items finished
+        (done) in the range, the organization's total and each factory the caller may read, in
+        name order. 400 for a bad range.
+      parameters:
+        - $ref: "#/components/parameters/RangeFrom"
+        - $ref: "#/components/parameters/RangeTo"
+      responses:
+        "200":
+          description: The organization's touch metrics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrgTouchMetrics" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/inbox:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -1549,6 +1571,39 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/LeadTimeBridge" }
+  /v1/orgs/{org}/factories/{factory}/metrics/touches:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: getTouchMetrics
+      x-goal-scope: factory:read
+      tags: [work]
+      summary: Human touches per finished item of the line, over a range of UTC days
+      description: >-
+        A touch is one action by a person on an item: its events with the same person and the same time (one transition) count once; API keys, agents and the engine never touch, and the submission (created) is not one. Planned touches are decisions the line requires (an approval or merge at a human station); every other touch is unplanned. The items count when they reached done in the range (as for
+        getMetrics); an item counts for the definition version of its last agent run. weekly is
+        the same headline in each of the `weeks` seven-day weeks ending on `to`. 400 for a bad
+        range, weeks outside 1 to 26, a type the factory does not declare or a version that is no
+        number nor current; 404 for a version the factory never published.
+      parameters:
+        - $ref: "#/components/parameters/RangeFrom"
+        - $ref: "#/components/parameters/RangeTo"
+        - $ref: "#/components/parameters/WorkTypeFilter"
+        - name: weeks
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 26, default: 12 }
+        - name: version
+          in: query
+          description: Only the items whose last agent run ran on this version, by number (12) or current
+          schema: { type: string }
+      responses:
+        "200":
+          description: The line's touch metrics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TouchMetrics" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/agents/{agent}/stats:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -1765,6 +1820,33 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/NoteReceipt" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/items/{item}/touches/{event}/reason:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ItemRef"
+      - name: event
+        in: path
+        required: true
+        description: The touch's event_id, as Item.touches lists it
+        schema: { type: integer, format: int64, minimum: 1 }
+    put:
+      operationId: setTouchReason
+      x-goal-scope: item:operate
+      tags: [work]
+      summary: Say why a person had to act on an item
+      description: >-
+        Sets or changes the reason of one of the item's touches, audited as touch.labelled; it is
+        no item event, so it is not a touch itself. 404 touch-not-found for an event that is not
+        one of the item's touches.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TouchReasonChange" }
+      responses:
+        "204":
+          description: The reason is set
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/runs/{run}:
     parameters:
@@ -2124,7 +2206,8 @@ components:
             editor-everywhere (owners and admins hold every factory role already). An unknown
             organization, factory, item or run and one the caller may not see answer the same
             fixed body without detail: org-not-found, factory-not-found, item-not-found,
-            run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found.
+            run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of
+            the item's touches.
         problems:
           type: array
           description: definition-invalid only, every problem of the definition (errors block the publish)
@@ -2773,6 +2856,180 @@ components:
         done_at: { type: string, format: date-time }
         flow:
           $ref: "#/components/schemas/ItemFlow"
+        touches:
+          description: The item's human touches; getItem only
+          allOf: [{ $ref: "#/components/schemas/ItemTouches" }]
+    ItemTouches:
+      type: object
+      required: [count, planned, unplanned, list]
+      properties:
+        count: { type: integer }
+        planned: { type: integer, description: Decisions the line requires (an approval or merge at a human station) }
+        unplanned: { type: integer }
+        list:
+          type: array
+          description: The touches in time order
+          items: { $ref: "#/components/schemas/Touch" }
+    Touch:
+      type: object
+      description: One action by a person on an item, named by its most specific event
+      required: [event_id, kind, station, at, actor, planned, reason, reason_by]
+      properties:
+        event_id: { type: integer, format: int64, description: The naming event; its reason is set by setTouchReason }
+        kind: { type: string, description: "The naming event's kind: merged, rejected, approved, moved, paused, retried, note, ..." }
+        station: { type: string, nullable: true }
+        at: { type: string, format: date-time }
+        actor: { $ref: "#/components/schemas/Actor" }
+        planned: { type: boolean }
+        reason:
+          nullable: true
+          description: Why the person had to act; planned touches start as required_gate, others with none
+          allOf: [{ $ref: "#/components/schemas/TouchReason" }]
+        reason_by:
+          type: string
+          nullable: true
+          description: Who set the reason (user:<id>); null for the planned default or none
+    TouchReason:
+      type: string
+      enum: [missing_knowledge, wrong_decision, required_gate, other]
+    TouchReasonChange:
+      type: object
+      required: [reason]
+      additionalProperties: false
+      properties:
+        reason: { $ref: "#/components/schemas/TouchReason" }
+    TouchHeadline:
+      type: object
+      description: Human touches of the items finished in a window, in brief
+      required: [finished, per_item_mean, per_item_median, touchless_rate]
+      properties:
+        finished: { type: integer, description: Items finished (done) in the window }
+        per_item_mean: { type: number, format: double, description: Touches per finished item; 0 when none finished }
+        per_item_median: { type: number, format: double }
+        touchless_rate: { type: number, format: double, description: Share of the finished items no person touched }
+    TouchTrend:
+      type: object
+      required: [current, previous]
+      properties:
+        current: { $ref: "#/components/schemas/TouchHeadline" }
+        previous: { allOf: [{ $ref: "#/components/schemas/TouchHeadline" }], description: The window of the same length just before }
+    TouchCount:
+      type: object
+      required: [key, touches, planned, unplanned]
+      properties:
+        key: { type: string, description: A station or an event kind; "" for touches with no station }
+        touches: { type: integer }
+        planned: { type: integer }
+        unplanned: { type: integer }
+    TouchReasonCount:
+      type: object
+      required: [reason, touches, planned, unplanned]
+      properties:
+        reason:
+          nullable: true
+          description: null for the touches no reason was set on
+          allOf: [{ $ref: "#/components/schemas/TouchReason" }]
+        touches: { type: integer }
+        planned: { type: integer }
+        unplanned: { type: integer }
+    VersionTouches:
+      type: object
+      description: The items whose last agent run ran on one definition version
+      required: [version_id, number, finished, touches, touchless_rate, per_item_mean, planned_per_item, unplanned_per_item]
+      properties:
+        version_id: { type: string, nullable: true, description: null for the items no agent ran }
+        number: { type: integer, nullable: true }
+        finished: { type: integer }
+        touches: { type: integer }
+        touchless_rate: { type: number, format: double }
+        per_item_mean: { type: number, format: double }
+        planned_per_item: { type: number, format: double }
+        unplanned_per_item: { type: number, format: double }
+    TouchStats:
+      type: object
+      required:
+        - finished
+        - touches
+        - planned
+        - unplanned
+        - touchless_rate
+        - per_item_mean
+        - per_item_median
+        - planned_per_item
+        - unplanned_per_item
+        - by_station
+        - by_kind
+        - by_reason
+        - by_version
+        - line_stops
+      properties:
+        finished: { type: integer, description: Items finished (done) in the range }
+        touches: { type: integer }
+        planned: { type: integer }
+        unplanned: { type: integer }
+        touchless_rate: { type: number, format: double, description: Share of the finished items no person touched; 0 when none finished }
+        per_item_mean: { type: number, format: double }
+        per_item_median: { type: number, format: double }
+        planned_per_item: { type: number, format: double }
+        unplanned_per_item: { type: number, format: double }
+        by_station:
+          type: array
+          description: By the station the touch happened at, the most touches first
+          items: { $ref: "#/components/schemas/TouchCount" }
+        by_kind:
+          type: array
+          description: By the touch's kind, the most touches first
+          items: { $ref: "#/components/schemas/TouchCount" }
+        by_reason:
+          type: array
+          description: By reason, the most touches first
+          items: { $ref: "#/components/schemas/TouchReasonCount" }
+        by_version:
+          type: array
+          description: By the definition version of each item's last agent run, newest version first, items no agent ran last
+          items: { $ref: "#/components/schemas/VersionTouches" }
+        line_stops: { type: integer, description: "Andon pulls people made in the range: the line's, not an item's" }
+    TouchWeek:
+      type: object
+      required: [from, to, finished, per_item_mean, touchless_rate]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        finished: { type: integer }
+        per_item_mean: { type: number, format: double }
+        touchless_rate: { type: number, format: double }
+    TouchMetrics:
+      type: object
+      required: [from, to, type, version, stats, weekly]
+      properties:
+        from: { type: string, format: date, description: The range's first UTC day }
+        to: { type: string, format: date, description: The range's last UTC day, included }
+        type: { type: string, nullable: true, description: The work type asked for; null for every type }
+        version: { type: integer, nullable: true, description: The version number asked for; null for every version }
+        stats: { $ref: "#/components/schemas/TouchStats" }
+        weekly:
+          type: array
+          description: The headline in each of the weeks ending on to, oldest first
+          items: { $ref: "#/components/schemas/TouchWeek" }
+    OrgTouchMetrics:
+      type: object
+      required: [from, to, total, factories]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        total: { $ref: "#/components/schemas/TouchStats" }
+        factories:
+          type: array
+          description: Each factory the caller may read, in name order
+          items: { $ref: "#/components/schemas/FactoryTouchMetrics" }
+    FactoryTouchMetrics:
+      type: object
+      required: [factory_id, name, stats]
+      properties:
+        factory_id: { type: string }
+        name: { type: string }
+        title: { type: string }
+        stats: { $ref: "#/components/schemas/TouchStats" }
     ItemFlow:
       type: object
       description: How the item flows, on GET of one item only
@@ -2843,7 +3100,7 @@ components:
     ItemCard:
       type: object
       description: An item as boards and lists show it
-      required: [id, ref, number, title, type, station, state, class_of_service, rework_count, cost_usd, created_at, updated_at, age_seconds, agent, pr_url, slot, turn, summary, in_buffer, rope_held]
+      required: [id, ref, number, title, type, station, state, class_of_service, rework_count, cost_usd, created_at, updated_at, age_seconds, agent, pr_url, slot, turn, summary, in_buffer, rope_held, touch_count]
       properties:
         id: { type: string }
         ref: { type: string, description: "<factory name>#<number>, as in goal#2" }
@@ -2890,6 +3147,9 @@ components:
         rope_held:
           type: boolean
           description: Held at a queue station by the drum-buffer-rope release; always false until it is enforced
+        touch_count:
+          type: integer
+          description: The item's human touches so far
     ItemPage:
       type: object
       required: [items, next_after]
@@ -2936,8 +3196,11 @@ components:
         The line as a whole: its work in progress against its limits, how work is released into
         it, its expedite lane and its weekly budget. The release policy and the expedite limit are
         shown as configured; goald does not enforce them yet (it releases as push).
-      required: [status, andon, wip, release, expedite, budget]
+      required: [status, andon, wip, release, expedite, budget, touches]
       properties:
+        touches:
+          description: Human touches of the items finished in the board's window
+          allOf: [{ $ref: "#/components/schemas/TouchHeadline" }]
         status:
           type: string
           enum: [running, stopped]
@@ -3549,8 +3812,11 @@ components:
           items: { $ref: "#/components/schemas/FactoryOverview" }
     FactoryOverview:
       type: object
-      required: [factory, health, andon, throughput, constraint, waiting, spend_usd, budget_usd]
+      required: [factory, health, andon, throughput, constraint, waiting, spend_usd, budget_usd, touches]
       properties:
+        touches:
+          description: Human touches of the items finished in the window against the window before
+          allOf: [{ $ref: "#/components/schemas/TouchTrend" }]
         factory: { $ref: "#/components/schemas/Factory" }
         health: { $ref: "#/components/schemas/FactoryHealth" }
         andon:

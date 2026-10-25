@@ -178,6 +178,12 @@ type Store interface {
 	// AndonPulls returns up to limit of the factory's andon pulls, open and cleared, the most
 	// recently pulled first.
 	AndonPulls(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.AndonPull, error)
+
+	// LabelTouch sets the reason of the touch event names (its naming event, domain.TouchesOf) on
+	// by's behalf, with the audit entry touch.labelled {event_id, reason} in the same transaction.
+	// It is never an item event, so it is not a touch itself. It returns ErrNotFound when event
+	// names no touch of the organization; reason must be valid (domain.TouchReason.Valid).
+	LabelTouch(ctx context.Context, event int64, reason domain.TouchReason, by domain.Actor) error
 }
 
 // FlowStats is the read model of how work flows: spans of time items spend at stations and the
@@ -237,6 +243,27 @@ type FlowStats interface {
 	// latest blocked or paused event), or in the expedite lane, most recently changed first
 	// (updated_at descending, then id). work_items_attention_idx (migration 00033) serves it.
 	InboxItems(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.AttentionItem, error)
+
+	// Touches measures the human touches (domain.Touch) of the factory's items of q.Type finished
+	// in [q.Since, q.Until), of those whose last agent run ran on q.VersionID when it is set
+	// (domain.TallyTouches), and counts the andon pulls people made in the window (LineStops).
+	Touches(ctx context.Context, q FlowQuery) (domain.TouchStats, error)
+
+	// OrgTouches measures, as Touches does, each of factories (q.FactoryID is not used) and all
+	// of them together, in the order given; a factory the organization does not have counts
+	// nothing.
+	OrgTouches(ctx context.Context, factories []domain.FactoryID, q FlowQuery) (domain.TouchStats, []domain.FactoryTouchStats, error)
+
+	// TouchesByBucket measures, as Touches does but without line stops, the items finished in n
+	// consecutive buckets of length d that end at q.Until, oldest first; q.Since is not used.
+	TouchesByBucket(ctx context.Context, q FlowQuery, d time.Duration, n int) ([]domain.TouchStats, error)
+
+	// ItemTouches returns an item's touches in time order with their reasons; none for an item
+	// the organization does not have.
+	ItemTouches(ctx context.Context, item domain.ItemID) ([]domain.Touch, error)
+
+	// TouchCounts counts the touches of each of items that has any, by item: the board's cards.
+	TouchCounts(ctx context.Context, items []domain.ItemID) (map[domain.ItemID]int, error)
 }
 
 // FlowQuery is what a FlowStats read measures: one factory's items over [Since, Until).
@@ -245,6 +272,9 @@ type FlowQuery struct {
 	Since, Until time.Time
 	// Type keeps the items of one work type; "" keeps every type.
 	Type string
+	// VersionID keeps, where a read says so (Touches), the items whose last agent run ran on this
+	// definition version; "" keeps every item.
+	VersionID domain.DefinitionVersionID
 }
 
 // Tenancy keeps the install's organizations. Methods marked (org) act on the organization in

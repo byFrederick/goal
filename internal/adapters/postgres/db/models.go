@@ -114,6 +114,21 @@ type ItemEvent struct {
 	OrgID     uuid.UUID
 }
 
+type ItemTouch struct {
+	OrgID     uuid.UUID
+	FactoryID uuid.UUID
+	ItemID    uuid.UUID
+	EventID   int64
+	Kind      string
+	Station   *string
+	At        time.Time
+	Actor     string
+	ActorName string
+	Planned   bool
+	Reason    *string
+	ReasonBy  *string
+}
+
 type Lease struct {
 	ItemID      uuid.UUID
 	FactoryID   uuid.UUID

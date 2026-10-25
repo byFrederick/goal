@@ -27,8 +27,10 @@ func TestHuman_ApproveAdvancesRejectSendsBack(t *testing.T) {
 		want   domain.Position
 		rework int
 		event  domain.EventKind
+		// planned: the line requires the approval at a human station; a send-back it does not.
+		planned bool
 	}{
-		{name: "approve", want: domain.Position{Station: stDone, State: domain.StateDone}, event: domain.EventApproved},
+		{name: "approve", want: domain.Position{Station: stDone, State: domain.StateDone}, event: domain.EventApproved, planned: true},
 		{
 			name: "reject", reject: true, want: domain.Position{Station: "spec", State: domain.StateQueued},
 			rework: 1, event: domain.EventRejected,
@@ -65,6 +67,10 @@ func TestHuman_ApproveAdvancesRejectSendsBack(t *testing.T) {
 			events := h.eventsOf(it.ID, tt.event)
 			if len(events) != 1 || events[0].Actor != human.Name || events[0].Data["actor"] != "user:local" {
 				t.Fatalf("events %v, want one %s by the local user (user:local)", h.kinds(it.ID), tt.event)
+			}
+
+			if events[0].Data[domain.KeyPlanned] != tt.planned {
+				t.Errorf("%s event data %v, want planned %v", tt.event, events[0].Data, tt.planned)
 			}
 
 			if tt.reject && events[0].Data["reason"] != "split it in two" {
@@ -111,6 +117,11 @@ func TestHuman_ApprovingAGateEscalationAdvancesIt(t *testing.T) {
 
 	if got.State != domain.StateDone {
 		t.Errorf("approved escalation is %s at %s, want done", got.State, got.Station)
+	}
+
+	// An escalation is no decision the line requires: an unplanned touch.
+	if approved := h.eventsOf(it.ID, domain.EventApproved); len(approved) != 1 || approved[0].Data[domain.KeyPlanned] != false {
+		t.Errorf("approved events %+v, want one with planned false", approved)
 	}
 }
 

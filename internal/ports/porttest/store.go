@@ -34,6 +34,7 @@ type Store struct {
 	leases    map[domain.ItemID]domain.Lease
 	runs      map[domain.RunID]*domain.Run
 	events    []domain.Event
+	labels    map[int64]touchLabel
 	spans     map[domain.ItemID][]domain.Span
 	leaseLog  map[domain.ItemID][]domain.LeaseSpan
 	andon     []andonRecord
@@ -57,6 +58,7 @@ func NewStore() *Store {
 		numbers:   map[domain.FactoryID]int64{},
 		leases:    map[domain.ItemID]domain.Lease{},
 		runs:      map[domain.RunID]*domain.Run{},
+		labels:    map[int64]touchLabel{},
 		spans:     map[domain.ItemID][]domain.Span{},
 		leaseLog:  map[domain.ItemID][]domain.LeaseSpan{},
 	}
@@ -124,7 +126,13 @@ func (s *Store) purge(org domain.OrgID) {
 	}
 
 	maps.DeleteFunc(s.runs, func(_ domain.RunID, r *domain.Run) bool { return gone[r.ItemID] })
-	s.events = slices.DeleteFunc(s.events, func(e domain.Event) bool { return gone[e.ItemID] })
+	s.events = slices.DeleteFunc(s.events, func(e domain.Event) bool {
+		if gone[e.ItemID] {
+			delete(s.labels, e.ID)
+		}
+
+		return gone[e.ItemID]
+	})
 
 	for id, owner := range s.factories {
 		if owner == org {
@@ -860,6 +868,7 @@ func (s *Store) waiting(org domain.OrgID, factory domain.FactoryID, station stri
 func (s *Store) append(e domain.Event) {
 	e.ID = int64(len(s.events) + 1)
 	s.events = append(s.events, e)
+	s.labelEvent(e)
 }
 
 // newID returns a deterministic UUIDv7-shaped id. Callers hold s.mu.

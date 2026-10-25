@@ -32,6 +32,8 @@ type Harness struct {
 	// LeaseSpans returns the lease spans of an item of org in the order they ended; no port reads
 	// them one item at a time.
 	LeaseSpans func(t *testing.T, org domain.OrgID, id domain.ItemID) []domain.LeaseSpan
+	// NewVersion returns a new published definition version of factory of org, for runs to run on.
+	NewVersion func(t *testing.T, org domain.OrgID, factory domain.FactoryID) domain.DefinitionVersionID
 }
 
 // Run runs the suite. Tests run in parallel and call newHarness once each; every harness must
@@ -102,6 +104,12 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Andon_OnlyTheOrgs", testAndonOnlyTheOrgs},
 		{"Concurrent_AndonPullsOneOpens", testConcurrentAndonPulls},
 		{"GateDecisions_LastVerdictsAfterAClear", testGateDecisions},
+		{"Touches_OneActionByAPersonCountsOnce", testTouchesOneActionOnce},
+		{"Touches_MetricsOfTheItemsFinishedInTheWindow", testTouchesMetrics},
+		{"TouchesByBucket_ByFinishTime", testTouchesByBucket},
+		{"OrgTouches_EachFactoryAndTheirTotal", testOrgTouches},
+		{"LabelTouch_OnTheNamingEventOnly", testLabelTouch},
+		{"Touches_NeedAnOrgAndSeeOnlyItsItems", testTouchesTenancy},
 	}
 
 	for _, tc := range tests {

@@ -193,7 +193,7 @@ The end goal of every factory is to finish an item from start to finish with as 
 - **Planned and unplanned.** A *planned* touch is a decision a line requires: an approval, gate approval or merge at a human station. Everything else is *unplanned*: rejections and send-backs, moves, pauses, retries, notes, approvals of an escalation (a gate after too many reworks). From 4-23 on decision events carry `data.planned`; older approvals, gate approvals and merges count as planned. The headline counts both; both stay visible.
 - **Metrics** over a window (UTC days, as E's metrics; one work type optional), for the items **finished** (done) in it: touches per finished item (mean and median), the **touchless rate** (finished with zero touches), planned and unplanned per item, touches by station (the event's station), by kind, by reason (§4.10) and **by definition version** (an item counts for the version of its last agent run, `agent_runs.definition_version_id`, so a publish shows whether it changed touches), a weekly trend (E's weekly buckets) and, beside them, the line stops people made (andon pulls in the window, which belong to the line, not an item). Organization level sums the factories the principal may read; factory level is the line.
 - **Where it shows**: the Floor and factory overview (headline and trend), the Board header (over the board's window), each item card (its count) and the Item (count and list), the API (§8.2) and `goal status` (§9). Permissions are the existing ones: `factory:read` for a factory and an item, `org:read` with per-factory visibility for the organization view; RLS as for every item read.
-- `FlowStats` computes it in SQL over `item_events` with a partial index on person events (`00053`); `porttest.Store` keeps the same rule in memory and `storetest` checks both agree.
+- `FlowStats` computes it in SQL over `item_events` with a partial index on person events (`00052`): the view `item_touches` groups and names them, read by item (one item, the cards' items, or the items finished in a window), and `domain.TallyTouches` sums those items in Go for both stores; `porttest.Store` keeps the same rule in memory (`domain.TouchesOf`) and `storetest` checks both agree. (4-23: the index is on `(item_id, at)`, since every read starts from items, not on `(factory_id, at)`.)
 
 ### 4.10 Touch reasons
 
@@ -382,7 +382,9 @@ Adapters: `postgres` (Knowledge, pgvector), `openaiembed` (`POST <GOAL_EMBED_URL
 // FlowStats
 Touches(ctx context.Context, q FlowQuery) (domain.TouchStats, error)        // §4.9, items finished in the window
 OrgTouches(ctx context.Context, factories []domain.FactoryID, q FlowQuery) (domain.TouchStats, []domain.FactoryTouchStats, error)
+TouchesByBucket(ctx context.Context, q FlowQuery, d time.Duration, n int) ([]domain.TouchStats, error) // the weekly trend, as DoneByBucket
 ItemTouches(ctx context.Context, item domain.ItemID) ([]domain.Touch, error) // with planned and reason
+TouchCounts(ctx context.Context, items []domain.ItemID) (map[domain.ItemID]int, error) // the cards' touch_count
 // Store
 LabelTouch(ctx context.Context, event int64, reason domain.TouchReason, by domain.Actor) error // a person's choice (audited)
 ```
@@ -452,8 +454,8 @@ Every org table: `org_id uuid NOT NULL DEFAULT goal_org()` referencing `organiza
 | --- | --- | --- |
 | `00050_drop_legacy_import.sql` | 4-3 | drops 00039's `legacy_import_pending` (no SQL function used it; its queries `LegacyImportPending`, `EndLegacyImport` and `HasVersions` go with the import). `postgres.Migrate` refuses, before applying it, a database where a live organization's import is still pending or that is from before 00039 (`ErrLegacyImportPending`) |
 | `00051_connections.sql` | 4-8 | `connection_kinds`, `connections`, `goal_sync_platform_kinds(jsonb)` |
-| `00052_knowledge.sql` | 4-16 | `knowledge_sources`, `knowledge_documents`, `knowledge_chunks`; requires the `vector` extension |
-| `00053_touches.sql` | 4-23 | the partial index on person events; `item_touch_labels` and the trigger that adds a row per person event |
+| `00052_touches.sql` | 4-23 | the partial index on person events; `item_touch_labels`, the trigger that adds a row per person event, `goal_touch_planned` and the view `item_touches` (4-23 landed before 4-16, so it took `00052`) |
+| `00053_knowledge.sql` | 4-16 | `knowledge_sources`, `knowledge_documents`, `knowledge_chunks`; requires the `vector` extension |
 
 ```sql
 -- 00051_connections.sql
@@ -502,7 +504,7 @@ CREATE INDEX connections_kind_idx ON connections (kind_id);
 ```
 
 ```sql
--- 00052_knowledge.sql (goal db init creates the extension as the admin; the migration fails with
+-- 00053_knowledge.sql (goal db init creates the extension as the admin; the migration fails with
 -- "extension vector is missing: run goal db init" otherwise)
 CREATE TABLE knowledge_sources (
   id             uuid PRIMARY KEY,
@@ -569,8 +571,8 @@ CREATE INDEX knowledge_chunks_embedding_idx ON knowledge_chunks USING hnsw (embe
 ```
 
 ```sql
--- 00053_touches.sql
-CREATE INDEX item_events_person_idx ON item_events (factory_id, at) WHERE data->>'actor' LIKE 'user:%';
+-- 00052_touches.sql
+CREATE INDEX item_events_person_idx ON item_events (item_id, at) WHERE data->>'actor' LIKE 'user:%';
 
 CREATE TABLE item_touch_labels (
   event_id   bigint PRIMARY KEY REFERENCES item_events (id) ON DELETE CASCADE,
@@ -584,7 +586,10 @@ CREATE TABLE item_touch_labels (
 CREATE INDEX item_touch_labels_org_item_idx ON item_touch_labels (org_id, item_id);
 -- AFTER INSERT trigger on item_events, for events whose data.actor starts with 'user:' and
 -- that are not lease_taken or created: one row, reason 'required_gate' when data.planned (or,
--- before 4-23, for approved, gate_approved and merged).
+-- before 4-23, for approved, gate_approved and merged): goal_touch_planned(kind, data).
+-- View item_touches (security_invoker): one row per touch, DISTINCT ON (item_id, actor, at)
+-- ordered by the naming precedence, with its event's reason. LabelTouch upserts the row, so
+-- older touches can get a reason too.
 ```
 
 A touch that groups several events (a merge's `merged` and `approved`) reads the label of the event that names it (§4.9).
@@ -645,11 +650,11 @@ They replace spec 3's proposed `credential:read|manage|grant`, `vault:manage`, `
 
 | Method and path | Scope | Does |
 | --- | --- | --- |
-| `GET /v1/orgs/{org}/factories/{factory}/metrics/touches?from=&to=&type=&weeks=` | `factory:read` | `getTouchMetrics`: `TouchStats` for the line (§4.9): finished items, touches per item (mean, median), touchless rate, planned and unplanned per item, by station, by kind, by reason, by definition version (`?version=` narrows to one), weekly trend, line stops by people |
+| `GET /v1/orgs/{org}/factories/{factory}/metrics/touches?from=&to=&type=&weeks=` | `factory:read` | `getTouchMetrics`: `TouchStats` for the line (§4.9): finished items, touches per item (mean, median), touchless rate, planned and unplanned per item, by station, by kind, by reason, by definition version (`?version=` narrows to one: a number or `current`), weekly trend (`weeks`, 1–26, default 12, ending on `to`), line stops by people |
 | `GET /v1/orgs/{org}/metrics/touches?from=&to=` | `org:read` | `getOrgTouchMetrics`: the organization's total and each factory the principal may read |
-| `PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason` | `item:operate` | `{reason}`: a person's choice, audited (`touch.labelled`); 404 `touch-not-found` for an event that is not a touch |
+| `PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason` | `item:operate` | `setTouchReason`, `{reason}` → 204: a person's choice, audited (`touch.labelled`); 404 `touch-not-found` for an event that is not a touch of the item |
 
-Changed shared schemas: `Item` gains `touches` (`{count, planned, unplanned, list: [Touch]}`, `Touch` = `{event_id, kind, station, at, actor, planned, reason, reason_by}`); `ItemCard` gains `touch_count`; the board's `line` gains `touches` (`{per_item_mean, per_item_median, touchless_rate}` over the board's window); `getFactoryOverview`'s factories gain the same headline with last week's against the week before.
+Changed shared schemas: `Item` gains `touches` (`ItemTouches` = `{count, planned, unplanned, list: [Touch]}`, `Touch` = `{event_id, kind, station, at, actor, planned, reason, reason_by}`; getItem only); `ItemCard` gains `touch_count`; the board's `line` gains `touches` (`TouchHeadline` = `{finished, per_item_mean, per_item_median, touchless_rate}` over the board's window); `getFactoryOverview`'s factories gain `touches` (`TouchTrend` = `{current, previous}`: the overview's window against the one before).
 
 Upload routes take bodies up to `GOAL_UPLOAD_MAX_BYTES`; every other route keeps the 1 MiB cap. Secret values appear in no response, log line, event or audit entry. Changed shared schemas: `Problem.code` adds the codes above; `Factory` gains nothing (the builder reads connections by `?factory=`). Removed from the registry: `/v1/oauth/callback` and `/oauth/client-metadata.json` (deferred with OAuth connections).
 
@@ -781,18 +786,18 @@ Each row is one PR on `goal/4-<n>-<slug>`, passing `task check`, plus `task migr
 | 4-13 | **CodeHost per kind** (`github` changed, `gitlab` new) + merge of every pull request of the item (§4.7) | partial merge then retry; host mismatch refused | engine tests, httptest code hosts |
 | 4-14 | **Cutover**: remove `GOAL_TASK_ENV`, `GOAL_GITHUB_*`, `env:` references, `domain.SecretPolicy`, the gateway's upstream forwarding (`upstream.go`, `policy.go`); `goal connection import-env`; README interim rule ended | §14 step 5; the goal factory runs on connections only | e2e, settings tests |
 | 4-15 | **Web: Connections** (list, new, detail; Define-Basics runtime, Define-Connections, New-Connections; phone) | §10; boards of §3 | Playwright 375/768/1440 + axe, Vitest |
-| 4-16 | **Knowledge core**: `00052`, `ports.Knowledge` + postgres + `knowledgetest`, `ports.Embedder` + `openaiembed`, `internal/knowledge` (extract, chunk, fuse, ingestion loop with leases), uploads in the bucket; compose PostgreSQL on pgvector | row 1, 8; leases survive a killed goald; keyword-only without an embedder | conformance, integration, unit |
+| 4-16 | **Knowledge core**: `00053`, `ports.Knowledge` + postgres + `knowledgetest`, `ports.Embedder` + `openaiembed`, `internal/knowledge` (extract, chunk, fuse, ingestion loop with leases), uploads in the bucket; compose PostgreSQL on pgvector | row 1, 8; leases survive a killed goald; keyword-only without an embedder | conformance, integration, unit |
 | 4-17 | **Knowledge API, CLI, gateway tools** `knowledge__search`, `knowledge__read`, SSE `knowledge` | §8; row 11 | handler and gateway tests |
 | 4-18 | **`gitdocs` reader** | incremental by blob id; deletion; globs; GitHub and GitLab hosts | integration against a local git server |
 | 4-19 | **`confluence` reader** (kind `confluence`, `sync: confluence`) | versions, deletion, storage format to text | httptest fixtures |
 | 4-20 | **Web: Knowledge** (sources, new source, documents, search; phone) | §10 | Playwright + axe |
 | 4-21 | **Cloudflare target**: `internal/adapters/cloudflare`, `api/sandbox.yaml`, `deploy/cloudflare` control Worker (routing, goald and auth containers, sandbox API, run DOs with deadline alarm) and wrangler config | `sandboxtest` green against staging; row 10; an item to done on staging | Worker Vitest, staging run |
 | 4-22 | **Terraform for the platform on Cloudflare** (R2, DNS, Secrets Store, route, Access for staging); delete the AWS Terraform; runbook (deploy, master key escrow and rotation, restore) | `terraform validate`/`plan` clean; nothing per org | `task check`, plan review |
-| 4-23 | **Human touches: metrics and reasons** (§4.9, §4.10): `00053`, `FlowStats.Touches`, `OrgTouches`, `ItemTouches`, `Store.LabelTouch`, `data.planned` on decisions, `getTouchMetrics` (with the by-version breakdown), `getOrgTouchMetrics`, the reason endpoint, `touches` on `Item`, `touch_count` on cards, the board's and the overview's headline | §13's touch cases on fake and PostgreSQL; golden matrix rows | storetest, handler tests |
+| 4-23 | **Human touches: metrics and reasons** (§4.9, §4.10): `00052`, `FlowStats.Touches`, `OrgTouches`, `ItemTouches`, `Store.LabelTouch`, `data.planned` on decisions, `getTouchMetrics` (with the by-version breakdown), `getOrgTouchMetrics`, the reason endpoint, `touches` on `Item`, `touch_count` on cards, the board's and the overview's headline | §13's touch cases on fake and PostgreSQL; golden matrix rows | storetest, handler tests |
 | 4-24 | **Human touches: screens and CLI**: Floor headline and Touches panel, factory tiles, Board header, cards, the Item's list with its reason select; `goal status`, `goal item` touches | §10 Touches; boards of §3 | Playwright 375/768/1440 + axe, CLI tests |
 | 4-25 | **Docs as built**: architecture.md, AGENTS.md, worker README, threat rows checked against tests | every §11.2 row names a passing test | review |
 
-Migration numbers rise with PR order (4-3 → `00050`, 4-8 → `00051`, 4-16 → `00052`, 4-23 → `00053`); a PR that lands out of order renumbers before merging. 4-3, 4-4 and 4-8 can start in parallel after the prototypes; 4-21 needs 4-7; 4-23 needs only 2.2-E and can be built any time after the prototypes; the web PRs need their API PRs.
+Migration numbers rise with landing order (4-3 → `00050`, 4-8 → `00051`, 4-23 → `00052`, then 4-16 → `00053`); a PR that lands out of order takes the next free number on main and fixes this text. 4-3, 4-4 and 4-8 can start in parallel after the prototypes; 4-21 needs 4-7; 4-23 needs only 2.2-E and can be built any time after the prototypes; the web PRs need their API PRs.
 
 ## 16. Cross-spec contracts
 

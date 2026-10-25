@@ -63,6 +63,13 @@ func (s *server) GetBoard(ctx context.Context, req gen.GetBoardRequestObject) (g
 		return nil, err
 	}
 
+	touches, err := s.items.Touches(ctx, w.query(l.FactoryID, "", now))
+	if err != nil {
+		return nil, err
+	}
+
+	line.Touches = touchHeadline(touches)
+
 	board := gen.GetBoard200JSONResponse{
 		Stations: make([]gen.BoardStation, 0, len(l.Stations)), Line: line, Constraint: optional(constraint),
 		ConstraintSource: gen.ConstraintSource(source),
@@ -280,10 +287,20 @@ func (s *server) listCards(ctx context.Context, f *config.Factory, items []domai
 
 // cards renders items of factory f as cards: for every item in progress the agent working it, the
 // copy (1-based) when its station runs several, and the turns of its running run; for every item
-// the pull request and the summary its outputs name, and whether it waits in the buffer of drum
+// the pull request and the summary its outputs name, its human touches, and whether it waits in the buffer of drum
 // (none when drum is ""). Nothing is held by the rope until drum-buffer-rope is enforced.
 func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, drum string, items []domain.Item) ([]gen.ItemCard, error) {
 	leases, turns, err := s.inProgress(ctx, l, items)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]domain.ItemID, 0, len(items))
+	for _, it := range items {
+		ids = append(ids, it.ID)
+	}
+
+	touches, err := s.items.TouchCounts(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -303,7 +320,7 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 			ClassOfService: gen.ClassOfService(it.Class), ReworkCount: it.ReworkCount, CostUsd: it.CostUSD,
 			CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt, AgeSeconds: int64(max(age, 0) / time.Second),
 			PrUrl: optional(it.PullRequest(l)), Summary: optional(it.Summary(l)),
-			InBuffer: drum != "" && it.Station == drum && it.State.Waiting(),
+			InBuffer: drum != "" && it.Station == drum && it.State.Waiting(), TouchCount: touches[it.ID],
 		}
 
 		if ls, ok := leases[it.ID]; ok {
