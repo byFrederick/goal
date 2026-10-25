@@ -99,12 +99,14 @@ tasks:
       # --no-recreate: the tests use the services as they run, never restarting the install's.
       - docker compose up -d --wait --no-recreate postgres rustfs mailpit
       # The test databases a killed run left behind: goal_test_* created over an hour ago, so never
-      # one a run in progress still uses, and never the install's own database.
+      # one a run in progress still uses, and never the install's own database. An interrupted drop
+      # leaves a database invalid (datconnlimit -2) and its files gone: drop it too.
       - |
         docker compose exec -T postgres psql -U goal -d postgres -v ON_ERROR_STOP=1 -qAt <<'SQL'
         SELECT format('DROP DATABASE %I WITH (FORCE)', datname) FROM pg_database
         WHERE datname LIKE 'goal\_test\_%' AND datname <> 'goal'
-          AND (pg_stat_file('base/' || oid || '/PG_VERSION')).modification < now() - interval '1 hour'
+          AND (datconnlimit = -2
+            OR (pg_stat_file('base/' || oid || '/PG_VERSION', true)).modification < now() - interval '1 hour')
         \gexec
         SQL
       - go test -race -tags integration ./...
