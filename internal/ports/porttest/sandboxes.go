@@ -8,6 +8,7 @@ import (
 	"io"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/byFrederick/goal/internal/domain"
@@ -35,7 +36,50 @@ type Sandboxes struct {
 
 	mu      sync.Mutex
 	boxes   map[domain.RunID]*sandbox
+	losses  []*loss
 	changes changes
+}
+
+// loss is a scripted ports.ErrSandboxLost: the next n Creates (an empty command) or commands
+// starting with command fail with reason.
+type loss struct {
+	command string
+	n       int
+	reason  string
+}
+
+// LoseCreates makes the next n Creates fail as a backend that lost the box: their error wraps
+// ports.ErrSandboxLost and says reason.
+func (s *Sandboxes) LoseCreates(n int, reason string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.losses = append(s.losses, &loss{n: n, reason: reason})
+}
+
+// Lose makes the next n commands whose argv, joined by spaces, starts with command lose their
+// sandbox: each plays as scripted, then Wait returns an error that wraps ports.ErrSandboxLost and
+// says reason instead of the exit, as when the connection to the box breaks before the outcome.
+func (s *Sandboxes) Lose(command string, n int, reason string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.losses = append(s.losses, &loss{command: command, n: n, reason: reason})
+}
+
+// lost takes one scripted loss of command ("" for Create) and returns its error, if any.
+func (s *Sandboxes) lost(command string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, l := range s.losses {
+		if l.n > 0 && (l.command == "") == (command == "") && strings.HasPrefix(command, l.command) {
+			l.n--
+			return fmt.Errorf("porttest: %w: %s", ports.ErrSandboxLost, l.reason)
+		}
+	}
+
+	return nil
 }
 
 // NewSandboxes returns sandboxes that play fn for every command.
@@ -47,6 +91,10 @@ func NewSandboxes(fn ExecFunc) *Sandboxes {
 func (s *Sandboxes) Create(_ context.Context, spec ports.SandboxSpec) (ports.Sandbox, error) {
 	if spec.RunID == "" {
 		return nil, errors.New("porttest: sandbox without a run")
+	}
+
+	if err := s.lost(""); err != nil {
+		return nil, err
 	}
 
 	s.mu.Lock()
@@ -165,14 +213,14 @@ func (b *sandbox) Exec(ctx context.Context, e ports.Exec) (ports.Process, error)
 	b.kills[p] = kill
 	b.mu.Unlock()
 
-	go b.play(run, kill, call, stdoutW, p)
+	go b.play(run, kill, call, stdoutW, p, b.owner.lost(strings.Join(e.Argv, " ")))
 
 	return p, nil
 }
 
-// play runs the script and records how the command ended. A killed command's output ends and
-// its pending writes fail at once, as a real process's do.
-func (b *sandbox) play(run context.Context, kill context.CancelCauseFunc, call ExecCall, stdout *io.PipeWriter, p *process) {
+// play runs the script and records how the command ended, or lost when the command is to lose its
+// sandbox. A killed command's output ends and its pending writes fail at once, as a real process's do.
+func (b *sandbox) play(run context.Context, kill context.CancelCauseFunc, call ExecCall, stdout *io.PipeWriter, p *process, lost error) {
 	defer close(p.done)
 
 	script, cancel := run, context.CancelFunc(func() {})
@@ -199,6 +247,8 @@ func (b *sandbox) play(run context.Context, kill context.CancelCauseFunc, call E
 	kill(nil)
 
 	switch {
+	case lost != nil && cause == nil:
+		p.err = lost
 	case cause == nil:
 		p.status = ports.ExitStatus{Code: code, StderrTail: stderr.String()}
 	case errors.Is(cause, errTimedOut):
