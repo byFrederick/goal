@@ -1,7 +1,8 @@
 # The same gate as the local pre-push hook (.githooks/pre-push), on every pull request and every
 # push to main: `task check`, and `task migrate-check` when migrations/ or auth/ changed (on a pull
 # request, against its base; on main, always); plus `task test-integration` on PostgreSQL 18,
-# RustFS and Mailpit from compose.yaml. The tools come from .mise.toml, as on a laptop.
+# RustFS and Mailpit from compose.yaml. The tools come from .mise.toml, as on a laptop, and so does
+# how they install (its [settings]: npm: tools such as pnpm install with npm, not aube).
 # If the workflow shows as disabled on GitHub, a person re-enables it: `gh workflow enable ci.yml`.
 # Hardening (github-actions-hardening skill): a read-only token no job widens, actions pinned to
 # commit SHAs, only the pull_request trigger for pull requests, no secrets (pull requests from
@@ -31,7 +32,8 @@ jobs:
           persist-credentials: false
           fetch-depth: 0 # the pull request's base commit, for the migrations diff
       # Go, Node, pnpm, terraform, tflint, sops, golangci-lint and sqlc at .mise.toml's versions.
-      # The default cache key includes the hash of .mise.toml, so a version bump misses the cache.
+      # mise-action runs mise in the checkout root, so it reads .mise.toml's [tools] and [settings].
+      # The default cache key includes the hash of .mise.toml, so a change to it misses the cache.
       - uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
         with:
           version: 2026.10.3
