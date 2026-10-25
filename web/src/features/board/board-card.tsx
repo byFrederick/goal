@@ -58,7 +58,10 @@ export function BoardCard({
   const state = cardState(item, decides);
   const age = formatAge(item.age_seconds);
 
-  const stateLine = <span className={cn(compact ? 'text-[13px]' : 'text-xs', toneText[state.tone])}>{state.text}</span>;
+  // Two lines at most: a done item's summary is an excerpt, and a card stays about as tall as its neighbours.
+  const stateLine = (
+    <span className={cn('line-clamp-2', compact ? 'text-[13px]' : 'text-xs', toneText[state.tone])}>{state.text}</span>
+  );
   // People who had to act on it so far (spec 4 §4.9); a card nobody touched says nothing.
   const touches =
     item.touch_count > 0 ? (
@@ -162,7 +165,7 @@ function CardTitle({
         draggable={false}
         aria-keyshortcuts={movable ? moveShortcut : undefined}
         aria-describedby={describedBy}
-        className="no-underline outline-none after:absolute after:inset-0 after:rounded-control"
+        className="line-clamp-3 no-underline outline-none after:absolute after:inset-0 after:rounded-control"
       >
         {item.title}
       </Link>
