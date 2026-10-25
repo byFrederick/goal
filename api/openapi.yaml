@@ -3609,7 +3609,7 @@ components:
     ItemCard:
       type: object
       description: An item as boards and lists show it
-      required: [id, ref, number, title, type, station, state, class_of_service, rework_count, cost_usd, created_at, updated_at, age_seconds, agent, pr_url, slot, turn, summary, in_buffer, rope_held, touch_count]
+      required: [id, ref, number, title, type, station, state, class_of_service, rework_count, cost_usd, created_at, updated_at, age_seconds, agent, pr_url, pull_requests, slot, turn, summary, in_buffer, rope_held, touch_count]
       properties:
         id: { type: string }
         ref: { type: string, description: "<factory name>#<number>, as in goal#2" }
@@ -3636,6 +3636,13 @@ components:
           type: string
           nullable: true
           description: The pull request the item's latest station output names, else null
+        pull_requests:
+          type: array
+          items: { type: string }
+          description: >-
+            At a merge station, every pull request a merge lands (POST
+            /v1/orgs/{org}/items/{item}/merge: what each station's latest output names, in station
+            order, each once), so whoever merges sees them all; empty at any other station
         slot:
           type: integer
           nullable: true

@@ -2897,6 +2897,8 @@ export interface components {
             agent: string | null;
             /** @description The pull request the item's latest station output names, else null */
             pr_url: string | null;
+            /** @description At a merge station, every pull request a merge lands (POST /v1/orgs/{org}/items/{item}/merge: what each station's latest output names, in station order, each once), so whoever merges sees them all; empty at any other station */
+            pull_requests: string[];
             /** @description While in progress at a station that runs several copies of its agent, the copy working it, 1-based (investigator-2); else null */
             slot: number | null;
             /** @description The turns its running run has reported so far, while one runs; else null */

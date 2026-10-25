@@ -321,6 +321,12 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 			CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt, AgeSeconds: int64(max(age, 0) / time.Second),
 			PrUrl: optional(it.PullRequest(l)), Summary: optional(it.Summary(l)),
 			InBuffer: drum != "" && it.Station == drum && it.State.Waiting(), TouchCount: touches[it.ID],
+			PullRequests: []string{},
+		}
+
+		// Whoever merges sees every pull request the merge lands (spec 4 §4.7), not just the latest.
+		if st, _ := l.Station(it.Station); st.Action == domain.ActionMerge {
+			c.PullRequests = it.PullRequests(l)
 		}
 
 		if ls, ok := leases[it.ID]; ok {

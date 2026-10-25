@@ -236,6 +236,15 @@ func TestAPI_BoardCardsShowAgentPullRequestAndAge(t *testing.T) {
 		t.Errorf("merge card %+v, want line#2 with its pull request and no agent", c)
 	}
 
+	// A merge lands every pull request the outputs name: the card says which, at the merge station only.
+	if c := cards[merging.Number]; !reflect.DeepEqual(c.PullRequests, []string{prURL}) {
+		t.Errorf("merge card pull_requests %v, want [%s]", c.PullRequests, prURL)
+	}
+
+	if c := cards[working.Number]; c.PullRequests == nil || len(c.PullRequests) != 0 {
+		t.Errorf("in-progress card pull_requests %#v, want [] away from a merge station", c.PullRequests)
+	}
+
 	if c := cards[finished.Number]; c.AgeSeconds != int64(time.Hour/time.Second) {
 		t.Errorf("done card age %d s, want created → done (3600)", c.AgeSeconds)
 	}

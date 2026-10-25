@@ -144,7 +144,13 @@ export function ApprovalCard({
         <ChevronRight size={12} strokeWidth={1.75} aria-hidden="true" />
       </Link>
       <ItemDecisions
-        item={{ key: item.ref, ref: item.ref, title: item.title, state: item.state, pr_url: item.pr_url }}
+        item={{
+          key: item.ref,
+          ref: item.ref,
+          title: item.title,
+          state: item.state,
+          pull_requests: item.pull_requests,
+        }}
         factory={entry.factory.id}
         station={station}
         layout="stack"

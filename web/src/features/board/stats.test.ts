@@ -200,6 +200,7 @@ const card = (over: Partial<ItemCard>): ItemCard => ({
   age_seconds: 0,
   agent: null,
   pr_url: null,
+  pull_requests: [],
   slot: null,
   turn: null,
   summary: null,

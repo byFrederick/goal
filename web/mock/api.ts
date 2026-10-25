@@ -241,6 +241,17 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return null;
   };
 
+  /** Every pull request a merge of the item lands: its outputs', station by station, each once (spec 4 §4.7). */
+  const pullRequestsOf = (it: MockItem): string[] => [
+    ...new Set(
+      stationsOf(it).flatMap((s) => {
+        const out = it.outputs[s.id] as { pull_request?: unknown; pull_requests?: unknown } | undefined;
+        const list = Array.isArray(out?.pull_requests) ? out.pull_requests : [];
+        return [out?.pull_request, ...list].filter((u): u is string => typeof u === 'string');
+      }),
+    ),
+  ];
+
   const card = (it: MockItem): ItemCard => {
     const run = liveRun(it);
     const copies = state.stations[it.factory]?.[it.station]?.copies ?? 1;
@@ -261,6 +272,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       age_seconds: Math.round((clock() - Date.parse(it.created_at)) / 1000),
       agent: it.agent,
       pr_url: it.pr_url,
+      pull_requests: stationsOf(it).find((s) => s.id === it.station)?.action === 'merge' ? pullRequestsOf(it) : [],
       slot: run && copies > 1 ? run.slot + 1 : null,
       turn: run ? run.turn : null,
       summary: summaryOf(it),
@@ -1622,16 +1634,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       if (action === 'merge') {
         if (station?.action !== 'merge')
           return problem(res, 409, 'Not a merge station', `${it.station} does not merge`);
-        // Every pull request the outputs name, station by station, each once (spec 4 §4.7).
-        const prs = [
-          ...new Set(
-            stations.flatMap((s) => {
-              const out = it.outputs[s.id] as { pull_request?: unknown; pull_requests?: unknown } | undefined;
-              const list = Array.isArray(out?.pull_requests) ? out.pull_requests : [];
-              return [out?.pull_request, ...list].filter((u): u is string => typeof u === 'string');
-            }),
-          ),
-        ];
+        const prs = pullRequestsOf(it);
         if (prs.length === 0) return problem(res, 409, 'Nothing to merge', `${ref(it)} has no pull request`);
         // One merged event per pull request, at one time: one person's one touch.
         const at = new Date(clock()).toISOString();

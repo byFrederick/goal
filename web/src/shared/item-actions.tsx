@@ -29,10 +29,8 @@ export interface DecidableItem {
   ref: string;
   title: string;
   state: ItemState;
-  /** The pull request a merge would land, when known (a card's). */
-  pr_url?: string | null | undefined;
-  /** Every pull request a merge would land (the item's outputs), when known. */
-  pull_requests?: string[] | undefined;
+  /** Every pull request a merge lands: the item's outputs', or a card's pull_requests. */
+  pull_requests: string[];
 }
 
 type Decision =
@@ -412,7 +410,7 @@ function MergeDialog({
   pending,
   refusal,
 }: DialogProps<void> & { refusal: string | undefined }) {
-  const prs = item.pull_requests ?? (item.pr_url ? [item.pr_url] : []);
+  const prs = item.pull_requests;
   const one = prs.length === 1 ? prs[0] : undefined;
   const what = one ? pullRequestLabel(one) : prs.length > 1 ? `${prs.length} pull requests` : 'the pull request';
   return (

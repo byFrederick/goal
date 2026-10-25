@@ -141,7 +141,7 @@ export function pullRequestsIn(output: unknown): string[] {
 
 /**
  * Every pull request an item's outputs name, as the merge station merges them: station by station
- * in line order, each once (the item endpoint has no pr_url; cards do).
+ * in line order, each once (the item endpoint has none; a card's pull_requests are these at a merge station).
  */
 export function pullRequestsOf(outputs: Record<string, unknown>, lineOrder: string[]): string[] {
   const rank = (s: string) => (lineOrder.includes(s) ? lineOrder.indexOf(s) : lineOrder.length);

@@ -2311,6 +2311,9 @@ type ItemCard struct {
 	// PrUrl The pull request the item's latest station output names, else null
 	PrUrl *string `json:"pr_url"`
 
+	// PullRequests At a merge station, every pull request a merge lands (POST /v1/orgs/{org}/items/{item}/merge: what each station's latest output names, in station order, each once), so whoever merges sees them all; empty at any other station
+	PullRequests []string `json:"pull_requests"`
+
 	// Ref <factory name>#<number>, as in goal#2
 	Ref         string `json:"ref"`
 	ReworkCount int    `json:"rework_count"`

@@ -303,6 +303,21 @@ test('approve from the phone: the oldest decision is open to decide on the spot'
   await expect(needs.getByRole('article', { name: 'Rotate the staging TLS certificate' })).toBeVisible();
 });
 
+test('merging from the phone names every pull request the merge lands', async ({ page, request }) => {
+  test.skip(!isPhone(page), 'the Needs you view is the phone Items tab');
+  // goal#12 is older; once approved, goal#6 (two pull requests, at Merge) is the one to decide.
+  await request.post('/v1/orgs/acme/items/goal%2312/approve', { data: {} });
+  await page.goto('/o/acme/f/goal/items');
+  const card = page.getByRole('region', { name: 'Needs you' }).getByRole('article', {
+    name: 'Floor: throughput bars per day',
+  });
+  await card.getByRole('button', { name: 'Merge' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Merge 2 pull requests?' });
+  await expect(dialog.getByRole('link', { name: /Review acme\/goal PR #38 first/ })).toBeVisible();
+  await expect(dialog.getByRole('link', { name: /Review acme\/design-tokens MR !12 first/ })).toBeVisible();
+  await expectAccessible(page);
+});
+
 test('an item shows its time at each station against its target', async ({ page }) => {
   // goal#16: an expedite fix created 38 minutes ago, its spec being written now.
   await page.goto('/o/acme/f/goal/items/16');
