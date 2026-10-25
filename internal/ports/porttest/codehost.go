@@ -112,7 +112,7 @@ func (c *CodeHost) Merge(_ context.Context, conn domain.ResolvedConnection, url 
 	switch {
 	case !ok:
 		return "", fmt.Errorf("pull request %s does not exist: %w", url, ports.ErrNotMergeable)
-	case !pr.Open || !pr.Mergeable:
+	case !pr.Open || !pr.Mergeable || pr.MergeabilityPending:
 		return "", fmt.Errorf("pull request %s: %w", url, ports.ErrNotMergeable)
 	case pr.HeadSHA != m.HeadSHA:
 		return "", fmt.Errorf("pull request %s: head moved: %w", url, ports.ErrNotMergeable)

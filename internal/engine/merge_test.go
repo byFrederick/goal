@@ -327,12 +327,22 @@ func TestMerge_RefusesAndChangesNothing(t *testing.T) {
 		pr      func(*ports.PullRequest)
 		early   bool // ask before the item reaches the merge station
 		wantErr error
+		says    string // the refusal's message contains it
+		notSays string // and not this
 	}{
 		{name: "not yet at a human station", action: domain.ActionMerge, early: true, wantErr: engine.ErrNotWaitingHuman},
 		{name: "a human station that does not merge", action: "", wantErr: engine.ErrNotMergeStep},
 		{name: "no pull request in the outputs", action: domain.ActionMerge, output: `{"summary":"done"}`, wantErr: ports.ErrNotMergeable},
 		{name: "closed", action: domain.ActionMerge, pr: func(pr *ports.PullRequest) { pr.Open = false }, wantErr: ports.ErrNotMergeable},
-		{name: "conflicts or failing checks", action: domain.ActionMerge, pr: func(pr *ports.PullRequest) { pr.Mergeable = false }, wantErr: ports.ErrNotMergeable},
+		{
+			name: "conflicts or failing checks", action: domain.ActionMerge, pr: func(pr *ports.PullRequest) { pr.Mergeable = false },
+			wantErr: ports.ErrNotMergeable, says: "conflicts", notSays: "computing",
+		},
+		{
+			name: "mergeability still being computed", action: domain.ActionMerge,
+			pr:      func(pr *ports.PullRequest) { pr.Mergeable, pr.MergeabilityPending = false, true },
+			wantErr: ports.ErrNotMergeable, says: "still computing", notSays: "conflicts",
+		},
 		{
 			// Refused before anything merges, the github pull request included.
 			name: "a host no connection serves", action: domain.ActionMerge,
@@ -398,6 +408,8 @@ func TestMerge_RefusesAndChangesNothing(t *testing.T) {
 				t.Fatalf("Merge = %v, want %v", err, tt.wantErr)
 			}
 
+			refusalSays(t, err, tt.says, tt.notSays)
+
 			h.expectRefusedMerge(t, it.ID, err, tt.removed)
 
 			if after := h.item(t, it.ID); after.Position() != before.Position() {
@@ -408,6 +420,15 @@ func TestMerge_RefusesAndChangesNothing(t *testing.T) {
 				t.Errorf("merges %v, deleted %v; want none", h.codehost.Merges(), h.codehost.DeletedBranches())
 			}
 		})
+	}
+}
+
+// refusalSays fails unless err's message contains says and, when notSays is set, not notSays.
+func refusalSays(t *testing.T, err error, says, notSays string) {
+	t.Helper()
+
+	if !strings.Contains(err.Error(), says) || (notSays != "" && strings.Contains(err.Error(), notSays)) {
+		t.Errorf("Merge = %v, want a message saying %q and not %q", err, says, notSays)
 	}
 }
 

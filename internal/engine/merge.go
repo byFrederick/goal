@@ -283,9 +283,13 @@ func (e *Engine) merge(ctx context.Context, t mergeTarget, method string) (ports
 		return ports.PullRequest{}, fmt.Errorf("%s is closed: %w", t.url, ports.ErrNotMergeable)
 	}
 
-	if !pr.Mergeable {
-		return ports.PullRequest{}, fmt.Errorf("%s has conflicts, failing required checks, or its mergeability is still being computed: %w",
+	if pr.MergeabilityPending {
+		return ports.PullRequest{}, fmt.Errorf("%s: the host is still computing whether it can be merged, try again shortly: %w",
 			t.url, ports.ErrNotMergeable)
+	}
+
+	if !pr.Mergeable {
+		return ports.PullRequest{}, fmt.Errorf("%s has conflicts or failing required checks: %w", t.url, ports.ErrNotMergeable)
 	}
 
 	if _, err := t.host.Merge(ctx, t.conn, t.url, ports.Merge{Method: method, HeadSHA: pr.HeadSHA}); err != nil {

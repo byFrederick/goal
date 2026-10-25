@@ -583,10 +583,13 @@ type PullRequest struct {
 	URL    string
 	Open   bool
 	Merged bool
-	// Mergeable is false while the host is still computing it, as well as when the pull
-	// request has conflicts or fails required checks.
+	// Mergeable is false when the pull request has conflicts or fails required checks, and
+	// while MergeabilityPending.
 	Mergeable bool
-	HeadSHA   string
+	// MergeabilityPending reports that the host was still computing whether an open pull request
+	// is mergeable when the adapter stopped waiting for it: try again shortly.
+	MergeabilityPending bool
+	HeadSHA             string
 	// HeadBranch is the branch the pull request merges from; SameRepository reports whether
 	// that branch lives in the repository it merges into (not a fork). BaseBranch is the branch
 	// it merges into.
