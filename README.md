@@ -1,5 +1,7 @@
 # Goal — config-driven AI agent factories
 
+Goal is a config-driven platform for AI agent factories: a definition declares stations, agents, skills and WIP limits, and a pull-based flow engine moves the work through agents that each run in their own container, on Docker Compose or on Cloudflare.
+
 Goal runs AI agent factories on your machine. A factory is a definition: `factory.yaml` declares its stations, agents, skills, connections, WIP limits and knowledge base; Markdown files hold the agent prompts and skills. The engine moves work through the factory as a pull-based Kanban flow, built on the Theory of Constraints (*The Goal*) and the Three Ways (*The Phoenix Project*).
 
 Factory definitions are content, not code. goald keeps them, not this repository: file content in one versioned S3-compatible bucket, drafts and published versions in PostgreSQL (ADR 0005 and its 2.2 amendment). The first factory, `goal`, builds this repository; others (`sre`, `university`) run the same engine on other work.
@@ -176,3 +178,7 @@ Bootstrap, deploys, master key escrow and rotation, and restores: [docs/engineer
 A factory signs in with its organization's connections, never with goald's environment: owners and admins create them on the Connections page or with `goal connection create` (secret values from stdin or a file, sealed under `GOAL_MASTER_KEYS`, never shown again), and the definition names them. `runtime.modelConnection` gives every run its model: a `claude-subscription` connection holds the output of `claude setup-token` (for one person's own use on their own subscription), an `anthropic` one an API key, a `bedrock` one AWS credentials minted per run. `runtime.repository.connection` clones the repository, and the factory's connections whose kind has a code host (`github`, `gitlab`) merge its pull requests. A run's box gets each connection's variables as it needs them and uses them directly, MCP servers included.
 
 Upgrading an install from before connections (spec 4 §14): goald ignores `GOAL_TASK_ENV`, `CLAUDE_CODE_OAUTH_TOKEN` and `GOAL_GITHUB_*` with a warning, and blocks the items of a version that still uses `env:` references, `runtime.image`, `runtime.auth` or inline connections, or names no model connection ("publish a version with connections"). With the old tokens still in `.env`, `task connection:import-env` creates `github` and `claude` from them once (names that exist are left as they are); then name them in each factory (`runtime.modelConnection: claude`, `runtime.repository.connection: github`, `connections: [github, …]`), apply the fixes `goal factory validate` or the builder shows, publish, `goal retry` the blocked items, and delete the old variables from `.env`.
+
+## License
+
+Goal is licensed under the [Apache License 2.0](LICENSE). To report a vulnerability, see [SECURITY.md](SECURITY.md).
