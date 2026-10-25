@@ -5,8 +5,10 @@ import {
   cardState,
   columnCount,
   constraintNote,
+  expediteHeader,
   expediteUse,
   firstStation,
+  isExpedite,
   lineSentence,
   stationMeter,
   stationNote,
@@ -162,6 +164,20 @@ describe('wipText and expediteUse', () => {
     expect(expediteUse(line({ expedite: { limit: 1, in_use: 1 } }), 1)).toBe('1 of 1 in use');
     expect(expediteUse(line({ expedite: { limit: null, in_use: 2 } }), 2)).toBe('2 in use');
     expect(expediteUse(line(), 3)).toBe('3 items skipping the queue');
+  });
+
+  it('heads the line with the expedite count only when there is a lane or an expedite item', () => {
+    expect(expediteHeader(line({ expedite: { limit: 1, in_use: 1 } }), 1)).toBe('Expedite 1 of 1 in use');
+    expect(expediteHeader(line(), 2)).toBe('Expedite 2 items skipping the queue');
+    expect(expediteHeader(line(), 0)).toBeNull();
+  });
+
+  it('marks an expedite item only while it is live', () => {
+    expect(isExpedite({ class_of_service: 'expedite', state: 'in_progress' })).toBe(true);
+    expect(isExpedite({ class_of_service: 'expedite', state: 'blocked' })).toBe(true);
+    expect(isExpedite({ class_of_service: 'expedite', state: 'done' })).toBe(false);
+    expect(isExpedite({ class_of_service: 'expedite', state: 'cancelled' })).toBe(false);
+    expect(isExpedite({ class_of_service: 'standard', state: 'ready' })).toBe(false);
   });
 });
 

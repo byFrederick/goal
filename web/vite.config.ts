@@ -61,7 +61,11 @@ export default defineConfig({
     assetsInlineLimit: (file) => (/\.(woff2?|ttf|otf)$/.test(file) ? false : undefined),
   },
   test: {
-    include: ['src/**/*.test.ts', 'mock/**/*.test.ts'],
+    // Component tests opt into jsdom with a `@vitest-environment jsdom` comment at the top of the file.
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'mock/**/*.test.ts'],
     environment: 'node',
+    // React's act (what Testing Library waits on) is in its development build only; a production
+    // NODE_ENV in the shell would load the build without it.
+    env: { NODE_ENV: 'test' },
   },
 });
