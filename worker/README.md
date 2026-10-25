@@ -16,7 +16,7 @@ Debian 13 (trixie, slim) with, every version pinned in `worker/Dockerfile` and e
 
 - the worker, `goal-agent` on `PATH` (Node from mise below, whatever Node a repository pins);
 - git (identity `Goal agent <goal-agent@example.com>` in `/etc/gitconfig`, `GIT_TERMINAL_PROMPT=0`), gh, ripgrep, jq, curl, openssh-client, gcc, libc headers and make (cgo, `go test -race`, native modules);
-- mise, with Go, Node and Python installed in `/opt/mise` (`MISE_DATA_DIR`, owned by uid 1000) from `/etc/mise/config.toml`, its shims first on `PATH`. A repository that pins the same versions installs nothing; others install at prepare. `MISE_TRUSTED_CONFIG_PATHS=/workspace` trusts the checkout's mise config;
+- mise, with Go, Node and Python installed in `/opt/mise` (`MISE_DATA_DIR`, owned by uid 1000) from `/etc/mise/config.toml`, its shims first on `PATH`. A repository that pins the same versions installs nothing; others install at prepare. `MISE_TRUSTED_CONFIG_PATHS=/workspace` trusts the checkout's mise config, and `npm:` tools install with npm itself (`npm.package_manager = "npm"`: the automatic choice writes shims that start every bin with node, which breaks a native bin such as pnpm 12's);
 - PostgreSQL 18's server and client binaries (`/usr/lib/postgresql/18/bin` on `PATH`) and no cluster: a run that needs a database starts its own (`initdb`, `pg_ctl`).
 
 It runs as uid 1000 (`node`, `HOME=/home/node`), works in `/workspace` and idles (`sleep infinity`) until goald execs into it. The filesystem is writable: an agent installs what it needs with mise, npm, pip or `go install`; the sandbox is deleted after the run.

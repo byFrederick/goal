@@ -59,6 +59,10 @@ RUN apt-get update \
       > /etc/gitconfig \
  && mkdir -p /etc/mise \
  && printf '%s\n' '[tools]' "go = \"${GO_VERSION}\"" "node = \"${NODE_VERSION}\"" "python = \"${PYTHON_VERSION}\"" \
+      '' '[settings]' \
+      '# npm: tools install with npm itself. The auto choice (aube) writes bin shims that run every' \
+      '# bin through node, so a package whose bin is a native binary, such as pnpm 12, fails to start.' \
+      'npm.package_manager = "npm"' \
       > /etc/mise/config.toml
 ENV HOME=/home/node \
     MISE_DATA_DIR=/opt/mise \

@@ -16,6 +16,9 @@ vars:
   FACTORIES: '{{.FACTORIES | default "internal/config/testdata/*/"}}'
   # The one image every run's sandbox starts from (spec 4 §4.1); built locally, never pushed from here.
   WORKER_IMAGE: '{{.WORKER_IMAGE | default "ghcr.io/byfrederick/goal-agent:0.2.0"}}'
+  # The repository's pnpm (.mise.toml), which worker:smoke installs the way prepare does.
+  PNPM_VERSION:
+    sh: sed -n 's/^"npm:pnpm" = "\([^"]*\)".*/\1/p' .mise.toml
   # The auth service's sidecar image (spec 3 §5.5); built locally, never pushed from here.
   AUTH_IMAGE: '{{.AUTH_IMAGE | default "ghcr.io/byfrederick/goal-auth:0.1.0"}}'
   # Where migrate-check gets its throwaway PostgreSQL 18: Docker, or a local cluster where there is
@@ -575,6 +578,7 @@ tasks:
         docker run --rm {{.WORKER_IMAGE}} sh -ec 'test "$(id -u)" = 1000; touch /workspace/.w /goal/.w;
         git --version; gh --version | head -1; mise --version; go version; node --version; python --version;
         gcc --version | head -1; postgres --version; initdb -D /tmp/pg >/dev/null 2>&1; echo "initdb: ok";
+        cd /workspace; mise use -q npm:pnpm@{{.PNPM_VERSION}}; v=$(pnpm --version); echo "pnpm from a repository mise.toml: $v"; rm mise.toml;
         ! goal-agent prepare 2>/tmp/err; grep -q "GOAL_GATEWAY_URL is not set" /tmp/err; echo "goal-agent: ok"'
 
   egress:image:
