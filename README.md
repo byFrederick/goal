@@ -29,7 +29,7 @@ docs/engineering/      architecture and testing rules
 docs/jonah/            evaluation and self-remediation plan
 AGENTS.md              rules for every agent and human (CLAUDE.md imports it)
 Taskfile.yml           task check = everything the pre-push hook and CI run
-.githooks/             pre-push hook: task check (+ task migrate-check when migrations/ changed)
+.githooks/             pre-push hook: task check (+ task migrate-check when migrations/ or auth/ changed)
 .github/               CI workflow (ci.yml): the pre-push gate on every pull request and push to main
 .claude/skills/        skills.sh skills used to build Goal itself, pinned in skills-lock.json
 ```
