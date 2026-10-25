@@ -12,7 +12,7 @@
 // git blob id as its version, so a sync fetches only the files whose blob changed and the
 // ingestion loop deletes the documents of files no longer listed. Symbolic links and submodules
 // are not documents. A fetch reads one file raw, at most an upload's size
-// (knowledge.DefaultMaxUpload). The token travels only in the API's own header of requests to the
+// (domain.DefaultMaxUpload). The token travels only in the API's own header of requests to the
 // connection's host; a repository on any other host is refused before anything is sent, redirects
 // are not followed and no error carries the token. goald gives it a transport that dials public
 // addresses only (egress.PublicDialer).
@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/knowledge"
 	"github.com/byFrederick/goal/internal/ports"
 )
 
@@ -121,13 +120,13 @@ func (r *Reader) Fetch(ctx context.Context, s domain.SyncSpec, id string) (domai
 
 	u, accept := src.host.raw(src, id)
 
-	_, body, err := r.send(ctx, src, u, accept, knowledge.DefaultMaxUpload)
+	_, body, err := r.send(ctx, src, u, accept, domain.DefaultMaxUpload)
 	if err != nil {
 		return domain.SourceDoc{}, fmt.Errorf("%s: %w", id, err)
 	}
 
 	// A type it cannot index stays "", which extraction refuses with the reason.
-	mime, _ := knowledge.TypeOf(id, body)
+	mime, _ := domain.DocumentType(id, body)
 
 	return domain.SourceDoc{SourceItem: domain.SourceItem{ID: id}, MIME: mime, Body: body}, nil
 }

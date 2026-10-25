@@ -157,6 +157,13 @@ linters:
               desc: adapters move bytes; loading and validating factories is internal/config's job
             - pkg: github.com/byFrederick/goal/internal/api
               desc: adapters implement ports; the HTTP API calls them, never the reverse
+        adapters-not-knowledge:
+          # Source readers implement ports.SourceReader; the document types and the size limit are
+          # the domain's. Their tests may drive a reader through knowledge.Ingestor.
+          files: ["**/internal/adapters/**", "!$test"]
+          deny:
+            - pkg: github.com/byFrederick/goal/internal/knowledge
+              desc: adapters implement ports; internal/knowledge calls them, never the reverse
         definitions:
           files: ["**/internal/config/**", "**/internal/definitions/**", "**/internal/factorymodel/**", "**/internal/authoring/**"]
           deny:

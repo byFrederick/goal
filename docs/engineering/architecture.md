@@ -24,7 +24,7 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one versioned object s
 | `internal/domain` | standard library | anything else in `internal/` |
 | `internal/ports` | `domain` | adapters, engine |
 | `internal/engine` | `domain`, `ports` | `adapters`, `config`, database or cloud SDKs |
-| `internal/adapters/*` | `domain`, `ports`, their own SDK | `engine`, `api`, other adapters |
+| `internal/adapters/*` | `domain`, `ports`, their own SDK | `engine`, `api`, `knowledge` (outside tests), other adapters |
 | `internal/config` | `domain` | adapters, engine |
 | `internal/factorymodel` | `domain`, `config`, `go.yaml.in/yaml/v3` | adapters, engine, `api`, cloud SDKs |
 | `internal/authoring` | `domain`, `ports`, `config`, `factorymodel`, `go.yaml.in/yaml/v3` | adapters, engine, `api`, `gateway`, `definitions`, cloud SDKs |

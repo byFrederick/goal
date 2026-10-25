@@ -141,7 +141,7 @@ func (r *reader) Fetch(ctx context.Context, _ domain.SyncSpec, id string) (domai
 		return domain.SourceDoc{}, errors.New("gone")
 	}
 
-	return domain.SourceDoc{SourceItem: domain.SourceItem{ID: id}, MIME: knowledge.TypeMarkdown, Body: []byte(body)}, nil
+	return domain.SourceDoc{SourceItem: domain.SourceItem{ID: id}, MIME: domain.MediaMarkdown, Body: []byte(body)}, nil
 }
 
 // world is one organization's knowledge base on the port fakes, with a synced source "runbooks"
@@ -438,7 +438,7 @@ func TestIngestor_UploadsIndexedFromTheBucket(t *testing.T) {
 	w.syncDue(w.ingestor(w.embed, nil))
 
 	docs := w.documents("handbook")
-	if got := docs["leave.md"]; got.ID != d.ID || got.Status != domain.DocumentIndexed || got.Blob != d.Blob || got.MIME != knowledge.TypeMarkdown {
+	if got := docs["leave.md"]; got.ID != d.ID || got.Status != domain.DocumentIndexed || got.Blob != d.Blob || got.MIME != domain.MediaMarkdown {
 		t.Errorf("leave.md after the sync = %+v", got)
 	}
 

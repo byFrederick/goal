@@ -338,7 +338,7 @@ func TestReader_SyncsIncrementallyByVersion(t *testing.T) {
 	got := w.sync(s, []string{"11", "12", "13", "21"}, []string{"11", "12", "13", "21"})
 
 	d := got["11"]
-	if d.Version != "3" || d.Title != "Runbook" || d.URL != s.pageURL(spaceENG, "11") || d.Status != domain.DocumentIndexed || d.MIME != knowledge.TypeMarkdown {
+	if d.Version != "3" || d.Title != "Runbook" || d.URL != s.pageURL(spaceENG, "11") || d.Status != domain.DocumentIndexed || d.MIME != domain.MediaMarkdown {
 		t.Fatalf("page 11 = %+v, want version 3, its title and link, indexed Markdown", d)
 	}
 
@@ -399,7 +399,7 @@ func TestReader_List(t *testing.T) {
 				i := slices.IndexFunc(pages, func(p page) bool { return p.id == id })
 				key := map[string]string{"1001": spaceENG, "2002": "SUP"}[pages[i].space]
 
-				if item.Version != strconv.Itoa(pages[i].version) || item.Title != pages[i].title || item.URL != s.pageURL(key, id) || item.MIME != knowledge.TypeMarkdown {
+				if item.Version != strconv.Itoa(pages[i].version) || item.Title != pages[i].title || item.URL != s.pageURL(key, id) || item.MIME != domain.MediaMarkdown {
 					t.Errorf("item %+v: want version %d, title %q, link %s and Markdown", item, pages[i].version, pages[i].title, s.pageURL(key, id))
 				}
 			}
@@ -418,7 +418,7 @@ func TestReader_List(t *testing.T) {
 func TestReader_Fetch(t *testing.T) {
 	t.Parallel()
 
-	big := page{id: "16", space: "1001", status: statusCurrent, title: "Big", body: "<p>" + strings.Repeat("a", knowledge.DefaultMaxUpload) + "</p>", version: 1}
+	big := page{id: "16", space: "1001", status: statusCurrent, title: "Big", body: "<p>" + strings.Repeat("a", domain.DefaultMaxUpload) + "</p>", version: 1}
 	s := newSite(t, append(slices.Clone(pages), big)...)
 	r := s.reader()
 	spec := s.spec(t, spaceENG)
@@ -428,7 +428,7 @@ func TestReader_Fetch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if string(doc.Body) != runbookText || doc.MIME != knowledge.TypeMarkdown || doc.Version != "3" || doc.Title != "Runbook" || doc.URL != s.pageURL(spaceENG, "11") {
+	if string(doc.Body) != runbookText || doc.MIME != domain.MediaMarkdown || doc.Version != "3" || doc.Title != "Runbook" || doc.URL != s.pageURL(spaceENG, "11") {
 		t.Fatalf("fetched %+v with %q, want the runbook as Markdown", doc.SourceItem, doc.Body)
 	}
 

@@ -357,7 +357,7 @@ func TestReader_SyncsIncrementallyByBlobID(t *testing.T) {
 				wantURL = h.repository() + "/-/blob/main/docs/deploy.md"
 			}
 
-			if d.Version != blobID(docs[deployMD]) || d.URL != wantURL || d.Status != domain.DocumentIndexed || d.MIME != knowledge.TypeMarkdown {
+			if d.Version != blobID(docs[deployMD]) || d.URL != wantURL || d.Status != domain.DocumentIndexed || d.MIME != domain.MediaMarkdown {
 				t.Fatalf("docs/deploy.md = %+v, want blob %s, url %s, indexed Markdown", d, blobID(docs[deployMD]), wantURL)
 			}
 
@@ -446,7 +446,7 @@ func TestReader_Fetch(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
 
-			big := strings.Repeat("a", knowledge.DefaultMaxUpload+1)
+			big := strings.Repeat("a", domain.DefaultMaxUpload+1)
 			files := maps.Clone(docs)
 			files["docs/big.md"] = big
 			h := newCodeHost(t, files)
@@ -460,7 +460,7 @@ func TestReader_Fetch(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if string(doc.Body) != "# Deploy v1\n" || doc.MIME != knowledge.TypeMarkdown {
+			if string(doc.Body) != "# Deploy v1\n" || doc.MIME != domain.MediaMarkdown {
 				t.Fatalf("fetched %q as %q, want release/v1's Markdown", doc.Body, doc.MIME)
 			}
 

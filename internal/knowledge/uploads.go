@@ -10,9 +10,6 @@ import (
 	"github.com/byFrederick/goal/internal/ports"
 )
 
-// DefaultMaxUpload is the largest document an upload takes (GOAL_UPLOAD_MAX_BYTES).
-const DefaultMaxUpload = 25 << 20
-
 var _ ports.SourceReader = (*Uploads)(nil)
 
 // Uploads keeps uploaded documents: their content in the bucket once per organization and
@@ -26,11 +23,11 @@ type Uploads struct {
 	max     int64
 }
 
-// NewUploads returns uploads into kb and objects of at most maxBytes each (DefaultMaxUpload
+// NewUploads returns uploads into kb and objects of at most maxBytes each (domain.DefaultMaxUpload
 // when not positive).
 func NewUploads(kb ports.Knowledge, objects ports.ObjectStore, maxBytes int64) *Uploads {
 	if maxBytes <= 0 {
-		maxBytes = DefaultMaxUpload
+		maxBytes = domain.DefaultMaxUpload
 	}
 
 	return &Uploads{kb: kb, objects: objects, max: maxBytes}
@@ -89,7 +86,7 @@ func (u *Uploads) check(name string, body []byte) (string, error) {
 		return "", fmt.Errorf("upload %q has %d bytes, more than %d: %w", name, len(body), u.max, ports.ErrTooLarge)
 	}
 
-	mime, err := TypeOf(name, body)
+	mime, err := domain.DocumentType(name, body)
 	if err != nil {
 		return "", fmt.Errorf("upload: %w", err)
 	}

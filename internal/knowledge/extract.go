@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"mime"
-	"path"
 	"strings"
 	"unicode/utf8"
 
@@ -14,50 +13,11 @@ import (
 	"github.com/byFrederick/goal/internal/domain"
 )
 
-// The document types the knowledge base indexes (spec 4 §4.8; PDF and Office are out of phase 4).
-const (
-	TypeText     = "text/plain"
-	TypeMarkdown = "text/markdown"
-	TypeHTML     = "text/html"
-	TypeJSON     = "application/json"
-	TypeYAML     = "application/yaml"
-)
-
 // types are the media types read as each indexed type.
 var types = map[string]string{
-	TypeText: TypeText, TypeMarkdown: TypeMarkdown, "text/x-markdown": TypeMarkdown,
-	TypeHTML: TypeHTML, "application/xhtml+xml": TypeHTML,
-	TypeJSON: TypeJSON, TypeYAML: TypeYAML, "application/x-yaml": TypeYAML, "text/yaml": TypeYAML, "text/x-yaml": TypeYAML,
-}
-
-// extensions are the file name extensions of each indexed type.
-var extensions = map[string]string{
-	".txt": TypeText, ".text": TypeText, ".md": TypeMarkdown, ".markdown": TypeMarkdown,
-	".html": TypeHTML, ".htm": TypeHTML, ".json": TypeJSON, ".yaml": TypeYAML, ".yml": TypeYAML,
-}
-
-// TypeOf is the indexed type of a file named name: by its extension, else by what its content
-// looks like (text or HTML). domain.ErrUnsupportedDocument for anything else.
-func TypeOf(name string, body []byte) (string, error) {
-	if t, ok := extensions[strings.ToLower(path.Ext(name))]; ok {
-		return t, nil
-	}
-
-	if path.Ext(name) == "" && utf8.Valid(body) && !bytes.ContainsRune(body, 0) {
-		if looksLikeHTML(body) {
-			return TypeHTML, nil
-		}
-
-		return TypeText, nil
-	}
-
-	return "", fmt.Errorf("%q is not text, Markdown, HTML, JSON or YAML: %w", name, domain.ErrUnsupportedDocument)
-}
-
-func looksLikeHTML(body []byte) bool {
-	head := strings.ToLower(strings.TrimSpace(string(body[:min(len(body), 512)])))
-
-	return strings.HasPrefix(head, "<!doctype html") || strings.HasPrefix(head, "<html")
+	domain.MediaText: domain.MediaText, domain.MediaMarkdown: domain.MediaMarkdown, "text/x-markdown": domain.MediaMarkdown,
+	domain.MediaHTML: domain.MediaHTML, "application/xhtml+xml": domain.MediaHTML,
+	domain.MediaJSON: domain.MediaJSON, domain.MediaYAML: domain.MediaYAML, "application/x-yaml": domain.MediaYAML, "text/yaml": domain.MediaYAML, "text/x-yaml": domain.MediaYAML,
 }
 
 // Extract is a document's text to index: text, Markdown, JSON and YAML as they are, HTML as text
@@ -75,7 +35,7 @@ func Extract(mediaType string, body []byte) (string, error) {
 		return "", fmt.Errorf("the document is not UTF-8 text: %w", domain.ErrInvalid)
 	}
 
-	if t == TypeHTML {
+	if t == domain.MediaHTML {
 		return htmlText(body)
 	}
 

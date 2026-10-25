@@ -20,6 +20,7 @@ import (
 	"github.com/byFrederick/goal/internal/adapters/postgres"
 	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/definitions"
+	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/knowledge"
 )
 
@@ -281,10 +282,10 @@ func knowledgeSettings(s *settings, or func(name, def string) string) []error {
 
 	s.KBWorkers = workers
 
-	upload, err := strconv.ParseInt(or(uploadMaxEnv, strconv.Itoa(knowledge.DefaultMaxUpload)), 10, 64)
+	upload, err := strconv.ParseInt(or(uploadMaxEnv, strconv.Itoa(domain.DefaultMaxUpload)), 10, 64)
 	if err != nil || upload <= 0 {
 		errs = append(errs, fmt.Errorf("%s %q is not a positive number of bytes (default %d, 25 MiB)",
-			uploadMaxEnv, or(uploadMaxEnv, ""), knowledge.DefaultMaxUpload))
+			uploadMaxEnv, or(uploadMaxEnv, ""), domain.DefaultMaxUpload))
 	}
 
 	s.UploadMaxBytes = upload

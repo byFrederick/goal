@@ -1,10 +1,13 @@
 package domain
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"slices"
+	"strings"
 	"time"
 	"unicode/utf8"
 )
@@ -363,3 +366,46 @@ const (
 	AuditTargetKnowledgeSource   = "knowledge_source"
 	AuditTargetKnowledgeDocument = "knowledge_document"
 )
+
+// The document types the knowledge base indexes (spec 4 §4.8; PDF and Office are out of phase 4).
+const (
+	MediaText     = "text/plain"
+	MediaMarkdown = "text/markdown"
+	MediaHTML     = "text/html"
+	MediaJSON     = "application/json"
+	MediaYAML     = "application/yaml"
+)
+
+// DefaultMaxUpload is the largest document the knowledge base takes, uploaded or fetched from a
+// source (GOAL_UPLOAD_MAX_BYTES).
+const DefaultMaxUpload = 25 << 20
+
+// documentExtensions are the file name extensions of each indexed type.
+var documentExtensions = map[string]string{
+	".txt": MediaText, ".text": MediaText, ".md": MediaMarkdown, ".markdown": MediaMarkdown,
+	".html": MediaHTML, ".htm": MediaHTML, ".json": MediaJSON, ".yaml": MediaYAML, ".yml": MediaYAML,
+}
+
+// DocumentType is the indexed type of a file named name: by its extension, else by what its
+// content looks like (text or HTML). ErrUnsupportedDocument for anything else.
+func DocumentType(name string, body []byte) (string, error) {
+	if t, ok := documentExtensions[strings.ToLower(path.Ext(name))]; ok {
+		return t, nil
+	}
+
+	if path.Ext(name) == "" && utf8.Valid(body) && !bytes.ContainsRune(body, 0) {
+		if looksLikeHTML(body) {
+			return MediaHTML, nil
+		}
+
+		return MediaText, nil
+	}
+
+	return "", fmt.Errorf("%q is not text, Markdown, HTML, JSON or YAML: %w", name, ErrUnsupportedDocument)
+}
+
+func looksLikeHTML(body []byte) bool {
+	head := strings.ToLower(strings.TrimSpace(string(body[:min(len(body), 512)])))
+
+	return strings.HasPrefix(head, "<!doctype html") || strings.HasPrefix(head, "<html")
+}

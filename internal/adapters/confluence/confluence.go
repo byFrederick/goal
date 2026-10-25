@@ -13,7 +13,7 @@
 // documents of pages trashed, archived, moved out or no longer visible to the account. A space the
 // site does not show fails the listing instead of deleting its documents. A fetch reads one page
 // in storage format (GET /wiki/api/v2/pages/{id}?body-format=storage), at most an upload's size
-// (knowledge.DefaultMaxUpload), and turns it into Markdown.
+// (domain.DefaultMaxUpload), and turns it into Markdown.
 //
 // Every request goes to the connection's site: a next link only lends its cursor, redirects are
 // not followed and no error carries the token. goald gives it a transport that dials public
@@ -35,7 +35,6 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/knowledge"
 	"github.com/byFrederick/goal/internal/ports"
 )
 
@@ -160,7 +159,7 @@ func (r *Reader) Fetch(ctx context.Context, s domain.SyncSpec, id string) (domai
 	}
 
 	var p page
-	if err := r.getJSON(ctx, src, "/pages/"+id, url.Values{"body-format": {"storage"}}, &p, knowledge.DefaultMaxUpload); err != nil {
+	if err := r.getJSON(ctx, src, "/pages/"+id, url.Values{"body-format": {"storage"}}, &p, domain.DefaultMaxUpload); err != nil {
 		return domain.SourceDoc{}, fmt.Errorf("page %s: %w", id, err)
 	}
 
@@ -188,7 +187,7 @@ func (r *Reader) Fetch(ctx context.Context, s domain.SyncSpec, id string) (domai
 		return domain.SourceDoc{}, fmt.Errorf("page %s: %w", id, err)
 	}
 
-	return domain.SourceDoc{SourceItem: item, MIME: knowledge.TypeMarkdown, Body: []byte(text)}, nil
+	return domain.SourceDoc{SourceItem: item, MIME: domain.MediaMarkdown, Body: []byte(text)}, nil
 }
 
 // source is a confluence source opened: the connection's site and account, and the keys of the
@@ -303,7 +302,7 @@ func (s source) item(sp space, p page) (domain.SourceItem, error) {
 	}
 
 	return domain.SourceItem{
-		ID: id, Version: strconv.Itoa(p.Version.Number), Title: p.Title, MIME: knowledge.TypeMarkdown,
+		ID: id, Version: strconv.Itoa(p.Version.Number), Title: p.Title, MIME: domain.MediaMarkdown,
 		URL: "https://" + s.site + "/wiki/spaces/" + url.PathEscape(sp.Key) + "/pages/" + id,
 	}, nil
 }
