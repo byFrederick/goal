@@ -23,10 +23,10 @@ var _ ports.Knowledge = (*Knowledge)(nil)
 // Knowledge implements ports.Knowledge over 00054's knowledge_sources, knowledge_documents and
 // knowledge_chunks, as goal_app under row-level security: every statement sees the organization
 // in ctx only (a claim alone reads across organizations, through 00055's definer), and every
-// change people make appends its audit entry in its transaction. A search
-// is one statement: the nearest chunks by cosine distance (pgvector's HNSW index on halfvec,
-// with its iterative scan so filters never starve it) and the best by keywords, both over the
-// named sources only, fused by reciprocal rank.
+// change people make appends its audit entry in its transaction. A search is one statement: the
+// nearest chunks by cosine distance (exact over small sources, else pgvector's HNSW index on
+// halfvec with its iterative scan) and the best by keywords, both over the named sources only,
+// fused by reciprocal rank.
 type Knowledge struct {
 	s *Store
 }

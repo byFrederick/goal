@@ -5,6 +5,7 @@ package postgres
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -158,6 +159,71 @@ func seesOnlyItsKnowledge(t *testing.T, tx pgx.Tx, acme domain.OrgID, query stri
 	}
 
 	return nil
+}
+
+// Review 4 SQL M2: one HNSW index holds every organization's chunks, and the organization and
+// source filters apply after it. When the planner walks that index (a large table, which a test
+// cannot build in time, so this one makes the other plans dear), and more of other
+// organizations' chunks are nearer to the query than pgvector's iterative scan visits by default
+// (hnsw.max_scan_tuples, 20,000), the nearest list came back empty and the search fell back to
+// keywords. The scan is sized to the table, so an organization still finds its own nearest chunk
+// past every other's.
+func TestKnowledge_VectorSearchFindsPastOtherOrganizationsNearerChunks(t *testing.T) {
+	t.Parallel()
+
+	d := newConnectionsDB(t)
+	syncingKind(t, d)
+
+	acme, labs := newOrgID(t, d.store), newOrgID(t, d.store)
+	knowledgeDoc(t, d, acme, "acme's runbook", 0)
+	knowledgeDoc(t, d, labs, "labs' own runbook", 7)
+
+	// 30,000 more chunks of acme's, each nearer to the query (along dimension 0) than labs' one,
+	// added before the HNSW index is built, as one build is far faster than as many inserts.
+	execSQL(t, d.db.admin, `DROP INDEX knowledge_chunks_embedding_idx;
+		INSERT INTO knowledge_chunks (org_id, source_id, document_id, ord, text, embedding, embed_model)
+		SELECT c.org_id, c.source_id, c.document_id, g, 'decoy',
+		       ('[1,' || array_to_string(array_fill(0, ARRAY[g % 1000]), ',') || CASE WHEN g % 1000 > 0 THEN ',' ELSE '' END
+		        || '0.05,' || array_to_string(array_fill(0, ARRAY[1022 - g % 1000]), ',') || ']')::halfvec(1024), c.embed_model
+		FROM knowledge_chunks c, generate_series(1, 30000) g WHERE c.org_id = '`+string(acme)+`';
+		CREATE INDEX knowledge_chunks_embedding_idx ON knowledge_chunks USING hnsw (embedding halfvec_cosine_ops);
+		ANALYZE knowledge_chunks`)
+
+	u, err := url.Parse(d.db.app)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	q := u.Query()
+	q.Set("options", "-c enable_seqscan=off -c enable_bitmapscan=off -c enable_sort=off")
+	u.RawQuery = strings.ReplaceAll(q.Encode(), "+", "%20") // a space, which pgx reads only so
+
+	query := make([]float32, domain.EmbeddingDimensions)
+	query[0], query[7] = 1, 0.3
+
+	forced := NewKnowledge(New(openPool(t, u.String())))
+
+	search := func(org domain.OrgID) []domain.KnowledgeHit {
+		t.Helper()
+
+		hits, err := forced.Search(domain.WithOrg(t.Context(), org), domain.KnowledgeQuery{
+			Text: "zebra", Sources: []string{"runbooks"}, Embedding: query, Model: "acme-embed-1", Limit: 5,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return hits
+	}
+
+	if hits := search(labs); len(hits) != 1 || hits[0].Text != "labs' own runbook" {
+		t.Errorf("labs' vector search = %+v, want its own runbook", hits)
+	}
+
+	// acme's source of 30,001 chunks walks the index (approximate: any five of its near ones).
+	if hits := search(acme); len(hits) != 5 {
+		t.Errorf("acme's vector search = %+v, want five of its chunks", hits)
+	}
 }
 
 // A claim reaches every organization but a deleted one, whose sources wait for its purge.

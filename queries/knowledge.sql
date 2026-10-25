@@ -167,8 +167,10 @@ DELETE FROM knowledge_documents WHERE id = sqlc.arg(id);
 SELECT coalesce(string_agg(text, E'\n\n' ORDER BY ord), '')::text AS text FROM knowledge_chunks WHERE document_id = sqlc.arg(document_id);
 
 -- name: SetSearchScan :exec
--- The nearest-neighbour scan goes on past chunks the filters drop (pgvector's iterative scan),
--- so a search still finds its candidates when other organizations' or sources' chunks are nearer.
+-- The nearest-neighbour scan over the HNSW index goes on past chunks the filters drop
+-- (pgvector's iterative scan), so a search over large sources still finds its candidates when
+-- other organizations' or sources' chunks are nearer. Small sources are searched exactly instead
+-- (SearchKnowledge).
 SELECT set_config('hnsw.iterative_scan', 'relaxed_order', true), set_config('hnsw.ef_search', '100', true);
 
 -- name: SearchKnowledge :many
@@ -176,19 +178,41 @@ SELECT set_config('hnsw.iterative_scan', 'relaxed_order', true), set_config('hns
 -- distance (with an embedding) and the best by keywords (any of the query's words, ts_rank on
 -- the simple tsvector divided by 1 + the log of the chunk's length, so long chunks full of
 -- common words do not win), fused by reciprocal rank (k = 60; domain.FuseRanks).
+--
+-- The nearest are exact when the sources hold at most 20,000 chunks: their distances, computed
+-- behind a fence (OFFSET 0) that keeps the HNSW index out, and sorted. The index holds every
+-- organization's chunks and the filters apply after it, so walking it for sources that are a
+-- small share of the table finds too few of theirs within pgvector's scan budget, or none
+-- (review 4 SQL M2). Larger sources walk the index; partitioning by organization (spec 4 §6) is
+-- the step after this if installs outgrow that.
 WITH src AS (
   SELECT id, name FROM knowledge_sources WHERE name = ANY (sqlc.arg(sources)::text[])
 ),
 query AS (
   SELECT nullif(replace(plainto_tsquery('simple', sqlc.arg(query)::text)::text, ' & ', ' | '), '')::tsquery AS q
 ),
+small AS (
+  SELECT count(*) <= 20000 AS exact
+  FROM (SELECT 1 FROM knowledge_chunks c WHERE c.source_id IN (SELECT id FROM src) LIMIT 20001) n
+),
 near AS (
   SELECT n.id, row_number() OVER (ORDER BY n.distance, n.id) AS r FROM (
-    SELECT c.id, c.embedding <=> nullif(sqlc.arg(embedding)::text, '')::halfvec(1024) AS distance
-    FROM knowledge_chunks c
-    WHERE sqlc.arg(embedding)::text <> '' AND c.embed_model = sqlc.arg(model)::text AND c.source_id IN (SELECT id FROM src)
-    ORDER BY c.embedding <=> nullif(sqlc.arg(embedding)::text, '')::halfvec(1024)
-    LIMIT 50
+    (SELECT e.id, e.distance FROM (
+       SELECT c.id, c.embedding <=> nullif(sqlc.arg(embedding)::text, '')::halfvec(1024) AS distance
+       FROM knowledge_chunks c
+       WHERE (SELECT exact FROM small) AND sqlc.arg(embedding)::text <> '' AND c.embed_model = sqlc.arg(model)::text
+         AND c.source_id IN (SELECT id FROM src)
+       OFFSET 0
+     ) e
+     ORDER BY e.distance, e.id
+     LIMIT 50)
+    UNION ALL
+    (SELECT c.id, c.embedding <=> nullif(sqlc.arg(embedding)::text, '')::halfvec(1024) AS distance
+     FROM knowledge_chunks c
+     WHERE NOT (SELECT exact FROM small) AND sqlc.arg(embedding)::text <> '' AND c.embed_model = sqlc.arg(model)::text
+       AND c.source_id IN (SELECT id FROM src)
+     ORDER BY c.embedding <=> nullif(sqlc.arg(embedding)::text, '')::halfvec(1024)
+     LIMIT 50)
   ) n
 ),
 words AS (
