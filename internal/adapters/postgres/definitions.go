@@ -227,22 +227,8 @@ func (d *Definitions) setArchived(ctx context.Context, id domain.FactoryID, arch
 
 	err := d.change(ctx, id, func(q *db.Queries, f db.LockFactoryRow) error {
 		if archive != (f.ArchivedAt != nil) {
-			action := domain.AuditFactoryRestored
-
-			if archive {
-				action = domain.AuditFactoryArchived
-
-				if err := archivable(ctx, q, f); err != nil {
-					return fmt.Errorf("factory %s: %w", id, err)
-				}
-			}
-
-			if err := q.SetFactoryArchived(ctx, db.SetFactoryArchivedParams{ID: f.ID, Archived: archive, ArchivedBy: by.Ref()}); err != nil {
-				return err
-			}
-
-			if err := appendAudit(ctx, q, factoryEntry(by, action, id, map[string]any{auditName: f.Name})); err != nil {
-				return err
+			if err := archiveLocked(ctx, q, f, archive, by); err != nil {
+				return fmt.Errorf("factory %s: %w", id, err)
 			}
 		}
 
@@ -254,6 +240,27 @@ func (d *Definitions) setArchived(ctx context.Context, id domain.FactoryID, arch
 	})
 
 	return rec, err
+}
+
+// archiveLocked archives or restores the locked factory f, audited.
+func archiveLocked(ctx context.Context, q *db.Queries, f db.LockFactoryRow, archive bool, by domain.Actor) error {
+	action := domain.AuditFactoryRestored
+
+	if archive {
+		action = domain.AuditFactoryArchived
+
+		if err := archivable(ctx, q, f); err != nil {
+			return err
+		}
+	}
+
+	if err := q.SetFactoryArchived(ctx, db.SetFactoryArchivedParams{ID: f.ID, Archived: archive, ArchivedBy: by.Ref()}); err != nil {
+		return err
+	}
+
+	id := domain.FactoryID(f.ID.String())
+
+	return appendAudit(ctx, q, factoryEntry(by, action, id, map[string]any{auditName: f.Name}))
 }
 
 // archivable returns nil when the locked factory f may be archived: it is paused and none of its

@@ -61,6 +61,26 @@ func testNotices(f *fixture) {
 			t.Errorf("notice = %+v; want %+v", n, want)
 		}
 	}
+
+	// Pausing, archiving and restoring each move the factory: every goald refreshes its lines.
+	if _, err := f.Definitions.SetPaused(f.ctx(t), r.ID, true, local); err != nil {
+		t.Fatalf("SetPaused: %v", err)
+	}
+
+	if _, err := f.Definitions.ArchiveFactory(f.ctx(t), r.ID, local); err != nil {
+		t.Fatalf("ArchiveFactory: %v", err)
+	}
+
+	if _, err := f.Definitions.RestoreArchivedFactory(f.ctx(t), r.ID, local); err != nil {
+		t.Fatalf("RestoreArchivedFactory: %v", err)
+	}
+
+	for _, change := range []string{"paused", "archived", "restored"} {
+		want := ports.DefinitionNotice{OrgID: f.org, FactoryID: r.ID, Kind: ports.NoticeCurrent, VersionID: v.ID, Number: 1}
+		if n := next(t, got, mine(ports.NoticeCurrent)); n != want {
+			t.Errorf("notice once %s = %+v; want %+v", change, n, want)
+		}
+	}
 }
 
 // next returns the next notice that matches, failing the test when none comes in time.
