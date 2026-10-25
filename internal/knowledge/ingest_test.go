@@ -7,6 +7,7 @@ import (
 	"iter"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -28,6 +29,8 @@ const (
 	oncallMD   = "docs/oncall.md"
 	newMD      = "docs/new.md"
 	slowMD     = "docs/slow.md"
+	// gitdocsSync is the test kind's sync adapter.
+	gitdocsSync = "gitdocs"
 )
 
 // want fails the test with what and got unless every condition holds.
@@ -86,6 +89,7 @@ type reader struct {
 	fetched []string
 	conn    *domain.ResolvedConnection
 	block   map[string]chan struct{}
+	down    bool // every fetch fails, as a server answering 503
 }
 
 func (r *reader) set(docs map[string]string) {
@@ -126,8 +130,12 @@ func (r *reader) Fetch(ctx context.Context, _ domain.SyncSpec, id string) (domai
 	r.mu.Lock()
 	r.fetched = append(r.fetched, id)
 	body, ok := r.docs[id]
-	wait := r.block[id]
+	wait, down := r.block[id], r.down
 	r.mu.Unlock()
+
+	if down {
+		return domain.SourceDoc{}, errors.New("503 service unavailable")
+	}
 
 	if wait != nil {
 		select {
@@ -181,7 +189,7 @@ func newWorld(t *testing.T) *world {
 	ctx := w.ctx()
 
 	if err := w.conns.SyncPlatformKinds(t.Context(), []domain.ConnectionKind{{Name: "gitdocs-kind", Title: "Docs", Platform: true, Spec: domain.KindSpec{
-		Fields: []domain.KindField{{Name: "token", Title: "Token", Secret: true, Required: true}}, Sync: "gitdocs",
+		Fields: []domain.KindField{{Name: "token", Title: "Token", Secret: true, Required: true}}, Sync: gitdocsSync,
 	}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +220,7 @@ func (w *world) ingestor(e ports.Embedder, kb ports.Knowledge) *knowledge.Ingest
 	}
 
 	return knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: kb, Connections: w.conns, Uploads: w.uploads, Readers: map[string]ports.SourceReader{"gitdocs": w.docs},
+		Knowledge: kb, Connections: w.conns, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: w.docs},
 		Embedder: e, Clock: w.clock,
 	})
 }
@@ -406,6 +414,80 @@ func TestIngestor_ATooLongIDIsLeftOut(t *testing.T) {
 	w.want("fetched (not the long one)", fetched, slices.Equal(fetched, []string{deployMD}))
 }
 
+// Review 4 Go L12: a document that cannot be fetched (the source answering 503 mid-sync) keeps
+// what was indexed of it and stays; only one never indexed is stored failed.
+func TestIngestor_AFailedFetchKeepsWhatWasIndexed(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	w.docs.set(map[string]string{deployMD: "# Deploy\n\nShip with the release train."})
+	in := w.ingestor(w.embed, nil)
+	w.syncDue(in)
+
+	w.docs.set(map[string]string{deployMD: "# Deploy\n\nShip on Fridays.", newMD: "# New\n\nA new page."})
+	w.docs.mu.Lock()
+	w.docs.down = true
+	w.docs.mu.Unlock()
+	w.clock.Advance(time.Hour + time.Minute)
+	w.syncDue(in)
+
+	docs := w.documents("runbooks")
+	w.want(deployMD, docs[deployMD], docs[deployMD].Status == domain.DocumentIndexed, docs[deployMD].Version != "")
+	w.want(newMD, docs[newMD], docs[newMD].Status == domain.DocumentFailed, docs[newMD].Version == "")
+
+	if hits := w.search(nil, "release train"); !slices.Equal(hits, []string{deployMD}) {
+		t.Errorf("search for the indexed text = %v, want deploy.md's", hits)
+	}
+
+	// The source answers again: the next sync fetches both.
+	w.docs.mu.Lock()
+	w.docs.down = false
+	w.docs.mu.Unlock()
+	w.clock.Advance(time.Hour + time.Minute)
+	w.syncDue(in)
+
+	if hits := w.search(nil, "fridays"); !slices.Equal(hits, []string{deployMD}) {
+		t.Errorf("search after the source answers = %v, want deploy.md's new text", hits)
+	}
+}
+
+// Review 4 Go L11: an upload deleted while its source syncs stays deleted; the sync's write of it
+// brought it back, indexed, without its content.
+func TestIngestor_AnUploadDeletedDuringItsSyncStaysDeleted(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	ctx := w.ctx()
+
+	d, err := w.uploads.Upload(ctx, "handbook", "leave.md", []byte("# Leave\n\nAsk two weeks ahead."), admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bucket := &racing{ObjectStore: w.objects}
+	bucket.get = func() {
+		bucket.get = nil
+
+		if err := w.uploads.DeleteDocument(ctx, d.ID, admin); err != nil {
+			t.Error(err)
+		}
+	}
+
+	in := knowledge.NewIngestor(knowledge.IngestorConfig{
+		Knowledge: w.kb, Connections: w.conns, Uploads: knowledge.NewUploads(w.kb, bucket, 0),
+		Readers: map[string]ports.SourceReader{gitdocsSync: w.docs}, Clock: w.clock,
+	})
+	w.syncDue(in)
+
+	if docs := w.documents("handbook"); len(docs) != 0 {
+		t.Errorf("handbook after its upload was deleted mid-sync = %+v, want none", docs)
+	}
+
+	if src := w.source("handbook"); src.Status != domain.SyncIdle {
+		t.Errorf("handbook = %+v, want synced", src)
+	}
+}
+
 func TestIngestor_UnknownSyncKindFailsTheSource(t *testing.T) {
 	t.Parallel()
 
@@ -415,7 +497,7 @@ func TestIngestor_UnknownSyncKindFailsTheSource(t *testing.T) {
 	})
 	w.syncDue(in)
 
-	if src := w.source("runbooks"); src.Status != domain.SyncFailed || !strings.Contains(src.LastError, `"gitdocs"`) {
+	if src := w.source("runbooks"); src.Status != domain.SyncFailed || !strings.Contains(src.LastError, strconv.Quote(gitdocsSync)) {
 		t.Errorf("runbooks without a gitdocs reader = %+v", src)
 	}
 }
@@ -523,12 +605,21 @@ func TestUploads_StoredOnceAndDeletedWithTheLastHolder(t *testing.T) {
 	}
 }
 
-// racing is a bucket that runs then right after each PutIfAbsent: what another request does
-// meanwhile.
+// racing is a bucket that runs then right after a PutIfAbsent and get right after a Get: what
+// another request does meanwhile.
 type racing struct {
 	*porttest.ObjectStore
 
-	then func()
+	then, get func()
+}
+
+func (r *racing) Get(ctx context.Context, key string) (ports.Object, error) {
+	obj, err := r.ObjectStore.Get(ctx, key)
+	if r.get != nil {
+		r.get()
+	}
+
+	return obj, err
 }
 
 func (r *racing) PutIfAbsent(ctx context.Context, key string, body []byte) (ports.ObjectInfo, bool, error) {
@@ -634,7 +725,7 @@ func TestIngestor_ATakenOverSyncRecordsNothing(t *testing.T) {
 	slow := &reader{docs: docs, block: map[string]chan struct{}{slowMD: release}}
 	kb := &stalled{Knowledge: w.kb, renewing: make(chan struct{}, 1)}
 	first := knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: kb, Connections: w.conns, Uploads: w.uploads, Readers: map[string]ports.SourceReader{"gitdocs": slow},
+		Knowledge: kb, Connections: w.conns, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: slow},
 		Embedder: w.embed, Clock: w.clock,
 	})
 	done := make(chan struct{})

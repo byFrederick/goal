@@ -364,6 +364,17 @@ func (q *Queries) KnowledgeDocuments(ctx context.Context, arg KnowledgeDocuments
 	return items, nil
 }
 
+const knowledgeSourceKind = `-- name: KnowledgeSourceKind :one
+SELECT kind FROM knowledge_sources WHERE id = $1
+`
+
+func (q *Queries) KnowledgeSourceKind(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, knowledgeSourceKind, id)
+	var kind string
+	err := row.Scan(&kind)
+	return kind, err
+}
+
 const knowledgeSources = `-- name: KnowledgeSources :many
 
 SELECT s.id, s.name, s.title, s.kind, c.name AS connection, s.config,
@@ -806,6 +817,50 @@ func (q *Queries) UpdateKnowledgeSource(ctx context.Context, arg UpdateKnowledge
 		arg.Config,
 		arg.SyncEverySeconds,
 		arg.Name,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const updateKnowledgeUpload = `-- name: UpdateKnowledgeUpload :one
+UPDATE knowledge_documents
+SET version = $1, title = $2, mime = $3, bytes = $4,
+    status = $5, error = $6, seen_at = greatest(seen_at, $7),
+    indexed_at = $8, embed_model = $9
+WHERE source_id = $10 AND external_id = $11
+RETURNING id
+`
+
+type UpdateKnowledgeUploadParams struct {
+	Version    string
+	Title      string
+	Mime       string
+	Bytes      int64
+	Status     string
+	Error      *string
+	SeenAt     time.Time
+	IndexedAt  *time.Time
+	EmbedModel *string
+	SourceID   uuid.UUID
+	ExternalID string
+}
+
+// An upload's document as its sync read it; none when it was deleted meanwhile, which a waiting
+// update sees once the deletion commits.
+func (q *Queries) UpdateKnowledgeUpload(ctx context.Context, arg UpdateKnowledgeUploadParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, updateKnowledgeUpload,
+		arg.Version,
+		arg.Title,
+		arg.Mime,
+		arg.Bytes,
+		arg.Status,
+		arg.Error,
+		arg.SeenAt,
+		arg.IndexedAt,
+		arg.EmbedModel,
+		arg.SourceID,
+		arg.ExternalID,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)

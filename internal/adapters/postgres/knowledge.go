@@ -446,14 +446,9 @@ func (k *Knowledge) PutDocument(ctx context.Context, d domain.KnowledgeDocument,
 	}
 
 	err = k.s.inTx(ctx, func(q *db.Queries) error {
-		docID, err := q.UpsertKnowledgeDocument(ctx, db.UpsertKnowledgeDocumentParams{
-			ID: id, SourceID: sid, ExternalID: d.ExternalID, Version: d.Version, Title: truncate(d.Title, maxDocumentTitle),
-			Url: optional(d.URL), Mime: d.MIME, Bytes: d.Bytes, BlobSha256: optional(string(d.Blob)), Status: string(d.Status),
-			Error: optional(truncate(d.Error, domain.MaxKnowledgeError)), SeenAt: d.SeenAt, IndexedAt: d.IndexedAt,
-			EmbedModel: optional(d.EmbedModel), CreatedBy: d.CreatedBy.Ref(),
-		})
+		docID, err := putDocument(ctx, q, id, sid, d)
 		if err != nil {
-			return ruleError(err, "")
+			return err
 		}
 
 		if err := q.DeleteDocumentChunks(ctx, docID); err != nil {
@@ -473,6 +468,41 @@ func (k *Knowledge) PutDocument(ctx context.Context, d domain.KnowledgeDocument,
 	}
 
 	return nil
+}
+
+// putDocument writes d's row and returns its id: an upload's only when it is still there
+// (ErrNotFound when it was deleted), any other's created or replaced.
+func putDocument(ctx context.Context, q *db.Queries, id, source uuid.UUID, d domain.KnowledgeDocument) (uuid.UUID, error) {
+	kind, err := q.KnowledgeSourceKind(ctx, source)
+	if notFound(err) {
+		return id, fmt.Errorf("knowledge source %s: %w", d.Source, ports.ErrNotFound)
+	}
+
+	if err != nil {
+		return id, err
+	}
+
+	title, errText := truncate(d.Title, maxDocumentTitle), optional(truncate(d.Error, domain.MaxKnowledgeError))
+
+	if kind == string(domain.SourceUpload) {
+		docID, err := q.UpdateKnowledgeUpload(ctx, db.UpdateKnowledgeUploadParams{
+			Version: d.Version, Title: title, Mime: d.MIME, Bytes: d.Bytes, Status: string(d.Status), Error: errText, SeenAt: d.SeenAt,
+			IndexedAt: d.IndexedAt, EmbedModel: optional(d.EmbedModel), SourceID: source, ExternalID: d.ExternalID,
+		})
+		if notFound(err) {
+			return id, fmt.Errorf("upload %s: %w", d.ExternalID, ports.ErrNotFound)
+		}
+
+		return docID, ruleError(err, "")
+	}
+
+	docID, err := q.UpsertKnowledgeDocument(ctx, db.UpsertKnowledgeDocumentParams{
+		ID: id, SourceID: source, ExternalID: d.ExternalID, Version: d.Version, Title: title, Url: optional(d.URL), Mime: d.MIME,
+		Bytes: d.Bytes, BlobSha256: optional(string(d.Blob)), Status: string(d.Status), Error: errText, SeenAt: d.SeenAt,
+		IndexedAt: d.IndexedAt, EmbedModel: optional(d.EmbedModel), CreatedBy: d.CreatedBy.Ref(),
+	})
+
+	return docID, ruleError(err, "")
 }
 
 // maxDocumentTitle bounds a document's title (00054's check).

@@ -53,7 +53,8 @@ type Knowledge interface {
 	// what a sync need not fetch again.
 	Versions(ctx context.Context, source domain.KnowledgeSourceID) (map[string]string, error)
 	// PutDocument creates or replaces the document of d.Source with d.ExternalID and replaces
-	// its chunks, in one transaction. A document's seen time never goes back.
+	// its chunks, in one transaction. A document's seen time never goes back. Of an upload source
+	// it only replaces one: an upload deleted meanwhile stays deleted (ErrNotFound).
 	PutDocument(ctx context.Context, d domain.KnowledgeDocument, chunks []domain.Chunk) error
 	// MarkSeen sets the seen time of the lease's source's documents with the given external ids
 	// to at, unless they were seen later. ErrLeaseLost, changing nothing, once another claim

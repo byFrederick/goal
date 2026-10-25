@@ -259,43 +259,17 @@ func (in *Ingestor) pass(ctx context.Context, c domain.SourceClaim, started time
 		return stats, err
 	}
 
-	versions, err := in.versions(ctx, src)
+	versions, err := in.cfg.Knowledge.Versions(ctx, src.ID)
 	if err != nil {
 		return stats, err
 	}
 
-	var unchanged []string
-
-	for item, err := range reader.List(ctx, spec) {
-		if err != nil {
-			return stats, fmt.Errorf("list: %w", err)
-		}
-
-		stats.listed++
-
-		if len(item.ID) > domain.MaxExternalID {
-			in.cfg.Log.WarnContext(ctx, "knowledge document left out: its id is too long", slog.String("source", src.Name),
-				slog.Int("bytes", len(item.ID)))
-
-			continue
-		}
-
-		if v, ok := versions[item.ID]; ok && v == item.Version {
-			unchanged = append(unchanged, item.ID)
-
-			continue
-		}
-
-		n, err := in.index(ctx, spec, reader, item, started)
-		if err != nil {
-			return stats, err
-		}
-
-		stats.fetched++
-		stats.chunks += n
+	seen, err := in.list(ctx, spec, reader, versions, started, &stats)
+	if err != nil {
+		return stats, err
 	}
 
-	if err := in.cfg.Knowledge.MarkSeen(ctx, c.Lease, unchanged, started); err != nil {
+	if err := in.cfg.Knowledge.MarkSeen(ctx, c.Lease, seen, started); err != nil {
 		return stats, err
 	}
 
@@ -308,14 +282,54 @@ func (in *Ingestor) pass(ctx context.Context, c domain.SourceClaim, started time
 	return stats, nil
 }
 
-// versions are the versions of src's documents a sync need not fetch again: none when its
-// chunks are of another model than the embedder's.
-func (in *Ingestor) versions(ctx context.Context, src domain.KnowledgeSource) (map[string]string, error) {
-	if model := in.model(); model != "" && src.EmbedModel != model {
-		return map[string]string{}, nil
+// list indexes the listed documents of spec's source that changed (every one when its chunks
+// are of another model than the embedder's) and returns the external ids of those that stay as
+// they are: unchanged, or indexed before and not fetched this time.
+func (in *Ingestor) list(ctx context.Context, spec domain.SyncSpec, reader ports.SourceReader, versions map[string]string,
+	started time.Time, stats *syncStats,
+) ([]string, error) {
+	model := in.model()
+	fresh := model == "" || spec.Source.EmbedModel == model
+
+	var seen []string
+
+	for item, err := range reader.List(ctx, spec) {
+		if err != nil {
+			return nil, fmt.Errorf("list: %w", err)
+		}
+
+		stats.listed++
+
+		if len(item.ID) > domain.MaxExternalID {
+			in.cfg.Log.WarnContext(ctx, "knowledge document left out: its id is too long", slog.String("source", spec.Source.Name),
+				slog.Int("bytes", len(item.ID)))
+
+			continue
+		}
+
+		v, known := versions[item.ID]
+		if known && fresh && v == item.Version {
+			seen = append(seen, item.ID)
+
+			continue
+		}
+
+		n, kept, err := in.index(ctx, spec, reader, item, started, known)
+		if err != nil {
+			return nil, err
+		}
+
+		if kept {
+			seen = append(seen, item.ID)
+
+			continue
+		}
+
+		stats.fetched++
+		stats.chunks += n
 	}
 
-	return in.cfg.Knowledge.Versions(ctx, src.ID)
+	return seen, nil
 }
 
 // reader is what reads src: the uploads, or its connection's kind's reader with the connection
@@ -345,10 +359,14 @@ func (in *Ingestor) reader(ctx context.Context, src domain.KnowledgeSource) (dom
 }
 
 // index fetches, extracts, chunks and embeds one document and stores it, and returns how many
-// chunks it has. A document that cannot be fetched or read is stored failed with the reason (one
-// that could not be fetched without a version, so the next sync tries again); only the embedding
-// model failing, the database or ctx ending stop the sync.
-func (in *Ingestor) index(ctx context.Context, spec domain.SyncSpec, reader ports.SourceReader, item domain.SourceItem, seen time.Time) (int, error) {
+// chunks it has. A document that cannot be read is stored failed with the reason; one that cannot
+// be fetched (the source failing for now) keeps what was indexed of it when it was known (kept:
+// the next sync tries again), else is stored failed without a version, so the next sync tries
+// again too. An upload deleted meanwhile stays deleted. Only the embedding model failing, the
+// database or ctx ending stop the sync.
+func (in *Ingestor) index(ctx context.Context, spec domain.SyncSpec, reader ports.SourceReader, item domain.SourceItem, seen time.Time,
+	known bool,
+) (n int, kept bool, err error) {
 	d := domain.KnowledgeDocument{
 		Source: spec.Source.ID, ExternalID: item.ID, Version: item.Version, Title: item.Title, URL: item.URL, MIME: item.MIME,
 		SeenAt: seen, CreatedBy: domain.EngineActor,
@@ -356,7 +374,14 @@ func (in *Ingestor) index(ctx context.Context, spec domain.SyncSpec, reader port
 
 	pieces, err := in.read(ctx, spec, reader, &d)
 	if ctx.Err() != nil {
-		return 0, ctx.Err()
+		return 0, false, ctx.Err()
+	}
+
+	if known && errors.Is(err, errFetch) {
+		in.cfg.Log.WarnContext(ctx, "knowledge document kept as indexed", slog.String("source", spec.Source.Name),
+			slog.String("document", item.ID), slog.Any("error", err))
+
+		return 0, true, nil
 	}
 
 	switch {
@@ -370,7 +395,7 @@ func (in *Ingestor) index(ctx context.Context, spec domain.SyncSpec, reader port
 
 	chunks, err := in.embed(ctx, pieces)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 
 	if d.Status == domain.DocumentIndexed {
@@ -378,12 +403,20 @@ func (in *Ingestor) index(ctx context.Context, spec domain.SyncSpec, reader port
 		d.IndexedAt, d.EmbedModel = &now, in.model()
 	}
 
-	if err := in.cfg.Knowledge.PutDocument(ctx, d, chunks); err != nil {
-		return 0, err
+	err = in.cfg.Knowledge.PutDocument(ctx, d, chunks)
+	if errors.Is(err, ports.ErrNotFound) && spec.Source.Kind == domain.SourceUpload {
+		return 0, false, nil // deleted meanwhile
 	}
 
-	return len(chunks), nil
+	if err != nil {
+		return 0, false, err
+	}
+
+	return len(chunks), false, nil
 }
+
+// errFetch marks a document its source could not hand over.
+var errFetch = errors.New("fetch")
 
 // read fetches d's content and cuts its text into pieces, filling in what the fetch tells.
 func (in *Ingestor) read(ctx context.Context, spec domain.SyncSpec, reader ports.SourceReader, d *domain.KnowledgeDocument) ([]Piece, error) {
@@ -391,7 +424,7 @@ func (in *Ingestor) read(ctx context.Context, spec domain.SyncSpec, reader ports
 	if err != nil {
 		d.Version = ""
 
-		return nil, fmt.Errorf("fetch: %w", err)
+		return nil, fmt.Errorf("%w: %w", errFetch, err)
 	}
 
 	if doc.MIME != "" {

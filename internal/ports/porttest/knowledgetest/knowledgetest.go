@@ -740,6 +740,16 @@ func testUploads(f *fixture) {
 	f.must(f.Knowledge.DeleteDocument(ctx, d1.ID, admin, drop))
 	f.want("DeleteDocument of the only holder", dropped, slices.Equal(dropped, []domain.BlobHash{h1}))
 
+	// A sync's write of the deleted upload does not bring it back (review 4 Go L11).
+	f.refused("PutDocument of a deleted upload", f.Knowledge.PutDocument(ctx, domain.KnowledgeDocument{
+		Source: d1.Source, ExternalID: string(h1), Version: string(h1), Title: "notes.md", MIME: plainText, Status: domain.DocumentIndexed,
+		SeenAt: time.Now(), CreatedBy: domain.EngineActor,
+	}, []domain.Chunk{{Text: "one"}}), ports.ErrNotFound)
+
+	docs, err := f.Knowledge.Documents(ctx, handbook, "", 10)
+	f.must(err)
+	f.want("handbook's documents after the deleted upload's write", docs, len(docs) == 1, len(docs) == 1 && docs[0].ID == d2.ID)
+
 	f.must(f.Knowledge.DeleteDocument(ctx, d2.ID, admin, drop))
 	f.want("DeleteDocument while archive holds it", dropped, len(dropped) == 1)
 

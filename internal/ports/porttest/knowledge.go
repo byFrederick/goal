@@ -506,6 +506,10 @@ func (k *Knowledge) PutDocument(ctx context.Context, d domain.KnowledgeDocument,
 		}
 
 		existing := o.document(d.Source, d.ExternalID)
+		if existing == nil && o.byID(d.Source).src.Kind == domain.SourceUpload {
+			return fmt.Errorf("upload %s: %w", d.ExternalID, ports.ErrNotFound)
+		}
+
 		if existing == nil {
 			d.ID = domain.KnowledgeDocumentID(newV7())
 			existing = &fakeDocument{}

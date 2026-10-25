@@ -120,6 +120,19 @@ SET version = EXCLUDED.version, title = EXCLUDED.title, url = EXCLUDED.url, mime
     seen_at = greatest(d.seen_at, EXCLUDED.seen_at), indexed_at = EXCLUDED.indexed_at, embed_model = EXCLUDED.embed_model
 RETURNING id;
 
+-- name: KnowledgeSourceKind :one
+SELECT kind FROM knowledge_sources WHERE id = sqlc.arg(id);
+
+-- name: UpdateKnowledgeUpload :one
+-- An upload's document as its sync read it; none when it was deleted meanwhile, which a waiting
+-- update sees once the deletion commits.
+UPDATE knowledge_documents
+SET version = sqlc.arg(version), title = sqlc.arg(title), mime = sqlc.arg(mime), bytes = sqlc.arg(bytes),
+    status = sqlc.arg(status), error = sqlc.narg(error), seen_at = greatest(seen_at, sqlc.arg(seen_at)),
+    indexed_at = sqlc.narg(indexed_at), embed_model = sqlc.narg(embed_model)
+WHERE source_id = sqlc.arg(source_id) AND external_id = sqlc.arg(external_id)
+RETURNING id;
+
 -- name: DeleteDocumentChunks :exec
 DELETE FROM knowledge_chunks WHERE document_id = sqlc.arg(document_id);
 
