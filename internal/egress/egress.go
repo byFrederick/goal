@@ -209,46 +209,9 @@ type forwarded struct {
 }
 
 // dial connects to dest (host:port, normalized) at the addresses its name resolves to, all of
-// which must be public.
+// which must be public (PublicDialer).
 func (p *Proxy) dial(ctx context.Context, dest string) (net.Conn, error) {
-	ctx, cancel := context.WithTimeout(ctx, DialTimeout)
-	defer cancel()
-
-	host, port, err := net.SplitHostPort(dest)
-	if err != nil {
-		return nil, err
-	}
-
-	var addrs []netip.Addr
-	if ip, err := netip.ParseAddr(host); err == nil {
-		addrs = []netip.Addr{ip}
-	} else if addrs, err = p.lookup(ctx, host); err != nil {
-		return nil, fmt.Errorf("resolve %s: %w", host, err)
-	}
-
-	if len(addrs) == 0 {
-		return nil, fmt.Errorf("resolve %s: no addresses", host)
-	}
-
-	// One non-public answer refuses the name: it is how a rebinding attack looks.
-	for _, a := range addrs {
-		if !Public(a) {
-			return nil, fmt.Errorf("%w: %s is %s", ErrNotPublic, host, a.Unmap())
-		}
-	}
-
-	var errs []error
-
-	for _, a := range addrs {
-		conn, err := p.dialFn(ctx, "tcp", net.JoinHostPort(a.Unmap().String(), port))
-		if err == nil {
-			return conn, nil
-		}
-
-		errs = append(errs, err)
-	}
-
-	return nil, errors.Join(errs...)
+	return PublicDialer{Lookup: p.lookup, Dial: p.dialFn}.DialContext(ctx, "tcp", dest)
 }
 
 func (p *Proxy) dialFailed(w http.ResponseWriter, r *http.Request, dest string, err error) {

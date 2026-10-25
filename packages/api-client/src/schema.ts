@@ -1433,7 +1433,7 @@ export interface paths {
         };
         /**
          * The organization's events as they happen (Server-Sent Events)
-         * @description A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent, no id) follows a change of a factory's line that is not an item's: its andon cord pulled or cleared. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+         * @description A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, connection, and later knowledge) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent, no id) follows a change of a factory's line that is not an item's: its andon cord pulled or cleared. `event: connection` (data a ConnectionEvent, no id) follows a connection created, changed, tested or deleted. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
          */
         get: operations["streamEvents"];
         put?: never;
@@ -1800,6 +1800,140 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/connection-kinds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The connection kinds the organization can make connections of
+         * @description The platform's kinds, shipped with goald, and the organization's own, by name; an organization's kind hides a platform kind of the same name. Each with the fields a connection of it is made of (secret ones are write-only), its modes, whether it gives agents their model, its adapter hooks and its docs.
+         */
+        get: operations["listConnectionKinds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/connection-kinds/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The connection kind's name */
+                kind: components["parameters"]["KindRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Create or replace one of the organization's connection kinds
+         * @description The body is a kind file (schema/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken. Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
+         */
+        put: operations["putConnectionKind"];
+        post?: never;
+        /**
+         * Delete one of the organization's connection kinds
+         * @description 404 connection-kind-not-found when the organization has no kind of that name (a platform kind cannot be deleted); 409 connection-kind-in-use while a connection is of it. Needs a sign-in from the last 10 minutes. Audited as connection_kind.deleted.
+         */
+        delete: operations["deleteConnectionKind"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's connections
+         * @description By name, each with its kind, description, non-secret fields, which secret fields are set (never a value), status, what uses it, its last use and last test. Members see them to pick them in the builder; only owners and admins change them.
+         */
+        get: operations["listConnections"];
+        put?: never;
+        /**
+         * Create a connection
+         * @description A connection of a kind, with the kind's non-secret fields in fields and its secret ones in secrets, sealed under the platform's master key and never returned, not even masked. 400 field-unknown for a value that is no field of the kind (or of the other sort), 400 field-required for a required field without a value, 404 connection-kind-not-found for an unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.created (field names only).
+         */
+        post: operations["createConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/connections/{connection}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The connection's name */
+                connection: components["parameters"]["ConnectionRef"];
+            };
+            cookie?: never;
+        };
+        /** One connection, with the env names a run gets from it and its kind's docs */
+        get: operations["getConnection"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a connection
+         * @description 409 connection-in-use, naming what, while a factory's current version or a knowledge source uses it. Needs a sign-in from the last 10 minutes. Audited as connection.deleted.
+         */
+        delete: operations["deleteConnection"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename a connection, or change its description, fields or secrets
+         * @description fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+         */
+        patch: operations["updateConnection"];
+        trace?: never;
+    };
+    "/v1/orgs/{org}/connections/{connection}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The connection's name */
+                connection: components["parameters"]["ConnectionRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run the connection's test
+         * @description Sends the kind's test request from goald with the connection's values: to public addresses only (a URL naming a private, loopback, link-local or metadata address fails the test), within 10 seconds, following no redirect. ok when the status is the one the kind expects. A test that fails is a 200 with ok false and why; the outcome is the connection's last test. 409 connection-not-testable for a kind without a test, 503 connections-unavailable for a sealed connection while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.tested.
+         */
+        post: operations["testConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1812,7 +1946,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -3901,6 +4035,141 @@ export interface components {
             /** @description draft only, who saved it, as an actor ref (user:local) */
             by?: string;
         };
+        /** @description 3 to 40 lowercase letters, digits and inner dashes, starting with a letter */
+        ConnectionName: string;
+        ConnectionKindList: {
+            kinds: components["schemas"]["ConnectionKind"][];
+        };
+        /** @description A template for connections (spec 4 §4.2), the platform's or the organization's */
+        ConnectionKind: {
+            name: components["schemas"]["ConnectionName"];
+            title: string;
+            description?: string;
+            /** @description Shipped with goald; otherwise the organization's own */
+            platform: boolean;
+            fields: components["schemas"]["ConnectionKindField"][];
+            /** @description How runs use it: env (variables for API calls and CLIs), mcp (an MCP server, remote or stdio), cli (a tool installed in the box), git (git over https) */
+            modes: ("env" | "mcp" | "cli" | "git")[];
+            /** @description It gives agents their model; only such a kind may be a factory's model connection */
+            model: boolean;
+            /** @description The code host adapter that reads and merges its pull requests (github, gitlab) */
+            code_host?: string;
+            /** @description The adapter that mints per-run credentials from it (aws-sts) */
+            mint?: string;
+            /** @description The knowledge source reader that syncs through it (gitdocs, confluence) */
+            sync?: string;
+            /** @description It has a test (POST …/connections/{connection}/test) */
+            testable: boolean;
+            /** @description The env names a run gets, as the kind writes them ({{field}} where a field names one) */
+            env: string[];
+            /** @description What agents are told about using it */
+            docs?: string;
+        };
+        ConnectionKindField: {
+            name: string;
+            title: string;
+            description?: string;
+            /** @description Write-only, sealed; an input of type password */
+            secret: boolean;
+            required: boolean;
+            /** @description The value of a field left empty */
+            default?: string;
+        };
+        /** @description A connection kind file (apiVersion goal/v1, kind ConnectionKind, metadata, spec) as JSON, checked against schema/connection-kind.schema.json */
+        ConnectionKindFile: {
+            [key: string]: unknown;
+        };
+        ConnectionList: {
+            connections: components["schemas"]["Connection"][];
+        };
+        /** @description An organization's connection (spec 4 §4.3), never a secret value */
+        Connection: {
+            id: string;
+            name: components["schemas"]["ConnectionName"];
+            kind: string;
+            description: string;
+            /** @description The non-secret values set (a kind's defaults are not copied in) */
+            fields: {
+                [key: string]: string;
+            };
+            /** @description The secret fields that are set, sorted; their values are never shown */
+            secrets_set: string[];
+            /**
+             * @description missing-secret: a required secret field is not set (its kind gained one); else the last test's outcome, untested before any
+             * @enum {string}
+             */
+            status: "ok" | "failing" | "untested" | "missing-secret";
+            used_by: components["schemas"]["ConnectionUsers"];
+            /**
+             * Format: date-time
+             * @description When a run last got it
+             */
+            last_used_at: string | null;
+            last_test: components["schemas"]["ConnectionTestResult"] | null;
+            /** @description getConnection only, the env names a run gets from it */
+            env?: string[];
+            /** @description getConnection only, its kind's docs for agents */
+            docs?: string;
+            created_by: components["schemas"]["Actor"];
+            /** Format: date-time */
+            created_at: string;
+            updated_by: components["schemas"]["Actor"];
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @description What uses a connection, so it cannot be deleted or renamed meanwhile */
+        ConnectionUsers: {
+            /** @description The factories whose current version names it (those the caller sees) */
+            factories: components["schemas"]["ConnectionFactory"][];
+            /** @description The knowledge sources synced through it (phase 4 knowledge) */
+            knowledge_sources: string[];
+        };
+        ConnectionFactory: {
+            id: string;
+            name: string;
+        };
+        NewConnection: {
+            name: components["schemas"]["ConnectionName"];
+            kind: string;
+            description?: string;
+            /** @description The kind's non-secret values */
+            fields?: {
+                [key: string]: string;
+            };
+            /** @description The kind's secret values; never answered */
+            secrets?: {
+                [key: string]: string;
+            };
+        };
+        ConnectionPatch: {
+            name?: components["schemas"]["ConnectionName"];
+            description?: string;
+            /** @description Every non-secret value (replaces them all) */
+            fields?: {
+                [key: string]: string;
+            };
+            /** @description The secret fields to replace, by name; an empty value clears an optional one */
+            secrets?: {
+                [key: string]: string;
+            };
+        };
+        ConnectionTestResult: {
+            ok: boolean;
+            /** @description The test request's HTTP status, when it got one */
+            status?: number;
+            /** @description Why it failed (never a secret value) */
+            error?: string;
+            /** Format: date-time */
+            at: string;
+        };
+        /** @description The data of one `event: connection` on /v1/orgs/{org}/stream; it carries no value */
+        ConnectionEvent: {
+            connection_id: string;
+            /** @description The connection's name after the change */
+            name: string;
+            /** @enum {string} */
+            change: "created" | "updated" | "deleted" | "tested";
+        };
     };
     responses: {
         /** @description An error (RFC 9457 problem details) */
@@ -3918,6 +4187,10 @@ export interface components {
         UserRef: string;
         /** @description The organization's slug or id */
         OrgRef: string;
+        /** @description The connection's name */
+        ConnectionRef: string;
+        /** @description The connection kind's name */
+        KindRef: string;
         /** @description The factory's metadata.id or metadata.name */
         FactoryRef: string;
         /** @description The first UTC day of the range; 6 days before `to` when absent */
@@ -6008,7 +6281,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/event-stream": components["schemas"]["StreamEvent"] | components["schemas"]["DefinitionEvent"] | components["schemas"]["FactoryEvent"];
+                    "text/event-stream": components["schemas"]["StreamEvent"] | components["schemas"]["DefinitionEvent"] | components["schemas"]["FactoryEvent"] | components["schemas"]["ConnectionEvent"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -6429,6 +6702,247 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SkillFiles"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listConnectionKinds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The kinds */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionKindList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    putConnectionKind: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The connection kind's name */
+                kind: components["parameters"]["KindRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectionKindFile"];
+            };
+        };
+        responses: {
+            /** @description The kind as the organization now sees it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionKind"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteConnectionKind: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The connection kind's name */
+                kind: components["parameters"]["KindRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listConnections: {
+        parameters: {
+            query?: {
+                /** @description Only the connections this factory's current version names (its metadata.id or metadata.name) */
+                factory?: string;
+                /** @description Only connections of this kind */
+                kind?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The connections */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewConnection"];
+            };
+        };
+        responses: {
+            /** @description The connection */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Connection"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The connection's name */
+                connection: components["parameters"]["ConnectionRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The connection */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Connection"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The connection's name */
+                connection: components["parameters"]["ConnectionRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The connection's name */
+                connection: components["parameters"]["ConnectionRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectionPatch"];
+            };
+        };
+        responses: {
+            /** @description The connection */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Connection"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    testConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The connection's name */
+                connection: components["parameters"]["ConnectionRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The outcome */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionTestResult"];
                 };
             };
             default: components["responses"]["Problem"];

@@ -20,11 +20,10 @@ import (
 
 const cmdKey = "key"
 
-// The key the tests create, and the verb.
+// The key the tests create.
 const (
-	ciKey      = "ci-deploy"
-	verbCreate = "create"
-	scopeRead  = "org:read"
+	ciKey     = "ci-deploy"
+	scopeRead = "org:read"
 )
 
 // flagScope is goal key create's --scope.

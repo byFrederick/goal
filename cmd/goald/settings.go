@@ -115,6 +115,10 @@ type settings struct {
 	SandboxNetwork string
 	// Ignored are the removedVariables that are set: goald warns about them at start.
 	Ignored []string
+	// AllowPrivateUpstreams lets goald's requests for connections (their tests) reach private,
+	// loopback and link-local addresses too (GOAL_ALLOW_PRIVATE_UPSTREAMS: true or false, default
+	// false): for a laptop's own test servers, and refused when goald listens off loopback.
+	AllowPrivateUpstreams bool
 }
 
 const (
@@ -174,7 +178,7 @@ var ownVariables = []string{
 	"GOAL_GITHUB_API_URL", githubWebEnv, "GOAL_LOG_LEVEL", "GOAL_LOG_FORMAT", agentImageEnv, "GOAL_ORG_RETENTION", "GOAL_MODELS",
 	"GOAL_DEFINITION_CACHE_BYTES", sandboxNetworkEnv,
 	"GOAL_S3_BUCKET", "GOAL_S3_ENDPOINT", "GOAL_S3_ACCESS_KEY", "GOAL_S3_SECRET_KEY",
-	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", masterkey.KeysEnv, masterkey.FileEnv,
+	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", masterkey.KeysEnv, masterkey.FileEnv, allowPrivateEnv,
 }
 
 // identityVariables are the identity service's (auth/: its listen address, database, secrets,
@@ -286,6 +290,7 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 	}
 
 	errs = append(errs, definitionSettings(&s, or)...)
+	errs = append(errs, upstreamSettings(&s, or)...)
 
 	if s.MaxRuns, err = strconv.Atoi(or("GOAL_MAX_RUNS", "0")); err != nil || s.MaxRuns < 0 {
 		errs = append(errs, fmt.Errorf("GOAL_MAX_RUNS %q is not a count of runs (0 for no cap)", getenv("GOAL_MAX_RUNS")))
@@ -327,6 +332,27 @@ func sandboxSettings(s *settings, getenv func(string) string, or func(name, def 
 	if u, err := url.Parse(s.GatewayURL); err != nil || (u.Scheme != schemeHTTP && u.Scheme != schemeHTTPS) || u.Host == "" || u.Path == "" || u.RawQuery != "" {
 		return []error{fmt.Errorf("%s %q is not an http(s) URL with a path and no query, such as http://127.0.0.1:8080/mcp", gatewayURLEnv, s.GatewayURL)}
 	}
+
+	return nil
+}
+
+// allowPrivateEnv lets connection requests reach private addresses (spec 4 §5.9).
+const allowPrivateEnv = "GOAL_ALLOW_PRIVATE_UPSTREAMS"
+
+// upstreamSettings reads GOAL_ALLOW_PRIVATE_UPSTREAMS, refused off loopback: another machine's
+// people could then aim a connection's test at goald's own network.
+func upstreamSettings(s *settings, or func(name, def string) string) []error {
+	allow, err := strconv.ParseBool(or(allowPrivateEnv, "false"))
+	if err != nil {
+		return []error{fmt.Errorf("%s %q is not true or false", allowPrivateEnv, or(allowPrivateEnv, ""))}
+	}
+
+	if host, _, err := net.SplitHostPort(s.Listen); allow && (err != nil || !isLoopback(host)) {
+		return []error{fmt.Errorf("%s=true lets connection tests reach private addresses, so goald must listen on a loopback address, "+
+			"not GOAL_LISTEN %q", allowPrivateEnv, s.Listen)}
+	}
+
+	s.AllowPrivateUpstreams = allow
 
 	return nil
 }

@@ -21,6 +21,7 @@ export const scopeGroups: readonly { id: 'read' | 'work' | 'build'; label: strin
       { id: 'org:read', label: 'See the organization', needs: null },
       { id: 'factory:read', label: 'See factories', needs: 'viewer' },
       { id: 'audit:read', label: 'Read the audit log', needs: null },
+      { id: 'connection:read', label: 'See connections', needs: null },
     ],
   },
   {

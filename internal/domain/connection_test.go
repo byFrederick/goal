@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"maps"
+	"net/http"
 	"reflect"
 	"strings"
 	"testing"
@@ -130,13 +131,15 @@ func TestConnectionKind_CheckValues(t *testing.T) {
 		fields  map[string]string
 		secrets []string
 		want    string
+		// rule is the field rule the error names, when it breaks one: ErrFieldRequired or ErrFieldUnknown.
+		rule error
 	}{
 		{name: "secret set, default host", kind: githubKind(), secrets: []string{fieldToken}},
 		{name: "own host", kind: githubKind(), fields: map[string]string{fieldHost: "git.example.com"}, secrets: []string{fieldToken}},
-		{name: "required secret missing", kind: githubKind(), want: `"token" is required`},
-		{name: "secret as a field", kind: githubKind(), fields: map[string]string{fieldToken: "x"}, secrets: []string{fieldToken}, want: "is secret"},
-		{name: "unknown field", kind: githubKind(), fields: map[string]string{"org": "example"}, secrets: []string{fieldToken}, want: `no field "org"`},
-		{name: "unknown secret", kind: githubKind(), secrets: []string{fieldToken, fieldHost}, want: `no secret field "host"`},
+		{name: "required secret missing", kind: githubKind(), want: `"token" is required`, rule: ErrFieldRequired},
+		{name: "secret as a field", kind: githubKind(), fields: map[string]string{fieldToken: "x"}, secrets: []string{fieldToken}, want: "is secret", rule: ErrFieldUnknown},
+		{name: "unknown field", kind: githubKind(), fields: map[string]string{"org": "example"}, secrets: []string{fieldToken}, want: `no field "org"`, rule: ErrFieldUnknown},
+		{name: "unknown secret", kind: githubKind(), secrets: []string{fieldToken, fieldHost}, want: `no secret field "host"`, rule: ErrFieldUnknown},
 		{name: "env names from a prefix", kind: apiKeyKind(), fields: map[string]string{fieldPrefix: "ACME", fieldBaseURL: apiExampleURL}, secrets: []string{fieldKey}},
 		{name: "prefix makes a bad name", kind: apiKeyKind(), fields: map[string]string{fieldPrefix: "acme api", fieldBaseURL: "u"}, secrets: []string{fieldKey}, want: "not a variable name"},
 		{name: "prefix makes a reserved name", kind: apiKeyKind(), fields: map[string]string{fieldPrefix: "GOAL", fieldBaseURL: "u"}, secrets: []string{fieldKey}, want: "reserved"},
@@ -154,6 +157,8 @@ func TestConnectionKind_CheckValues(t *testing.T) {
 				t.Errorf("CheckValues = %v; want nil", err)
 			case tt.want != "" && (!errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), tt.want)):
 				t.Errorf("CheckValues = %v; want ErrInvalid mentioning %q", err, tt.want)
+			case tt.rule != nil && !errors.Is(err, tt.rule):
+				t.Errorf("CheckValues = %v; want it to be %v", err, tt.rule)
 			}
 		})
 	}
@@ -307,6 +312,59 @@ func TestConnectionKind_Outline(t *testing.T) {
 			got := tt.kind.Outline(tt.conn)
 			if !reflect.DeepEqual(got, ConnectionOutline{Env: tt.env, GitHost: tt.gitHost}) {
 				t.Errorf("Outline = %+v; want env %v and git host %q", got, tt.env, tt.gitHost)
+			}
+		})
+	}
+}
+
+func TestConnectionKind_RenderTest(t *testing.T) {
+	t.Parallel()
+
+	const token = "ghp_secret-value"
+
+	jira := ConnectionKind{Name: "jira", Spec: KindSpec{
+		Fields: []KindField{{Name: "site", Required: true}, {Name: "email", Required: true}, {Name: fieldToken, Secret: true, Required: true}},
+		Test:   &KindTest{Method: http.MethodGet, URL: "https://{{site}}/rest/api/3/myself", Basic: &KindBasicAuth{Username: "{{email}}", Password: tmplToken}, Expect: 200},
+	}}
+
+	tests := []struct {
+		name   string
+		kind   ConnectionKind
+		values map[string]string
+		want   *KindTest
+		err    string // "" when it renders
+	}{
+		{
+			name: "defaults and secrets in headers", kind: githubKind(), values: map[string]string{fieldToken: token},
+			want: &KindTest{Method: http.MethodGet, URL: "https://api.github.com/user", Headers: map[string]string{headerAuthorization: "Bearer " + token}, Expect: 200},
+		},
+		{
+			name: "basic authentication", kind: jira, values: map[string]string{"site": "acme.atlassian.net", "email": "ops@example.com", fieldToken: token},
+			want: &KindTest{
+				Method: http.MethodGet, URL: "https://acme.atlassian.net/rest/api/3/myself", Headers: map[string]string{},
+				Basic: &KindBasicAuth{Username: "ops@example.com", Password: token}, Expect: 200,
+			},
+		},
+		{name: "no test", kind: mcpKind()},
+		{name: "a missing value", kind: githubKind(), values: map[string]string{}, err: "has no value"},
+		{name: "a url that is not http", kind: jira, values: map[string]string{"site": "/x", "email": "e", fieldToken: token}, err: "not an http or https URL"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := tt.kind.RenderTest(tt.values)
+
+			switch {
+			case tt.err != "":
+				if err == nil || !strings.Contains(err.Error(), tt.err) || strings.Contains(err.Error(), token) {
+					t.Errorf("RenderTest = %+v, %v; want an error mentioning %q without the secret", got, err, tt.err)
+				}
+			case err != nil:
+				t.Fatal(err)
+			case !reflect.DeepEqual(got, tt.want):
+				t.Errorf("RenderTest = %+v; want %+v", got, tt.want)
 			}
 		})
 	}

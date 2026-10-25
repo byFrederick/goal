@@ -29,6 +29,27 @@ func (q *Queries) NoticeAndon(ctx context.Context, id int64) (NoticeAndonRow, er
 	return i, err
 }
 
+const noticeConnection = `-- name: NoticeConnection :one
+SELECT coalesce(data ->> 'name', '')::text AS name FROM audit_log
+WHERE target_kind = 'connection' AND target_id = $1::text AND action = ANY ($2::text[])
+ORDER BY id DESC
+LIMIT 1
+`
+
+type NoticeConnectionParams struct {
+	TargetID string
+	Actions  []string
+}
+
+// The name in a connection's latest audit entry of one of actions (audit_log_target_idx): what a
+// connection event is read back from.
+func (q *Queries) NoticeConnection(ctx context.Context, arg NoticeConnectionParams) (string, error) {
+	row := q.db.QueryRow(ctx, noticeConnection, arg.TargetID, arg.Actions)
+	var name string
+	err := row.Scan(&name)
+	return name, err
+}
+
 const noticeCurrent = `-- name: NoticeCurrent :one
 SELECT current_version_id FROM factories WHERE id = $1
 `

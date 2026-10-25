@@ -32,7 +32,15 @@ describe('what a personal token can do', () => {
     expect(highImpactScopes).toEqual(['definition:edit', 'definition:publish', 'factory:create']);
     for (const s of highImpactScopes) expect(cliWorkPreset).not.toContain(s);
     expect([...cliWorkPreset].sort()).toEqual(
-      ['andon:manage', 'factory:read', 'item:create', 'item:decide', 'item:operate', 'org:read'].sort(),
+      [
+        'andon:manage',
+        'connection:read',
+        'factory:read',
+        'item:create',
+        'item:decide',
+        'item:operate',
+        'org:read',
+      ].sort(),
     );
   });
 

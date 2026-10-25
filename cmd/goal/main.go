@@ -98,6 +98,23 @@ const usage = `usage:
                                                   --expires 1d to 90d, default 90d). The secret is printed
                                                   once, alone on stdout: store it as GOAL_API_KEY
   goal key revoke <name|id>                       revoke a key: anything using it stops working at once
+  goal connection list [--kind K] [--factory F]   the organization's connections: kind, status, which
+                                                  secrets are set (never a value), what uses them
+  goal connection show <name>                     one connection: its fields, last test, the env names a
+                                                  run gets and its kind's docs
+  goal connection create <name> --kind K [--field k=v]... [--secret k=-] [--secret-file k=<path>]... [--description D]
+                                                  create a connection (owners and admins); a secret comes
+                                                  from stdin (k=-, one value) or a file, never argv
+  goal connection update <name> [--name N] [--description D] [--field k=v]... [--secret k=-] [--secret-file k=<path>]...
+                                                  rename it, change its fields (merged; k= clears one) or
+                                                  replace the named secrets
+  goal connection delete <name>                   delete it (refused while a factory's current version
+                                                  names it)
+  goal connection test <name>                     run its kind's test from goald (exit 1 when it fails)
+  goal connection kinds                           the kinds connections are made of, the platform's and
+                                                  the organization's
+  goal connection kind push <file.yaml>           create or replace an organization kind from its file
+  goal connection kind delete <name>              delete an organization kind no connection is of
   goal storage init                               create the bucket if missing
   goal catalog skills sync --file <sources.yaml> [--search <q>]... [--top <n>]
                                                   fetch skills.sh skills (a YAML list of
@@ -141,7 +158,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, move, pause, the decisions, status, andon, factory) acts in one
+Every command that talks to goald (run, follow, item, note, move, pause, the decisions, status, andon, factory, connection) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or
@@ -206,6 +223,7 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 	if handler, ok := map[string]command{
 		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbMove: moveItem, verbPause: pauseItem,
 		"status": status, "factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
+		"connection": connectionCommand,
 	}[cmd]; ok {
 		return handler(ctx, out, getenv, rest)
 	}

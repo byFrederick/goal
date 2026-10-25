@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,8 +19,10 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
+	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/egress"
 	"github.com/byFrederick/goal/internal/engine"
 	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/ports/porttest"
@@ -133,6 +136,11 @@ type harness struct {
 	// platform keeps the platform admins of the people signed in (an identity of its own under
 	// GOAL_AUTH=none).
 	platform *porttest.Platform
+	// conns keeps the organizations' connections, sealed under key k1, with goald's platform
+	// kinds. Connection tests dial through egress.PublicDialer, private addresses (the tests'
+	// servers) allowed unless publicOnly is set.
+	conns      *porttest.Connections
+	publicOnly atomic.Bool
 }
 
 // acme's one prompt and its path.
@@ -416,11 +424,13 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
 
 	h.platform = porttest.NewPlatform(h.keys)
 
+	connections := h.connections(t, tenancy)
+
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
 		Access: h.keys, OrgRetention: retention, Authorizer: h.seam, Auth: api.AuthConfig{Mode: api.AuthNone}, Platform: h.platform, Feed: feed,
-		Builder: h.builder,
-		Clock:   h.clock, Logger: jsonLog(logs),
+		Builder: h.builder, Connections: h.conns, ParseKind: connkind.Parse, ConnectionTransport: connections,
+		Clock: h.clock, Logger: jsonLog(logs),
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity
@@ -445,6 +455,30 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
 	})
 
 	return h
+}
+
+// connections makes h's connections, with goald's platform kinds, and returns the transport their
+// tests dial through.
+func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
+	t.Helper()
+
+	h.conns = porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), audit)
+
+	kinds, err := connkind.Platform()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.conns.SyncPlatformKinds(t.Context(), kinds); err != nil {
+		t.Fatal(err)
+	}
+
+	tr := &http.Transport{DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return egress.PublicDialer{AllowPrivate: !h.publicOnly.Load()}.DialContext(ctx, network, addr)
+	}}
+	t.Cleanup(tr.CloseIdleConnections)
+
+	return tr
 }
 
 // call sends a JSON request and decodes the response into out (when not nil), returning the

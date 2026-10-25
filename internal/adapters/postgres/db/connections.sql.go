@@ -295,6 +295,25 @@ func (q *Queries) MarkConnectionsUsed(ctx context.Context, ids []uuid.UUID) erro
 	return err
 }
 
+const notifyConnection = `-- name: NotifyConnection :exec
+SELECT pg_notify('goal_org_events', json_build_object(
+  'org_id', goal_org(), 'event', 'connection',
+  'data', json_build_object('connection_id', $1::uuid, 'name', $2::text, 'change', $3::text))::text)
+`
+
+type NotifyConnectionParams struct {
+	ID     uuid.UUID
+	Name   string
+	Change string
+}
+
+// The organization's stream event connection on goal_org_events, sent when the change's
+// transaction commits; postgres.Notices reads it back from the change's audit entry.
+func (q *Queries) NotifyConnection(ctx context.Context, arg NotifyConnectionParams) error {
+	_, err := q.db.Exec(ctx, notifyConnection, arg.ID, arg.Name, arg.Change)
+	return err
+}
+
 const orgConnectionKind = `-- name: OrgConnectionKind :one
 SELECT id, spec_sha256 FROM connection_kinds WHERE org_id = goal_org() AND name = $1 FOR UPDATE
 `
@@ -505,14 +524,15 @@ func (q *Queries) SyncPlatformKinds(ctx context.Context, kinds []byte) error {
 
 const updateConnection = `-- name: UpdateConnection :one
 UPDATE connections
-SET description = $1, fields = $2, secret_fields = $3::text[],
-    key_id = $4, nonce = $5, ciphertext = $6,
-    updated_by = $7, updated_at = now()
-WHERE id = $8
+SET name = $1, description = $2, fields = $3, secret_fields = $4::text[],
+    key_id = $5, nonce = $6, ciphertext = $7,
+    updated_by = $8, updated_at = now()
+WHERE id = $9
 RETURNING updated_at
 `
 
 type UpdateConnectionParams struct {
+	Name         string
 	Description  string
 	Fields       []byte
 	SecretFields []string
@@ -525,6 +545,7 @@ type UpdateConnectionParams struct {
 
 func (q *Queries) UpdateConnection(ctx context.Context, arg UpdateConnectionParams) (time.Time, error) {
 	row := q.db.QueryRow(ctx, updateConnection,
+		arg.Name,
 		arg.Description,
 		arg.Fields,
 		arg.SecretFields,

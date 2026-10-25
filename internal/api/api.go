@@ -148,6 +148,12 @@ type Deps struct {
 	InboxSources []InboxSource
 	// Builder serves the factory editor's metadata and the skills catalog.
 	Builder Builder
+	// Connections are the organization's connections and kinds (spec 4); ParseKind reads an
+	// organization's kind file as goald's own (connkind.Parse); ConnectionTransport sends
+	// connection tests: it must dial public addresses only (egress.PublicDialer).
+	Connections         ports.Connections
+	ParseKind           KindParser
+	ConnectionTransport http.RoundTripper
 	// Clock dates ages and metric windows and paces stream heartbeats.
 	Clock  ports.Clock
 	Logger *slog.Logger
@@ -158,7 +164,7 @@ func (d Deps) complete() bool {
 	missing := []bool{
 		d.Engine == nil, d.Items == nil, d.Factories == nil, d.Definitions == nil, d.Versions == nil, d.Orgs == nil,
 		d.Audit == nil, d.Access == nil, d.Authorizer == nil, d.Platform == nil, d.Feed == nil, d.Builder == nil, d.Clock == nil,
-		d.OrgRetention <= 0,
+		d.Connections == nil, d.ParseKind == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
 	}
 
 	return !slices.Contains(missing, true)
@@ -199,8 +205,8 @@ var errInvalid = errors.New("invalid request")
 // New returns the API's handler for the /v1/ routes.
 func New(d Deps) (http.Handler, error) {
 	if !d.complete() {
-		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Access, Authorizer, Platform, Feed, Builder, Clock " +
-			"and a positive OrgRetention are required")
+		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Access, Authorizer, Platform, Feed, Builder, Clock, " +
+			"Connections, ParseKind, ConnectionTransport and a positive OrgRetention are required")
 	}
 
 	if err := d.failsClosed(); err != nil {
@@ -215,8 +221,9 @@ func New(d Deps) (http.Handler, error) {
 	s := &server{
 		engine: d.Engine, items: d.Items, factories: d.Factories, defs: d.Definitions, versions: d.Versions, orgs: d.Orgs, audit: d.Audit,
 		retention: d.OrgRetention, authz: d.Authorizer, auth: d.Auth, identity: d.Identity, access: d.Access, platform: d.Platform, feed: d.Feed,
-		builder: d.Builder,
-		clock:   d.Clock, log: log,
+		builder: d.Builder, connections: d.Connections, parseKind: d.ParseKind,
+		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
+		clock:            d.Clock, log: log,
 	}
 	s.inbox = append([]InboxSource{workInbox{s: s}}, d.InboxSources...)
 
@@ -311,8 +318,12 @@ type server struct {
 	feed      *Feed
 	inbox     []InboxSource
 	builder   Builder
-	clock     ports.Clock
-	log       *slog.Logger
+	// connections and parseKind serve the connection routes; connectionClient sends their tests.
+	connections      ports.Connections
+	parseKind        KindParser
+	connectionClient *http.Client
+	clock            ports.Clock
+	log              *slog.Logger
 }
 
 var _ gen.StrictServerInterface = (*server)(nil)
@@ -506,7 +517,10 @@ func problemOf(err error) gen.Problem {
 	var tooLarge *http.MaxBytesError
 
 	// The answers with a code of their own, the fixed bodies first.
-	for _, answer := range []func(error) (gen.Problem, bool){fixedProblem, definitionProblem, controlProblem, agentProblem, apiKeyProblem, personalTokenProblem} {
+	// The connection routes' answers come before the definitions' (both wrap ports.ErrNameTaken).
+	for _, answer := range []func(error) (gen.Problem, bool){
+		fixedProblem, connectionProblem, definitionProblem, controlProblem, agentProblem, apiKeyProblem, personalTokenProblem,
+	} {
 		if p, ok := answer(err); ok {
 			return p
 		}

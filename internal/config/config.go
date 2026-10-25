@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/byFrederick/goal/internal/domain"
@@ -446,6 +447,31 @@ func (f *Factory) Warnings() []string {
 	}
 
 	return w
+}
+
+// ConnectionNames are the organization's connections the definition names (spec 4 §4.4), sorted
+// and unique: spec.connections but its inline entries, runtime.modelConnection and
+// runtime.repository.connection. A connection a current version names is neither deleted nor
+// renamed.
+func (f *Factory) ConnectionNames() []string {
+	names := make([]string, 0, len(f.Spec.Connections)+2)
+	for _, c := range f.Spec.Connections {
+		if !c.Inline() {
+			names = append(names, c.Name)
+		}
+	}
+
+	if m := f.Spec.Runtime.ModelConnection; m != "" {
+		names = append(names, m)
+	}
+
+	if r := f.Spec.Runtime.Repository; r != nil && r.Connection != "" {
+		names = append(names, r.Connection)
+	}
+
+	slices.Sort(names)
+
+	return slices.Compact(names)
 }
 
 // Purpose is what the factory is for: metadata.purpose, or its deprecated alias description.

@@ -16,6 +16,14 @@ FROM item_events e
 JOIN work_items w ON w.id = e.item_id
 WHERE e.id = sqlc.arg(id);
 
+-- name: NoticeConnection :one
+-- The name in a connection's latest audit entry of one of actions (audit_log_target_idx): what a
+-- connection event is read back from.
+SELECT coalesce(data ->> 'name', '')::text AS name FROM audit_log
+WHERE target_kind = 'connection' AND target_id = sqlc.arg(target_id)::text AND action = ANY (sqlc.arg(actions)::text[])
+ORDER BY id DESC
+LIMIT 1;
+
 -- name: NoticeAndon :one
 SELECT factory_id, pulled_at, cleared_at FROM andon_pulls WHERE id = sqlc.arg(id);
 

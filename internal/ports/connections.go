@@ -23,8 +23,10 @@ type MasterKey interface {
 }
 
 // Connections are an organization's connections and connection kinds (spec 4 §4.2, §4.3), for the
-// organization in ctx. Secret values are write-only: only Resolve returns them. Every change and
-// test is audited in its transaction; so is each use by a run.
+// organization in ctx. Secret values are write-only: only Resolve and Open return them. Every
+// change and test is audited in its transaction, and is the organization's stream event
+// connection ({connection_id, name, change: created|updated|deleted|tested}, spec 4 §8.3) once it
+// commits; each use by a run is audited too.
 type Connections interface {
 	// Kinds are the platform's kinds and the organization's, by name; an organization's own kind
 	// hides a platform kind of the same name.
@@ -49,8 +51,9 @@ type Connections interface {
 	// CheckValues (domain.ErrInvalid); ErrNotFound for an unknown kind, ErrNameTaken for a name
 	// in use, ErrNoMasterKey for secrets without a master key.
 	Create(ctx context.Context, c domain.NewConnection, by domain.Actor) (domain.Connection, error)
-	// Update changes metadata and fields (connection.updated); Secrets replaces the named secret
-	// fields only (connection.secret_replaced). ErrNotFound when there is none.
+	// Update renames a connection and changes its metadata and fields (connection.updated); Secrets
+	// replaces the named secret fields only (connection.secret_replaced). ErrNotFound when there is
+	// none, ErrNameTaken when another connection has the new name.
 	Update(ctx context.Context, name string, p domain.ConnectionPatch, by domain.Actor) (domain.Connection, error)
 	// Delete deletes a connection (connection.deleted). ErrNotFound when there is none;
 	// ErrConflict while a knowledge source uses it.
@@ -59,7 +62,9 @@ type Connections interface {
 	RecordTest(ctx context.Context, name string, r domain.ConnectionTest, by domain.Actor) error
 
 	// Resolve opens the named connections for one run, audits connection.used and sets
-	// last_used_at. It is the only method that returns secret values. ErrNotFound names the first
-	// unknown connection.
+	// last_used_at. ErrNotFound names the first unknown connection.
 	Resolve(ctx context.Context, names []string, run domain.RunID) ([]domain.ResolvedConnection, error)
+	// Open opens one connection for its test, whose outcome RecordTest records: its values, secret
+	// ones included, with no use recorded. ErrNotFound when there is none.
+	Open(ctx context.Context, name string) (domain.ResolvedConnection, error)
 }

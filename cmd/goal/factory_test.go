@@ -18,6 +18,7 @@ import (
 	"github.com/byFrederick/goal/internal/api"
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
+	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/engine"
@@ -66,6 +67,8 @@ type defGoald struct {
 	orgID   domain.OrgID
 	// keys holds the organization's API keys.
 	keys *porttest.Identity
+	// conns holds the organization's connections, with goald's platform kinds.
+	conns *porttest.Connections
 
 	mu sync.Mutex
 	// beforeTree runs once before the next PUT …/draft/tree is served.
@@ -104,17 +107,29 @@ func newDefGoald(t *testing.T) *defGoald {
 	keys := porttest.NewIdentity(clock.Now)
 	keys.AddOrg(o)
 
+	conns := porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy)
+
+	kinds, err := connkind.Platform()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := conns.SyncPlatformKinds(t.Context(), kinds); err != nil {
+		t.Fatal(err)
+	}
+
 	handler, err := api.New(api.Deps{
 		Engine: e, Items: store, Factories: cache, Definitions: authors, Versions: defs, Orgs: tenancy, Audit: tenancy,
 		Access: keys, OrgRetention: time.Hour, Authorizer: api.AllowAll{}, Auth: api.AuthConfig{Mode: api.AuthNone},
 		Platform: porttest.NewPlatform(porttest.NewIdentity(clock.Now)), Feed: api.NewFeed(porttest.NewItemNotices(), defNotices, nil),
-		Builder: builder.New(objects, clock, builder.Config{}), Clock: clock,
+		Builder: builder.New(objects, clock, builder.Config{}), Connections: conns, ParseKind: connkind.Parse,
+		ConnectionTransport: http.DefaultTransport, Clock: clock,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	g := &defGoald{authors: authors, cache: cache, orgID: o.ID, keys: keys}
+	g := &defGoald{authors: authors, cache: cache, orgID: o.ID, keys: keys, conns: conns}
 	g.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPut && strings.HasSuffix(r.URL.Path, "/draft/tree") {
 			g.mu.Lock()

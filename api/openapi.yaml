@@ -49,6 +49,12 @@ tags:
       Who is signed in and how this install signs people in (spec 3). Signing in, out and
       changing one's name go to the identity service under /api/auth/* (Better Auth's own
       contract, ADR 0007); goald answers the rest.
+  - name: connections
+    description: >-
+      The organization's connections (spec 4): the accounts and API keys its factories' runs use,
+      each of a connection kind, with credentials sealed under the platform's master key and never
+      readable back. Members read names, kinds and status; owners and admins create, test, change
+      and delete them, after a recent sign-in.
   - name: definitions
     description: >-
       Factory definitions: creating factories, the one shared draft per factory (Visual
@@ -1714,13 +1720,14 @@ paths:
       description: >-
         A text/event-stream of one organization's events only. Each committed item event arrives
         as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names
-        (definition, factory, and later credential, approval, connection) carry their own data
+        (definition, factory, connection, and later knowledge) carry their own data
         object; clients ignore the names they do not know. `event: definition` (data a
         DefinitionEvent, no id) follows every committed change of a factory's definition: a
         factory created or deleted, its current version moved (publish, restore, pause, resume),
         its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent,
         no id) follows a change of a factory's line that is not an item's: its andon cord pulled
-        or cleared. `event: resync` (data `{}`) means
+        or cleared. `event: connection` (data a ConnectionEvent, no id) follows a connection
+        created, changed, tested or deleted. `event: resync` (data `{}`) means
         goald may have missed events (it reconnected to the database): re-read what you show. A
         comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID
         is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of
@@ -1736,11 +1743,12 @@ paths:
           content:
             text/event-stream:
               schema:
-                description: The data of each event, by its name (item, definition, factory)
+                description: The data of each event, by its name (item, definition, factory, connection)
                 oneOf:
                   - $ref: "#/components/schemas/StreamEvent"
                   - $ref: "#/components/schemas/DefinitionEvent"
                   - $ref: "#/components/schemas/FactoryEvent"
+                  - $ref: "#/components/schemas/ConnectionEvent"
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}:
     parameters:
@@ -2077,6 +2085,197 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SkillFiles" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/connection-kinds:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listConnectionKinds
+      x-goal-scope: connection:read
+      tags: [connections]
+      summary: The connection kinds the organization can make connections of
+      description: >-
+        The platform's kinds, shipped with goald, and the organization's own, by name; an
+        organization's kind hides a platform kind of the same name. Each with the fields a
+        connection of it is made of (secret ones are write-only), its modes, whether it gives
+        agents their model, its adapter hooks and its docs.
+      responses:
+        "200":
+          description: The kinds
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConnectionKindList" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/connection-kinds/{kind}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/KindRef"
+    put:
+      operationId: putConnectionKind
+      x-goal-scope: connection:manage
+      tags: [connections]
+      summary: Create or replace one of the organization's connection kinds
+      description: >-
+        The body is a kind file (schema/connection-kind.schema.json) as JSON, whose metadata.name
+        is the path's kind. A kind has no versions: replacing it changes every connection of it
+        from the next run on. A kind that breaks the schema or the kind rules is 400
+        connection-kind-invalid, whose detail names every broken rule; a new kind with a platform
+        kind's name is 409 connection-kind-name-taken. Needs a sign-in from the last 10 minutes.
+        Audited as connection_kind.created or connection_kind.updated.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConnectionKindFile" }
+      responses:
+        "200":
+          description: The kind as the organization now sees it
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConnectionKind" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteConnectionKind
+      x-goal-scope: connection:manage
+      tags: [connections]
+      summary: Delete one of the organization's connection kinds
+      description: >-
+        404 connection-kind-not-found when the organization has no kind of that name (a platform
+        kind cannot be deleted); 409 connection-kind-in-use while a connection is of it. Needs a
+        sign-in from the last 10 minutes. Audited as connection_kind.deleted.
+      responses:
+        "204":
+          description: Deleted
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/connections:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listConnections
+      x-goal-scope: connection:read
+      tags: [connections]
+      summary: The organization's connections
+      description: >-
+        By name, each with its kind, description, non-secret fields, which secret fields are set
+        (never a value), status, what uses it, its last use and last test. Members see them to
+        pick them in the builder; only owners and admins change them.
+      parameters:
+        - name: factory
+          in: query
+          description: Only the connections this factory's current version names (its metadata.id or metadata.name)
+          schema: { type: string }
+        - name: kind
+          in: query
+          description: Only connections of this kind
+          schema: { type: string }
+      responses:
+        "200":
+          description: The connections
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConnectionList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createConnection
+      x-goal-scope: connection:manage
+      tags: [connections]
+      summary: Create a connection
+      description: >-
+        A connection of a kind, with the kind's non-secret fields in fields and its secret ones in
+        secrets, sealed under the platform's master key and never returned, not even masked. 400
+        field-unknown for a value that is no field of the kind (or of the other sort), 400
+        field-required for a required field without a value, 404 connection-kind-not-found for an
+        unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while
+        goald has no master key. Needs a sign-in from the last 10 minutes. Audited as
+        connection.created (field names only).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewConnection" }
+      responses:
+        "201":
+          description: The connection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Connection" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/connections/{connection}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ConnectionRef"
+    get:
+      operationId: getConnection
+      x-goal-scope: connection:read
+      tags: [connections]
+      summary: One connection, with the env names a run gets from it and its kind's docs
+      responses:
+        "200":
+          description: The connection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Connection" }
+        default: { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: updateConnection
+      x-goal-scope: connection:manage
+      tags: [connections]
+      summary: Rename a connection, or change its description, fields or secrets
+      description: >-
+        fields, when present, replaces every non-secret value; secrets replaces the named secret
+        fields only (an empty value clears an optional one), audited as
+        connection.secret_replaced; the rest as connection.updated. A rename is 409
+        connection-in-use while a factory's current version names the connection, 409
+        connection-name-taken when another has the name. The kind never changes. Needs a sign-in
+        from the last 10 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConnectionPatch" }
+      responses:
+        "200":
+          description: The connection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Connection" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteConnection
+      x-goal-scope: connection:manage
+      tags: [connections]
+      summary: Delete a connection
+      description: >-
+        409 connection-in-use, naming what, while a factory's current version or a knowledge
+        source uses it. Needs a sign-in from the last 10 minutes. Audited as connection.deleted.
+      responses:
+        "204":
+          description: Deleted
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/connections/{connection}/test:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ConnectionRef"
+    post:
+      operationId: testConnection
+      x-goal-scope: connection:manage
+      tags: [connections]
+      summary: Run the connection's test
+      description: >-
+        Sends the kind's test request from goald with the connection's values: to public
+        addresses only (a URL naming a private, loopback, link-local or metadata address fails
+        the test), within 10 seconds, following no redirect. ok when the status is the one the
+        kind expects. A test that fails is a 200 with ok false and why; the outcome is the
+        connection's last test. 409 connection-not-testable for a kind without a test, 503
+        connections-unavailable for a sealed connection
+        while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as
+        connection.tested.
+      responses:
+        "200":
+          description: The outcome
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConnectionTestResult" }
+        default: { $ref: "#/components/responses/Problem" }
 components:
   parameters:
     UserRef:
@@ -2090,6 +2289,18 @@ components:
       in: path
       required: true
       description: The organization's slug or id
+      schema: { type: string }
+    ConnectionRef:
+      name: connection
+      in: path
+      required: true
+      description: The connection's name
+      schema: { type: string }
+    KindRef:
+      name: kind
+      in: path
+      required: true
+      description: The connection kind's name
       schema: { type: string }
     FactoryRef:
       name: factory
@@ -2208,6 +2419,11 @@ components:
             fixed body without detail: org-not-found, factory-not-found, item-not-found,
             run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of
             the item's touches.
+            Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404),
+            field-unknown, field-required and connection-kind-invalid (400),
+            connection-name-taken, connection-kind-name-taken, connection-in-use,
+            connection-kind-in-use and connection-not-testable (409), connections-unavailable
+            (503: goald has no master key, so no secret can be sealed or opened).
         problems:
           type: array
           description: definition-invalid only, every problem of the definition (errors block the publish)
@@ -4676,3 +4892,165 @@ components:
         number: { type: integer, description: The version's number once published }
         revision: { type: integer, format: int64, description: draft only, the draft's revision }
         by: { type: string, description: "draft only, who saved it, as an actor ref (user:local)" }
+    ConnectionName:
+      type: string
+      description: 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
+      pattern: "^[a-z][a-z0-9-]{1,38}[a-z0-9]$"
+    ConnectionKindList:
+      type: object
+      required: [kinds]
+      properties:
+        kinds:
+          type: array
+          items: { $ref: "#/components/schemas/ConnectionKind" }
+    ConnectionKind:
+      type: object
+      description: A template for connections (spec 4 §4.2), the platform's or the organization's
+      required: [name, title, platform, fields, modes, model, testable, env]
+      properties:
+        name: { $ref: "#/components/schemas/ConnectionName" }
+        title: { type: string }
+        description: { type: string }
+        platform: { type: boolean, description: Shipped with goald; otherwise the organization's own }
+        fields:
+          type: array
+          items: { $ref: "#/components/schemas/ConnectionKindField" }
+        modes:
+          type: array
+          description: "How runs use it: env (variables for API calls and CLIs), mcp (an MCP server, remote or stdio), cli (a tool installed in the box), git (git over https)"
+          items: { type: string, enum: [env, mcp, cli, git] }
+        model: { type: boolean, description: "It gives agents their model; only such a kind may be a factory's model connection" }
+        code_host: { type: string, description: "The code host adapter that reads and merges its pull requests (github, gitlab)" }
+        mint: { type: string, description: "The adapter that mints per-run credentials from it (aws-sts)" }
+        sync: { type: string, description: "The knowledge source reader that syncs through it (gitdocs, confluence)" }
+        testable: { type: boolean, description: "It has a test (POST …/connections/{connection}/test)" }
+        env:
+          type: array
+          description: The env names a run gets, as the kind writes them ({{field}} where a field names one)
+          items: { type: string }
+        docs: { type: string, description: What agents are told about using it }
+    ConnectionKindField:
+      type: object
+      required: [name, title, secret, required]
+      properties:
+        name: { type: string }
+        title: { type: string }
+        description: { type: string }
+        secret: { type: boolean, description: "Write-only, sealed; an input of type password" }
+        required: { type: boolean }
+        default: { type: string, description: The value of a field left empty }
+    ConnectionKindFile:
+      type: object
+      description: >-
+        A connection kind file (apiVersion goal/v1, kind ConnectionKind, metadata, spec) as JSON,
+        checked against schema/connection-kind.schema.json
+      additionalProperties: true
+    ConnectionList:
+      type: object
+      required: [connections]
+      properties:
+        connections:
+          type: array
+          items: { $ref: "#/components/schemas/Connection" }
+    Connection:
+      type: object
+      description: An organization's connection (spec 4 §4.3), never a secret value
+      required: [id, name, kind, description, fields, secrets_set, status, used_by, last_used_at, last_test, created_by, created_at, updated_by, updated_at]
+      properties:
+        id: { type: string }
+        name: { $ref: "#/components/schemas/ConnectionName" }
+        kind: { type: string }
+        description: { type: string }
+        fields:
+          type: object
+          description: The non-secret values set (a kind's defaults are not copied in)
+          additionalProperties: { type: string }
+        secrets_set:
+          type: array
+          description: The secret fields that are set, sorted; their values are never shown
+          items: { type: string }
+        status:
+          type: string
+          enum: [ok, failing, untested, missing-secret]
+          description: >-
+            missing-secret: a required secret field is not set (its kind gained one); else the
+            last test's outcome, untested before any
+        used_by: { $ref: "#/components/schemas/ConnectionUsers" }
+        last_used_at: { type: string, format: date-time, nullable: true, description: When a run last got it }
+        last_test:
+          allOf: [{ $ref: "#/components/schemas/ConnectionTestResult" }]
+          nullable: true
+        env:
+          type: array
+          description: getConnection only, the env names a run gets from it
+          items: { type: string }
+        docs: { type: string, description: "getConnection only, its kind's docs for agents" }
+        created_by: { $ref: "#/components/schemas/Actor" }
+        created_at: { type: string, format: date-time }
+        updated_by: { $ref: "#/components/schemas/Actor" }
+        updated_at: { type: string, format: date-time }
+    ConnectionUsers:
+      type: object
+      description: What uses a connection, so it cannot be deleted or renamed meanwhile
+      required: [factories, knowledge_sources]
+      properties:
+        factories:
+          type: array
+          description: The factories whose current version names it (those the caller sees)
+          items: { $ref: "#/components/schemas/ConnectionFactory" }
+        knowledge_sources:
+          type: array
+          description: The knowledge sources synced through it (phase 4 knowledge)
+          items: { type: string }
+    ConnectionFactory:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+    NewConnection:
+      type: object
+      required: [name, kind]
+      properties:
+        name: { $ref: "#/components/schemas/ConnectionName" }
+        kind: { type: string }
+        description: { type: string, maxLength: 500 }
+        fields:
+          type: object
+          description: The kind's non-secret values
+          additionalProperties: { type: string }
+        secrets:
+          type: object
+          writeOnly: true
+          description: The kind's secret values; never answered
+          additionalProperties: { type: string }
+    ConnectionPatch:
+      type: object
+      properties:
+        name: { $ref: "#/components/schemas/ConnectionName" }
+        description: { type: string, maxLength: 500 }
+        fields:
+          type: object
+          description: Every non-secret value (replaces them all)
+          additionalProperties: { type: string }
+        secrets:
+          type: object
+          writeOnly: true
+          description: The secret fields to replace, by name; an empty value clears an optional one
+          additionalProperties: { type: string }
+    ConnectionTestResult:
+      type: object
+      required: [ok, at]
+      properties:
+        ok: { type: boolean }
+        status: { type: integer, description: "The test request's HTTP status, when it got one" }
+        error: { type: string, description: Why it failed (never a secret value) }
+        at: { type: string, format: date-time }
+    ConnectionEvent:
+      type: object
+      description: "The data of one `event: connection` on /v1/orgs/{org}/stream; it carries no value"
+      required: [connection_id, name, change]
+      properties:
+        connection_id: { type: string }
+        name: { type: string, description: The connection's name after the change }
+        change: { type: string, enum: [created, updated, deleted, tested] }

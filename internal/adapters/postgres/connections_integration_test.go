@@ -5,7 +5,9 @@ package postgres
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -367,4 +369,75 @@ func TestRekey_UnknownKeyStops(t *testing.T) {
 	if err != nil || len(ids) != 1 || ids[0] != "k1" {
 		t.Errorf("ConnectionKeyIDs = %v, %v; want [k1] still", ids, err)
 	}
+}
+
+// Spec 4 §8.3: each change and test of a connection is the organization's stream event
+// connection, sent on commit and read back from the change's audit entry, so it names the
+// connection as it is now; a forged one for a connection the organization has no such entry of
+// (another organization's, an unknown one) is dropped.
+func TestNotices_ConnectionChangesAreConnectionEvents(t *testing.T) {
+	t.Parallel()
+
+	d := newConnectionsDB(t)
+	c := NewConnections(d.store, testKey(t, "k1"))
+	acme, labs := newOrgID(t, d.store), newOrgID(t, d.store)
+	ctx := domain.WithOrg(t.Context(), acme)
+	notices := listening(t, NewNotices(d.store, nil), "") // the database is this test's: only its events
+
+	if n := next(t, notices); !n.Resync {
+		t.Fatalf("first notice = %+v; want Resync", n)
+	}
+
+	conn := seedConnections(t, c, acme, "s3cret")
+	renamed := "acme-two"
+
+	if _, err := c.Update(ctx, seededConnection, domain.ConnectionPatch{Name: &renamed}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := c.RecordTest(ctx, renamed, domain.ConnectionTest{OK: true}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	forged := func(org domain.OrgID, id domain.ConnectionID) string {
+		return fmt.Sprintf(`{"org_id":%q,"event":"connection","data":{"connection_id":%q,"name":"forged","change":"created"}}`, org, id)
+	}
+
+	for _, payload := range []string{forged(labs, conn.ID), forged(acme, "0b6f1c9e-0000-7000-8000-000000000999")} {
+		if _, err := d.admin.Exec(t.Context(), "SELECT pg_notify('goal_org_events', $1)", payload); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := c.Delete(ctx, renamed, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []connectionEvent{
+		{ConnectionID: string(conn.ID), Name: seededConnection, Change: changeCreated},
+		{ConnectionID: string(conn.ID), Name: renamed, Change: changeUpdated},
+		{ConnectionID: string(conn.ID), Name: renamed, Change: changeTested},
+		{ConnectionID: string(conn.ID), Name: renamed, Change: changeDeleted},
+	} {
+		if got := nextConnectionEvent(t, notices, acme); got != want {
+			t.Errorf("connection event = %+v; want %+v", got, want)
+		}
+	}
+}
+
+// nextConnectionEvent is the next notice, which must be org's connection event.
+func nextConnectionEvent(t *testing.T, notices <-chan ports.ItemNotice, org domain.OrgID) connectionEvent {
+	t.Helper()
+
+	n := next(t, notices)
+	if n.OrgID != org || n.Org == nil || n.Org.Name != "connection" || n.Org.FactoryID != "" {
+		t.Fatalf("notice = %+v (org event %+v); want the organization's connection event", n, n.Org)
+	}
+
+	var got connectionEvent
+	if err := json.Unmarshal(n.Org.Data, &got); err != nil {
+		t.Fatal(err)
+	}
+
+	return got
 }

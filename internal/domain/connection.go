@@ -142,10 +142,12 @@ type NewConnection struct {
 	Fields, Secrets         map[string]string
 }
 
-// ConnectionPatch changes a connection. Description, when set, replaces it; Fields, when not nil,
-// replaces every non-secret value; Secrets replaces the named secret values only, an empty value
-// clearing an optional one. The kind never changes.
+// ConnectionPatch changes a connection. Name, when set, renames it (its sealed values stay: they
+// are bound to its id); Description, when set, replaces it; Fields, when not nil, replaces every
+// non-secret value; Secrets replaces the named secret values only, an empty value clearing an
+// optional one. The kind never changes.
 type ConnectionPatch struct {
+	Name        *string
 	Description *string
 	Fields      map[string]string
 	Secrets     map[string]string
@@ -153,7 +155,7 @@ type ConnectionPatch struct {
 
 // Empty reports whether p changes nothing.
 func (p ConnectionPatch) Empty() bool {
-	return p.Description == nil && p.Fields == nil && len(p.Secrets) == 0
+	return p.Name == nil && p.Description == nil && p.Fields == nil && len(p.Secrets) == 0
 }
 
 // ResolvedConnection is a connection opened for one run: its kind and every value, secret ones
@@ -189,6 +191,15 @@ var (
 	envNamePattern   = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	templateRef      = regexp.MustCompile(`\{\{([^{}]*)\}\}`)
 	envRef           = regexp.MustCompile(`\$\{([^{}]*)\}`)
+)
+
+// The field rules CheckValues names; both wrap ErrInvalid.
+var (
+	// ErrFieldRequired: a required field of the kind has no value (and no default).
+	ErrFieldRequired = fmt.Errorf("field required: %w", ErrInvalid)
+	// ErrFieldUnknown: a value names no field of the kind, or a field of the other sort (a secret
+	// field as a field, a field as a secret).
+	ErrFieldUnknown = fmt.Errorf("field unknown: %w", ErrInvalid)
 )
 
 // CheckConnectionName enforces the name of a connection or a kind: 3 to 40 lowercase letters,
@@ -468,7 +479,7 @@ func (k ConnectionKind) CheckValues(fields map[string]string, secrets []string) 
 		}
 
 		if f.Required && !set {
-			errs = append(errs, fmt.Errorf("field %q is required: %w", f.Name, ErrInvalid))
+			errs = append(errs, fmt.Errorf("field %q is required: %w", f.Name, ErrFieldRequired))
 		}
 	}
 
@@ -488,15 +499,15 @@ func (k ConnectionKind) checkValueNames(fields map[string]string, secrets []stri
 	for _, name := range slices.Sorted(maps.Keys(fields)) {
 		switch f, ok := k.Field(name); {
 		case !ok:
-			errs = append(errs, fmt.Errorf("kind %s has no field %q: %w", k.Name, name, ErrInvalid))
+			errs = append(errs, fmt.Errorf("kind %s has no field %q: %w", k.Name, name, ErrFieldUnknown))
 		case f.Secret:
-			errs = append(errs, fmt.Errorf("field %q is secret: set it as a secret: %w", name, ErrInvalid))
+			errs = append(errs, fmt.Errorf("field %q is secret: set it as a secret: %w", name, ErrFieldUnknown))
 		}
 	}
 
 	for _, name := range secrets {
 		if f, ok := k.Field(name); !ok || !f.Secret {
-			errs = append(errs, fmt.Errorf("kind %s has no secret field %q: %w", k.Name, name, ErrInvalid))
+			errs = append(errs, fmt.Errorf("kind %s has no secret field %q: %w", k.Name, name, ErrFieldUnknown))
 		}
 	}
 
@@ -616,6 +627,75 @@ func (k ConnectionKind) renderRemote(values, minted, env map[string]string) (Kin
 	})
 
 	return KindMCP{URL: u, Headers: headers}, nil
+}
+
+// RenderTest makes k's test request for a connection with values (fields and secrets by field
+// name; defaults fill empty ones): nil when k has no test. A test that names a field without a
+// value, a minted value (a kind that mints is not testable from goald) or a URL that is not http or
+// https is an error naming the field, never a value.
+func (k ConnectionKind) RenderTest(values map[string]string) (*KindTest, error) {
+	t := k.Spec.Test
+	if t == nil {
+		return nil, nil
+	}
+
+	out := KindTest{Method: t.Method, Expect: t.Expect, Headers: make(map[string]string, len(t.Headers))}
+
+	var err error
+	if out.URL, err = k.mustExpand("test.url", t.URL, values); err != nil {
+		return nil, err
+	}
+
+	if p, err := url.Parse(out.URL); err != nil || (p.Scheme != "https" && p.Scheme != "http") || p.Host == "" {
+		return nil, fmt.Errorf("render %s: test.url is not an http or https URL: %w", k.Name, ErrInvalid)
+	}
+
+	for _, name := range slices.Sorted(maps.Keys(t.Headers)) {
+		header, err := k.mustExpand("test.headers name", name, values)
+		if err != nil {
+			return nil, err
+		}
+
+		if out.Headers[header], err = k.mustExpand("test.headers "+name, t.Headers[name], values); err != nil {
+			return nil, err
+		}
+	}
+
+	if b := t.Basic; b != nil {
+		user, err := k.mustExpand("test.basic.username", b.Username, values)
+		if err != nil {
+			return nil, err
+		}
+
+		password, err := k.mustExpand("test.basic.password", b.Password, values)
+		if err != nil {
+			return nil, err
+		}
+
+		out.Basic = &KindBasicAuth{Username: user, Password: password}
+	}
+
+	return &out, nil
+}
+
+// mustExpand fills s's templates for a test, which needs every value it names.
+func (k ConnectionKind) mustExpand(where, s string, values map[string]string) (string, error) {
+	for _, r := range mustRefs(s) {
+		if r.minted {
+			return "", fmt.Errorf("render %s: %s names minted value %q: %w", k.Name, where, r.name, ErrInvalid)
+		}
+	}
+
+	out, ok, err := k.expand(s, values, nil)
+
+	switch {
+	case err != nil:
+		return "", fmt.Errorf("render %s: %s: %w", k.Name, where, err)
+	case !ok:
+		return "", fmt.Errorf("render %s: %s names a field that has no value: %w", k.Name, where, ErrFieldRequired)
+	default:
+		return out, nil
+	}
 }
 
 // expandMap expands keys and values of m, leaving out every entry whose key or value names a

@@ -95,7 +95,7 @@ var _ ports.Connections = (*Connections)(nil)
 
 // Connections keeps connection kinds and connections in memory with the database's rules: the
 // platform's kinds and each organization's, names unique per organization, secrets sealed with
-// the master key under domain.ConnectionAAD and never returned but by Resolve, and an audit entry
+// the master key under domain.ConnectionAAD and never returned but by Resolve and Open, and an audit entry
 // through audit for every change and use. Views made with WithKey share the data, as goalds
 // with different keys share one database.
 type Connections struct {
@@ -400,10 +400,8 @@ func (c *Connections) Update(ctx context.Context, name string, p domain.Connecti
 		return domain.Connection{}, domain.ErrNoOrg
 	}
 
-	if p.Description != nil {
-		if err := domain.CheckConnectionDescription(*p.Description); err != nil {
-			return domain.Connection{}, err
-		}
+	if err := checkPatch(p); err != nil {
+		return domain.Connection{}, err
 	}
 
 	c.d.mu.Lock()
@@ -419,6 +417,14 @@ func (c *Connections) Update(ctx context.Context, name string, p domain.Connecti
 	}
 
 	r := &connectionRow{own: old.own, conn: cloneConnection(old.conn), keyID: old.keyID, nonce: old.nonce, ciphertext: old.ciphertext}
+
+	if p.Name != nil && *p.Name != name {
+		if _, taken := c.d.conns[org][*p.Name]; taken {
+			return domain.Connection{}, fmt.Errorf("connection %q: %w", *p.Name, ports.ErrNameTaken)
+		}
+
+		r.conn.Name = *p.Name
+	}
 
 	if p.Description != nil {
 		r.conn.Description = *p.Description
@@ -437,14 +443,31 @@ func (c *Connections) Update(ctx context.Context, name string, p domain.Connecti
 		return domain.Connection{}, err
 	}
 
-	if err := c.updateAudits(ctx, by, r.conn, p); err != nil {
+	if err := c.updateAudits(ctx, by, name, r.conn, p); err != nil {
 		return domain.Connection{}, err
 	}
 
 	r.conn.UpdatedBy, r.conn.UpdatedAt = by, time.Now().UTC().Truncate(time.Microsecond)
-	c.d.conns[org][name] = r
+
+	delete(c.d.conns[org], name)
+	c.d.conns[org][r.conn.Name] = r
 
 	return cloneConnection(r.conn), nil
+}
+
+// checkPatch refuses a patch's malformed name or description.
+func checkPatch(p domain.ConnectionPatch) error {
+	var errs []error
+
+	if p.Name != nil {
+		errs = append(errs, domain.CheckConnectionName(*p.Name))
+	}
+
+	if p.Description != nil {
+		errs = append(errs, domain.CheckConnectionDescription(*p.Description))
+	}
+
+	return errors.Join(errs...)
 }
 
 // replaceLocked opens r's secrets, replaces those of with (an empty value clears one) and reseals.
@@ -471,11 +494,15 @@ func (c *Connections) replaceLocked(org domain.OrgID, r *connectionRow, with map
 	return c.sealLocked(org, r, secrets)
 }
 
-func (c *Connections) updateAudits(ctx context.Context, by domain.Actor, conn domain.Connection, p domain.ConnectionPatch) error {
-	if p.Description != nil || p.Fields != nil {
+func (c *Connections) updateAudits(ctx context.Context, by domain.Actor, from string, conn domain.Connection, p domain.ConnectionPatch) error {
+	if p.Name != nil || p.Description != nil || p.Fields != nil {
 		data := map[string]any{auditName: conn.Name}
 		if p.Fields != nil {
 			data["fields"] = slices.Sorted(maps.Keys(setOnly(p.Fields)))
+		}
+
+		if conn.Name != from {
+			data["from"] = from
 		}
 
 		if err := c.appendAudit(ctx, by, domain.AuditConnectionUpdated, domain.AuditTargetConnection, string(conn.ID), data); err != nil {
@@ -578,20 +605,13 @@ func (c *Connections) Resolve(ctx context.Context, names []string, run domain.Ru
 			continue
 		}
 
-		values, err := c.openLocked(org, r)
+		rc, err := c.resolvedLocked(org, r)
 		if err != nil {
 			return nil, err
 		}
 
-		maps.Copy(values, r.conn.Fields)
-
-		kind, _, _ := c.d.kindLocked(org, r.conn.Kind)
-		if !r.own {
-			kind = c.d.platform[r.conn.Kind]
-		}
-
 		rows = append(rows, r)
-		out = append(out, domain.ResolvedConnection{Connection: cloneConnection(r.conn), Kind: cloneKind(kind), Values: values})
+		out = append(out, rc)
 	}
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -610,6 +630,41 @@ func (c *Connections) Resolve(ctx context.Context, names []string, run domain.Ru
 	}
 
 	return out, nil
+}
+
+// Open implements ports.Connections.
+func (c *Connections) Open(ctx context.Context, name string) (domain.ResolvedConnection, error) {
+	org, ok := domain.OrgFrom(ctx)
+	if !ok {
+		return domain.ResolvedConnection{}, domain.ErrNoOrg
+	}
+
+	c.d.mu.Lock()
+	defer c.d.mu.Unlock()
+
+	r, ok := c.d.conns[org][name]
+	if !ok {
+		return domain.ResolvedConnection{}, fmt.Errorf("connection %q: %w", name, ports.ErrNotFound)
+	}
+
+	return c.resolvedLocked(org, r)
+}
+
+// resolvedLocked opens r with its kind and every value.
+func (c *Connections) resolvedLocked(org domain.OrgID, r *connectionRow) (domain.ResolvedConnection, error) {
+	values, err := c.openLocked(org, r)
+	if err != nil {
+		return domain.ResolvedConnection{}, err
+	}
+
+	maps.Copy(values, r.conn.Fields)
+
+	kind, _, _ := c.d.kindLocked(org, r.conn.Kind)
+	if !r.own {
+		kind = c.d.platform[r.conn.Kind]
+	}
+
+	return domain.ResolvedConnection{Connection: cloneConnection(r.conn), Kind: cloneKind(kind), Values: values}, nil
 }
 
 // Rekey reseals every organization's connections sealed under another key than key's active one

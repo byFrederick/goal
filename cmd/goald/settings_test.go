@@ -242,6 +242,14 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 		{name: "auth service with a path", env: map[string]string{upstreamEnv: "http://127.0.0.1:8081/api/auth"}, want: upstreamEnv},
 		{name: "auth service with a user", env: map[string]string{upstreamEnv: "http://u:p@127.0.0.1:8081"}, want: upstreamEnv}, //nolint:gosec // a test URL
 		{name: "trusted proxy not a CIDR", env: map[string]string{proxiesEnv: "10.0.0.0/8,proxy.example.com"}, want: proxiesEnv},
+		{name: "private upstreams neither true nor false", env: map[string]string{allowPrivateEnv: "yes"}, want: allowPrivateEnv},
+		{
+			name: "private upstreams off loopback",
+			env: map[string]string{
+				authEnv: string(authSession), listenEnv: "10.0.0.6:8080", gatewayEnv: testGateway, publicURLEnv: testPublicURL, allowPrivateEnv: "true",
+			},
+			want: allowPrivateEnv + "=true",
+		},
 	}
 
 	for _, tt := range tests {
@@ -252,6 +260,19 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 				t.Errorf("settings error = %v, want one mentioning %q", err, tt.want)
 			}
 		})
+	}
+}
+
+// Connection tests reach public addresses only, unless a loopback goald allows its laptop's own
+// servers (spec 4 §5.9).
+func TestSettings_AllowPrivateUpstreams(t *testing.T) {
+	t.Parallel()
+
+	for env, want := range map[string]bool{"": false, "false": false, "true": true} {
+		s, err := settingsFrom(envOf(map[string]string{allowPrivateEnv: env}))
+		if err != nil || s.AllowPrivateUpstreams != want {
+			t.Errorf("%s=%q: AllowPrivateUpstreams %v, %v; want %v", allowPrivateEnv, env, s.AllowPrivateUpstreams, err, want)
+		}
 	}
 }
 

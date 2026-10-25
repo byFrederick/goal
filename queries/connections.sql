@@ -63,7 +63,7 @@ RETURNING created_at;
 
 -- name: UpdateConnection :one
 UPDATE connections
-SET description = sqlc.arg(description), fields = sqlc.arg(fields), secret_fields = sqlc.arg(secret_fields)::text[],
+SET name = sqlc.arg(name), description = sqlc.arg(description), fields = sqlc.arg(fields), secret_fields = sqlc.arg(secret_fields)::text[],
     key_id = sqlc.narg(key_id), nonce = sqlc.narg(nonce), ciphertext = sqlc.narg(ciphertext),
     updated_by = sqlc.arg(updated_by), updated_at = now()
 WHERE id = sqlc.arg(id)
@@ -79,6 +79,13 @@ SET last_test_at = coalesce(sqlc.narg(at)::timestamptz, now()), last_test_ok = s
     last_test_error = sqlc.narg(error)
 WHERE name = sqlc.arg(name)
 RETURNING id;
+
+-- name: NotifyConnection :exec
+-- The organization's stream event connection on goal_org_events, sent when the change's
+-- transaction commits; postgres.Notices reads it back from the change's audit entry.
+SELECT pg_notify('goal_org_events', json_build_object(
+  'org_id', goal_org(), 'event', 'connection',
+  'data', json_build_object('connection_id', sqlc.arg(id)::uuid, 'name', sqlc.arg(name)::text, 'change', sqlc.arg(change)::text))::text);
 
 -- name: MarkConnectionsUsed :exec
 UPDATE connections SET last_used_at = now() WHERE id = ANY (sqlc.arg(ids)::uuid[]);

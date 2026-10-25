@@ -1,6 +1,6 @@
 # Phase 4 — Connections, runs and knowledge
 
-Status: owner-approved design (2026-10-24), not built · follows phase 3 · migrations `00050–00059` (`00050–00053` planned) · OpenAPI tags `connections` and `knowledge` (touch metrics under `work`) · PRs `4-1…4-25` · decision records [ADR 0008](../adr/0008-portable-runs-connections-and-knowledge.md), [ADR 0009](../adr/0009-agent-network-isolation.md) (amended), [ADR 0005](../adr/0005-factory-definitions-in-object-storage.md) (amended)
+Status: owner-approved design (2026-10-24), not built · follows phase 3 · migrations `00050–00059` (`00050–00053` built, `00054` planned) · OpenAPI tags `connections` and `knowledge` (touch metrics under `work`) · PRs `4-1…4-25` · decision records [ADR 0008](../adr/0008-portable-runs-connections-and-knowledge.md), [ADR 0009](../adr/0009-agent-network-isolation.md) (amended), [ADR 0005](../adr/0005-factory-definitions-in-object-storage.md) (amended)
 
 (phase 4 redesign) This file was `4-credentials-and-connectors.md` (parts 4.1 vault and credentials, 4.2 connectors and MCP gateway, PRs `4.1-n`/`4.2-n`). The design pass replaced it. Kept, simplified: credentials encrypted in PostgreSQL, write-only values, RLS, audit, AWS STS, the merge station. Cut: remote MCP through the gateway (connections go direct from the box), the Credentials page, credential grants, the connector catalog and `kind: Connector` files, scopes, CLI exec sidecars, stdio sidecar containers, `ModelAuth`, `CredentialProbe`, per-org data keys, vault settings, the MCP Registry import, multi-instance forwarding. Deferred: approval-gated tool calls, OAuth connections, the GitHub App. References to "4.1 §x" or "4.2 §x" in older text point at retired parts.
 
@@ -307,10 +307,14 @@ type Connections interface {
 	RecordTest(ctx context.Context, name string, r domain.ConnectionTest, by domain.Actor) error
 
 	// Resolve opens the named connections for one run, audits connection.used and sets
-	// last_used_at. It is the only method that returns secret values.
+	// last_used_at. It and Open are the only methods that return secret values.
 	Resolve(ctx context.Context, names []string, run domain.RunID) ([]domain.ResolvedConnection, error)
+	// Open opens one connection for its test (as built, 4-9): no use recorded; RecordTest records the outcome.
+	Open(ctx context.Context, name string) (domain.ResolvedConnection, error)
 }
 ```
+
+As built (4-9): `domain.ConnectionPatch` has `Name` (a rename; the sealed values stay, bound to the connection's id; `ErrNameTaken` for a taken name), and every change and test notifies the stream event `connection` in its transaction (§8.3).
 
 `postgres.NewConnections(store, masterKey)` implements it; errors `ErrNotFound`, `ErrNameTaken`, `ErrConflict`, `ErrNoMasterKey`. `porttest.Connections` (with `porttest.MasterKeys`, a fake key that seals without cryptography) and `porttest/connectiontest` (fake and PostgreSQL). `postgres.Rekey(ctx, ownerStore, masterKey)` is `goal db rekey`; `postgres.ConnectionKeyIDs` feeds goald's startup check. Kind types and `Render(values, minted) (domain.RunConnection, error)` live in `internal/domain/connection.go` (standard library only); `internal/connkind` parses and validates kind YAML against the schema and embeds the platform kinds.
 
@@ -456,7 +460,8 @@ Every org table: `org_id uuid NOT NULL DEFAULT goal_org()` referencing `organiza
 | `00050_drop_legacy_import.sql` | 4-3 | drops 00039's `legacy_import_pending` (no SQL function used it; its queries `LegacyImportPending`, `EndLegacyImport` and `HasVersions` go with the import). `postgres.Migrate` refuses, before applying it, a database where a live organization's import is still pending or that is from before 00039 (`ErrLegacyImportPending`) |
 | `00051_connections.sql` | 4-8 | `connection_kinds`, `connections`, `goal_sync_platform_kinds(jsonb)` |
 | `00052_touches.sql` | 4-23 | the partial index on person events; `item_touch_labels`, the trigger that adds a row per person event, `goal_touch_planned` and the view `item_touches` (4-23 landed before 4-16, so it took `00052`) |
-| `00053_knowledge.sql` | 4-16 | `knowledge_sources`, `knowledge_documents`, `knowledge_chunks`; requires the `vector` extension |
+| `00053_connection_rename.sql` | 4-9 | `GRANT UPDATE (name) ON connections TO goal_app`: a rename (§8.2), which 00051's column grants left out (4-9 landed after 4-23, so it took `00053`) |
+| `00054_knowledge.sql` | 4-16 | `knowledge_sources`, `knowledge_documents`, `knowledge_chunks`; requires the `vector` extension |
 
 ```sql
 -- 00051_connections.sql
@@ -505,7 +510,7 @@ CREATE INDEX connections_kind_idx ON connections (kind_id);
 ```
 
 ```sql
--- 00053_knowledge.sql (goal db init creates the extension as the admin; the migration fails with
+-- 00054_knowledge.sql (goal db init creates the extension as the admin; the migration fails with
 -- "extension vector is missing: run goal db init" otherwise)
 CREATE TABLE knowledge_sources (
   id             uuid PRIMARY KEY,
@@ -628,14 +633,14 @@ They replace spec 3's proposed `credential:read|manage|grant`, `vault:manage`, `
 | Method and path | Scope | Does |
 | --- | --- | --- |
 | `GET /v1/orgs/{org}/connection-kinds` | `connection:read` | platform and org kinds: name, title, description, fields (name, title, secret, required, default), modes, `model`, hooks, docs, `platform` |
-| `PUT /v1/orgs/{org}/connection-kinds/{kind}` | `connection:manage` | create or replace an org kind (`ConnectionKindSpec`); 400 with `problems[]` from the schema; 409 `connection-kind-name-taken` |
+| `PUT /v1/orgs/{org}/connection-kinds/{kind}` | `connection:manage` | create or replace an org kind (`ConnectionKindFile`, the kind file as JSON, parsed by `connkind.Parse`); as built, 400 `connection-kind-invalid` whose detail names every broken rule (connkind reports them as one error), also when `metadata.name` is not the path's; 409 `connection-kind-name-taken` |
 | `DELETE /v1/orgs/{org}/connection-kinds/{kind}` | `connection:manage` | 409 `connection-kind-in-use` while a connection uses it |
 | `GET /v1/orgs/{org}/connections?factory=&kind=` | `connection:read` | `Connection` list: name, kind, description, fields, `secrets_set`, status, `used_by` (factories of current versions, knowledge sources), last used, last test |
-| `POST /v1/orgs/{org}/connections` | `connection:manage` | `{name, kind, description?, fields, secrets}` → 201 `Connection` (never a value); 400 `field-required`, `field-unknown`; 409 `connection-name-taken` |
+| `POST /v1/orgs/{org}/connections` | `connection:manage` | `{name, kind, description?, fields, secrets}` → 201 `Connection` (never a value); 400 `field-required`, `field-unknown`; 404 `connection-kind-not-found`; 409 `connection-name-taken`; 503 `connections-unavailable` for secrets without a master key |
 | `GET /v1/orgs/{org}/connections/{connection}` | `connection:read` | one `Connection` with the kind's env names and docs |
 | `PATCH /v1/orgs/{org}/connections/{connection}` | `connection:manage` | `{name?, description?, fields?, secrets?}`; `secrets` replaces the named secret fields; a rename is 409 `connection-in-use` while a current version names it |
 | `DELETE /v1/orgs/{org}/connections/{connection}` | `connection:manage` | 204; 409 `connection-in-use` (listing what) while a current version or a knowledge source uses it |
-| `POST /v1/orgs/{org}/connections/{connection}/test` | `connection:manage` | runs the kind's `test` from goald (public addresses only, 10 s, no redirects) → `{ok, status, error?, at}`; 409 `connection-not-testable` |
+| `POST /v1/orgs/{org}/connections/{connection}/test` | `connection:manage` | runs the kind's `test` from goald (public addresses only, 10 s, no redirects) → `{ok, status?, error?, at}` (a failed test is a 200 with `ok: false`; `status` when a response came); 409 `connection-not-testable` |
 | `GET /v1/orgs/{org}/knowledge/sources` | `knowledge:read` | `KnowledgeSource` list with status, counts, last and next sync, `used_by` |
 | `POST /v1/orgs/{org}/knowledge/sources` | `knowledge:manage` | `{name, title, kind, connection?, config?, sync_every?}` → 201; 400 `connection-cannot-sync`; 409 `knowledge-source-name-taken` |
 | `GET`, `PATCH`, `DELETE /v1/orgs/{org}/knowledge/sources/{source}` | read, manage, manage | one source; change title, config, schedule; delete with its documents (409 `knowledge-source-in-use` while a current version lists it) |
@@ -661,11 +666,11 @@ Upload routes take bodies up to `GOAL_UPLOAD_MAX_BYTES`; every other route keeps
 
 ### 8.3 Stream
 
-On `/v1/orgs/{org}/stream`, through `goal_org_events`: `connection` (`{connection_id, name, change: created|updated|deleted|tested}`) and `knowledge` (`{source_id, name, status}` when a sync starts or ends). Query invalidation: `['org', id, 'connections']`, `['org', id, 'connection-kinds']`, `['org', id, 'knowledge']`.
+On `/v1/orgs/{org}/stream`, through `goal_org_events`: `connection` (`{connection_id, name, change: created|updated|deleted|tested}`; as built, notified by the connections adapter in the change's transaction and read back from the change's audit entry, so a forged one is dropped) and `knowledge` (`{source_id, name, status}` when a sync starts or ends). Query invalidation: `['org', id, 'connections']`, `['org', id, 'connection-kinds']`, `['org', id, 'knowledge']`.
 
 ## 9. CLI changes
 
-- `goal connection list|show <name>|create <name> --kind <kind> [--field k=v]… [--secret k=-|--secret-file k=<path>]…|update <name> …|delete <name>|test <name>`: secret values only from stdin (`-`, one value) or a file, never from argv.
+- `goal connection list|show <name>|create <name> --kind <kind> [--field k=v]… [--secret k=-|--secret-file k=<path>]…|update <name> …|delete <name>|test <name>`: secret values only from stdin (`-`, one value) or a file, never from argv. As built (4-9): `list [--kind k] [--factory f]`; `create … [--description d]`; `update <name> [--name n] [--description d] [--field k=v]… [--secret k=-] [--secret-file k=<path>]…`, whose fields merge into the connection's (`k=` clears one); `test` exits 1 when the test fails.
 - `goal connection kinds` and `goal connection kind push <file.yaml>` / `kind delete <name>`.
 - `goal knowledge sources|add <name> --kind upload|synced|live [--connection c] [--config k=v]…|sync <source>|upload <source> <file>…|rm <document>|search "<query>" [--source s]…`.
 - `goal connection import-env` (4-14, one-time): creates `github` (kind `github`, from `GOAL_GITHUB_TOKEN`) and `claude` (kind `claude-subscription` from `CLAUDE_CODE_OAUTH_TOKEN`, or `anthropic` from `ANTHROPIC_API_KEY`) in the current organization from the CLI's environment, skipping existing names.
@@ -780,14 +785,14 @@ Each row is one PR on `goal/4-<n>-<slug>`, passing `task check`, plus `task migr
 | 4-6 | **docker adapter on Sandboxes + Compose**: goald and auth images and services, `goal-egress` service, `agents` network, one egress policy (public), `GOAL_AGENT_EGRESS` and `docker.Egress` removed (ADR 0009 amendment) | `sandboxtest` passes against Docker; a box reaches a public host and not the host, RustFS or a private address; `goal up` brings the stack up; host-binary mode still works | integration, egress tests, manual |
 | 4-7 | **Engine on Sandboxes** (§4.5, §4.6): lifecycle, checks through exec, retries in the box, reaping by `List`; delete `Runner`, `Task`, `Workspaces`, `Checker`, `Reaper`, `gitworkspace`, `docker.AgentFiles`; `runtime.image` ignored with `field-removed` | engine tests; an item runs to done on Compose with today's env token | engine tests, e2e |
 | 4-8 | **Connections core**: `ports.MasterKey` + `masterkey`, `schema/connection-kind.schema.json`, `internal/connkind` with the platform kinds, `domain` kinds and `Render`, `00051`, `ports.Connections` + postgres adapter + fake + `connectiontest`, `goal db rekey` | threat rows 1, 2, 12; rekey reseals all; platform kinds synced at start | conformance, integration |
-| 4-9 | **Connections API, permissions, CLI, test probe**, public-only dialer, SSE `connection` | §8.1–8.3; row 3, 4 | handler tests, golden matrix, CLI tests |
+| 4-9 | **Connections API, permissions, CLI, test probe**, public-only dialer, SSE `connection`; `00053` (the rename grant) | §8.1–8.3; row 3, 4 | handler tests, golden matrix, CLI tests |
 | 4-10 | **Definition schema** (§4.4): new fields, removals with quick fixes, connections check through `authoring.Credentials` | every code of §4.4 with its fix; fixtures updated | config and authoring tests |
 | 4-11 | **Runs get their connections**: resolve, render, env per exec, stdio and remote MCP in the worker (direct from the box, headers from env), `tools.allow/deny` in the worker, connections section in the prompt; delete `ports.Sidecars`, `gateway/sidecars.go`, docker sidecars; scrubbing | rows 6, 9; a run with a remote and a stdio MCP connection, neither through the gateway | engine, worker tests |
 | 4-12 | **AWS STS**: `ports.Minter`, `awssts`, kinds `aws` and `bedrock` | row 7; AssumeRole and GetSessionToken paths | stub STS endpoint |
 | 4-13 | **CodeHost per kind** (`github` changed, `gitlab` new) + merge of every pull request of the item (§4.7) | partial merge then retry; host mismatch refused | engine tests, httptest code hosts |
 | 4-14 | **Cutover**: remove `GOAL_TASK_ENV`, `GOAL_GITHUB_*`, `env:` references, `domain.SecretPolicy`, the gateway's upstream forwarding (`upstream.go`, `policy.go`); `goal connection import-env`; README interim rule ended | §14 step 5; the goal factory runs on connections only | e2e, settings tests |
 | 4-15 | **Web: Connections** (list, new, detail; Define-Basics runtime, Define-Connections, New-Connections; phone) | §10; boards of §3 | Playwright 375/768/1440 + axe, Vitest |
-| 4-16 | **Knowledge core**: `00053`, `ports.Knowledge` + postgres + `knowledgetest`, `ports.Embedder` + `openaiembed`, `internal/knowledge` (extract, chunk, fuse, ingestion loop with leases), uploads in the bucket; compose PostgreSQL on pgvector | row 1, 8; leases survive a killed goald; keyword-only without an embedder | conformance, integration, unit |
+| 4-16 | **Knowledge core**: `00054`, `ports.Knowledge` + postgres + `knowledgetest`, `ports.Embedder` + `openaiembed`, `internal/knowledge` (extract, chunk, fuse, ingestion loop with leases), uploads in the bucket; compose PostgreSQL on pgvector | row 1, 8; leases survive a killed goald; keyword-only without an embedder | conformance, integration, unit |
 | 4-17 | **Knowledge API, CLI, gateway tools** `knowledge__search`, `knowledge__read`, SSE `knowledge` | §8; row 11 | handler and gateway tests |
 | 4-18 | **`gitdocs` reader** | incremental by blob id; deletion; globs; GitHub and GitLab hosts | integration against a local git server |
 | 4-19 | **`confluence` reader** (kind `confluence`, `sync: confluence`) | versions, deletion, storage format to text | httptest fixtures |
@@ -798,7 +803,7 @@ Each row is one PR on `goal/4-<n>-<slug>`, passing `task check`, plus `task migr
 | 4-24 | **Human touches: screens and CLI**: Floor headline and Touches panel, factory tiles, Board header, cards, the Item's list with its reason select; `goal status`, `goal item` touches | §10 Touches; boards of §3 | Playwright 375/768/1440 + axe, CLI tests |
 | 4-25 | **Docs as built**: architecture.md, AGENTS.md, worker README, threat rows checked against tests | every §11.2 row names a passing test | review |
 
-Migration numbers rise with landing order (4-3 → `00050`, 4-8 → `00051`, 4-23 → `00052`, then 4-16 → `00053`); a PR that lands out of order takes the next free number on main and fixes this text. 4-3, 4-4 and 4-8 can start in parallel after the prototypes; 4-21 needs 4-7; 4-23 needs only 2.2-E and can be built any time after the prototypes; the web PRs need their API PRs.
+Migration numbers rise with landing order (4-3 → `00050`, 4-8 → `00051`, 4-23 → `00052`, 4-9 → `00053`, then 4-16 → `00054`); a PR that lands out of order takes the next free number on main and fixes this text. 4-3, 4-4 and 4-8 can start in parallel after the prototypes; 4-21 needs 4-7; 4-23 needs only 2.2-E and can be built any time after the prototypes; the web PRs need their API PRs.
 
 ## 16. Cross-spec contracts
 

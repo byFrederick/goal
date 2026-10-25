@@ -23,9 +23,9 @@ var _ ports.Connections = (*Connections)(nil)
 
 // Connections implements ports.Connections over 00051's connection_kinds and connections, as
 // goal_app under row-level security: every statement sees the organization in ctx and the
-// platform's kinds, and every change appends its audit entry in its transaction. Secret values
-// are sealed with key under domain.ConnectionAAD and opened only by Resolve and by an update
-// that replaces some of them. Without a master key (the zero masterkey.Keys) everything without
+// platform's kinds, and every change appends its audit entry and notifies its stream event
+// (connection, read back by Notices) in its transaction. Secret values are sealed with key under
+// domain.ConnectionAAD and opened only by Resolve, Open and an update that replaces some of them. Without a master key (the zero masterkey.Keys) everything without
 // secrets works and the rest fails with ports.ErrNoMasterKey.
 type Connections struct {
 	s   *Store
@@ -43,10 +43,32 @@ const maxTestError = 500
 
 // The audit data keys of connections.
 const (
-	auditKind    = "kind"
-	auditFields  = "fields"
-	auditSecrets = "secrets"
+	auditKind        = "kind"
+	auditFields      = "fields"
+	auditSecrets     = "secrets"
+	auditRenamedFrom = "from"
 )
+
+// The changes of a connection event (spec 4 §8.3), and the audit actions each is read back from.
+const (
+	changeCreated = "created"
+	changeUpdated = "updated"
+	changeDeleted = "deleted"
+	changeTested  = "tested"
+)
+
+var connectionChangeActions = map[string][]string{
+	changeCreated: {domain.AuditConnectionCreated},
+	changeUpdated: {domain.AuditConnectionUpdated, domain.AuditConnectionSecretReplaced},
+	changeDeleted: {domain.AuditConnectionDeleted},
+	changeTested:  {domain.AuditConnectionTested},
+}
+
+// notifyConnection sends the stream event of a change of connection id, now named name, when q's
+// transaction commits.
+func notifyConnection(ctx context.Context, q *db.Queries, id uuid.UUID, name, change string) error {
+	return q.NotifyConnection(ctx, db.NotifyConnectionParams{ID: id, Name: name, Change: change})
+}
 
 // storedKind is a kind as connection_kinds.spec holds it.
 type storedKind struct {
@@ -340,9 +362,7 @@ func (c *Connections) Create(ctx context.Context, n domain.NewConnection, by dom
 			return err
 		}
 
-		return connectionAudit(ctx, q, by, domain.AuditConnectionCreated, id, map[string]any{
-			auditName: n.Name, auditKind: n.Kind, auditFields: valueNames(fields), auditSecrets: out.SecretFields,
-		})
+		return created(ctx, q, by, id, n, out)
 	})
 	if err != nil {
 		return domain.Connection{}, fmt.Errorf("create connection %s: %w", n.Name, ruleError(err, ""))
@@ -352,6 +372,18 @@ func (c *Connections) Create(ctx context.Context, n domain.NewConnection, by dom
 	out.UpdatedAt = out.CreatedAt
 
 	return out, nil
+}
+
+// created audits and notifies the creation of connection id, out, from n.
+func created(ctx context.Context, q *db.Queries, by domain.Actor, id uuid.UUID, n domain.NewConnection, out domain.Connection) error {
+	err := connectionAudit(ctx, q, by, domain.AuditConnectionCreated, id, map[string]any{
+		auditName: n.Name, auditKind: n.Kind, auditFields: valueNames(out.Fields), auditSecrets: out.SecretFields,
+	})
+	if err != nil {
+		return err
+	}
+
+	return notifyConnection(ctx, q, id, n.Name, changeCreated)
 }
 
 // Update implements ports.Connections.
@@ -365,10 +397,8 @@ func (c *Connections) Update(ctx context.Context, name string, p domain.Connecti
 		return c.Get(ctx, name)
 	}
 
-	if p.Description != nil {
-		if err := domain.CheckConnectionDescription(*p.Description); err != nil {
-			return domain.Connection{}, fmt.Errorf("update connection %s: %w", name, err)
-		}
+	if err := checkPatch(p); err != nil {
+		return domain.Connection{}, fmt.Errorf("update connection %s: %w", name, err)
 	}
 
 	var out domain.Connection
@@ -401,6 +431,10 @@ func (c *Connections) update(ctx context.Context, q *db.Queries, org domain.OrgI
 		return domain.Connection{}, err
 	}
 
+	if p.Name != nil {
+		out.Name = *p.Name
+	}
+
 	if p.Description != nil {
 		out.Description = *p.Description
 	}
@@ -427,16 +461,39 @@ func (c *Connections) update(ctx context.Context, q *db.Queries, org domain.OrgI
 	}
 
 	at, err := q.UpdateConnection(ctx, db.UpdateConnectionParams{
-		Description: out.Description, Fields: raw, SecretFields: out.SecretFields, KeyID: s.keyID, Nonce: s.nonce,
+		Name: out.Name, Description: out.Description, Fields: raw, SecretFields: out.SecretFields, KeyID: s.keyID, Nonce: s.nonce,
 		Ciphertext: s.ciphertext, UpdatedBy: by.Ref(), ID: r.ID,
 	})
+	if violates(err, connectionNameKey) {
+		return domain.Connection{}, fmt.Errorf("connection %q: %w", out.Name, ports.ErrNameTaken)
+	}
+
 	if err != nil {
 		return domain.Connection{}, err
 	}
 
 	out.UpdatedAt, out.UpdatedBy = at.UTC(), by
 
-	return out, updateAudits(ctx, q, by, r.ID, name, p)
+	if err := updateAudits(ctx, q, by, r.ID, name, out.Name, p); err != nil {
+		return domain.Connection{}, err
+	}
+
+	return out, notifyConnection(ctx, q, r.ID, out.Name, changeUpdated)
+}
+
+// checkPatch refuses a patch's malformed name or description.
+func checkPatch(p domain.ConnectionPatch) error {
+	var errs []error
+
+	if p.Name != nil {
+		errs = append(errs, domain.CheckConnectionName(*p.Name))
+	}
+
+	if p.Description != nil {
+		errs = append(errs, domain.CheckConnectionDescription(*p.Description))
+	}
+
+	return errors.Join(errs...)
 }
 
 // replaceSecrets opens r's secrets, replaces those named in with (an empty value clears one) and
@@ -462,13 +519,17 @@ func (c *Connections) replaceSecrets(org domain.OrgID, id domain.ConnectionID, r
 	return s, valueNames(secrets), err
 }
 
-// updateAudits records an update: connection.updated for its description or fields,
-// connection.secret_replaced for its secrets (names only).
-func updateAudits(ctx context.Context, q *db.Queries, by domain.Actor, id uuid.UUID, name string, p domain.ConnectionPatch) error {
-	if p.Description != nil || p.Fields != nil {
+// updateAudits records an update of the connection from, now named name: connection.updated for
+// its name, description or fields, connection.secret_replaced for its secrets (names only).
+func updateAudits(ctx context.Context, q *db.Queries, by domain.Actor, id uuid.UUID, from, name string, p domain.ConnectionPatch) error {
+	if p.Name != nil || p.Description != nil || p.Fields != nil {
 		data := map[string]any{auditName: name}
 		if p.Fields != nil {
 			data[auditFields] = valueNames(setValues(p.Fields))
+		}
+
+		if name != from {
+			data[auditRenamedFrom] = from
 		}
 
 		if err := connectionAudit(ctx, q, by, domain.AuditConnectionUpdated, id, data); err != nil {
@@ -498,7 +559,11 @@ func (c *Connections) Delete(ctx context.Context, name string, by domain.Actor) 
 			return err
 		}
 
-		return connectionAudit(ctx, q, by, domain.AuditConnectionDeleted, r.ID, map[string]any{auditName: name, auditKind: r.Kind})
+		if err := connectionAudit(ctx, q, by, domain.AuditConnectionDeleted, r.ID, map[string]any{auditName: name, auditKind: r.Kind}); err != nil {
+			return err
+		}
+
+		return notifyConnection(ctx, q, r.ID, name, changeDeleted)
 	})
 	if err != nil {
 		return fmt.Errorf("delete connection %s: %w", name, err)
@@ -524,7 +589,11 @@ func (c *Connections) RecordTest(ctx context.Context, name string, r domain.Conn
 			return err
 		}
 
-		return connectionAudit(ctx, q, by, domain.AuditConnectionTested, id, map[string]any{auditName: name, "ok": r.OK, "error": msg})
+		if err := connectionAudit(ctx, q, by, domain.AuditConnectionTested, id, map[string]any{auditName: name, "ok": r.OK, "error": msg}); err != nil {
+			return err
+		}
+
+		return notifyConnection(ctx, q, id, name, changeTested)
 	})
 	if err != nil {
 		return fmt.Errorf("record test of connection %s: %w", name, err)
@@ -585,7 +654,33 @@ func (c *Connections) Resolve(ctx context.Context, names []string, run domain.Ru
 	return out, nil
 }
 
-// resolved opens one connection for a run.
+// Open implements ports.Connections.
+func (c *Connections) Open(ctx context.Context, name string) (domain.ResolvedConnection, error) {
+	org, ok := domain.OrgFrom(ctx)
+	if !ok {
+		return domain.ResolvedConnection{}, domain.ErrNoOrg
+	}
+
+	var out domain.ResolvedConnection
+
+	err := c.s.inTx(ctx, func(q *db.Queries) error {
+		r, _, err := c.sealedOne(ctx, q, name)
+		if err != nil {
+			return err
+		}
+
+		out, err = c.resolved(org, r)
+
+		return err
+	})
+	if err != nil {
+		return domain.ResolvedConnection{}, fmt.Errorf("open connection %s: %w", name, err)
+	}
+
+	return out, nil
+}
+
+// resolved opens one connection for a run or a test.
 func (c *Connections) resolved(org domain.OrgID, r db.SealedConnectionsRow) (domain.ResolvedConnection, error) {
 	conn, err := connectionFrom(sealedConnection(r))
 	if err != nil {

@@ -21,6 +21,7 @@ import (
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/config"
+	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/ports/porttest"
@@ -279,7 +280,8 @@ func mxServer(t *testing.T, identity Identity) *httptest.Server {
 		Engine: struct{ Engine }{}, Items: mxItems{}, Factories: mxFactories{}, Definitions: mxDefinitions{}, Versions: struct{ Versions }{},
 		Orgs: mxOrgs{}, Audit: mxAudit{}, Access: struct{ Access }{}, OrgRetention: time.Hour, Authorizer: NewPermissions(clock),
 		Auth: AuthConfig{Mode: AuthSession}, Identity: identity, Platform: mxPlatform{}, Feed: NewFeed(porttest.NewItemNotices(), porttest.NewDefinitionNotices(), nil),
-		Builder: struct{ Builder }{}, Clock: clock,
+		Builder: struct{ Builder }{}, Connections: struct{ ports.Connections }{}, ParseKind: connkind.Parse,
+		ConnectionTransport: http.DefaultTransport, Clock: clock,
 	})
 	if err != nil {
 		t.Fatal(err)

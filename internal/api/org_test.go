@@ -293,6 +293,18 @@ var probes = map[string]probe{
 	"searchSkills":   {method: http.MethodGet, path: "/v1/orgs/acme/builder/skills?q=lint", org: testOrg},
 	"getSkillFiles":  {method: http.MethodGet, path: "/v1/orgs/acme/builder/skills/acme/skills/lint/files", org: testOrg},
 	"listAPIKeys":    {method: http.MethodGet, path: "/v1/orgs/acme/api-keys", org: testOrg},
+
+	"listConnectionKinds":  {method: http.MethodGet, path: "/v1/orgs/acme/connection-kinds", org: testOrg},
+	"putConnectionKind":    {method: http.MethodPut, path: "/v1/orgs/acme/connection-kinds/acme-api", body: `{}`, org: testOrg},
+	"deleteConnectionKind": {method: http.MethodDelete, path: "/v1/orgs/acme/connection-kinds/acme-api", org: testOrg},
+	"listConnections":      {method: http.MethodGet, path: "/v1/orgs/acme/connections?factory=acme", org: testOrg, factory: acmeID},
+	"createConnection": {
+		method: http.MethodPost, path: "/v1/orgs/acme/connections", org: testOrg, body: `{"name":"docs","kind":"mcp-server"}`,
+	},
+	"getConnection":    {method: http.MethodGet, path: "/v1/orgs/acme/connections/docs", org: testOrg},
+	"updateConnection": {method: http.MethodPatch, path: "/v1/orgs/acme/connections/docs", body: `{"description":"d"}`, org: testOrg},
+	"testConnection":   {method: http.MethodPost, path: "/v1/orgs/acme/connections/docs/test", org: testOrg},
+	"deleteConnection": {method: http.MethodDelete, path: "/v1/orgs/acme/connections/docs", org: testOrg},
 	// The key's factory passes the resolver; no key has this id.
 	"createAPIKey": {
 		method: http.MethodPost, path: "/v1/orgs/acme/api-keys", org: testOrg, factory: acmeID,

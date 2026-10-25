@@ -130,6 +130,32 @@ createAPIKey         pat-demoted      403 forbidden            404 org-not-found
 createAPIKey         pat-removed      401 unauthenticated      401 unauthenticated
 createAPIKey         pat-platform     403 forbidden            404 org-not-found
 createAPIKey         pat-deleted-org  401 unauthenticated      401 unauthenticated
+createConnection     anonymous        401 unauthenticated      401 unauthenticated
+createConnection     owner            200                      404 org-not-found
+createConnection     admin            200                      404 org-not-found
+createConnection     viewer           403 forbidden            404 org-not-found
+createConnection     approver         403 forbidden            404 org-not-found
+createConnection     editor           403 forbidden            404 org-not-found
+createConnection     member-no-roles  403 forbidden            404 org-not-found
+createConnection     other-org-owner  404 org-not-found        200
+createConnection     platform-admin   404 org-not-found        404 org-not-found
+createConnection     stale-owner      403 reauth-required      404 org-not-found
+createConnection     key-scoped       403 forbidden            404 org-not-found
+createConnection     key-restricted   403 forbidden            404 org-not-found
+createConnection     key-other-org    404 org-not-found        403 forbidden
+createConnection     key-expired      401 unauthenticated      401 unauthenticated
+createConnection     key-revoked      401 unauthenticated      401 unauthenticated
+createConnection     bearer-owner     200                      404 org-not-found
+createConnection     pat-approver     403 forbidden            404 org-not-found
+createConnection     pat-owner        403 forbidden            404 org-not-found
+createConnection     pat-viewer       403 forbidden            404 org-not-found
+createConnection     pat-other-org    404 org-not-found        403 forbidden
+createConnection     pat-expired      401 unauthenticated      401 unauthenticated
+createConnection     pat-revoked      401 unauthenticated      401 unauthenticated
+createConnection     pat-demoted      403 forbidden            404 org-not-found
+createConnection     pat-removed      401 unauthenticated      401 unauthenticated
+createConnection     pat-platform     403 forbidden            404 org-not-found
+createConnection     pat-deleted-org  401 unauthenticated      401 unauthenticated
 createFactory        anonymous        401 unauthenticated      401 unauthenticated
 createFactory        owner            200                      404 org-not-found
 createFactory        admin            200                      404 org-not-found
@@ -208,6 +234,58 @@ createPersonalToken  pat-demoted      403 forbidden            404 org-not-found
 createPersonalToken  pat-removed      401 unauthenticated      401 unauthenticated
 createPersonalToken  pat-platform     403 forbidden            404 org-not-found
 createPersonalToken  pat-deleted-org  401 unauthenticated      401 unauthenticated
+deleteConnection     anonymous        401 unauthenticated      401 unauthenticated
+deleteConnection     owner            200                      404 org-not-found
+deleteConnection     admin            200                      404 org-not-found
+deleteConnection     viewer           403 forbidden            404 org-not-found
+deleteConnection     approver         403 forbidden            404 org-not-found
+deleteConnection     editor           403 forbidden            404 org-not-found
+deleteConnection     member-no-roles  403 forbidden            404 org-not-found
+deleteConnection     other-org-owner  404 org-not-found        200
+deleteConnection     platform-admin   404 org-not-found        404 org-not-found
+deleteConnection     stale-owner      403 reauth-required      404 org-not-found
+deleteConnection     key-scoped       403 forbidden            404 org-not-found
+deleteConnection     key-restricted   403 forbidden            404 org-not-found
+deleteConnection     key-other-org    404 org-not-found        403 forbidden
+deleteConnection     key-expired      401 unauthenticated      401 unauthenticated
+deleteConnection     key-revoked      401 unauthenticated      401 unauthenticated
+deleteConnection     bearer-owner     200                      404 org-not-found
+deleteConnection     pat-approver     403 forbidden            404 org-not-found
+deleteConnection     pat-owner        403 forbidden            404 org-not-found
+deleteConnection     pat-viewer       403 forbidden            404 org-not-found
+deleteConnection     pat-other-org    404 org-not-found        403 forbidden
+deleteConnection     pat-expired      401 unauthenticated      401 unauthenticated
+deleteConnection     pat-revoked      401 unauthenticated      401 unauthenticated
+deleteConnection     pat-demoted      403 forbidden            404 org-not-found
+deleteConnection     pat-removed      401 unauthenticated      401 unauthenticated
+deleteConnection     pat-platform     403 forbidden            404 org-not-found
+deleteConnection     pat-deleted-org  401 unauthenticated      401 unauthenticated
+deleteConnectionKind anonymous        401 unauthenticated      401 unauthenticated
+deleteConnectionKind owner            200                      404 org-not-found
+deleteConnectionKind admin            200                      404 org-not-found
+deleteConnectionKind viewer           403 forbidden            404 org-not-found
+deleteConnectionKind approver         403 forbidden            404 org-not-found
+deleteConnectionKind editor           403 forbidden            404 org-not-found
+deleteConnectionKind member-no-roles  403 forbidden            404 org-not-found
+deleteConnectionKind other-org-owner  404 org-not-found        200
+deleteConnectionKind platform-admin   404 org-not-found        404 org-not-found
+deleteConnectionKind stale-owner      403 reauth-required      404 org-not-found
+deleteConnectionKind key-scoped       403 forbidden            404 org-not-found
+deleteConnectionKind key-restricted   403 forbidden            404 org-not-found
+deleteConnectionKind key-other-org    404 org-not-found        403 forbidden
+deleteConnectionKind key-expired      401 unauthenticated      401 unauthenticated
+deleteConnectionKind key-revoked      401 unauthenticated      401 unauthenticated
+deleteConnectionKind bearer-owner     200                      404 org-not-found
+deleteConnectionKind pat-approver     403 forbidden            404 org-not-found
+deleteConnectionKind pat-owner        403 forbidden            404 org-not-found
+deleteConnectionKind pat-viewer       403 forbidden            404 org-not-found
+deleteConnectionKind pat-other-org    404 org-not-found        403 forbidden
+deleteConnectionKind pat-expired      401 unauthenticated      401 unauthenticated
+deleteConnectionKind pat-revoked      401 unauthenticated      401 unauthenticated
+deleteConnectionKind pat-demoted      403 forbidden            404 org-not-found
+deleteConnectionKind pat-removed      401 unauthenticated      401 unauthenticated
+deleteConnectionKind pat-platform     403 forbidden            404 org-not-found
+deleteConnectionKind pat-deleted-org  401 unauthenticated      401 unauthenticated
 deleteDraftFile      anonymous        401 unauthenticated      401 unauthenticated
 deleteDraftFile      owner            200                      404 org-not-found
 deleteDraftFile      admin            200                      404 org-not-found
@@ -468,6 +546,32 @@ getBuilderMeta       pat-demoted      200                      404 org-not-found
 getBuilderMeta       pat-removed      401 unauthenticated      401 unauthenticated
 getBuilderMeta       pat-platform     200                      404 org-not-found
 getBuilderMeta       pat-deleted-org  401 unauthenticated      401 unauthenticated
+getConnection        anonymous        401 unauthenticated      401 unauthenticated
+getConnection        owner            200                      404 org-not-found
+getConnection        admin            200                      404 org-not-found
+getConnection        viewer           200                      404 org-not-found
+getConnection        approver         200                      404 org-not-found
+getConnection        editor           200                      404 org-not-found
+getConnection        member-no-roles  200                      404 org-not-found
+getConnection        other-org-owner  404 org-not-found        200
+getConnection        platform-admin   404 org-not-found        404 org-not-found
+getConnection        stale-owner      200                      404 org-not-found
+getConnection        key-scoped       403 forbidden            404 org-not-found
+getConnection        key-restricted   200                      404 org-not-found
+getConnection        key-other-org    404 org-not-found        200
+getConnection        key-expired      401 unauthenticated      401 unauthenticated
+getConnection        key-revoked      401 unauthenticated      401 unauthenticated
+getConnection        bearer-owner     200                      404 org-not-found
+getConnection        pat-approver     403 forbidden            404 org-not-found
+getConnection        pat-owner        200                      404 org-not-found
+getConnection        pat-viewer       200                      404 org-not-found
+getConnection        pat-other-org    404 org-not-found        200
+getConnection        pat-expired      401 unauthenticated      401 unauthenticated
+getConnection        pat-revoked      401 unauthenticated      401 unauthenticated
+getConnection        pat-demoted      200                      404 org-not-found
+getConnection        pat-removed      401 unauthenticated      401 unauthenticated
+getConnection        pat-platform     200                      404 org-not-found
+getConnection        pat-deleted-org  401 unauthenticated      401 unauthenticated
 getConstraintReport  anonymous        401 unauthenticated      401 unauthenticated
 getConstraintReport  owner            200                      404 org-not-found
 getConstraintReport  admin            200                      404 org-not-found
@@ -1196,6 +1300,58 @@ listAuthEvents       pat-demoted      install: 403 forbidden
 listAuthEvents       pat-removed      install: 401 unauthenticated
 listAuthEvents       pat-platform     install: 403 forbidden
 listAuthEvents       pat-deleted-org  install: 401 unauthenticated
+listConnectionKinds  anonymous        401 unauthenticated      401 unauthenticated
+listConnectionKinds  owner            200                      404 org-not-found
+listConnectionKinds  admin            200                      404 org-not-found
+listConnectionKinds  viewer           200                      404 org-not-found
+listConnectionKinds  approver         200                      404 org-not-found
+listConnectionKinds  editor           200                      404 org-not-found
+listConnectionKinds  member-no-roles  200                      404 org-not-found
+listConnectionKinds  other-org-owner  404 org-not-found        200
+listConnectionKinds  platform-admin   404 org-not-found        404 org-not-found
+listConnectionKinds  stale-owner      200                      404 org-not-found
+listConnectionKinds  key-scoped       403 forbidden            404 org-not-found
+listConnectionKinds  key-restricted   200                      404 org-not-found
+listConnectionKinds  key-other-org    404 org-not-found        200
+listConnectionKinds  key-expired      401 unauthenticated      401 unauthenticated
+listConnectionKinds  key-revoked      401 unauthenticated      401 unauthenticated
+listConnectionKinds  bearer-owner     200                      404 org-not-found
+listConnectionKinds  pat-approver     403 forbidden            404 org-not-found
+listConnectionKinds  pat-owner        200                      404 org-not-found
+listConnectionKinds  pat-viewer       200                      404 org-not-found
+listConnectionKinds  pat-other-org    404 org-not-found        200
+listConnectionKinds  pat-expired      401 unauthenticated      401 unauthenticated
+listConnectionKinds  pat-revoked      401 unauthenticated      401 unauthenticated
+listConnectionKinds  pat-demoted      200                      404 org-not-found
+listConnectionKinds  pat-removed      401 unauthenticated      401 unauthenticated
+listConnectionKinds  pat-platform     200                      404 org-not-found
+listConnectionKinds  pat-deleted-org  401 unauthenticated      401 unauthenticated
+listConnections      anonymous        401 unauthenticated      401 unauthenticated
+listConnections      owner            200                      404 org-not-found
+listConnections      admin            200                      404 org-not-found
+listConnections      viewer           200                      404 org-not-found
+listConnections      approver         200                      404 org-not-found
+listConnections      editor           200                      404 org-not-found
+listConnections      member-no-roles  404 factory-not-found    404 org-not-found
+listConnections      other-org-owner  404 org-not-found        200
+listConnections      platform-admin   404 org-not-found        404 org-not-found
+listConnections      stale-owner      200                      404 org-not-found
+listConnections      key-scoped       403 forbidden            404 org-not-found
+listConnections      key-restricted   404 factory-not-found    404 org-not-found
+listConnections      key-other-org    404 org-not-found        200
+listConnections      key-expired      401 unauthenticated      401 unauthenticated
+listConnections      key-revoked      401 unauthenticated      401 unauthenticated
+listConnections      bearer-owner     200                      404 org-not-found
+listConnections      pat-approver     403 forbidden            404 org-not-found
+listConnections      pat-owner        200                      404 org-not-found
+listConnections      pat-viewer       200                      404 org-not-found
+listConnections      pat-other-org    404 org-not-found        200
+listConnections      pat-expired      401 unauthenticated      401 unauthenticated
+listConnections      pat-revoked      401 unauthenticated      401 unauthenticated
+listConnections      pat-demoted      404 factory-not-found    404 org-not-found
+listConnections      pat-removed      401 unauthenticated      401 unauthenticated
+listConnections      pat-platform     200                      404 org-not-found
+listConnections      pat-deleted-org  401 unauthenticated      401 unauthenticated
 listDraftFiles       anonymous        401 unauthenticated      401 unauthenticated
 listDraftFiles       owner            200                      404 org-not-found
 listDraftFiles       admin            200                      404 org-not-found
@@ -1742,6 +1898,32 @@ pullAndon            pat-demoted      404 factory-not-found    404 org-not-found
 pullAndon            pat-removed      401 unauthenticated      401 unauthenticated
 pullAndon            pat-platform     200                      404 org-not-found
 pullAndon            pat-deleted-org  401 unauthenticated      401 unauthenticated
+putConnectionKind    anonymous        401 unauthenticated      401 unauthenticated
+putConnectionKind    owner            200                      404 org-not-found
+putConnectionKind    admin            200                      404 org-not-found
+putConnectionKind    viewer           403 forbidden            404 org-not-found
+putConnectionKind    approver         403 forbidden            404 org-not-found
+putConnectionKind    editor           403 forbidden            404 org-not-found
+putConnectionKind    member-no-roles  403 forbidden            404 org-not-found
+putConnectionKind    other-org-owner  404 org-not-found        200
+putConnectionKind    platform-admin   404 org-not-found        404 org-not-found
+putConnectionKind    stale-owner      403 reauth-required      404 org-not-found
+putConnectionKind    key-scoped       403 forbidden            404 org-not-found
+putConnectionKind    key-restricted   403 forbidden            404 org-not-found
+putConnectionKind    key-other-org    404 org-not-found        403 forbidden
+putConnectionKind    key-expired      401 unauthenticated      401 unauthenticated
+putConnectionKind    key-revoked      401 unauthenticated      401 unauthenticated
+putConnectionKind    bearer-owner     200                      404 org-not-found
+putConnectionKind    pat-approver     403 forbidden            404 org-not-found
+putConnectionKind    pat-owner        403 forbidden            404 org-not-found
+putConnectionKind    pat-viewer       403 forbidden            404 org-not-found
+putConnectionKind    pat-other-org    404 org-not-found        403 forbidden
+putConnectionKind    pat-expired      401 unauthenticated      401 unauthenticated
+putConnectionKind    pat-revoked      401 unauthenticated      401 unauthenticated
+putConnectionKind    pat-demoted      403 forbidden            404 org-not-found
+putConnectionKind    pat-removed      401 unauthenticated      401 unauthenticated
+putConnectionKind    pat-platform     403 forbidden            404 org-not-found
+putConnectionKind    pat-deleted-org  401 unauthenticated      401 unauthenticated
 putDraftFile         anonymous        401 unauthenticated      401 unauthenticated
 putDraftFile         owner            200                      404 org-not-found
 putDraftFile         admin            200                      404 org-not-found
@@ -2210,6 +2392,32 @@ submitItem           pat-demoted      404 factory-not-found    404 org-not-found
 submitItem           pat-removed      401 unauthenticated      401 unauthenticated
 submitItem           pat-platform     200                      404 org-not-found
 submitItem           pat-deleted-org  401 unauthenticated      401 unauthenticated
+testConnection       anonymous        401 unauthenticated      401 unauthenticated
+testConnection       owner            200                      404 org-not-found
+testConnection       admin            200                      404 org-not-found
+testConnection       viewer           403 forbidden            404 org-not-found
+testConnection       approver         403 forbidden            404 org-not-found
+testConnection       editor           403 forbidden            404 org-not-found
+testConnection       member-no-roles  403 forbidden            404 org-not-found
+testConnection       other-org-owner  404 org-not-found        200
+testConnection       platform-admin   404 org-not-found        404 org-not-found
+testConnection       stale-owner      403 reauth-required      404 org-not-found
+testConnection       key-scoped       403 forbidden            404 org-not-found
+testConnection       key-restricted   403 forbidden            404 org-not-found
+testConnection       key-other-org    404 org-not-found        403 forbidden
+testConnection       key-expired      401 unauthenticated      401 unauthenticated
+testConnection       key-revoked      401 unauthenticated      401 unauthenticated
+testConnection       bearer-owner     200                      404 org-not-found
+testConnection       pat-approver     403 forbidden            404 org-not-found
+testConnection       pat-owner        403 forbidden            404 org-not-found
+testConnection       pat-viewer       403 forbidden            404 org-not-found
+testConnection       pat-other-org    404 org-not-found        403 forbidden
+testConnection       pat-expired      401 unauthenticated      401 unauthenticated
+testConnection       pat-revoked      401 unauthenticated      401 unauthenticated
+testConnection       pat-demoted      403 forbidden            404 org-not-found
+testConnection       pat-removed      401 unauthenticated      401 unauthenticated
+testConnection       pat-platform     403 forbidden            404 org-not-found
+testConnection       pat-deleted-org  401 unauthenticated      401 unauthenticated
 transferOwnership    anonymous        401 unauthenticated      401 unauthenticated
 transferOwnership    owner            200                      404 org-not-found
 transferOwnership    admin            403 forbidden            404 org-not-found
@@ -2236,6 +2444,32 @@ transferOwnership    pat-demoted      403 forbidden            404 org-not-found
 transferOwnership    pat-removed      401 unauthenticated      401 unauthenticated
 transferOwnership    pat-platform     403 forbidden            404 org-not-found
 transferOwnership    pat-deleted-org  401 unauthenticated      401 unauthenticated
+updateConnection     anonymous        401 unauthenticated      401 unauthenticated
+updateConnection     owner            200                      404 org-not-found
+updateConnection     admin            200                      404 org-not-found
+updateConnection     viewer           403 forbidden            404 org-not-found
+updateConnection     approver         403 forbidden            404 org-not-found
+updateConnection     editor           403 forbidden            404 org-not-found
+updateConnection     member-no-roles  403 forbidden            404 org-not-found
+updateConnection     other-org-owner  404 org-not-found        200
+updateConnection     platform-admin   404 org-not-found        404 org-not-found
+updateConnection     stale-owner      403 reauth-required      404 org-not-found
+updateConnection     key-scoped       403 forbidden            404 org-not-found
+updateConnection     key-restricted   403 forbidden            404 org-not-found
+updateConnection     key-other-org    404 org-not-found        403 forbidden
+updateConnection     key-expired      401 unauthenticated      401 unauthenticated
+updateConnection     key-revoked      401 unauthenticated      401 unauthenticated
+updateConnection     bearer-owner     200                      404 org-not-found
+updateConnection     pat-approver     403 forbidden            404 org-not-found
+updateConnection     pat-owner        403 forbidden            404 org-not-found
+updateConnection     pat-viewer       403 forbidden            404 org-not-found
+updateConnection     pat-other-org    404 org-not-found        403 forbidden
+updateConnection     pat-expired      401 unauthenticated      401 unauthenticated
+updateConnection     pat-revoked      401 unauthenticated      401 unauthenticated
+updateConnection     pat-demoted      403 forbidden            404 org-not-found
+updateConnection     pat-removed      401 unauthenticated      401 unauthenticated
+updateConnection     pat-platform     403 forbidden            404 org-not-found
+updateConnection     pat-deleted-org  401 unauthenticated      401 unauthenticated
 updateOrgSettings    anonymous        401 unauthenticated      401 unauthenticated
 updateOrgSettings    owner            200                      404 org-not-found
 updateOrgSettings    admin            200                      404 org-not-found

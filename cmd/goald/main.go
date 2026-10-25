@@ -43,6 +43,7 @@ import (
 	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/egress"
 	"github.com/byFrederick/goal/internal/engine"
 	"github.com/byFrederick/goal/internal/gateway"
 	"github.com/byFrederick/goal/internal/ports"
@@ -121,8 +122,8 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	// Connections and their kinds (spec 4): definitions are validated against them; the API and
-	// the runs use them from 4-9 and 4-11 on.
+	// Connections and their kinds (spec 4): definitions are validated against them and the API
+	// serves them; the runs use them from 4-11 on.
 	connections, err := openConnections(ctx, store, os.Getenv, log)
 	if err != nil {
 		return err
@@ -218,6 +219,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Engine: eng, Items: store, Factories: defs, Definitions: authors, Versions: definitionStore, Orgs: store, Audit: store, OrgRetention: s.OrgRetention,
 		Authorizer: authorizer(s.Auth, clock), Auth: api.AuthConfig{Mode: api.AuthMode(s.Auth), Google: s.Google, SecureCookies: s.strictTransport()},
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
+		Connections: connections, ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams),
 		Clock: clock, Logger: log,
 	})
 	if err != nil {
@@ -276,6 +278,17 @@ func openConnections(ctx context.Context, store *postgres.Store, getenv func(str
 	log.InfoContext(ctx, "connection kinds synced", slog.Int("platform", len(kinds)))
 
 	return connections, nil
+}
+
+// connectionTransport carries every request goald makes for a connection (its test; later sync,
+// STS and embeddings): to public addresses only (egress.PublicDialer, threat row 4), unless
+// GOAL_ALLOW_PRIVATE_UPSTREAMS lets a laptop reach its own test servers. It uses no proxy, so a
+// proxy variable cannot route around the address check.
+func connectionTransport(allowPrivate bool) *http.Transport {
+	return &http.Transport{
+		DialContext: egress.PublicDialer{AllowPrivate: allowPrivate}.DialContext, ForceAttemptHTTP2: true,
+		TLSHandshakeTimeout: egress.DialTimeout, MaxIdleConns: 16, IdleConnTimeout: 90 * time.Second,
+	}
 }
 
 // containers connects to Docker. The agents' network and its egress proxy are compose.yaml's

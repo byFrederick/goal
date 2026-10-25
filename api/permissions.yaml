@@ -37,6 +37,10 @@ permissions:
   # for a fresh sign-in), creating one (manage: a fresh sign-in, in the browser only).
   - {name: personal_token:read,   level: org, org_roles: [owner, admin, member]}
   - {name: personal_token:manage, level: org, org_roles: [owner, admin, member], fresh: true}
+  # The organization's connections (spec 4 §8.1): members read names, kinds and status, never a
+  # value; owners and admins change and test them after a recent sign-in, never with a key.
+  - {name: connection:read,    level: org, org_roles: [owner, admin, member], keys: true, pat: true}
+  - {name: connection:manage,  level: org, org_roles: [owner, admin], fresh: true}
   - {name: factory:create,     level: org, org_roles: [owner, admin], keys: true, pat: true}   # high impact
   - {name: factory:read,       level: factory, factory_role: viewer,   keys: true, pat: true}
   - {name: item:create,        level: factory, factory_role: approver, keys: true, pat: true}

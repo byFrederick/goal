@@ -16,6 +16,7 @@ export const tokenScopeGroups: readonly { id: TokenGroupId; label: string; scope
     scopes: [
       { id: 'org:read', label: 'See the organization', needs: null },
       { id: 'factory:read', label: 'See factories', needs: 'viewer' },
+      { id: 'connection:read', label: 'See connections', needs: null },
     ],
   },
   {

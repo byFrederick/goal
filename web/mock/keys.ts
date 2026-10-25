@@ -20,6 +20,7 @@ const keyScopes: Record<string, FactoryRole | null> = {
   authenticated: null,
   'org:read': null,
   'audit:read': null,
+  'connection:read': null,
   'factory:create': null,
   'factory:read': 'viewer',
   'item:create': 'approver',
@@ -36,6 +37,7 @@ const ladder: FactoryRole[] = ['viewer', 'approver', 'editor'];
 const tokenScopes: Record<string, 'org' | 'factory'> = {
   authenticated: 'org',
   'org:read': 'org',
+  'connection:read': 'org',
   'factory:create': 'org',
   'factory:read': 'factory',
   'item:create': 'factory',

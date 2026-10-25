@@ -307,3 +307,18 @@ func write(t *testing.T, path, content string) {
 		t.Fatal(err)
 	}
 }
+
+// The organization's connections a definition names: spec.connections but its inline entries,
+// the model connection and the repository's, once each.
+func TestFactory_ConnectionNames(t *testing.T) {
+	t.Parallel()
+
+	f := &Factory{}
+	f.Spec.Connections = []Connection{{Name: "repos"}, {Name: "docs", Type: "mcp"}, {Name: "datadog"}}
+	f.Spec.Runtime.ModelConnection = "model"
+	f.Spec.Runtime.Repository = &Repository{URL: "https://code.example.com/acme/goal", Connection: "repos"}
+
+	if got := f.ConnectionNames(); !slices.Equal(got, []string{"datadog", "model", "repos"}) {
+		t.Errorf("ConnectionNames = %v; want datadog, model and repos", got)
+	}
+}

@@ -260,6 +260,78 @@ func (e CloneStartKind) Valid() bool {
 	}
 }
 
+// Defines values for ConnectionStatus.
+const (
+	ConnectionStatusFailing       ConnectionStatus = "failing"
+	ConnectionStatusMissingSecret ConnectionStatus = "missing-secret"
+	ConnectionStatusOk            ConnectionStatus = "ok"
+	ConnectionStatusUntested      ConnectionStatus = "untested"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionStatus enum.
+func (e ConnectionStatus) Valid() bool {
+	switch e {
+	case ConnectionStatusFailing:
+		return true
+	case ConnectionStatusMissingSecret:
+		return true
+	case ConnectionStatusOk:
+		return true
+	case ConnectionStatusUntested:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectionEventChange.
+const (
+	Created ConnectionEventChange = "created"
+	Deleted ConnectionEventChange = "deleted"
+	Tested  ConnectionEventChange = "tested"
+	Updated ConnectionEventChange = "updated"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionEventChange enum.
+func (e ConnectionEventChange) Valid() bool {
+	switch e {
+	case Created:
+		return true
+	case Deleted:
+		return true
+	case Tested:
+		return true
+	case Updated:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectionKindModes.
+const (
+	ConnectionKindModesCli ConnectionKindModes = "cli"
+	ConnectionKindModesEnv ConnectionKindModes = "env"
+	ConnectionKindModesGit ConnectionKindModes = "git"
+	ConnectionKindModesMcp ConnectionKindModes = "mcp"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionKindModes enum.
+func (e ConnectionKindModes) Valid() bool {
+	switch e {
+	case ConnectionKindModesCli:
+		return true
+	case ConnectionKindModesEnv:
+		return true
+	case ConnectionKindModesGit:
+		return true
+	case ConnectionKindModesMcp:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ConstraintSource.
 const (
 	Configured ConstraintSource = "configured"
@@ -391,13 +463,13 @@ func (e FileChangeOp) Valid() bool {
 
 // Defines values for HealthStatus.
 const (
-	Ok HealthStatus = "ok"
+	HealthStatusOk HealthStatus = "ok"
 )
 
 // Valid indicates whether the value is a known member of the HealthStatus enum.
 func (e HealthStatus) Valid() bool {
 	switch e {
-	case Ok:
+	case HealthStatusOk:
 		return true
 	default:
 		return false
@@ -1319,6 +1391,170 @@ type Comparison struct {
 
 	// To One side of a comparison; id, number and state are null for a starting tree no version holds
 	To CompareSide `json:"to"`
+}
+
+// Connection An organization's connection (spec 4 §4.3), never a secret value
+type Connection struct {
+	CreatedAt time.Time `json:"created_at"`
+
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	CreatedBy   Actor  `json:"created_by"`
+	Description string `json:"description"`
+
+	// Docs getConnection only, its kind's docs for agents
+	Docs *string `json:"docs,omitempty"`
+
+	// Env getConnection only, the env names a run gets from it
+	Env *[]string `json:"env,omitempty"`
+
+	// Fields The non-secret values set (a kind's defaults are not copied in)
+	Fields   map[string]string     `json:"fields"`
+	Id       string                `json:"id"`
+	Kind     string                `json:"kind"`
+	LastTest *ConnectionTestResult `json:"last_test"`
+
+	// LastUsedAt When a run last got it
+	LastUsedAt *time.Time `json:"last_used_at"`
+
+	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
+	Name ConnectionName `json:"name"`
+
+	// SecretsSet The secret fields that are set, sorted; their values are never shown
+	SecretsSet []string `json:"secrets_set"`
+
+	// Status missing-secret: a required secret field is not set (its kind gained one); else the last test's outcome, untested before any
+	Status    ConnectionStatus `json:"status"`
+	UpdatedAt time.Time        `json:"updated_at"`
+
+	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	UpdatedBy Actor `json:"updated_by"`
+
+	// UsedBy What uses a connection, so it cannot be deleted or renamed meanwhile
+	UsedBy ConnectionUsers `json:"used_by"`
+}
+
+// ConnectionStatus missing-secret: a required secret field is not set (its kind gained one); else the last test's outcome, untested before any
+type ConnectionStatus string
+
+// ConnectionEvent The data of one `event: connection` on /v1/orgs/{org}/stream; it carries no value
+type ConnectionEvent struct {
+	Change       ConnectionEventChange `json:"change"`
+	ConnectionId string                `json:"connection_id"`
+
+	// Name The connection's name after the change
+	Name string `json:"name"`
+}
+
+// ConnectionEventChange defines model for ConnectionEvent.Change.
+type ConnectionEventChange string
+
+// ConnectionFactory defines model for ConnectionFactory.
+type ConnectionFactory struct {
+	Id   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// ConnectionKind A template for connections (spec 4 §4.2), the platform's or the organization's
+type ConnectionKind struct {
+	// CodeHost The code host adapter that reads and merges its pull requests (github, gitlab)
+	CodeHost    *string `json:"code_host,omitempty"`
+	Description *string `json:"description,omitempty"`
+
+	// Docs What agents are told about using it
+	Docs *string `json:"docs,omitempty"`
+
+	// Env The env names a run gets, as the kind writes them ({{field}} where a field names one)
+	Env    []string              `json:"env"`
+	Fields []ConnectionKindField `json:"fields"`
+
+	// Mint The adapter that mints per-run credentials from it (aws-sts)
+	Mint *string `json:"mint,omitempty"`
+
+	// Model It gives agents their model; only such a kind may be a factory's model connection
+	Model bool `json:"model"`
+
+	// Modes How runs use it: env (variables for API calls and CLIs), mcp (an MCP server, remote or stdio), cli (a tool installed in the box), git (git over https)
+	Modes []ConnectionKindModes `json:"modes"`
+
+	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
+	Name ConnectionName `json:"name"`
+
+	// Platform Shipped with goald; otherwise the organization's own
+	Platform bool `json:"platform"`
+
+	// Sync The knowledge source reader that syncs through it (gitdocs, confluence)
+	Sync *string `json:"sync,omitempty"`
+
+	// Testable It has a test (POST …/connections/{connection}/test)
+	Testable bool   `json:"testable"`
+	Title    string `json:"title"`
+}
+
+// ConnectionKindModes defines model for ConnectionKind.Modes.
+type ConnectionKindModes string
+
+// ConnectionKindField defines model for ConnectionKindField.
+type ConnectionKindField struct {
+	// Default The value of a field left empty
+	Default     *string `json:"default,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Name        string  `json:"name"`
+	Required    bool    `json:"required"`
+
+	// Secret Write-only, sealed; an input of type password
+	Secret bool   `json:"secret"`
+	Title  string `json:"title"`
+}
+
+// ConnectionKindFile A connection kind file (apiVersion goal/v1, kind ConnectionKind, metadata, spec) as JSON, checked against schema/connection-kind.schema.json
+type ConnectionKindFile map[string]interface{}
+
+// ConnectionKindList defines model for ConnectionKindList.
+type ConnectionKindList struct {
+	Kinds []ConnectionKind `json:"kinds"`
+}
+
+// ConnectionList defines model for ConnectionList.
+type ConnectionList struct {
+	Connections []Connection `json:"connections"`
+}
+
+// ConnectionName 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
+type ConnectionName = string
+
+// ConnectionPatch defines model for ConnectionPatch.
+type ConnectionPatch struct {
+	Description *string `json:"description,omitempty"`
+
+	// Fields Every non-secret value (replaces them all)
+	Fields *map[string]string `json:"fields,omitempty"`
+
+	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
+	Name *ConnectionName `json:"name,omitempty"`
+
+	// Secrets The secret fields to replace, by name; an empty value clears an optional one
+	Secrets *map[string]string `json:"secrets,omitempty"`
+}
+
+// ConnectionTestResult defines model for ConnectionTestResult.
+type ConnectionTestResult struct {
+	At time.Time `json:"at"`
+
+	// Error Why it failed (never a secret value)
+	Error *string `json:"error,omitempty"`
+	Ok    bool    `json:"ok"`
+
+	// Status The test request's HTTP status, when it got one
+	Status *int `json:"status,omitempty"`
+}
+
+// ConnectionUsers What uses a connection, so it cannot be deleted or renamed meanwhile
+type ConnectionUsers struct {
+	// Factories The factories whose current version names it (those the caller sees)
+	Factories []ConnectionFactory `json:"factories"`
+
+	// KnowledgeSources The knowledge sources synced through it (phase 4 knowledge)
+	KnowledgeSources []string `json:"knowledge_sources"`
 }
 
 // ConstraintCandidate defines model for ConstraintCandidate.
@@ -2355,6 +2591,21 @@ type NewApiKey struct {
 	Scopes []Permission `json:"scopes"`
 }
 
+// NewConnection defines model for NewConnection.
+type NewConnection struct {
+	Description *string `json:"description,omitempty"`
+
+	// Fields The kind's non-secret values
+	Fields *map[string]string `json:"fields,omitempty"`
+	Kind   string             `json:"kind"`
+
+	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
+	Name ConnectionName `json:"name"`
+
+	// Secrets The kind's secret values; never answered
+	Secrets *map[string]string `json:"secrets,omitempty"`
+}
+
 // NewFactoryRequest defines model for NewFactoryRequest.
 type NewFactoryRequest struct {
 	// Name Required except for an import, where factory.yaml's metadata.name is used when it is absent
@@ -2601,7 +2852,7 @@ type PlatformAdminList struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches.
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened).
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
@@ -3275,6 +3526,9 @@ type WeeklyThroughput struct {
 	} `json:"weeks"`
 }
 
+// ConnectionRef defines model for ConnectionRef.
+type ConnectionRef = string
+
 // FactoryRef defines model for FactoryRef.
 type FactoryRef = string
 
@@ -3289,6 +3543,9 @@ type IfNoneMatch = string
 
 // ItemRef defines model for ItemRef.
 type ItemRef = string
+
+// KindRef defines model for KindRef.
+type KindRef = string
 
 // OrgRef defines model for OrgRef.
 type OrgRef = string
@@ -3333,6 +3590,15 @@ type SearchSkillsParams struct {
 
 	// After The next_after of the previous page
 	After *string `form:"after,omitempty" json:"after,omitempty"`
+}
+
+// ListConnectionsParams defines parameters for ListConnections.
+type ListConnectionsParams struct {
+	// Factory Only the connections this factory's current version names (its metadata.id or metadata.name)
+	Factory *string `form:"factory,omitempty" json:"factory,omitempty"`
+
+	// Kind Only connections of this kind
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty"`
 }
 
 // GetAgentStatsParams defines parameters for GetAgentStats.
@@ -3542,6 +3808,15 @@ type DeleteOrgJSONRequestBody = OrgDeletion
 
 // CreateAPIKeyJSONRequestBody defines body for CreateAPIKey for application/json ContentType.
 type CreateAPIKeyJSONRequestBody = NewApiKey
+
+// PutConnectionKindJSONRequestBody defines body for PutConnectionKind for application/json ContentType.
+type PutConnectionKindJSONRequestBody = ConnectionKindFile
+
+// CreateConnectionJSONRequestBody defines body for CreateConnection for application/json ContentType.
+type CreateConnectionJSONRequestBody = NewConnection
+
+// UpdateConnectionJSONRequestBody defines body for UpdateConnection for application/json ContentType.
+type UpdateConnectionJSONRequestBody = ConnectionPatch
 
 // ValidateDefinitionJSONRequestBody defines body for ValidateDefinition for application/json ContentType.
 type ValidateDefinitionJSONRequestBody = DefinitionFiles
@@ -4059,6 +4334,100 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files (the `GetSkillFiles` operationId).
 	GetSkillFiles(ctx context.Context, org OrgRef, owner SkillName, repo SkillName, skill SkillName, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListConnectionKinds The connection kinds the organization can make connections of
+	//
+	// The platform's kinds, shipped with goald, and the organization's own, by name; an organization's kind hides a platform kind of the same name. Each with the fields a connection of it is made of (secret ones are write-only), its modes, whether it gives agents their model, its adapter hooks and its docs.
+	//
+	// Corresponds with GET /v1/orgs/{org}/connection-kinds (the `ListConnectionKinds` operationId).
+	ListConnectionKinds(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteConnectionKind Delete one of the organization's connection kinds
+	//
+	// 404 connection-kind-not-found when the organization has no kind of that name (a platform kind cannot be deleted); 409 connection-kind-in-use while a connection is of it. Needs a sign-in from the last 10 minutes. Audited as connection_kind.deleted.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/connection-kinds/{kind} (the `DeleteConnectionKind` operationId).
+	DeleteConnectionKind(ctx context.Context, org OrgRef, kind KindRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutConnectionKindWithBody Create or replace one of the organization's connection kinds
+	//
+	// The body is a kind file (schema/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken. Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/connection-kinds/{kind} (the `PutConnectionKind` operationId).
+	PutConnectionKindWithBody(ctx context.Context, org OrgRef, kind KindRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutConnectionKind Create or replace one of the organization's connection kinds
+	//
+	// The body is a kind file (schema/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken. Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/connection-kinds/{kind} (the `PutConnectionKind` operationId).
+	PutConnectionKind(ctx context.Context, org OrgRef, kind KindRef, body PutConnectionKindJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListConnections The organization's connections
+	//
+	// By name, each with its kind, description, non-secret fields, which secret fields are set (never a value), status, what uses it, its last use and last test. Members see them to pick them in the builder; only owners and admins change them.
+	//
+	// Corresponds with GET /v1/orgs/{org}/connections (the `ListConnections` operationId).
+	ListConnections(ctx context.Context, org OrgRef, params *ListConnectionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateConnectionWithBody Create a connection
+	//
+	// A connection of a kind, with the kind's non-secret fields in fields and its secret ones in secrets, sealed under the platform's master key and never returned, not even masked. 400 field-unknown for a value that is no field of the kind (or of the other sort), 400 field-required for a required field without a value, 404 connection-kind-not-found for an unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.created (field names only).
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/connections (the `CreateConnection` operationId).
+	CreateConnectionWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateConnection Create a connection
+	//
+	// A connection of a kind, with the kind's non-secret fields in fields and its secret ones in secrets, sealed under the platform's master key and never returned, not even masked. 400 field-unknown for a value that is no field of the kind (or of the other sort), 400 field-required for a required field without a value, 404 connection-kind-not-found for an unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.created (field names only).
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/connections (the `CreateConnection` operationId).
+	CreateConnection(ctx context.Context, org OrgRef, body CreateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteConnection Delete a connection
+	//
+	// 409 connection-in-use, naming what, while a factory's current version or a knowledge source uses it. Needs a sign-in from the last 10 minutes. Audited as connection.deleted.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/connections/{connection} (the `DeleteConnection` operationId).
+	DeleteConnection(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetConnection One connection, with the env names a run gets from it and its kind's docs
+	//
+	// Corresponds with GET /v1/orgs/{org}/connections/{connection} (the `GetConnection` operationId).
+	GetConnection(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateConnectionWithBody Rename a connection, or change its description, fields or secrets
+	//
+	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
+	UpdateConnectionWithBody(ctx context.Context, org OrgRef, connection ConnectionRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateConnection Rename a connection, or change its description, fields or secrets
+	//
+	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
+	UpdateConnection(ctx context.Context, org OrgRef, connection ConnectionRef, body UpdateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TestConnection Run the connection's test
+	//
+	// Sends the kind's test request from goald with the connection's values: to public addresses only (a URL naming a private, loopback, link-local or metadata address fails the test), within 10 seconds, following no redirect. ok when the status is the one the kind expects. A test that fails is a 200 with ok false and why; the outcome is the connection's last test. 409 connection-not-testable for a kind without a test, 503 connections-unavailable for a sealed connection while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.tested.
+	//
+	// Corresponds with POST /v1/orgs/{org}/connections/{connection}/test (the `TestConnection` operationId).
+	TestConnection(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// FormatDefinitionWithBody Format a factory.yaml the way Visual saves write changed lines (Format)
 	//
@@ -4718,7 +5087,7 @@ type ClientInterface interface {
 
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	//
-	// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent, no id) follows a change of a factory's line that is not an item's: its andon cord pulled or cleared. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+	// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, connection, and later knowledge) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent, no id) follows a change of a factory's line that is not an item's: its andon cord pulled or cleared. `event: connection` (data a ConnectionEvent, no id) follows a connection created, changed, tested or deleted. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
 	//
 	// Corresponds with GET /v1/orgs/{org}/stream (the `StreamEvents` operationId).
 	StreamEvents(ctx context.Context, org OrgRef, params *StreamEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5112,6 +5481,220 @@ func (c *Client) SearchSkills(ctx context.Context, org OrgRef, params *SearchSki
 // Corresponds with GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files (the `GetSkillFiles` operationId).
 func (c *Client) GetSkillFiles(ctx context.Context, org OrgRef, owner SkillName, repo SkillName, skill SkillName, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetSkillFilesRequest(c.Server, org, owner, repo, skill)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListConnectionKinds The connection kinds the organization can make connections of
+//
+// The platform's kinds, shipped with goald, and the organization's own, by name; an organization's kind hides a platform kind of the same name. Each with the fields a connection of it is made of (secret ones are write-only), its modes, whether it gives agents their model, its adapter hooks and its docs.
+//
+// Corresponds with GET /v1/orgs/{org}/connection-kinds (the `ListConnectionKinds` operationId).
+func (c *Client) ListConnectionKinds(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListConnectionKindsRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteConnectionKind Delete one of the organization's connection kinds
+//
+// 404 connection-kind-not-found when the organization has no kind of that name (a platform kind cannot be deleted); 409 connection-kind-in-use while a connection is of it. Needs a sign-in from the last 10 minutes. Audited as connection_kind.deleted.
+//
+// Corresponds with DELETE /v1/orgs/{org}/connection-kinds/{kind} (the `DeleteConnectionKind` operationId).
+func (c *Client) DeleteConnectionKind(ctx context.Context, org OrgRef, kind KindRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteConnectionKindRequest(c.Server, org, kind)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PutConnectionKindWithBody Create or replace one of the organization's connection kinds
+//
+// The body is a kind file (schema/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken. Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/connection-kinds/{kind} (the `PutConnectionKind` operationId).
+func (c *Client) PutConnectionKindWithBody(ctx context.Context, org OrgRef, kind KindRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutConnectionKindRequestWithBody(c.Server, org, kind, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PutConnectionKind Create or replace one of the organization's connection kinds
+//
+// The body is a kind file (schema/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken. Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/connection-kinds/{kind} (the `PutConnectionKind` operationId).
+func (c *Client) PutConnectionKind(ctx context.Context, org OrgRef, kind KindRef, body PutConnectionKindJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutConnectionKindRequest(c.Server, org, kind, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListConnections The organization's connections
+//
+// By name, each with its kind, description, non-secret fields, which secret fields are set (never a value), status, what uses it, its last use and last test. Members see them to pick them in the builder; only owners and admins change them.
+//
+// Corresponds with GET /v1/orgs/{org}/connections (the `ListConnections` operationId).
+func (c *Client) ListConnections(ctx context.Context, org OrgRef, params *ListConnectionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListConnectionsRequest(c.Server, org, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateConnectionWithBody Create a connection
+//
+// A connection of a kind, with the kind's non-secret fields in fields and its secret ones in secrets, sealed under the platform's master key and never returned, not even masked. 400 field-unknown for a value that is no field of the kind (or of the other sort), 400 field-required for a required field without a value, 404 connection-kind-not-found for an unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.created (field names only).
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/connections (the `CreateConnection` operationId).
+func (c *Client) CreateConnectionWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateConnectionRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateConnection Create a connection
+//
+// A connection of a kind, with the kind's non-secret fields in fields and its secret ones in secrets, sealed under the platform's master key and never returned, not even masked. 400 field-unknown for a value that is no field of the kind (or of the other sort), 400 field-required for a required field without a value, 404 connection-kind-not-found for an unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.created (field names only).
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/connections (the `CreateConnection` operationId).
+func (c *Client) CreateConnection(ctx context.Context, org OrgRef, body CreateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateConnectionRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteConnection Delete a connection
+//
+// 409 connection-in-use, naming what, while a factory's current version or a knowledge source uses it. Needs a sign-in from the last 10 minutes. Audited as connection.deleted.
+//
+// Corresponds with DELETE /v1/orgs/{org}/connections/{connection} (the `DeleteConnection` operationId).
+func (c *Client) DeleteConnection(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteConnectionRequest(c.Server, org, connection)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetConnection One connection, with the env names a run gets from it and its kind's docs
+//
+// Corresponds with GET /v1/orgs/{org}/connections/{connection} (the `GetConnection` operationId).
+func (c *Client) GetConnection(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetConnectionRequest(c.Server, org, connection)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateConnectionWithBody Rename a connection, or change its description, fields or secrets
+//
+// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
+func (c *Client) UpdateConnectionWithBody(ctx context.Context, org OrgRef, connection ConnectionRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateConnectionRequestWithBody(c.Server, org, connection, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateConnection Rename a connection, or change its description, fields or secrets
+//
+// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
+func (c *Client) UpdateConnection(ctx context.Context, org OrgRef, connection ConnectionRef, body UpdateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateConnectionRequest(c.Server, org, connection, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TestConnection Run the connection's test
+//
+// Sends the kind's test request from goald with the connection's values: to public addresses only (a URL naming a private, loopback, link-local or metadata address fails the test), within 10 seconds, following no redirect. ok when the status is the one the kind expects. A test that fails is a 200 with ok false and why; the outcome is the connection's last test. 409 connection-not-testable for a kind without a test, 503 connections-unavailable for a sealed connection while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.tested.
+//
+// Corresponds with POST /v1/orgs/{org}/connections/{connection}/test (the `TestConnection` operationId).
+func (c *Client) TestConnection(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestConnectionRequest(c.Server, org, connection)
 	if err != nil {
 		return nil, err
 	}
@@ -6640,7 +7223,7 @@ func (c *Client) UpdateOrgSettings(ctx context.Context, org OrgRef, body UpdateO
 
 // StreamEvents The organization's events as they happen (Server-Sent Events)
 //
-// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent, no id) follows a change of a factory's line that is not an item's: its andon cord pulled or cleared. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, connection, and later knowledge) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent, no id) follows a change of a factory's line that is not an item's: its andon cord pulled or cleared. `event: connection` (data a ConnectionEvent, no id) follows a connection created, changed, tested or deleted. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
 //
 // Corresponds with GET /v1/orgs/{org}/stream (the `StreamEvents` operationId).
 func (c *Client) StreamEvents(ctx context.Context, org OrgRef, params *StreamEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -7521,6 +8104,432 @@ func NewGetSkillFilesRequest(server string, org OrgRef, owner SkillName, repo Sk
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListConnectionKindsRequest constructs an http.Request for the ListConnectionKinds method
+func NewListConnectionKindsRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/connection-kinds", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewDeleteConnectionKindRequest constructs an http.Request for the DeleteConnectionKind method
+func NewDeleteConnectionKindRequest(server string, org OrgRef, kind KindRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "kind", kind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/connection-kinds/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutConnectionKindRequest calls the generic PutConnectionKind builder with application/json body
+func NewPutConnectionKindRequest(server string, org OrgRef, kind KindRef, body PutConnectionKindJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutConnectionKindRequestWithBody(server, org, kind, "application/json", bodyReader)
+}
+
+// NewPutConnectionKindRequestWithBody constructs an http.Request for the PutConnectionKind method, with any body, and a specified content type
+func NewPutConnectionKindRequestWithBody(server string, org OrgRef, kind KindRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "kind", kind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/connection-kinds/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListConnectionsRequest constructs an http.Request for the ListConnections method
+func NewListConnectionsRequest(server string, org OrgRef, params *ListConnectionsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/connections", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Factory != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "factory", *params.Factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Kind != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "kind", *params.Kind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateConnectionRequest calls the generic CreateConnection builder with application/json body
+func NewCreateConnectionRequest(server string, org OrgRef, body CreateConnectionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateConnectionRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewCreateConnectionRequestWithBody constructs an http.Request for the CreateConnection method, with any body, and a specified content type
+func NewCreateConnectionRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/connections", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteConnectionRequest constructs an http.Request for the DeleteConnection method
+func NewDeleteConnectionRequest(server string, org OrgRef, connection ConnectionRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "connection", connection, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/connections/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetConnectionRequest constructs an http.Request for the GetConnection method
+func NewGetConnectionRequest(server string, org OrgRef, connection ConnectionRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "connection", connection, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/connections/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateConnectionRequest calls the generic UpdateConnection builder with application/json body
+func NewUpdateConnectionRequest(server string, org OrgRef, connection ConnectionRef, body UpdateConnectionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateConnectionRequestWithBody(server, org, connection, "application/json", bodyReader)
+}
+
+// NewUpdateConnectionRequestWithBody constructs an http.Request for the UpdateConnection method, with any body, and a specified content type
+func NewUpdateConnectionRequestWithBody(server string, org OrgRef, connection ConnectionRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "connection", connection, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/connections/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewTestConnectionRequest constructs an http.Request for the TestConnection method
+func NewTestConnectionRequest(server string, org OrgRef, connection ConnectionRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "connection", connection, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/connections/%s/test", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -11823,6 +12832,112 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files (the `GetSkillFiles` operationId).
 	GetSkillFilesWithResponse(ctx context.Context, org OrgRef, owner SkillName, repo SkillName, skill SkillName, reqEditors ...RequestEditorFn) (*GetSkillFilesResponse, error)
 
+	// ListConnectionKindsWithResponse The connection kinds the organization can make connections of
+	//
+	// The platform's kinds, shipped with goald, and the organization's own, by name; an organization's kind hides a platform kind of the same name. Each with the fields a connection of it is made of (secret ones are write-only), its modes, whether it gives agents their model, its adapter hooks and its docs.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/connection-kinds (the `ListConnectionKinds` operationId).
+	ListConnectionKindsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListConnectionKindsResponse, error)
+
+	// DeleteConnectionKindWithResponse Delete one of the organization's connection kinds
+	//
+	// 404 connection-kind-not-found when the organization has no kind of that name (a platform kind cannot be deleted); 409 connection-kind-in-use while a connection is of it. Needs a sign-in from the last 10 minutes. Audited as connection_kind.deleted.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/connection-kinds/{kind} (the `DeleteConnectionKind` operationId).
+	DeleteConnectionKindWithResponse(ctx context.Context, org OrgRef, kind KindRef, reqEditors ...RequestEditorFn) (*DeleteConnectionKindResponse, error)
+
+	// PutConnectionKindWithBodyWithResponse Create or replace one of the organization's connection kinds
+	//
+	// The body is a kind file (schema/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken. Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/connection-kinds/{kind} (the `PutConnectionKind` operationId).
+	PutConnectionKindWithBodyWithResponse(ctx context.Context, org OrgRef, kind KindRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutConnectionKindResponse, error)
+
+	// PutConnectionKindWithResponse Create or replace one of the organization's connection kinds
+	//
+	// The body is a kind file (schema/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken. Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/connection-kinds/{kind} (the `PutConnectionKind` operationId).
+	PutConnectionKindWithResponse(ctx context.Context, org OrgRef, kind KindRef, body PutConnectionKindJSONRequestBody, reqEditors ...RequestEditorFn) (*PutConnectionKindResponse, error)
+
+	// ListConnectionsWithResponse The organization's connections
+	//
+	// By name, each with its kind, description, non-secret fields, which secret fields are set (never a value), status, what uses it, its last use and last test. Members see them to pick them in the builder; only owners and admins change them.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/connections (the `ListConnections` operationId).
+	ListConnectionsWithResponse(ctx context.Context, org OrgRef, params *ListConnectionsParams, reqEditors ...RequestEditorFn) (*ListConnectionsResponse, error)
+
+	// CreateConnectionWithBodyWithResponse Create a connection
+	//
+	// A connection of a kind, with the kind's non-secret fields in fields and its secret ones in secrets, sealed under the platform's master key and never returned, not even masked. 400 field-unknown for a value that is no field of the kind (or of the other sort), 400 field-required for a required field without a value, 404 connection-kind-not-found for an unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.created (field names only).
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/connections (the `CreateConnection` operationId).
+	CreateConnectionWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateConnectionResponse, error)
+
+	// CreateConnectionWithResponse Create a connection
+	//
+	// A connection of a kind, with the kind's non-secret fields in fields and its secret ones in secrets, sealed under the platform's master key and never returned, not even masked. 400 field-unknown for a value that is no field of the kind (or of the other sort), 400 field-required for a required field without a value, 404 connection-kind-not-found for an unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.created (field names only).
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/connections (the `CreateConnection` operationId).
+	CreateConnectionWithResponse(ctx context.Context, org OrgRef, body CreateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateConnectionResponse, error)
+
+	// DeleteConnectionWithResponse Delete a connection
+	//
+	// 409 connection-in-use, naming what, while a factory's current version or a knowledge source uses it. Needs a sign-in from the last 10 minutes. Audited as connection.deleted.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/connections/{connection} (the `DeleteConnection` operationId).
+	DeleteConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*DeleteConnectionResponse, error)
+
+	// GetConnectionWithResponse One connection, with the env names a run gets from it and its kind's docs
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/connections/{connection} (the `GetConnection` operationId).
+	GetConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*GetConnectionResponse, error)
+
+	// UpdateConnectionWithBodyWithResponse Rename a connection, or change its description, fields or secrets
+	//
+	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
+	UpdateConnectionWithBodyWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateConnectionResponse, error)
+
+	// UpdateConnectionWithResponse Rename a connection, or change its description, fields or secrets
+	//
+	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
+	UpdateConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, body UpdateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateConnectionResponse, error)
+
+	// TestConnectionWithResponse Run the connection's test
+	//
+	// Sends the kind's test request from goald with the connection's values: to public addresses only (a URL naming a private, loopback, link-local or metadata address fails the test), within 10 seconds, following no redirect. ok when the status is the one the kind expects. A test that fails is a 200 with ok false and why; the outcome is the connection's last test. 409 connection-not-testable for a kind without a test, 503 connections-unavailable for a sealed connection while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.tested.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/connections/{connection}/test (the `TestConnection` operationId).
+	TestConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*TestConnectionResponse, error)
+
 	// FormatDefinitionWithBodyWithResponse Format a factory.yaml the way Visual saves write changed lines (Format)
 	//
 	// 422 yaml-invalid (with parse_error) when it does not parse.
@@ -12565,7 +13680,7 @@ type ClientWithResponsesInterface interface {
 
 	// StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
 	//
-	// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent, no id) follows a change of a factory's line that is not an item's: its andon cord pulled or cleared. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+	// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, connection, and later knowledge) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent, no id) follows a change of a factory's line that is not an item's: its andon cord pulled or cleared. `event: connection` (data a ConnectionEvent, no id) follows a connection created, changed, tested or deleted. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -13400,6 +14515,424 @@ func (r GetSkillFilesResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetSkillFilesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListConnectionKindsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ConnectionKindList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListConnectionKindsResponse) GetJSON200() *ConnectionKindList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListConnectionKindsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListConnectionKindsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListConnectionKindsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListConnectionKindsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListConnectionKindsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteConnectionKindResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r DeleteConnectionKindResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteConnectionKindResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteConnectionKindResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteConnectionKindResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteConnectionKindResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PutConnectionKindResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ConnectionKind
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PutConnectionKindResponse) GetJSON200() *ConnectionKind {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PutConnectionKindResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PutConnectionKindResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PutConnectionKindResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutConnectionKindResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PutConnectionKindResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListConnectionsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ConnectionList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListConnectionsResponse) GetJSON200() *ConnectionList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListConnectionsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListConnectionsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListConnectionsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListConnectionsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListConnectionsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateConnectionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Connection
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateConnectionResponse) GetJSON201() *Connection {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateConnectionResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateConnectionResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateConnectionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateConnectionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateConnectionResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteConnectionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r DeleteConnectionResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteConnectionResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteConnectionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteConnectionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteConnectionResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetConnectionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Connection
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetConnectionResponse) GetJSON200() *Connection {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetConnectionResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetConnectionResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetConnectionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetConnectionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetConnectionResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateConnectionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Connection
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UpdateConnectionResponse) GetJSON200() *Connection {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r UpdateConnectionResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateConnectionResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateConnectionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateConnectionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateConnectionResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type TestConnectionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ConnectionTestResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TestConnectionResponse) GetJSON200() *ConnectionTestResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TestConnectionResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TestConnectionResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TestConnectionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TestConnectionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TestConnectionResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -17155,6 +18688,184 @@ func (c *ClientWithResponses) GetSkillFilesWithResponse(ctx context.Context, org
 	return ParseGetSkillFilesResponse(rsp)
 }
 
+// ListConnectionKindsWithResponse The connection kinds the organization can make connections of
+//
+// The platform's kinds, shipped with goald, and the organization's own, by name; an organization's kind hides a platform kind of the same name. Each with the fields a connection of it is made of (secret ones are write-only), its modes, whether it gives agents their model, its adapter hooks and its docs.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/connection-kinds (the `ListConnectionKinds` operationId).
+func (c *ClientWithResponses) ListConnectionKindsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListConnectionKindsResponse, error) {
+	rsp, err := c.ListConnectionKinds(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListConnectionKindsResponse(rsp)
+}
+
+// DeleteConnectionKindWithResponse Delete one of the organization's connection kinds
+//
+// 404 connection-kind-not-found when the organization has no kind of that name (a platform kind cannot be deleted); 409 connection-kind-in-use while a connection is of it. Needs a sign-in from the last 10 minutes. Audited as connection_kind.deleted.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/connection-kinds/{kind} (the `DeleteConnectionKind` operationId).
+func (c *ClientWithResponses) DeleteConnectionKindWithResponse(ctx context.Context, org OrgRef, kind KindRef, reqEditors ...RequestEditorFn) (*DeleteConnectionKindResponse, error) {
+	rsp, err := c.DeleteConnectionKind(ctx, org, kind, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteConnectionKindResponse(rsp)
+}
+
+// PutConnectionKindWithBodyWithResponse Create or replace one of the organization's connection kinds
+//
+// The body is a kind file (schema/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken. Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/connection-kinds/{kind} (the `PutConnectionKind` operationId).
+func (c *ClientWithResponses) PutConnectionKindWithBodyWithResponse(ctx context.Context, org OrgRef, kind KindRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutConnectionKindResponse, error) {
+	rsp, err := c.PutConnectionKindWithBody(ctx, org, kind, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutConnectionKindResponse(rsp)
+}
+
+// PutConnectionKindWithResponse Create or replace one of the organization's connection kinds
+//
+// The body is a kind file (schema/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken. Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/connection-kinds/{kind} (the `PutConnectionKind` operationId).
+func (c *ClientWithResponses) PutConnectionKindWithResponse(ctx context.Context, org OrgRef, kind KindRef, body PutConnectionKindJSONRequestBody, reqEditors ...RequestEditorFn) (*PutConnectionKindResponse, error) {
+	rsp, err := c.PutConnectionKind(ctx, org, kind, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutConnectionKindResponse(rsp)
+}
+
+// ListConnectionsWithResponse The organization's connections
+//
+// By name, each with its kind, description, non-secret fields, which secret fields are set (never a value), status, what uses it, its last use and last test. Members see them to pick them in the builder; only owners and admins change them.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/connections (the `ListConnections` operationId).
+func (c *ClientWithResponses) ListConnectionsWithResponse(ctx context.Context, org OrgRef, params *ListConnectionsParams, reqEditors ...RequestEditorFn) (*ListConnectionsResponse, error) {
+	rsp, err := c.ListConnections(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListConnectionsResponse(rsp)
+}
+
+// CreateConnectionWithBodyWithResponse Create a connection
+//
+// A connection of a kind, with the kind's non-secret fields in fields and its secret ones in secrets, sealed under the platform's master key and never returned, not even masked. 400 field-unknown for a value that is no field of the kind (or of the other sort), 400 field-required for a required field without a value, 404 connection-kind-not-found for an unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.created (field names only).
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/connections (the `CreateConnection` operationId).
+func (c *ClientWithResponses) CreateConnectionWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateConnectionResponse, error) {
+	rsp, err := c.CreateConnectionWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateConnectionResponse(rsp)
+}
+
+// CreateConnectionWithResponse Create a connection
+//
+// A connection of a kind, with the kind's non-secret fields in fields and its secret ones in secrets, sealed under the platform's master key and never returned, not even masked. 400 field-unknown for a value that is no field of the kind (or of the other sort), 400 field-required for a required field without a value, 404 connection-kind-not-found for an unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.created (field names only).
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/connections (the `CreateConnection` operationId).
+func (c *ClientWithResponses) CreateConnectionWithResponse(ctx context.Context, org OrgRef, body CreateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateConnectionResponse, error) {
+	rsp, err := c.CreateConnection(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateConnectionResponse(rsp)
+}
+
+// DeleteConnectionWithResponse Delete a connection
+//
+// 409 connection-in-use, naming what, while a factory's current version or a knowledge source uses it. Needs a sign-in from the last 10 minutes. Audited as connection.deleted.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/connections/{connection} (the `DeleteConnection` operationId).
+func (c *ClientWithResponses) DeleteConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*DeleteConnectionResponse, error) {
+	rsp, err := c.DeleteConnection(ctx, org, connection, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteConnectionResponse(rsp)
+}
+
+// GetConnectionWithResponse One connection, with the env names a run gets from it and its kind's docs
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/connections/{connection} (the `GetConnection` operationId).
+func (c *ClientWithResponses) GetConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*GetConnectionResponse, error) {
+	rsp, err := c.GetConnection(ctx, org, connection, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetConnectionResponse(rsp)
+}
+
+// UpdateConnectionWithBodyWithResponse Rename a connection, or change its description, fields or secrets
+//
+// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
+func (c *ClientWithResponses) UpdateConnectionWithBodyWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateConnectionResponse, error) {
+	rsp, err := c.UpdateConnectionWithBody(ctx, org, connection, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateConnectionResponse(rsp)
+}
+
+// UpdateConnectionWithResponse Rename a connection, or change its description, fields or secrets
+//
+// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
+func (c *ClientWithResponses) UpdateConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, body UpdateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateConnectionResponse, error) {
+	rsp, err := c.UpdateConnection(ctx, org, connection, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateConnectionResponse(rsp)
+}
+
+// TestConnectionWithResponse Run the connection's test
+//
+// Sends the kind's test request from goald with the connection's values: to public addresses only (a URL naming a private, loopback, link-local or metadata address fails the test), within 10 seconds, following no redirect. ok when the status is the one the kind expects. A test that fails is a 200 with ok false and why; the outcome is the connection's last test. 409 connection-not-testable for a kind without a test, 503 connections-unavailable for a sealed connection while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.tested.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/connections/{connection}/test (the `TestConnection` operationId).
+func (c *ClientWithResponses) TestConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*TestConnectionResponse, error) {
+	rsp, err := c.TestConnection(ctx, org, connection, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestConnectionResponse(rsp)
+}
+
 // FormatDefinitionWithBodyWithResponse Format a factory.yaml the way Visual saves write changed lines (Format)
 //
 // 422 yaml-invalid (with parse_error) when it does not parse.
@@ -18413,7 +20124,7 @@ func (c *ClientWithResponses) UpdateOrgSettingsWithResponse(ctx context.Context,
 
 // StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
 //
-// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, and later credential, approval, connection) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent, no id) follows a change of a factory's line that is not an item's: its andon cord pulled or cleared. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+// A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, connection, and later knowledge) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent, no id) follows a change of a factory's line that is not an item's: its andon cord pulled or cleared. `event: connection` (data a ConnectionEvent, no id) follows a connection created, changed, tested or deleted. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -19065,6 +20776,295 @@ func ParseGetSkillFilesResponse(rsp *http.Response) (*GetSkillFilesResponse, err
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest SkillFiles
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListConnectionKindsResponse parses an HTTP response from a ListConnectionKindsWithResponse call
+func ParseListConnectionKindsResponse(rsp *http.Response) (*ListConnectionKindsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListConnectionKindsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ConnectionKindList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteConnectionKindResponse parses an HTTP response from a DeleteConnectionKindWithResponse call
+func ParseDeleteConnectionKindResponse(rsp *http.Response) (*DeleteConnectionKindResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteConnectionKindResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutConnectionKindResponse parses an HTTP response from a PutConnectionKindWithResponse call
+func ParsePutConnectionKindResponse(rsp *http.Response) (*PutConnectionKindResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutConnectionKindResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ConnectionKind
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListConnectionsResponse parses an HTTP response from a ListConnectionsWithResponse call
+func ParseListConnectionsResponse(rsp *http.Response) (*ListConnectionsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListConnectionsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ConnectionList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateConnectionResponse parses an HTTP response from a CreateConnectionWithResponse call
+func ParseCreateConnectionResponse(rsp *http.Response) (*CreateConnectionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateConnectionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Connection
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteConnectionResponse parses an HTTP response from a DeleteConnectionWithResponse call
+func ParseDeleteConnectionResponse(rsp *http.Response) (*DeleteConnectionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteConnectionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetConnectionResponse parses an HTTP response from a GetConnectionWithResponse call
+func ParseGetConnectionResponse(rsp *http.Response) (*GetConnectionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetConnectionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Connection
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateConnectionResponse parses an HTTP response from a UpdateConnectionWithResponse call
+func ParseUpdateConnectionResponse(rsp *http.Response) (*UpdateConnectionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateConnectionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Connection
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTestConnectionResponse parses an HTTP response from a TestConnectionWithResponse call
+func ParseTestConnectionResponse(rsp *http.Response) (*TestConnectionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TestConnectionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ConnectionTestResult
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -21564,6 +23564,33 @@ type ServerInterface interface {
 	// GetSkillFiles A catalog skill's files at its pinned commit, to vendor into a draft
 	// (GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files)
 	GetSkillFiles(w http.ResponseWriter, r *http.Request, org OrgRef, owner SkillName, repo SkillName, skill SkillName)
+	// ListConnectionKinds The connection kinds the organization can make connections of
+	// (GET /v1/orgs/{org}/connection-kinds)
+	ListConnectionKinds(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// DeleteConnectionKind Delete one of the organization's connection kinds
+	// (DELETE /v1/orgs/{org}/connection-kinds/{kind})
+	DeleteConnectionKind(w http.ResponseWriter, r *http.Request, org OrgRef, kind KindRef)
+	// PutConnectionKind Create or replace one of the organization's connection kinds
+	// (PUT /v1/orgs/{org}/connection-kinds/{kind})
+	PutConnectionKind(w http.ResponseWriter, r *http.Request, org OrgRef, kind KindRef)
+	// ListConnections The organization's connections
+	// (GET /v1/orgs/{org}/connections)
+	ListConnections(w http.ResponseWriter, r *http.Request, org OrgRef, params ListConnectionsParams)
+	// CreateConnection Create a connection
+	// (POST /v1/orgs/{org}/connections)
+	CreateConnection(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// DeleteConnection Delete a connection
+	// (DELETE /v1/orgs/{org}/connections/{connection})
+	DeleteConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef)
+	// GetConnection One connection, with the env names a run gets from it and its kind's docs
+	// (GET /v1/orgs/{org}/connections/{connection})
+	GetConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef)
+	// UpdateConnection Rename a connection, or change its description, fields or secrets
+	// (PATCH /v1/orgs/{org}/connections/{connection})
+	UpdateConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef)
+	// TestConnection Run the connection's test
+	// (POST /v1/orgs/{org}/connections/{connection}/test)
+	TestConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef)
 	// FormatDefinition Format a factory.yaml the way Visual saves write changed lines (Format)
 	// (POST /v1/orgs/{org}/definitions/format)
 	FormatDefinition(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -22300,6 +24327,323 @@ func (siw *ServerInterfaceWrapper) GetSkillFiles(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetSkillFiles(w, r, org, owner, repo, skill)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListConnectionKinds operation middleware
+func (siw *ServerInterfaceWrapper) ListConnectionKinds(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListConnectionKinds(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteConnectionKind operation middleware
+func (siw *ServerInterfaceWrapper) DeleteConnectionKind(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "kind" -------------
+	var kind KindRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "kind", r.PathValue("kind"), &kind, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteConnectionKind(w, r, org, kind)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutConnectionKind operation middleware
+func (siw *ServerInterfaceWrapper) PutConnectionKind(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "kind" -------------
+	var kind KindRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "kind", r.PathValue("kind"), &kind, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutConnectionKind(w, r, org, kind)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListConnections operation middleware
+func (siw *ServerInterfaceWrapper) ListConnections(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListConnectionsParams
+
+	// ------------- Optional query parameter "factory" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "factory", r.URL.Query(), &params.Factory, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "factory"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListConnections(w, r, org, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateConnection operation middleware
+func (siw *ServerInterfaceWrapper) CreateConnection(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateConnection(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteConnection operation middleware
+func (siw *ServerInterfaceWrapper) DeleteConnection(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "connection" -------------
+	var connection ConnectionRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "connection", r.PathValue("connection"), &connection, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "connection", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteConnection(w, r, org, connection)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetConnection operation middleware
+func (siw *ServerInterfaceWrapper) GetConnection(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "connection" -------------
+	var connection ConnectionRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "connection", r.PathValue("connection"), &connection, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "connection", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetConnection(w, r, org, connection)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateConnection operation middleware
+func (siw *ServerInterfaceWrapper) UpdateConnection(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "connection" -------------
+	var connection ConnectionRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "connection", r.PathValue("connection"), &connection, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "connection", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateConnection(w, r, org, connection)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TestConnection operation middleware
+func (siw *ServerInterfaceWrapper) TestConnection(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "connection" -------------
+	var connection ConnectionRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "connection", r.PathValue("connection"), &connection, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "connection", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TestConnection(w, r, org, connection)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -25716,6 +28060,15 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/builder/meta", wrapper.GetBuilderMeta)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/builder/skills", wrapper.SearchSkills)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files", wrapper.GetSkillFiles)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/connection-kinds", wrapper.ListConnectionKinds)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/connection-kinds/{kind}", wrapper.DeleteConnectionKind)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/connection-kinds/{kind}", wrapper.PutConnectionKind)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/connections", wrapper.ListConnections)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/connections", wrapper.CreateConnection)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}", wrapper.DeleteConnection)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}", wrapper.GetConnection)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}", wrapper.UpdateConnection)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}/test", wrapper.TestConnection)
 
 	return m
 }
@@ -26307,6 +28660,355 @@ type GetSkillFilesdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetSkillFilesdefaultApplicationProblemPlusJSONResponse) VisitGetSkillFilesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListConnectionKindsRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type ListConnectionKindsResponseObject interface {
+	VisitListConnectionKindsResponse(w http.ResponseWriter) error
+}
+
+type ListConnectionKinds200JSONResponse ConnectionKindList
+
+func (response ListConnectionKinds200JSONResponse) VisitListConnectionKindsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListConnectionKindsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListConnectionKindsdefaultApplicationProblemPlusJSONResponse) VisitListConnectionKindsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteConnectionKindRequestObject struct {
+	Org  OrgRef  `json:"org"`
+	Kind KindRef `json:"kind"`
+}
+
+type DeleteConnectionKindResponseObject interface {
+	VisitDeleteConnectionKindResponse(w http.ResponseWriter) error
+}
+
+type DeleteConnectionKind204Response struct {
+}
+
+func (response DeleteConnectionKind204Response) VisitDeleteConnectionKindResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteConnectionKinddefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteConnectionKinddefaultApplicationProblemPlusJSONResponse) VisitDeleteConnectionKindResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutConnectionKindRequestObject struct {
+	Org  OrgRef  `json:"org"`
+	Kind KindRef `json:"kind"`
+	Body *PutConnectionKindJSONRequestBody
+}
+
+type PutConnectionKindResponseObject interface {
+	VisitPutConnectionKindResponse(w http.ResponseWriter) error
+}
+
+type PutConnectionKind200JSONResponse ConnectionKind
+
+func (response PutConnectionKind200JSONResponse) VisitPutConnectionKindResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutConnectionKinddefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response PutConnectionKinddefaultApplicationProblemPlusJSONResponse) VisitPutConnectionKindResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListConnectionsRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params ListConnectionsParams
+}
+
+type ListConnectionsResponseObject interface {
+	VisitListConnectionsResponse(w http.ResponseWriter) error
+}
+
+type ListConnections200JSONResponse ConnectionList
+
+func (response ListConnections200JSONResponse) VisitListConnectionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListConnectionsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListConnectionsdefaultApplicationProblemPlusJSONResponse) VisitListConnectionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateConnectionRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *CreateConnectionJSONRequestBody
+}
+
+type CreateConnectionResponseObject interface {
+	VisitCreateConnectionResponse(w http.ResponseWriter) error
+}
+
+type CreateConnection201JSONResponse Connection
+
+func (response CreateConnection201JSONResponse) VisitCreateConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateConnectiondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateConnectiondefaultApplicationProblemPlusJSONResponse) VisitCreateConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteConnectionRequestObject struct {
+	Org        OrgRef        `json:"org"`
+	Connection ConnectionRef `json:"connection"`
+}
+
+type DeleteConnectionResponseObject interface {
+	VisitDeleteConnectionResponse(w http.ResponseWriter) error
+}
+
+type DeleteConnection204Response struct {
+}
+
+func (response DeleteConnection204Response) VisitDeleteConnectionResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteConnectiondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteConnectiondefaultApplicationProblemPlusJSONResponse) VisitDeleteConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetConnectionRequestObject struct {
+	Org        OrgRef        `json:"org"`
+	Connection ConnectionRef `json:"connection"`
+}
+
+type GetConnectionResponseObject interface {
+	VisitGetConnectionResponse(w http.ResponseWriter) error
+}
+
+type GetConnection200JSONResponse Connection
+
+func (response GetConnection200JSONResponse) VisitGetConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetConnectiondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetConnectiondefaultApplicationProblemPlusJSONResponse) VisitGetConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateConnectionRequestObject struct {
+	Org        OrgRef        `json:"org"`
+	Connection ConnectionRef `json:"connection"`
+	Body       *UpdateConnectionJSONRequestBody
+}
+
+type UpdateConnectionResponseObject interface {
+	VisitUpdateConnectionResponse(w http.ResponseWriter) error
+}
+
+type UpdateConnection200JSONResponse Connection
+
+func (response UpdateConnection200JSONResponse) VisitUpdateConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateConnectiondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UpdateConnectiondefaultApplicationProblemPlusJSONResponse) VisitUpdateConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestConnectionRequestObject struct {
+	Org        OrgRef        `json:"org"`
+	Connection ConnectionRef `json:"connection"`
+}
+
+type TestConnectionResponseObject interface {
+	VisitTestConnectionResponse(w http.ResponseWriter) error
+}
+
+type TestConnection200JSONResponse ConnectionTestResult
+
+func (response TestConnection200JSONResponse) VisitTestConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestConnectiondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response TestConnectiondefaultApplicationProblemPlusJSONResponse) VisitTestConnectionResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -29366,6 +32068,33 @@ type StrictServerInterface interface {
 	// GetSkillFiles A catalog skill's files at its pinned commit, to vendor into a draft
 	// (GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files)
 	GetSkillFiles(ctx context.Context, request GetSkillFilesRequestObject) (GetSkillFilesResponseObject, error)
+	// ListConnectionKinds The connection kinds the organization can make connections of
+	// (GET /v1/orgs/{org}/connection-kinds)
+	ListConnectionKinds(ctx context.Context, request ListConnectionKindsRequestObject) (ListConnectionKindsResponseObject, error)
+	// DeleteConnectionKind Delete one of the organization's connection kinds
+	// (DELETE /v1/orgs/{org}/connection-kinds/{kind})
+	DeleteConnectionKind(ctx context.Context, request DeleteConnectionKindRequestObject) (DeleteConnectionKindResponseObject, error)
+	// PutConnectionKind Create or replace one of the organization's connection kinds
+	// (PUT /v1/orgs/{org}/connection-kinds/{kind})
+	PutConnectionKind(ctx context.Context, request PutConnectionKindRequestObject) (PutConnectionKindResponseObject, error)
+	// ListConnections The organization's connections
+	// (GET /v1/orgs/{org}/connections)
+	ListConnections(ctx context.Context, request ListConnectionsRequestObject) (ListConnectionsResponseObject, error)
+	// CreateConnection Create a connection
+	// (POST /v1/orgs/{org}/connections)
+	CreateConnection(ctx context.Context, request CreateConnectionRequestObject) (CreateConnectionResponseObject, error)
+	// DeleteConnection Delete a connection
+	// (DELETE /v1/orgs/{org}/connections/{connection})
+	DeleteConnection(ctx context.Context, request DeleteConnectionRequestObject) (DeleteConnectionResponseObject, error)
+	// GetConnection One connection, with the env names a run gets from it and its kind's docs
+	// (GET /v1/orgs/{org}/connections/{connection})
+	GetConnection(ctx context.Context, request GetConnectionRequestObject) (GetConnectionResponseObject, error)
+	// UpdateConnection Rename a connection, or change its description, fields or secrets
+	// (PATCH /v1/orgs/{org}/connections/{connection})
+	UpdateConnection(ctx context.Context, request UpdateConnectionRequestObject) (UpdateConnectionResponseObject, error)
+	// TestConnection Run the connection's test
+	// (POST /v1/orgs/{org}/connections/{connection}/test)
+	TestConnection(ctx context.Context, request TestConnectionRequestObject) (TestConnectionResponseObject, error)
 	// FormatDefinition Format a factory.yaml the way Visual saves write changed lines (Format)
 	// (POST /v1/orgs/{org}/definitions/format)
 	FormatDefinition(ctx context.Context, request FormatDefinitionRequestObject) (FormatDefinitionResponseObject, error)
@@ -30052,6 +32781,268 @@ func (sh *strictHandler) GetSkillFiles(w http.ResponseWriter, r *http.Request, o
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetSkillFilesResponseObject); ok {
 		if err := validResponse.VisitGetSkillFilesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListConnectionKinds operation middleware
+func (sh *strictHandler) ListConnectionKinds(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request ListConnectionKindsRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListConnectionKinds(ctx, request.(ListConnectionKindsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListConnectionKinds")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListConnectionKindsResponseObject); ok {
+		if err := validResponse.VisitListConnectionKindsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteConnectionKind operation middleware
+func (sh *strictHandler) DeleteConnectionKind(w http.ResponseWriter, r *http.Request, org OrgRef, kind KindRef) {
+	var request DeleteConnectionKindRequestObject
+
+	request.Org = org
+	request.Kind = kind
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteConnectionKind(ctx, request.(DeleteConnectionKindRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteConnectionKind")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteConnectionKindResponseObject); ok {
+		if err := validResponse.VisitDeleteConnectionKindResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutConnectionKind operation middleware
+func (sh *strictHandler) PutConnectionKind(w http.ResponseWriter, r *http.Request, org OrgRef, kind KindRef) {
+	var request PutConnectionKindRequestObject
+
+	request.Org = org
+	request.Kind = kind
+
+	var body PutConnectionKindJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutConnectionKind(ctx, request.(PutConnectionKindRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutConnectionKind")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutConnectionKindResponseObject); ok {
+		if err := validResponse.VisitPutConnectionKindResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListConnections operation middleware
+func (sh *strictHandler) ListConnections(w http.ResponseWriter, r *http.Request, org OrgRef, params ListConnectionsParams) {
+	var request ListConnectionsRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListConnections(ctx, request.(ListConnectionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListConnections")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListConnectionsResponseObject); ok {
+		if err := validResponse.VisitListConnectionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateConnection operation middleware
+func (sh *strictHandler) CreateConnection(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request CreateConnectionRequestObject
+
+	request.Org = org
+
+	var body CreateConnectionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateConnection(ctx, request.(CreateConnectionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateConnection")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateConnectionResponseObject); ok {
+		if err := validResponse.VisitCreateConnectionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteConnection operation middleware
+func (sh *strictHandler) DeleteConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef) {
+	var request DeleteConnectionRequestObject
+
+	request.Org = org
+	request.Connection = connection
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteConnection(ctx, request.(DeleteConnectionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteConnection")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteConnectionResponseObject); ok {
+		if err := validResponse.VisitDeleteConnectionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetConnection operation middleware
+func (sh *strictHandler) GetConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef) {
+	var request GetConnectionRequestObject
+
+	request.Org = org
+	request.Connection = connection
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetConnection(ctx, request.(GetConnectionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetConnection")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetConnectionResponseObject); ok {
+		if err := validResponse.VisitGetConnectionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateConnection operation middleware
+func (sh *strictHandler) UpdateConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef) {
+	var request UpdateConnectionRequestObject
+
+	request.Org = org
+	request.Connection = connection
+
+	var body UpdateConnectionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateConnection(ctx, request.(UpdateConnectionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateConnection")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateConnectionResponseObject); ok {
+		if err := validResponse.VisitUpdateConnectionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TestConnection operation middleware
+func (sh *strictHandler) TestConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef) {
+	var request TestConnectionRequestObject
+
+	request.Org = org
+	request.Connection = connection
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TestConnection(ctx, request.(TestConnectionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TestConnection")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TestConnectionResponseObject); ok {
+		if err := validResponse.VisitTestConnectionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -52,6 +52,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Create_RulesRefused", testCreateRules},
 		{"Update_FieldsAndDescription", testUpdate},
 		{"Update_ReplaceSecret", testReplaceSecret},
+		{"Update_RenameKeepsSecrets", testRename},
+		{"Open_ValuesWithoutAUse", testOpen},
 		{"Resolve_OpensAuditsAndMarksUse", testResolve},
 		{"RecordTest_StoredAndAudited", testRecordTest},
 		{"Delete_GoneAndAudited", testDelete},
@@ -514,6 +516,52 @@ func testReplaceSecret(f *fixture) {
 		"connection.secret_replaced = %+v; want two naming app_key", replaced)
 	f.expect(len(f.audit(acme, domain.AuditConnectionUpdated)) == 0, "a secret's replacement was audited as connection.updated")
 	f.noSecret("the audit entries", replaced, "app-2", apiValue)
+}
+
+func testRename(f *fixture) {
+	acme := f.NewOrg(f.t)
+	ctx := f.in(acme)
+	git := f.git(acme, sealedValue)
+	f.docs(acme)
+
+	name := "repos"
+
+	got, err := f.c.Update(ctx, connGit, domain.ConnectionPatch{Name: &name}, editor)
+	f.expect(err == nil && got.Name == name && got.ID == git.ID, "Update of the name = %+v, %v", got, err)
+	f.expect(f.values(acme, name)[fieldToken] == sealedValue, "the renamed connection's secret does not open")
+
+	_, err = f.c.Get(ctx, connGit)
+	f.refused("Get of the old name", err, ports.ErrNotFound)
+
+	taken := connDocs
+	_, err = f.c.Update(ctx, name, domain.ConnectionPatch{Name: &taken}, admin)
+	f.refused("a rename to a taken name", err, ports.ErrNameTaken)
+
+	bad := "Repos"
+	_, err = f.c.Update(ctx, name, domain.ConnectionPatch{Name: &bad}, admin)
+	f.refused("a rename to a bad name", err, domain.ErrInvalid)
+
+	e := f.one(acme, domain.AuditConnectionUpdated)
+	f.expect(e.Data["name"] == name && e.Data["from"] == connGit && e.TargetID == string(git.ID), "connection.updated of a rename = %+v", e)
+}
+
+func testOpen(f *fixture) {
+	acme, labs := f.NewOrg(f.t), f.NewOrg(f.t)
+	f.git(acme, sealedValue)
+
+	got, err := f.c.Open(f.in(acme), connGit)
+	f.expect(err == nil && got.Values[fieldToken] == sealedValue && got.Kind.Name == gitName, "Open = %+v, %v; want its token and kind", got, err)
+	f.expect(len(f.audit(acme, domain.AuditConnectionUsed)) == 0 && f.get(acme, connGit).LastUsedAt == nil,
+		"Open recorded a use: a test is not a run's use")
+
+	_, err = f.c.Open(f.in(acme), "nothing")
+	f.refused("Open of no connection", err, ports.ErrNotFound)
+
+	_, err = f.c.Open(f.in(labs), connGit)
+	f.refused("another org's Open", err, ports.ErrNotFound)
+
+	_, err = f.Connections(f.Key()).Open(f.in(acme), connGit)
+	f.refused("Open without a master key", err, ports.ErrNoMasterKey)
 }
 
 // anyStrings is a []string as an audit entry's data holds it.

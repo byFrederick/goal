@@ -14,9 +14,10 @@
 // allows (Org.can); the people routes (members, invitations, factory roles, transfer) answer as
 // goald does, a fresh-only change asking for a recent sign-in (the factory routes do not filter by
 // factory role under sign-in).
-// The organizations' API keys are keys.ts's.
+// The organizations' API keys are keys.ts's; their connections and connection kinds connections.ts's.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
+  Actor,
   AgentStats,
   AndonPull,
   AndonState,
@@ -50,6 +51,7 @@ import type {
   TouchMetrics,
 } from '@goal/api-client';
 import { authSettings, createMockAuth } from './auth.ts';
+import { createConnections } from './connections.ts';
 import { createDefinitions } from './definitions.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
 import {
@@ -168,6 +170,20 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     person: (req) => auth.who(req)?.person,
     member: (org, user) => state.people.members[org]?.some((m) => m.userId === user) ?? false,
     factories: (org) => state.factories.filter((f) => f.org_id === org),
+    acme: acmeOrg,
+  });
+
+  const connections = createConnections({
+    clock,
+    actor: (req) => auth.actor(req),
+    stale: (req, res) => stale(req, res),
+    factories: (org) => state.factories.filter((f) => f.org_id === org),
+    audit: (org, by, action, target, data) => auditAs(org, by, action, target, data),
+    broadcast: (org, event, data) => {
+      for (const sub of subscribers) {
+        if (sub.org === org) sub.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      }
+    },
     acme: acmeOrg,
   });
 
@@ -455,19 +471,22 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return { name: o.name, slug: o.slug, mark: o.mark, slots: { max: slots.max, factories } };
   };
 
-  const audit = (org: Org, action: string, data: Record<string, unknown>) => {
+  const audit = (org: Org, action: string, data: Record<string, unknown>) =>
+    auditAs(org.id, { kind: 'user', id: 'local', name: localUser }, action, { kind: 'org', id: org.id }, data);
+
+  /** An audit entry of org by `by` about target. */
+  function auditAs(
+    org: string,
+    by: Actor,
+    action: string,
+    target: { kind: string; id: string },
+    data: Record<string, unknown>,
+  ) {
     state.audit.push({
-      org: org.id,
-      entry: {
-        id: state.nextAuditId++,
-        at: new Date(clock()).toISOString(),
-        actor: { kind: 'user', id: 'local', name: localUser },
-        action,
-        target: { kind: 'org', id: org.id },
-        data,
-      },
+      org,
+      entry: { id: state.nextAuditId++, at: new Date(clock()).toISOString(), actor: by, action, target, data },
     });
-  };
+  }
 
   /** PATCH /settings as goald applies it: every rule checked first, then one org.updated. */
   const patchSettings = (org: Org, body: Record<string, unknown>, res: ServerResponse) => {
@@ -1105,6 +1124,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       grants = role ? grantsOf(sources.table, role) : undefined;
       if (grants) withRole(state, grants);
       apiKeys.reset(clock());
+      connections.reset(clock());
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
       const cookie = auth.reset(authSettings(body.auth));
       if (cookie) res.setHeader('Set-Cookie', cookie);
@@ -1193,6 +1213,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     }
     if (await definitions.handle(org, rest, method, url, req, res)) return;
     if (await apiKeys.handle(forCaller(req, org), rest, method, req, res, () => readBody(req))) return;
+    if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
 
     if (rest === '' && method === 'GET') return json(res, 200, forCaller(req, withCount(org)));
     if (rest === '' && method === 'DELETE') {
