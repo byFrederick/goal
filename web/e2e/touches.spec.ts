@@ -110,6 +110,33 @@ test('the item lists its touches, and a reason set on one stays', async ({ page 
   await expectNoHorizontalScroll(page);
 });
 
+test('two quick reason changes end on the second, never flipping back to the first', async ({ page, request }) => {
+  await touchSre8(page);
+  // The first answers after 500 ms, the second after 2.5 s: the first settles while the second is out.
+  await request.post('/__mock/fail', { data: { path: '/touches/', method: 'PUT', delay_ms: 500 } });
+  await request.post('/__mock/fail', { data: { path: '/touches/', method: 'PUT', delay_ms: 2500 } });
+  await page.goto('/o/acme/f/sre/items/8');
+  const reason = page.getByRole('combobox', { name: /^Reason for the .+ touch$/ });
+  await expect(reason).toHaveValue('');
+
+  const put = (n: number) => {
+    let seen = 0;
+    return page.waitForResponse((r) => r.url().includes('/touches/') && r.request().method() === 'PUT' && ++seen === n);
+  };
+  const first = put(1);
+  const second = put(2);
+  await reason.selectOption({ label: 'Missing knowledge' });
+  await reason.selectOption({ label: 'Other' });
+  await first;
+  // What a refetch after the first would have put back shows by now, if it ran.
+  await page.waitForTimeout(400);
+  expect(await reason.inputValue()).toBe('other');
+  await second;
+  await expect(reason).toHaveValue('other');
+  await page.reload();
+  await expect(page.getByRole('combobox', { name: /^Reason for the .+ touch$/ })).toHaveValue('other');
+});
+
 test('a refused reason says why and goes back to what goald has', async ({ page, request }) => {
   await touchSre8(page);
   await request.post('/__mock/fail', {

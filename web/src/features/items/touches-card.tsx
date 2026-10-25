@@ -115,7 +115,9 @@ function ReasonSelect({
   const client = useQueryClient();
   const errorId = useId();
   const itemKeyOf = keys.item(org.id, itemKey);
+  const mutationKey = ['touch-reason', org.id, touch.event_id];
   const change = useMutation({
+    mutationKey,
     mutationFn: (reason: TouchReason) => setTouchReason(org.id, itemKey, touch.event_id, reason),
     // The select shows the choice at once; a refusal puts goald's answer back.
     onMutate: async (reason) => {
@@ -132,11 +134,15 @@ function ReasonSelect({
           : it,
       );
     },
+    // Only the last of quick changes re-reads: an earlier one's refetch would show its reason
+    // again while the later one is on its way.
     onSettled: () =>
-      Promise.all([
-        client.invalidateQueries({ queryKey: itemKeyOf, exact: true }),
-        client.invalidateQueries({ queryKey: [...keys.factory(org.id, factoryId), 'touches'] }),
-      ]),
+      client.isMutating({ mutationKey }) > 1
+        ? undefined
+        : Promise.all([
+            client.invalidateQueries({ queryKey: itemKeyOf, exact: true }),
+            client.invalidateQueries({ queryKey: [...keys.factory(org.id, factoryId), 'touches'] }),
+          ]),
   });
   const reason = touch.reason;
 
