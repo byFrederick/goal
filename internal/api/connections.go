@@ -151,6 +151,8 @@ func (s *server) PutConnectionKind(ctx context.Context, req gen.PutConnectionKin
 		return nil, fmt.Errorf("%w: %w", errKindTaken, err)
 	case errors.Is(err, domain.ErrInvalid):
 		return nil, fmt.Errorf("%w: %w", errKindInvalid, err)
+	case errors.Is(err, ports.ErrConflict):
+		return nil, fmt.Errorf("%w: %w", errKindInUse, err)
 	case err != nil:
 		return nil, err
 	}

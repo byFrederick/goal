@@ -180,6 +180,14 @@ func TestConnectionKinds_PutAndDelete(t *testing.T) {
 	decode[gen.Connection](t, h.request(t, http.MethodPost, connectionsPath,
 		`{"name":"acme-api","kind":"acme-api","fields":{"base_url":"https://api.example.com"},"secrets":{"key":"k"}}`, nil), http.StatusCreated)
 	refused(t, "delete in use", h.request(t, http.MethodDelete, kindsPath+"/acme-api", "", nil), http.StatusConflict, "connection-kind-in-use")
+
+	secretURL := strings.NewReplacer(`"title":"Base URL","required":true`, `"title":"Base URL","required":true,"secret":true`,
+		`"url":"{{base_url}}/ping"`, `"url":"https://api.example.com/ping"`).Replace(acmeKind)
+	if p := refused(t, "a field a connection holds made secret", h.request(t, http.MethodPut, kindsPath+"/acme-api", secretURL, nil),
+		http.StatusConflict, "connection-kind-in-use"); !strings.Contains(valueOf(p.Detail), "base_url") || strings.Contains(valueOf(p.Detail), "api.example.com") {
+		t.Errorf("refusal detail %q; want it to name the field, not its value", valueOf(p.Detail))
+	}
+
 	refused(t, "delete of a platform kind", h.request(t, http.MethodDelete, kindsPath+"/github", "", nil), http.StatusNotFound, "connection-kind-not-found")
 
 	if r := h.request(t, http.MethodDelete, apiPath, "", nil); r.status != http.StatusNoContent {

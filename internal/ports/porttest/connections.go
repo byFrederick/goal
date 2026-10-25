@@ -212,6 +212,18 @@ func (c *Connections) PutKind(ctx context.Context, k domain.ConnectionKind, by d
 		}
 	}
 
+	var ofKind []domain.Connection
+
+	for _, s := range c.d.conns[org] {
+		if s.conn.Kind == k.Name {
+			ofKind = append(ofKind, s.conn)
+		}
+	}
+
+	if err := k.CheckHeldPlain(ofKind); err != nil {
+		return fmt.Errorf("put connection kind %s: %w: %w", k.Name, err, ports.ErrConflict)
+	}
+
 	action := domain.AuditConnectionKindCreated
 	if exists {
 		action = domain.AuditConnectionKindUpdated

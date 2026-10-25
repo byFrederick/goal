@@ -566,6 +566,31 @@ func (k ConnectionKind) checkValueNames(fields map[string]string, secrets []stri
 	return errs
 }
 
+// CheckHeldPlain refuses k as the new kind of conns, its connections, when one of them holds a
+// field k makes secret as a plain value: the value would stay readable by every member and win
+// over a sealed one. It names fields and connections, never a value; the connection must clear
+// the field first.
+func (k ConnectionKind) CheckHeldPlain(conns []Connection) error {
+	var errs []error
+
+	for _, c := range conns {
+		var held []string
+
+		for _, name := range slices.Sorted(maps.Keys(c.Fields)) {
+			if f, ok := k.Field(name); ok && f.Secret {
+				held = append(held, name)
+			}
+		}
+
+		if len(held) > 0 {
+			errs = append(errs, fmt.Errorf("connection %s holds %s as a plain value, which kind %s makes secret: clear it on the connection first",
+				c.Name, strings.Join(held, ", "), k.Name))
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
 // WithDefaults is a copy of values (fields and secrets by field name) with k's defaults filling
 // the empty ones: the values a connection of k has, as its templates and its minter see them.
 func (k ConnectionKind) WithDefaults(values map[string]string) map[string]string {

@@ -1838,7 +1838,7 @@ export interface paths {
         get?: never;
         /**
          * Create or replace one of the organization's connection kinds
-         * @description The body is a kind file (schema/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken. Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
+         * @description The body is a kind file (schema/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken; a change that makes a field secret while a connection holds it as a plain value is 409 connection-kind-in-use, naming the field and the connection (clear the field there first). Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
          */
         put: operations["putConnectionKind"];
         post?: never;

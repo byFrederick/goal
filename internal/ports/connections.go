@@ -35,7 +35,8 @@ type Connections interface {
 	// Kind is the kind name as the organization sees it. ErrNotFound when there is none.
 	Kind(ctx context.Context, name string) (domain.ConnectionKind, error)
 	// PutKind creates or replaces an organization kind (connection_kind.created or .updated).
-	// ErrNameTaken when a new kind takes a platform kind's name.
+	// ErrNameTaken when a new kind takes a platform kind's name; ErrConflict when the change makes
+	// a field secret that one of its connections holds as a plain value (cleared there first).
 	PutKind(ctx context.Context, k domain.ConnectionKind, by domain.Actor) error
 	// DeleteKind deletes an organization kind. ErrNotFound when the organization has none of that
 	// name; ErrConflict while a connection uses it.

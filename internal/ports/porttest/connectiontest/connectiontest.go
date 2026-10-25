@@ -46,6 +46,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 	}{
 		{"Kinds_PlatformAndOrgKinds", testKinds},
 		{"PutKind_PlatformNameTakenChangesAudited", testPutKind},
+		{"PutKind_SetFieldTurnedSecretIsAConflict", testPutKindMakesASetFieldSecret},
 		{"DeleteKind_UsedIsAConflict", testDeleteKind},
 		{"SyncPlatformKinds_ReplacesAndKeepsUsed", testSync},
 		{"Create_SecretsNeverReturned", testCreate},
@@ -349,6 +350,44 @@ func testPutKind(f *fixture) {
 	f.one(acme, domain.AuditConnectionKindUpdated)
 	f.expect(created.Data["name"] == ownName && created.Actor.ID == admin.ID && created.TargetKind == domain.AuditTargetConnectionKind,
 		"connection_kind.created = %+v", created)
+}
+
+// A kind change that makes a field secret while a connection holds it as a plain value is refused:
+// the value would stay readable by every member and win over a sealed one. Once the connection
+// no longer holds it, the change goes through.
+func testPutKindMakesASetFieldSecret(f *fixture) {
+	acme := f.NewOrg(f.t)
+	ctx := f.in(acme)
+
+	plain := ownKind("")
+	plain.Spec.Fields = append(plain.Spec.Fields, domain.KindField{Name: fieldSite, Title: "Site"})
+	plain.Spec.Env["ACME_SITE"] = "{{site}}"
+
+	if err := f.c.PutKind(ctx, plain, admin); err != nil {
+		f.t.Fatal(err)
+	}
+
+	f.create(acme, domain.NewConnection{Name: connOther, Kind: ownName, Fields: map[string]string{fieldSite: euSite}, Secrets: map[string]string{"key": "k"}})
+
+	secret := ownKind("")
+	secret.Spec.Fields = append(secret.Spec.Fields, domain.KindField{Name: fieldSite, Title: "Site", Secret: true})
+	secret.Spec.Env["ACME_SITE"] = "{{site}}"
+
+	err := f.c.PutKind(ctx, secret, admin)
+	f.refused("PutKind making a set field secret", err, ports.ErrConflict)
+	f.expect(err != nil && strings.Contains(err.Error(), fieldSite) && strings.Contains(err.Error(), connOther),
+		"PutKind error %v; want it to name the field and the connection", err)
+
+	k, err := f.c.Kind(ctx, ownName)
+	f.expect(err == nil && !k.Spec.Fields[1].Secret, "Kind after the refused change = %+v, %v; want site still plain", k, err)
+
+	if _, err := f.c.Update(ctx, connOther, domain.ConnectionPatch{Fields: map[string]string{}}, admin); err != nil {
+		f.t.Fatal(err)
+	}
+
+	if err := f.c.PutKind(ctx, secret, admin); err != nil {
+		f.t.Fatalf("PutKind once no connection holds the field: %v", err)
+	}
 }
 
 func testDeleteKind(f *fixture) {

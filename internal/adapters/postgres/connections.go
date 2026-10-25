@@ -161,6 +161,10 @@ func (c *Connections) PutKind(ctx context.Context, k domain.ConnectionKind, by d
 			return nil
 		}
 
+		if err := checkHeldPlain(ctx, q, k); err != nil {
+			return err
+		}
+
 		if err := q.UpdateConnectionKind(ctx, db.UpdateConnectionKindParams{Spec: raw, SpecSha256: sum, ID: existing.ID}); err != nil {
 			return err
 		}
@@ -169,6 +173,36 @@ func (c *Connections) PutKind(ctx context.Context, k domain.ConnectionKind, by d
 	})
 	if err != nil {
 		return fmt.Errorf("put connection kind %s: %w", k.Name, ruleError(err, ""))
+	}
+
+	return nil
+}
+
+// checkHeldPlain refuses k as the organization kind's change while one of its connections holds
+// a field k makes secret as a plain value (domain.ConnectionKind.CheckHeldPlain).
+func checkHeldPlain(ctx context.Context, q *db.Queries, k domain.ConnectionKind) error {
+	rows, err := q.Connections(ctx)
+	if err != nil {
+		return err
+	}
+
+	var ofKind []domain.Connection
+
+	for _, r := range rows {
+		if r.Kind != k.Name {
+			continue
+		}
+
+		c, err := connectionFrom(db.ConnectionRow(r))
+		if err != nil {
+			return err
+		}
+
+		ofKind = append(ofKind, c)
+	}
+
+	if err := k.CheckHeldPlain(ofKind); err != nil {
+		return fmt.Errorf("%w: %w", err, ports.ErrConflict)
 	}
 
 	return nil
