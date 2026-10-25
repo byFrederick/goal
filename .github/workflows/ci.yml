@@ -6,7 +6,13 @@
 # If the workflow shows as disabled on GitHub, a person re-enables it: `gh workflow enable ci.yml`.
 # Hardening (github-actions-hardening skill): a read-only token no job widens, actions pinned to
 # commit SHAs, only the pull_request trigger for pull requests, no secrets (pull requests from
-# forks get none, and none are needed), no ${{ }} expressions inside run scripts, superseded runs cancelled.
+# forks get none, and none are needed), no ${{ }} expressions inside run scripts.
+# Concurrency: one group per ref. A pull request's newer push cancels its run in flight; on main no
+# run is cancelled once started, so every started run completes, one at a time in push order, and
+# deploy.yml (workflow_run on ci's success) can always follow the newest merge. GitHub keeps one
+# pending run per group: in a burst of merges a middle commit's run may be cancelled before it
+# starts, which is expected (the newest commit's run covers its tree). Per-sha groups would let
+# main's runs finish out of order and an older commit deploy last.
 name: ci
 
 on:
@@ -19,7 +25,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
