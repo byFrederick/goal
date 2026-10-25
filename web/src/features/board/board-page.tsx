@@ -1,4 +1,4 @@
-import { useSuspenseQuery } from '@tanstack/react-query';
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { Users } from 'lucide-react';
 import { Tabs } from 'radix-ui';
@@ -359,10 +359,11 @@ export function BoardPage() {
   const factory = useFactory();
   const org = useOrg();
   const { data: board } = useSuspenseQuery(boardQuery(org.id, factory.id));
-  // The board's window is the last 7 days, as the touch metrics' default range.
-  const { data: touches } = useSuspenseQuery(touchesQuery(org.id, factory.id));
-  const rates = stationRates(touches.stats);
-  const rateOf: RateOf = (s) => (touches.stats.finished === 0 ? null : (rates.get(s.id) ?? 0));
+  // The board's window is the last 7 days, as the touch metrics' default range. The rates wait
+  // for them (or go without when they fail); the line's headline is the board's own.
+  const touches = useQuery(touchesQuery(org.id, factory.id)).data?.stats;
+  const rates = touches ? stationRates(touches) : undefined;
+  const rateOf: RateOf = (s) => (!rates || touches?.finished === 0 ? null : (rates.get(s.id) ?? 0));
   const search = useSearch({ from: '/o/$org/f/$factory/board' });
   const expedite = board.stations.flatMap((s) => s.items.filter(isExpedite));
   const selected = board.stations.find((s) => s.id === search.station)?.id ?? firstStation(board);

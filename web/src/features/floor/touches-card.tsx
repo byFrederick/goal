@@ -1,7 +1,8 @@
 // Human touches per finished item on the Floor (spec 4 §4.9, §10; canvas Main and Mobile-Floor):
 // from 768 px a panel across the top (the headline against the range before, touchless and
 // unplanned per item and the line stops people made, then where the touches happen by station,
-// kind, reason or definition version); on a phone a compact card under Throughput.
+// kind, reason or definition version); on a phone a compact card under Throughput. The rest of
+// the Floor never waits for them: while they load, or when they fail, TouchesWaiting holds the place.
 import { Link, useNavigate } from '@tanstack/react-router';
 import { type ReactNode, useId } from 'react';
 import type { TouchMetrics, TouchStats } from '../../api/types';
@@ -15,6 +16,7 @@ import {
   touchGroupings,
   touchRows,
 } from '../../shared/touches';
+import { Button } from '../../ui/button';
 import { SectionCard, StatRow } from '../../ui/card';
 import { cn } from '../../ui/cn';
 import { Hatch } from '../../ui/hatch';
@@ -226,6 +228,32 @@ export function TouchesSummary({ touches, previous, className }: Props) {
           </div>
           {most ? <p className="m-0 text-[13px] leading-[1.45] text-muted">{most}</p> : null}
         </>
+      )}
+    </SectionCard>
+  );
+}
+
+/** The touches' place while they load, or after they failed, with Try again. */
+export function TouchesWaiting({
+  failed,
+  onRetry,
+  className,
+}: {
+  failed: boolean;
+  onRetry: () => void;
+  className?: string;
+}) {
+  return (
+    <SectionCard title="Human touches" className={cn('gap-2.5', className)}>
+      {failed ? (
+        <div role="alert" className="flex flex-col items-start gap-3">
+          <p className="m-0 text-sm leading-normal text-rework-ink">Couldn’t load the human touches.</p>
+          <Button variant="white" className="h-11 md:h-10" onClick={onRetry}>
+            Try again
+          </Button>
+        </div>
+      ) : (
+        <p className="m-0 text-sm text-muted">Loading the human touches…</p>
       )}
     </SectionCard>
   );

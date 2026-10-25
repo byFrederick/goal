@@ -122,3 +122,22 @@ test('a refused reason says why and goes back to what goald has', async ({ page,
   await expect(page.getByRole('alert').filter({ hasText: /^Not saved: / })).toBeVisible();
   await expect(reason).toHaveValue('');
 });
+
+test('the board and the floor work while the touch metrics fail, and the floor offers to try again', async ({
+  page,
+  request,
+}) => {
+  // Every try fails (times 0) until the faults are cleared: the app retries a 500 twice first.
+  await request.post('/__mock/fail', { data: { path: '/metrics/touches', method: 'GET', status: 500, times: 0 } });
+  await page.goto('/o/acme/f/sre/board');
+  await expect(page.getByRole('heading', { level: 1, name: 'SRE board' })).toBeVisible();
+
+  await page.goto('/o/acme/f/sre');
+  await expect(page.getByRole('heading', { level: 1, name: 'SRE floor' })).toBeVisible();
+  const card = page.getByRole('region', { name: 'Human touches' });
+  await expect(card.getByText('Couldn’t load the human touches.')).toBeVisible({ timeout: 15_000 });
+  await expectAccessible(page);
+  await request.delete('/__mock/fail');
+  await card.getByRole('button', { name: 'Try again' }).click();
+  await expect(card.getByText(isPhone(page) ? /^\d+\.\d per item$/ : /^\d+\.\d touches per item$/)).toBeVisible();
+});

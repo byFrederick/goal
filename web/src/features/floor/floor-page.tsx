@@ -1,4 +1,4 @@
-import { useSuspenseQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { ChevronDown, ListFilter } from 'lucide-react';
 import { boardQuery, constraintQuery, leadTimeQuery, metricsQuery, touchesQuery, weeklyQuery } from '../../api/queries';
@@ -25,7 +25,7 @@ import {
   todayUtc,
 } from './range';
 import { ThroughputCard } from './throughput-card';
-import { TouchesPanel, TouchesSummary } from './touches-card';
+import { TouchesPanel, TouchesSummary, TouchesWaiting } from './touches-card';
 import { WeeklyCard } from './weekly-card';
 
 // The approved design's grid (Main and Mobile-Floor boards), laid out by the room beside the
@@ -52,8 +52,16 @@ export function FloorPage() {
   const { data: weekly } = useSuspenseQuery(weeklyQuery(org.id, factory.id, range));
   const { data: bridge } = useSuspenseQuery(leadTimeQuery(org.id, factory.id, range));
   const { data: constraint } = useSuspenseQuery(constraintQuery(org.id, factory.id, range));
-  const { data: touches } = useSuspenseQuery(touchesQuery(org.id, factory.id, range));
-  const { data: touchesBefore } = useSuspenseQuery(touchesQuery(org.id, factory.id, previousRange(range)));
+  // The touches never hold the Floor up: a range change keeps the last ones until the new arrive.
+  const touches = useQuery({ ...touchesQuery(org.id, factory.id, range), placeholderData: keepPreviousData });
+  const touchesBefore = useQuery({
+    ...touchesQuery(org.id, factory.id, previousRange(range)),
+    placeholderData: keepPreviousData,
+  });
+  const retryTouches = () => {
+    void touches.refetch();
+    void touchesBefore.refetch();
+  };
   const title = `${factoryTitle(factory)} floor`;
   const label = rangeLabel(metrics.from, metrics.to);
   const before = metrics.previous ? rangeLabel(metrics.previous.from, metrics.previous.to) : null;
@@ -72,12 +80,20 @@ export function FloorPage() {
         </div>
       </header>
 
-      <TouchesPanel touches={touches} previous={touchesBefore} grouping={search.touches ?? 'station'} />
+      {touches.data ? (
+        <TouchesPanel touches={touches.data} previous={touchesBefore.data} grouping={search.touches ?? 'station'} />
+      ) : (
+        <TouchesWaiting failed={touches.isError} onRetry={retryTouches} className="hidden md:flex" />
+      )}
 
       <div className={grid}>
         <div className="flex flex-col gap-3 [grid-area:tp]">
           <ThroughputCard metrics={metrics} className="md:flex-1" />
-          <TouchesSummary touches={touches} previous={touchesBefore} />
+          {touches.data ? (
+            <TouchesSummary touches={touches.data} previous={touchesBefore.data} />
+          ) : (
+            <TouchesWaiting failed={touches.isError} onRetry={retryTouches} className="md:hidden" />
+          )}
         </div>
         <ConstraintCard report={constraint} board={board} className="[grid-area:hero]" />
         <NeedsYouCard factory={factory} className="[grid-area:needs]" />
