@@ -9,8 +9,8 @@
 // (domain.SignTaskToken) for the audience goal-gateway (domain.TaskAudience). A missing, forged
 // or expired token, or one for no or another audience, gets 401 with no detail. goald's API
 // refuses task tokens, so they work only here. The
-// claims name the factory, agent and run; the factory's current definition must still declare
-// that agent, otherwise 403.
+// claims name the factory, its definition version, the agent and the run; that version must
+// declare the agent, otherwise 403.
 //
 // # Run bundle
 //

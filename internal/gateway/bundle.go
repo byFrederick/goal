@@ -239,7 +239,7 @@ func (g *Gateway) addRepository(ctx context.Context, repo domain.Repository, bra
 func (g *Gateway) addConnections(ctx context.Context, c domain.TaskClaims, line domain.Line, agent domain.AgentSpec, b *runBundle) error {
 	for _, name := range agent.Connections {
 		if !slices.Contains(line.Connections, name) || !slices.Contains(c.Connections, name) {
-			continue // an inline connection (served at /mcp) or one the token does not grant
+			continue // one the factory does not list, or the token does not grant
 		}
 
 		o, k, err := g.outline(ctx, name)

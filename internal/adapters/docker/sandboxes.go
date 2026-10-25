@@ -64,9 +64,9 @@ const killScript = `for round in 1 2 3; do
 done`
 
 // Sandboxes runs one container per run on the agents' network (ports.Sandboxes): the run's dev
-// box. A box keeps the hardening of agent tasks (uid 1000, every capability dropped, no new
-// privileges, an init process, CPU, memory and PID limits of its size, a tmpfs /tmp) with a
-// writable root filesystem and nothing mounted. It sleeps until its deadline, so a box no goald
+// box. A box is hardened (uid 1000, every capability dropped, no new privileges, an init
+// process, CPU, memory and PID limits of its size, a tmpfs /tmp) with a writable root filesystem
+// and nothing mounted. It sleeps until its deadline, so a box no goald
 // deletes ends by itself; commands run in it with docker exec, stdout and stderr attached. It is
 // safe for concurrent use.
 type Sandboxes struct {

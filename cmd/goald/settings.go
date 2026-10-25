@@ -193,6 +193,7 @@ var removedSettings = []removedSetting{
 	{"GOAL_WORKSPACE_ROOT", insteadSandbox},
 	{"GOAL_RUN_DIR", insteadSandbox},
 	{"GOAL_DEFAULT_AGENT_IMAGE", agentImageEnv},
+	{"GOAL_LEGACY_IMPORT", "nothing: the legacy import is gone; goald refuses to start while an organization still has one pending"},
 	{"GOAL_TASK_ENV", insteadModel},
 	{"CLAUDE_CODE_OAUTH_TOKEN", insteadModel + "; runs no longer get it from goald's environment"},
 	{"GOAL_GITHUB_TOKEN", insteadGitHubKey},
@@ -573,7 +574,7 @@ func gatewayURL(s settings) error {
 	}
 
 	host := u.Hostname()
-	if host == dockerHost { // how agent containers name this machine (the Docker runner's alias)
+	if host == dockerHost { // how a container names this machine
 		host = "127.0.0.1"
 	}
 
@@ -609,8 +610,8 @@ func wildcard(host string) bool {
 }
 
 // defaultGatewayURL is the gateway as agent containers reach it: on its own listener when it has
-// one, else on the main listener. A wildcard host (every interface) becomes 127.0.0.1, which the
-// Docker runner rewrites to the host's name in a container.
+// one, else on the main listener. A wildcard host (every interface) becomes 127.0.0.1, which goal
+// up gives the egress proxy as host.docker.internal, its name for this machine.
 func defaultGatewayURL(s settings) string {
 	addr := cmp.Or(s.GatewayListen, s.Listen)
 

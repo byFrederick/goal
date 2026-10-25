@@ -93,14 +93,14 @@ func TestSettings_SandboxNetwork(t *testing.T) {
 
 	s, err = settingsFrom(envOf(map[string]string{
 		sandboxNetworkEnv: "goal-dev_agents", "GOAL_AGENT_EGRESS": "api.anthropic.com, proxy.golang.org", "GOAL_EGRESS_NAME": "../goal",
-		"GOAL_EGRESS_IMAGE": " ", "GOAL_RUN_DIR": "/tmp/goal-stack/runs", "GOAL_DEFAULT_AGENT_IMAGE": "ghcr.io/acme/agent:1",
+		"GOAL_EGRESS_IMAGE": " ", "GOAL_RUN_DIR": "/tmp/goal-stack/runs", "GOAL_DEFAULT_AGENT_IMAGE": "ghcr.io/acme/agent:1", "GOAL_LEGACY_IMPORT": "on",
 		agentImageEnv: "ghcr.io/acme/goal-agent:2",
 	}))
 	if err != nil {
 		t.Fatalf("removed settings refused goald's start: %v", err)
 	}
 
-	wantIgnored := []string{"GOAL_AGENT_EGRESS", "GOAL_EGRESS_NAME", "GOAL_RUN_DIR", "GOAL_DEFAULT_AGENT_IMAGE"}
+	wantIgnored := []string{"GOAL_AGENT_EGRESS", "GOAL_EGRESS_NAME", "GOAL_RUN_DIR", "GOAL_DEFAULT_AGENT_IMAGE", "GOAL_LEGACY_IMPORT"}
 	if s.SandboxNetwork != "goal-dev_agents" || !slices.Equal(ignored(s), wantIgnored) || s.AgentImage != "ghcr.io/acme/goal-agent:2" {
 		t.Errorf("network %q, ignored %v, image %q; want GOAL_SANDBOX_NETWORK's, %v and GOAL_AGENT_IMAGE's", s.SandboxNetwork, ignored(s), s.AgentImage, wantIgnored)
 	}

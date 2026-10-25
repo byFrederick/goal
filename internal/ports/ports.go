@@ -547,8 +547,8 @@ type ItemNotice struct {
 
 // OrgEvent is an organization's stream event that is not an item event, NOTIFYed on the
 // goal_org_events channel ({org_id, event, factory_id?, data}) in the transaction that causes it,
-// such as a factory's andon pulled or cleared (event factory) and phase 4's credential and
-// connection events.
+// such as a factory's andon pulled or cleared (event factory) or a connection's change (event
+// connection).
 type OrgEvent struct {
 	// Name is the stream's event name: lowercase letters, digits and dashes.
 	Name string
