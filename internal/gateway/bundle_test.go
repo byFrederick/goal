@@ -329,6 +329,10 @@ func TestServeRun_RefusesWhatTheTokenDoesNotName(t *testing.T) {
 	noItem.ItemID = "item-gone"
 	otherFactorys := valid
 	otherFactorys.VersionID = otherVersion
+	// A token of another organization naming this one's item and version: the item is looked up
+	// in the token's organization, where it is not.
+	otherOrg := valid
+	otherOrg.OrgID = "01900000-0000-7000-8000-00000000beef"
 
 	tests := []struct {
 		name   string
@@ -345,6 +349,7 @@ func TestServeRun_RefusesWhatTheTokenDoesNotName(t *testing.T) {
 		{name: "another factory's item", token: h.token(t, otherItem), status: http.StatusForbidden},
 		{name: "no such item", token: h.token(t, noItem), status: http.StatusForbidden},
 		{name: "another factory's version", token: h.token(t, otherFactorys), status: http.StatusForbidden},
+		{name: "another organization's item", token: h.token(t, otherOrg), status: http.StatusForbidden},
 		{name: "not a GET", method: http.MethodPost, token: h.token(t, valid), status: http.StatusMethodNotAllowed},
 		{name: "valid", token: h.token(t, valid), status: http.StatusOK},
 	}
