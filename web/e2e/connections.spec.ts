@@ -147,6 +147,21 @@ test.describe('New connection', () => {
     await fits(page);
   });
 
+  test('a GitHub Enterprise host left on github.com’s API is refused, saying which field to set', async ({ page }) => {
+    await page.goto('/o/acme/connections/new?kind=github');
+    const form = page.getByRole('form', { name: 'GitHub details' });
+    await form.getByLabel('Name').fill('github-ghe');
+    await form.getByLabel('Token').fill(secretValue);
+    await form.getByLabel('Host (optional)').fill('ghe.example.com');
+    await form.getByRole('button', { name: 'Create connection' }).click();
+    await expect(page.getByRole('alert')).toContainText(
+      'test.url (from api_url) is on api.github.com, not on ghe.example.com or api.ghe.example.com',
+    );
+    await form.getByLabel('API URL (optional)').fill('https://ghe.example.com/api/v3');
+    await form.getByRole('button', { name: 'Create connection' }).click();
+    await expect(page).toHaveURL(/\/o\/acme\/connections\/github-ghe\?created=true$/);
+  });
+
   test('a required field is asked for before anything is sent', async ({ page }) => {
     await page.goto('/o/acme/connections/new?kind=jira');
     const form = page.getByRole('form', { name: 'Jira details' });

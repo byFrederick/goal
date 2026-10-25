@@ -115,6 +115,29 @@ describe('the mock connections', () => {
     expect(passed.body).toMatchObject({ ok: true, status: 200 });
   });
 
+  it('refuses a kind change that makes a field secret while a connection holds it plain, naming both', async () => {
+    const kind = (secret: boolean) => ({
+      apiVersion: 'goal/v1',
+      kind: 'ConnectionKind',
+      metadata: { name: 'acme-api', title: 'Acme API' },
+      spec: {
+        fields: [{ name: 'base_url', title: 'Base URL', secret, required: true }],
+        env: { ACME_API_URL: '{{base_url}}' },
+      },
+    });
+    expect((await call('/v1/orgs/acme/connection-kinds/acme-api', 'PUT', kind(false))).status).toBe(200);
+    const made = await call(connections, 'POST', {
+      name: 'acme-api',
+      kind: 'acme-api',
+      fields: { base_url: 'https://api.example.com' },
+    });
+    expect(made.status).toBe(201);
+    const refused = await call<Problem>('/v1/orgs/acme/connection-kinds/acme-api', 'PUT', kind(true));
+    expect([refused.status, refused.body.code]).toEqual([409, 'connection-kind-in-use']);
+    expect(refused.body.detail).toContain('acme-api holds base_url');
+    expect(refused.body.detail).not.toContain('api.example.com');
+  });
+
   it('says what uses a connection from the current versions, and a missing secret', async () => {
     const { body } = await call<ConnectionList>(connections);
     const by = (name: string) => body.connections.find((c) => c.name === name);

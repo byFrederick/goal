@@ -38,6 +38,8 @@ interface MockKind {
   expect?: number;
   /** The host its git block signs in to, as written ({{host}}); undefined without one. */
   gitHost?: string;
+  /** Its test's URL, as written ({{api_url}}/user); undefined without a test. */
+  testUrl?: string;
 }
 
 /** A kind file (schema/connection-kind.schema.json) as the mock reads it. */
@@ -53,7 +55,7 @@ interface KindFile {
     codeHost?: string;
     mint?: string;
     sync?: string;
-    test?: { expect?: number };
+    test?: { expect?: number; url?: string };
     docs?: string;
   };
 }
@@ -98,7 +100,34 @@ function kindOf(file: KindFile, platform: boolean): MockKind | undefined {
     kind,
     ...(s.test ? { expect: s.test.expect ?? 200 } : {}),
     ...(typeof s.git?.host === 'string' ? { gitHost: s.git.host } : {}),
+    ...(typeof s.test?.url === 'string' ? { testUrl: s.test.url } : {}),
   };
+}
+
+/**
+ * goald's checkTestHost: a kind with a git login is tested on its git host or that host's api.
+ * subdomain, so a GitHub Enterprise connection left with github.com's api_url is refused, naming
+ * the field, before its token goes anywhere. A template that does not render is left to the test.
+ */
+function testHostRefusal(kind: MockKind, fields: Record<string, string>): string | undefined {
+  if (!kind.gitHost || !kind.testUrl) return undefined;
+  const values = Object.fromEntries(kind.kind.fields.map((f) => [f.name, fields[f.name] || f.default || '']));
+  const refs: string[] = [];
+  const render = (t: string) =>
+    t.replace(/\{\{\s*([a-z_]+)\s*\}\}/g, (_, name: string) => {
+      refs.push(name);
+      return values[name] ?? '';
+    });
+  const host = render(kind.gitHost).toLowerCase();
+  refs.length = 0;
+  let got: string;
+  try {
+    got = new URL(render(kind.testUrl)).host.toLowerCase();
+  } catch {
+    return undefined;
+  }
+  if (!host || got === host || got === `api.${host}`) return undefined;
+  return `test.url (from ${refs.join(', ')}) is on ${got}, not on ${host} or api.${host}, the host git signs in to: set it to that host's API`;
 }
 
 /** goald's platform kinds, from internal/connkind/kinds. */
@@ -396,7 +425,7 @@ export function createConnections({
     kind: MockKind,
     fields: Record<string, string>,
     secrets: string[],
-  ): [string, string] | undefined => {
+  ): [string, string?] | undefined => {
     for (const name of Object.keys(fields)) {
       const f = kind.kind.fields.find((x) => x.name === name);
       if (!f) return [`kind ${kind.kind.name} has no field "${name}"`, 'field-unknown'];
@@ -407,7 +436,9 @@ export function createConnections({
     const missing = kind.kind.fields.find(
       (f) => f.required && !(f.secret ? secrets.includes(f.name) : Boolean(fields[f.name] || f.default)),
     );
-    return missing ? [`field "${missing.name}" is required`, 'field-required'] : undefined;
+    if (missing) return [`field "${missing.name}" is required`, 'field-required'];
+    const offHost = testHostRefusal(kind, fields);
+    return offHost ? [offHost] : undefined;
   };
 
   /** 409 connection-in-use naming the factories, as goald does; false when nothing uses it. */
@@ -569,6 +600,29 @@ export function createConnections({
     const existing = own.some((k) => k.kind.name === name);
     if (!existing && platform.some((p) => p.kind.name === name)) {
       return refuse(res, 409, `a platform kind is named ${name}`, 'connection-kind-name-taken');
+    }
+    // A field made secret that a connection holds as a plain value (goald's CheckHeldPlain): never the value.
+    const secret = new Set(kind.kind.fields.filter((f) => f.secret).map((f) => f.name));
+    const held = list(org.id)
+      .filter((c) => c.connection.kind === name)
+      .map(
+        (c) =>
+          [
+            c.connection.name,
+            Object.keys(c.connection.fields)
+              .filter((f) => secret.has(f))
+              .sort(),
+          ] as const,
+      )
+      .filter(([, fields]) => fields.length > 0);
+    if (held.length > 0) {
+      const detail = held
+        .map(
+          ([c, fields]) =>
+            `connection ${c} holds ${fields.join(', ')} as a plain value, which kind ${name} makes secret: clear it on the connection first`,
+        )
+        .join('\n');
+      return refuse(res, 409, detail, 'connection-kind-in-use');
     }
     orgKinds.set(org.id, [...own.filter((k) => k.kind.name !== name), kind]);
     audit(
