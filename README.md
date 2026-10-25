@@ -51,7 +51,7 @@ task test-integration      # adapters against PostgreSQL 18 and RustFS
 ```bash
 # .env: CLAUDE_CODE_OAUTH_TOKEN (claude setup-token), GOAL_GITHUB_TOKEN (fine-grained PAT, this repo),
 #       GOAL_GATEWAY_KEY (openssl rand -hex 32)
-task worker:image-dev                              # the agent image the goal factory names (runtime.image)
+task worker:image                                  # goal-agent, the image every run starts from (worker/README.md)
 task up                                            # PostgreSQL + RustFS, bucket, the egress proxy image, then goald in the foreground
 task factory:push DIR=../goal-factories/goal -- --publish  # in another terminal: the definition goald runs
 bin/goal run goal "Add a goal version subcommand"  # submit; prints the timeline until a human must act

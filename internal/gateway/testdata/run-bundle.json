@@ -1,0 +1,46 @@
+{
+  "spec": {
+    "factory_id": "8d4f2b1a-3c5e-4f60-9a7b-1c2d3e4f5a6b",
+    "item_id": "00000000-0000-7000-8000-000000000001",
+    "run_id": "run-1",
+    "station": "build",
+    "agent": "engineer",
+    "model": "claude-opus-5-5",
+    "skills": [
+      "acme-conventions"
+    ],
+    "tools_allow": [
+      "Read",
+      "Edit",
+      "Bash(npm test*)"
+    ],
+    "tools_deny": [
+      "Bash(git push --force*)"
+    ],
+    "purpose": "Ship small changes to acme's API.",
+    "brief": "Add a health endpoint\n\nFor the load balancer.",
+    "inputs": {
+      "spec": {
+        "lane": "backend"
+      }
+    },
+    "output": "change",
+    "max_turns": 40,
+    "max_usd": 6
+  },
+  "files": {
+    "agent/output.schema.json": "eyJ0eXBlIjoib2JqZWN0In0=",
+    "agent/prompt.md": "IyBlbmdpbmVlcgo="
+  },
+  "repository": {
+    "url": "https://github.com/acme/api.git",
+    "branch": "goal/1-add-a-health-endpoint"
+  },
+  "git_credentials": [
+    {
+      "host": "github.com",
+      "username": "x-access-token",
+      "password_env": "GOAL_REPOSITORY_TOKEN"
+    }
+  ]
+}

@@ -78,6 +78,16 @@ type Item struct {
 // Position returns the item's station and state.
 func (it Item) Position() Position { return Position{Station: it.Station, State: it.State} }
 
+// Work is what an item asks of its agents: its title, then its body when it has one. A run's
+// brief adds what the engine has for that attempt (people's notes, a rejected attempt's reason).
+func (it Item) Work() string {
+	if it.Body == "" {
+		return it.Title
+	}
+
+	return it.Title + "\n\n" + it.Body
+}
+
 // maxSlug bounds the title part of a branch name.
 const maxSlug = 40
 

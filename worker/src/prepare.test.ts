@@ -1,0 +1,262 @@
+import { execFileSync, spawn } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { credentialHelper, type Exec, type PrepareDeps, prepare } from './prepare.js';
+
+const gateway = 'http://goal-egress:3128/mcp';
+const token = 'task-token-123';
+const at = new Date('2026-10-24T10:00:00Z');
+const later = new Date('2026-10-24T10:00:12.34Z');
+
+const spec = {
+  factory_id: 'f1',
+  item_id: 'i1',
+  run_id: 'r1',
+  station: 'build',
+  agent: 'engineer',
+  skills: ['acme-conventions'],
+  tools_allow: ['Read'],
+  tools_deny: [],
+  brief: 'Add a health endpoint',
+};
+
+const b64 = (s: string) => Buffer.from(s).toString('base64');
+
+let root: string;
+let home: string;
+let dirs: PrepareDeps['dirs'];
+
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), 'goal-prepare-'));
+  home = join(root, 'home');
+  await mkdir(home);
+  dirs = { goal: join(root, 'goal'), workspace: join(root, 'workspace') };
+});
+
+afterEach(async () => {
+  await rm(root, { recursive: true, force: true });
+});
+
+/** git with the test's own home and no system config, so the developer's config is never read or written. */
+function gitEnv(): NodeJS.ProcessEnv {
+  return { PATH: process.env.PATH, HOME: home, GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' };
+}
+
+function git(cwd: string, ...args: string[]): string {
+  return execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', ...args], {
+    cwd,
+    env: gitEnv(),
+    encoding: 'utf8',
+  }).trim();
+}
+
+/** A bare repository with a commit on main and, when given, one on branch. */
+async function origin(branch?: string): Promise<string> {
+  const bare = join(root, 'origin.git');
+  const work = join(root, 'seed');
+  execFileSync('git', ['init', '--quiet', '--bare', '--initial-branch=main', bare], { env: gitEnv() });
+  execFileSync('git', ['init', '--quiet', '--initial-branch=main', work], { env: gitEnv() });
+  git(work, 'remote', 'add', 'origin', bare);
+  git(work, 'commit', '--quiet', '--allow-empty', '-m', 'first');
+  git(work, 'push', '--quiet', 'origin', 'HEAD:main');
+  if (branch) {
+    git(work, 'checkout', '--quiet', '-b', branch);
+    git(work, 'commit', '--quiet', '--allow-empty', '-m', 'earlier run');
+    git(work, 'push', '--quiet', 'origin', branch);
+  }
+  return `file://${bare}`;
+}
+
+/** Runs git for real (isolated), records every command and fakes mise with exit code `mise`. */
+function recorder(mise = 0) {
+  const calls: { command: string; args: string[]; cwd?: string }[] = [];
+  const exec: Exec = (command, args, opts = {}) => {
+    calls.push(opts.cwd === undefined ? { command, args } : { command, args, cwd: opts.cwd });
+    if (command !== 'git') return Promise.resolve(mise);
+    return new Promise((resolve) => {
+      const child = spawn(command, args, { cwd: opts.cwd, env: gitEnv(), stdio: 'ignore' });
+      child.once('close', (code) => resolve(code ?? 1));
+    });
+  };
+  return { exec, calls };
+}
+
+/** A gateway that answers GET /run with body (or status) and records the requests. */
+function gatewayServing(body: unknown, status = 200) {
+  const requests: { url: string; auth: string | null }[] = [];
+  const fake = (async (input: string | URL | Request, init?: RequestInit) => {
+    requests.push({ url: String(input), auth: new Headers(init?.headers).get('Authorization') });
+    return new Response(typeof body === 'string' ? body : JSON.stringify(body), { status });
+  }) as typeof fetch;
+  return { fake, requests };
+}
+
+function depsWith(fake: typeof fetch, exec: Exec, env: NodeJS.ProcessEnv = {}): PrepareDeps {
+  const times = [at, later];
+  return {
+    fetch: fake,
+    exec,
+    env: { GOAL_GATEWAY_URL: gateway, GOAL_GATEWAY_TOKEN: token, ...env },
+    now: () => times.shift() ?? later,
+    dirs,
+  };
+}
+
+describe('prepare', () => {
+  it("sets the sandbox up from the bundle goald's gateway serves (internal/gateway/testdata)", async () => {
+    const served = JSON.parse(
+      await readFile(new URL('../../internal/gateway/testdata/run-bundle.json', import.meta.url), 'utf8'),
+    );
+    const { fake } = gatewayServing(served);
+    const calls: { command: string; args: string[] }[] = [];
+    const exec: Exec = async (command, args) => {
+      calls.push({ command, args });
+      return command === 'git' && args[0] === 'rev-parse' ? 1 : 0;
+    };
+
+    const prepared = await prepare(depsWith(fake, exec));
+
+    expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8'))).toEqual({
+      ...served.spec,
+      gateway_url: gateway,
+    });
+    expect(await readFile(join(dirs.goal, 'agent/prompt.md'), 'utf8')).toBe('# engineer\n');
+    expect(await readFile(join(dirs.goal, 'agent/output.schema.json'), 'utf8')).toBe('{"type":"object"}');
+    expect(calls.map((c) => `${c.command} ${c.args.join(' ')}`)).toEqual([
+      `git config --global credential.https://github.com.helper ${credentialHelper(served.git_credentials[0])}`,
+      'git check-ref-format --branch goal/1-add-a-health-endpoint',
+      `git clone --quiet -- https://github.com/acme/api.git ${dirs.workspace}`,
+      'git rev-parse --verify --quiet refs/remotes/origin/goal/1-add-a-health-endpoint',
+      'git checkout --quiet -b goal/1-add-a-health-endpoint',
+      'mise install --yes',
+    ]);
+    expect(prepared).toMatchObject({ branch: 'goal/1-add-a-health-endpoint', branch_existed: false, tools: 0 });
+  });
+
+  it("writes the run bundle to /goal with the gateway's URL in spec.json", async () => {
+    const files = {
+      'agent/prompt.md': b64('You are the engineer.\n'),
+      'agent/skills/acme-conventions/SKILL.md': b64('# acme\n'),
+    };
+    const { fake, requests } = gatewayServing({ spec, files, git_credentials: [] });
+    const { exec, calls } = recorder();
+
+    const prepared = await prepare(depsWith(fake, exec));
+
+    expect(requests).toEqual([{ url: 'http://goal-egress:3128/run', auth: `Bearer ${token}` }]);
+    expect(await readFile(join(dirs.goal, 'agent/prompt.md'), 'utf8')).toBe('You are the engineer.\n');
+    expect(await readFile(join(dirs.goal, 'agent/skills/acme-conventions/SKILL.md'), 'utf8')).toBe('# acme\n');
+    expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8'))).toEqual({ ...spec, gateway_url: gateway });
+    expect(prepared).toEqual({ type: 'prepared', at: later.toISOString(), seconds: 12.3, tools: 0 });
+    // No repository: nothing cloned, no repository tools.
+    expect(calls).toEqual([]);
+  });
+
+  it("clones the repository on the item's branch when earlier runs pushed it", async () => {
+    const url = await origin('goal/7-add-a-health-endpoint');
+    const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch: 'goal/7-add-a-health-endpoint' } });
+    const { exec } = recorder();
+
+    const prepared = await prepare(depsWith(fake, exec));
+
+    expect(prepared).toMatchObject({ branch: 'goal/7-add-a-health-endpoint', branch_existed: true });
+    expect(git(dirs.workspace, 'branch', '--show-current')).toBe('goal/7-add-a-health-endpoint');
+    expect(git(dirs.workspace, 'log', '-1', '--format=%s')).toBe('earlier run');
+  });
+
+  it('starts the branch from the default branch when the remote has none', async () => {
+    const url = await origin();
+    const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch: 'goal/8-new-work' } });
+    const { exec } = recorder();
+
+    const prepared = await prepare(depsWith(fake, exec));
+
+    expect(prepared).toMatchObject({ branch: 'goal/8-new-work', branch_existed: false });
+    expect(git(dirs.workspace, 'branch', '--show-current')).toBe('goal/8-new-work');
+    expect(git(dirs.workspace, 'log', '-1', '--format=%s')).toBe('first');
+  });
+
+  it("installs the repository's tools with mise, then the definition's runtime.tools", async () => {
+    const url = await origin();
+    const tools = ['go@1.26.10', 'task@3.46.1'];
+    const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch: 'goal/9-x' }, tools });
+    const { exec, calls } = recorder();
+
+    const prepared = await prepare(depsWith(fake, exec));
+
+    expect(calls.filter((c) => c.command === 'mise')).toEqual([
+      { command: 'mise', args: ['install', '--yes'], cwd: dirs.workspace },
+      { command: 'mise', args: ['use', '--global', '--yes', ...tools] },
+    ]);
+    expect(prepared.tools).toBe(2);
+  });
+
+  it('installs runtime.tools without a repository too', async () => {
+    const { fake } = gatewayServing({ spec, files: {}, tools: ['python@3.14.8'] });
+    const { exec, calls } = recorder();
+
+    await prepare(depsWith(fake, exec));
+
+    expect(calls).toEqual([{ command: 'mise', args: ['use', '--global', '--yes', 'python@3.14.8'] }]);
+  });
+
+  it('configures a credential helper per host that reads the password from the environment', async () => {
+    const credential = { host: 'github.com', username: 'x-access-token', password_env: 'GOAL_REPOSITORY_TOKEN' };
+    const { fake } = gatewayServing({ spec, files: {}, git_credentials: [credential] });
+    const { exec } = recorder();
+
+    await prepare(depsWith(fake, exec));
+
+    const helper = execFileSync('git', ['config', '--global', '--get', 'credential.https://github.com.helper'], {
+      env: gitEnv(),
+      encoding: 'utf8',
+    }).trim();
+    expect(helper).toBe(credentialHelper(credential));
+    expect(helper).not.toContain('s3cr3t');
+
+    // git runs a "!" helper as sh -c '<helper> "$@"' with the action as its argument.
+    const ask = (action: string, env: NodeJS.ProcessEnv) =>
+      execFileSync('sh', ['-c', `${helper.slice(1)} "$@"`, 'helper', action], { env, encoding: 'utf8' });
+    expect(ask('get', { GOAL_REPOSITORY_TOKEN: 'acme-s3cr3t' })).toBe(
+      'username=x-access-token\npassword=acme-s3cr3t\n',
+    );
+    expect(ask('get', {})).toBe('');
+    expect(ask('store', { GOAL_REPOSITORY_TOKEN: 'acme-s3cr3t' })).toBe('');
+  });
+
+  it('fails when the gateway refuses the bundle', async () => {
+    const { fake } = gatewayServing('forbidden\n', 403);
+    await expect(prepare(depsWith(fake, recorder().exec))).rejects.toThrow('GET /run: 403 forbidden');
+  });
+
+  it('fails without the gateway URL or token', async () => {
+    const { fake, requests } = gatewayServing({ spec, files: {} });
+    await expect(prepare(depsWith(fake, recorder().exec, { GOAL_GATEWAY_TOKEN: '' }))).rejects.toThrow(
+      'GOAL_GATEWAY_TOKEN is not set',
+    );
+    expect(requests).toEqual([]);
+  });
+
+  it('refuses a bundle that would write outside /goal or pass an option to git or mise', async () => {
+    for (const bundle of [
+      { spec, files: { '../etc/profile': b64('x') } },
+      { spec, files: { 'agent/../../x': b64('x') } },
+      { spec, files: { '/etc/profile': b64('x') } },
+      { spec, files: {}, repository: { url: '--upload-pack=sh', branch: 'goal/1-x' } },
+      { spec, files: {}, tools: ['--yes'] },
+      { spec, files: {}, git_credentials: [{ host: 'github.com', username: "x'; rm -rf ~; '", password_env: 'T' }] },
+    ]) {
+      const { exec, calls } = recorder();
+      await expect(prepare(depsWith(gatewayServing(bundle).fake, exec))).rejects.toThrow();
+      expect(calls).toEqual([]);
+    }
+  });
+
+  it('fails when the clone fails', async () => {
+    const missing = `file://${join(root, 'no-such.git')}`;
+    const { fake } = gatewayServing({ spec, files: {}, repository: { url: missing, branch: 'goal/1-x' } });
+    await expect(prepare(depsWith(fake, recorder().exec))).rejects.toThrow('git clone exited 128');
+  });
+});

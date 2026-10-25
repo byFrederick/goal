@@ -10,8 +10,12 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 )
 
-// GatewayPath is where goald serves the agents' MCP gateway.
-const GatewayPath = "/mcp"
+// GatewayPath is where goald serves the agents' MCP gateway, and RunPath the run bundle beside
+// it (GET, the same task token); they are the gateway's paths.
+const (
+	GatewayPath = "/mcp"
+	RunPath     = "/run"
+)
 
 // healthPath is the liveness check, which load balancers call by address.
 const healthPath = "/v1/health"
@@ -21,7 +25,7 @@ const healthPath = "/v1/health"
 // rebinds its own name to goald's address cannot use the API or the SPA: its requests would
 // otherwise pass cross-origin protection as same-origin (DNS rebinding). The port is not
 // compared: the name is what a rebinding page controls, and the web dev server's proxy keeps
-// the browser's Host (localhost:5173). The health check and the agents' gateway are exempt:
+// the browser's Host (localhost:5173). The health check and the gateway's paths are exempt:
 // agent containers reach the gateway by another name (host.docker.internal), and every gateway
 // request must carry a task token, which a rebinding page cannot present.
 func CheckHost(hosts []string, next http.Handler) http.Handler {
@@ -31,7 +35,7 @@ func CheckHost(hosts []string, next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == healthPath || r.URL.Path == GatewayPath {
+		if r.URL.Path == healthPath || r.URL.Path == GatewayPath || r.URL.Path == RunPath {
 			next.ServeHTTP(w, r)
 			return
 		}

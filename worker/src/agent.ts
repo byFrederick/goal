@@ -74,7 +74,7 @@ export function agentQuery(
   if (spec.max_usd) options.maxBudgetUsd = spec.max_usd;
   if (files.outputSchema) options.outputFormat = { type: 'json_schema', schema: files.outputSchema };
 
-  return { prompt: taskPrompt(spec), options };
+  return { prompt: taskPrompt(spec, env.GOAL_FEEDBACK), options };
 }
 
 /**
@@ -128,9 +128,12 @@ export function systemAppend(spec: Pick<TaskSpec, 'purpose'>, files: Pick<AgentF
   return spec.purpose ? `## This factory\n${spec.purpose}\n\n${files.prompt}` : files.prompt;
 }
 
-/** The user prompt: the brief, earlier stations' outputs and how to finish. */
-export function taskPrompt(spec: TaskSpec): string {
-  const parts = [spec.brief];
+/**
+ * The user prompt: the brief, then what goald adds for this attempt (GOAL_FEEDBACK: people's
+ * notes, why a previous attempt was rejected), earlier stations' outputs and how to finish.
+ */
+export function taskPrompt(spec: TaskSpec, feedback?: string): string {
+  const parts = feedback ? [spec.brief, feedback] : [spec.brief];
   const inputs = Object.entries(spec.inputs ?? {});
   if (inputs.length > 0) {
     parts.push('## Outputs of earlier stations');

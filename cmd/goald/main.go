@@ -1,5 +1,5 @@
 // Command goald is Goal's daemon: it runs the current definition version of every factory on one
-// flow engine, serves the HTTP API (/v1/) and the MCP gateway agents use (/mcp, on a listener of
+// flow engine, serves the HTTP API (/v1/) and the gateway agents use (/mcp and /run, on a listener of
 // its own with GOAL_GATEWAY_LISTEN), and starts agent tasks in Docker.
 //
 // All wiring happens here, by hand: PostgreSQL (store, definition versions, item and definition
@@ -165,7 +165,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	runner := docker.New(dockerClient, defs, egress, runnerCfg, log)
 
 	gw, err := gateway.New(gateway.Deps{
-		Definitions: defs, Secrets: secrets, Events: store, Clock: clock, Logger: log,
+		Definitions: defs, Items: store, Secrets: secrets, Events: store, Clock: clock, Logger: log,
 		Sidecars: docker.NewSidecars(dockerClient, egress, docker.Config{}, log),
 	}, gateway.Config{Key: []byte(key), SecretPolicy: policy})
 	if err != nil {
@@ -216,7 +216,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	servers := httpServers(s, proxySecret, apiHandler, gw, web.Handler(web.Options{StrictTransport: s.strictTransport()}), log)
+	servers := httpServers(s, proxySecret, apiHandler, gatewayHandler(gw), web.Handler(web.Options{StrictTransport: s.strictTransport()}), log)
 
 	// Deleted organizations go, rows and bucket objects, once their retention has passed.
 	purger := retention.New(store, objects, clock, s.OrgRetention, log)
@@ -317,26 +317,42 @@ func httpServers(s settings, proxySecret string, apiHandler, gw, spa http.Handle
 }
 
 // routes are the handlers of goald's listeners: the main one serves the API, the SPA and, when
-// the gateway has no listener of its own, the agents' gateway at /mcp. With one (separate), the
-// gateway listener serves only /mcp (everything else 404) and the main one answers /mcp with 404,
-// so the gateway address agents are given reaches nothing else; gatewayOnly is nil without one.
+// the gateway has no listener of its own, the agents' gateway at /mcp and /run (gw serves both).
+// With one (separate), the gateway listener serves only those (everything else 404) and the main
+// one answers them with 404, so the gateway address agents are given reaches nothing else;
+// gatewayOnly is nil without one.
 func routes(separate bool, apiHandler, gw, spa http.Handler) (primary, gatewayOnly http.Handler) {
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", apiHandler)
 	mux.Handle("/", spa)
 
+	gatewayPaths := []string{api.GatewayPath, api.RunPath}
+
 	if !separate {
-		mux.Handle(api.GatewayPath, gw)
+		for _, p := range gatewayPaths {
+			mux.Handle(p, gw)
+		}
 
 		return mux, nil
 	}
 
-	mux.Handle(api.GatewayPath, http.NotFoundHandler())
-
 	only := http.NewServeMux()
-	only.Handle(api.GatewayPath, gw)
+
+	for _, p := range gatewayPaths {
+		mux.Handle(p, http.NotFoundHandler())
+		only.Handle(p, gw)
+	}
 
 	return mux, only
+}
+
+// gatewayHandler serves the gateway's paths: the MCP endpoint and the run bundle.
+func gatewayHandler(gw *gateway.Gateway) http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle(api.GatewayPath, gw)
+	mux.HandleFunc(api.RunPath, gw.ServeRun)
+
+	return mux
 }
 
 // jobs are goald's scheduled jobs: the purge of deleted organizations and the sign-in clean-up,

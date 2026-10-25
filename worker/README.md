@@ -1,34 +1,70 @@
 # worker
 
-The agent container image: TypeScript on Node 22 with the Claude Agent SDK (pinned exactly in `package.json`). goald's Docker runner (`internal/adapters/docker`) starts one hardened container per agent task; the worker runs the agent once and reports progress and its result as JSON lines on stdout.
+`goal-agent`, the one image every run's sandbox starts from (spec 4 §4.1, ADR 0008), and the worker inside it: TypeScript on Node 22 with the Claude Agent SDK (pinned exactly in `package.json`), which prepares the sandbox from the gateway's run bundle and runs the agent once, reporting progress and its result as JSON lines on stdout.
 
 ```bash
 task worker:check   # typecheck, Biome, Vitest (part of task check)
-task worker:image       # docker build -f worker/Dockerfile --target runtime -t ghcr.io/byfrederick/goal-agent:0.1.0 .
-task worker:image-dev   # the dev variant, ghcr.io/byfrederick/goal-agent-dev:0.1.0 (below)
+task worker:image   # docker build -f worker/Dockerfile --target runtime -t ghcr.io/byfrederick/goal-agent:0.2.0 ., then task worker:smoke
+task worker:smoke   # the image's toolchains run as uid 1000 and goal-agent answers
 ```
-
-## Dev variant
-
-`--target dev` adds the toolchain a factory that builds this repository needs: Go (with a C compiler for `-race`), task, golangci-lint v2, pnpm, Terraform with the AWS provider mirrored (`TF_CLI_CONFIG_FILE`), and a PostgreSQL 18 server, which `task migrate-check` uses for a throwaway local cluster when there is no Docker. Go modules from `go.mod` are prewarmed as a read-only local `GOPROXY`; anything new still downloads in a check, and in an agent only from a host `GOAL_AGENT_EGRESS` adds (such as `proxy.golang.org` or `registry.npmjs.org`): agents reach only the model API by default. The goal factory names this image in `runtime.image`, so its agents and its station command checks run with it. Checks run in their own container of the same image (`docker.Checker`): same hardening, the run's workspace at `/workspace`, `HOME`, `CI` and the egress proxy's variables only in the environment, no secrets, no gateway token, no Docker socket, and the tools' network: public hosts through the proxy, never the host or a private address.
 
 The image is built locally and never pushed from this repository.
 
-## Container contract
+## Image
 
-| Path | Mode | Content |
+Debian 13 (trixie, slim) with, every version pinned in `worker/Dockerfile` and every download checked against its project's published checksums:
+
+- the worker, `goal-agent` on `PATH` (Node from mise below, whatever Node a repository pins);
+- git (identity `Goal agent <goal-agent@example.com>` in `/etc/gitconfig`, `GIT_TERMINAL_PROMPT=0`), gh, ripgrep, jq, curl, openssh-client, gcc, libc headers and make (cgo, `go test -race`, native modules);
+- mise, with Go, Node and Python installed in `/opt/mise` (`MISE_DATA_DIR`, owned by uid 1000) from `/etc/mise/config.toml`, its shims first on `PATH`. A repository that pins the same versions installs nothing; others install at prepare. `MISE_TRUSTED_CONFIG_PATHS=/workspace` trusts the checkout's mise config;
+- PostgreSQL 18's server and client binaries (`/usr/lib/postgresql/18/bin` on `PATH`) and no cluster: a run that needs a database starts its own (`initdb`, `pg_ctl`).
+
+It runs as uid 1000 (`node`, `HOME=/home/node`), works in `/workspace` and idles (`sleep infinity`) until goald execs into it. The filesystem is writable: an agent installs what it needs with mise, npm, pip or `go install`; the sandbox is deleted after the run.
+
+## Sandbox contract
+
+goald creates one sandbox per run (`ports.Sandboxes`) and execs, in order:
+
+| Exec | Environment from goald | Does |
 | --- | --- | --- |
-| `/goal/spec.json` | read-only | the task, without secrets (below) |
-| `/goal/agent/prompt.md` | read-only | the agent's prompt, appended to Claude Code's system prompt |
-| `/goal/agent/skills/<name>/SKILL.md` | read-only | one folder per skill the agent loads, with its other files |
-| `/goal/agent/output.schema.json` | read-only | the station's output contract (JSON Schema), only when the station has one |
-| `/workspace` | read-write | the run's git checkout, prepared by goald; the agent's working directory. No git or GitHub credentials are mounted or passed. |
-| `/tmp` | tmpfs (noexec) | scratch space |
-| `/home/node` | anonymous volume | `HOME`, disk-backed so toolchain caches fit; removed with the container. Everything else is a read-only root filesystem |
+| `goal-agent prepare` | `GOAL_GATEWAY_URL` (the sandbox's), `GOAL_GATEWAY_TOKEN`, each git credential's password variable (`GOAL_REPOSITORY_TOKEN` for the factory's repository) | builds `/goal` and `/workspace` from the run bundle (below); one `prepared` line on stdout; exit 0, or 1 with the reason on stderr |
+| `goal-agent run` | `GOAL_GATEWAY_TOKEN`, the model's credential, `GOAL_FEEDBACK` when goald adds to the brief | runs the agent once (How the agent runs); the stdout protocol; exit 0 with a result, 1 when the worker crashed |
+| a station check, `sh -c '<command>'` in `/workspace` | `HOME`, `CI=true` | the exit code is the runtime's |
 
-The runner writes `spec.json` into a per-run host folder (`$TMPDIR/goal-runs/<run id>/` by default) and has goald's `AgentFiles` write `agent/` next to it, then mounts the folder at `/goal`. The container runs as uid 1000 with every capability dropped, `no-new-privileges`, an init process, and CPU, memory and PID limits; it carries the labels `goal.org`, `goal.factory`, `goal.item`, `goal.run`, `goal.station` and `goal.agent`, and goald's reaper removes the containers and folders of runs that are over (neither running nor holding their lease, whichever goald on the host started them).
+`goal-agent` without a command prints its usage and exits 2.
 
-Environment: only the task's `Env` from goald (which carries `CLAUDE_CODE_OAUTH_TOKEN`), `GOAL_GATEWAY_TOKEN`, `HOME`, `CLAUDE_CONFIG_DIR=/home/node/.claude` and the egress proxy's variables (Networking, below; all set by the runner over anything in `Env`; the config dir set again by the worker, so Claude Code's config always lives in the container's throwaway home; no host `~/.claude` is ever mounted). `ANTHROPIC_API_KEY` is removed by the runner and again by the worker before the SDK starts; the gateway token is removed from the agent's environment too and reaches the gateway only as a header.
+| Path | Content |
+| --- | --- |
+| `/goal/spec.json` | the task, without secrets (below) |
+| `/goal/agent/prompt.md` | the agent's prompt, appended to Claude Code's system prompt |
+| `/goal/agent/skills/<name>/SKILL.md` | one folder per skill that ships in the factory, with its other files |
+| `/goal/agent/output.schema.json` | the station's output contract (JSON Schema, without `$schema`), only when the station has one |
+| `/workspace` | the factory's repository on the item's branch, or empty; the agent's working directory |
+| `/home/node` | `HOME`: Claude Code's config dir (`.claude`), mise's global config, git's credential helpers |
+
+`GOAL_FEEDBACK` is what goald adds to the brief for one attempt: the notes people left and, on a retry in the same sandbox, why the previous attempt was rejected. The worker puts it right after the brief. `ANTHROPIC_API_KEY` and `GOAL_GATEWAY_TOKEN` are removed from the agent's own environment (the token reaches the gateway only as a header).
+
+### prepare and the run bundle
+
+`goal-agent prepare` fetches `GET <origin of GOAL_GATEWAY_URL>/run` with `Authorization: Bearer $GOAL_GATEWAY_TOKEN` (`internal/gateway`, `ServeRun`; 401 for a bad token, 403 for a run the token's version or organization does not have). The bundle holds no secret:
+
+```json
+{
+  "spec": { "…": "spec.json below, without gateway_url" },
+  "files": { "agent/prompt.md": "<base64>", "agent/skills/acme-conventions/SKILL.md": "<base64>", "agent/output.schema.json": "<base64>" },
+  "repository": { "url": "https://github.com/acme/api.git", "branch": "goal/7-add-a-health-endpoint" },
+  "git_credentials": [{ "host": "github.com", "username": "x-access-token", "password_env": "GOAL_REPOSITORY_TOKEN" }],
+  "tools": ["task@3.46.1"]
+}
+```
+
+`internal/gateway/testdata/run-bundle.json` is a real one; the Go and the Vitest tests both read it. Then, in order:
+
+1. Each file under `/goal` at its path (relative, no `.` or `..`), and `spec.json` with `gateway_url` set to `GOAL_GATEWAY_URL`.
+2. Per git credential, a helper for `https://<host>` in the global git config that answers git's `get` with the user name and the value of `password_env`, read when git asks: the password is only ever in the environment of the exec that runs git.
+3. With a repository: `git clone` into `/workspace` and the item's branch checked out, the remote one when earlier runs pushed it, otherwise new from the default branch; then `mise install` there for the repository's own tools (`mise.toml`, `.tool-versions`, …).
+4. `mise use --global` for `tools`, the definition's `runtime.tools`, so they are on `PATH` wherever the agent works (absent until the definition schema has the field, 4-10).
+5. One line on stdout: `{"type":"prepared","at":…,"seconds":5.4,"tools":1,"branch":"goal/7-…","branch_existed":true}` (`branch` and `branch_existed` only with a repository).
 
 ### spec.json
 
@@ -70,8 +106,10 @@ One JSON object per line, each with `type` and `at` (RFC 3339). Logs go to stder
 | `usage` | `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`: one event per API call (one model turn), with that call's final counts, not a running total. They come from the stream's `message_delta` (`includePartialMessages`): the SDK's assistant messages carry only the opening counts (`output_tokens` 1). The run's totals are in `finished` | `usage` |
 | `finished` | `status` (`succeeded` or `failed`), `subtype`, `output`, `error`, `cost_usd`, `turns`, `input_tokens`, `output_tokens`, `session_id`, `permission_denials` (`[{tool, id}]`, the calls the policy refused; absent when none) | the run's result; goald records each denial as a `tool_denied` event |
 
-`finished` is always the last line. The exit code is 0 when the agent produced a result (even a failed one) and 1 when the worker crashed; a container that exits without a `finished` line is a failed run quoting the tail of stderr.
+`finished` is always the last line. The exit code is 0 when the agent produced a result (even a failed one) and 1 when the worker crashed; a container that exits without a `finished` line is a failed run quoting the tail of stderr. `goal-agent prepare` writes exactly one line, `prepared` (above), which `domain.DecodeWorkerLine` skips as not one of these.
 
 ## Networking
 
 The container runs on goald's agents' network (`<GOAL_EGRESS_NAME>-agents`, ADR 0009): an internal Docker network without a bridge address, so it has no route to the host, to other networks or to the internet. The only other container on it is goald's egress proxy (`cmd/goal-egress`), named like the network (`goal-egress` by default), and the runner sets `HTTP_PROXY`, `HTTPS_PROXY` (and the lower-case forms) to it, `NO_PROXY` to the proxy itself and `NODE_USE_ENV_PROXY=1`. Through it an agent reaches the model API (`GOAL_AGENT_EGRESS`, default `api.anthropic.com`) over `CONNECT`, and goald's gateway at `gateway_url`, which is the proxy's own address at the gateway's path (`http://goal-egress:3128/mcp`): the proxy forwards exactly that path to goald and nothing else of it. Every other destination, and any name that resolves to a loopback, private or link-local address, is refused. The worker turns off Claude Code's nonessential traffic (`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`: telemetry, error reports, the updater), which the proxy would refuse anyway. A tool that fetches from the web (`WebFetch`, `curl` in `Bash`) reaches only those hosts.
+
+goald serves the run bundle at `/run` beside `/mcp`, on the same listener and under the same task token, so a sandbox reaches both at `GOAL_GATEWAY_URL`'s origin; the egress proxy above forwards `/mcp` only until the sandboxes' egress policy adds `/run` (spec 4 §5.10).

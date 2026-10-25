@@ -99,6 +99,21 @@ func (d definitions) Version(_ context.Context, id domain.DefinitionVersionID) (
 	return f, nil
 }
 
+// AgentFiles stands in for the definitions cache's: a prompt naming the agent and, with a
+// contract, its schema.
+func (d definitions) AgentFiles(_ context.Context, id domain.DefinitionVersionID, agent domain.AgentSpec, output string) (map[string][]byte, error) {
+	if _, ok := d[id]; !ok {
+		return nil, fmt.Errorf("definition version %s: %w", id, ports.ErrNotFound)
+	}
+
+	files := map[string][]byte{"prompt.md": []byte("# " + agent.Name + "\n")}
+	if output != "" {
+		files["output.schema.json"] = []byte(`{"type":"object"}`)
+	}
+
+	return files, nil
+}
+
 // upstream is a fake remote MCP server that records the Authorization headers it receives.
 type upstream struct {
 	mu    sync.Mutex
@@ -205,7 +220,9 @@ func newHarness(t *testing.T, cfg Config) *harness {
 // harnessDeps vary a harness: its definition (UPSTREAM is replaced by the fake upstream's url),
 // the host's secrets and the transport upstream requests take (nil: the default).
 type harnessDeps struct {
-	yaml      string
+	yaml string
+	// files are the definition's other files, by path.
+	files     map[string]string
 	secrets   ports.Secrets
 	transport http.RoundTripper
 }
@@ -218,10 +235,15 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 	load := func(id domain.FactoryID) *config.Factory {
 		yaml := strings.ReplaceAll(strings.ReplaceAll(d.yaml, "UPSTREAM", upURL), string(factoryID), string(id))
 
-		f, err := config.Load(fstest.MapFS{
+		files := fstest.MapFS{
 			"factory.yaml":       {Data: []byte(yaml)},
 			"agents/engineer.md": {Data: []byte("# engineer\n")},
-		})
+		}
+		for name, body := range d.files {
+			files[name] = &fstest.MapFile{Data: []byte(body)}
+		}
+
+		f, err := config.Load(files)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -240,6 +262,7 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 
 	h.gw, err = New(Deps{
 		Definitions: definitions{version: load(factoryID), otherVersion: load(otherID)},
+		Items:       h.store,
 		Secrets:     d.secrets,
 		Events:      h.store,
 		Clock:       h.clock,

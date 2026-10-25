@@ -1,98 +1,99 @@
 # syntax=docker/dockerfile:1
-# Goal agent worker image. Build from the repository root (task worker:image):
-#   docker build -f worker/Dockerfile -t ghcr.io/byfrederick/goal-agent:0.1.0 .
-# Contract with goald's Docker runner (internal/adapters/docker): runs as uid 1000 with HOME
-# /home/node, reads /goal/spec.json and /goal/agent, works in /workspace, writes JSON lines to
-# stdout. worker/README.md has the details.
+# goal-agent: the one image every run's sandbox starts from (spec 4 §4.1, ADR 0008). Build from
+# the repository root (task worker:image):
+#   docker build -f worker/Dockerfile -t ghcr.io/byfrederick/goal-agent:0.2.0 .
+# A sandbox idles in it until goald execs `goal-agent prepare`, `goal-agent run` and the station's
+# checks; worker/README.md has the contract. It carries the worker (Claude Code through the Agent
+# SDK), git, gh, mise with Go, Node and Python, a C compiler and PostgreSQL 18's server binaries;
+# a repository's other tools come from its mise config at prepare. Every version is pinned and
+# every download checked against the checksums its project publishes.
 
-ARG NODE_IMAGE=node:22-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d
+ARG DEBIAN_IMAGE=debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
 
-FROM ${NODE_IMAGE} AS build
-ARG PNPM_VERSION=12.15.0
-RUN npm install --global --no-fund --no-audit "pnpm@${PNPM_VERSION}"
-WORKDIR /src
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY worker/package.json worker/
-RUN pnpm install --frozen-lockfile --filter @goal/worker
-COPY worker/ worker/
-RUN pnpm --filter @goal/worker build \
- && pnpm --filter @goal/worker deploy --prod /out
-
-FROM ${NODE_IMAGE} AS runtime
-# git for the agent's local commits (it never gets credentials), ripgrep for search.
-RUN apt-get update \
- && apt-get install --yes --no-install-recommends ca-certificates git ripgrep \
- && rm -rf /var/lib/apt/lists/*
-ENV NODE_ENV=production \
-    HOME=/home/node
-COPY --from=build /out /opt/goal-worker
-# The workspace is a bind mount whose owner may differ from the container's user.
-RUN git config --system --add safe.directory /workspace
-USER 1000:1000
-WORKDIR /workspace
-ENTRYPOINT ["node", "/opt/goal-worker/dist/main.js"]
-
-# Dev variant: the runtime plus the toolchain a factory that builds this repository needs to do
-# its work and to pass its station checks (`task check`, `task migrate-check`) in an isolated
-# container: Go (with a C compiler for -race), task, golangci-lint, pnpm, Terraform with the AWS provider mirrored for
-# `terraform init`, and a PostgreSQL 18 server for throwaway clusters. Built by
-# `task worker:image-dev`; goald never mounts the Docker socket, so nothing here can reach the
-# host's Docker. Module downloads are prewarmed from go.mod as a local GOPROXY.
-FROM runtime AS dev
+# downloads: the binaries and keys the image takes from outside Debian, checked.
+FROM ${DEBIAN_IMAGE} AS downloads
 ARG TARGETARCH
-ARG GO_VERSION=1.26.10
-ARG TASK_VERSION=3.46.1
-ARG GOLANGCI_VERSION=2.15.0
-ARG TERRAFORM_VERSION=1.15.7
-ARG PNPM_VERSION=12.15.0
-ARG PG_MAJOR=18
-USER root
+ARG MISE_VERSION=2026.10.3
+ARG GH_VERSION=2.102.0
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update \
- && apt-get install --yes --no-install-recommends curl unzip make gcc libc6-dev \
- && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/keyrings/pgdg.asc \
- && echo "deb [signed-by=/usr/share/keyrings/pgdg.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
-      > /etc/apt/sources.list.d/pgdg.list \
- && apt-get update \
- && apt-get install --yes --no-install-recommends "postgresql-${PG_MAJOR}" \
+ && apt-get install --yes --no-install-recommends ca-certificates curl \
  && rm -rf /var/lib/apt/lists/*
-WORKDIR /tmp/dl
-# Every download is checked against the checksums its project publishes.
-RUN curl -fsSLO "https://dl.google.com/go/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" \
- && echo "$(curl -fsSL "https://dl.google.com/go/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz.sha256")  go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" | sha256sum -c - \
- && tar -C /usr/local -xzf "go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" \
- && curl -fsSLO "https://github.com/go-task/task/releases/download/v${TASK_VERSION}/task_linux_${TARGETARCH}.tar.gz" \
- && curl -fsSL "https://github.com/go-task/task/releases/download/v${TASK_VERSION}/task_checksums.txt" | grep " task_linux_${TARGETARCH}.tar.gz$" | sha256sum -c - \
- && tar -C /usr/local/bin -xzf "task_linux_${TARGETARCH}.tar.gz" task \
- && curl -fsSLO "https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_VERSION}/golangci-lint-${GOLANGCI_VERSION}-linux-${TARGETARCH}.tar.gz" \
- && curl -fsSL "https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_VERSION}/golangci-lint-${GOLANGCI_VERSION}-checksums.txt" | grep " golangci-lint-${GOLANGCI_VERSION}-linux-${TARGETARCH}.tar.gz$" | sha256sum -c - \
- && tar -C /usr/local/bin --strip-components=1 -xzf "golangci-lint-${GOLANGCI_VERSION}-linux-${TARGETARCH}.tar.gz" "golangci-lint-${GOLANGCI_VERSION}-linux-${TARGETARCH}/golangci-lint" \
- && curl -fsSLO "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip" \
- && curl -fsSL "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_SHA256SUMS" | grep " terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip$" | sha256sum -c - \
- && unzip -q "terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip" terraform -d /usr/local/bin \
- && npm install --global --no-fund --no-audit "pnpm@${PNPM_VERSION}" \
- && rm -rf /tmp/dl /root/.npm
-ENV PATH=/usr/local/go/bin:/usr/lib/postgresql/${PG_MAJOR}/bin:${PATH} \
-    NODE_ENV=development \
-    GOTOOLCHAIN=local \
-    CGO_ENABLED=1 \
-    GOPROXY=file:///opt/goproxy/cache/download,https://proxy.golang.org,direct \
-    TF_CLI_CONFIG_FILE=/opt/terraform/terraformrc \
-    GOTMPDIR=/home/node/.cache/go-tmp
-# Go modules of this repository, served as a read-only local proxy; new modules still download.
-COPY go.mod go.sum /tmp/gomod/
-RUN cd /tmp/gomod && GOMODCACHE=/opt/goproxy GOPROXY=https://proxy.golang.org,direct go mod download \
- && chmod -R a+rX /opt/goproxy && rm -rf /tmp/gomod /root/.cache
-# Terraform providers of terraform/, mirrored so `terraform init` installs them offline.
-COPY terraform/ /tmp/tf/
-RUN cd /tmp/tf && rm -rf .terraform \
- && TF_CLI_CONFIG_FILE= terraform init -backend=false -input=false >/dev/null \
- && TF_CLI_CONFIG_FILE= terraform providers mirror -platform="linux_${TARGETARCH}" /opt/terraform/providers >/dev/null \
- && printf '%s\n' 'provider_installation {' \
-      '  filesystem_mirror {' '    path    = "/opt/terraform/providers"' '    include = ["registry.terraform.io/*/*"]' '  }' \
-      '  direct {' '    exclude = ["registry.terraform.io/*/*"]' '  }' '}' > /opt/terraform/terraformrc \
- && rm -rf /tmp/tf /root/.terraform.d
-# /tmp is mounted noexec, so Go builds test binaries under the home volume instead.
-RUN install -d -o 1000 -g 1000 /home/node/.cache /home/node/.cache/go-tmp
+WORKDIR /dl
+RUN mise="mise-v${MISE_VERSION}-linux-$([ "${TARGETARCH}" = amd64 ] && echo x64 || echo "${TARGETARCH}")" \
+ && curl -fsSLO "https://github.com/jdx/mise/releases/download/v${MISE_VERSION}/${mise}" \
+ && curl -fsSL "https://github.com/jdx/mise/releases/download/v${MISE_VERSION}/SHASUMS256.txt" | grep " ./${mise}$" | sha256sum -c - \
+ && install -D -m 0755 "${mise}" /out/usr/local/bin/mise \
+ && gh="gh_${GH_VERSION}_linux_${TARGETARCH}" \
+ && curl -fsSLO "https://github.com/cli/cli/releases/download/v${GH_VERSION}/${gh}.tar.gz" \
+ && curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_checksums.txt" | grep " ${gh}.tar.gz$" | sha256sum -c - \
+ && tar -xzf "${gh}.tar.gz" \
+ && install -D -m 0755 "${gh}/bin/gh" /out/usr/local/bin/gh \
+ && curl -fsSL --create-dirs https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /out/usr/share/keyrings/pgdg.asc
+
+# base: Debian with the system packages, PostgreSQL's server binaries, gh and mise with the
+# image's Go, Node and Python, installed as the sandbox's user into /opt/mise.
+FROM ${DEBIAN_IMAGE} AS base
+ARG PG_MAJOR=18
+ARG GO_VERSION=1.26.10
+ARG NODE_VERSION=22.23.3
+ARG PYTHON_VERSION=3.14.8
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+COPY --from=downloads /out/usr/local/bin/ /usr/local/bin/
+COPY --from=downloads --chmod=0644 /out/usr/share/keyrings/pgdg.asc /usr/share/keyrings/pgdg.asc
+# No cluster at install: a run that wants PostgreSQL starts its own (initdb, pg_ctl).
+RUN apt-get update \
+ && apt-get install --yes --no-install-recommends ca-certificates \
+ && echo "deb [signed-by=/usr/share/keyrings/pgdg.asc] https://apt.postgresql.org/pub/repos/apt trixie-pgdg main" \
+      > /etc/apt/sources.list.d/pgdg.list \
+ && mkdir -p /etc/postgresql-common/createcluster.d \
+ && echo "create_main_cluster = false" > /etc/postgresql-common/createcluster.d/no-main.conf \
+ && apt-get update \
+ && apt-get install --yes --no-install-recommends \
+      curl git openssh-client ripgrep jq unzip xz-utils zstd bzip2 procps less \
+      gcc libc6-dev make "postgresql-${PG_MAJOR}" \
+ && rm -rf /var/lib/apt/lists/* \
+ && useradd --uid 1000 --user-group --create-home --home-dir /home/node --shell /bin/bash node \
+ && install -d -o 1000 -g 1000 /opt/mise /workspace /goal \
+ && printf '%s\n' '[user]' '	name = Goal agent' '	email = goal-agent@example.com' '[init]' '	defaultBranch = main' \
+      > /etc/gitconfig \
+ && mkdir -p /etc/mise \
+ && printf '%s\n' '[tools]' "go = \"${GO_VERSION}\"" "node = \"${NODE_VERSION}\"" "python = \"${PYTHON_VERSION}\"" \
+      > /etc/mise/config.toml
+ENV HOME=/home/node \
+    MISE_DATA_DIR=/opt/mise \
+    MISE_TRUSTED_CONFIG_PATHS=/workspace \
+    MISE_YES=1 \
+    MISE_DISABLE_UPDATE_WARNING=1 \
+    GIT_TERMINAL_PROMPT=0 \
+    PATH=/opt/mise/shims:/usr/lib/postgresql/${PG_MAJOR}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+USER 1000:1000
+RUN mise install \
+ && rm -rf /home/node/.cache /opt/mise/downloads
+
+# worker: the TypeScript worker, built with the image's own Node and deployed with its
+# production dependencies only.
+FROM base AS worker
+ARG PNPM_VERSION=12.15.0
+WORKDIR /home/node/src
+RUN npm install --global --no-fund --no-audit "pnpm@${PNPM_VERSION}" && mise reshim
+COPY --chown=1000:1000 package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY --chown=1000:1000 worker/package.json worker/
+RUN pnpm install --frozen-lockfile --filter @goal/worker
+COPY --chown=1000:1000 worker/ worker/
+RUN pnpm --filter @goal/worker build \
+ && pnpm --filter @goal/worker deploy --prod /home/node/out
+
+# runtime: base plus the worker, nothing of its build.
+FROM base AS runtime
+ARG NODE_VERSION=22.23.3
+COPY --from=worker /home/node/out /opt/goal-worker
+USER root
+# The worker runs on the image's Node whatever Node a repository pins for the agent.
+RUN printf '%s\n' '#!/bin/sh' \
+      "NODE_ENV=production exec /opt/mise/installs/node/${NODE_VERSION}/bin/node /opt/goal-worker/dist/main.js \"\$@\"" \
+      > /usr/local/bin/goal-agent \
+ && chmod 0755 /usr/local/bin/goal-agent
 USER 1000:1000
 WORKDIR /workspace
+CMD ["sleep", "infinity"]

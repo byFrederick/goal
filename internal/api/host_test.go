@@ -42,6 +42,7 @@ func TestCheckHost(t *testing.T) {
 		{name: "the public URL's host, any case", method: http.MethodGet, host: "Goal.Example.com", path: "/", want: http.StatusNoContent},
 		{name: "health check from anywhere", method: http.MethodGet, host: evilHost, path: "/v1/health", want: http.StatusNoContent},
 		{name: "agents reach the gateway as the Docker host", method: http.MethodPost, host: "host.docker.internal:8080", path: api.GatewayPath, want: http.StatusNoContent},
+		{name: "and its run bundle", method: http.MethodGet, host: "host.docker.internal:8080", path: api.RunPath, want: http.StatusNoContent},
 	}
 
 	for _, tt := range tests {

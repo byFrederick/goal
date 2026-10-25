@@ -81,11 +81,7 @@ func (e *Engine) withNotes(ctx context.Context, item domain.ItemID, notes []doma
 func briefOf(it domain.Item, notes []domain.Event) string {
 	var b strings.Builder
 
-	b.WriteString(it.Title)
-
-	if it.Body != "" {
-		b.WriteString("\n\n" + it.Body)
-	}
+	b.WriteString(it.Work())
 
 	if len(notes) == 0 {
 		return b.String()

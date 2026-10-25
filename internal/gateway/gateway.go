@@ -12,6 +12,15 @@
 // claims name the factory, agent and run; the factory's current definition must still declare
 // that agent, otherwise 403.
 //
+// # Run bundle
+//
+// ServeRun answers GET /run with the bundle of the run in the token, which goal-agent prepare
+// writes to /goal in the run's sandbox: the task (spec.json: brief, earlier outputs, model, tool
+// rules, limits), the agent's prompt, skills and output schema from the definition version the
+// run started on, the repository and the item's branch to check out, and the git credentials to
+// configure, each naming the environment variable that holds its password. The bundle holds no
+// secret, and it proxies nothing: everything it describes is used from the sandbox.
+//
 // # Connections and tools
 //
 // A task is granted the connections that are both in its token and in its agent's
@@ -96,6 +105,9 @@ const EventToolCall domain.EventKind = "gateway_tool_call"
 // ports.ErrNotFound.
 type Definitions interface {
 	Version(ctx context.Context, id domain.DefinitionVersionID) (*config.Factory, error)
+	// AgentFiles returns an agent's prompt, skills and the output schema of contract output
+	// from version id, by path under the agent's folder (definitions.Cache.AgentFiles).
+	AgentFiles(ctx context.Context, id domain.DefinitionVersionID, agent domain.AgentSpec, output string) (map[string][]byte, error)
 }
 
 // Events records audit events; ports.Store satisfies it.
@@ -107,10 +119,12 @@ type Events interface {
 // may be nil (logs discarded); Sidecars may be nil (stdio connections are unavailable).
 type Deps struct {
 	Definitions Definitions
-	Secrets     ports.Secrets
-	Events      Events
-	Clock       ports.Clock
-	Logger      *slog.Logger
+	// Items gives the run bundle the item's brief, earlier outputs and branch.
+	Items   Items
+	Secrets ports.Secrets
+	Events  Events
+	Clock   ports.Clock
+	Logger  *slog.Logger
 	// Transport carries upstream requests.
 	Transport http.RoundTripper
 	// Sidecars runs the servers of stdio connections.
@@ -157,6 +171,7 @@ var implementation = &mcp.Implementation{Name: "goal-gateway", Version: "1"}
 // Gateway serves the MCP endpoint. It is an http.Handler, safe for concurrent use.
 type Gateway struct {
 	defs      Definitions
+	items     Items
 	secrets   ports.Secrets
 	events    Events
 	clock     ports.Clock
@@ -169,8 +184,8 @@ type Gateway struct {
 
 // New returns a gateway; goald mounts it at its MCP path.
 func New(d Deps, cfg Config) (*Gateway, error) {
-	if d.Definitions == nil || d.Secrets == nil || d.Events == nil || d.Clock == nil {
-		return nil, errors.New("gateway: Definitions, Secrets, Events and Clock are required")
+	if d.Definitions == nil || d.Items == nil || d.Secrets == nil || d.Events == nil || d.Clock == nil {
+		return nil, errors.New("gateway: Definitions, Items, Secrets, Events and Clock are required")
 	}
 
 	if len(cfg.Key) == 0 {
@@ -186,7 +201,7 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 	cfg.MaxSidecars = cmp.Or(cfg.MaxSidecars, defaultMaxSidecars)
 
 	g := &Gateway{
-		defs: d.Definitions, secrets: d.Secrets, events: d.Events, clock: d.Clock,
+		defs: d.Definitions, items: d.Items, secrets: d.Secrets, events: d.Events, clock: d.Clock,
 		log: d.Logger, transport: d.Transport, cfg: cfg,
 	}
 	if g.log == nil {
@@ -237,10 +252,7 @@ var errForbidden = errors.New("forbidden")
 func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	claims, err := g.authenticate(r)
 	if err != nil {
-		g.log.WarnContext(r.Context(), "gateway request rejected", "remote", r.RemoteAddr, "reason", err)
-		w.Header().Set("WWW-Authenticate", `Bearer realm="goal"`)
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-
+		g.unauthorized(w, r, err)
 		return
 	}
 
@@ -271,6 +283,13 @@ func serverOf(r *http.Request) *mcp.Server {
 	s, _ := r.Context().Value(serverKey{}).(*mcp.Server)
 
 	return s
+}
+
+// unauthorized answers a request without a valid task token: 401 with no detail.
+func (g *Gateway) unauthorized(w http.ResponseWriter, r *http.Request, reason error) {
+	g.log.WarnContext(r.Context(), "gateway request rejected", "path", r.URL.Path, "remote", r.RemoteAddr, "reason", reason)
+	w.Header().Set("WWW-Authenticate", `Bearer realm="goal"`)
+	http.Error(w, "unauthorized", http.StatusUnauthorized)
 }
 
 func (g *Gateway) authenticate(r *http.Request) (domain.TaskClaims, error) {

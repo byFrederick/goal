@@ -1,5 +1,4 @@
-# The image builds from the repository root. The runtime needs only the workspace manifests and
-# worker/; the dev variant also reads go.mod, go.sum and terraform/ to prewarm its caches.
+# The image builds from the repository root and needs only the workspace manifests and worker/.
 *
 !package.json
 !pnpm-lock.yaml
@@ -7,10 +6,3 @@
 !worker/
 worker/node_modules/
 worker/dist/
-!go.mod
-!go.sum
-!terraform/
-terraform/.terraform/
-terraform/backend.hcl
-terraform/terraform.tfvars
-terraform/*.tfstate*

@@ -13,9 +13,8 @@ vars:
   FACTORIES_DIR: '{{.GOAL_FACTORIES_DIR | default "../goal-factories"}}'
   # Fixtures that `task validate` checks; override to validate a working copy.
   FACTORIES: '{{.FACTORIES | default "internal/config/testdata/*/"}}'
-  # The agent images factories name in runtime.image; built locally, never pushed from here.
-  WORKER_IMAGE: '{{.WORKER_IMAGE | default "ghcr.io/byfrederick/goal-agent:0.1.0"}}'
-  WORKER_DEV_IMAGE: '{{.WORKER_DEV_IMAGE | default "ghcr.io/byfrederick/goal-agent-dev:0.1.0"}}'
+  # The one image every run's sandbox starts from (spec 4 §4.1); built locally, never pushed from here.
+  WORKER_IMAGE: '{{.WORKER_IMAGE | default "ghcr.io/byfrederick/goal-agent:0.2.0"}}'
   # The egress proxy agents, sidecars and checks go out through (ADR 0009); built locally, never pushed.
   EGRESS_IMAGE: '{{.GOAL_EGRESS_IMAGE | default "ghcr.io/byfrederick/goal-egress:0.1.0"}}'
   # The auth service's sidecar image (spec 3 §5.5); built locally, never pushed from here.
@@ -376,9 +375,19 @@ tasks:
       - pnpm run --silent test
 
   worker:image:
-    desc: Build the agent worker image locally (WORKER_IMAGE); never pushes
+    desc: Build the goal-agent image locally (WORKER_IMAGE), then smoke it; never pushes
     cmds:
       - docker build -f worker/Dockerfile --target runtime -t {{.WORKER_IMAGE}} .
+      - task: worker:smoke
+
+  worker:smoke:
+    desc: Smoke the goal-agent image (WORKER_IMAGE) - its toolchains run as the sandbox's user, and goal-agent answers
+    cmds:
+      - >-
+        docker run --rm {{.WORKER_IMAGE}} sh -ec 'test "$(id -u)" = 1000; touch /workspace/.w /goal/.w;
+        git --version; gh --version | head -1; mise --version; go version; node --version; python --version;
+        gcc --version | head -1; postgres --version; initdb -D /tmp/pg >/dev/null 2>&1; echo "initdb: ok";
+        ! goal-agent prepare 2>/tmp/err; grep -q "GOAL_GATEWAY_URL is not set" /tmp/err; echo "goal-agent: ok"'
 
   egress:image:
     desc: Build the egress proxy's image locally (EGRESS_IMAGE, cmd/goal-egress); goald runs it for agent runs, sidecars and checks; never pushes
@@ -389,11 +398,6 @@ tasks:
     desc: Build the auth service's sidecar image locally (AUTH_IMAGE); never pushes
     cmds:
       - docker build -f auth/Dockerfile --target runtime -t {{.AUTH_IMAGE}} .
-
-  worker:image-dev:
-    desc: Build the dev agent image (WORKER_DEV_IMAGE) with Go, task, golangci-lint, pnpm, Terraform and PostgreSQL 18
-    cmds:
-      - docker build -f worker/Dockerfile --target dev -t {{.WORKER_DEV_IMAGE}} .
 
   hooks:install:
     desc: Use the versioned git hooks in .githooks (pre-push runs task check)
