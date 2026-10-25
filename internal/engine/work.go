@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
@@ -41,7 +42,8 @@ type claimed struct {
 
 // work runs the agent on a claimed item until the item moves on, is blocked, is released (at
 // shutdown, or cancelled by the weekly budget) or the lease is lost to another instance. The
-// claim's runs share one sandbox, deleted when work returns.
+// claim's runs share one sandbox, deleted when work returns; a run whose sandbox was lost
+// (ports.ErrSandboxLost) runs again in a new one (retryLost).
 func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it domain.Item, lease domain.Lease) {
 	c := claimed{line: l, station: st, item: it, lease: lease}
 	log := e.log.With(slog.String("factory", string(it.FactoryID)), slog.String("item", string(it.ID)), slog.String("station", st.ID))
@@ -62,22 +64,24 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 	var b box
 	defer e.deleteBox(ctx, log, &b)
 
-	rejection := ""
+	rejection, attempt, lost := "", 1, 0
 
-	for attempt := 1; ; attempt++ {
+	for {
 		res, verdict, err := e.runOnce(ctx, c, &b, feedbackOf(notes, rejection))
+
+		if e.cut(ctx, log, c, err) {
+			return
+		}
 
 		var rejected *outputError
 
 		switch {
-		case errors.Is(context.Cause(ctx), errLeaseTaken):
-			return // a person moved the item; its run is finished as cancelled
-		case errors.Is(err, ports.ErrLeaseLost):
-			log.WarnContext(ctx, "lease lost; another instance or a person owns the item now")
-			return
-		case ctx.Err() != nil:
-			e.release(ctx, log, c)
-			return
+		case errors.Is(err, ports.ErrSandboxLost):
+			if lost++; !e.retryLost(ctx, log, c, &b, lost, err) {
+				return
+			}
+
+			continue
 		case errors.As(err, &rejected):
 		case err != nil:
 			e.block(ctx, log, c, err.Error())
@@ -100,7 +104,86 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 
 		rejection = "Your previous attempt was rejected: " + rejected.err.Error() +
 			"\nFix that and return output that satisfies the station contract."
+		attempt++
 	}
+}
+
+// cut reports whether the claim ended under its run or wait: a person moved the item (its run is
+// finished as cancelled), the lease went to another instance (err is ErrLeaseLost), or ctx ended,
+// when the item has been released to its queue.
+func (e *Engine) cut(ctx context.Context, log *slog.Logger, c claimed, err error) bool {
+	switch {
+	case errors.Is(context.Cause(ctx), errLeaseTaken):
+		return true
+	case errors.Is(err, ports.ErrLeaseLost):
+		log.WarnContext(ctx, "lease lost; another instance or a person owns the item now")
+		return true
+	case ctx.Err() != nil:
+		e.release(ctx, log, c)
+		return true
+	}
+
+	return false
+}
+
+// maxLostBoxes caps the runs of one claim whose sandbox is lost: the third loss blocks the item.
+const maxLostBoxes = 3
+
+// retryLost follows the lost-th run of a claim whose sandbox was lost (err, scrubbed): a
+// redeploy, a box restart or a network blip, not the item's fault. It deletes the box, so the
+// next run creates a new one (the branch keeps what was pushed), and below maxLostBoxes records
+// run_retried and waits TransientBackoff, doubled with each loss, while heartbeating the lease.
+// It reports whether to run again; when not, the item is blocked with err, released at shutdown
+// or no longer this instance's.
+func (e *Engine) retryLost(ctx context.Context, log *slog.Logger, c claimed, b *box, lost int, err error) bool {
+	e.deleteBox(ctx, log, b)
+	*b = box{}
+
+	if lost >= maxLostBoxes {
+		e.block(ctx, log, c, fmt.Sprintf("the sandbox was lost %d times: %v", lost, err))
+		return false
+	}
+
+	log.WarnContext(ctx, "sandbox lost; running the item again in a new one", slog.Int("attempt", lost), slog.Any("error", err))
+
+	ev := event(c.item, domain.EventRunRetried, e.clock.Now(), domain.ActorEngine,
+		map[string]any{keyReason: err.Error(), "attempt": lost, "max": maxLostBoxes})
+	if aerr := e.store.AppendEvents(ctx, ev); aerr != nil {
+		log.ErrorContext(ctx, "append run_retried event", slog.Any("error", aerr))
+	}
+
+	return !e.cut(ctx, log, c, e.backoff(ctx, c.lease, e.cfg.TransientBackoff<<(lost-1)))
+}
+
+// backoff waits d on the clock in equal steps of at most HeartbeatEvery and heartbeats the lease
+// after each, so the claim outlives the wait. It returns ErrLeaseLost when the lease is lost, or
+// ctx's error when ctx ends first.
+func (e *Engine) backoff(ctx context.Context, lease domain.Lease, d time.Duration) error {
+	steps := max(1, (d+e.cfg.HeartbeatEvery-1)/e.cfg.HeartbeatEvery)
+
+	t := e.clock.NewTicker(d / steps)
+	defer t.Stop()
+
+	for range steps {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.C():
+		}
+
+		now := e.clock.Now()
+
+		_, err := e.store.HeartbeatLease(ctx, lease, now, now.Add(e.cfg.LeaseTTL))
+
+		switch {
+		case errors.Is(err, ports.ErrLeaseLost):
+			return err
+		case err != nil && ctx.Err() == nil:
+			e.log.WarnContext(ctx, "heartbeat lease", slog.String("item", string(lease.ItemID)), slog.Any("error", err))
+		}
+	}
+
+	return ctx.Err()
 }
 
 // agentFor is the agent that works on an item of lane at st, or why none can: no agent for the
@@ -238,8 +321,12 @@ func (e *Engine) runInBox(ctx context.Context, c claimed, runID domain.RunID, b 
 		agentEnv[envFeedback] = f
 	}
 
-	res := e.agent(ctx, c, runID, b, agentEnv, scrub)
+	res, lost := e.agent(ctx, c, runID, b, agentEnv, scrub)
 	e.finishRun(ctx, runID, res)
+
+	if lost != nil {
+		return res, nil, lost
+	}
 
 	if res.Status != domain.RunSucceeded {
 		return res, nil, nil
@@ -259,8 +346,9 @@ func (e *Engine) runInBox(ctx context.Context, c claimed, runID domain.RunID, b 
 
 // agent runs `goal-agent run` in the claim's sandbox with env, relays the events it reports and
 // returns its result. How the command ended (cancelled, timed out, crashed) wins over what the
-// worker reported; what reaches the store is scrubbed of the run's secrets.
-func (e *Engine) agent(ctx context.Context, c claimed, runID domain.RunID, b *box, env map[string]string, scrub scrubber) domain.RunResult {
+// worker reported; what reaches the store is scrubbed of the run's secrets. When the sandbox was
+// lost on the way the run failed, and the scrubbed error wrapping ports.ErrSandboxLost is returned too.
+func (e *Engine) agent(ctx context.Context, c claimed, runID domain.RunID, b *box, env map[string]string, scrub scrubber) (domain.RunResult, error) {
 	var fin *domain.WorkerFinished
 
 	started := e.clock.Now()
@@ -283,7 +371,11 @@ func (e *Engine) agent(ctx context.Context, c claimed, runID domain.RunID, b *bo
 		}
 	})
 
-	var res domain.RunResult
+	var (
+		res  domain.RunResult
+		lost error
+	)
+
 	if fin != nil {
 		res = fin.Result()
 	}
@@ -295,6 +387,10 @@ func (e *Engine) agent(ctx context.Context, c claimed, runID domain.RunID, b *bo
 		res.Status, res.Output, res.Error = domain.RunCancelled, nil, ctx.Err().Error()
 	case err != nil:
 		res.Status, res.Output, res.Error = domain.RunFailed, nil, "agent: "+err.Error()
+
+		if errors.Is(err, ports.ErrSandboxLost) {
+			lost = scrub.err(fmt.Errorf("agent: %w", err))
+		}
 	case fin == nil:
 		res.Status, res.Error = domain.RunFailed, fmt.Sprintf("worker exited with code %d without a result", st.Code)
 		if tail := strings.TrimSpace(st.StderrTail); tail != "" {
@@ -307,7 +403,7 @@ func (e *Engine) agent(ctx context.Context, c claimed, runID domain.RunID, b *bo
 	e.log.InfoContext(ctx, "sandbox exec", slog.String("run", string(runID)), slog.String("step", "agent"),
 		slog.Int("exit", st.Code), slog.Float64("seconds", e.since(started)))
 
-	return res
+	return res, lost
 }
 
 // relay records one event the agent reported, by the agent, for its run.
@@ -348,7 +444,7 @@ func (e *Engine) runChecks(ctx context.Context, c claimed, runID domain.RunID, b
 			Argv: []string{"sh", "-c", cmd}, Env: map[string]string{"CI": "true"}, Dir: workspaceDir, Timeout: e.cfg.CheckTimeout,
 		}, out.add)
 		if err != nil {
-			return fmt.Errorf("run check %q: %w", cmd, err)
+			return fmt.Errorf("run check %q: %w", cmd, scrub.err(err))
 		}
 
 		code, output := st.Code, joinParts(out.String(), st.StderrTail)

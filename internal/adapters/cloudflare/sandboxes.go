@@ -220,7 +220,11 @@ func (s *Sandboxes) do(ctx context.Context, method, path string, body any) (*htt
 
 	res, err := s.client.Do(req)
 	if err != nil {
-		return nil, err
+		if ctx.Err() != nil {
+			return nil, err
+		}
+
+		return nil, fmt.Errorf("%w: %w", ports.ErrSandboxLost, err)
 	}
 
 	if res.StatusCode < 200 || res.StatusCode > 299 {
@@ -232,10 +236,36 @@ func (s *Sandboxes) do(ctx context.Context, method, path string, body any) (*htt
 
 		_ = json.NewDecoder(io.LimitReader(res.Body, 4<<10)).Decode(&problem)
 
-		return nil, fmt.Errorf("the sandbox API answered %d: %s", res.StatusCode, cmp.Or(problem.Error, http.StatusText(res.StatusCode)))
+		return nil, &answerError{status: res.StatusCode, reason: cmp.Or(problem.Error, http.StatusText(res.StatusCode))}
 	}
 
 	return res, nil
+}
+
+// answerError is an answer of the sandbox API other than a success. A 5xx is the Worker or the
+// box failing (ports.ErrSandboxLost); anything else is a refusal.
+type answerError struct {
+	status int
+	reason string
+}
+
+func (e *answerError) Error() string {
+	return fmt.Sprintf("the sandbox API answered %d: %s", e.status, e.reason)
+}
+
+func (e *answerError) Is(target error) bool {
+	return target == ports.ErrSandboxLost && e.status >= http.StatusInternalServerError
+}
+
+// gone marks the 404 an exec or an attach gets when its box or command no longer exists (a
+// restart, a redeploy) as ports.ErrSandboxLost; elsewhere a 404 is a path the Worker lacks.
+func gone(err error) error {
+	var a *answerError
+	if errors.As(err, &a) && a.status == http.StatusNotFound {
+		return fmt.Errorf("%w: %w", ports.ErrSandboxLost, err)
+	}
+
+	return err
 }
 
 // box is one run's container.
@@ -271,7 +301,7 @@ func (b *box) Exec(ctx context.Context, e ports.Exec) (ports.Process, error) {
 
 	body, err := b.s.call(ctx, http.MethodPost, b.s.boxPath(b.run)+"/execs", x)
 	if err != nil {
-		return nil, fmt.Errorf("exec in sandbox of run %s: %w", b.run, err)
+		return nil, fmt.Errorf("exec in sandbox of run %s: %w", b.run, gone(err))
 	}
 
 	stdoutR, stdoutW := io.Pipe()
@@ -353,6 +383,7 @@ func (p *process) read(ctx context.Context, body io.ReadCloser, stdout *io.PipeW
 		path := fmt.Sprintf("%s/execs/%s?offset=%d", p.b.s.boxPath(p.b.run), p.id, p.offset)
 
 		if body, err = p.b.s.call(ctx, http.MethodGet, path, nil); err != nil {
+			err = gone(err)
 			break
 		}
 
@@ -367,6 +398,10 @@ func (p *process) read(ctx context.Context, body io.ReadCloser, stdout *io.PipeW
 		p.kill(ctx)
 
 		return
+	}
+
+	if errors.Is(err, errCut) {
+		err = fmt.Errorf("%w: %w", ports.ErrSandboxLost, err)
 	}
 
 	if err != nil {
@@ -412,8 +447,8 @@ func (p *process) decode(body io.Reader, stdout io.Writer) error {
 		case l.Exit != nil:
 			p.status = ports.ExitStatus{Code: *l.Exit, TimedOut: l.TimedOut, StderrTail: lastBytes(l.Stderr, ports.MaxStderrTail)}
 			return nil
-		case l.Error != nil:
-			return errors.New(*l.Error)
+		case l.Error != nil: // the Worker lost the command: its box went or the box's connection broke
+			return fmt.Errorf("%w: %s", ports.ErrSandboxLost, *l.Error)
 		}
 	}
 }

@@ -127,6 +127,9 @@ type Config struct {
 	TaskTimeout time.Duration
 	// CheckTimeout stops one command check that runs longer (default 30m).
 	CheckTimeout time.Duration
+	// TransientBackoff is the wait before an item whose sandbox was lost runs again in a new one;
+	// it doubles with each loss (default 15s).
+	TransientBackoff time.Duration
 	// SweepLimit caps leases requeued per sweep and items released per queue station per tick (default 100).
 	SweepLimit int
 	// Image is the agent image every sandbox starts from (required).
@@ -158,6 +161,7 @@ const (
 	defaultLeaseTTL     = 2 * time.Minute
 	defaultTaskTimeout  = 2 * time.Hour
 	defaultCheckTimeout = 30 * time.Minute
+	defaultBackoff      = 15 * time.Second
 	defaultSweepLimit   = 100
 	cleanupTimeout      = 10 * time.Second
 )
@@ -307,6 +311,10 @@ func withDefaults(cfg Config) Config {
 
 	if cfg.CheckTimeout <= 0 {
 		cfg.CheckTimeout = defaultCheckTimeout
+	}
+
+	if cfg.TransientBackoff <= 0 {
+		cfg.TransientBackoff = defaultBackoff
 	}
 
 	if cfg.SweepLimit <= 0 {

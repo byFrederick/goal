@@ -1,6 +1,7 @@
 package cloudflare
 
 import (
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -177,4 +178,101 @@ func (tt attachCase) worker(t *testing.T) (*Sandboxes, *[]string, *int) {
 	s.attachWait = time.Millisecond
 
 	return s, &offsets, &kills
+}
+
+// A failure of the box or of the way to it wraps ports.ErrSandboxLost, so the engine runs the
+// item again in a new box; a command's own outcome, a refusal and a broken protocol do not.
+func TestSandboxes_TransportErrorsAreSandboxLost(t *testing.T) {
+	t.Parallel()
+
+	cut := func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, `{"o":"first\n"}`+"\n") }
+	answer := func(status int, body string) http.HandlerFunc {
+		return func(w http.ResponseWriter, _ *http.Request) { http.Error(w, body, status) }
+	}
+
+	tests := []struct {
+		name string
+		// create answers the box's PUT, exec its POST and attach the GET of a cut stream; nil is
+		// a success that says nothing more.
+		create, exec, attach http.HandlerFunc
+		down                 bool // the Worker does not answer at all
+		lost                 bool
+	}{
+		{name: "the Worker unreachable", down: true, lost: true},
+		{name: "a 5xx on create", create: answer(http.StatusBadGateway, `{"error":"the container did not start"}`), lost: true},
+		{name: "a 5xx on exec", exec: answer(http.StatusServiceUnavailable, `{"error":"try later"}`), lost: true},
+		{name: "a 404 on exec: the box is gone", exec: answer(http.StatusNotFound, `{"error":"no sandbox for this run"}`), lost: true},
+		{name: "a 404 on attach: the exec is gone", exec: cut, attach: answer(http.StatusNotFound, `{"error":"no such exec"}`), lost: true},
+		{name: "cut after the last attach", exec: cut, attach: cut, lost: true},
+		{
+			name: "the outcome unknown",
+			exec: func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = io.WriteString(w, `{"error":"the command's outcome is unknown: Network connection lost."}`+"\n")
+			},
+			lost: true,
+		},
+		{
+			name: "the command's own exit",
+			exec: func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = io.WriteString(w, `{"exit":3,"timed_out":false,"stderr":"oops"}`+"\n")
+			},
+		},
+		{name: "a refusal", exec: answer(http.StatusBadRequest, `{"error":"argv is required"}`)},
+		{name: "a 404 on create: no such path", create: answer(http.StatusNotFound, `{"error":"no such path"}`)},
+		{name: "not the protocol", exec: func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "<html>") }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				h := map[string]http.HandlerFunc{http.MethodPut: tt.create, http.MethodPost: tt.exec, http.MethodGet: tt.attach}[r.Method]
+				if h != nil {
+					h(w, r)
+				}
+			}))
+			t.Cleanup(srv.Close)
+
+			if tt.down {
+				srv.Close()
+			}
+
+			s, err := New(Config{URL: srv.URL, Key: "key"}, slog.New(slog.DiscardHandler))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			s.attachWait = time.Millisecond
+
+			err = createAndRun(t, s)
+			if err == nil && tt.lost {
+				t.Fatal("no error, want one that the box was lost")
+			}
+
+			if got := errors.Is(err, ports.ErrSandboxLost); got != tt.lost {
+				t.Errorf("error %v: errors.Is(ErrSandboxLost) = %v, want %v", err, got, tt.lost)
+			}
+		})
+	}
+}
+
+// createAndRun creates a box and runs one command in it to its end.
+func createAndRun(t *testing.T, s *Sandboxes) error {
+	t.Helper()
+
+	sb, err := s.Create(t.Context(), ports.SandboxSpec{RunID: "run-1", Image: "goal-agent", Deadline: time.Now().Add(time.Hour)})
+	if err != nil {
+		return err
+	}
+
+	p, err := sb.Exec(t.Context(), ports.Exec{Argv: []string{"long"}})
+	if err != nil {
+		return err
+	}
+
+	_, _ = io.Copy(io.Discard, p.Stdout())
+	_, err = p.Wait()
+
+	return err
 }

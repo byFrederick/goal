@@ -65,6 +65,10 @@ const (
 	// repository cloned on the item's branch, the tools installed. Data seconds, tools (how many
 	// of the definition's) and, with a repository, branch_existed.
 	EventPrepared EventKind = "prepared"
+	// EventRunRetried is a run whose sandbox was lost (ports.ErrSandboxLost: a redeploy, a box
+	// restart, a network blip) and that the engine runs again in a new one at the same station.
+	// Data reason, attempt (the lost one) and max.
+	EventRunRetried EventKind = "run_retried"
 )
 
 // Audit of items.

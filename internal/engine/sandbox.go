@@ -33,8 +33,9 @@ var (
 	argvAgent   = []string{"goal-agent", "run"}
 )
 
-// box is a claim's sandbox: created by the claim's first run and prepared once; a retry runs in
-// it too. The claim's work deletes it when it ends.
+// box is a claim's sandbox: created by the claim's first run and prepared once; a retry of a
+// rejected output runs in it too. A lost box (ports.ErrSandboxLost) is deleted and the next run
+// creates a new one. The claim's work deletes it when it ends.
 type box struct {
 	sandbox ports.Sandbox
 	// existed reports whether the item's branch was on the remote when prepare checked it out.
@@ -67,7 +68,7 @@ func (e *Engine) open(ctx context.Context, c claimed, runID domain.RunID, b *box
 		Deadline: started.Add(maxAttempts*e.cfg.TaskTimeout + e.cfg.LeaseTTL),
 	})
 	if err != nil {
-		return fmt.Errorf("create sandbox: %w", err)
+		return fmt.Errorf("create sandbox: %w", scrub.err(err))
 	}
 
 	b.sandbox = sb
@@ -225,7 +226,25 @@ func newScrubber(values ...string) scrubber {
 
 func (s scrubber) string(v string) string { return s.r.Replace(v) }
 
-func (s scrubber) err(err error) error { return errors.New(s.string(err.Error())) }
+// err scrubs err's message. Of what err wraps it keeps only ports.ErrSandboxLost, which the
+// engine decides on and whose message holds no secret.
+func (s scrubber) err(err error) error {
+	scrubbed := &scrubbedError{msg: s.string(err.Error())}
+	if errors.Is(err, ports.ErrSandboxLost) {
+		scrubbed.kind = ports.ErrSandboxLost
+	}
+
+	return scrubbed
+}
+
+// scrubbedError is an error scrubbed of the run's secrets, with the sentinel it wrapped, if any.
+type scrubbedError struct {
+	msg  string
+	kind error
+}
+
+func (e *scrubbedError) Error() string { return e.msg }
+func (e *scrubbedError) Unwrap() error { return e.kind }
 
 // value scrubs every string inside a decoded JSON value, in place, and returns it.
 func (s scrubber) value(v any) any {

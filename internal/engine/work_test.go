@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports/porttest"
@@ -521,4 +522,168 @@ func TestRun_KeepsItsVersionAndTheNextMoveUsesTheCurrentLine(t *testing.T) {
 	if claims := h.claims(t, h.worker.Runs()[0].Env["GOAL_GATEWAY_TOKEN"]); claims.VersionID != v1 {
 		t.Errorf("token version = %q, want %q", claims.VersionID, v1)
 	}
+}
+
+// stepThroughBackoff is step with the clock running, a second every millisecond: the engine
+// waits on it between the runs of a lost box.
+func (h *harness) stepThroughBackoff(t *testing.T) {
+	t.Helper()
+
+	done := make(chan struct{})
+	defer close(done)
+
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case <-time.After(time.Millisecond):
+				h.clock.Advance(time.Second)
+			}
+		}
+	}()
+
+	h.step(t)
+}
+
+// lostBox is the reason a scripted loss gives, with a secret the run's scrubber holds.
+const lostBox = "Network connection lost near " + codeToken
+
+// lostScrubbed reports whether s carries lostBox without its secret.
+func lostScrubbed(s string) bool {
+	return strings.Contains(s, "Network connection lost") && !strings.Contains(s, codeToken)
+}
+
+// A box lost to its infrastructure (a redeploy, a restart, a network blip) is not the item's
+// fault: the run fails with the reason, run_retried records it, and the item runs again at the
+// same station in a new box, which moves it on.
+func TestRun_LostSandboxRetriesInAFreshBox(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		lose func(*porttest.Sandboxes)
+		// prepares is the sandboxes prepared; checked whether the lost run's check ran.
+		prepares int
+		checked  bool
+	}{
+		{name: "on create", lose: func(s *porttest.Sandboxes) { s.LoseCreates(1, lostBox) }, prepares: 1},
+		{name: "in prepare", lose: func(s *porttest.Sandboxes) { s.Lose("goal-agent prepare", 1, lostBox) }, prepares: 2},
+		{name: "in the agent's exec", lose: func(s *porttest.Sandboxes) { s.Lose("goal-agent run", 1, lostBox) }, prepares: 2},
+		{name: "in a check", lose: func(s *porttest.Sandboxes) { s.Lose("sh -c "+makeTest, 1, lostBox) }, prepares: 2, checked: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			line := repoLine()
+			line.Stations[1].Checks = []string{makeTest}
+			h := newHarness(t, line, porttest.Succeed(`{}`))
+			tt.lose(h.sandboxes)
+			it := h.submit(t, domain.NewItem{})
+
+			h.stepThroughBackoff(t)
+			h.expectRetriedOnce(t, it, tt.checked)
+
+			if n := len(h.worker.Prepares()); n != tt.prepares {
+				t.Errorf("%d prepares, want %d", n, tt.prepares)
+			}
+		})
+	}
+}
+
+// expectRetriedOnce fails the test unless it is done after one run that lost its box and one in a
+// new box; checked is whether the lost run's agent succeeded.
+func (h *harness) expectRetriedOnce(t *testing.T, it domain.Item, checked bool) {
+	t.Helper()
+
+	if got := h.item(t, it.ID); got.State != domain.StateDone {
+		t.Fatalf("item is %s, want done (events %v)", got.State, h.kinds(it.ID))
+	}
+
+	retried := h.eventsOf(it.ID, domain.EventRunRetried)
+	if len(retried) != 1 {
+		t.Fatalf("%d run_retried events, want one (events %v)", len(retried), h.kinds(it.ID))
+	}
+
+	reason, _ := retried[0].Data["reason"].(string)
+	if !lostScrubbed(reason) || retried[0].Data["attempt"] != 1 || retried[0].Data["max"] != 3 || retried[0].Station != stWork {
+		t.Errorf("run_retried %+v; want the scrubbed reason, attempt 1 of 3 at %s", retried[0].Data, stWork)
+	}
+
+	runs := h.runs(t, testOrg, it.ID)
+	if len(runs) != 2 || runs[1].Result.Status != domain.RunSucceeded {
+		t.Fatalf("runs %+v, want two, the second succeeded", runs)
+	}
+
+	if !checked && (runs[0].Result.Status != domain.RunFailed || !lostScrubbed(runs[0].Result.Error)) {
+		t.Errorf("first run %+v, want failed with the scrubbed reason", runs[0].Result)
+	}
+
+	if agents := h.worker.Runs(); agents[len(agents)-1].Sandbox.RunID != runs[1].ID {
+		t.Errorf("the last agent ran in run %s's box, want the second run's (%s), a new one", agents[len(agents)-1].Sandbox.RunID, runs[1].ID)
+	}
+
+	h.expectOutcomes(t, it.ID, domain.LeaseAdvanced)
+	h.noSandboxes(t)
+}
+
+// A box lost on every attempt blocks the item after the cap, with the last reason.
+func TestRun_LostSandboxBlocksAfterTheCap(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, repoLine(), porttest.Succeed(`{}`))
+	h.sandboxes.Lose("goal-agent run", 5, lostBox)
+	it := h.submit(t, domain.NewItem{})
+
+	h.stepThroughBackoff(t)
+
+	if got := h.item(t, it.ID); got.State != domain.StateBlocked {
+		t.Fatalf("item is %s, want blocked (events %v)", got.State, h.kinds(it.ID))
+	}
+
+	reason, _ := h.eventsOf(it.ID, domain.EventBlocked)[0].Data["reason"].(string)
+	if !strings.Contains(reason, "lost 3 times") || !lostScrubbed(reason) {
+		t.Errorf("blocked reason %q, want the cap and the last reason, scrubbed", reason)
+	}
+
+	if n := len(h.eventsOf(it.ID, domain.EventRunRetried)); n != 2 {
+		t.Errorf("%d run_retried events, want 2", n)
+	}
+
+	if runs := h.runs(t, testOrg, it.ID); len(runs) != 3 || len(h.worker.Runs()) != 3 {
+		t.Errorf("%d runs, %d agent runs; want 3 of each", len(runs), len(h.worker.Runs()))
+	}
+
+	h.expectOutcomes(t, it.ID, domain.LeaseBlocked)
+	h.noSandboxes(t)
+}
+
+// A shutdown while the engine waits to run a lost box's item again releases it to its queue.
+func TestRun_LostSandboxShutdownDuringTheBackoff(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, repoLine(), porttest.Succeed(`{}`))
+	h.sandboxes.Lose("goal-agent run", 1, lostBox)
+	it := h.submit(t, domain.NewItem{})
+
+	ctx, cancel := context.WithCancel(inOrg(t))
+	if err := h.e.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.store.Await(bounded(t), func() bool { return len(h.eventsOf(it.ID, domain.EventRunRetried)) == 1 }); err != nil {
+		t.Fatal(err)
+	}
+
+	cancel()
+	h.wait(t, h.e)
+
+	if got := h.item(t, it.ID); got.State != domain.StateQueued || len(h.worker.Runs()) != 1 {
+		t.Errorf("item %s after %d agent runs, want queued after one (events %v)", got.State, len(h.worker.Runs()), h.kinds(it.ID))
+	}
+
+	h.expectOutcomes(t, it.ID, domain.LeaseReleased)
+	h.noSandboxes(t)
 }
