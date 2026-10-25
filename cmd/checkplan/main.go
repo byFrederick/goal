@@ -45,11 +45,14 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 
 	changed, err := changedFiles(ctx, *dir, *base)
 
-	var pl plan
+	var (
+		pl     plan
+		header string
+	)
 
 	switch {
 	case errors.Is(err, errNoBase):
-		pl = everything(err.Error())
+		pl, header = everything(err.Error()), "cannot compare with "+*base
 	case err != nil:
 		return err
 	case len(changed) == 0:
@@ -57,12 +60,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 
 		return err
 	default:
-		pl = planFor(changed)
+		pl, header = planFor(changed), fmt.Sprintf("%d changed files since %s", len(changed), *base)
 	}
 
 	var report strings.Builder
 
-	fmt.Fprintf(&report, "check:changed: %d changed files since %s\n", len(changed), *base)
+	report.WriteString("check:changed: " + header + "\n")
 
 	for _, r := range pl.reasons {
 		report.WriteString("  " + r + "\n")
@@ -90,7 +93,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 }
 
 // errNoBase reports that there is nothing to compare the branch with; the plan is then everything.
-var errNoBase = errors.New("no base")
+var errNoBase = errors.New("nothing to compare with")
 
 // changedFiles lists, sorted and once each, the files changed since the merge base of base and
 // HEAD: committed, staged, unstaged and untracked (not ignored). Renames count as a deletion and

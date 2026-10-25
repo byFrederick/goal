@@ -96,6 +96,22 @@ GitHub Actions minutes are not available for this private repository, so CI on G
 
 Read `AGENTS.md` before changing anything.
 
+## Development
+
+`task check` runs every part's checks. While working on a branch, `task check:changed` runs only the ones the branch needs: `cmd/checkplan` lists the files changed since the merge base with `BASE` (default `origin/main`; `task check:changed BASE=<ref>`), committed, staged, unstaged and untracked, with renames counted as a deletion and an addition so a file moved out of a part still selects it. It prints each part it runs and the file that selected it, then runs those tasks in `task check`'s order and stops at the first failure.
+
+| Changed | Runs |
+| --- | --- |
+| `*.go` anywhere, `cmd/`, `internal/`, `queries/`, `sqlc.yaml`, `migrations/`; what Go embeds or its tests read: `web/csp.txt`, `web/placeholder/`, `compose.yaml`, `.env.example` | `lint`, `test`, `api:permissions-check`, `validate` |
+| `auth/src/access.gen.ts` (compared by `api:permissions-check`) | the Go checks and `auth:check` |
+| `worker/`, `auth/`, `deploy/cloudflare/` | `worker:check`, `auth:check`, `cloudflare:check` |
+| `packages/api-client/` | `api-client:check` and `web:check` (web uses it) |
+| the rest of `web/` | `web:check` |
+| `terraform/`, `.sops.yaml` | `tf:check` |
+| `docs/`, `design-system/`, `.claude/`, `.github/`, `.githooks/`, root `*.md`, `skills-lock.json` | nothing |
+
+Shared files run everything and say which file did: `go.mod`, `go.sum`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `Taskfile.yml`, `.golangci.yml`, the mise config, `api/` and `schema/`. So does any path no rule knows, and a `BASE` that is missing or shares no history with `HEAD` (a shallow clone). Any other git failure fails the task: it never passes with an empty plan. When `migrations/` or `auth/` changed it notes that `task migrate-check` also applies; it does not run it. The pre-push hook still runs the whole `task check`.
+
 ## Where factories live
 
 A definition is a file tree:
