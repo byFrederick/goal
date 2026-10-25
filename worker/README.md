@@ -8,7 +8,7 @@ task worker:image   # docker build -f worker/Dockerfile --target runtime -t ghcr
 task worker:smoke   # the image's toolchains run as uid 1000 and goal-agent answers
 ```
 
-The image is built locally and never pushed from this repository.
+The image is built locally and never pushed from this repository. `task up` (and `task up:compose`, `task goald`) builds it first, without the smoke, so runs never start from an image older than the checkout's worker: an older worker silently drops what the run bundle gained since.
 
 ## Image
 
@@ -64,7 +64,7 @@ goald creates one sandbox per run (`ports.Sandboxes`) and execs, in order:
 2. Per git credential, a helper for `https://<host>` added to the global git config (`--add`: git asks each helper of a host in turn) that answers git's `get` with the user name and the value of `password_env`, read when git asks: the password is only ever in the environment of the exec that runs git, so prepare clones with the repository connection's and the agent pushes with one of its own.
 3. With a repository: `git clone` into `/workspace` and the item's branch checked out, the remote one when earlier runs pushed it, otherwise new from the default branch; then `mise install` there for the repository's own tools (`mise.toml`, `.tool-versions`, …).
 4. `mise use --global` for `tools`, so they are on `PATH` wherever the agent works.
-5. One line on stdout: `{"type":"prepared","at":…,"seconds":5.4,"tools":1,"branch":"goal/7-…","branch_existed":true}` (`branch` and `branch_existed` only with a repository).
+5. One line on stdout: `{"type":"prepared","at":…,"seconds":5.4,"tools":1,"branch":"goal/7-…","branch_existed":true}` (`branch` and `branch_existed` only with a repository). `tools` counts the bundle's `tools` (step 4), not the repository's own from step 3: a repository whose `.mise.toml` names six tools and a definition without `runtime.tools` prepare with `"tools":0`.
 
 ### spec.json
 

@@ -23,7 +23,10 @@ export interface Prepared {
   branch?: string;
   /** Whether that branch already existed on the remote: earlier runs of the item pushed it. */
   branch_existed?: boolean;
-  /** How many of the definition's runtime.tools were installed. */
+  /**
+   * How many of the bundle's tools were installed: runtime.tools, then the connections' CLI tools.
+   * The repository's own, which mise installs from its config, are not counted.
+   */
   tools: number;
 }
 

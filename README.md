@@ -50,8 +50,7 @@ task test-integration      # adapters against PostgreSQL 18 and RustFS
 
 ```bash
 # .env: GOAL_GATEWAY_KEY (openssl rand -hex 32) and GOAL_MASTER_KEYS=k1:<openssl rand -base64 32> (keep a copy offline)
-task worker:image                                  # goal-agent, the image every run starts from (worker/README.md)
-task up                                            # PostgreSQL + RustFS, bucket, the egress proxy image, then goald in the foreground
+task up                                            # the agent image (goal-agent, worker/README.md) and the egress proxy's, PostgreSQL + RustFS, bucket, then goald in the foreground
 # in another terminal, once: the organization's connections a factory runs on (or the Connections page);
 # each reads its secret from stdin: paste it, then Ctrl-D (task connection:import-env upgrades an older .env)
 bin/goal connection create claude --kind claude-subscription --secret token=-   # the output of claude setup-token

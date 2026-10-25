@@ -66,20 +66,20 @@ tasks:
       - go build -trimpath -tags webui -o bin/ ./cmd/...
 
   up:
-    desc: Start PostgreSQL, RustFS and the egress proxy, prepare the database roles and the bucket, run goald in the foreground with, under GOAL_AUTH=session, the auth service and Mailpit (goal up)
-    deps: [build, auth:build, egress:image]
+    desc: Build the agent and egress proxy images, start PostgreSQL, RustFS and the egress proxy, prepare the database roles and the bucket, run goald in the foreground with, under GOAL_AUTH=session, the auth service and Mailpit (goal up)
+    deps: [build, auth:build, egress:image, worker:image:build]
     cmds:
       - bin/goal up
 
   up:compose:
     desc: goal up with goald and the auth service as compose services too (the stack profile; images built from this checkout), detached; needs GOAL_AUTH=session (goal up --compose)
-    deps: [build]
+    deps: [build, worker:image:build]
     cmds:
       - bin/goal up --compose
 
   goald:
-    desc: Run goald in the foreground against already running compose services (after goal db init), with the egress proxy toward it
-    deps: [build, egress:image]
+    desc: Run goald in the foreground against already running compose services (after goal db init), with the egress proxy toward it and the agent image built
+    deps: [build, egress:image, worker:image:build]
     cmds:
       - bin/goal db init
       - docker compose up -d --wait goal-egress
@@ -520,6 +520,14 @@ tasks:
     cmds:
       - docker build -f worker/Dockerfile --target runtime -t {{.WORKER_IMAGE}} .
       - task: worker:smoke
+
+  # Every task that starts goald runs this first: runs start from the image of this checkout's
+  # worker, never an older one that drops what the run bundle gained since. A second or so when
+  # nothing in the image changed (Docker's layer cache).
+  worker:image:build:
+    desc: Build the goal-agent image locally (WORKER_IMAGE) without output or the smoke, as task up does; never pushes
+    cmds:
+      - docker build -q -f worker/Dockerfile --target runtime -t {{.WORKER_IMAGE}} . >/dev/null
 
   worker:smoke:
     desc: Smoke the goal-agent image (WORKER_IMAGE) - its toolchains run as the sandbox's user, and goal-agent answers

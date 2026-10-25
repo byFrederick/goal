@@ -51,6 +51,51 @@ func TestUp_AuthVariablesAreTheTaskfiles(t *testing.T) {
 	}
 }
 
+// Every task that starts goald first builds the agent image from the checkout, as it builds the
+// egress proxy's. A box started from an image older than the checkout runs an older worker, which
+// drops what the run bundle gained since: the image built before 4-11 gave agents no MCP server
+// of their connections.
+func TestUp_TasksThatStartGoaldBuildTheAgentImage(t *testing.T) {
+	t.Parallel()
+
+	raw, err := os.ReadFile("../../Taskfile.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var taskfile struct {
+		Tasks map[string]struct {
+			Deps []string `yaml:"deps"`
+			Cmds []any    `yaml:"cmds"`
+		} `yaml:"tasks"`
+	}
+
+	if err := yaml.Unmarshal(raw, &taskfile); err != nil {
+		t.Fatal(err)
+	}
+
+	starters := 0
+
+	for name, task := range taskfile.Tasks {
+		if !slices.ContainsFunc(task.Cmds, func(c any) bool {
+			s, _ := c.(string)
+			return s == "bin/goald" || strings.HasPrefix(s, "bin/goal up")
+		}) {
+			continue
+		}
+
+		starters++
+
+		if !slices.Contains(task.Deps, "worker:image:build") {
+			t.Errorf("task %s starts goald with deps %v, want worker:image:build among them", name, task.Deps)
+		}
+	}
+
+	if starters < 3 {
+		t.Errorf("found %d tasks that start goald, want up, up:compose and goald at least", starters)
+	}
+}
+
 // The postmaster treats any child it did not start that exits non-zero as a crashed backend and
 // restarts the server. As a container's PID 1 it inherits every orphan in the container, such as
 // the pg_isready a shell healthcheck leaves behind when Docker kills the shell on a timeout. So
