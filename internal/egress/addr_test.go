@@ -44,6 +44,12 @@ func TestPublic(t *testing.T) {
 		{"2002:a00:1::1", false},  // 6to4 of 10.0.0.1
 		{"2001:db8::1", false},
 		{"ff02::1", false},
+		{"::7f00:1", false},         // IPv4-compatible loopback
+		{"::a9fe:a9fe", false},      // IPv4-compatible metadata
+		{"::ffff:0:7f00:1", false},  // IPv4-translated loopback
+		{"100::1", false},           // discard-only
+		{"fec0::1", false},          // site-local
+		{"64:ff9b:1::a00:1", false}, // local-use NAT64
 	}
 
 	for _, tt := range tests {
