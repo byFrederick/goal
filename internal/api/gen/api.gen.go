@@ -99,6 +99,24 @@ func (e BlankStartKind) Valid() bool {
 	}
 }
 
+// Defines values for BoardLaneKind.
+const (
+	BoardLaneKindAgent  BoardLaneKind = "agent"
+	BoardLaneKindPerson BoardLaneKind = "person"
+)
+
+// Valid indicates whether the value is a known member of the BoardLaneKind enum.
+func (e BoardLaneKind) Valid() bool {
+	switch e {
+	case BoardLaneKindAgent:
+		return true
+	case BoardLaneKindPerson:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BoardLineStatus.
 const (
 	BoardLineStatusRunning BoardLineStatus = "running"
@@ -1270,6 +1288,31 @@ type Board struct {
 	Stations []BoardStation `json:"stations"`
 }
 
+// BoardLane One lane of a board station, by who works it (a role, never a numbered agent copy)
+type BoardLane struct {
+	// Busy Agent lanes: the station's live leases held by that agent; a person lane: the items waiting on a person there
+	Busy int `json:"busy"`
+
+	// Key What cards name in board_lane: the agent's name, or `person` for a person lane
+	Key  string        `json:"key"`
+	Kind BoardLaneKind `json:"kind"`
+
+	// Model The model the agent runs (its own, else the runtime's); null for a person lane or when neither names one
+	Model *string `json:"model"`
+
+	// ModelLabel The model's label among goald's models (GOAL_MODELS) without a leading "Claude " ("Opus 5.5"), else the model id; null when model is
+	ModelLabel *string `json:"model_label"`
+
+	// Role The name people read: the agent's name humanized ("infra-engineer" → "Infra engineer"), the station's id humanized for a person lane
+	Role string `json:"role"`
+
+	// Slots How many runs the lane can have at once: the station's slots, min(agents, wip), shared by all its lanes; null for a person lane
+	Slots *int `json:"slots"`
+}
+
+// BoardLaneKind defines model for BoardLane.Kind.
+type BoardLaneKind string
+
 // BoardLine The line as a whole: its work in progress against its limits, how work is released into it, its expedite lane and its weekly budget. The release policy and the expedite limit are shown as configured; goald does not enforce them yet (it releases as push).
 type BoardLine struct {
 	// Andon The open andon pull, or null while the line runs
@@ -1314,6 +1357,9 @@ type BoardStation struct {
 	InProgress int         `json:"in_progress"`
 	Items      []ItemCard  `json:"items"`
 	Kind       StationKind `json:"kind"`
+
+	// Lanes The station's lanes, sorted by role: at an agent station one per distinct agent that works there (its agent, or each agent its route uses), at a human station one for the person; none at queue and done stations. Cards name theirs in ItemCard.board_lane
+	Lanes *[]BoardLane `json:"lanes,omitempty"`
 
 	// OldestWaitingSeconds How long the item waiting longest here has waited; null when none waits
 	OldestWaitingSeconds *int64 `json:"oldest_waiting_seconds"`
@@ -2297,7 +2343,10 @@ type ItemCard struct {
 	AgeSeconds int64 `json:"age_seconds"`
 
 	// Agent The agent working the item now (in progress), else null
-	Agent          *string        `json:"agent"`
+	Agent *string `json:"agent"`
+
+	// BoardLane The key of the station's lane (BoardLane.key) the item belongs to: the agent holding its lease while in progress, else the agent its station routes its lane to at an agent station, the person lane at a human station; absent or null at queue and done stations, or when the station has no route for the item's lane
+	BoardLane      *string        `json:"board_lane,omitempty"`
 	ClassOfService ClassOfService `json:"class_of_service"`
 	CostUsd        float64        `json:"cost_usd"`
 	CreatedAt      time.Time      `json:"created_at"`
