@@ -40,7 +40,7 @@ type Decision =
   | { kind: 'retry' }
   | { kind: 'pause'; reason: string };
 
-function useDecision(item: DecidableItem, factory: string) {
+export function useDecision(item: DecidableItem, factory: string) {
   const client = useQueryClient();
   const org = useOrg();
   return useMutation({
@@ -81,6 +81,7 @@ function useDecision(item: DecidableItem, factory: string) {
       Promise.all([
         ...factoryWorkInvalidations(org.id, factory).map((queryKey) => client.invalidateQueries({ queryKey })),
         client.invalidateQueries({ queryKey: keys.attention(org.id) }),
+        client.invalidateQueries({ queryKey: keys.inboxes(org.id) }),
         client.invalidateQueries({ queryKey: keys.item(org.id, item.key) }),
       ]),
   });
@@ -402,7 +403,7 @@ export function mergeRefusal(err: unknown): string | undefined {
   return undefined;
 }
 
-function MergeDialog({
+export function MergeDialog({
   item,
   open,
   onOpenChange,
