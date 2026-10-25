@@ -67,15 +67,20 @@ type codeHost struct {
 	srv       *httptest.Server
 	def       string
 	branches  map[string]map[string]string
+	commits   map[string]map[string]string // GitLab's: the files of each commit a branch was at, by id
 	raws      []string
 	pageSize  int
 	truncated bool
+	// afterPage runs, under mu, after GitLab served a tree page: a push meanwhile.
+	afterPage func(page int)
 }
 
 func newCodeHost(t *testing.T, files map[string]string) *codeHost {
 	t.Helper()
 
-	h := &codeHost{def: "main", branches: map[string]map[string]string{"main": maps.Clone(files)}, pageSize: 2}
+	h := &codeHost{
+		def: "main", branches: map[string]map[string]string{"main": maps.Clone(files)}, commits: map[string]map[string]string{}, pageSize: 2,
+	}
 	h.srv = httptest.NewTLSServer(http.HandlerFunc(h.serve))
 	t.Cleanup(h.srv.Close)
 
@@ -110,9 +115,13 @@ type entry struct {
 	path, mode, kind, id string
 }
 
-// tree is a branch's entries in path order; ok false for an unknown branch.
-func (h *codeHost) tree(branch string) ([]entry, bool) {
-	files, ok := h.branches[branch]
+// tree is a branch's or a commit's entries in path order; ok false for an unknown one.
+func (h *codeHost) tree(ref string) ([]entry, bool) {
+	files, ok := h.branches[ref]
+	if !ok {
+		files, ok = h.commits[ref]
+	}
+
 	if !ok {
 		return nil, false
 	}
@@ -253,11 +262,38 @@ func (h *codeHost) gitlab(w http.ResponseWriter, r *http.Request, rest string) {
 		}
 
 		answer(w, http.StatusOK, out)
+
+		if h.afterPage != nil {
+			h.afterPage(page)
+		}
+	case strings.HasPrefix(rest, "/repository/branches/"):
+		h.gitlabBranch(w, strings.TrimPrefix(rest, "/repository/branches/"))
 	case strings.HasPrefix(rest, "/repository/files/") && strings.HasSuffix(rest, "/raw"):
 		h.raw(w, r, strings.TrimSuffix(strings.TrimPrefix(rest, "/repository/files/"), "/raw"))
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// gitlabBranch answers a branch with the commit it is at, kept so its tree can be listed.
+func (h *codeHost) gitlabBranch(w http.ResponseWriter, escaped string) {
+	branch, _ := url.PathUnescape(escaped)
+
+	files, ok := h.branches[branch]
+	if !ok {
+		refuse(w, http.StatusNotFound, "404 Branch Not Found")
+
+		return
+	}
+
+	var all strings.Builder
+	for _, p := range slices.Sorted(maps.Keys(files)) {
+		all.WriteString(p + "\x00" + files[p] + "\x00")
+	}
+
+	id := blobID(all.String())
+	h.commits[id] = maps.Clone(files)
+	answer(w, http.StatusOK, map[string]any{"name": branch, "commit": map[string]string{"id": id}})
 }
 
 // transport reaches the stand-in through the public-only dialer, loopback allowed as
@@ -434,6 +470,30 @@ func TestReader_List(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+// Review 4 Go L15: GitLab lists a tree in pages, so a push between two pages moved the entries
+// under the reader and it skipped a file, which the sync then deleted. The listing reads one
+// commit, the branch's when it starts.
+func TestReader_GitLabListsOneCommit(t *testing.T) {
+	t.Parallel()
+
+	h := newCodeHost(t, docs)
+	h.afterPage = func(page int) {
+		if page == 2 {
+			pushed := maps.Clone(docs)
+			delete(pushed, readmeMD)
+			delete(pushed, "docs/api.yaml")
+			h.branches["main"] = pushed
+		}
+	}
+
+	r := gitdocs.New(gitdocs.Config{Transport: h.transport(true)})
+	got := list(t, r, h.spec(t, kindGitLab, map[string]string{cfgRepository: h.repository()}))
+
+	if ids, want := slices.Sorted(maps.Keys(got)), []string{readmeMD, deployMD, "docs/drafts/idea.md", pagingMD}; !slices.Equal(ids, want) {
+		t.Errorf("listed %v across a push, want %v (the tree when the listing began)", ids, want)
 	}
 }
 

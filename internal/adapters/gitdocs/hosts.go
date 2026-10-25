@@ -147,9 +147,25 @@ func (g gitlab) defaultBranch(ctx context.Context, r *Reader, s source) (string,
 	return project.DefaultBranch, nil
 }
 
+// files lists the tree of the commit the branch is at when it starts, page by page, so a push
+// meanwhile moves no entry under it.
 func (g gitlab) files(ctx context.Context, r *Reader, s source, branch string, yield func(file) bool) error {
+	var b struct {
+		Commit struct {
+			ID string `json:"id"`
+		} `json:"commit"`
+	}
+
+	if _, err := r.getJSON(ctx, s, g.projectURL(s)+"/repository/branches/"+url.PathEscape(branch), &b); err != nil {
+		return err
+	}
+
+	if b.Commit.ID == "" {
+		return fmt.Errorf("GitLab names no commit for branch %s", branch)
+	}
+
 	for page := 1; ; page++ {
-		q := url.Values{"recursive": {"true"}, "ref": {branch}, "per_page": {strconv.Itoa(gitlabPage)}, "page": {strconv.Itoa(page)}}
+		q := url.Values{"recursive": {"true"}, "ref": {b.Commit.ID}, "per_page": {strconv.Itoa(gitlabPage)}, "page": {strconv.Itoa(page)}}
 
 		var entries []struct {
 			ID   string `json:"id"`
