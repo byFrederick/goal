@@ -136,7 +136,7 @@ export function LinedText({ text, minLines }: { text: string; minLines?: number 
       <span className="sr-only">Loading the editor</span>
       {lineNumbers(text, minLines).map((n) => (
         <div key={n} className="contents">
-          <span aria-hidden="true" className="pr-3 text-right text-[#5f6b67] select-none">
+          <span aria-hidden="true" className="pr-3 text-right text-muted select-none">
             {n}
           </span>
           <span className="pr-3 whitespace-pre-wrap [overflow-wrap:anywhere]">{lines[n - 1] ?? ''}</span>
@@ -209,7 +209,7 @@ function TextareaEditor({
 
   return (
     <div ref={box} className="flex max-h-[70dvh] overflow-auto overscroll-contain py-2.5">
-      <div aria-hidden="true" className={cn('w-12 shrink-0 pr-2 text-right text-[#5f6b67] select-none', phoneText)}>
+      <div aria-hidden="true" className={cn('w-12 shrink-0 pr-2 text-right text-muted select-none', phoneText)}>
         {lineNumbers(value, minLines).map((n) => (
           <div key={n} className="flex items-center justify-end gap-0.5">
             {problems.has(n) ? (

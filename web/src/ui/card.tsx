@@ -9,7 +9,7 @@ interface SectionCardProps extends Omit<ComponentProps<'section'>, 'title'> {
   headingLevel?: 'h2' | 'h3';
 }
 
-/** A titled card (card #F6F7F5, 12px radius) labelled by its heading. */
+/** A titled card (the card token, 12px radius) labelled by its heading. */
 export function SectionCard({
   title,
   description,

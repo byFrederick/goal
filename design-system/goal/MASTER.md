@@ -47,6 +47,59 @@
 
 ---
 
+## Dark theme (Goal override, 2026-10-25)
+
+The app follows the device's color scheme by default, and a person can choose System, Light or Dark (account menu, Appearance). The dark values below are the same tokens redefined, so no component names a color: `web/src/styles.css` defines them under `:root[data-theme="dark"]` and under `prefers-color-scheme: dark` for `:root:not([data-theme="light"])`. Meaning does not change: teal runs, amber is the constraint only, violet waits on you, rust is rework and loss, green is healthy or done. Every text pair meets 4.5:1 and every UI mark 3:1 (WCAG AA), measured against the surface it sits on.
+
+| Token | Light | Dark | Use and contrast (dark) |
+|---|---|---|---|
+| `--color-white` | `#FFFFFF` | `#0F161D` | Text on an ink fill: 15.2:1 on ink; on the status colors 6.9 to 9.8:1 |
+| `--color-shell` | `#EEF1EF` | `#0F161D` | Page background |
+| `--color-card` | `#F6F7F5` | `#18212A` | Cards |
+| `--color-surface` | `#FFFFFF` | `#1E2A35` | Items in cards, inputs: ink 12.2:1 |
+| `--color-control` | `#E3E7E5` | `#26323E` | Segmented controls: ink 10.9:1 |
+| `--color-control-hover` | `#D8DEDB` | `#2E3B48` | Hover on controls |
+| `--color-nav-hover` | `#E1E6E3` | `#223039` | Hover on rail icons |
+| `--color-ink` | `#1D2733` | `#E6ECEA` | Text, primary buttons, active nav: 13.6:1 on card, 15.2:1 on shell |
+| `--color-ink-soft` | `#3A4654` | `#C2CBC7` | Rail icons, secondary labels: 9.8:1 on card |
+| `--color-muted` | `#556270` | `#B0BBB6` | Secondary text: 8.2:1 on card; 5.7:1 on the run tint, 6.4 to 7.6:1 on the other tints |
+| `--color-faint` | `#9AA5A0` | `#8A9690` | Disabled text, scrollbars: 4.8:1 on surface |
+| `--color-rule` | `#CBD2CE` | `#75838C` | Input borders, dashed new squares: 4.2:1 on card, 3.7:1 on surface (UI 3:1) |
+| `--color-rule-strong` | `#6F7B77` | `#9AA6AE` | Hover borders, switch borders: 6.5:1 on card |
+| `--color-line` | `#DDE2DF` | `#2C3741` | Dividers (decorative; the text carries the meaning) |
+| `--color-hairline` | `#E3E7E5` | `#242E37` | Hairlines (decorative) |
+| `--color-run` | `#1F6F8B` | `#6CC0DC` | Running, actual, teal text: 7.9:1 on card; teal marks 3:1+ |
+| `--color-run-tint` | `#DCEEF3` | `#173F4D` | Background behind run states; the text on it is ink 9.5:1 |
+| `--color-run-hatch` | `#BFE0EA` | `#3A7A92` | Hatched teal fill (actual): 3.4:1 against card |
+| `--color-amber` | `#F0A202` | `#F5B21A` | The constraint (drum) only: mark 8.7:1 on card |
+| `--color-amber-tint` | `#FFF6E0` | `#3A2D0C` | Background of the constraint callout |
+| `--color-amber-line` | `#F2D58A` | `#6B5216` | Border on the amber tint (decorative) |
+| `--color-amber-ink` | `#8A5D00` | `#F5C75A` | Text on the amber tint: 8.5:1 |
+| `--color-you` | `#5B4BB7` | `#A99BEA` | Waiting on a human: 6.6:1 on card |
+| `--color-you-tint` | `#ECE9F8` | `#2A2647` | Waiting-on-you banners; the text on it is you-ink 9.0:1 |
+| `--color-you-line` | `#C9C1EE` | `#4B4290` | Border on the violet tint (decorative) |
+| `--color-you-ink` | `#4A3C9E` | `#CFC8F5` | Text on the violet tint: 9.0:1 |
+| `--color-rework` | `#B4441C` | `#F07F5C` | Rework, delays, losses, andon: 6.1:1 on card; rust stays apart from amber by hue and by its label |
+| `--color-rework-tint` | `#FBEFE9` | `#3D1F17` | Background of rework callouts |
+| `--color-rework-line` | `#EBC3B2` | `#6E3524` | Border on the rust tint (decorative) |
+| `--color-rework-ink` | `#8A3313` | `#F7A68D` | Text on the rust tint: 7.7:1 |
+| `--color-rework-hatch` | `#F1CDBE` | `#B45A38` | Hatched rust fill (delay, loss): 3.5:1 against card |
+| `--color-ok` | `#2E6B4E` | `#6FCB9C` | Healthy, done: 8.3:1 on card |
+| `--color-ok-tint` | `#E3EFE8` | `#173A2A` | Background behind healthy states |
+| `--color-ok-ink` | `#24563E` | `#8FDDB5` | Healthy text: 7.9:1 on the ok tint |
+| `--color-ok-dot` | `#2E8B5E` | `#4FBF86` | Status dots: 7.1:1 on card |
+| `--color-target` | `#8A958F` | `#8E9B95` | Hatched gray target and its tick: 5.6:1 on card |
+| `--color-shadow` | `#1D2733` | `#000000` | The tint of every shadow (`--shadow-*` mix it at their opacity) |
+
+Rules that go with the table:
+
+- The selection highlight is `run-tint` (ink on it 9.5:1), not `run-hatch`, so selected text meets 4.5:1 in both themes.
+- Native controls and scrollbars follow `color-scheme`, set from the choice by `web/public/theme.js` before first paint and by `web/src/shared/theme.ts` afterwards.
+- `meta theme-color` has a light and a dark variant by the device's scheme (`web/index.html`).
+- No raw color (hex, `rgb()`, `hsl()`) in a component: `web/src/ui/raw-colors.test.ts` fails on one. The Monaco theme is the one allow-listed exception until its own item maps it to these tokens.
+
+---
+
 ## Global Rules
 
 ### Color Palette

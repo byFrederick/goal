@@ -119,11 +119,22 @@ export function wipText(line: BoardLine): string {
   return `WIP ${line.wip.in_progress}${line.wip.limit !== null ? ` of ${line.wip.limit}` : ''}`;
 }
 
+/** A live expedite item: it skips the queue, so it is tinted in the station it is at. */
+export function isExpedite(item: Pick<ItemCard, 'class_of_service' | 'state'>): boolean {
+  return item.class_of_service === 'expedite' && item.state !== 'done' && item.state !== 'cancelled';
+}
+
 /** "1 of 1 in use": the expedite lane against its limit; `shown` items when the line has no lane. */
 export function expediteUse(line: BoardLine, shown: number): string {
   const lane = line.expedite;
   if (!lane) return `${plural(shown, 'item')} skipping the queue`;
   return lane.limit !== null ? `${lane.in_use} of ${lane.limit} in use` : `${lane.in_use} in use`;
+}
+
+/** "Expedite 1 of 1 in use" for the line header; null when the line has no lane and no expedite item is on the board. */
+export function expediteHeader(line: BoardLine, shown: number): string | null {
+  if (!line.expedite && shown === 0) return null;
+  return `Expedite ${expediteUse(line, shown)}`;
 }
 
 /** What the line says once its weekly budget is used up; null while there is room. */
