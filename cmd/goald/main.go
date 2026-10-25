@@ -22,6 +22,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -33,12 +35,14 @@ import (
 	"github.com/byFrederick/goal/internal/adapters/envsecrets"
 	"github.com/byFrederick/goal/internal/adapters/github"
 	"github.com/byFrederick/goal/internal/adapters/gitworkspace"
+	"github.com/byFrederick/goal/internal/adapters/masterkey"
 	"github.com/byFrederick/goal/internal/adapters/postgres"
 	"github.com/byFrederick/goal/internal/adapters/s3store"
 	"github.com/byFrederick/goal/internal/adapters/sysclock"
 	"github.com/byFrederick/goal/internal/api"
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
+	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/engine"
@@ -112,6 +116,11 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	identity, proxySecret, err := authentication(ctx, s, store, secrets, log)
 	if err != nil {
+		return err
+	}
+
+	// Connections and their kinds (spec 4); the API and the runs use them from 4-9 and 4-11 on.
+	if _, err := openConnections(ctx, store, os.Getenv, log); err != nil {
 		return err
 	}
 
@@ -214,6 +223,51 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	return serve(ctx, log, s, servers, eng, defs, definitionNotices, feed,
 		jobs{purger: purger, platform: platform, clock: clock, identity: newIdentityWatch(s, store)})
+}
+
+// openConnections loads the platform's master keys (GOAL_MASTER_KEYS or GOAL_MASTER_KEY_FILE),
+// refuses to start while a connection is sealed under a key id they lack (spec 4 §5.2, threat row
+// 12), and makes the kinds goald ships the platform's. Without a master key goald serves
+// everything but connections with secrets, and says so.
+func openConnections(ctx context.Context, store *postgres.Store, getenv func(string) string, log *slog.Logger) (*postgres.Connections, error) {
+	keys, err := masterkey.Load(getenv)
+	if err != nil {
+		return nil, err
+	}
+
+	sealed, err := postgres.ConnectionKeyIDs(ctx, store)
+	if err != nil {
+		return nil, err
+	}
+
+	have := keys.IDs()
+
+	if missing := slices.DeleteFunc(sealed, func(id string) bool { return slices.Contains(have, id) }); len(missing) > 0 {
+		return nil, fmt.Errorf("connections are sealed under master key %s, which %s and %s do not hold: "+
+			"give goald every key a connection is sealed under (goal db rekey reseals them under the active one, "+
+			"after which an old key can go)", strings.Join(missing, ", "), masterkey.KeysEnv, masterkey.FileEnv)
+	}
+
+	if len(have) == 0 {
+		log.WarnContext(ctx, "no master key: connections with secrets are unavailable until one is set; add "+
+			masterkey.KeysEnv+"=k1:<the output of openssl rand -base64 32> to .env and keep a copy offline")
+	} else {
+		log.InfoContext(ctx, "master keys loaded", slog.String("active", keys.Active()), slog.Int("count", len(have)))
+	}
+
+	kinds, err := connkind.Platform()
+	if err != nil {
+		return nil, err
+	}
+
+	connections := postgres.NewConnections(store, keys)
+	if err := connections.SyncPlatformKinds(ctx, kinds); err != nil {
+		return nil, err
+	}
+
+	log.InfoContext(ctx, "connection kinds synced", slog.Int("platform", len(kinds)))
+
+	return connections, nil
 }
 
 // containers connects to Docker and prepares the egress proxy that agents, networked sidecars and

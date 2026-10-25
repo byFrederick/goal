@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"net/url"
 	"os"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
+	"github.com/byFrederick/goal/internal/adapters/masterkey"
 	"github.com/byFrederick/goal/internal/adapters/postgres"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
@@ -23,11 +25,11 @@ import (
 )
 
 // recoveryDB is a throwaway database migrated as goald would (never the install's own): adminURL
-// connects as the bootstrap superuser, as GOAL_DATABASE_ADMIN_URL does, admin and app pools as
-// it and as goal_app.
+// connects as the bootstrap superuser, as GOAL_DATABASE_ADMIN_URL does, ownerURL as goal_owner,
+// admin and app pools as the superuser and as goal_app.
 type recoveryDB struct {
-	adminURL   string
-	admin, app *pgxpool.Pool
+	adminURL, ownerURL string
+	admin, app         *pgxpool.Pool
 }
 
 func newRecoveryDB(t *testing.T) recoveryDB {
@@ -39,7 +41,7 @@ func newRecoveryDB(t *testing.T) recoveryDB {
 		t.Fatal(err)
 	}
 
-	return recoveryDB{adminURL: d.adminURL, admin: d.admin, app: openTestPool(t, d.appURL)}
+	return recoveryDB{adminURL: d.adminURL, ownerURL: d.ownerURL, admin: d.admin, app: openTestPool(t, d.appURL)}
 }
 
 // testDatabase is a throwaway database with goal db init's roles and grants and no migration
@@ -209,7 +211,7 @@ func TestDB_MigrateUpgradesTheSchemaBeforeTheAuthService(t *testing.T) {
 		t.Fatalf("at migration 39 the auth schema exists (%v, %v); the test needs the upgrade's database", before, err)
 	}
 
-	env := testEnv(t, "http://127.0.0.1:1", map[string]string{"GOAL_MIGRATE_DATABASE_URL": d.ownerURL})
+	env := testEnv(t, "http://127.0.0.1:1", map[string]string{migrateURLEnv: d.ownerURL})
 
 	for range 2 {
 		var buf bytes.Buffer
@@ -295,5 +297,68 @@ func TestDB_RecoverOwner(t *testing.T) {
 
 	if n := d.count(t, `SELECT count(*) FROM auth."user"`); n != 1 {
 		t.Errorf("%d users after a refused recovery; want Ada alone", n)
+	}
+}
+
+// Spec 4 §5.2: goal db rekey reseals every organization's connections under the new key in
+// front of GOAL_MASTER_KEYS, with nothing but the database, so the old key can then go; a second
+// run reseals nothing.
+func TestDB_Rekey(t *testing.T) {
+	t.Parallel()
+
+	d := newRecoveryDB(t)
+	store := postgres.New(d.app)
+	entry := func(id string, b byte) string {
+		return id + ":" + base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{b}, 32))
+	}
+
+	old, err := masterkey.Load(testEnv(t, "", map[string]string{masterkey.KeysEnv: entry("k1", 1)}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	conns := postgres.NewConnections(store, old)
+	if err := conns.SyncPlatformKinds(t.Context(), []domain.ConnectionKind{{Name: "acme-api", Title: "Acme API", Spec: domain.KindSpec{
+		Fields: []domain.KindField{{Name: "key", Title: "Key", Secret: true}}, Env: map[string]string{"ACME_KEY": "{{key}}"},
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+
+	org, err := store.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: orgAcme, Name: recoveredOrgName})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := domain.WithOrg(t.Context(), org.ID)
+	if _, err := conns.Create(ctx, domain.NewConnection{Name: orgAcme, Kind: "acme-api", Secrets: map[string]string{"key": "s3cret"}}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	rotated := entry("k2", 2) + "," + entry("k1", 1)
+	env := testEnv(t, "http://127.0.0.1:1", map[string]string{migrateURLEnv: d.ownerURL, masterkey.KeysEnv: rotated})
+
+	for _, want := range []string{"✓ 1 connections resealed under master key k2", "✓ 0 connections resealed"} {
+		var buf bytes.Buffer
+
+		if err := run(t.Context(), []string{"db", "rekey"}, &printer{w: &buf}, env, nil); err != nil || !strings.Contains(buf.String(), want) {
+			t.Fatalf("goal db rekey = %q, %v; want %q", buf.String(), err, want)
+		}
+	}
+
+	onlyNew, err := masterkey.Load(testEnv(t, "", map[string]string{masterkey.KeysEnv: entry("k2", 2)}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := postgres.NewConnections(store, onlyNew).Resolve(ctx, []string{orgAcme}, "run-1")
+	if err != nil || got[0].Values["key"] != "s3cret" {
+		t.Errorf("Resolve under the new key alone = %+v, %v", got, err)
+	}
+
+	var buf bytes.Buffer
+
+	noKey := testEnv(t, "http://127.0.0.1:1", map[string]string{migrateURLEnv: d.ownerURL})
+	if err := run(t.Context(), []string{"db", "rekey"}, &printer{w: &buf}, noKey, nil); err == nil || !strings.Contains(err.Error(), masterkey.KeysEnv) {
+		t.Errorf("goal db rekey without keys = %v; want an error naming %s", err, masterkey.KeysEnv)
 	}
 }

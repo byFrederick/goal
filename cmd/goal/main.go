@@ -109,6 +109,8 @@ const usage = `usage:
                                                   alone (GOAL_DATABASE_ADMIN_URL), creating them if no
                                                   one has the email; goald may be stopped
   goal db recover-owner <org> <email>             make the person an owner of the organization, the same way
+  goal db rekey                                   reseal every connection under the active master key (the
+                                                  first of GOAL_MASTER_KEYS) as goal_owner; then drop old keys
   goal admin list                                 the platform admins (platform admins only)
   goal admin add <email>                          make a person who has signed in a platform admin
   goal admin remove <email>                       stop them being one (the last one stays)

@@ -213,6 +213,17 @@ linters:
               desc: database access belongs in internal/adapters/postgres
             - pkg: github.com/moby
               desc: container access belongs in internal/adapters/docker
+            - pkg: github.com/byFrederick/goal/internal/connkind
+              desc: handlers reach connection kinds through an interface declared in internal/api; cmd/goald wires connkind
+        connkind:
+          files: ["**/internal/connkind/**"]
+          deny:
+            - pkg: github.com/byFrederick/goal/internal/adapters
+              desc: connection kinds are data; they are stored through ports.Connections
+            - pkg: github.com/byFrederick/goal/internal/engine
+              desc: the engine receives domain kinds; connkind never calls it
+            - pkg: github.com/byFrederick/goal/internal/api
+              desc: the HTTP API calls connkind, never the reverse
         builder:
           files: ["**/internal/builder/**"]
           deny:

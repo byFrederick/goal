@@ -1,0 +1,13 @@
+apiVersion: goal/v1
+kind: ConnectionKind
+metadata:
+  name: pagerduty
+  title: PagerDuty
+  description: A PagerDuty REST API key.
+spec:
+  fields:
+    - {name: token, title: API key, description: A read-only key unless agents should change incidents., secret: true, required: true}
+  env:
+    PAGERDUTY_API_TOKEN: "{{token}}"
+  test: {method: GET, url: "https://api.pagerduty.com/abilities", headers: {Authorization: "Token token={{token}}"}, expect: 200}
+  docs: "Call the PagerDuty REST API at https://api.pagerduty.com with the header Authorization: Token token=$PAGERDUTY_API_TOKEN."

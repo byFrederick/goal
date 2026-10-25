@@ -1,9 +1,9 @@
 // Package ports declares the interfaces the engine uses to reach the outside world. Adapters in
 // internal/adapters implement them; internal/ports/porttest holds in-memory fakes for tests.
 //
-// Ports import only internal/domain. Knowledge (kb_search, kb_write, sync) and ModelAuth
-// (per-factory model credentials) join this package when the engine first needs them; until
-// then model credentials reach tasks as secret references in the engine's task environment.
+// Ports import only internal/domain. Connections and MasterKey (connections.go, phase 4) hold an
+// organization's connections and their sealed credentials; until runs use them (spec 4, 4-11)
+// model credentials reach tasks as secret references in the engine's task environment.
 package ports
 
 import (

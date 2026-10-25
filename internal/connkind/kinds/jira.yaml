@@ -1,0 +1,17 @@
+apiVersion: goal/v1
+kind: ConnectionKind
+metadata:
+  name: jira
+  title: Jira
+  description: A Jira Cloud site with an Atlassian account's API token.
+spec:
+  fields:
+    - {name: site, title: Site, description: "The site's host, such as acme.atlassian.net.", required: true}
+    - {name: email, title: Email, description: The Atlassian account the token belongs to., required: true}
+    - {name: token, title: API token, secret: true, required: true}
+  env:
+    JIRA_URL: "https://{{site}}"
+    JIRA_EMAIL: "{{email}}"
+    JIRA_API_TOKEN: "{{token}}"
+  test: {method: GET, url: "https://{{site}}/rest/api/3/myself", basic: {username: "{{email}}", password: "{{token}}"}, expect: 200}
+  docs: Call the Jira REST API at JIRA_URL with basic authentication, JIRA_EMAIL and JIRA_API_TOKEN.

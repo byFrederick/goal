@@ -1,0 +1,21 @@
+apiVersion: goal/v1
+kind: ConnectionKind
+metadata:
+  name: gitlab
+  title: GitLab
+  description: A personal, project or group access token for the GitLab projects agents may use.
+spec:
+  fields:
+    - {name: token, title: Token, description: "An access token with the api scope, for only the projects agents need.", secret: true, required: true}
+    - {name: host, title: Host, description: "gitlab.com, or a self-managed GitLab's host.", default: gitlab.com}
+  env:
+    GITLAB_TOKEN: "{{token}}"
+    GITLAB_HOST: "{{host}}"
+  cli: {tool: glab}
+  git:
+    host: "{{host}}"
+    username: oauth2
+    passwordEnv: GITLAB_TOKEN
+  codeHost: gitlab
+  test: {method: GET, url: "https://{{host}}/api/v4/user", headers: {PRIVATE-TOKEN: "{{token}}"}, expect: 200}
+  docs: Use glab and git; GITLAB_TOKEN and GITLAB_HOST are set. Open a merge request for every change.

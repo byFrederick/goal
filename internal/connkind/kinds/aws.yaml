@@ -1,0 +1,22 @@
+apiVersion: goal/v1
+kind: ConnectionKind
+metadata:
+  name: aws
+  title: AWS
+  description: An AWS access key, optionally with a role to assume; runs get short-lived credentials minted for them.
+spec:
+  fields:
+    - {name: access_key_id, title: Access key ID, secret: true, required: true}
+    - {name: secret_access_key, title: Secret access key, secret: true, required: true}
+    - {name: role_arn, title: Role ARN, description: "A role to assume for each run; without one, runs get a session token of the key itself."}
+    - {name: external_id, title: External ID, description: "The role's external id, when its trust policy asks for one."}
+    - {name: region, title: Region, default: us-east-1}
+  env:
+    AWS_ACCESS_KEY_ID: "{{minted.access_key_id}}"
+    AWS_SECRET_ACCESS_KEY: "{{minted.secret_access_key}}"
+    AWS_SESSION_TOKEN: "{{minted.session_token}}"
+    AWS_REGION: "{{region}}"
+    AWS_DEFAULT_REGION: "{{region}}"
+  cli: {tool: aws-cli}
+  mint: aws-sts
+  docs: Use the aws CLI or an SDK; short-lived credentials for this run and AWS_REGION are set. The stored key never reaches the box.

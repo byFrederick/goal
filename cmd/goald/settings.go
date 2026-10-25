@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/adapters/docker"
+	"github.com/byFrederick/goal/internal/adapters/masterkey"
 	"github.com/byFrederick/goal/internal/adapters/postgres"
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
@@ -180,7 +181,7 @@ var ownVariables = []string{
 	"GOAL_GITHUB_API_URL", githubWebEnv, "GOAL_LOG_LEVEL", "GOAL_LOG_FORMAT", "GOAL_DEFAULT_AGENT_IMAGE", "GOAL_ORG_RETENTION", "GOAL_MODELS",
 	"GOAL_DEFINITION_CACHE_BYTES", egressNameEnv, egressImageEnv, agentEgressEnv,
 	"GOAL_S3_BUCKET", "GOAL_S3_ENDPOINT", "GOAL_S3_ACCESS_KEY", "GOAL_S3_SECRET_KEY",
-	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
+	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", masterkey.KeysEnv, masterkey.FileEnv,
 }
 
 // identityVariables are the identity service's (auth/: its listen address, database, secrets,

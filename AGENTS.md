@@ -23,13 +23,14 @@ cmd/goald/           daemon         (main: wire adapters into the engine)
 cmd/goal-egress/     egress proxy   (the container agents, sidecars and checks go out through; ADR 0009; phase 4: agents' only policy is public hosts, never private, as a compose service)
 internal/domain/     plain types and rules: factory, item, station, lease. Imports nothing internal.
 internal/engine/     flow engine: pull, WIP, drum-buffer-rope, andon. Imports domain + ports only.
-internal/ports/      interfaces: Store, Runner, Reaper, Workspaces, Checker, Sidecars, Secrets, Contracts, ObjectStore, ItemNotices, CodeHost, Clock, Tenancy, Audit, DefinitionStore, DefinitionNotices, SkillSource, Identity, Access, Platform (phase 4: Sandboxes replaces Runner, Reaper, Workspaces, Checker and Sidecars; new Connections, MasterKey, Minter, Knowledge, Embedder, SourceReader)
-internal/adapters/   s3store/ postgres/ docker/ gitworkspace/ github/ envsecrets/ sysclock/ skillssh/ (phase 4: cloudflare/ masterkey/ awssts/ gitlab/ openaiembed/ gitdocs/ confluence/; gitworkspace/ goes)
+internal/ports/      interfaces: Store, Runner, Reaper, Workspaces, Checker, Sidecars, Secrets, Contracts, ObjectStore, ItemNotices, CodeHost, Clock, Tenancy, Audit, DefinitionStore, DefinitionNotices, SkillSource, Identity, Access, Platform, Connections, MasterKey (phase 4: Sandboxes replaces Runner, Reaper, Workspaces, Checker and Sidecars; new Minter, Knowledge, Embedder, SourceReader)
+internal/adapters/   s3store/ postgres/ docker/ gitworkspace/ github/ envsecrets/ sysclock/ skillssh/ masterkey/ (phase 4: cloudflare/ awssts/ gitlab/ openaiembed/ gitdocs/ confluence/; gitworkspace/ goes)
 internal/api/        HTTP API handlers for api/openapi.yaml (generated types in internal/api/gen); no adapter imports
 internal/gateway/    MCP gateway inside goald: task-token auth, per-agent tools, credentials added on the host (phase 4: Goal's MCP server for runs, its own tools and `/run` only; connections go direct from the box)
 internal/egress/     the egress proxy's policy: agents to the model API and the gateway's path, tools to public hosts, nothing private (phase 4: public hosts for every box, and the public-only dialer goald uses for connections). Standard library only
 internal/definitions/ goald's cache of published definition versions (current and pinned by runs): lines, contracts, agent files, gateway lookups
 internal/config/     loads and validates one factory definition from an fs.FS (bucket prefix or local folder)
+internal/connkind/   connection kinds (phase 4): parses and validates kind files against schema/connection-kind.schema.json; embeds the platform's (kinds/*.yaml)
 internal/factorymodel/ the Visual editor's model of factory.yaml: read, apply section edits keeping comments, format
 internal/authoring/  definition authoring: create, the shared draft (sections, files, CAS), validation, publish, restore, templates
 internal/retention/  purges deleted organizations after GOAL_ORG_RETENTION: their rows and bucket objects
@@ -39,7 +40,7 @@ migrations/          forward-only SQL (goose); never edit an applied file
 queries/             SQL for sqlc
 api/                 openapi.yaml + events.schema.json: the only contract between goald and TypeScript; permissions.yaml (phase 3): every permission, generating goald's table and auth/'s roles
 auth/                identity service (phase 3, pnpm workspace app: Hono + Better Auth): sign-in, sessions, members and invitations; reached only through goald's /api/auth proxy, whose client contract is ADR 0007's one exception
-schema/              JSON Schemas for factory and eval files
+schema/              JSON Schemas for factory, eval and connection kind files
 web/                 React SPA (pnpm workspace app), embedded into goald
 worker/              agent container image (pnpm workspace app, Claude Agent SDK; phase 4: the one goal-agent base image with git, gh, mise and toolchains)
 deploy/cloudflare/   phase 4: the control Worker (TypeScript) and wrangler config, the only Cloudflare-specific code besides internal/adapters/cloudflare

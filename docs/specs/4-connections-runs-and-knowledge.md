@@ -91,12 +91,12 @@ spec:
   docs: Use gh and git; GH_TOKEN is set. Open a pull request for every change.
 ```
 
-- **Template grammar** (closed): `{{field}}` and, for minted kinds, `{{minted.<name>}}`. Nothing else is evaluated. `mcp.headers` values may also hold `${NAME}`, a variable of the kind's own `env`, which goald leaves as written for Claude Code to expand in the box, so no value is in the bundle or on disk. A kind that names an unknown field or variable is invalid.
+- **Template grammar** (closed): `{{field}}` and, for minted kinds, `{{minted.<name>}}`. Nothing else is evaluated. `mcp.headers` values may also hold `${NAME}`, a variable of the kind's own `env`, which goald leaves as written for Claude Code to expand in the box, so no value is in the bundle or on disk. A kind that names an unknown field or variable is invalid. Env names and header names may be templates too (`{{prefix}}_URL`). A value that names an optional field with no value and no default is left out, with the env variable or header it belongs to (an MCP header whose `${NAME}` is left out goes too); a git login, MCP url or MCP command with such a value is left out whole (4-8). Secret fields may appear only in env values, a test's headers and its `basic` password, never in an MCP header (use `${NAME}`), a URL, a command, a git login or an env name (4-8). A test may authenticate with `basic: {username, password}` (Atlassian API tokens) and expects 200 unless it says otherwise.
 - **Modes.** `env` serves API calls and CLIs (`cli: {tool: "<mise tool spec>"}` installs one at prepare); `mcp.url` + `headers` is a remote MCP server the worker configures in Claude Code, called directly from the box like any API; `mcp.command` (an argv, for example `[npx, -y, "@acme/jira-mcp@2.1.0"]`) is a stdio MCP server the worker starts inside the box with the kind's `env`. A kind may combine them.
 - **Model access.** `model: true` marks a kind that gives Claude Code its model (`anthropic`: `ANTHROPIC_API_KEY`; `claude-subscription`: `CLAUDE_CODE_OAUTH_TOKEN`, for one person's own use; `bedrock`: `CLAUDE_CODE_USE_BEDROCK=1` and minted AWS credentials). Only such a kind may be `runtime.modelConnection`.
 - **Adapter hooks**, the only provider code: `codeHost` (`github`, `gitlab`), `mint` (`aws-sts`), `sync` (`gitdocs`, `confluence`). Absent means the kind needs no Go code at all.
 - **Reserved names.** A kind's `env` may not set `GOAL_*`, `HOME`, `PATH`, `USER`, `SHELL`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` (any case), `NODE_USE_ENV_PROXY`, `CLAUDE_CONFIG_DIR`, `LD_*` or `MISE_*` (`domain.ReservedRunEnv`).
-- **Platform kinds in 4-8:** `github`, `gitlab`, `aws`, `anthropic`, `claude-subscription`, `bedrock`, `jira`, `confluence`, `datadog`, `pagerduty`, `http-api-key` (generic: `base_url`, `header`, `key`; env `<PREFIX>_URL`, `<PREFIX>_KEY` from a `prefix` field), `mcp-server` (generic: no secret, a stdio command or a remote URL, such as Playwright or a public documentation server).
+- **Platform kinds in 4-8:** `github`, `gitlab`, `aws`, `anthropic`, `claude-subscription`, `bedrock`, `jira`, `confluence`, `datadog`, `pagerduty`, `http-api-key` (generic: `base_url`, `header`, `key`; env `<PREFIX>_URL`, `<PREFIX>_KEY` from a `prefix` field), `mcp-server` (generic: no secret, a stdio command or a remote URL, such as Playwright or a public documentation server; the command runs as `sh -c "<command>"`). As built (4-8), `aws` and `bedrock` render `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` from `{{minted.access_key_id}}`, `{{minted.secret_access_key}}` and `{{minted.session_token}}` (the names 4-12's minter returns), with the fields `access_key_id`, `secret_access_key` (secret), `role_arn`, `external_id` and `region`; `jira` and `confluence` take `site`, `email` and a secret `token` and test with basic authentication; `gitlab` installs `glab`; `aws` installs `aws-cli`.
 - **Changes.** A kind has no versions: editing an org kind changes every connection of it from the next run on. A platform kind changes with a goald release. An org kind may not take a platform kind's name (409 `connection-kind-name-taken`); if a later release adds a platform kind with an org kind's name, the org's own kind wins inside that org.
 
 ### 4.3 Connections and their credentials
@@ -285,7 +285,7 @@ type MasterKey interface {
 }
 ```
 
-`internal/adapters/masterkey` reads `GOAL_MASTER_KEYS` (`<id>:<base64 32 bytes>[,<id>:…]`, the first active) or `GOAL_MASTER_KEY_FILE` (the same, one per line; mode 0600, not a symlink, refused otherwise). Locally `goal up` generates one into the git-ignored `.env` on first start; on Cloudflare it is a Secrets Store secret the control Worker passes to the goald container as env. goald refuses to start when a connection is sealed under a key id it does not have. Rotation: add a key in front, restart, run `goal db rekey` (reseals every connection under the active key, in batches), then drop the old key. A KMS adapter can implement the same port later.
+`internal/adapters/masterkey` reads `GOAL_MASTER_KEYS` (`<id>:<base64 32 bytes>[,<id>:…]`, the first active) or `GOAL_MASTER_KEY_FILE` (the same, one per line; mode 0600, not a symlink, refused otherwise). Locally it lives in the git-ignored `.env` (`.env.example` shows how to make one; generating it from `goal up` on first start is not built yet: as built in 4-8, goald without a key starts, warns, and serves everything but connections with secrets, which fail with `ports.ErrNoMasterKey`); on Cloudflare it is a Secrets Store secret the control Worker passes to the goald container as env. goald refuses to start when a connection is sealed under a key id it does not have. Rotation: add a key in front, restart, run `goal db rekey` (reseals every connection under the active key, in batches), then drop the old key. A KMS adapter can implement the same port later.
 
 ### 5.3 `ports.Connections` (new)
 
@@ -311,7 +311,7 @@ type Connections interface {
 }
 ```
 
-`postgres.NewConnections(pool, masterKey)` implements it; errors `ErrNotFound`, `ErrNameTaken`, `ErrConflict`. `porttest.Connections` and `porttest/connectionstest` (fake and PostgreSQL). Kind types and `Render(values, minted) (domain.RunConnection, error)` live in `internal/domain/connection.go` (standard library only); `internal/connkind` parses and validates kind YAML against the schema and embeds the platform kinds.
+`postgres.NewConnections(store, masterKey)` implements it; errors `ErrNotFound`, `ErrNameTaken`, `ErrConflict`, `ErrNoMasterKey`. `porttest.Connections` (with `porttest.MasterKeys`, a fake key that seals without cryptography) and `porttest/connectiontest` (fake and PostgreSQL). `postgres.Rekey(ctx, ownerStore, masterKey)` is `goal db rekey`; `postgres.ConnectionKeyIDs` feeds goald's startup check. Kind types and `Render(values, minted) (domain.RunConnection, error)` live in `internal/domain/connection.go` (standard library only); `internal/connkind` parses and validates kind YAML against the schema and embeds the platform kinds.
 
 ### 5.4 `ports.Minter` (new; AWS only)
 
@@ -459,7 +459,7 @@ Every org table: `org_id uuid NOT NULL DEFAULT goal_org()` referencing `organiza
 -- 00051_connections.sql
 CREATE TABLE connection_kinds (
   id          uuid PRIMARY KEY,
-  org_id      uuid REFERENCES organizations(id) ON DELETE CASCADE,  -- NULL: shipped by the platform
+  org_id      uuid DEFAULT goal_org() REFERENCES organizations(id) ON DELETE CASCADE,  -- NULL: shipped by the platform
   name        text NOT NULL CHECK (name ~ '^[a-z][a-z0-9-]{1,38}[a-z0-9]$'),
   spec        jsonb NOT NULL CHECK (jsonb_typeof(spec) = 'object' AND octet_length(spec::text) <= 65536),
   spec_sha256 text NOT NULL,
@@ -469,14 +469,16 @@ CREATE TABLE connection_kinds (
   UNIQUE NULLS NOT DISTINCT (org_id, name)
 );
 -- RLS: SELECT where org_id IS NULL OR org_id = (SELECT goal_org()); INSERT/UPDATE/DELETE only
--- org_id = goal_org(). Platform rows only through goal_sync_platform_kinds (SECURITY DEFINER,
--- search_path pinned), called at goald's start.
+-- org_id = goal_org() (as built: org_isolation plus a SELECT-only platform_kinds policy that also needs an organization bound). Platform
+-- rows only through goal_sync_platform_kinds (SECURITY DEFINER, search_path pinned), called at
+-- goald's start; goal_connection_key_ids() (definer) lists the key ids in use for the startup check.
 
 CREATE TABLE connections (
   id              uuid PRIMARY KEY,
   org_id          uuid NOT NULL DEFAULT goal_org() REFERENCES organizations(id) ON DELETE CASCADE,
   name            text NOT NULL CHECK (name ~ '^[a-z][a-z0-9-]{1,38}[a-z0-9]$'),
-  kind_id         uuid NOT NULL REFERENCES connection_kinds(id) ON DELETE RESTRICT,
+  kind_id         uuid NOT NULL REFERENCES connection_kinds(id),   -- NO ACTION (as built): checked at the statement's end, so an org's purge cascades in any order
+  -- as built: a trigger (connections_kind_of_org) refuses a kind of another organization
   description     text NOT NULL DEFAULT '' CHECK (length(description) <= 500),
   fields          jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(fields) = 'object' AND octet_length(fields::text) <= 8192),
   secret_fields   text[] NOT NULL DEFAULT '{}',          -- the names that are set, for display
@@ -484,6 +486,7 @@ CREATE TABLE connections (
   nonce           bytea CHECK (octet_length(nonce) = 12),
   ciphertext      bytea CHECK (octet_length(ciphertext) <= 65536),
   CHECK ((key_id IS NULL) = (nonce IS NULL) AND (nonce IS NULL) = (ciphertext IS NULL)),
+  CHECK ((ciphertext IS NULL) = (cardinality(secret_fields) = 0)),
   created_by      text NOT NULL,
   created_at      timestamptz NOT NULL DEFAULT now(),
   updated_by      text NOT NULL,
@@ -660,7 +663,7 @@ On `/v1/orgs/{org}/stream`, through `goal_org_events`: `connection` (`{connectio
 - `goal connection kinds` and `goal connection kind push <file.yaml>` / `kind delete <name>`.
 - `goal knowledge sources|add <name> --kind upload|synced|live [--connection c] [--config k=v]…|sync <source>|upload <source> <file>…|rm <document>|search "<query>" [--source s]…`.
 - `goal connection import-env` (4-14, one-time): creates `github` (kind `github`, from `GOAL_GITHUB_TOKEN`) and `claude` (kind `claude-subscription` from `CLAUDE_CODE_OAUTH_TOKEN`, or `anthropic` from `ANTHROPIC_API_KEY`) in the current organization from the CLI's environment, skipping existing names.
-- `goal db rekey` (needs the database and `GOAL_MASTER_KEYS`, like `goal db recover-*`), `goal db init` creates the `vector` extension.
+- `goal db rekey` (needs only the database, as goal_owner through `GOAL_MIGRATE_DATABASE_URL` like `goal db migrate`, whom row-level security does not bind, and `GOAL_MASTER_KEYS`; goald may keep running), `goal db init` creates the `vector` extension.
 - `goal status [--factory f] [--window 7d]` (new): per factory, WIP, items done, lead time p85, **touches per finished item**, touchless rate and the station with the most unplanned touches; `goal item <ref>` lists the item's touches.
 - Removed: nothing the CLI uses today; `goal factory validate` shows the quick fixes of §4.4.
 

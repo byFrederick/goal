@@ -1,0 +1,17 @@
+apiVersion: goal/v1
+kind: ConnectionKind
+metadata:
+  name: datadog
+  title: Datadog
+  description: A Datadog API key and application key.
+spec:
+  fields:
+    - {name: api_key, title: API key, secret: true, required: true}
+    - {name: app_key, title: Application key, description: Scoped to what agents may read., secret: true, required: true}
+    - {name: site, title: Site, description: "datadoghq.com, datadoghq.eu, us3.datadoghq.com and so on.", default: datadoghq.com}
+  env:
+    DD_API_KEY: "{{api_key}}"
+    DD_APP_KEY: "{{app_key}}"
+    DD_SITE: "{{site}}"
+  test: {method: GET, url: "https://api.{{site}}/api/v1/validate", headers: {DD-API-KEY: "{{api_key}}"}, expect: 200}
+  docs: Call the Datadog API at https://api.$DD_SITE with the headers DD-API-KEY and DD-APPLICATION-KEY from DD_API_KEY and DD_APP_KEY.

@@ -19,7 +19,13 @@ import (
 // orgTables are the tables 00006 gave org_id, then those later phases added with theirs.
 var orgTables = []string{
 	"factories", "work_items", "leases", "agent_runs", "item_events", "andon_pulls", "audit_log", "item_spans", "lease_spans",
-	"factory_roles",
+	"factory_roles", "connection_kinds", "connections",
+}
+
+// withPlatformRows are the org tables whose org_id may be NULL for the platform's rows, and why;
+// every organization reads those rows, only definers write them.
+var withPlatformRows = map[string]string{
+	"connection_kinds": "the platform's kinds (00051), written by goal_sync_platform_kinds at goald's start",
 }
 
 // withoutOrgID are the tables that carry no org_id, and why. A phase that adds a table without
@@ -134,8 +140,11 @@ func checkOrgDefault(t *testing.T, admin *pgxpool.Pool, table string) {
 		t.Fatal(err)
 	}
 
-	if !notNull || def != "goal_org()" {
-		t.Errorf("table %s: org_id NOT NULL %v, default %q; want NOT NULL DEFAULT goal_org()", table, notNull, def)
+	_, platform := withPlatformRows[table]
+
+	if notNull == platform || def != "goal_org()" {
+		t.Errorf("table %s: org_id NOT NULL %v, default %q; want DEFAULT goal_org(), NOT NULL unless it has platform rows",
+			table, notNull, def)
 	}
 }
 
@@ -309,6 +318,11 @@ func TestRLS_RawSQLWithoutOrgFails(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+
+	// goald syncs the platform's connection kinds at its start, so that table always has rows; even
+	// those every organization reads need one bound (00051's platform_kinds policy).
+	execSQL(t, db.owner, `INSERT INTO connection_kinds (id, org_id, name, spec, spec_sha256, created_by)
+		VALUES (gen_random_uuid(), NULL, 'acme-docs', '{}', repeat('a', 64), 'system:goald')`)
 
 	for _, table := range orgTables {
 		var n int

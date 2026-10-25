@@ -1,0 +1,12 @@
+apiVersion: goal/v1
+kind: ConnectionKind
+metadata:
+  name: claude-subscription
+  title: Claude subscription
+  description: "A Claude subscription's token that gives Claude Code its model. For one person's own runs only: a shared install uses an API key or Bedrock."
+spec:
+  fields:
+    - {name: token, title: OAuth token, description: "The output of claude setup-token.", secret: true, required: true}
+  env:
+    CLAUDE_CODE_OAUTH_TOKEN: "{{token}}"
+  model: true

@@ -1,0 +1,23 @@
+apiVersion: goal/v1
+kind: ConnectionKind
+metadata:
+  name: github
+  title: GitHub
+  description: A fine-grained personal access token for the repositories agents may use.
+spec:
+  fields:
+    - {name: token, title: Token, description: "A fine-grained token: only the repositories and permissions agents need.", secret: true, required: true}
+    - {name: host, title: Host, description: "github.com, or a GitHub Enterprise Server's host.", default: github.com}
+  env:
+    GH_TOKEN: "{{token}}"
+    GH_HOST: "{{host}}"
+  git:
+    host: "{{host}}"
+    username: x-access-token
+    passwordEnv: GH_TOKEN
+  mcp:
+    url: https://api.githubcopilot.com/mcp/
+    headers: {Authorization: "Bearer ${GH_TOKEN}"}   # expanded by Claude Code from the box's env
+  codeHost: github
+  test: {method: GET, url: "https://api.{{host}}/user", headers: {Authorization: "Bearer {{token}}"}, expect: 200}
+  docs: Use gh and git; GH_TOKEN is set. Open a pull request for every change.

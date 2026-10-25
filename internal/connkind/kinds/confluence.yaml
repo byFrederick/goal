@@ -1,0 +1,18 @@
+apiVersion: goal/v1
+kind: ConnectionKind
+metadata:
+  name: confluence
+  title: Confluence
+  description: A Confluence Cloud site with an Atlassian account's API token; its spaces can be synced into the knowledge base.
+spec:
+  fields:
+    - {name: site, title: Site, description: "The site's host, such as acme.atlassian.net.", required: true}
+    - {name: email, title: Email, description: The Atlassian account the token belongs to., required: true}
+    - {name: token, title: API token, secret: true, required: true}
+  env:
+    CONFLUENCE_URL: "https://{{site}}/wiki"
+    CONFLUENCE_EMAIL: "{{email}}"
+    CONFLUENCE_API_TOKEN: "{{token}}"
+  sync: confluence
+  test: {method: GET, url: "https://{{site}}/wiki/rest/api/user/current", basic: {username: "{{email}}", password: "{{token}}"}, expect: 200}
+  docs: Call the Confluence REST API at CONFLUENCE_URL with basic authentication, CONFLUENCE_EMAIL and CONFLUENCE_API_TOKEN.

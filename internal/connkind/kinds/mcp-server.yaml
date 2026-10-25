@@ -1,0 +1,13 @@
+apiVersion: goal/v1
+kind: ConnectionKind
+metadata:
+  name: mcp-server
+  title: MCP server
+  description: An MCP server without credentials, remote (a URL) or started inside the box (a command), such as Playwright or a public documentation server.
+spec:
+  fields:
+    - {name: url, title: URL, description: "A remote server's URL, reached through the gateway."}
+    - {name: command, title: Command, description: "A command that starts a stdio server inside the box, such as npx -y @playwright/mcp@0.0.41."}
+  mcp:
+    url: "{{url}}"
+    command: [sh, -c, "{{command}}"]

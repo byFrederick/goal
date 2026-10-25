@@ -57,7 +57,7 @@ func TestSetUp_OnlyInitAndMigrate(t *testing.T) {
 	t.Parallel()
 
 	for _, what := range []string{"db", "storage"} {
-		for _, args := range [][]string{{}, {"upgrade"}, {"init", "now"}, {"migrate", "now"}} {
+		for _, args := range [][]string{{}, {"upgrade"}, {"init", "now"}, {"migrate", "now"}, {"rekey", "now"}} {
 			err := setUp(t.Context(), &printer{w: &bytes.Buffer{}}, func(string) string { return "" }, what, args)
 			if !errors.Is(err, errUsage) {
 				t.Errorf("goal %s %v = %v; want a usage error", what, args, err)

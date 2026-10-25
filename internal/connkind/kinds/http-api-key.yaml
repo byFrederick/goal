@@ -1,0 +1,17 @@
+apiVersion: goal/v1
+kind: ConnectionKind
+metadata:
+  name: http-api-key
+  title: HTTP API key
+  description: Any HTTP API that takes a key in a header. Runs get <PREFIX>_URL, <PREFIX>_HEADER and <PREFIX>_KEY.
+spec:
+  fields:
+    - {name: prefix, title: Variable prefix, description: "Upper case, such as ACME_API: runs get ACME_API_URL, ACME_API_HEADER and ACME_API_KEY.", required: true}
+    - {name: base_url, title: Base URL, required: true}
+    - {name: header, title: Header, description: The header the key goes in., default: Authorization}
+    - {name: key, title: Key, description: "The header's whole value, such as Bearer <token>.", secret: true, required: true}
+  env:
+    "{{prefix}}_URL": "{{base_url}}"
+    "{{prefix}}_HEADER": "{{header}}"
+    "{{prefix}}_KEY": "{{key}}"
+  docs: Call <PREFIX>_URL with the header named by <PREFIX>_HEADER set to <PREFIX>_KEY.

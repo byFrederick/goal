@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/byFrederick/goal/internal/adapters/masterkey"
 	"github.com/byFrederick/goal/internal/adapters/postgres"
 	"github.com/byFrederick/goal/internal/ports"
 )
@@ -69,8 +70,8 @@ func localDatabase(role, password string) string {
 }
 
 // setUp runs `goal db init`, `goal db migrate` and `goal storage init`, the steps goal up takes
-// before the auth service and goald, and the recoveries `goal db recover-admin <email>` and
-// `goal db recover-owner <org> <email>`.
+// before the auth service and goald, the recoveries `goal db recover-admin <email>` and
+// `goal db recover-owner <org> <email>`, and `goal db rekey`.
 func setUp(ctx context.Context, out *printer, getenv func(string) string, what string, args []string) error {
 	if len(args) == 0 {
 		return errUsage
@@ -85,17 +86,29 @@ func setUp(ctx context.Context, out *printer, getenv func(string) string, what s
 		return storageInit(ctx, out, getenv)
 	}
 
-	switch {
+	switch run := dbCommand(cmd); {
 	case cmd == "recover-admin" && len(rest) == 1:
 		return recoverAdmin(ctx, out, getenv, rest[0])
 	case cmd == "recover-owner" && len(rest) == 2:
 		return recoverOwner(ctx, out, getenv, rest[0], rest[1])
-	case cmd == "init" && len(rest) == 0:
-		return dbInit(ctx, out, getenv)
-	case cmd == "migrate" && len(rest) == 0:
-		return dbMigrate(ctx, out, getenv)
+	case run != nil && len(rest) == 0:
+		return run(ctx, out, getenv)
 	default:
 		return errUsage
+	}
+}
+
+// dbCommand is the goal db command without arguments named cmd, or nil.
+func dbCommand(cmd string) func(context.Context, *printer, func(string) string) error {
+	switch cmd {
+	case "init":
+		return dbInit
+	case "migrate":
+		return dbMigrate
+	case "rekey":
+		return dbRekey
+	default:
+		return nil
 	}
 }
 
@@ -145,6 +158,38 @@ func dbMigrate(ctx context.Context, out *printer, getenv func(string) string) er
 	}
 
 	out.printf("✓ database migrated (as %s)\n", postgres.OwnerRole)
+
+	return nil
+}
+
+// dbRekey reseals every organization's connections under the active master key (spec 4 §5.2):
+// the step between adding a new key in front of GOAL_MASTER_KEYS (and restarting goald) and
+// dropping the old one. It connects as goal_owner (GOAL_MIGRATE_DATABASE_URL), whom row-level
+// security does not bind, with the master keys of GOAL_MASTER_KEYS or GOAL_MASTER_KEY_FILE; goald
+// may keep running. Running it again reseals nothing.
+func dbRekey(ctx context.Context, out *printer, getenv func(string) string) error {
+	keys, err := masterkey.Load(getenv)
+	if err != nil {
+		return err
+	}
+
+	if keys.Active() == "" {
+		return fmt.Errorf("goal db rekey needs the master keys: set %s (the new key first, then the old ones) or %s",
+			masterkey.KeysEnv, masterkey.FileEnv)
+	}
+
+	pool, err := postgres.Open(ctx, dbSettingsFrom(getenv).MigrateURL)
+	if err != nil {
+		return fmt.Errorf("%s: %w (goal db init creates the roles)", migrateURLEnv, err)
+	}
+	defer pool.Close()
+
+	n, err := postgres.Rekey(ctx, postgres.New(pool), keys)
+	if err != nil {
+		return fmt.Errorf("%w (%d resealed before it stopped; run it again once fixed)", err, n)
+	}
+
+	out.printf("✓ %d connections resealed under master key %s; the other keys can go once every goald runs with it first\n", n, keys.Active())
 
 	return nil
 }
