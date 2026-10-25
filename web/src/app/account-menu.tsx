@@ -28,6 +28,7 @@ import { Avatar } from '../ui/mark';
 import { menuRow } from '../ui/menu';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Tooltip } from '../ui/tooltip';
+import { AppearanceChoice } from './appearance-choice';
 import { railItem, railItemClass } from './rail-items';
 
 /** Better Auth extends a session its endpoints see (spec 3 §8.3): on load, then hourly. */
@@ -172,6 +173,7 @@ function AccountPanel({ org, onAction }: { org: OrgSummary; onAction: () => void
         </p>
       ) : null}
       <div aria-hidden="true" className="my-1 h-px bg-line" />
+      <AppearanceChoice />
       <ul className="m-0 flex list-none flex-col p-0">
         <li>
           <button type="button" aria-haspopup="dialog" onClick={act(account.editName)} className={actionRow}>
@@ -233,6 +235,7 @@ function LocalUser() {
         </span>
       </div>
       <Callout tone="note">Sign-in is off. Anyone who can reach this address acts as the local user.</Callout>
+      <AppearanceChoice />
     </div>
   );
 }
@@ -293,6 +296,7 @@ export function AccountBlock({ org, onAction }: { org: OrgSummary; onAction: () 
           Sign out everywhere…
         </Button>
       </div>
+      <AppearanceChoice />
     </section>
   );
 }

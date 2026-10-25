@@ -158,6 +158,12 @@ Screens offer a control from `can`, never from role names (spec 3 §10.1): the o
 
 Approve and retry act at once (they only move work forward); send back asks for a reason in a dialog, and merge asks for confirmation. Merge replaces approve at a human station whose `action` is `merge`; nothing is keyed by station names. Decisions carry no actor: goald records the request's (the local user until phase 4 adds sign-in).
 
+### Colour theme (dark mode)
+
+The colors are tokens: `web/src/styles.css` defines the light values in `@theme` and the dark ones (MASTER.md, "Dark theme") under `:root[data-theme="dark"]` and under `prefers-color-scheme: dark` for `:root:not([data-theme="light"])`. Components use token names only, so a theme switches without edits; `web/src/ui/raw-colors.test.ts` fails on a hex, `rgb()`, `rgba()` or `hsl()` outside the allow-list, which holds only the Monaco theme until its item lands. The text on an ink fill is `--color-white` (the dark shell in dark mode), and the selection is `run-tint`.
+
+The choice (System, Light or Dark) is one localStorage key, `goal-theme`, per browser (`web/src/shared/theme.ts`; a missing or unknown value is System). `web/public/theme.js` is a classic script in `index.html`'s `<head>`, before the module, so it sets `data-theme` and `style.colorScheme` on `<html>` before first paint; it reads the same key and must stay in step with `theme.ts`. CSP is `script-src 'self'`, so it cannot be inline, and it must not be a module or deferred. `useTheme()` (in `theme.ts`) gives the choice, the resolved theme and the setter; the account menu's Appearance choice sets it, and the toaster in `routes/__root.tsx` takes the resolved theme. `theme.test.ts` checks the persistence, fallbacks, live system changes and that the dark blocks define every token; `theme-boot.test.ts` runs `theme.js` against fake objects and checks its place in `index.html`.
+
 ### Card size
 
 A board card stays compact in every column, so the board scans as flow: a done item's card shows a short excerpt of its summary (`summaryExcerpt` in `features/board/stats.ts`: the first line without markdown marks, at most 100 characters), the state line is clamped to two lines and the title to three (`line-clamp-*`, the link keeps its full text for screen readers). The item page's Outputs card shows the summary in full. Any new card text that can grow goes through a clamp or an excerpt the same way.
