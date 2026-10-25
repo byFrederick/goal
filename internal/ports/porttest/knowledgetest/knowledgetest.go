@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
@@ -45,6 +46,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Claim_TakenOverLeaseChangesNothing", testClaimFenced},
 		{"Claim_EveryOrganizationOldestDueFirst", testClaimAcrossOrgs},
 		{"Claim_ScheduleAndSyncNow", testClaimSchedule},
+		{"FinishSync_AnErrorThatIsNoUTF8", testFinishInvalidUTF8},
 		{"Claim_AnotherModelIsDue", testClaimModel},
 		{"Documents_ReplacedSeenAndUnseenDeleted", testDocuments},
 		{"Uploads_PendingDueAndOrphans", testUploads},
@@ -561,6 +563,20 @@ func testClaimSchedule(f *fixture) {
 
 	got = f.get(f.org, handbook)
 	f.want("next sync after Sync now during a sync (now)", got.NextSyncAt, got.NextSyncAt != nil && !got.NextSyncAt.After(time.Now()))
+}
+
+// testFinishInvalidUTF8: a sync's error is stored as text even when it is not valid UTF-8 (a
+// server's reply cut at a byte; review 4 Go L13), instead of the end failing and the source staying
+// syncing until its lease ends.
+func testFinishInvalidUTF8(f *fixture) {
+	f.upload(handbook)
+
+	t0 := time.Now().UTC().Add(time.Minute).Truncate(time.Millisecond)
+	f.finish(f.claimed("the new source", t0, 10*time.Minute, ""), t0, "embed: 500 caf\xc3", "")
+
+	got := f.get(f.org, handbook)
+	f.want("after a failed sync", got, got.Status == domain.SyncFailed, utf8.ValidString(got.LastError),
+		strings.HasPrefix(got.LastError, "embed: 500 caf"))
 }
 
 // testClaimModel: a source whose chunks are of another model is due for a full sync, unless its

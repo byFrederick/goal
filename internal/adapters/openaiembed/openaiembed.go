@@ -177,7 +177,7 @@ func (c *Client) embeddings(raw []byte, n int) ([][]float32, error) {
 func (c *Client) snippet(raw []byte) string {
 	s := strings.TrimSpace(string(raw))
 	if len(s) > 300 {
-		s = s[:300] + "…"
+		s = strings.ToValidUTF8(s[:300], "") + "…" // the cut may split a character
 	}
 
 	if c.key != "" {

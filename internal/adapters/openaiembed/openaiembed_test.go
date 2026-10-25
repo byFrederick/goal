@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/byFrederick/goal/internal/domain"
 )
@@ -94,6 +95,22 @@ func TestEmbed_ErrorsCarryTheStatusNeverTheKey(t *testing.T) {
 	_, err := client(t, embeddingServer(t, domain.EmbeddingDimensions).URL+"/elsewhere").Embed(t.Context(), []string{"a"})
 	if err == nil || !strings.Contains(err.Error(), "400") || strings.Contains(err.Error(), testKey) {
 		t.Errorf("Embed = %v, want the status without the key", err)
+	}
+}
+
+// Review 4 Go L13: an error reply cut at its 300th byte stays valid UTF-8 (the source's sync
+// error is stored as text).
+func TestEmbed_ALongErrorIsCutOnACharacter(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "x"+strings.Repeat("é", 200), http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+
+	_, err := client(t, srv.URL).Embed(t.Context(), []string{"a"})
+	if err == nil || !utf8.ValidString(err.Error()) || !strings.Contains(err.Error(), "500") {
+		t.Errorf("Embed = %q, want the status in valid UTF-8", err)
 	}
 }
 

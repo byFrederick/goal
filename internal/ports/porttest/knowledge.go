@@ -924,7 +924,9 @@ func sourceEntry(by domain.Actor, action string, id domain.KnowledgeSourceID, da
 // newV7 is a time-ordered id, as the postgres adapter's.
 func newV7() string { return uuid.Must(uuid.NewV7()).String() }
 
+// truncateRunes is s, valid UTF-8 as the database keeps it, cut to at most n characters.
 func truncateRunes(s string, n int) string {
+	s = strings.ToValidUTF8(s, "\uFFFD")
 	if r := []rune(s); len(r) > n {
 		return string(r[:n])
 	}

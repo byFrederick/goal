@@ -880,8 +880,10 @@ func nonNilConfig(c map[string]string) map[string]string {
 
 func wholeSeconds(d time.Duration) int64 { return int64(d / time.Second) }
 
-// truncate cuts s to at most n characters, keeping it valid UTF-8.
+// truncate cuts s to at most n characters of valid UTF-8 (an invalid byte becomes U+FFFD:
+// PostgreSQL stores no other).
 func truncate(s string, n int) string {
+	s = strings.ToValidUTF8(s, "\uFFFD")
 	if utf8.RuneCountInString(s) <= n {
 		return s
 	}
