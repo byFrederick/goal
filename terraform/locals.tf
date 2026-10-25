@@ -23,16 +23,13 @@ locals {
       google_project_id = "goal-byfrederick"
       # The one repository whose workflows may plan and apply this stack (ci.tf, ADR 0010), by the
       # ids GitHub puts in its OIDC tokens: a renamed or transferred repository keeps its id, and
-      # a new one with the old name gets another. The two GitHub environments of its workflows:
-      # plan holds read-only credentials, apply the write ones (deployable from main only).
+      # a new one with the old name gets another. The one GitHub environment of its workflows,
+      # for both the pull request plan and the apply on merge.
       github = {
         repository    = "byFrederick/goal"
         repository_id = "1431390907"
         owner_id      = "43914037"
-        environments = {
-          plan  = "production-plan"
-          apply = "production"
-        }
+        environment   = "production"
       }
       # The PlanetScale Postgres database (PS-5, one node, us-east), made in the Cloudflare
       # dashboard and billed through Cloudflare: its production branch is adopted, never created.
