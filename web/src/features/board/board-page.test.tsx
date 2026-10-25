@@ -1,9 +1,15 @@
 // @vitest-environment jsdom
-import { cleanup, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Board, BoardStation, Factory, ItemCard, OrgSummary } from '../../api/types';
 import { renderBoardPage } from '../../test/route';
 import { BoardPage } from './board-page';
+
+// The header's Inbox button reads the inbox; the board tests see an empty one.
+vi.mock(import('../../api/client'), async (original) => ({
+  ...(await original()),
+  getInbox: vi.fn(async () => ({ entries: [], truncated: false })),
+}));
 
 afterEach(cleanup);
 
@@ -173,5 +179,13 @@ describe('BoardPage', () => {
     const line = await screen.findByRole('region', { name: 'The line' });
     expect(within(line).getByText('WIP 2 of 3')).toBeTruthy();
     expect(screen.queryByText(/^Expedite/)).toBeNull();
+  });
+
+  it('the header Inbox button opens the inbox drawer over the board', async () => {
+    renderBoardPage({ page: BoardPage, org, factory, board: board() });
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Inbox/ }));
+    const drawer = await screen.findByRole('dialog', { name: 'Inbox' });
+    expect(await within(drawer).findByText('Nothing needs you')).toBeTruthy();
   });
 });
