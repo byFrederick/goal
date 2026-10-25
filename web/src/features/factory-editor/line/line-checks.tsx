@@ -1,11 +1,12 @@
 // Checks on this line (D §10.6): B's checks of the line section (passed, warning, failed) and its
 // line problems, then hints that are never rules, from data already loaded: who needs pull
-// request access for a merge step (wizard), and the open items a removed station holds now.
+// request access for a merge step (wizard), a note when nothing merges, and the open items a
+// removed station holds now.
 import { Check, CircleAlert, Info, TriangleAlert } from 'lucide-react';
 import { useId } from 'react';
 import type { CheckResult } from '../../../api/types';
 import { useValidation } from '../frame/use-editor';
-import { stationLabel } from './labels';
+import { noMergeHint, stationLabel } from './labels';
 import { useLineEditor } from './line-editor';
 
 interface Row {
@@ -27,7 +28,7 @@ export function LineChecks() {
   const id = useId();
   const editor = useLineEditor();
   const validation = useValidation();
-  const { stations, board } = editor;
+  const { line, stations, board } = editor;
 
   const rows: Row[] = [];
   for (const c of validation?.checks ?? []) {
@@ -43,9 +44,12 @@ export function LineChecks() {
     });
   }
 
+  const noMerge = noMergeHint(line, editor.hasRepository);
+  if (noMerge) rows.push({ key: 'no-merge', tone: 'info', text: noMerge });
+
   if (editor.place === 'wizard') {
     for (const s of stations) {
-      if (s.kind !== 'human' || s.action !== 'merge') continue;
+      if (s.action !== 'merge') continue;
       const before = stations.slice(0, stations.indexOf(s)).filter((x) => x.kind === 'agent');
       const builders = [...new Set(before.flatMap((x) => (x.agent ? [x.agent] : Object.values(x.route ?? {}))))];
       const who = builders.length > 0 ? builders.join(', ') : 'the agents that open it';

@@ -198,8 +198,9 @@ tasks:
   # in a workflow (GITHUB_ACTIONS=true; Google through Workload Identity Federation, ADR 0010).
   # Neither prompts given -input=false and a saved plan:
   #   task tf:plan -- -input=false -out=tfplan && task tf:apply -- -input=false tfplan
-  # Agents fmt, check and plan; only the owner, or the coordinator the owner authorizes, applies
-  # (AGENTS.md rule 8).
+  # On merge to main, .github/workflows/terraform-apply.yml runs exactly that (ADR 0010). Agents
+  # fmt, check and plan and never run tf:apply; the owner runs it by hand only for the bootstrap
+  # and break-glass cases of the runbook (AGENTS.md rule 8).
   tf:fmt:
     desc: Format terraform/ (terraform fmt -recursive)
     dir: terraform
@@ -250,7 +251,7 @@ tasks:
         vars: { TF_COMMAND: plan }
 
   tf:apply:
-    desc: terraform apply of production (shows the plan and asks; extra flags after --). The owner, or the coordinator the owner authorizes, only
+    desc: terraform apply of production (shows the plan and asks, or applies a saved plan; extra flags after --). Run by the apply-on-merge workflow (.github/workflows/terraform-apply.yml); agents never run it, the owner only for bootstrap and break-glass
     interactive: true
     cmds:
       - task: tf:run
