@@ -120,21 +120,30 @@ func split(heading, section string) []Piece {
 // paragraph that is longer by lines and words.
 func pack(section string) []string {
 	var (
-		out []string
-		cur strings.Builder
+		out   []string
+		cur   strings.Builder
+		runes int // cur's characters
 	)
 
 	add := func(part, sep string) {
-		if cur.Len() > 0 && utf8.RuneCountInString(cur.String())+len(sep)+utf8.RuneCountInString(part) > pieceChars {
+		n := utf8.RuneCountInString(part)
+
+		if cur.Len() > 0 && runes+len(sep)+n > pieceChars {
 			out = append(out, cur.String())
 			cur.Reset()
+
+			runes = 0
 		}
 
 		if cur.Len() > 0 {
 			cur.WriteString(sep)
+
+			runes += len(sep)
 		}
 
 		cur.WriteString(part)
+
+		runes += n
 	}
 
 	for para := range strings.SplitSeq(section, "\n\n") {
@@ -167,17 +176,15 @@ func pack(section string) []string {
 }
 
 // cut splits a long paragraph into parts of at most pieceChars characters: at lines, then at
-// spaces, then anywhere.
+// spaces, then anywhere. Each cut reads only the part it cuts, so a line costs its length.
 func cut(para string) []string {
 	var out []string
 
 	for line := range strings.SplitSeq(para, "\n") {
-		for utf8.RuneCountInString(line) > pieceChars {
-			r := []rune(line)
-			at := strings.LastIndex(string(r[:pieceChars]), " ")
-
+		for end := runeOffset(line, pieceChars); end < len(line); end = runeOffset(line, pieceChars) {
+			at := strings.LastIndexByte(line[:end], ' ')
 			if at <= 0 {
-				at = len(string(r[:pieceChars]))
+				at = end
 			}
 
 			out = append(out, strings.TrimRight(line[:at], " "))
@@ -190,6 +197,19 @@ func cut(para string) []string {
 	}
 
 	return out
+}
+
+// runeOffset is the byte offset in s after its first n characters, len(s) when it has no more.
+func runeOffset(s string, n int) int {
+	for i := range s {
+		if n == 0 {
+			return i
+		}
+
+		n--
+	}
+
+	return len(s)
 }
 
 // tail is the end of s, at most n characters, starting at a word.

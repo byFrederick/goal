@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 )
 
@@ -95,5 +96,41 @@ func TestChunk_LongSectionsSplitWithOverlap(t *testing.T) {
 	squash := func(s string) string { return strings.Join(strings.Fields(s), "") }
 	if squash(strings.Join(joined, "")) != squash(doc) {
 		t.Error("the pieces do not join back into the document")
+	}
+}
+
+// Review 4 M4: cutting a long line was quadratic (a minified JSON upload of 25 MiB took minutes
+// of one worker's CPU while it held its source's lease); it is linear, so 8 MiB on one line, or
+// in tiny paragraphs, takes well under a second.
+func TestChunk_LongLineIsLinear(t *testing.T) {
+	t.Parallel()
+
+	squash := func(s string) string { return strings.Join(strings.Fields(s), "") }
+
+	for name, doc := range map[string]string{
+		"one line":         strings.Repeat(`{"key":"välue",`, 8<<20/16) + strings.Repeat("y", 3000),
+		"tiny paragraphs":  strings.Repeat("a\n\n", 8<<20/3),
+		"one line, spaces": strings.Repeat("wörd ", 8<<20/6),
+	} {
+		start := time.Now()
+		pieces := Chunk(doc)
+
+		if took := time.Since(start); took > 3*time.Second {
+			t.Errorf("%s: Chunk of %d MiB took %v", name, len(doc)>>20, took)
+		}
+
+		var b strings.Builder
+
+		for i, p := range pieces {
+			if n := utf8.RuneCountInString(p.Text); n > pieceChars {
+				t.Fatalf("%s: piece %d has %d characters", name, i, n)
+			}
+
+			b.WriteString(p.Text)
+		}
+
+		if squash(b.String()) != squash(doc) {
+			t.Errorf("%s: the pieces do not join back into the document", name)
+		}
 	}
 }
