@@ -23,7 +23,7 @@ export interface Service {
  */
 export async function startService(env: Env, log: Logger, mailer?: Mailer): Promise<Service> {
   const settings = loadSettings(env);
-  const smtp = mailer ? undefined : new SMTPMailer(settings.smtp.url, settings.smtp.from);
+  const smtp = mailer ? undefined : new SMTPMailer(settings.smtp);
   const mail: Mailer = mailer ?? (smtp as SMTPMailer);
   const pool = openPool(settings.databaseURL);
   pool.on('error', (e) => log.log('error', 'database.error', { error: e }));

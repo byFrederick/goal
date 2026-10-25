@@ -26,7 +26,7 @@ describe('loadSettings', () => {
     expect(s.google).toBeUndefined();
     expect(s.secret).toBe(secret);
     expect(s.bootstrapOwnerEmail).toBeUndefined();
-    expect(s.smtp).toEqual({ url: 'smtp://127.0.0.1:1025', from: 'Goal <goal@localhost>' });
+    expect(s.smtp).toEqual({ url: 'smtp://127.0.0.1:1025', from: 'Goal <goal@localhost>', plaintext: true });
     expect(s.proxySecret).toBe(proxySecret);
   });
 
@@ -46,7 +46,24 @@ describe('loadSettings', () => {
     expect(s.smtp).toEqual({
       url: 'smtps://user:test-only@email-smtp.example.com:465',
       from: 'Goal <goal@example.com>',
+      plaintext: false,
     });
+  });
+
+  // Compose's Mailpit (smtp://mailpit:1025 in the stack profile) speaks no TLS, and sign-in codes
+  // never arrived while every host off loopback had to upgrade with STARTTLS.
+  it('sends without TLS off loopback only when GOAL_SMTP_PLAINTEXT=on, to a compose service', () => {
+    const mailpit = { ...base, GOAL_SMTP_URL: 'smtp://mailpit:1025' };
+
+    expect(loadSettings(mailpit).smtp.plaintext).toBe(false);
+    expect(loadSettings({ ...mailpit, GOAL_SMTP_PLAINTEXT: 'on' }).smtp.plaintext).toBe(true);
+    expect(loadSettings({ ...mailpit, GOAL_SMTP_PLAINTEXT: 'off' }).smtp.plaintext).toBe(false);
+  });
+
+  it('requires STARTTLS from a mail server off loopback', () => {
+    expect(loadSettings({ ...base, GOAL_SMTP_URL: 'smtp://mail.example.com:587' }).smtp.plaintext).toBe(false);
+    expect(loadSettings({ ...base, GOAL_SMTP_URL: 'smtp://[::1]:1025' }).smtp.plaintext).toBe(true);
+    expect(loadSettings({ ...base, GOAL_SMTP_URL: 'smtp://127.0.0.2:1025' }).smtp.plaintext).toBe(true);
   });
 
   it('builds the default database URL from GOAL_PG_AUTH_PASSWORD, escaped', () => {
@@ -112,6 +129,22 @@ describe('loadSettings', () => {
     ['a bootstrap owner that is no address', { ...base, GOAL_BOOTSTRAP_OWNER_EMAIL: 'ada' }, 'an email address'],
     ['a mail server that is not SMTP', { ...base, GOAL_SMTP_URL: 'http://127.0.0.1:1025' }, 'GOAL_SMTP_URL must be'],
     ['a sender that is no address', { ...base, GOAL_SMTP_FROM: 'Goal' }, 'GOAL_SMTP_FROM must be'],
+    ['an unknown plaintext mode', { ...base, GOAL_SMTP_PLAINTEXT: 'yes' }, 'GOAL_SMTP_PLAINTEXT must be on or off'],
+    [
+      'plaintext to a server with a domain name',
+      { ...base, GOAL_SMTP_URL: 'smtp://mail.example.com:25', GOAL_SMTP_PLAINTEXT: 'on' },
+      'GOAL_SMTP_PLAINTEXT=on needs',
+    ],
+    [
+      'plaintext to a server by address',
+      { ...base, GOAL_SMTP_URL: 'smtp://10.0.0.5:25', GOAL_SMTP_PLAINTEXT: 'on' },
+      'GOAL_SMTP_PLAINTEXT=on needs',
+    ],
+    [
+      'plaintext with smtps',
+      { ...base, GOAL_SMTP_URL: 'smtps://mailpit:465', GOAL_SMTP_PLAINTEXT: 'on' },
+      'GOAL_SMTP_PLAINTEXT=on needs',
+    ],
     ['no proxy secret', { BETTER_AUTH_SECRET: secret }, 'GOAL_AUTH_PROXY_SECRET is required'],
     [
       'a short proxy secret',

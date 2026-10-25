@@ -26,8 +26,12 @@ export interface Settings {
    * no user exists, then becomes platform admin and owner of every organization (spec 3 §8.7).
    */
   bootstrapOwnerEmail: string | undefined;
-  /** GOAL_SMTP_URL (it may hold the server's credentials) and GOAL_SMTP_FROM: where mail goes. */
-  smtp: { url: string; from: string };
+  /**
+   * GOAL_SMTP_URL (it may hold the server's credentials) and GOAL_SMTP_FROM: where mail goes.
+   * plaintext: smtp:// may stay unencrypted, as to a loopback host or, with GOAL_SMTP_PLAINTEXT=on,
+   * to a compose service (Mailpit in the stack profile); any other server must offer STARTTLS.
+   */
+  smtp: { url: string; from: string; plaintext: boolean };
   /**
    * GOAL_AUTH_PROXY_SECRET: goald sends it with every request it forwards (X-Goal-Proxy-Secret),
    * and the service answers nothing else but its health check, so a process that reaches its
@@ -210,7 +214,21 @@ function parseSMTP(get: (name: string) => string | undefined, problems: string[]
   if (!emailPattern.test(address) || /[\r\n]/.test(from)) {
     problems.push('GOAL_SMTP_FROM must be an address or "Name <address>"');
   }
-  return { url, from };
+
+  const host = parsed?.hostname.replace(/^\[(.*)\]$/, '$1') ?? '';
+  const smtp = parsed?.protocol === 'smtp:';
+  const mode = get('GOAL_SMTP_PLAINTEXT') ?? 'off';
+  if (mode !== 'on' && mode !== 'off') problems.push('GOAL_SMTP_PLAINTEXT must be on or off');
+  const plaintextOn = mode === 'on';
+  // A name without dots is a compose service (or this machine's own name): never a mail server
+  // across the internet.
+  if (plaintextOn && !(smtp && (isLoopback(host) || /^[a-z]([a-z0-9-]*[a-z0-9])?$/i.test(host)))) {
+    problems.push(
+      'GOAL_SMTP_PLAINTEXT=on needs an smtp:// GOAL_SMTP_URL on loopback or a compose service ' +
+        '(a host name without dots, such as mailpit); any other server must offer STARTTLS',
+    );
+  }
+  return { url, from, plaintext: smtp && (isLoopback(host) || plaintextOn) };
 }
 
 /**

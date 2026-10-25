@@ -168,7 +168,8 @@ services:
 
   # The auth service (auth/, profile stack) in goald's network namespace, as beside goald in any
   # deployment: it listens on loopback and goald's /api/auth proxy is the only way in. Only its
-  # own variables reach it.
+  # own variables reach it. It mails Mailpit, which speaks no TLS, across this network:
+  # GOAL_SMTP_PLAINTEXT=on allows that for a compose service's name and nothing else.
   auth:
     profiles: [stack]
     image: ghcr.io/byfrederick/goal-auth:0.1.0
@@ -183,6 +184,7 @@ services:
       GOAL_AUTH_PROXY_SECRET: ${GOAL_AUTH_PROXY_SECRET:-}
       GOAL_AUTH_DATABASE_URL: postgres://goal_auth:${GOAL_PG_AUTH_PASSWORD:-goal-auth-dev-only}@postgres:5432/goal?sslmode=disable
       GOAL_SMTP_URL: smtp://mailpit:1025
+      GOAL_SMTP_PLAINTEXT: "on"
       GOAL_SMTP_FROM: ${GOAL_SMTP_FROM:-}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
       BETTER_AUTH_SECRETS: ${BETTER_AUTH_SECRETS:-}

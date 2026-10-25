@@ -76,14 +76,15 @@ const (
 var authVariables = []string{
 	"PATH", "HOME", "GOAL_PUBLIC_URL", "GOAL_AUTH_GOOGLE", "GOAL_AUTH_LISTEN", "GOAL_AUTH_DATABASE_URL", "GOAL_PG_AUTH_PASSWORD",
 	"BETTER_AUTH_SECRET", "BETTER_AUTH_SECRETS", "GOAL_BOOTSTRAP_OWNER_EMAIL", "GOAL_SMTP_URL", "GOAL_SMTP_FROM",
-	"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "NODE_ENV", "NODE_OPTIONS", "NODE_EXTRA_CA_CERTS", proxySecretEnv,
+	"GOAL_SMTP_PLAINTEXT", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "NODE_ENV", "NODE_OPTIONS", "NODE_EXTRA_CA_CERTS", proxySecretEnv,
 }
 
 // authOnly are the auth service's variables goald never gets: its secrets, its database, its
 // mail and its Google client (goald's reserved list holds them too, cmd/goald identityVariables).
 var authOnly = []string{
 	"GOAL_AUTH_LISTEN", "GOAL_AUTH_DATABASE_URL", "GOAL_PG_AUTH_PASSWORD", "BETTER_AUTH_SECRET", "BETTER_AUTH_SECRETS",
-	"BETTER_AUTH_URL", "GOAL_BOOTSTRAP_OWNER_EMAIL", "GOAL_SMTP_URL", "GOAL_SMTP_FROM", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
+	"BETTER_AUTH_URL", "GOAL_BOOTSTRAP_OWNER_EMAIL", "GOAL_SMTP_URL", "GOAL_SMTP_FROM", "GOAL_SMTP_PLAINTEXT",
+	"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
 }
 
 // up starts the local platform: PostgreSQL and RustFS from compose.yaml (waiting until they are

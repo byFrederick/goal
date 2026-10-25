@@ -21,7 +21,8 @@ function inboxHeaders(): Record<string, string> {
   }
 }
 
-const mailer = new SMTPMailer(smtpURL, 'Goal <goal@localhost>');
+const from = 'Goal <goal@localhost>';
+const mailer = new SMTPMailer({ url: smtpURL, from, plaintext: true });
 afterAll(() => mailer.close());
 
 interface Summary {
@@ -71,5 +72,20 @@ describe('SMTPMailer', () => {
     };
     expect(message.Text).toContain('Join: http://127.0.0.1:8080/invite/inv-1');
     expect(message.HTML).toContain('href="http://127.0.0.1:8080/invite/inv-1"');
+  });
+
+  // Mailpit offers no STARTTLS: without plaintext (GOAL_SMTP_PLAINTEXT=on or a loopback host,
+  // settings decide), nothing crosses to it in the clear.
+  it('refuses a server without STARTTLS unless plaintext is allowed', async () => {
+    const strict = new SMTPMailer({ url: smtpURL, from, plaintext: false });
+    const to = `ada-${randomBytes(4).toString('hex')}@example.com`;
+    try {
+      await expect(strict.send({ to, subject: 'never sent', text: 'never sent', html: '' })).rejects.toMatchObject({
+        code: 'ETLS',
+      });
+    } finally {
+      strict.close();
+    }
+    expect(await inbox(to)).toHaveLength(0);
   });
 });

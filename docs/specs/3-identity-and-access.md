@@ -272,7 +272,8 @@ The CSP itself (`web/csp.txt`, with `worker-src 'self'`) and `X-Frame-Options: D
 | `BETTER_AUTH_SECRETS` or `BETTER_AUTH_SECRET` | auth | none · required, ≥ 32 bytes |
 | `GOAL_AUTH_PROXY_SECRET` | goald, auth | `goal up` generates one per start when unset · required under `session`, ≥ 32 bytes, not a Better Auth secret; goald sends it as `X-Goal-Proxy-Secret` with every forwarded request and the auth service answers nothing else but `GET /api/auth/ok` (review of phase 3, L4; row 54) |
 | `GOAL_BOOTSTRAP_OWNER_EMAIL` | auth | none · used only while no user exists |
-| `GOAL_SMTP_URL`, `GOAL_SMTP_FROM` | auth | `smtp://127.0.0.1:1025`, `Goal <goal@localhost>` |
+| `GOAL_SMTP_URL`, `GOAL_SMTP_FROM` | auth | `smtp://127.0.0.1:1025`, `Goal <goal@localhost>` · `smtp://` to a host other than loopback must offer STARTTLS |
+| `GOAL_SMTP_PLAINTEXT` | auth | `off` · `on` lets `smtp://` stay unencrypted to a host name without dots (a compose service) and is refused for any other host; set only by compose's stack profile, for Mailpit (fix in 4-6) |
 
 `compose.yaml` gains `mailpit` (`axllent/mailpit`, pinned) with `127.0.0.1:1025` (SMTP) and `127.0.0.1:8025` (inbox UI); it never appears in cloud configuration.
 
