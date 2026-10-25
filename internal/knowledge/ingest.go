@@ -18,11 +18,6 @@ import (
 	"github.com/byFrederick/goal/internal/ports"
 )
 
-// Orgs lists the organizations whose sources sync; ports.Tenancy satisfies it.
-type Orgs interface {
-	ActiveOrgs(ctx context.Context) ([]domain.OrgID, error)
-}
-
 // Connections opens a synced source's connection; ports.Connections satisfies it.
 type Connections interface {
 	Resolve(ctx context.Context, names []string, use domain.ConnectionUse) ([]domain.ResolvedConnection, error)
@@ -48,7 +43,6 @@ const (
 // sources.
 type IngestorConfig struct {
 	Knowledge   ports.Knowledge
-	Orgs        Orgs
 	Connections Connections
 	Uploads     ports.SourceReader
 	Readers     map[string]ports.SourceReader
@@ -61,8 +55,9 @@ type IngestorConfig struct {
 	Tick    time.Duration
 }
 
-// Ingestor syncs the sources that are due, in every active organization: it claims one with a
-// lease (renewed while it works), lists its documents, fetches, extracts, chunks and embeds the
+// Ingestor syncs the sources that are due, in every live organization in one order (the source
+// due first, whichever its organization): it claims one with a lease (renewed while it works
+// and fencing its writes), lists its documents, fetches, extracts, chunks and embeds the
 // new and changed ones, replaces their chunks, deletes those its source no longer lists and
 // schedules the next sync. Any goald runs one; a goald that dies mid-sync leaves its source to
 // the next claim once the lease ends, and every step is safe to repeat.
@@ -117,41 +112,33 @@ func (in *Ingestor) Run(ctx context.Context) {
 	wg.Wait()
 }
 
-// SyncDue syncs, one after the other, every source due in any active organization that no
-// other worker holds, and returns how many it synced (failed syncs included). A source's failure
-// is recorded on it, not returned; the error is the listing's or the database's.
+// SyncDue syncs, one after the other and the one due first first, every source due in any
+// organization that no other worker holds, and returns how many it synced (failed syncs
+// included). With nothing due it is one claim. A source's failure is recorded on it, not
+// returned; the error is the claim's or the database's.
 func (in *Ingestor) SyncDue(ctx context.Context) (int, error) {
-	orgs, err := in.cfg.Orgs.ActiveOrgs(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("knowledge: organizations: %w", err)
-	}
-
 	n := 0
 
 	var errs []error
 
-	for _, org := range orgs {
-		octx := domain.WithOrg(ctx, org)
+	for ctx.Err() == nil {
+		now := in.cfg.Clock.Now()
 
-		for ctx.Err() == nil {
-			now := in.cfg.Clock.Now()
+		c, err := in.cfg.Knowledge.ClaimSource(ctx, now, now.Add(in.cfg.Lease), in.model())
+		if err != nil {
+			errs = append(errs, fmt.Errorf("knowledge: claim: %w", err))
 
-			src, err := in.cfg.Knowledge.ClaimSource(octx, now, now.Add(in.cfg.Lease), in.model())
-			if err != nil {
-				errs = append(errs, fmt.Errorf("knowledge: claim in %s: %w", org, err))
+			break
+		}
 
-				break
-			}
+		if c == nil {
+			break
+		}
 
-			if src == nil {
-				break
-			}
+		n++
 
-			n++
-
-			if err := in.sync(octx, *src); err != nil {
-				errs = append(errs, err)
-			}
+		if err := in.sync(domain.WithOrg(ctx, c.Org), *c); err != nil {
+			errs = append(errs, err)
 		}
 	}
 
@@ -168,9 +155,11 @@ func (in *Ingestor) model() string {
 }
 
 // sync runs one claimed source's sync, renewing its lease, and records how it ended. A sync cut
-// short (goald stopping, the lease lost) records nothing: the lease ends and the next claim
-// takes the source over.
-func (in *Ingestor) sync(ctx context.Context, src domain.KnowledgeSource) error {
+// short (goald stopping, the lease lost or taken over) records nothing: the lease ends, or
+// another claim holds it, and that sync takes the source over.
+func (in *Ingestor) sync(ctx context.Context, c domain.SourceClaim) error {
+	src := c.Source
+
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
@@ -179,19 +168,22 @@ func (in *Ingestor) sync(ctx context.Context, src domain.KnowledgeSource) error 
 	go func() {
 		defer close(renewed)
 
-		in.renew(ctx, cancel, src.ID)
+		in.renew(ctx, cancel, c.Lease)
 	}()
 
 	started := in.cfg.Clock.Now()
-	stats, err := in.pass(ctx, src, started)
+	stats, err := in.pass(ctx, c, started)
 
 	lost := context.Cause(ctx)
+	if lost == nil && errors.Is(err, ports.ErrLeaseLost) {
+		lost = err
+	}
 
 	cancel(nil)
 	<-renewed
 
 	if lost != nil {
-		in.cfg.Log.WarnContext(ctx, "knowledge sync cut short", slog.String("source", src.Name), slog.Any("cause", lost))
+		in.cutShort(ctx, src, lost)
 
 		return nil
 	}
@@ -207,11 +199,23 @@ func (in *Ingestor) sync(ctx context.Context, src domain.KnowledgeSource) error 
 		slog.Int("listed", stats.listed), slog.Int("fetched", stats.fetched), slog.Int("deleted", stats.deleted),
 		slog.Int("chunks", stats.chunks), slog.Float64("seconds", r.At.Sub(started).Seconds()), slog.String("error", r.Error))
 
-	if err := in.cfg.Knowledge.FinishSync(context.WithoutCancel(ctx), src.ID, r); err != nil {
+	err = in.cfg.Knowledge.FinishSync(context.WithoutCancel(ctx), c.Lease, r)
+	if errors.Is(err, ports.ErrLeaseLost) {
+		in.cutShort(ctx, src, err)
+
+		return nil
+	}
+
+	if err != nil {
 		return fmt.Errorf("knowledge: finish %s: %w", src.Name, err)
 	}
 
 	return nil
+}
+
+// cutShort logs a sync that records nothing, and why.
+func (in *Ingestor) cutShort(ctx context.Context, src domain.KnowledgeSource, cause error) {
+	in.cfg.Log.WarnContext(ctx, "knowledge sync cut short", slog.String("source", src.Name), slog.Any("cause", cause))
 }
 
 // errLeaseLost cuts a sync short when its lease could not be renewed.
@@ -219,7 +223,7 @@ var errLeaseLost = errors.New("the lease on the source was lost")
 
 // renew extends the lease every third of it until ctx ends; a renewal that fails cuts the sync
 // short.
-func (in *Ingestor) renew(ctx context.Context, cancel context.CancelCauseFunc, id domain.KnowledgeSourceID) {
+func (in *Ingestor) renew(ctx context.Context, cancel context.CancelCauseFunc, l domain.SourceLease) {
 	tick := in.cfg.Clock.NewTicker(in.cfg.Lease / 3)
 	defer tick.Stop()
 
@@ -229,7 +233,7 @@ func (in *Ingestor) renew(ctx context.Context, cancel context.CancelCauseFunc, i
 			return
 		case <-tick.C():
 			now := in.cfg.Clock.Now()
-			if err := in.cfg.Knowledge.RenewSource(ctx, id, now, now.Add(in.cfg.Lease)); err != nil && ctx.Err() == nil {
+			if err := in.cfg.Knowledge.RenewSource(ctx, l, now, now.Add(in.cfg.Lease)); err != nil && ctx.Err() == nil {
 				cancel(fmt.Errorf("%w: %w", errLeaseLost, err))
 
 				return
@@ -245,8 +249,10 @@ type syncStats struct {
 // pass is one sync of src: every listed document whose version changed (all of them when its
 // chunks are of another model) indexed, the others marked seen, and for a synced source the ones
 // it no longer lists deleted.
-func (in *Ingestor) pass(ctx context.Context, src domain.KnowledgeSource, started time.Time) (syncStats, error) {
+func (in *Ingestor) pass(ctx context.Context, c domain.SourceClaim, started time.Time) (syncStats, error) {
 	var stats syncStats
+
+	src := c.Source
 
 	spec, reader, err := in.reader(ctx, src)
 	if err != nil {
@@ -285,12 +291,12 @@ func (in *Ingestor) pass(ctx context.Context, src domain.KnowledgeSource, starte
 		stats.chunks += n
 	}
 
-	if err := in.cfg.Knowledge.MarkSeen(ctx, src.ID, unchanged, started); err != nil {
+	if err := in.cfg.Knowledge.MarkSeen(ctx, c.Lease, unchanged, started); err != nil {
 		return stats, err
 	}
 
 	if src.Kind == domain.SourceSynced {
-		if stats.deleted, err = in.cfg.Knowledge.DeleteUnseen(ctx, src.ID, started); err != nil {
+		if stats.deleted, err = in.cfg.Knowledge.DeleteUnseen(ctx, c.Lease, started); err != nil {
 			return stats, err
 		}
 	}

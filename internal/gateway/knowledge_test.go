@@ -106,7 +106,7 @@ func newKBHarness(t *testing.T) *kbHarness {
 		h.upload(t, kb, uploads, o.ID, sources)
 	}
 
-	in := knowledge.NewIngestor(knowledge.IngestorConfig{Knowledge: kb, Orgs: tenancy, Connections: conns, Uploads: uploads, Clock: h.clock})
+	in := knowledge.NewIngestor(knowledge.IngestorConfig{Knowledge: kb, Connections: conns, Uploads: uploads, Clock: h.clock})
 
 	for n := -1; n != 0; {
 		var err error

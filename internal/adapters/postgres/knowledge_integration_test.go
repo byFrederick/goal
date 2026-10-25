@@ -160,6 +160,37 @@ func seesOnlyItsKnowledge(t *testing.T, tx pgx.Tx, acme domain.OrgID, query stri
 	return nil
 }
 
+// A claim reaches every organization but a deleted one, whose sources wait for its purge.
+func TestKnowledge_ClaimSkipsDeletedOrganizations(t *testing.T) {
+	t.Parallel()
+
+	d := newConnectionsDB(t)
+	k := NewKnowledge(d.store)
+	gone, live := newOrgID(t, d.store), newOrgID(t, d.store)
+
+	for _, org := range []domain.OrgID{gone, live} {
+		if _, err := k.CreateSource(domain.WithOrg(t.Context(), org),
+			domain.NewKnowledgeSource{Name: "archive", Title: "Archive", Kind: domain.SourceUpload}, domain.LocalUser); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := d.store.DeleteOrg(domain.WithOrg(t.Context(), gone), domain.LocalUser, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now().Add(time.Minute)
+
+	c, err := k.ClaimSource(t.Context(), now, now.Add(time.Minute), "")
+	if err != nil || c == nil || c.Org != live {
+		t.Fatalf("claim = %+v, %v; want the live organization's archive", c, err)
+	}
+
+	if c, err := k.ClaimSource(t.Context(), now, now.Add(time.Minute), ""); err != nil || c != nil {
+		t.Errorf("second claim = %+v, %v; want none (the deleted organization's is left)", c, err)
+	}
+}
+
 // An organization's purge removes its knowledge base with its connections, whichever the cascade
 // reaches first (the sources' foreign key to connections is checked at the statement's end).
 func TestPurgeOrg_RemovesKnowledge(t *testing.T) {
@@ -223,7 +254,7 @@ func TestNotices_SyncStartAndEndAreKnowledgeEvents(t *testing.T) {
 	now := time.Now().Add(time.Second)
 
 	claimed, err := k.ClaimSource(ctx, now, now.Add(time.Minute), "")
-	if err != nil || claimed == nil || claimed.ID != src.ID {
+	if err != nil || claimed == nil || claimed.Source.ID != src.ID {
 		t.Fatalf("claim = %+v, %v; want handbook", claimed, err)
 	}
 
@@ -237,7 +268,7 @@ func TestNotices_SyncStartAndEndAreKnowledgeEvents(t *testing.T) {
 		}
 	}
 
-	if err := k.FinishSync(ctx, src.ID, domain.SyncResult{At: now, Due: *claimed.NextSyncAt}); err != nil {
+	if err := k.FinishSync(ctx, claimed.Lease, domain.SyncResult{At: now, Due: *claimed.Source.NextSyncAt}); err != nil {
 		t.Fatal(err)
 	}
 

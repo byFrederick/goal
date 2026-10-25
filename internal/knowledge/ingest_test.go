@@ -27,6 +27,7 @@ const (
 	deployMD   = "docs/deploy.md"
 	oncallMD   = "docs/oncall.md"
 	newMD      = "docs/new.md"
+	slowMD     = "docs/slow.md"
 )
 
 // want fails the test with what and got unless every condition holds.
@@ -211,7 +212,7 @@ func (w *world) ingestor(e ports.Embedder, kb ports.Knowledge) *knowledge.Ingest
 	}
 
 	return knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: kb, Orgs: w.tenancy, Connections: w.conns, Uploads: w.uploads, Readers: map[string]ports.SourceReader{"gitdocs": w.docs},
+		Knowledge: kb, Connections: w.conns, Uploads: w.uploads, Readers: map[string]ports.SourceReader{"gitdocs": w.docs},
 		Embedder: e, Clock: w.clock,
 	})
 }
@@ -393,7 +394,7 @@ func TestIngestor_UnknownSyncKindFailsTheSource(t *testing.T) {
 
 	w := newWorld(t)
 	in := knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: w.kb, Orgs: w.tenancy, Connections: w.conns, Uploads: w.uploads, Clock: w.clock,
+		Knowledge: w.kb, Connections: w.conns, Uploads: w.uploads, Clock: w.clock,
 	})
 	w.syncDue(in)
 
@@ -512,11 +513,80 @@ type renewals struct {
 	renewed chan error
 }
 
-func (r *renewals) RenewSource(ctx context.Context, id domain.KnowledgeSourceID, now, until time.Time) error {
-	err := r.Knowledge.RenewSource(ctx, id, now, until)
+func (r *renewals) RenewSource(ctx context.Context, l domain.SourceLease, now, until time.Time) error {
+	err := r.Knowledge.RenewSource(ctx, l, now, until)
 	r.renewed <- err
 
 	return err
+}
+
+// stalled is a knowledge base whose lease renewals hang until their sync ends: a goald stalled
+// past its lease (a renewal stuck on a dead connection, a paused VM).
+type stalled struct {
+	ports.Knowledge
+
+	renewing chan struct{}
+}
+
+func (s *stalled) RenewSource(ctx context.Context, _ domain.SourceLease, _, _ time.Time) error {
+	s.renewing <- struct{}{}
+
+	<-ctx.Done()
+
+	return ctx.Err()
+}
+
+// Review 4 SQL M1: a goald that stalled past its lease while another took the source over and
+// synced it records nothing when it wakes: no deletions and no end of its own over the newer
+// sync's.
+func TestIngestor_ATakenOverSyncRecordsNothing(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+
+	if _, err := w.kb.DeleteSource(w.ctx(), "handbook", admin); err != nil {
+		t.Fatal(err)
+	}
+
+	docs := map[string]string{deployMD: "# Deploy\n\nShip on Tuesdays.", slowMD: "# Slow\n\nA slow page."}
+	w.docs.set(docs)
+
+	release := make(chan struct{})
+	slow := &reader{docs: docs, block: map[string]chan struct{}{slowMD: release}}
+	kb := &stalled{Knowledge: w.kb, renewing: make(chan struct{}, 1)}
+	first := knowledge.NewIngestor(knowledge.IngestorConfig{
+		Knowledge: kb, Connections: w.conns, Uploads: w.uploads, Readers: map[string]ports.SourceReader{"gitdocs": slow},
+		Embedder: w.embed, Clock: w.clock,
+	})
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		_, _ = first.SyncDue(t.Context())
+	}()
+
+	// The first goald holds runbooks, waits on slow.md and its renewal hangs past the lease.
+	if err := w.clock.WaitTickers(t.Context(), 1); err != nil {
+		t.Fatal(err)
+	}
+
+	w.clock.Advance(knowledge.Lease + time.Second)
+	<-kb.renewing
+
+	if n := w.syncDue(w.ingestor(w.embed, nil)); n != 1 {
+		t.Fatalf("a second goald synced %d sources after the first's lease ended, want runbooks", n)
+	}
+
+	synced := w.source("runbooks")
+
+	w.clock.Advance(time.Minute)
+	close(release)
+	<-done
+
+	got := w.source("runbooks")
+	w.want("runbooks after the first goald woke (the second's sync)", got, got.Status == domain.SyncIdle, got.Documents == 2,
+		got.LastSyncedAt != nil && got.LastSyncedAt.Equal(*synced.LastSyncedAt), got.NextSyncAt.Equal(*synced.NextSyncAt))
 }
 
 // A goald killed mid-sync leaves the source leased: no one takes it while the lease, renewed as
@@ -526,8 +596,8 @@ func TestIngestor_LeasesSurviveAKilledGoald(t *testing.T) {
 
 	w := newWorld(t)
 	release := make(chan struct{})
-	w.docs.block = map[string]chan struct{}{"docs/slow.md": release}
-	w.docs.set(map[string]string{"docs/slow.md": "# Slow\n\nA slow page."})
+	w.docs.block = map[string]chan struct{}{slowMD: release}
+	w.docs.set(map[string]string{slowMD: "# Slow\n\nA slow page."})
 
 	// The upload source is due too; sync it first, so only runbooks is left.
 	if _, err := w.kb.DeleteSource(w.ctx(), "handbook", admin); err != nil {

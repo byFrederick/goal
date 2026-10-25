@@ -621,7 +621,7 @@ func newWorld(t *testing.T, h *codeHost, kind string, config map[string]string) 
 	}
 
 	in := knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: kb, Orgs: tenancy, Connections: conns, Clock: clock,
+		Knowledge: kb, Connections: conns, Clock: clock,
 		Readers: map[string]ports.SourceReader{"gitdocs": gitdocs.New(gitdocs.Config{Transport: h.transport(true)})},
 	})
 

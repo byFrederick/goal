@@ -41,6 +41,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"CreateSource_RulesRefused", testSourceRules},
 		{"ConnectionReadBySource_DeleteIsAConflict", testConnectionInUse},
 		{"Claim_LeaseEndsAndAnotherTakesOver", testClaimLease},
+		{"Claim_TakenOverLeaseChangesNothing", testClaimFenced},
+		{"Claim_EveryOrganizationOldestDueFirst", testClaimAcrossOrgs},
 		{"Claim_ScheduleAndSyncNow", testClaimSchedule},
 		{"Claim_AnotherModelIsDue", testClaimModel},
 		{"Documents_ReplacedSeenAndUnseenDeleted", testDocuments},
@@ -244,6 +246,7 @@ const (
 	plainText  = "text/plain"
 	leaseWord  = "lease"
 	newName    = "syn"
+	docA       = "docs/a.md"
 )
 
 // want fails the test with what and got unless every condition holds.
@@ -384,42 +387,43 @@ func testConnectionInUse(f *fixture) {
 	f.must(f.Connections.Delete(ctx, docsConn, admin))
 }
 
-// claim claims at now for lease, failing the test on an error.
-func (f *fixture) claim(now time.Time, lease time.Duration, m string) *domain.KnowledgeSource {
+// claim claims at now for lease, in no organization (a claim reaches every one), failing the
+// test on an error.
+func (f *fixture) claim(now time.Time, lease time.Duration, m string) *domain.SourceClaim {
 	f.t.Helper()
 
-	s, err := f.Knowledge.ClaimSource(f.ctx(), now, now.Add(lease), m)
+	c, err := f.Knowledge.ClaimSource(f.t.Context(), now, now.Add(lease), m)
 	f.must(err)
 
-	return s
+	return c
 }
 
 // claimed claims at now for lease and fails the test unless it gets a source.
-func (f *fixture) claimed(what string, now time.Time, lease time.Duration, m string) domain.KnowledgeSource {
+func (f *fixture) claimed(what string, now time.Time, lease time.Duration, m string) domain.SourceClaim {
 	f.t.Helper()
 
-	s := f.claim(now, lease, m)
-	if s == nil {
+	c := f.claim(now, lease, m)
+	if c == nil {
 		f.t.Fatalf("%s: ClaimSource = nil, want a source", what)
 	}
 
-	return *s
+	return *c
 }
 
 // none fails the test when a claim at now gets a source.
 func (f *fixture) none(what string, now time.Time, m string) {
 	f.t.Helper()
 
-	if s := f.claim(now, time.Minute, m); s != nil {
-		f.t.Errorf("%s: ClaimSource = %+v, want none", what, s)
+	if c := f.claim(now, time.Minute, m); c != nil {
+		f.t.Errorf("%s: ClaimSource = %+v, want none", what, c)
 	}
 }
 
-// finish ends s's sync at the time at, with errText ("" for success) and model.
-func (f *fixture) finish(s domain.KnowledgeSource, at time.Time, errText, m string) {
+// finish ends c's sync at the time at, with errText ("" for success) and model.
+func (f *fixture) finish(c domain.SourceClaim, at time.Time, errText, m string) {
 	f.t.Helper()
 
-	f.must(f.Knowledge.FinishSync(f.ctx(), s.ID, domain.SyncResult{At: at, Due: *s.NextSyncAt, Error: errText, EmbedModel: m}))
+	f.must(f.Knowledge.FinishSync(f.in(c.Org), c.Lease, domain.SyncResult{At: at, Due: *c.Source.NextSyncAt, Error: errText, EmbedModel: m}))
 }
 
 // testClaimLease: a claimed source is leased; while the lease runs nobody else claims it; a
@@ -433,21 +437,97 @@ func testClaimLease(f *fixture) {
 	lease := 10 * time.Minute
 
 	first := f.claimed("the due source", t0, lease, "")
-	f.want("claimed", first, first.ID == src.ID, first.Status == domain.SyncSyncing, equalTime(first.LeaseUntil, t0.Add(lease)))
+	f.want("claimed", first, first.Org == f.org, first.Source.ID == src.ID, first.Source.Status == domain.SyncSyncing,
+		equalTime(first.Source.LeaseUntil, t0.Add(lease)), first.Lease.Source == src.ID, first.Lease.Token != "")
 
 	f.none("while leased (live sources never)", t0.Add(5*time.Minute), "")
-	f.must(f.Knowledge.RenewSource(ctx, src.ID, t0.Add(5*time.Minute), t0.Add(15*time.Minute)))
+	f.must(f.Knowledge.RenewSource(ctx, first.Lease, t0.Add(5*time.Minute), t0.Add(15*time.Minute)))
 
 	// The holder dies: nothing renews the lease, which ends at t0+15m.
 	f.none("before the renewed lease ends", t0.Add(14*time.Minute), "")
 
 	second := f.claimed("after the lease ended", t0.Add(16*time.Minute), lease, "")
-	f.want("taken over", second.ID, second.ID == src.ID)
+	f.want("taken over", second, second.Source.ID == src.ID, second.Lease.Token != first.Lease.Token)
 
 	f.refused("RenewSource after the lease ended",
-		f.Knowledge.RenewSource(ctx, src.ID, t0.Add(30*time.Minute), t0.Add(40*time.Minute)), ports.ErrLeaseLost)
+		f.Knowledge.RenewSource(ctx, first.Lease, t0.Add(30*time.Minute), t0.Add(40*time.Minute)), ports.ErrLeaseLost)
 	f.refused("RenewSource of another organization's source",
-		f.Knowledge.RenewSource(f.in(f.NewOrg(f.t)), src.ID, t0.Add(17*time.Minute), t0.Add(20*time.Minute)), ports.ErrLeaseLost)
+		f.Knowledge.RenewSource(f.in(f.NewOrg(f.t)), second.Lease, t0.Add(17*time.Minute), t0.Add(20*time.Minute)), ports.ErrLeaseLost)
+}
+
+// testClaimFenced: a holder that stalled past its lease while another claim took the source over
+// renews, marks seen, deletes and finishes nothing, even by a clock that lags (review 4 SQL M1);
+// and a document's seen time never goes back, so the new holder's sync stands.
+func testClaimFenced(f *fixture) {
+	ctx := f.ctx()
+	src := f.synced(f.org, runbooks)
+	f.put(f.org, src.ID, docA, "v1", []string{"alpha"}, nil)
+	f.put(f.org, src.ID, "docs/b.md", "v1", []string{"beta"}, nil)
+
+	t0 := time.Now().UTC().Add(time.Minute).Truncate(time.Millisecond)
+	lease := 10 * time.Minute
+	stale := f.claimed("the first holder", t0, lease, "")
+
+	t1 := t0.Add(lease + time.Minute)
+	fresh := f.claimed("after the first lease ended", t1, lease, "")
+	f.must(f.Knowledge.MarkSeen(ctx, fresh.Lease, []string{docA}, t1))
+
+	// The first holder wakes, its clock behind: within its own lease by that clock.
+	f.refused("the stale holder's RenewSource", f.Knowledge.RenewSource(ctx, stale.Lease, t0.Add(5*time.Minute), t0.Add(15*time.Minute)),
+		ports.ErrLeaseLost)
+	f.refused("the stale holder's MarkSeen", f.Knowledge.MarkSeen(ctx, stale.Lease, []string{docA}, t0), ports.ErrLeaseLost)
+
+	n, err := f.Knowledge.DeleteUnseen(ctx, stale.Lease, t1.Add(time.Hour))
+	f.refused("the stale holder's DeleteUnseen", err, ports.ErrLeaseLost)
+	f.want("documents the stale holder deleted", n, n == 0)
+	f.refused("the stale holder's FinishSync",
+		f.Knowledge.FinishSync(ctx, stale.Lease, domain.SyncResult{At: t0.Add(6 * time.Minute), Due: *stale.Source.NextSyncAt}), ports.ErrLeaseLost)
+
+	// Its document written in flight keeps the newer seen time; so does an earlier mark.
+	f.must(f.Knowledge.PutDocument(ctx, domain.KnowledgeDocument{
+		Source: src.ID, ExternalID: docA, Version: "v1", Title: "Doc docs/a.md", MIME: "text/markdown", Status: domain.DocumentIndexed,
+		SeenAt: t0, CreatedBy: domain.EngineActor,
+	}, []domain.Chunk{{Text: "alpha"}}))
+	f.must(f.Knowledge.MarkSeen(ctx, fresh.Lease, []string{docA}, t0))
+
+	a := f.docNamed(runbooks, docA)
+	f.want("a.md's seen time (the newer holder's)", a.SeenAt, a.SeenAt.Equal(t1))
+
+	got := f.get(f.org, runbooks)
+	f.want("the source (the newer holder's sync)", got, got.Status == domain.SyncSyncing, equalTime(got.LeaseUntil, t1.Add(lease)),
+		got.LastSyncedAt == nil)
+
+	f.must(f.Knowledge.RenewSource(ctx, fresh.Lease, t1.Add(time.Minute), t1.Add(lease+time.Minute)))
+
+	n, err = f.Knowledge.DeleteUnseen(ctx, fresh.Lease, t1)
+	f.must(err)
+	f.want("DeleteUnseen of the newer holder (b.md)", n, n == 1)
+	f.finish(fresh, t1.Add(2*time.Minute), "", "")
+	f.refused("MarkSeen after the sync ended", f.Knowledge.MarkSeen(ctx, fresh.Lease, []string{docA}, t1), ports.ErrLeaseLost)
+}
+
+// testClaimAcrossOrgs: one claim reaches every organization's sources, the one due first first,
+// so no organization waits for another's to drain.
+func testClaimAcrossOrgs(f *fixture) {
+	other := f.NewOrg(f.t)
+	f.setUp(other)
+
+	// Due in the order they are created: next_sync_at is their creation time.
+	first := f.upload(handbook)
+	second := f.source(other, domain.NewKnowledgeSource{Name: handbook, Kind: domain.SourceUpload})
+	third := f.synced(f.org, runbooks)
+
+	t0 := time.Now().UTC().Add(time.Minute).Truncate(time.Millisecond)
+
+	for i, want := range []struct {
+		org domain.OrgID
+		id  domain.KnowledgeSourceID
+	}{{f.org, first.ID}, {other, second.ID}, {f.org, third.ID}} {
+		c := f.claimed("claim", t0, time.Minute, "")
+		f.want("claim in due order", []any{i, c.Org, c.Source.Name}, c.Org == want.org, c.Source.ID == want.id, c.Lease.Source == want.id)
+	}
+
+	f.none("all three claimed", t0, "")
 }
 
 // testClaimSchedule: a finished sync is due again after the interval; a failed one says why;
@@ -525,20 +605,20 @@ func testDocuments(f *fixture) {
 	ctx := f.ctx()
 	src := f.synced(f.org, runbooks)
 
-	f.put(f.org, src.ID, "docs/a.md", "v1", []string{"alpha one", "alpha two"}, nil)
+	f.put(f.org, src.ID, docA, "v1", []string{"alpha one", "alpha two"}, nil)
 	f.put(f.org, src.ID, "docs/b.md", "v1", []string{"beta"}, nil)
 
 	versions, err := f.Knowledge.Versions(ctx, src.ID)
 	f.must(err)
-	f.want("Versions", versions, reflect.DeepEqual(versions, map[string]string{"docs/a.md": "v1", "docs/b.md": "v1"}))
+	f.want("Versions", versions, reflect.DeepEqual(versions, map[string]string{docA: "v1", "docs/b.md": "v1"}))
 
-	a := f.docNamed(runbooks, "docs/a.md")
+	a := f.docNamed(runbooks, docA)
 
 	_, text, err := f.Knowledge.Document(ctx, a.ID)
 	f.must(err)
 	f.want("Document text", text, text == "alpha one\n\nalpha two")
 
-	f.put(f.org, src.ID, "docs/a.md", "v2", []string{"alpha again"}, nil)
+	f.put(f.org, src.ID, docA, "v2", []string{"alpha again"}, nil)
 
 	got, text, err := f.Knowledge.Document(ctx, a.ID)
 	f.must(err)
@@ -556,9 +636,10 @@ func testDocuments(f *fixture) {
 	f.want("the next page", rest, len(rest) == 1, len(rest) == 1 && rest[0].ID != page[0].ID)
 
 	pass := time.Now().UTC().Add(time.Second).Truncate(time.Millisecond)
-	f.must(f.Knowledge.MarkSeen(ctx, src.ID, []string{"docs/a.md"}, pass))
+	sync := f.claimed("runbooks", pass, time.Minute, "")
+	f.must(f.Knowledge.MarkSeen(ctx, sync.Lease, []string{docA}, pass))
 
-	n, err := f.Knowledge.DeleteUnseen(ctx, src.ID, pass)
+	n, err := f.Knowledge.DeleteUnseen(ctx, sync.Lease, pass)
 	f.must(err)
 	f.want("DeleteUnseen (b.md)", n, n == 1)
 
@@ -606,7 +687,7 @@ func testUploads(f *fixture) {
 	f.want("the same content again (the same document)", again.ID, again.ID == d1.ID)
 
 	due := f.claimed("after an upload", t0.Add(2*time.Minute), time.Minute, "")
-	f.want("due after an upload", due.Name, due.Name == handbook)
+	f.want("due after an upload", due.Source.Name, due.Source.Name == handbook)
 
 	v, err := f.Knowledge.Versions(ctx, d1.Source)
 	f.must(err)
@@ -646,9 +727,9 @@ func (f *fixture) uploadRefusals(h domain.BlobHash) {
 	_, err = f.Knowledge.AddUpload(ctx, handbook, domain.KnowledgeDocument{Title: "x", MIME: plainText, Blob: "nothex"}, admin)
 	f.refused("AddUpload without a content hash", err, domain.ErrInvalid)
 
-	f.put(f.org, f.get(f.org, runbooks).ID, "docs/a.md", "v1", []string{"alpha"}, nil)
+	f.put(f.org, f.get(f.org, runbooks).ID, docA, "v1", []string{"alpha"}, nil)
 
-	_, err = f.Knowledge.DeleteDocument(ctx, f.docNamed(runbooks, "docs/a.md").ID, admin)
+	_, err = f.Knowledge.DeleteDocument(ctx, f.docNamed(runbooks, docA).ID, admin)
 	f.refused("DeleteDocument of a synced document", err, domain.ErrNotUploadSource)
 }
 
@@ -734,8 +815,8 @@ func testSearchSources(f *fixture) {
 // id, claim or search, and writes none (spec 4 §11.2 row 1).
 func testIsolation(f *fixture) {
 	src := f.synced(f.org, runbooks)
-	f.put(f.org, src.ID, "docs/a.md", "v1", []string{"lease expiry"}, [][]float32{axis(0, -1, 0)})
-	doc := f.docNamed(runbooks, "docs/a.md")
+	f.put(f.org, src.ID, docA, "v1", []string{"lease expiry"}, [][]float32{axis(0, -1, 0)})
+	doc := f.docNamed(runbooks, docA)
 
 	other := f.NewOrg(f.t)
 	f.setUp(other)
@@ -764,10 +845,18 @@ func testIsolation(f *fixture) {
 	}, nil)
 	f.want("PutDocument into another org's source", err, err != nil)
 
+	// A lease is its organization's: under another, it renews, marks, deletes and ends nothing.
 	t0 := time.Now().UTC().Add(time.Minute)
-	s, err := f.Knowledge.ClaimSource(in, t0, t0.Add(time.Minute), model)
-	f.must(err)
-	f.want("ClaimSource in another org", s, s == nil)
+	c := f.claimed("runbooks", t0, time.Minute, model)
+	f.want("the claim's organization", c.Org, c.Org == f.org)
+	f.refused("RenewSource in another org", f.Knowledge.RenewSource(in, c.Lease, t0, t0.Add(time.Minute)), ports.ErrLeaseLost)
+	f.refused("MarkSeen in another org", f.Knowledge.MarkSeen(in, c.Lease, []string{docA}, t0), ports.ErrLeaseLost)
+
+	_, err = f.Knowledge.DeleteUnseen(in, c.Lease, t0.Add(time.Hour))
+	f.refused("DeleteUnseen in another org", err, ports.ErrLeaseLost)
+	f.refused("FinishSync in another org", f.Knowledge.FinishSync(in, c.Lease, domain.SyncResult{At: t0, Due: *c.Source.NextSyncAt}),
+		ports.ErrLeaseLost)
+	f.finish(c, t0, "", model)
 
 	// The other org's own source of the same name, nearest to nothing: a search there never
 	// reaches the first org's chunk however near it is.
@@ -781,11 +870,12 @@ func testIsolation(f *fixture) {
 	f.want("Search in the first org (its own chunk only)", hits, slices.Equal(hits, []string{"lease expiry"}))
 }
 
-// testNoOrg: every method needs an organization in ctx.
+// testNoOrg: every method but ClaimSource needs an organization in ctx.
 func testNoOrg(f *fixture) {
 	ctx := f.t.Context()
 	now := time.Now()
 	id := domain.KnowledgeSourceID("01900000-0000-7000-8000-000000000000")
+	lease := domain.SourceLease{Source: id, Token: "01900000-0000-4000-8000-000000000000"}
 
 	calls := map[string]func() error{
 		"Sources": func() error { _, err := f.Knowledge.Sources(ctx); return err },
@@ -794,11 +884,13 @@ func testNoOrg(f *fixture) {
 			_, err := f.Knowledge.CreateSource(ctx, domain.NewKnowledgeSource{Name: "abc", Title: "x", Kind: domain.SourceUpload}, admin)
 			return err
 		},
-		"SyncNow":     func() error { return f.Knowledge.SyncNow(ctx, "abc") },
-		"ClaimSource": func() error { _, err := f.Knowledge.ClaimSource(ctx, now, now, ""); return err },
-		"RenewSource": func() error { return f.Knowledge.RenewSource(ctx, id, now, now) },
-		"Versions":    func() error { _, err := f.Knowledge.Versions(ctx, id); return err },
-		"Documents":   func() error { _, err := f.Knowledge.Documents(ctx, "abc", "", 1); return err },
+		"SyncNow":      func() error { return f.Knowledge.SyncNow(ctx, "abc") },
+		"RenewSource":  func() error { return f.Knowledge.RenewSource(ctx, lease, now, now) },
+		"FinishSync":   func() error { return f.Knowledge.FinishSync(ctx, lease, domain.SyncResult{At: now, Due: now}) },
+		"MarkSeen":     func() error { return f.Knowledge.MarkSeen(ctx, lease, []string{"x"}, now) },
+		"DeleteUnseen": func() error { _, err := f.Knowledge.DeleteUnseen(ctx, lease, now); return err },
+		"Versions":     func() error { _, err := f.Knowledge.Versions(ctx, id); return err },
+		"Documents":    func() error { _, err := f.Knowledge.Documents(ctx, "abc", "", 1); return err },
 		"Search": func() error {
 			_, err := f.Knowledge.Search(ctx, domain.KnowledgeQuery{Text: "x", Sources: []string{"abc"}, Limit: 1})
 			return err

@@ -555,7 +555,7 @@ func newWorld(t *testing.T, s *site, spaces string) *world {
 	}
 
 	in := knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: kb, Orgs: tenancy, Connections: conns, Clock: clock,
+		Knowledge: kb, Connections: conns, Clock: clock,
 		Readers: map[string]ports.SourceReader{"confluence": s.reader()},
 	})
 

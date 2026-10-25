@@ -13,31 +13,29 @@ import (
 )
 
 const claimKnowledgeSource = `-- name: ClaimKnowledgeSource :one
-UPDATE knowledge_sources s SET lease_until = $1::timestamptz, status = 'syncing'
-WHERE s.id = (
-  SELECT k.id FROM knowledge_sources k
-  WHERE k.kind <> 'live' AND (k.lease_until IS NULL OR k.lease_until <= $2::timestamptz)
-    AND (k.next_sync_at <= $2::timestamptz
-         OR ($3::text <> '' AND k.embed_model IS DISTINCT FROM $3::text AND k.status <> 'failed'))
-  ORDER BY k.next_sync_at, k.id
-  LIMIT 1
-  FOR UPDATE SKIP LOCKED)
-RETURNING s.id
+SELECT c.org_id::uuid AS org_id, c.id::uuid AS id, c.lease_token::uuid AS lease_token
+FROM goal_claim_knowledge_source($1::timestamptz, $2::timestamptz, $3::text) c
 `
 
 type ClaimKnowledgeSourceParams struct {
-	Until time.Time
 	Now   time.Time
+	Until time.Time
 	Model string
 }
 
-// The source most overdue: not live, its lease ended, and due or, with a model, of another
-// model's chunks unless its last sync failed. Leased until until, as syncing.
-func (q *Queries) ClaimKnowledgeSource(ctx context.Context, arg ClaimKnowledgeSourceParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, claimKnowledgeSource, arg.Until, arg.Now, arg.Model)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+type ClaimKnowledgeSourceRow struct {
+	OrgID      uuid.UUID
+	ID         uuid.UUID
+	LeaseToken uuid.UUID
+}
+
+// The source due first in any live organization, leased under a new token (00055), in no
+// organization: the caller binds the transaction to the one returned.
+func (q *Queries) ClaimKnowledgeSource(ctx context.Context, arg ClaimKnowledgeSourceParams) (ClaimKnowledgeSourceRow, error) {
+	row := q.db.QueryRow(ctx, claimKnowledgeSource, arg.Now, arg.Until, arg.Model)
+	var i ClaimKnowledgeSourceRow
+	err := row.Scan(&i.OrgID, &i.ID, &i.LeaseToken)
+	return i, err
 }
 
 const deleteDocumentChunks = `-- name: DeleteDocumentChunks :exec
@@ -101,22 +99,24 @@ SET status = CASE WHEN $1::text = '' THEN 'idle' ELSE 'failed' END,
     last_error = nullif($1::text, ''),
     last_synced_at = CASE WHEN $1::text = '' THEN $2::timestamptz ELSE last_synced_at END,
     embed_model = CASE WHEN $1::text = '' THEN nullif($3::text, '') ELSE embed_model END,
-    lease_until = NULL,
+    lease_until = NULL, lease_token = NULL,
     next_sync_at = CASE WHEN next_sync_at IS DISTINCT FROM $4::timestamptz THEN next_sync_at
                         ELSE $2::timestamptz + sync_every END,
     updated_at = now()
-WHERE id = $5 AND kind <> 'live'
+WHERE id = $5 AND lease_token = $6::uuid AND kind <> 'live'
 `
 
 type FinishKnowledgeSyncParams struct {
-	Error string
-	At    time.Time
-	Model string
-	Due   time.Time
-	ID    uuid.UUID
+	Error      string
+	At         time.Time
+	Model      string
+	Due        time.Time
+	ID         uuid.UUID
+	LeaseToken uuid.UUID
 }
 
 // The next sync is at plus the interval unless the source was made due since its claim (due).
+// Nothing when another claim took the source (its token).
 func (q *Queries) FinishKnowledgeSync(ctx context.Context, arg FinishKnowledgeSyncParams) (int64, error) {
 	result, err := q.db.Exec(ctx, finishKnowledgeSync,
 		arg.Error,
@@ -124,11 +124,30 @@ func (q *Queries) FinishKnowledgeSync(ctx context.Context, arg FinishKnowledgeSy
 		arg.Model,
 		arg.Due,
 		arg.ID,
+		arg.LeaseToken,
 	)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const holdKnowledgeLease = `-- name: HoldKnowledgeLease :one
+SELECT true FROM knowledge_sources WHERE id = $1 AND lease_token = $2::uuid FOR SHARE
+`
+
+type HoldKnowledgeLeaseParams struct {
+	ID         uuid.UUID
+	LeaseToken uuid.UUID
+}
+
+// The lease's source, locked against a claim until the transaction ends, while the token is its
+// current one: a seen mark or a deletion under it applies, or none does.
+func (q *Queries) HoldKnowledgeLease(ctx context.Context, arg HoldKnowledgeLeaseParams) (bool, error) {
+	row := q.db.QueryRow(ctx, holdKnowledgeLease, arg.ID, arg.LeaseToken)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const insertKnowledgeChunks = `-- name: InsertKnowledgeChunks :exec
@@ -508,7 +527,7 @@ func (q *Queries) MakeKnowledgeSourceDue(ctx context.Context, id uuid.UUID) erro
 }
 
 const markKnowledgeSeen = `-- name: MarkKnowledgeSeen :exec
-UPDATE knowledge_documents SET seen_at = $1
+UPDATE knowledge_documents SET seen_at = greatest(seen_at, $1)
 WHERE source_id = $2 AND external_id = ANY ($3::text[])
 `
 
@@ -539,17 +558,24 @@ func (q *Queries) NotifyKnowledgeSync(ctx context.Context, id uuid.UUID) error {
 
 const renewKnowledgeSource = `-- name: RenewKnowledgeSource :execrows
 UPDATE knowledge_sources SET lease_until = $1::timestamptz
-WHERE id = $2 AND status = 'syncing' AND lease_until > $3::timestamptz
+WHERE id = $2 AND lease_token = $3::uuid AND status = 'syncing'
+  AND lease_until > $4::timestamptz
 `
 
 type RenewKnowledgeSourceParams struct {
-	Until time.Time
-	ID    uuid.UUID
-	Now   time.Time
+	Until      time.Time
+	ID         uuid.UUID
+	LeaseToken uuid.UUID
+	Now        time.Time
 }
 
 func (q *Queries) RenewKnowledgeSource(ctx context.Context, arg RenewKnowledgeSourceParams) (int64, error) {
-	result, err := q.db.Exec(ctx, renewKnowledgeSource, arg.Until, arg.ID, arg.Now)
+	result, err := q.db.Exec(ctx, renewKnowledgeSource,
+		arg.Until,
+		arg.ID,
+		arg.LeaseToken,
+		arg.Now,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -767,7 +793,7 @@ VALUES ($1, $2, $3, $4, $5, $6,
 ON CONFLICT (source_id, external_id) DO UPDATE
 SET version = EXCLUDED.version, title = EXCLUDED.title, url = EXCLUDED.url, mime = EXCLUDED.mime, bytes = EXCLUDED.bytes,
     blob_sha256 = coalesce(EXCLUDED.blob_sha256, d.blob_sha256), status = EXCLUDED.status, error = EXCLUDED.error,
-    seen_at = EXCLUDED.seen_at, indexed_at = EXCLUDED.indexed_at, embed_model = EXCLUDED.embed_model
+    seen_at = greatest(d.seen_at, EXCLUDED.seen_at), indexed_at = EXCLUDED.indexed_at, embed_model = EXCLUDED.embed_model
 RETURNING id
 `
 
@@ -789,7 +815,8 @@ type UpsertKnowledgeDocumentParams struct {
 	CreatedBy  string
 }
 
-// org_id comes from its default, goal_org(); an upload's hash stays when a sync rewrites it.
+// org_id comes from its default, goal_org(); an upload's hash stays when a sync rewrites it, and
+// its seen time never goes back (a sync that stalled past its lease writes an older one).
 func (q *Queries) UpsertKnowledgeDocument(ctx context.Context, arg UpsertKnowledgeDocumentParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, upsertKnowledgeDocument,
 		arg.ID,

@@ -77,7 +77,7 @@ func (h *harness) syncAll(t *testing.T) {
 	t.Helper()
 
 	in := knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: h.kb, Orgs: h.tenancy, Connections: h.conns, Uploads: h.uploads, Clock: porttest.NewClock(time.Now().Add(time.Second)),
+		Knowledge: h.kb, Connections: h.conns, Uploads: h.uploads, Clock: porttest.NewClock(time.Now().Add(time.Second)),
 	})
 
 	if _, err := in.SyncDue(t.Context()); err != nil {

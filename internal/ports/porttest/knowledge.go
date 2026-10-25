@@ -47,6 +47,7 @@ type knowledgeOrg struct {
 type fakeSource struct {
 	src    domain.KnowledgeSource
 	connID domain.ConnectionID
+	token  string // the lease's, "" when none holds it
 }
 
 type fakeDocument struct {
@@ -340,13 +341,17 @@ func (k *Knowledge) SyncNow(ctx context.Context, name string) error {
 	})
 }
 
-// ClaimSource implements ports.Knowledge.
-func (k *Knowledge) ClaimSource(ctx context.Context, now, until time.Time, model string) (*domain.KnowledgeSource, error) {
-	var out *domain.KnowledgeSource
+// ClaimSource implements ports.Knowledge: the source due first of every organization's.
+func (k *Knowledge) ClaimSource(_ context.Context, now, until time.Time, model string) (*domain.SourceClaim, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
 
-	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
-		var best *fakeSource
+	var (
+		best    *fakeSource
+		bestOrg domain.OrgID
+	)
 
+	for org, o := range k.orgs {
 		for _, s := range o.sources {
 			if !claimable(s.src, now, model) {
 				continue
@@ -354,23 +359,21 @@ func (k *Knowledge) ClaimSource(ctx context.Context, now, until time.Time, model
 
 			if best == nil || s.src.NextSyncAt.Before(*best.src.NextSyncAt) ||
 				(s.src.NextSyncAt.Equal(*best.src.NextSyncAt) && s.src.ID < best.src.ID) {
-				best = s
+				best, bestOrg = s, org
 			}
 		}
+	}
 
-		if best == nil {
-			return nil
-		}
+	if best == nil {
+		return nil, nil //nolint:nilnil // nothing is due
+	}
 
-		u := until.UTC()
-		best.src.LeaseUntil, best.src.Status = &u, domain.SyncSyncing
-		v := o.view(best)
-		out = &v
+	u := until.UTC()
+	best.src.LeaseUntil, best.src.Status, best.token = &u, domain.SyncSyncing, uuid.NewString()
 
-		return nil
-	})
-
-	return out, err
+	return &domain.SourceClaim{
+		Org: bestOrg, Source: k.orgs[bestOrg].view(best), Lease: domain.SourceLease{Source: best.src.ID, Token: best.token},
+	}, nil
 }
 
 // claimable is the claim's rule: not live, its lease ended, and due or of another model.
@@ -383,11 +386,15 @@ func claimable(s domain.KnowledgeSource, now time.Time, model string) bool {
 }
 
 // RenewSource implements ports.Knowledge.
-func (k *Knowledge) RenewSource(ctx context.Context, id domain.KnowledgeSourceID, now, until time.Time) error {
+func (k *Knowledge) RenewSource(ctx context.Context, l domain.SourceLease, now, until time.Time) error {
 	return k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
-		s := o.byID(id)
-		if s == nil || s.src.Status != domain.SyncSyncing || s.src.LeaseUntil == nil || !s.src.LeaseUntil.After(now) {
-			return fmt.Errorf("knowledge source %s: %w", id, ports.ErrLeaseLost)
+		s, err := o.leased(l)
+		if err != nil {
+			return err
+		}
+
+		if s.src.Status != domain.SyncSyncing || s.src.LeaseUntil == nil || !s.src.LeaseUntil.After(now) {
+			return fmt.Errorf("knowledge source %s: %w", l.Source, ports.ErrLeaseLost)
 		}
 
 		u := until.UTC()
@@ -395,6 +402,16 @@ func (k *Knowledge) RenewSource(ctx context.Context, id domain.KnowledgeSourceID
 
 		return nil
 	})
+}
+
+// leased is the source l holds; ErrLeaseLost when another claim took it or none holds it.
+func (o *knowledgeOrg) leased(l domain.SourceLease) (*fakeSource, error) {
+	s := o.byID(l.Source)
+	if s == nil || s.token == "" || s.token != l.Token {
+		return nil, fmt.Errorf("knowledge source %s: %w", l.Source, ports.ErrLeaseLost)
+	}
+
+	return s, nil
 }
 
 func (o *knowledgeOrg) byID(id domain.KnowledgeSourceID) *fakeSource {
@@ -408,15 +425,15 @@ func (o *knowledgeOrg) byID(id domain.KnowledgeSourceID) *fakeSource {
 }
 
 // FinishSync implements ports.Knowledge.
-func (k *Knowledge) FinishSync(ctx context.Context, id domain.KnowledgeSourceID, r domain.SyncResult) error {
+func (k *Knowledge) FinishSync(ctx context.Context, l domain.SourceLease, r domain.SyncResult) error {
 	return k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
-		s := o.byID(id)
-		if s == nil || s.src.Kind == domain.SourceLive {
-			return fmt.Errorf("knowledge source %s: %w", id, ports.ErrNotFound)
+		s, err := o.leased(l)
+		if err != nil {
+			return err
 		}
 
 		at := r.At.UTC()
-		s.src.LeaseUntil = nil
+		s.src.LeaseUntil, s.token = nil, ""
 
 		if r.Error == "" {
 			s.src.Status, s.src.LastError, s.src.LastSyncedAt, s.src.EmbedModel = domain.SyncIdle, "", &at, r.EmbedModel
@@ -480,7 +497,7 @@ func (k *Knowledge) PutDocument(ctx context.Context, d domain.KnowledgeDocument,
 		}
 
 		d.Error = truncateRunes(d.Error, domain.MaxKnowledgeError)
-		d.SeenAt = d.SeenAt.UTC()
+		d.SeenAt = later(existing.doc.SeenAt, d.SeenAt.UTC())
 		existing.doc, existing.chunks = d, nil
 
 		for _, c := range chunks {
@@ -542,12 +559,29 @@ func (o *knowledgeOrg) document(source domain.KnowledgeSourceID, ext string) *fa
 	return nil
 }
 
-// MarkSeen implements ports.Knowledge.
-func (k *Knowledge) MarkSeen(ctx context.Context, source domain.KnowledgeSourceID, externalIDs []string, at time.Time) error {
+// later is the later of a and b.
+func later(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+
+	return b
+}
+
+// MarkSeen implements ports.Knowledge; no external ids is nothing to do.
+func (k *Knowledge) MarkSeen(ctx context.Context, l domain.SourceLease, externalIDs []string, at time.Time) error {
+	if len(externalIDs) == 0 {
+		return nil
+	}
+
 	return k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
+		if _, err := o.leased(l); err != nil {
+			return err
+		}
+
 		for _, d := range o.docs {
-			if d.doc.Source == source && slices.Contains(externalIDs, d.doc.ExternalID) {
-				d.doc.SeenAt = at.UTC()
+			if d.doc.Source == l.Source && slices.Contains(externalIDs, d.doc.ExternalID) {
+				d.doc.SeenAt = later(d.doc.SeenAt, at.UTC())
 			}
 		}
 
@@ -556,12 +590,16 @@ func (k *Knowledge) MarkSeen(ctx context.Context, source domain.KnowledgeSourceI
 }
 
 // DeleteUnseen implements ports.Knowledge.
-func (k *Knowledge) DeleteUnseen(ctx context.Context, source domain.KnowledgeSourceID, before time.Time) (int, error) {
+func (k *Knowledge) DeleteUnseen(ctx context.Context, l domain.SourceLease, before time.Time) (int, error) {
 	n := 0
 
 	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
+		if _, err := o.leased(l); err != nil {
+			return err
+		}
+
 		for id, d := range o.docs {
-			if d.doc.Source == source && d.doc.SeenAt.Before(before) {
+			if d.doc.Source == l.Source && d.doc.SeenAt.Before(before) {
 				delete(o.docs, id)
 
 				n++

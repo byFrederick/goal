@@ -208,6 +208,22 @@ type SyncResult struct {
 	EmbedModel string
 }
 
+// SourceClaim is a source claimed for one sync, with its organization (a claim reaches every
+// organization's sources) and the lease that sync holds.
+type SourceClaim struct {
+	Org    OrgID
+	Source KnowledgeSource
+	Lease  SourceLease
+}
+
+// SourceLease is one sync's hold on its source. Its token fences the sync's renewals, seen
+// marks, deletions and end: once another claim took the source over (the holder stalled past
+// its lease), none of them applies any more.
+type SourceLease struct {
+	Source KnowledgeSourceID
+	Token  string
+}
+
 // KnowledgeDocument is one document of a source.
 type KnowledgeDocument struct {
 	ID     KnowledgeDocumentID

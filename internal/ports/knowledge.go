@@ -34,29 +34,34 @@ type Knowledge interface {
 	// syncs (domain.ErrInvalid).
 	SyncNow(ctx context.Context, name string) error
 
-	// ClaimSource leases the source most overdue at now until until, as syncing, or returns nil
-	// when none is: a source not live whose next sync is due or, when model is not "", whose
-	// chunks are of another model (unless its last sync failed), and whose lease ended.
-	ClaimSource(ctx context.Context, now, until time.Time, model string) (*domain.KnowledgeSource, error)
-	// RenewSource extends a lease held at now until until. ErrLeaseLost when it ended, or the
-	// source is not syncing any more.
-	RenewSource(ctx context.Context, id domain.KnowledgeSourceID, now, until time.Time) error
+	// ClaimSource leases from now to until, as syncing, the source due first in any live
+	// organization (ctx needs none), so every organization's sources take their turn in one
+	// order; nil when none is: a source not live whose next sync is due or, when model is not "",
+	// whose chunks are of another model (unless its last sync failed), and whose lease ended. The
+	// other lease methods take the claim's lease, under its organization in ctx.
+	ClaimSource(ctx context.Context, now, until time.Time, model string) (*domain.SourceClaim, error)
+	// RenewSource extends a lease held at now until until. ErrLeaseLost when it ended, another
+	// claim took the source, or the source is not syncing any more.
+	RenewSource(ctx context.Context, l domain.SourceLease, now, until time.Time) error
 	// FinishSync ends a sync: idle or failed with r.Error, its lease released and the next sync
 	// due r.At plus the source's interval, unless it was made due since its claim (r.Due); on
-	// success its model becomes r.EmbedModel.
-	FinishSync(ctx context.Context, id domain.KnowledgeSourceID, r domain.SyncResult) error
+	// success its model becomes r.EmbedModel. ErrLeaseLost, changing nothing, once another
+	// claim took the source.
+	FinishSync(ctx context.Context, l domain.SourceLease, r domain.SyncResult) error
 
 	// Versions are the versions of a source's documents by external id, those pending excluded:
 	// what a sync need not fetch again.
 	Versions(ctx context.Context, source domain.KnowledgeSourceID) (map[string]string, error)
 	// PutDocument creates or replaces the document of d.Source with d.ExternalID and replaces
-	// its chunks, in one transaction.
+	// its chunks, in one transaction. A document's seen time never goes back.
 	PutDocument(ctx context.Context, d domain.KnowledgeDocument, chunks []domain.Chunk) error
-	// MarkSeen sets the seen time of a source's documents with the given external ids.
-	MarkSeen(ctx context.Context, source domain.KnowledgeSourceID, externalIDs []string, at time.Time) error
-	// DeleteUnseen deletes a source's documents last seen before (a sync's start) and
-	// returns how many.
-	DeleteUnseen(ctx context.Context, source domain.KnowledgeSourceID, before time.Time) (int, error)
+	// MarkSeen sets the seen time of the lease's source's documents with the given external ids
+	// to at, unless they were seen later. ErrLeaseLost, changing nothing, once another claim
+	// took the source.
+	MarkSeen(ctx context.Context, l domain.SourceLease, externalIDs []string, at time.Time) error
+	// DeleteUnseen deletes the lease's source's documents last seen before (a sync's start) and
+	// returns how many. ErrLeaseLost, deleting nothing, once another claim took the source.
+	DeleteUnseen(ctx context.Context, l domain.SourceLease, before time.Time) (int, error)
 
 	// AddUpload adds an uploaded document to the upload source named source, pending, and makes
 	// the source due (knowledge_document.uploaded). d.Blob is its content's hash, which is its

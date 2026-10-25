@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -21,7 +22,8 @@ var _ ports.Knowledge = (*Knowledge)(nil)
 
 // Knowledge implements ports.Knowledge over 00054's knowledge_sources, knowledge_documents and
 // knowledge_chunks, as goal_app under row-level security: every statement sees the organization
-// in ctx only, and every change people make appends its audit entry in its transaction. A search
+// in ctx only (a claim alone reads across organizations, through 00055's definer), and every
+// change people make appends its audit entry in its transaction. A search
 // is one statement: the nearest chunks by cosine distance (pgvector's HNSW index on halfvec,
 // with its iterative scan so filters never starve it) and the best by keywords, both over the
 // named sources only, fused by reciprocal rank.
@@ -293,12 +295,14 @@ func (k *Knowledge) SyncNow(ctx context.Context, name string) error {
 	}
 }
 
-// ClaimSource implements ports.Knowledge; the claim notifies the stream event knowledge (syncing).
-func (k *Knowledge) ClaimSource(ctx context.Context, now, until time.Time, model string) (*domain.KnowledgeSource, error) {
-	var out *domain.KnowledgeSource
+// ClaimSource implements ports.Knowledge: goal_claim_knowledge_source claims across
+// organizations, then the transaction binds to the claim's to read the source; the claim
+// notifies the stream event knowledge (syncing).
+func (k *Knowledge) ClaimSource(ctx context.Context, now, until time.Time, model string) (*domain.SourceClaim, error) {
+	var out *domain.SourceClaim
 
-	err := k.s.inTx(ctx, func(q *db.Queries) error {
-		id, err := q.ClaimKnowledgeSource(ctx, db.ClaimKnowledgeSourceParams{Until: until, Now: now, Model: model})
+	err := k.s.systemTx(ctx, func(q *db.Queries) error {
+		c, err := q.ClaimKnowledgeSource(ctx, db.ClaimKnowledgeSourceParams{Until: until, Now: now, Model: model})
 		if notFound(err) {
 			return nil
 		}
@@ -307,14 +311,20 @@ func (k *Knowledge) ClaimSource(ctx context.Context, now, until time.Time, model
 			return err
 		}
 
-		s, err := oneSource(ctx, q, db.KnowledgeSourcesParams{ID: &id}, "knowledge source "+id.String())
+		if err := q.SetOrg(ctx, c.OrgID.String()); err != nil {
+			return fmt.Errorf("set org: %w", err)
+		}
+
+		s, err := oneSource(ctx, q, db.KnowledgeSourcesParams{ID: &c.ID}, "knowledge source "+c.ID.String())
 		if err != nil {
 			return err
 		}
 
-		out = &s
+		out = &domain.SourceClaim{
+			Org: domain.OrgID(c.OrgID.String()), Source: s, Lease: domain.SourceLease{Source: s.ID, Token: c.LeaseToken.String()},
+		}
 
-		return q.NotifyKnowledgeSync(ctx, id)
+		return q.NotifyKnowledgeSync(ctx, c.ID)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("claim knowledge source: %w", err)
@@ -323,37 +333,61 @@ func (k *Knowledge) ClaimSource(ctx context.Context, now, until time.Time, model
 	return out, nil
 }
 
+// lease parses l. A malformed one holds nothing: ErrLeaseLost.
+func lease(l domain.SourceLease) (source, token uuid.UUID, err error) {
+	source, err = uuid.Parse(string(l.Source))
+	if err == nil {
+		token, err = uuid.Parse(l.Token)
+	}
+
+	if err != nil {
+		return source, token, fmt.Errorf("knowledge source %s: %w", l.Source, ports.ErrLeaseLost)
+	}
+
+	return source, token, nil
+}
+
+// held locks l's source while l is its lease (HoldKnowledgeLease); ErrLeaseLost when it is not.
+func held(ctx context.Context, q *db.Queries, l domain.SourceLease, source, token uuid.UUID) error {
+	_, err := q.HoldKnowledgeLease(ctx, db.HoldKnowledgeLeaseParams{ID: source, LeaseToken: token})
+	if notFound(err) {
+		return fmt.Errorf("knowledge source %s: %w", l.Source, ports.ErrLeaseLost)
+	}
+
+	return err
+}
+
 // RenewSource implements ports.Knowledge.
-func (k *Knowledge) RenewSource(ctx context.Context, id domain.KnowledgeSourceID, now, until time.Time) error {
-	sid, err := parseID("knowledge source", string(id))
+func (k *Knowledge) RenewSource(ctx context.Context, l domain.SourceLease, now, until time.Time) error {
+	sid, token, err := lease(l)
 	if err != nil {
 		return err
 	}
 
 	n, err := fetch(ctx, k.s.inTx, func(q *db.Queries) (int64, error) {
-		return q.RenewKnowledgeSource(ctx, db.RenewKnowledgeSourceParams{Until: until, ID: sid, Now: now})
+		return q.RenewKnowledgeSource(ctx, db.RenewKnowledgeSourceParams{Until: until, ID: sid, LeaseToken: token, Now: now})
 	})
 	if err != nil {
 		return fmt.Errorf("renew knowledge source: %w", err)
 	}
 
 	if n == 0 {
-		return fmt.Errorf("knowledge source %s: %w", id, ports.ErrLeaseLost)
+		return fmt.Errorf("knowledge source %s: %w", l.Source, ports.ErrLeaseLost)
 	}
 
 	return nil
 }
 
 // FinishSync implements ports.Knowledge; the end notifies the stream event knowledge (idle or failed).
-func (k *Knowledge) FinishSync(ctx context.Context, id domain.KnowledgeSourceID, r domain.SyncResult) error {
-	sid, err := parseID("knowledge source", string(id))
+func (k *Knowledge) FinishSync(ctx context.Context, l domain.SourceLease, r domain.SyncResult) error {
+	sid, token, err := lease(l)
 	if err != nil {
 		return err
 	}
 
 	n, err := fetch(ctx, k.s.inTx, func(q *db.Queries) (int64, error) {
 		n, err := q.FinishKnowledgeSync(ctx, db.FinishKnowledgeSyncParams{
-			Error: truncate(r.Error, domain.MaxKnowledgeError), At: r.At, Model: r.EmbedModel, Due: r.Due, ID: sid,
+			Error: truncate(r.Error, domain.MaxKnowledgeError), At: r.At, Model: r.EmbedModel, Due: r.Due, ID: sid, LeaseToken: token,
 		})
 		if err != nil || n == 0 {
 			return n, err
@@ -366,7 +400,7 @@ func (k *Knowledge) FinishSync(ctx context.Context, id domain.KnowledgeSourceID,
 	}
 
 	if n == 0 {
-		return fmt.Errorf("knowledge source %s: %w", id, ports.ErrNotFound)
+		return fmt.Errorf("knowledge source %s: %w", l.Source, ports.ErrLeaseLost)
 	}
 
 	return nil
@@ -496,19 +530,33 @@ func vectorText(v []float32) (string, error) {
 	return b.String(), nil
 }
 
-// MarkSeen implements ports.Knowledge.
-func (k *Knowledge) MarkSeen(ctx context.Context, source domain.KnowledgeSourceID, externalIDs []string, at time.Time) error {
+// seenBatch bounds the external ids of one MarkKnowledgeSeen statement: a source's unchanged
+// documents can be a hundred thousand.
+const seenBatch = 1000
+
+// MarkSeen implements ports.Knowledge, in statements of seenBatch ids in one transaction.
+func (k *Knowledge) MarkSeen(ctx context.Context, l domain.SourceLease, externalIDs []string, at time.Time) error {
 	if len(externalIDs) == 0 {
 		return nil
 	}
 
-	sid, err := parseID("knowledge source", string(source))
+	sid, token, err := lease(l)
 	if err != nil {
 		return err
 	}
 
 	err = k.s.inTx(ctx, func(q *db.Queries) error {
-		return q.MarkKnowledgeSeen(ctx, db.MarkKnowledgeSeenParams{At: at, SourceID: sid, ExternalIds: externalIDs})
+		if err := held(ctx, q, l, sid, token); err != nil {
+			return err
+		}
+
+		for ids := range slices.Chunk(externalIDs, seenBatch) {
+			if err := q.MarkKnowledgeSeen(ctx, db.MarkKnowledgeSeenParams{At: at, SourceID: sid, ExternalIds: ids}); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	})
 	if err != nil {
 		return fmt.Errorf("mark knowledge documents seen: %w", err)
@@ -518,13 +566,17 @@ func (k *Knowledge) MarkSeen(ctx context.Context, source domain.KnowledgeSourceI
 }
 
 // DeleteUnseen implements ports.Knowledge.
-func (k *Knowledge) DeleteUnseen(ctx context.Context, source domain.KnowledgeSourceID, before time.Time) (int, error) {
-	sid, err := parseID("knowledge source", string(source))
+func (k *Knowledge) DeleteUnseen(ctx context.Context, l domain.SourceLease, before time.Time) (int, error) {
+	sid, token, err := lease(l)
 	if err != nil {
 		return 0, err
 	}
 
 	n, err := fetch(ctx, k.s.inTx, func(q *db.Queries) (int64, error) {
+		if err := held(ctx, q, l, sid, token); err != nil {
+			return 0, err
+		}
+
 		return q.DeleteUnseenDocuments(ctx, db.DeleteUnseenDocumentsParams{SourceID: sid, Before: before})
 	})
 	if err != nil {

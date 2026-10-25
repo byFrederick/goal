@@ -58,35 +58,34 @@ WHERE name = sqlc.arg(name)
 RETURNING kind;
 
 -- name: ClaimKnowledgeSource :one
--- The source most overdue: not live, its lease ended, and due or, with a model, of another
--- model's chunks unless its last sync failed. Leased until until, as syncing.
-UPDATE knowledge_sources s SET lease_until = sqlc.arg(until)::timestamptz, status = 'syncing'
-WHERE s.id = (
-  SELECT k.id FROM knowledge_sources k
-  WHERE k.kind <> 'live' AND (k.lease_until IS NULL OR k.lease_until <= sqlc.arg(now)::timestamptz)
-    AND (k.next_sync_at <= sqlc.arg(now)::timestamptz
-         OR (sqlc.arg(model)::text <> '' AND k.embed_model IS DISTINCT FROM sqlc.arg(model)::text AND k.status <> 'failed'))
-  ORDER BY k.next_sync_at, k.id
-  LIMIT 1
-  FOR UPDATE SKIP LOCKED)
-RETURNING s.id;
+-- The source due first in any live organization, leased under a new token (00055), in no
+-- organization: the caller binds the transaction to the one returned.
+SELECT c.org_id::uuid AS org_id, c.id::uuid AS id, c.lease_token::uuid AS lease_token
+FROM goal_claim_knowledge_source(sqlc.arg(now)::timestamptz, sqlc.arg(until)::timestamptz, sqlc.arg(model)::text) c;
 
 -- name: RenewKnowledgeSource :execrows
 UPDATE knowledge_sources SET lease_until = sqlc.arg(until)::timestamptz
-WHERE id = sqlc.arg(id) AND status = 'syncing' AND lease_until > sqlc.arg(now)::timestamptz;
+WHERE id = sqlc.arg(id) AND lease_token = sqlc.arg(lease_token)::uuid AND status = 'syncing'
+  AND lease_until > sqlc.arg(now)::timestamptz;
+
+-- name: HoldKnowledgeLease :one
+-- The lease's source, locked against a claim until the transaction ends, while the token is its
+-- current one: a seen mark or a deletion under it applies, or none does.
+SELECT true FROM knowledge_sources WHERE id = sqlc.arg(id) AND lease_token = sqlc.arg(lease_token)::uuid FOR SHARE;
 
 -- name: FinishKnowledgeSync :execrows
 -- The next sync is at plus the interval unless the source was made due since its claim (due).
+-- Nothing when another claim took the source (its token).
 UPDATE knowledge_sources
 SET status = CASE WHEN sqlc.arg(error)::text = '' THEN 'idle' ELSE 'failed' END,
     last_error = nullif(sqlc.arg(error)::text, ''),
     last_synced_at = CASE WHEN sqlc.arg(error)::text = '' THEN sqlc.arg(at)::timestamptz ELSE last_synced_at END,
     embed_model = CASE WHEN sqlc.arg(error)::text = '' THEN nullif(sqlc.arg(model)::text, '') ELSE embed_model END,
-    lease_until = NULL,
+    lease_until = NULL, lease_token = NULL,
     next_sync_at = CASE WHEN next_sync_at IS DISTINCT FROM sqlc.arg(due)::timestamptz THEN next_sync_at
                         ELSE sqlc.arg(at)::timestamptz + sync_every END,
     updated_at = now()
-WHERE id = sqlc.arg(id) AND kind <> 'live';
+WHERE id = sqlc.arg(id) AND lease_token = sqlc.arg(lease_token)::uuid AND kind <> 'live';
 
 -- name: NotifyKnowledgeSync :exec
 -- The organization's stream event knowledge on goal_org_events, sent when the claim's or the
@@ -101,7 +100,8 @@ SELECT external_id, version FROM knowledge_documents
 WHERE source_id = sqlc.arg(source_id) AND status <> 'pending';
 
 -- name: UpsertKnowledgeDocument :one
--- org_id comes from its default, goal_org(); an upload's hash stays when a sync rewrites it.
+-- org_id comes from its default, goal_org(); an upload's hash stays when a sync rewrites it, and
+-- its seen time never goes back (a sync that stalled past its lease writes an older one).
 INSERT INTO knowledge_documents AS d (id, source_id, external_id, version, title, url, mime, bytes, blob_sha256, status, error,
                                       seen_at, indexed_at, embed_model, created_by)
 VALUES (sqlc.arg(id), sqlc.arg(source_id), sqlc.arg(external_id), sqlc.arg(version), sqlc.arg(title), sqlc.narg(url),
@@ -110,7 +110,7 @@ VALUES (sqlc.arg(id), sqlc.arg(source_id), sqlc.arg(external_id), sqlc.arg(versi
 ON CONFLICT (source_id, external_id) DO UPDATE
 SET version = EXCLUDED.version, title = EXCLUDED.title, url = EXCLUDED.url, mime = EXCLUDED.mime, bytes = EXCLUDED.bytes,
     blob_sha256 = coalesce(EXCLUDED.blob_sha256, d.blob_sha256), status = EXCLUDED.status, error = EXCLUDED.error,
-    seen_at = EXCLUDED.seen_at, indexed_at = EXCLUDED.indexed_at, embed_model = EXCLUDED.embed_model
+    seen_at = greatest(d.seen_at, EXCLUDED.seen_at), indexed_at = EXCLUDED.indexed_at, embed_model = EXCLUDED.embed_model
 RETURNING id;
 
 -- name: DeleteDocumentChunks :exec
@@ -125,7 +125,7 @@ SELECT sqlc.arg(source_id), sqlc.arg(document_id), (sqlc.arg(ords)::int[])[i], (
 FROM generate_series(1, cardinality(sqlc.arg(ords)::int[])) AS i;
 
 -- name: MarkKnowledgeSeen :exec
-UPDATE knowledge_documents SET seen_at = sqlc.arg(at)
+UPDATE knowledge_documents SET seen_at = greatest(seen_at, sqlc.arg(at))
 WHERE source_id = sqlc.arg(source_id) AND external_id = ANY (sqlc.arg(external_ids)::text[]);
 
 -- name: DeleteUnseenDocuments :execrows
