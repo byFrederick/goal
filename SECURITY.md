@@ -44,6 +44,16 @@ step 9). The install signs in with Google only: it has no mail server, so no sig
   it sends credentials over http only to a loopback address. Any install other people reach uses
   https, whose cookie is `__Secure-` and `Secure`.
 
+## Secrets in the repository
+
+No credential is committed, in the tree or in its history: the production secrets are only in the
+age-encrypted `terraform/secrets/production.sops.yaml`, and
+`gitleaks git --redact --log-opts=--all .` (gitleaks v8.28.0, `.gitleaks.toml` lists its false
+positives) reports no leaks. The audit and the identifiers kept on purpose (Cloudflare account and
+Secrets Store ids, the public hostname) are in
+[docs/engineering/public-readiness.md](docs/engineering/public-readiness.md). If you find a
+credential anyway, report it as a vulnerability.
+
 ## Dependencies
 
 - Go modules and npm packages are pinned exactly (`go.sum`, `pnpm-lock.yaml`); pnpm runs no
