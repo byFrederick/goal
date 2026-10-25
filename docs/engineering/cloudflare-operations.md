@@ -53,7 +53,7 @@ The workflows that plan and apply `terraform/` run the same `task tf:plan` and `
 | Environment | Rules | Used by |
 | --- | --- | --- |
 | `production-plan` | Read-only credentials. Optional required reviewers (the owner). | The plan of a pull request from this repository, never a fork: `task tf:plan -- -lock=false -input=false` (a read-only state token cannot take the lock). |
-| `production` | Deployment branches: `main` only. Write credentials. | The apply on merge to main, [`.github/workflows/terraform-apply.yml`](../../.github/workflows/terraform-apply.yml): `task -x tf:plan -- -input=false -out=tfplan`, `task -x tf:apply -- -input=false tfplan`, then `task -x tf:plan -- -input=false -detailed-exitcode`, which fails the job if anything is left. |
+| `production` | Write credentials. No deployment-branch rule, by the owner's choice: it is the one environment the plan workflow uses too. The apply runs only on a push to `main`, so what keeps another branch from applying is that trigger and the review of any change to the workflow, not the environment. | The apply on merge to main, [`.github/workflows/terraform-apply.yml`](../../.github/workflows/terraform-apply.yml): `task -x tf:plan -- -input=false -out=tfplan`, `task -x tf:apply -- -input=false tfplan`, then `task -x tf:plan -- -input=false -detailed-exitcode`, which fails the job if anything is left. |
 
 | Secret | `production-plan` (read-only) | `production` (write) | Where its value comes from |
 | --- | --- | --- | --- |
