@@ -98,8 +98,8 @@ function useIsWizard(): boolean {
 
 /**
  * The organization's Connections (rail only): ink while one of its pages is open, a rust dot when
- * a connection's test failed or its secret is missing, said in the name ("Connections, 1
- * failing"). Only for whoever may read connections.
+ * a connection's last test failed, said in the name ("Connections, 1 failing"). A missing secret
+ * is said on the Connections page and the connection's own. Only for whoever may read connections.
  */
 export function ConnectionsRailLink({ org }: { org: OrgSummary }) {
   const read = useOrgHolds('connection:read');

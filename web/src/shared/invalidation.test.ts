@@ -249,7 +249,7 @@ describe('definitionInvalidations', () => {
 });
 
 describe('connectionInvalidations', () => {
-  test('re-reads the lists, the connection and its activity, never a definition or the work', async () => {
+  test('re-reads the lists, the connection, its activity and the kinds, never a definition or the work', async () => {
     const client = definitionCache();
     client.setQueryData(keys.connectionList(acme, {}), []);
     client.setQueryData(keys.connectionList(acme, { factory: goal }), []);
@@ -265,6 +265,8 @@ describe('connectionInvalidations', () => {
       keys.connectionList(acme, { factory: goal }),
       keys.connection(acme, 'github'),
       keys.connectionActivity(acme),
+      // A connection of a kind another admin just defined: the kinds are re-read too.
+      keys.connectionKinds(acme),
     ]);
   });
 
@@ -276,12 +278,13 @@ describe('connectionInvalidations', () => {
 });
 
 describe('knowledgeInvalidations', () => {
-  test("re-reads the organization's sources, their documents and searches, nothing else", async () => {
+  test("re-reads the organization's sources and their documents, never a search or anything else", async () => {
     const client = definitionCache();
     client.setQueryData(keys.knowledgeSources(acme, {}), []);
     client.setQueryData(keys.knowledgeSources(acme, { factory: goal }), []);
     client.setQueryData(keys.knowledgeSource(acme, 'handbook'), {});
     client.setQueryData([...keys.knowledgeDocuments(acme, 'handbook'), 100], {});
+    client.setQueryData(keys.knowledgeDocument(acme, 'd1'), {});
     client.setQueryData(keys.knowledgeSearch(acme, { q: 'deploy' }), []);
     client.setQueryData(keys.connectionList(acme, {}), []);
     client.setQueryData(keys.knowledgeSources(labs, {}), []);
@@ -293,8 +296,9 @@ describe('knowledgeInvalidations', () => {
       keys.knowledgeSources(acme, { factory: goal }),
       keys.knowledgeSource(acme, 'handbook'),
       [...keys.knowledgeDocuments(acme, 'handbook'), 100],
-      keys.knowledgeSearch(acme, { q: 'deploy' }),
+      keys.knowledgeDocument(acme, 'd1'),
     ]);
+    // A search open on Knowledge is an embedding call on goald: it runs again when asked, not per sync.
   });
 
   test('a publish re-reads which factories may search each source', () => {

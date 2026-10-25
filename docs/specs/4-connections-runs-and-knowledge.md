@@ -718,7 +718,7 @@ Upload routes take bodies up to `GOAL_UPLOAD_MAX_BYTES` (as built: that and 1 Mi
 
 ### 8.3 Stream
 
-On `/v1/orgs/{org}/stream`, through `goal_org_events`: `connection` (`{connection_id, name, change: created|updated|deleted|tested}`; as built, notified by the connections adapter in the change's transaction and read back from the change's audit entry, so a forged one is dropped) and `knowledge` (`{source_id, name, status}` when a sync starts or ends; as built in 4-17, notified in the claim's and the finish's transactions and read back from the source's row, its name and current status). Query invalidation: `['org', id, 'connections']`, `['org', id, 'connection-kinds']`, `['org', id, 'knowledge']`.
+On `/v1/orgs/{org}/stream`, through `goal_org_events`: `connection` (`{connection_id, name, change: created|updated|deleted|tested}`; as built, notified by the connections adapter in the change's transaction and read back from the change's audit entry, so a forged one is dropped) and `knowledge` (`{source_id, name, status}` when a sync starts or ends; as built in 4-17, notified in the claim's and the finish's transactions and read back from the source's row, its name and current status). Query invalidation: `['org', id, 'connections']`, `['org', id, 'connection-kinds']`, `['org', id, 'knowledge']` (as built, phase 4 review: a `knowledge` event leaves the cached searches alone, each an embedding call on goald; they run again when asked).
 
 ## 9. CLI changes
 

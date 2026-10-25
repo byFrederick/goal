@@ -146,8 +146,8 @@ export const keys = {
   connectionKinds: (org: string) => ['org', org, 'connection-kinds'] as const,
   /**
    * The prefix of everything of the organization's knowledge base (spec 4 §10): the source lists
-   * by filter, each source and its documents, a document's text, searches. `event: knowledge`
-   * invalidates it.
+   * by filter, each source and its documents, a document's text, searches. `event: knowledge` re-reads
+   * all of it but the searches (shared/invalidation.ts).
    */
   knowledge: (org: string) => ['org', org, 'knowledge'] as const,
   knowledgeSources: (org: string, filter: KnowledgeSourceFilter) =>
@@ -401,7 +401,6 @@ export const constraintQuery = (org: string, factory: string, { from, to }: Flow
     staleTime: 30_000,
   });
 
-/** The lead-time bridge over a range. */
 /** Human touches over a range: the Floor's panel and, over the last 7 days, the board and the item. */
 export const touchesQuery = (org: string, factory: string, range: FlowRange = {}) =>
   queryOptions({
@@ -410,6 +409,7 @@ export const touchesQuery = (org: string, factory: string, range: FlowRange = {}
     staleTime: 30_000,
   });
 
+/** The lead-time bridge over a range. */
 export const leadTimeQuery = (org: string, factory: string, range: FlowRange = {}) =>
   queryOptions({
     queryKey: keys.leadTime(org, factory, range),

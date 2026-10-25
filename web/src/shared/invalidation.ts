@@ -129,18 +129,25 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
 /**
  * The queries one `connection` event touches (spec 4 §8.3): a connection created, changed, tested
  * or deleted changes the lists, that connection and the audit entries about connections, all
- * under one prefix; it carries no value.
+ * under one prefix; it carries no value. The kinds too: a connection of a kind another admin just
+ * defined (kinds have no event of their own).
  */
 export function connectionInvalidations(org: string): QueryKey[] {
-  return [keys.connections(org)];
+  return [keys.connections(org), keys.connectionKinds(org)];
 }
 
 /**
  * The queries one `knowledge` event touches (spec 4 §8.3): a source's sync started or ended, so
- * its status, documents and what searches find may have changed; all under one prefix.
+ * the source lists, each source with its documents and each document's text may have changed.
+ * Not a search: one open on Knowledge is an embedding call on goald, run again when asked.
  */
 export function knowledgeInvalidations(org: string): QueryKey[] {
-  return [keys.knowledge(org)];
+  const knowledge = keys.knowledge(org);
+  return [
+    [...knowledge, 'sources'],
+    [...knowledge, 'source'],
+    [...knowledge, 'document'],
+  ];
 }
 
 /** A resync may have missed anything of the organization: everything under it is re-read. */
