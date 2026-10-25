@@ -17,6 +17,12 @@ secret in plain text, the master keys and the database administrator's URL inclu
 bucket and its token are the operator's alone
 ([runbook](docs/engineering/cloudflare-operations.md#workspaces-and-state)).
 
+The Cloudflare install (`goal.byfrederick.work`, since 2026-10-25) keeps a run's box from private,
+loopback, link-local and metadata addresses by Cloudflare's container networking, not by Goal's
+egress proxy. That was shown there on 2026-10-25 (spec 4 §5.12 check 1, threat row
+5) and is shown again before any deploy that changes the boxes' networking (runbook bootstrap
+step 9). The install signs in with Google only: it has no mail server, so no sign-in codes.
+
 ## Known limits, by design
 
 - **Anyone can lock an address out of sign-in by code for a day** (phase 3 review L3). Ten wrong
