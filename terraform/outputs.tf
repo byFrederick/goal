@@ -88,15 +88,10 @@ output "goal_pg_auth_password" {
   sensitive   = true
 }
 
-# Google: GitHub Actions (ci.tf); variables of the GitHub environments, not secrets
+# Google: GitHub Actions (ci.tf); variables of the GitHub environment, not secrets
 output "ci_workload_identity_provider" {
-  description = "workload_identity_provider of google-github-actions/auth in both GitHub environments."
+  description = "workload_identity_provider of google-github-actions/auth in the production GitHub environment."
   value       = google_iam_workload_identity_pool_provider.github.name
-}
-
-output "ci_plan_service_account" {
-  description = "service_account of google-github-actions/auth in the production-plan GitHub environment."
-  value       = google_service_account.terraform_plan.email
 }
 
 output "ci_apply_service_account" {
