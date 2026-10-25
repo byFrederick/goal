@@ -10,6 +10,7 @@ import { type FormEvent, useId, useState } from 'react';
 import { knowledgeSearchQuery } from '../../api/queries';
 import type { Factory, KnowledgeHit, KnowledgeSource } from '../../api/types';
 import { plural } from '../../shared/format';
+import { externalUrl } from '../../shared/knowledge';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Field, Input, NativeSelect } from '../../ui/field';
@@ -166,11 +167,12 @@ function Hit({ hit, q, source }: { hit: KnowledgeHit; q: string; source: Knowled
   const org = useOrg();
   const title = hit.heading && hit.heading !== hit.title ? `${hit.title} › ${hit.heading}` : hit.title;
   const link = 'text-[15px] font-medium text-ink underline underline-offset-3 hover:text-run';
+  const url = externalUrl(hit.url);
   return (
     <li className="flex min-w-0 flex-col gap-1 border-t border-line py-3 first:border-t-0 first:pt-0">
-      {hit.url ? (
+      {url ? (
         <a
-          href={hit.url}
+          href={url}
           target="_blank"
           rel="noreferrer noopener"
           className={`${link} inline-flex items-center gap-1.5 break-words`}

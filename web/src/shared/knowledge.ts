@@ -45,3 +45,11 @@ export function sourceSummary(s: Pick<KnowledgeSource, 'kind' | 'connection' | '
   if (keys.length > 0) return `${connection}, ${keys.length === 1 ? 'space' : 'spaces'} ${keys.join(', ')}`;
   return connection;
 }
+
+/**
+ * A synced document's address at its source, for a link: only http and https, so a source that
+ * reports javascript:, data: or file: addresses never puts one in an href.
+ */
+export function externalUrl(url: string | null | undefined): string | undefined {
+  return url && /^https?:\/\//i.test(url) ? url : undefined;
+}

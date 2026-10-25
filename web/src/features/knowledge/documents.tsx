@@ -11,6 +11,7 @@ import { deleteKnowledgeDocument, documentContentUrl } from '../../api/knowledge
 import { keys, knowledgeDocumentQuery, knowledgeDocumentsQuery } from '../../api/queries';
 import type { KnowledgeDocument, KnowledgeSource } from '../../api/types';
 import { plural } from '../../shared/format';
+import { externalUrl } from '../../shared/knowledge';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
@@ -130,9 +131,10 @@ function DocumentActions({
 }) {
   const org = useOrg();
   if (!upload) {
-    return d.url ? (
+    const url = externalUrl(d.url);
+    return url ? (
       <Button asChild variant="white" size="icon" className="size-11 md:size-9">
-        <a href={d.url} target="_blank" rel="noreferrer noopener" aria-label={`Open ${d.title} at its source`}>
+        <a href={url} target="_blank" rel="noreferrer noopener" aria-label={`Open ${d.title} at its source`}>
           <ExternalLink size={16} strokeWidth={1.5} aria-hidden="true" />
         </a>
       </Button>
@@ -261,9 +263,9 @@ export function DocumentDialog({ source, id }: { source: KnowledgeSource; id: st
                       Download original
                     </a>
                   </Button>
-                ) : d.url ? (
+                ) : externalUrl(d.url) ? (
                   <Button asChild variant="white" className="h-11 md:h-10">
-                    <a href={d.url} target="_blank" rel="noreferrer noopener">
+                    <a href={externalUrl(d.url)} target="_blank" rel="noreferrer noopener">
                       <ExternalLink size={16} strokeWidth={1.5} aria-hidden="true" />
                       Open at its source
                     </a>
