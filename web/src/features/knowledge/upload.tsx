@@ -232,6 +232,10 @@ export function UploadDialog({ source, onClose }: { source: KnowledgeSource | nu
         <DialogContent title={`Upload to ${source.title}`} className="max-w-[560px]">
           <DropZone onFiles={(files) => void uploader.upload(source.name, uploader.add(files))} />
           <UploadRows rows={uploader.rows} />
+          {/* Escape and Close wait for the uploads: say so rather than ignore them. */}
+          <p role="status" className="m-0 min-h-5 text-sm text-muted">
+            {uploader.busy ? 'Uploading. You can close this once every file is up or refused.' : ''}
+          </p>
         </DialogContent>
       ) : null}
     </Dialog>

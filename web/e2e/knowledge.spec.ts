@@ -73,6 +73,28 @@ test.describe('the Knowledge page', () => {
     });
   });
 
+  test('the upload dialog stays open while files go up and says why', async ({ page, request }) => {
+    await request.post('/__mock/fail', { data: { path: '/documents', method: 'POST', delay_ms: 2000 } });
+    await page.goto('/o/acme/knowledge');
+    await expect(page.getByRole('heading', { level: 2, name: '4 sources' })).toBeVisible();
+    test.skip(!(await page.getByRole('table').isVisible()), 'Upload… is on the table’s rows; narrower, on the source');
+    await sourceRow(page, 'Handbook').getByRole('button', { name: 'Upload…, Handbook' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Upload to Handbook' });
+    const chooser = page.waitForEvent('filechooser');
+    await dialog.getByRole('button', { name: /Drop files here/ }).click();
+    await (await chooser).setFiles([{ name: 'leave.md', mimeType: 'text/markdown', buffer: Buffer.from('# Leave') }]);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('status').filter({ hasText: /^Uploading\./ })).toHaveText(
+      'Uploading. You can close this once every file is up or refused.',
+    );
+    await expect(dialog.getByRole('listitem').filter({ hasText: 'leave.md' })).toContainText('Uploaded', {
+      timeout: 10_000,
+    });
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+  });
+
   test('Sync now makes a source due, and the stream brings its new status', async ({ page }) => {
     await page.goto('/o/acme/knowledge');
     await expect(sourceRow(page, 'Runbooks')).toContainText('Sync failed');
