@@ -37,15 +37,22 @@ vars:
   TF_OFFLINE_DATA_DIR: .terraform/offline
   # The environment of every terraform command that reaches the state and the providers (run in
   # terraform/). The state token goes to the s3 backend as AWS_* only here, so no other AWS setting
-  # of the shell or .env reaches it. Google gets an access token of the goal gcloud configuration
-  # and nothing else: no application default credentials, no key file, no other account.
+  # of the shell or .env reaches it. Google gets one access token and nothing else: no application
+  # default credentials, no key file, no other account. On a laptop (GITHUB_ACTIONS unset) it is
+  # the goal gcloud configuration's, overwriting any GOOGLE_OAUTH_ACCESS_TOKEN of the shell; in
+  # GitHub Actions (GITHUB_ACTIONS=true) it is the one the workflow's google-github-actions/auth
+  # step exported, a service account's through Workload Identity Federation (terraform/ci.tf).
   TF_ONLINE: |
     set -eu
     export AWS_ACCESS_KEY_ID="$GOAL_TF_STATE_ACCESS_KEY" AWS_SECRET_ACCESS_KEY="$GOAL_TF_STATE_SECRET_KEY"
     export AWS_ENDPOINT_URL_S3="https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com"
     unset AWS_PROFILE AWS_SESSION_TOKEN AWS_ENDPOINT_URL TF_WORKSPACE TF_DATA_DIR
     unset GOOGLE_CREDENTIALS GOOGLE_APPLICATION_CREDENTIALS GOOGLE_CLOUD_KEYFILE_JSON GCLOUD_KEYFILE_JSON
-    GOOGLE_OAUTH_ACCESS_TOKEN="$(CLOUDSDK_ACTIVE_CONFIG_NAME=goal gcloud auth print-access-token)"
+    if [ "${GITHUB_ACTIONS:-}" = true ]; then
+      : "${GOOGLE_OAUTH_ACCESS_TOKEN:?is not set: run google-github-actions/auth with token_format access_token first}"
+    else
+      GOOGLE_OAUTH_ACCESS_TOKEN="$(CLOUDSDK_ACTIVE_CONFIG_NAME=goal gcloud auth print-access-token)"
+    fi
     export GOOGLE_OAUTH_ACCESS_TOKEN
     terraform init -input=false -lockfile=readonly >/dev/null
     terraform workspace select -or-create "production" >/dev/null
@@ -187,8 +194,12 @@ tasks:
 
   # terraform/: the platform's own infrastructure on Cloudflare, in the production workspace only
   # (docs/engineering/cloudflare-operations.md). tf:check runs offline; tf:plan and tf:apply need
-  # the operator's credentials (tf:credentials says which). Agents fmt, check and plan; only the
-  # owner, or the coordinator the owner authorizes, applies (AGENTS.md rule 8).
+  # credentials (tf:credentials says which): the operator's on a laptop, or a GitHub environment's
+  # in a workflow (GITHUB_ACTIONS=true; Google through Workload Identity Federation, ADR 0010).
+  # Neither prompts given -input=false and a saved plan:
+  #   task tf:plan -- -input=false -out=tfplan && task tf:apply -- -input=false tfplan
+  # Agents fmt, check and plan; only the owner, or the coordinator the owner authorizes, applies
+  # (AGENTS.md rule 8).
   tf:fmt:
     desc: Format terraform/ (terraform fmt -recursive)
     dir: terraform
@@ -258,8 +269,14 @@ tasks:
         msg: "PLANETSCALE_SERVICE_TOKEN_ID and PLANETSCALE_SERVICE_TOKEN are not set: the PlanetScale service token for terraform/ (access in docs/engineering/cloudflare-operations.md)"
       - sh: test -r "$SOPS_AGE_KEY_FILE"
         msg: "No age key at $SOPS_AGE_KEY_FILE (SOPS_AGE_KEY_FILE): the operator's key that decrypts terraform/secrets/"
-      - sh: CLOUDSDK_ACTIVE_CONFIG_NAME=goal gcloud auth print-access-token >/dev/null 2>&1
-        msg: "gcloud's goal configuration has no signed-in account: CLOUDSDK_ACTIVE_CONFIG_NAME=goal gcloud auth login"
+      # Google: a laptop's goal gcloud configuration, or in GitHub Actions the token the workflow exported.
+      - sh: |
+          if [ "${GITHUB_ACTIONS:-}" = true ]; then
+            test -n "${GOOGLE_OAUTH_ACCESS_TOKEN:-}"
+          else
+            CLOUDSDK_ACTIVE_CONFIG_NAME=goal gcloud auth print-access-token >/dev/null 2>&1
+          fi
+        msg: "No Google access token. On a laptop, gcloud's goal configuration has no signed-in account: CLOUDSDK_ACTIVE_CONFIG_NAME=goal gcloud auth login. In GitHub Actions, GOOGLE_OAUTH_ACCESS_TOKEN is not set: run google-github-actions/auth with token_format: access_token first"
 
   tf:run:
     internal: true

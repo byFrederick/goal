@@ -4,8 +4,10 @@
 #   of the organization, its access in the runbook).
 # - google reads GOOGLE_OAUTH_ACCESS_TOKEN, which the tf:* tasks take from the `goal` gcloud
 #   configuration (`gcloud auth print-access-token`); never the machine's application default
-#   credentials or another gcloud account.
-# - sops decrypts secrets/<workspace>.sops.yaml with the operator's age key (SOPS_AGE_KEY_FILE).
+#   credentials or another gcloud account. In GitHub Actions (GITHUB_ACTIONS=true) the workflow
+#   puts it there: a service account's token through Workload Identity Federation (ci.tf).
+# - sops decrypts secrets/<workspace>.sops.yaml with the age key (SOPS_AGE_KEY_FILE): the
+#   operator's file, or in a workflow a 0600 file it writes from the SOPS_AGE_KEY secret.
 provider "cloudflare" {}
 
 provider "planetscale" {}
