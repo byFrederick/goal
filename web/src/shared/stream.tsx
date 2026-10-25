@@ -16,6 +16,7 @@ import {
   knowledgeInvalidations,
   resyncInvalidations,
 } from './invalidation';
+import { browserPage, followPresence } from './stream-presence';
 
 const StatusContext = createContext<StreamStatus>('connecting');
 
@@ -71,26 +72,34 @@ export function OrgStream({ org, children }: { org: string; children: ReactNode 
       for (const key of queryKeys) (isOverviewKey(key) ? overviews : work).add(key);
     };
 
+    // A stream that keeps failing may have lost its session (an EventSource cannot see a 401):
+    // after two errors in a row while the page is visible, ask who this is; a 401 there opens the
+    // sign-in page.
+    const page = browserPage();
     let errors = 0;
-    const unsubscribe = subscribeToOrg(org, {
-      onItem: (event) => invalidate(invalidationsFor(org, event)),
-      onFactory: (event) => invalidate(factoryInvalidations(org, event)),
-      events: Object.keys(streamHandlers),
-      onEvent: (name, data) => invalidate(streamHandlers[name]?.(org, data) ?? []),
+    const stop = followPresence({
+      page,
+      connect: (link) =>
+        subscribeToOrg(org, {
+          onItem: (event) => invalidate(invalidationsFor(org, event)),
+          onFactory: (event) => invalidate(factoryInvalidations(org, event)),
+          events: Object.keys(streamHandlers),
+          onEvent: (name, data) => invalidate(streamHandlers[name]?.(org, data) ?? []),
+          onResync: link.onResync,
+          onStatus: (next) => {
+            link.onStatus(next);
+            errors = next === 'live' ? 0 : next === 'reconnecting' && !page.hidden() ? errors + 1 : errors;
+            if (errors === 2) void client.fetchQuery({ ...meQuery, staleTime: 0 }).catch(() => undefined);
+          },
+        }),
+      onStatus: setStatus,
       onResync: () => {
         for (const queryKey of resyncInvalidations(org)) client.invalidateQueries({ queryKey });
-      },
-      onStatus: (next) => {
-        setStatus(next);
-        // A stream that keeps failing may have lost its session (an EventSource cannot see a 401):
-        // after two errors in a row, ask who this is; a 401 there opens the sign-in page.
-        errors = next === 'live' ? 0 : next === 'reconnecting' ? errors + 1 : errors;
-        if (errors === 2) void client.fetchQuery({ ...meQuery, staleTime: 0 }).catch(() => undefined);
       },
     });
 
     return () => {
-      unsubscribe();
+      stop();
       work.cancel();
       overviews.cancel();
     };
