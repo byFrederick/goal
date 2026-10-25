@@ -1,7 +1,7 @@
 // The mock's checks of phase 4's definition forms (spec 4 §4.4), as goald's config and authoring
 // report them: `tools` (tool-spec-invalid), `removed` (field-removed, env-reference-removed and
 // connection-inline-removed, errors since the cutover) and `connections` (connection-unknown,
-// connection-not-model, repository-host-mismatch, connection-env-conflict,
+// model-connection-missing, connection-not-model, repository-host-mismatch, connection-env-conflict,
 // knowledge-source-unknown and merge-needs-code-host, errors), each problem at its model pointer
 // with goald's fixes.
 import type { DefinitionProblem, ProblemFix } from '@goal/api-client';
@@ -121,12 +121,23 @@ export function checkConnections(model: Model, conns: ConnectionOutline[], sourc
     );
   });
 
-  // its model connection gives model access
+  // a definition with agents names a model connection, which gives model access
   const modelName = typeof basics.model_connection === 'string' ? basics.model_connection : '';
+  const modelFixes = () =>
+    names.filter((n) => byName.get(n)?.model).map((n) => replace(`Use ${n}`, 'basics', '/model_connection', n));
+  const modelTitles = () => [...new Set(conns.filter((x) => x.model).map((x) => x.title))].sort().join(', ');
+  if (!modelName && agents.length > 0) {
+    add(
+      'model-connection-missing',
+      'error',
+      'connections',
+      '/basics/model_connection',
+      `runtime.modelConnection: the factory has agents but names no model connection, which gives every run its model; name a connection of a kind with model access (${modelTitles()})`,
+      modelFixes(),
+    );
+  }
   if (modelName) {
-    const fixes = names
-      .filter((n) => byName.get(n)?.model)
-      .map((n) => replace(`Use ${n}`, 'basics', '/model_connection', n));
+    const fixes = modelFixes();
     const c = byName.get(modelName);
     if (!c) {
       add(
@@ -138,13 +149,12 @@ export function checkConnections(model: Model, conns: ConnectionOutline[], sourc
         fixes,
       );
     } else if (!c.model) {
-      const titles = [...new Set(conns.filter((x) => x.model).map((x) => x.title))].sort();
       add(
         'connection-not-model',
         'error',
         'connections',
         '/basics/model_connection',
-        `runtime.modelConnection: ${modelName} is a ${c.title} connection, which gives no model access; choose one of a kind that does (${titles.join(', ')})`,
+        `runtime.modelConnection: ${modelName} is a ${c.title} connection, which gives no model access; choose one of a kind that does (${modelTitles()})`,
         fixes,
       );
     }

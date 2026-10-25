@@ -235,7 +235,7 @@ describe('the draft', () => {
 });
 
 describe('a blank factory', () => {
-  it('starts from goald’s skeleton and publishes once the line and an agent are added', async () => {
+  it('starts from goald’s skeleton and publishes once the line, an agent and its model connection are added', async () => {
     const { body: f } = await call<Factory>('/v1/orgs/acme/factories', {
       method: 'POST',
       body: JSON.stringify({ name: 'blank-one', start: { kind: 'blank' } }),
@@ -261,7 +261,17 @@ describe('a blank factory', () => {
         { id: 'done', kind: 'done' },
       ],
     };
-    const saved = await call<SaveResult>(`${path}/draft/model/line`, put({ value: line }, m.etags.line));
+    const lined = await call<SaveResult>(`${path}/draft/model/line`, put({ value: line }, m.etags.line));
+    expect(lined.status).toBe(200);
+
+    // An agent's runs need a model: publish refuses until Basics names the model connection.
+    const refused = await call<Problem>(`${path}/draft/publish`, {
+      method: 'POST',
+      body: JSON.stringify({ revision: lined.body.revision }),
+    });
+    expect([refused.status, refused.body.problems?.map((p) => p.code)]).toEqual([409, ['model-connection-missing']]);
+    const basics = { ...(m.model.basics as Record<string, unknown>), model_connection: 'claude' };
+    const saved = await call<SaveResult>(`${path}/draft/model/basics`, put({ value: basics }, m.etags.basics));
     expect(saved.status).toBe(200);
 
     const published = await call<Version>(`${path}/draft/publish`, {

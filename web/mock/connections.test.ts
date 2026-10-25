@@ -158,4 +158,28 @@ spec:
     // The model connection (github) and aws-prod set no variable in common.
     expect(at('connection-env-conflict')).toEqual([]);
   });
+
+  it('refuses a definition with agents that names no model connection, offering each that gives model access', async () => {
+    const yaml = `apiVersion: goal/v1
+kind: Factory
+metadata:
+  name: probe
+spec:
+  agents:
+    - { name: worker }
+  board:
+    stations:
+      - { id: inbox, kind: queue }
+      - { id: done, kind: done }
+`;
+    const validate = async (text: string) =>
+      (
+        await call<Validation>('/v1/orgs/acme/definitions/validate', 'POST', { files: { 'factory.yaml': { text } } })
+      ).body.problems
+        .filter((p) => p.code === 'model-connection-missing')
+        .map((p) => [p.pointer, p.severity, p.fixes.map((f) => f.label)]);
+    expect(await validate(yaml)).toEqual([['/basics/model_connection', 'error', ['Use claude']]]);
+    // Without agents no run needs a model.
+    expect(await validate(yaml.replace('  agents:\n    - { name: worker }\n', ''))).toEqual([]);
+  });
 });

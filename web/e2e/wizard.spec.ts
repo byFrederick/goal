@@ -76,6 +76,8 @@ test('a factory from a template, step by step (flow 1)', async ({ page }) => {
   await addType.press('Enter');
   await page.getByRole('textbox', { name: 'Repository URL' }).fill('https://github.com/acme/infra');
   await page.getByRole('textbox', { name: 'Repository URL' }).blur();
+  // The template names no model connection, which an agent's runs need: publish waits for one.
+  await page.getByRole('combobox', { name: 'Model connection' }).selectOption('claude');
   await expect(saved(page)).toBeVisible();
   await expect(page.getByRole('heading', { level: 1, name: 'cloud-costs' })).toBeVisible();
   await checkPage(page);
