@@ -4,9 +4,11 @@
 # they are console steps in the runbook, and the client's id and secret go into the SOPS file
 # (google). Sign-in asks only for openid, email and profile, which needs no enabled API, no
 # billing account and no verification. The project is kept if this stack is ever destroyed.
+# auto_create_network stays true: with false the provider enables the Compute API to delete the
+# default network, which needs billing; without billing Compute is never enabled, so no network.
 resource "google_project" "sign_in" {
   project_id          = local.settings.google_project_id
   name                = "Goal sign-in"
-  auto_create_network = false
+  auto_create_network = true
   deletion_policy     = "PREVENT"
 }
