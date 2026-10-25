@@ -52,7 +52,7 @@
 // of its own, validates outputs against station contracts, runs the station's command checks in
 // the sandbox, applies gates and human approvals, routes by lane and sweeps expired leases. Humans also send
 // blocked items back to their queue (Retry) and, at a human station whose action is merge,
-// merge the item's pull request through the CodeHost port before approving it (Merge).
+// merge the item's pull requests through their code hosts before approving it (Merge).
 // These arrive in later phases and are deliberately absent here: drum-buffer-rope
 // release (the rope that limits release from queue stations), constraint detection,
 // station buffers, the automatic andon pull on a gate's rework rate, the expedite WIP limit,
@@ -82,6 +82,12 @@ type Orgs interface {
 	ActiveOrgs(ctx context.Context) ([]domain.OrgID, error)
 }
 
+// MergeConnections opens the connections a line's merges may use (spec 4 §4.7), for the
+// organization in ctx: those whose kind names a code host serve the pull requests on the host of
+// their git login. Until runs get the organization's connections (spec 4 PR 4-14), goald gives
+// the factory repository's token as a connection of the platform's github kind.
+type MergeConnections func(ctx context.Context, l domain.Line) ([]domain.ResolvedConnection, error)
+
 // Deps are the ports the engine works through.
 type Deps struct {
 	Store     ports.Store
@@ -89,17 +95,20 @@ type Deps struct {
 	Sandboxes ports.Sandboxes
 	Contracts ports.Contracts
 	Secrets   ports.Secrets
-	CodeHost  ports.CodeHost
-	Clock     ports.Clock
-	Logger    *slog.Logger // nil discards logs
+	// CodeHosts are the code host adapters by the name a connection kind gives (KindSpec.CodeHost),
+	// and MergeConnections the connections merges reach them with.
+	CodeHosts        map[string]ports.CodeHost
+	MergeConnections MergeConnections
+	Clock            ports.Clock
+	Logger           *slog.Logger // nil discards logs
 	// RunEnded, when set, is told each run whose agent has ended (goald stops the run's MCP
 	// sidecars). It is called once per run, with the run's result already recorded.
 	RunEnded func(ctx context.Context, run domain.RunID)
 }
 
 func (d Deps) complete() bool {
-	return d.Store != nil && d.Orgs != nil && d.Sandboxes != nil && d.Contracts != nil && d.Secrets != nil && d.CodeHost != nil &&
-		d.Clock != nil
+	return d.Store != nil && d.Orgs != nil && d.Sandboxes != nil && d.Contracts != nil && d.Secrets != nil && d.CodeHosts != nil &&
+		d.MergeConnections != nil && d.Clock != nil
 }
 
 // Config is the engine's behaviour; zero durations take the defaults below.
@@ -171,7 +180,8 @@ type Engine struct {
 	sandboxes ports.Sandboxes
 	contracts ports.Contracts
 	secrets   ports.Secrets
-	codehost  ports.CodeHost
+	codehosts map[string]ports.CodeHost
+	mergeWith MergeConnections
 	clock     ports.Clock
 	log       *slog.Logger
 	runEnded  func(context.Context, domain.RunID)
@@ -228,8 +238,8 @@ func New(d Deps, cfg Config) (*Engine, error) {
 	}
 
 	return &Engine{
-		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, codehost: d.CodeHost,
-		clock: d.Clock, log: log, runEnded: d.RunEnded, cfg: cfg, lines: lines,
+		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, codehosts: d.CodeHosts,
+		mergeWith: d.MergeConnections, clock: d.Clock, log: log, runEnded: d.RunEnded, cfg: cfg, lines: lines,
 		active: map[domain.ItemID]*activeRun{}, exhausted: map[domain.FactoryID]bool{},
 	}, nil
 }

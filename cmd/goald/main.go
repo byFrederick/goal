@@ -3,7 +3,7 @@
 // its own with GOAL_GATEWAY_LISTEN), and runs every agent run in a sandbox of its own in Docker.
 //
 // All wiring happens here, by hand: PostgreSQL (store, definition versions, item and definition
-// notices), the bucket (definition file content), environment secrets, GitHub (merges), Docker's
+// notices), the bucket (definition file content), environment secrets, GitHub and GitLab (merges), Docker's
 // sandboxes and MCP sidecars, the system clock, the engine, the gateway, definition authoring, the
 // API and its stream feed. Configuration comes from the environment; settings.go lists every
 // variable. goald keeps nothing another instance would need: work state and definition versions
@@ -32,7 +32,6 @@ import (
 
 	"github.com/byFrederick/goal/internal/adapters/docker"
 	"github.com/byFrederick/goal/internal/adapters/envsecrets"
-	"github.com/byFrederick/goal/internal/adapters/github"
 	"github.com/byFrederick/goal/internal/adapters/masterkey"
 	"github.com/byFrederick/goal/internal/adapters/postgres"
 	"github.com/byFrederick/goal/internal/adapters/s3store"
@@ -183,13 +182,14 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// Runs after serve returns: HTTP is drained and the engine's runs have ended.
 	defer gw.Close()
 
-	codehost := github.New(secrets, github.Config{APIURL: s.GitHubAPIURL, WebHost: s.GitHubWebHost, Policy: policy})
+	// Merges reach GitHub and GitLab with a connection: until 4-14, the repository token's.
+	mergeWith := repositoryConnections(secrets, policy, s.GitHubWebHost)
 
 	// The engine runs each claim in a sandbox and, at its start and every ReapEvery, deletes the
 	// sandboxes of runs that are over, whichever goald on this Docker host started them.
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: docker.NewSandboxes(dockerClient, s.SandboxNetwork, log),
-		Contracts: defs, Secrets: secrets, CodeHost: codehost, Clock: clock, Logger: log, RunEnded: gw.EndRun,
+		Contracts: defs, Secrets: secrets, CodeHosts: codeHosts(s), MergeConnections: mergeWith, Clock: clock, Logger: log, RunEnded: gw.EndRun,
 	}, engine.Config{
 		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxGateway, GatewayKeyRef: s.GatewayKeyRef, TaskEnv: s.TaskEnv,
 		MaxRuns: s.MaxRuns, RepositoryHosts: []string{s.GitHubWebHost}, SecretPolicy: policy,

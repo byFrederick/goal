@@ -5,13 +5,14 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
-	"github.com/byFrederick/goal/internal/ports/porttest"
 )
 
 const (
@@ -22,7 +23,29 @@ const (
 	message = "message"
 )
 
-var repo = domain.Repository{URL: "https://github.com/acme/app.git", AuthRef: "env:REPO_TOKEN"}
+// connection is a connection of the platform's github kind with values (token and host).
+func connection(t *testing.T, values map[string]string) domain.ResolvedConnection {
+	t.Helper()
+
+	kinds, err := connkind.Platform()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	i := slices.IndexFunc(kinds, func(k domain.ConnectionKind) bool { return k.Name == "github" })
+	if i < 0 {
+		t.Fatal("the platform has no github kind")
+	}
+
+	return domain.ResolvedConnection{Connection: domain.Connection{Name: "github", Kind: "github"}, Kind: kinds[i], Values: values}
+}
+
+// dotComConn is a github.com connection with the token.
+func dotComConn(t *testing.T) domain.ResolvedConnection {
+	t.Helper()
+
+	return connection(t, map[string]string{"token": token})
+}
 
 // fakeGitHub is a GitHub REST API with one pull request, acme/app#7, that requires the token.
 type fakeGitHub struct {
@@ -82,7 +105,7 @@ func newFakeGitHub(t *testing.T) (*fakeGitHub, *Client) {
 	}))
 	t.Cleanup(srv.Close)
 
-	return f, New(porttest.Secrets{"REPO_TOKEN": token}, Config{APIURL: srv.URL})
+	return f, New(Config{APIURL: srv.URL})
 }
 
 func (f *fakeGitHub) reply(w http.ResponseWriter, status int, body any) {
@@ -94,12 +117,39 @@ func (f *fakeGitHub) reply(w http.ResponseWriter, status int, body any) {
 	_ = json.NewEncoder(w).Encode(body)
 }
 
+func (f *fakeGitHub) sent() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return slices.Clone(f.requests)
+}
+
+func TestClient_APIForTheConnectionsHost(t *testing.T) {
+	t.Parallel()
+
+	c := New(Config{})
+
+	for host, want := range map[string]string{
+		"github.com":      "https://api.github.com",
+		"acme.ghe.com":    "https://api.acme.ghe.com",
+		"ghe.example.com": "https://ghe.example.com/api/v3",
+	} {
+		if got := c.apiFor(host); got != want {
+			t.Errorf("API of %s = %s; want %s", host, got, want)
+		}
+	}
+
+	if got := New(Config{APIURL: "http://127.0.0.1:9/"}).apiFor("ghe.example.com"); got != "http://127.0.0.1:9" {
+		t.Errorf("API with an override = %s; want the override", got)
+	}
+}
+
 func TestPullRequest_ReadsStateHeadAndBase(t *testing.T) {
 	t.Parallel()
 
 	_, c := newFakeGitHub(t)
 
-	pr, err := c.PullRequest(t.Context(), repo, prURL)
+	pr, err := c.PullRequest(t.Context(), dotComConn(t), prURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,26 +162,58 @@ func TestPullRequest_ReadsStateHeadAndBase(t *testing.T) {
 	}
 }
 
-func TestPullRequest_OnlyOnTheFactorysRepository(t *testing.T) {
+// The repository is the URL's: any repository on the connection's host, which the token's own
+// scope limits.
+func TestPullRequest_TheRepositoryIsTheURLs(t *testing.T) {
 	t.Parallel()
 
 	f, c := newFakeGitHub(t)
 
-	for _, url := range []string{
-		"https://github.com/acme/other/pull/7",
-		"https://github.com/evil/app/pull/7",
-		"https://code.example.com/acme/app/pull/7",
-		"http://github.com/acme/app/pull/7",
-		"https://github.com/acme/app/pull/7?x=1",
-		"https://github.com/acme/app/issues/7",
+	if _, err := c.PullRequest(t.Context(), dotComConn(t), "https://github.com/acme/docs/pull/2"); !errors.Is(err, ports.ErrNotMergeable) {
+		t.Errorf("PullRequest of a missing pull request = %v; want ErrNotMergeable", err)
+	}
+
+	if got := f.sent(); !slices.Equal(got, []string{"GET /repos/acme/docs/pulls/2"}) {
+		t.Errorf("requests %v; want acme/docs#2 read", got)
+	}
+}
+
+// A pull request on another host than the connection's, or a URL that is not a pull request's,
+// is refused before anything is sent.
+func TestPullRequest_OnlyOnTheConnectionsHost(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitHub(t)
+	ghe := connection(t, map[string]string{"token": token, "host": "ghe.example.com"})
+
+	for _, tt := range []struct {
+		conn domain.ResolvedConnection
+		url  string
+	}{
+		{dotComConn(t), "https://code.example.com/acme/app/pull/7"},
+		{dotComConn(t), "https://gitlab.com/acme/app/-/merge_requests/7"},
+		{ghe, prURL},
+		{dotComConn(t), "http://github.com/acme/app/pull/7"},
+		{dotComConn(t), "https://user@github.com/acme/app/pull/7"},
+		{dotComConn(t), "https://github.com/acme/app/pull/7?x=1"},
+		{dotComConn(t), "https://github.com/acme/app/issues/7"},
 	} {
-		if _, err := c.PullRequest(t.Context(), repo, url); !errors.Is(err, ports.ErrNotMergeable) {
-			t.Errorf("PullRequest(%s) = %v; want ErrNotMergeable", url, err)
+		if _, err := c.PullRequest(t.Context(), tt.conn, tt.url); !errors.Is(err, ports.ErrNotMergeable) {
+			t.Errorf("PullRequest(%s) = %v; want ErrNotMergeable", tt.url, err)
+		}
+
+		if err := c.DeleteBranch(t.Context(), tt.conn, tt.url, "goal/7-add-x"); !errors.Is(err, ports.ErrNotMergeable) {
+			t.Errorf("DeleteBranch(%s) = %v; want ErrNotMergeable", tt.url, err)
 		}
 	}
 
-	if len(f.requests) != 0 {
-		t.Errorf("requests %v; want none for pull requests off the repository", f.requests)
+	// A connection without a token has no git login: nothing is sent either.
+	if _, err := c.PullRequest(t.Context(), connection(t, map[string]string{}), prURL); err == nil {
+		t.Error("PullRequest with a connection without a token succeeded; want an error")
+	}
+
+	if got := f.sent(); len(got) != 0 {
+		t.Errorf("requests %v; want none", got)
 	}
 }
 
@@ -148,7 +230,7 @@ func TestMerge_SquashesTheHeadItWasGiven(t *testing.T) {
 		return http.StatusOK, map[string]any{"sha": "merge-sha", "merged": true}
 	}
 
-	sha, err := c.Merge(t.Context(), repo, prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
+	sha, err := c.Merge(t.Context(), dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
 	if err != nil || sha != "merge-sha" {
 		t.Fatalf("Merge = %q, %v; want merge-sha", sha, err)
 	}
@@ -167,7 +249,7 @@ func TestMerge_GitHubRefusalsAreNotMergeable(t *testing.T) {
 			return status, map[string]any{message: "Head branch was modified. Review and try the merge again."}
 		}
 
-		_, err := c.Merge(t.Context(), repo, prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
+		_, err := c.Merge(t.Context(), dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
 		if !errors.Is(err, ports.ErrNotMergeable) || !strings.Contains(err.Error(), "Head branch was modified") {
 			t.Errorf("merge answered %d: err = %v; want ErrNotMergeable with GitHub's reason", status, err)
 		}
@@ -179,7 +261,7 @@ func TestDeleteBranch_DeletesTheRefAndToleratesAGoneOne(t *testing.T) {
 
 	f, c := newFakeGitHub(t)
 
-	if err := c.DeleteBranch(t.Context(), repo, "goal/7-add-x"); err != nil {
+	if err := c.DeleteBranch(t.Context(), dotComConn(t), prURL, "goal/7-add-x"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -187,45 +269,9 @@ func TestDeleteBranch_DeletesTheRefAndToleratesAGoneOne(t *testing.T) {
 		t.Errorf("deleted %v; want goal/7-add-x", f.deleted)
 	}
 
-	if err := c.DeleteBranch(t.Context(), repo, "../main"); err == nil {
+	if err := c.DeleteBranch(t.Context(), dotComConn(t), prURL, "../main"); err == nil {
 		t.Error("deleting ../main succeeded; want refused")
 	}
-}
-
-// A version published before a variable was reserved may still name it as the repository's
-// token: the install's SecretPolicy refuses it before it is resolved, so GitHub, though trusted
-// with the repository token, never receives goald's own secrets.
-func TestClient_RefusesAReservedToken(t *testing.T) {
-	t.Parallel()
-
-	var calls sync.Map
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Store(r.Method+" "+r.URL.Path, r.Header.Get("Authorization"))
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	t.Cleanup(srv.Close)
-
-	c := New(porttest.Secrets{"GOAL_GATEWAY_KEY": token}, Config{
-		APIURL: srv.URL, Policy: domain.SecretPolicy{Reserved: []string{"GOAL_GATEWAY_KEY"}},
-	})
-	reserved := domain.Repository{URL: repo.URL, AuthRef: "env:GOAL_GATEWAY_KEY"}
-
-	_, perr := c.PullRequest(t.Context(), reserved, prURL)
-	_, merr := c.Merge(t.Context(), reserved, prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
-	derr := c.DeleteBranch(t.Context(), reserved, "goal/7-add-x")
-
-	for _, err := range []error{perr, merr, derr} {
-		if err == nil || !strings.Contains(err.Error(), "reserved") {
-			t.Errorf("err = %v; want the reserved token refused", err)
-		}
-	}
-
-	calls.Range(func(k, v any) bool {
-		t.Errorf("sent %v with Authorization %q; want nothing sent", k, v)
-
-		return true
-	})
 }
 
 func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
@@ -238,7 +284,7 @@ func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 		return http.StatusInternalServerError, map[string]any{message: "bad token " + token}
 	}
 
-	if _, err := c.Merge(t.Context(), repo, prURL, ports.Merge{Method: squash, HeadSHA: headSHA}); err == nil ||
+	if _, err := c.Merge(t.Context(), dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA}); err == nil ||
 		strings.Contains(err.Error(), token) {
 		t.Errorf("err = %v; want an error without the token", err)
 	}
@@ -256,9 +302,9 @@ func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 	}))
 	t.Cleanup(redirect.Close)
 
-	moved := New(porttest.Secrets{"REPO_TOKEN": token}, Config{APIURL: redirect.URL})
+	moved := New(Config{APIURL: redirect.URL})
 
-	if _, err := moved.PullRequest(t.Context(), repo, prURL); err == nil || leaked {
+	if _, err := moved.PullRequest(t.Context(), dotComConn(t), prURL); err == nil || leaked {
 		t.Errorf("PullRequest via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", err, leaked)
 	}
 }

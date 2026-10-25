@@ -337,7 +337,7 @@
         },
         "action": {
           "enum": ["merge"],
-          "description": "On a human station: what goald does when the human approves. merge merges the item's pull request (the pull_request field of its latest output) first."
+          "description": "On a human station: what goald does when the human approves. merge merges every pull request the item's outputs name first (the pull_request and pull_requests fields of each station's latest output), each through the factory's code host connection for its host."
         },
         "gate": {
           "type": "object",

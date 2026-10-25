@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 )
 
@@ -75,6 +76,50 @@ func TestItemPullRequest_LatestStationOutputThatNamesOne(t *testing.T) {
 		if got := (Item{Outputs: tc.outputs}).PullRequest(l); got != tc.want {
 			t.Errorf("%s: PullRequest = %q, want %q", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestItemPullRequests_EveryStationsPullRequestsOnce(t *testing.T) {
+	t.Parallel()
+
+	const (
+		app7  = "https://github.com/acme/app/pull/7"
+		web3  = "https://gitlab.com/acme/web/-/merge_requests/3"
+		docs2 = "https://github.com/acme/docs/pull/2"
+	)
+
+	l := Line{Stations: []Station{{ID: stPlan}, {ID: stCode}}}
+	raw := func(s string) json.RawMessage { return json.RawMessage(s) }
+
+	tests := []struct {
+		name    string
+		outputs map[string]json.RawMessage
+		want    []string
+	}{
+		{"none", map[string]json.RawMessage{stPlan: raw(`{"summary":"x"}`)}, []string{}},
+		{"one string", map[string]json.RawMessage{stCode: raw(`{"pull_request":"` + app7 + `"}`)}, []string{app7}},
+		{"the string, then the list", map[string]json.RawMessage{
+			stCode: raw(`{"pull_requests":["` + web3 + `","` + docs2 + `"],"pull_request":"` + app7 + `"}`),
+		}, []string{app7, web3, docs2}},
+		{"in station order, each once", map[string]json.RawMessage{
+			stCode: raw(`{"pull_requests":["` + app7 + `","` + docs2 + `"]}`),
+			stPlan: raw(`{"pull_request":"` + app7 + `","pull_requests":["` + web3 + `"]}`),
+		}, []string{app7, web3, docs2}},
+		{"only https URLs", map[string]json.RawMessage{
+			stCode: raw(`{"pull_request":"#7","pull_requests":["http://github.com/acme/app/pull/7",7,null,"` + web3 + `"]}`),
+		}, []string{web3}},
+		{"a list that is not one", map[string]json.RawMessage{stCode: raw(`{"pull_requests":"` + app7 + `"}`)}, []string{}},
+		{"a station not on the line", map[string]json.RawMessage{"gone": raw(`{"pull_request":"` + app7 + `"}`)}, []string{}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := (Item{Outputs: tc.outputs}).PullRequests(l); !slices.Equal(got, tc.want) {
+				t.Errorf("PullRequests = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

@@ -235,6 +235,32 @@ func TestConnectionKind_Render(t *testing.T) {
 	}
 }
 
+func TestResolvedConnection_GitLogin(t *testing.T) {
+	t.Parallel()
+
+	const token = "ghp_secret-value"
+
+	resolved := func(k ConnectionKind, values map[string]string) ResolvedConnection {
+		return ResolvedConnection{Connection: Connection{Name: "code"}, Kind: k, Values: values}
+	}
+
+	host, password, err := resolved(githubKind(), map[string]string{fieldToken: token, fieldHost: "GHE.Example.com"}).GitLogin()
+	if err != nil || host != "ghe.example.com" || password != token {
+		t.Errorf("GitLogin = %q, %q, %v; want ghe.example.com and the token", host, password, err)
+	}
+
+	for name, rc := range map[string]ResolvedConnection{
+		"no git login": resolved(apiKeyKind(), map[string]string{
+			fieldPrefix: "DOCS", fieldBaseURL: apiExampleURL, fieldKey: token,
+		}),
+		"no password value": resolved(githubKind(), map[string]string{}),
+	} {
+		if _, _, err := rc.GitLogin(); !errors.Is(err, ErrInvalid) || strings.Contains(err.Error(), token) {
+			t.Errorf("%s: GitLogin = %v; want ErrInvalid without a value", name, err)
+		}
+	}
+}
+
 // Render's refusals name fields and variables, never a value: they reach logs.
 func TestConnectionKind_RenderErrorsHoldNoValue(t *testing.T) {
 	t.Parallel()

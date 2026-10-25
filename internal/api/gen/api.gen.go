@@ -4849,18 +4849,18 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/events (the `ListItemEvents` operationId).
 	ListItemEvents(ctx context.Context, org OrgRef, item ItemRef, params *ListItemEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// MergeItemWithBody Merge the item's pull request, then approve it
+	// MergeItemWithBody Merge the item's pull requests, then approve it
 	//
-	// Only for an item waiting at a human station with action merge. goald merges the pull request named by the pull_request field of the item's latest station output, on the factory's runtime.repository, with the repository's token. It never forces: a pull request that is closed, has conflicts or failing required checks, or whose head moves meanwhile is refused with 409 and nothing changes. After the merge it deletes the pull request's head branch (only when it lives on the same repository) and approves the item.
+	// Only for an item waiting at a human station with action merge. goald merges every pull request (GitLab merge request) the item's outputs name: the pull_request string and the pull_requests array of each station's latest output, in station order, each once. Each goes through the factory's connection whose kind has a code host and whose git login is for the URL's host; a URL on a host none serves is refused with 409 no-code-host-connection before anything is merged. It never forces: a pull request that is closed, has conflicts or failing required checks, or whose head moves meanwhile stops the merge with 409 cannot-merge naming it, and the item does not move; the ones merged before it stay merged and are skipped when the merge is asked again. After each merge it deletes the pull request's head branch (only when it lives in the repository it merged into), and once all are merged it approves the item with one merged event per pull request.
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/merge (the `MergeItem` operationId).
 	MergeItemWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// MergeItem Merge the item's pull request, then approve it
+	// MergeItem Merge the item's pull requests, then approve it
 	//
-	// Only for an item waiting at a human station with action merge. goald merges the pull request named by the pull_request field of the item's latest station output, on the factory's runtime.repository, with the repository's token. It never forces: a pull request that is closed, has conflicts or failing required checks, or whose head moves meanwhile is refused with 409 and nothing changes. After the merge it deletes the pull request's head branch (only when it lives on the same repository) and approves the item.
+	// Only for an item waiting at a human station with action merge. goald merges every pull request (GitLab merge request) the item's outputs name: the pull_request string and the pull_requests array of each station's latest output, in station order, each once. Each goes through the factory's connection whose kind has a code host and whose git login is for the URL's host; a URL on a host none serves is refused with 409 no-code-host-connection before anything is merged. It never forces: a pull request that is closed, has conflicts or failing required checks, or whose head moves meanwhile stops the merge with 409 cannot-merge naming it, and the item does not move; the ones merged before it stay merged and are skipped when the merge is asked again. After each merge it deletes the pull request's head branch (only when it lives in the repository it merged into), and once all are merged it approves the item with one merged event per pull request.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -6685,9 +6685,9 @@ func (c *Client) ListItemEvents(ctx context.Context, org OrgRef, item ItemRef, p
 	return c.Client.Do(req)
 }
 
-// MergeItemWithBody Merge the item's pull request, then approve it
+// MergeItemWithBody Merge the item's pull requests, then approve it
 //
-// Only for an item waiting at a human station with action merge. goald merges the pull request named by the pull_request field of the item's latest station output, on the factory's runtime.repository, with the repository's token. It never forces: a pull request that is closed, has conflicts or failing required checks, or whose head moves meanwhile is refused with 409 and nothing changes. After the merge it deletes the pull request's head branch (only when it lives on the same repository) and approves the item.
+// Only for an item waiting at a human station with action merge. goald merges every pull request (GitLab merge request) the item's outputs name: the pull_request string and the pull_requests array of each station's latest output, in station order, each once. Each goes through the factory's connection whose kind has a code host and whose git login is for the URL's host; a URL on a host none serves is refused with 409 no-code-host-connection before anything is merged. It never forces: a pull request that is closed, has conflicts or failing required checks, or whose head moves meanwhile stops the merge with 409 cannot-merge naming it, and the item does not move; the ones merged before it stay merged and are skipped when the merge is asked again. After each merge it deletes the pull request's head branch (only when it lives in the repository it merged into), and once all are merged it approves the item with one merged event per pull request.
 //
 // Takes any type of body and a specified content type.
 //
@@ -6704,9 +6704,9 @@ func (c *Client) MergeItemWithBody(ctx context.Context, org OrgRef, item ItemRef
 	return c.Client.Do(req)
 }
 
-// MergeItem Merge the item's pull request, then approve it
+// MergeItem Merge the item's pull requests, then approve it
 //
-// Only for an item waiting at a human station with action merge. goald merges the pull request named by the pull_request field of the item's latest station output, on the factory's runtime.repository, with the repository's token. It never forces: a pull request that is closed, has conflicts or failing required checks, or whose head moves meanwhile is refused with 409 and nothing changes. After the merge it deletes the pull request's head branch (only when it lives on the same repository) and approves the item.
+// Only for an item waiting at a human station with action merge. goald merges every pull request (GitLab merge request) the item's outputs name: the pull_request string and the pull_requests array of each station's latest output, in station order, each once. Each goes through the factory's connection whose kind has a code host and whose git login is for the URL's host; a URL on a host none serves is refused with 409 no-code-host-connection before anything is merged. It never forces: a pull request that is closed, has conflicts or failing required checks, or whose head moves meanwhile stops the merge with 409 cannot-merge naming it, and the item does not move; the ones merged before it stay merged and are skipped when the merge is asked again. After each merge it deletes the pull request's head branch (only when it lives in the repository it merged into), and once all are merged it approves the item with one merged event per pull request.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -13418,18 +13418,18 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/events (the `ListItemEvents` operationId).
 	ListItemEventsWithResponse(ctx context.Context, org OrgRef, item ItemRef, params *ListItemEventsParams, reqEditors ...RequestEditorFn) (*ListItemEventsResponse, error)
 
-	// MergeItemWithBodyWithResponse Merge the item's pull request, then approve it
+	// MergeItemWithBodyWithResponse Merge the item's pull requests, then approve it
 	//
-	// Only for an item waiting at a human station with action merge. goald merges the pull request named by the pull_request field of the item's latest station output, on the factory's runtime.repository, with the repository's token. It never forces: a pull request that is closed, has conflicts or failing required checks, or whose head moves meanwhile is refused with 409 and nothing changes. After the merge it deletes the pull request's head branch (only when it lives on the same repository) and approves the item.
+	// Only for an item waiting at a human station with action merge. goald merges every pull request (GitLab merge request) the item's outputs name: the pull_request string and the pull_requests array of each station's latest output, in station order, each once. Each goes through the factory's connection whose kind has a code host and whose git login is for the URL's host; a URL on a host none serves is refused with 409 no-code-host-connection before anything is merged. It never forces: a pull request that is closed, has conflicts or failing required checks, or whose head moves meanwhile stops the merge with 409 cannot-merge naming it, and the item does not move; the ones merged before it stay merged and are skipped when the merge is asked again. After each merge it deletes the pull request's head branch (only when it lives in the repository it merged into), and once all are merged it approves the item with one merged event per pull request.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/merge (the `MergeItem` operationId).
 	MergeItemWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*MergeItemResponse, error)
 
-	// MergeItemWithResponse Merge the item's pull request, then approve it
+	// MergeItemWithResponse Merge the item's pull requests, then approve it
 	//
-	// Only for an item waiting at a human station with action merge. goald merges the pull request named by the pull_request field of the item's latest station output, on the factory's runtime.repository, with the repository's token. It never forces: a pull request that is closed, has conflicts or failing required checks, or whose head moves meanwhile is refused with 409 and nothing changes. After the merge it deletes the pull request's head branch (only when it lives on the same repository) and approves the item.
+	// Only for an item waiting at a human station with action merge. goald merges every pull request (GitLab merge request) the item's outputs name: the pull_request string and the pull_requests array of each station's latest output, in station order, each once. Each goes through the factory's connection whose kind has a code host and whose git login is for the URL's host; a URL on a host none serves is refused with 409 no-code-host-connection before anything is merged. It never forces: a pull request that is closed, has conflicts or failing required checks, or whose head moves meanwhile stops the merge with 409 cannot-merge naming it, and the item does not move; the ones merged before it stay merged and are skipped when the merge is asked again. After each merge it deletes the pull request's head branch (only when it lives in the repository it merged into), and once all are merged it approves the item with one merged event per pull request.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -19682,9 +19682,9 @@ func (c *ClientWithResponses) ListItemEventsWithResponse(ctx context.Context, or
 	return ParseListItemEventsResponse(rsp)
 }
 
-// MergeItemWithBodyWithResponse Merge the item's pull request, then approve it
+// MergeItemWithBodyWithResponse Merge the item's pull requests, then approve it
 //
-// Only for an item waiting at a human station with action merge. goald merges the pull request named by the pull_request field of the item's latest station output, on the factory's runtime.repository, with the repository's token. It never forces: a pull request that is closed, has conflicts or failing required checks, or whose head moves meanwhile is refused with 409 and nothing changes. After the merge it deletes the pull request's head branch (only when it lives on the same repository) and approves the item.
+// Only for an item waiting at a human station with action merge. goald merges every pull request (GitLab merge request) the item's outputs name: the pull_request string and the pull_requests array of each station's latest output, in station order, each once. Each goes through the factory's connection whose kind has a code host and whose git login is for the URL's host; a URL on a host none serves is refused with 409 no-code-host-connection before anything is merged. It never forces: a pull request that is closed, has conflicts or failing required checks, or whose head moves meanwhile stops the merge with 409 cannot-merge naming it, and the item does not move; the ones merged before it stay merged and are skipped when the merge is asked again. After each merge it deletes the pull request's head branch (only when it lives in the repository it merged into), and once all are merged it approves the item with one merged event per pull request.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -19697,9 +19697,9 @@ func (c *ClientWithResponses) MergeItemWithBodyWithResponse(ctx context.Context,
 	return ParseMergeItemResponse(rsp)
 }
 
-// MergeItemWithResponse Merge the item's pull request, then approve it
+// MergeItemWithResponse Merge the item's pull requests, then approve it
 //
-// Only for an item waiting at a human station with action merge. goald merges the pull request named by the pull_request field of the item's latest station output, on the factory's runtime.repository, with the repository's token. It never forces: a pull request that is closed, has conflicts or failing required checks, or whose head moves meanwhile is refused with 409 and nothing changes. After the merge it deletes the pull request's head branch (only when it lives on the same repository) and approves the item.
+// Only for an item waiting at a human station with action merge. goald merges every pull request (GitLab merge request) the item's outputs name: the pull_request string and the pull_requests array of each station's latest output, in station order, each once. Each goes through the factory's connection whose kind has a code host and whose git login is for the URL's host; a URL on a host none serves is refused with 409 no-code-host-connection before anything is merged. It never forces: a pull request that is closed, has conflicts or failing required checks, or whose head moves meanwhile stops the merge with 409 cannot-merge naming it, and the item does not move; the ones merged before it stay merged and are skipped when the merge is asked again. After each merge it deletes the pull request's head branch (only when it lives in the repository it merged into), and once all are merged it approves the item with one merged event per pull request.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -23723,7 +23723,7 @@ type ServerInterface interface {
 	// ListItemEvents One page of an item's history, oldest first
 	// (GET /v1/orgs/{org}/items/{item}/events)
 	ListItemEvents(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, params ListItemEventsParams)
-	// MergeItem Merge the item's pull request, then approve it
+	// MergeItem Merge the item's pull requests, then approve it
 	// (POST /v1/orgs/{org}/items/{item}/merge)
 	MergeItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
 	// MoveItem Put an item at another station of its line
@@ -32227,7 +32227,7 @@ type StrictServerInterface interface {
 	// ListItemEvents One page of an item's history, oldest first
 	// (GET /v1/orgs/{org}/items/{item}/events)
 	ListItemEvents(ctx context.Context, request ListItemEventsRequestObject) (ListItemEventsResponseObject, error)
-	// MergeItem Merge the item's pull request, then approve it
+	// MergeItem Merge the item's pull requests, then approve it
 	// (POST /v1/orgs/{org}/items/{item}/merge)
 	MergeItem(ctx context.Context, request MergeItemRequestObject) (MergeItemResponseObject, error)
 	// MoveItem Put an item at another station of its line

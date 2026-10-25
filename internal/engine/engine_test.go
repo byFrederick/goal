@@ -68,12 +68,16 @@ type harness struct {
 	sandboxes *porttest.Sandboxes // the sandbox backend every engine of the harness shares
 	clock     *porttest.Clock
 	contracts *porttest.Contracts
-	codehost  *porttest.CodeHost
+	codehost  *porttest.CodeHost // the github code host
+	gitlab    *porttest.CodeHost // the gitlab code host
 	line      domain.Line
 	logs      *logBuffer // what every engine of the harness logs
 
 	mu    sync.Mutex
 	ended []domain.RunID // runs reported to RunEnded
+	// codeConns are the connections merges get (engine.MergeConnections): by default one of a
+	// github kind on github.com.
+	codeConns []domain.ResolvedConnection
 	// ticking, while step's tick runs, is closed when it returns; every agent run waits for it
 	// before it plays, so no run ends within the tick that started it (see step).
 	ticking chan struct{}
@@ -93,6 +97,22 @@ func (h *harness) runEnded(_ context.Context, run domain.RunID) {
 	defer h.mu.Unlock()
 
 	h.ended = append(h.ended, run)
+}
+
+// mergeConnections are the connections the harness's merges get.
+func (h *harness) mergeConnections(context.Context, domain.Line) ([]domain.ResolvedConnection, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	return slices.Clone(h.codeConns), nil
+}
+
+// setCodeConnections replaces the connections merges get.
+func (h *harness) setCodeConnections(conns ...domain.ResolvedConnection) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.codeConns = conns
 }
 
 func (h *harness) endedRuns() []domain.RunID {
@@ -125,6 +145,8 @@ func newHarness(t *testing.T, line domain.Line, run porttest.AgentFunc) *harness
 		clock:     clock,
 		contracts: porttest.NewContracts(),
 		codehost:  porttest.NewCodeHost(),
+		gitlab:    porttest.NewCodeHost(),
+		codeConns: []domain.ResolvedConnection{porttest.CodeHostConnection(connGitHub, codeHostGitHub, "github.com")},
 		line:      line,
 		logs:      &logBuffer{},
 	}
@@ -179,8 +201,9 @@ func (h *harness) engineWith(t *testing.T, store ports.Store, maxRuns int, lines
 
 	e, err := engine.New(engine.Deps{
 		Store: store, Orgs: h.tenancy, Sandboxes: h.sandboxes, Contracts: h.contracts, Clock: h.clock,
-		Secrets:  porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y", "MODEL_ACCESS": modelToken, "GIT_TOKEN": gitToken, "REPO_TOKEN": gitToken},
-		CodeHost: h.codehost, RunEnded: h.runEnded,
+		Secrets:   porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y", "MODEL_ACCESS": modelToken, "GIT_TOKEN": gitToken, "REPO_TOKEN": gitToken},
+		CodeHosts: map[string]ports.CodeHost{codeHostGitHub: h.codehost, codeHostGitLab: h.gitlab},
+		RunEnded:  h.runEnded, MergeConnections: h.mergeConnections,
 		Logger: slog.New(slog.NewJSONHandler(h.logs, nil)),
 	}, engine.Config{
 		Lines:           lines,

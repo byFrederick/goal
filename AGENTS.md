@@ -24,7 +24,7 @@ cmd/goal-egress/     egress proxy   (the container agents, sidecars and checks g
 internal/domain/     plain types and rules: factory, item, station, lease. Imports nothing internal.
 internal/engine/     flow engine: pull, WIP, drum-buffer-rope, andon. Imports domain + ports only.
 internal/ports/      interfaces: Store, Sandboxes, Sidecars, Secrets, Contracts, ObjectStore, ItemNotices, CodeHost, Clock, Tenancy, Audit, DefinitionStore, DefinitionNotices, SkillSource, Identity, Access, Platform, Connections, MasterKey (phase 4: Sidecars goes in 4-11; new Minter, Knowledge, Embedder, SourceReader)
-internal/adapters/   s3store/ postgres/ docker/ github/ envsecrets/ sysclock/ skillssh/ masterkey/ (phase 4: cloudflare/ awssts/ gitlab/ openaiembed/ gitdocs/ confluence/)
+internal/adapters/   s3store/ postgres/ docker/ github/ gitlab/ envsecrets/ sysclock/ skillssh/ masterkey/ (phase 4: cloudflare/ awssts/ openaiembed/ gitdocs/ confluence/)
 internal/api/        HTTP API handlers for api/openapi.yaml (generated types in internal/api/gen); no adapter imports
 internal/gateway/    MCP gateway inside goald: task-token auth, per-agent tools, credentials added on the host (phase 4: Goal's MCP server for runs, its own tools and `/run` only; connections go direct from the box)
 internal/egress/     the egress proxy's policy: agents to the model API and the gateway's path, tools to public hosts, nothing private (phase 4: public hosts for every box, and the public-only dialer goald uses for connections). Standard library only

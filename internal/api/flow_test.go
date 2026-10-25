@@ -671,12 +671,26 @@ func TestAPI_MergeRefusalsAreConflicts(t *testing.T) {
 	stuck := h.atMerge(t)
 	h.codehost.Add(ports.PullRequest{URL: prURL, Open: true, HeadSHA: "5c1f0e2a", SameRepository: true}) // not mergeable
 
-	if code := h.call(t, http.MethodPost, "/v1/orgs/acme/items/line%231/merge", ``, nil); code != http.StatusConflict {
-		t.Errorf("merge of an unmergeable pull request = %d, want 409", code)
+	var p gen.Problem
+	if code := h.call(t, http.MethodPost, "/v1/orgs/acme/items/line%231/merge", ``, &p); code != http.StatusConflict ||
+		p.Code == nil || *p.Code != "cannot-merge" || p.Detail == nil || !strings.Contains(*p.Detail, prURL) {
+		t.Errorf("merge of an unmergeable pull request = %d %+v, want 409 cannot-merge naming it", code, p)
 	}
 
 	if got, _ := h.store.Item(inOrg(t), stuck.ID); got.Position() != stuck.Position() {
 		t.Errorf("refused merge moved the item to %+v", got.Position())
+	}
+
+	// A pull request on a host none of the factory's connections serves.
+	elsewhere := h.seed(t, stBuild, domain.StateQueued, t0)
+	h.move(t, elsewhere, domain.Position{Station: stMerge, State: domain.StateWaitingHuman}, func(tr *ports.Transition) {
+		tr.OutputStation, tr.Output = stBuild, json.RawMessage(`{"pull_requests":["https://gitlab.example.com/acme/app/-/merge_requests/1"]}`)
+	})
+
+	p = gen.Problem{}
+	if code := h.call(t, http.MethodPost, "/v1/orgs/acme/items/"+string(elsewhere.ID)+"/merge", ``, &p); code != http.StatusConflict ||
+		p.Code == nil || *p.Code != "no-code-host-connection" {
+		t.Errorf("merge on a host no connection serves = %d %+v, want 409 no-code-host-connection", code, p)
 	}
 
 	// Approving at a human station without a merge action is no merge.

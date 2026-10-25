@@ -95,7 +95,8 @@ func newDefGoald(t *testing.T) *defGoald {
 
 	e, err := engine.New(engine.Deps{
 		Store: store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
-		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, CodeHost: porttest.NewCodeHost(), Clock: clock,
+		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: clock,
+		CodeHosts: map[string]ports.CodeHost{}, MergeConnections: porttest.CodeHostConnections(),
 	}, engine.Config{Image: "ghcr.io/acme/goal-agent:1", GatewayURL: "http://gateway.example.com/mcp", GatewayKeyRef: "env:GOAL_GATEWAY_KEY"})
 	if err != nil {
 		t.Fatal(err)

@@ -8,8 +8,12 @@ import (
 )
 
 // pullRequestKey is the output field in which an agent station reports the pull request it
-// opened. It is a convention of station contracts, not a station or factory name.
-const pullRequestKey = "pull_request"
+// opened, and pullRequestsKey the one in which it reports several (in several repositories, say).
+// They are conventions of station contracts, not station or factory names.
+const (
+	pullRequestKey  = "pull_request"
+	pullRequestsKey = "pull_requests"
+)
 
 // summaryKey is the output field in which a station reports what it did in a sentence
 // ("Postmortem filed"). Like pull_request, it is a convention of station contracts.
@@ -25,6 +29,41 @@ func (it Item) PullRequest(l Line) string {
 
 		return ""
 	})
+}
+
+// PullRequests returns every pull request URL the item's outputs name, the ones a merge station
+// merges (spec 4 §4.7): the pull_request string and the pull_requests array of each station's
+// latest output, in the line's station order, each once. Only https URLs count.
+func (it Item) PullRequests(l Line) []string {
+	out := []string{}
+
+	add := func(v any) {
+		if url, _ := v.(string); strings.HasPrefix(url, "https://") && !slices.Contains(out, url) {
+			out = append(out, url)
+		}
+	}
+
+	for _, st := range l.Stations {
+		raw, ok := it.Outputs[st.ID]
+		if !ok {
+			continue
+		}
+
+		var fields map[string]any
+		if json.Unmarshal(raw, &fields) != nil {
+			continue
+		}
+
+		add(fields[pullRequestKey])
+
+		if many, ok := fields[pullRequestsKey].([]any); ok {
+			for _, v := range many {
+				add(v)
+			}
+		}
+	}
+
+	return out
 }
 
 // Summary returns what the item's outputs say was done: the summary field, trimmed, of the

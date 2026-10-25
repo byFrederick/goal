@@ -547,6 +547,23 @@ func (k ConnectionKind) Render(values, minted map[string]string) (RunConnection,
 	return out, nil
 }
 
+// GitLogin is a connection's rendered git login: the host it serves, in lower case, and the
+// password its env variable holds. A code host's connection is chosen by that host and calls the
+// host's API with that password (spec 4 §4.7, §5.5). It fails, naming the connection, when the
+// kind has no git login or the connection's values leave it out; errors never hold a value.
+func (rc ResolvedConnection) GitLogin() (host, password string, err error) {
+	run, err := rc.Kind.Render(rc.Values, nil)
+	if err != nil {
+		return "", "", fmt.Errorf("connection %s: %w", rc.Connection.Name, err)
+	}
+
+	if run.Git == nil || run.Env[run.Git.PasswordEnv] == "" {
+		return "", "", fmt.Errorf("connection %s has no git login: %w", rc.Connection.Name, ErrInvalid)
+	}
+
+	return strings.ToLower(run.Git.Host), run.Env[run.Git.PasswordEnv], nil
+}
+
 func (k ConnectionKind) renderGit(values, minted, env map[string]string) (*KindGit, error) {
 	g := k.Spec.Git
 	if g == nil {

@@ -557,8 +557,8 @@ func problemOf(err error) gen.Problem {
 
 		return p
 	case errors.Is(err, domain.ErrInvalid), errors.Is(err, engine.ErrNotWaitingHuman), errors.Is(err, engine.ErrNotBlocked),
-		errors.Is(err, engine.ErrNotMergeStep), errors.Is(err, ports.ErrNotMergeable), errors.Is(err, engine.ErrItemClosed),
-		errors.Is(err, engine.ErrAndonPulled), errors.Is(err, engine.ErrAndonNotPulled):
+		errors.Is(err, engine.ErrNotMergeStep), errors.Is(err, ports.ErrNotMergeable), errors.Is(err, engine.ErrNoCodeHost),
+		errors.Is(err, engine.ErrItemClosed), errors.Is(err, engine.ErrAndonPulled), errors.Is(err, engine.ErrAndonNotPulled):
 		p := detailed(http.StatusConflict, err)
 		p.Code = optional(problemCode(err))
 

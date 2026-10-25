@@ -41,8 +41,8 @@ var (
 	// ErrSecretNotFound means a secret reference names nothing.
 	ErrSecretNotFound = errors.New("secret not found")
 	// ErrNotMergeable means a pull request cannot be merged as it stands: it is closed, has
-	// conflicts or failing required checks, its head moved, or it is not on the expected
-	// repository. Nothing was changed.
+	// conflicts or failing required checks, its head moved, or its URL is not a pull request on
+	// the connection's host. Nothing was changed.
 	ErrNotMergeable = errors.New("pull request not mergeable")
 )
 
@@ -559,20 +559,24 @@ type OrgEvent struct {
 	Data json.RawMessage
 }
 
-// CodeHost reaches the API of the host where a factory's repository lives (GitHub), with the
-// repository's token, on the goald host only. Adapters never put the token in errors or logs.
+// CodeHost reaches the API of a code host (GitHub, GitLab) from goald, with the credential of a
+// connection whose kind names the adapter (domain.KindSpec.CodeHost): the password of its
+// rendered git login (domain.ResolvedConnection.GitLogin), sent only to that login's host. A
+// pull request's repository comes from its URL, which must be on that host (otherwise an error
+// wrapping ErrNotMergeable, before anything is sent). Adapters follow no redirects and never put
+// the credential in errors or logs.
 type CodeHost interface {
-	// PullRequest returns the state of the pull request at url, which must belong to repo
-	// (otherwise an error wrapping ErrNotMergeable).
-	PullRequest(ctx context.Context, repo domain.Repository, url string) (PullRequest, error)
+	// PullRequest returns the state of the pull request (a GitLab merge request) at url.
+	PullRequest(ctx context.Context, c domain.ResolvedConnection, url string) (PullRequest, error)
 
 	// Merge merges the pull request at url only while its head is still m.HeadSHA, and never
 	// forces: a pull request the host refuses to merge is an error wrapping ErrNotMergeable.
 	// It returns the merge commit's SHA.
-	Merge(ctx context.Context, repo domain.Repository, url string, m Merge) (string, error)
+	Merge(ctx context.Context, c domain.ResolvedConnection, url string, m Merge) (string, error)
 
-	// DeleteBranch deletes a branch of repo; a branch that is already gone is not an error.
-	DeleteBranch(ctx context.Context, repo domain.Repository, branch string) error
+	// DeleteBranch deletes a branch of the repository the pull request at url merges into; a
+	// branch that is already gone is not an error.
+	DeleteBranch(ctx context.Context, c domain.ResolvedConnection, url, branch string) error
 }
 
 // PullRequest is what goald needs to know before and after merging a pull request.
@@ -585,7 +589,8 @@ type PullRequest struct {
 	Mergeable bool
 	HeadSHA   string
 	// HeadBranch is the branch the pull request merges from; SameRepository reports whether
-	// that branch lives in repo itself (not a fork). BaseBranch is the branch it merges into.
+	// that branch lives in the repository it merges into (not a fork). BaseBranch is the branch
+	// it merges into.
 	HeadBranch     string
 	SameRepository bool
 	BaseBranch     string

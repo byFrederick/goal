@@ -236,6 +236,10 @@ func problemCode(err error) string {
 		return "andon-pulled"
 	case errors.Is(err, engine.ErrAndonNotPulled):
 		return "andon-not-pulled"
+	case errors.Is(err, engine.ErrNoCodeHost):
+		return "no-code-host-connection"
+	case errors.Is(err, ports.ErrNotMergeable):
+		return "cannot-merge"
 	default:
 		return ""
 	}

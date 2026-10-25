@@ -1,0 +1,376 @@
+package gitlab
+
+import (
+	"encoding/json"
+	"errors"
+	"maps"
+	"net/http"
+	"net/http/httptest"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/byFrederick/goal/internal/connkind"
+	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/ports"
+)
+
+const (
+	token   = "glpat-test-token-never-shown"
+	mrURL   = "https://gitlab.com/acme/platform/web/-/merge_requests/3"
+	project = "/projects/acme%2Fplatform%2Fweb"
+	headSHA = "4b825dc6"
+	branch  = "goal/3-add-x"
+
+	fieldToken  = "token"
+	keyState    = "state"
+	keyStatus   = "detailed_merge_status"
+	keyMessage  = "message"
+	squashSHA   = "squash-sha"
+	cannotMerge = "Branch cannot be merged"
+)
+
+// connection is a connection of the platform's gitlab kind with values (token and host).
+func connection(t *testing.T, values map[string]string) domain.ResolvedConnection {
+	t.Helper()
+
+	kinds, err := connkind.Platform()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	i := slices.IndexFunc(kinds, func(k domain.ConnectionKind) bool { return k.Name == "gitlab" })
+	if i < 0 {
+		t.Fatal("the platform has no gitlab kind")
+	}
+
+	return domain.ResolvedConnection{Connection: domain.Connection{Name: "gitlab", Kind: "gitlab"}, Kind: kinds[i], Values: values}
+}
+
+// dotComConn is a gitlab.com connection with the token.
+func dotComConn(t *testing.T) domain.ResolvedConnection {
+	t.Helper()
+
+	return connection(t, map[string]string{fieldToken: token})
+}
+
+// fakeGitLab is a GitLab REST API with one merge request, acme/platform/web!3, that requires the
+// token. Its routes are matched on the escaped path, as GitLab reads a project id.
+type fakeGitLab struct {
+	mu       sync.Mutex
+	mr       map[string]any
+	merge    func(body map[string]any) (int, any)
+	requests []string
+	deleted  []string
+}
+
+func newFakeGitLab(t *testing.T) (*fakeGitLab, *Client) {
+	t.Helper()
+
+	f := &fakeGitLab{mr: map[string]any{
+		"iid": 3, keyState: "opened", "sha": headSHA, "source_branch": branch, "target_branch": "main",
+		"source_project_id": 42, "target_project_id": 42, keyStatus: "mergeable",
+		"merge_commit_sha": nil, "squash_commit_sha": nil,
+	}}
+	f.merge = func(map[string]any) (int, any) {
+		f.mr[keyState], f.mr["squash_commit_sha"] = "merged", squashSHA
+
+		return http.StatusOK, f.mr
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		route := r.Method + " " + r.URL.EscapedPath()
+
+		f.mu.Lock()
+		f.requests = append(f.requests, route)
+		f.mu.Unlock()
+
+		if r.Header.Get("PRIVATE-TOKEN") != token {
+			f.reply(w, http.StatusUnauthorized, map[string]any{keyMessage: "401 Unauthorized"})
+			return
+		}
+
+		switch {
+		case route == "GET "+project+"/merge_requests/3":
+			f.reply(w, http.StatusOK, f.mr)
+		case route == "PUT "+project+"/merge_requests/3/merge":
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Error(err)
+			}
+
+			f.mu.Lock()
+			status, res := f.merge(body)
+			f.mu.Unlock()
+
+			f.reply(w, status, res)
+		case strings.HasPrefix(route, "DELETE "+project+"/repository/branches/"):
+			f.mu.Lock()
+			f.deleted = append(f.deleted, strings.TrimPrefix(route, "DELETE "+project+"/repository/branches/"))
+			f.mu.Unlock()
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			f.reply(w, http.StatusNotFound, map[string]any{keyMessage: "404 Not Found"})
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	return f, New(Config{APIURL: srv.URL})
+}
+
+func (f *fakeGitLab) reply(w http.ResponseWriter, status int, body any) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(body)
+}
+
+func (f *fakeGitLab) sent() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return slices.Clone(f.requests)
+}
+
+// The API is the connection's host's own, gitlab.com or a self-managed GitLab.
+func TestClient_APIForTheConnectionsHost(t *testing.T) {
+	t.Parallel()
+
+	c := New(Config{})
+
+	tests := []struct {
+		values   map[string]string
+		url, api string
+	}{
+		{map[string]string{fieldToken: token}, mrURL, "https://gitlab.com/api/v4"},
+		{
+			map[string]string{fieldToken: token, "host": "gitlab.example.com"},
+			"https://gitlab.example.com/acme/platform/web/-/merge_requests/3", "https://gitlab.example.com/api/v4",
+		},
+	}
+
+	for _, tt := range tests {
+		m, err := c.open(connection(t, tt.values), tt.url)
+		if err != nil || m.api != tt.api || m.project != "acme%2Fplatform%2Fweb" || m.iid != "3" {
+			t.Errorf("open(%s) = %+v, %v; want the API %s, project acme/platform/web and iid 3", tt.url, m, err, tt.api)
+		}
+	}
+}
+
+func TestPullRequest_ReadsStateHeadAndBase(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		mr   map[string]any
+		want ports.PullRequest
+	}{
+		{
+			name: "open and mergeable", mr: map[string]any{},
+			want: ports.PullRequest{Open: true, Mergeable: true},
+		},
+		{
+			name: "mergeability being computed", mr: map[string]any{keyStatus: "checking"},
+			want: ports.PullRequest{Open: true},
+		},
+		{
+			name: "conflicts", mr: map[string]any{keyStatus: "conflict"},
+			want: ports.PullRequest{Open: true},
+		},
+		{
+			name: "a GitLab before detailed_merge_status", mr: map[string]any{keyStatus: nil, "merge_status": "can_be_merged"},
+			want: ports.PullRequest{Open: true, Mergeable: true},
+		},
+		{
+			name: "from a fork", mr: map[string]any{"source_project_id": 7},
+			want: ports.PullRequest{Open: true, Mergeable: true},
+		},
+		{
+			name: "merged with a merge commit", mr: map[string]any{keyState: "merged", "merge_commit_sha": "merge-sha"},
+			want: ports.PullRequest{Merged: true, MergeSHA: "merge-sha"},
+		},
+		{
+			name: "squashed and fast-forwarded", mr: map[string]any{keyState: "merged", "squash_commit_sha": squashSHA},
+			want: ports.PullRequest{Merged: true, MergeSHA: squashSHA},
+		},
+		{
+			name: "closed", mr: map[string]any{keyState: "closed"},
+			want: ports.PullRequest{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f, c := newFakeGitLab(t)
+			maps.Copy(f.mr, tt.mr)
+
+			pr, err := c.PullRequest(t.Context(), dotComConn(t), mrURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			want := tt.want
+			want.URL, want.HeadSHA, want.HeadBranch, want.BaseBranch = mrURL, headSHA, branch, "main"
+			// Only the fork case moves the source project away from the target's.
+			want.SameRepository = tt.mr["source_project_id"] == nil
+
+			if pr != want {
+				t.Errorf("merge request = %+v; want %+v", pr, want)
+			}
+		})
+	}
+}
+
+// A merge request on another host than the connection's, or a URL that is not a merge
+// request's, is refused before anything is sent.
+func TestPullRequest_OnlyOnTheConnectionsHost(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitLab(t)
+	selfManaged := connection(t, map[string]string{fieldToken: token, "host": "gitlab.example.com"})
+
+	for _, tt := range []struct {
+		conn domain.ResolvedConnection
+		url  string
+	}{
+		{dotComConn(t), "https://gitlab.example.com/acme/web/-/merge_requests/3"},
+		{dotComConn(t), "https://github.com/acme/web/pull/3"},
+		{selfManaged, mrURL},
+		{dotComConn(t), "http://gitlab.com/acme/web/-/merge_requests/3"},
+		{dotComConn(t), "https://gitlab.com/acme/web/-/merge_requests/3?x=1"},
+		{dotComConn(t), "https://gitlab.com/acme/web/-/issues/3"},
+		{dotComConn(t), "https://gitlab.com/web/-/merge_requests/3"},
+	} {
+		if _, err := c.PullRequest(t.Context(), tt.conn, tt.url); !errors.Is(err, ports.ErrNotMergeable) {
+			t.Errorf("PullRequest(%s) = %v; want ErrNotMergeable", tt.url, err)
+		}
+
+		if err := c.DeleteBranch(t.Context(), tt.conn, tt.url, branch); !errors.Is(err, ports.ErrNotMergeable) {
+			t.Errorf("DeleteBranch(%s) = %v; want ErrNotMergeable", tt.url, err)
+		}
+	}
+
+	if got := f.sent(); len(got) != 0 {
+		t.Errorf("requests %v; want none", got)
+	}
+}
+
+func TestMerge_AtTheHeadItWasGiven(t *testing.T) {
+	t.Parallel()
+
+	for _, method := range []string{methodSquash, methodMerge} {
+		f, c := newFakeGitLab(t)
+
+		var asked map[string]any
+
+		merge := f.merge
+		f.merge = func(body map[string]any) (int, any) {
+			asked = body
+
+			return merge(body)
+		}
+
+		sha, err := c.Merge(t.Context(), dotComConn(t), mrURL, ports.Merge{Method: method, HeadSHA: headSHA})
+		if err != nil || sha != squashSHA {
+			t.Fatalf("Merge(%s) = %q, %v; want squash-sha", method, sha, err)
+		}
+
+		if asked["sha"] != headSHA || asked["squash"] != (method == methodSquash) {
+			t.Errorf("merge (%s) request %v; want head 4b825dc6, squash %v", method, asked, method == methodSquash)
+		}
+	}
+
+	// GitLab cannot rebase in one call: refused, nothing sent.
+	f, c := newFakeGitLab(t)
+	if _, err := c.Merge(t.Context(), dotComConn(t), mrURL, ports.Merge{Method: "rebase", HeadSHA: headSHA}); !errors.Is(err, ports.ErrNotMergeable) ||
+		len(f.sent()) != 0 {
+		t.Errorf("Merge with rebase = %v after %v; want ErrNotMergeable and nothing sent", err, f.sent())
+	}
+}
+
+func TestMerge_GitLabRefusalsAreNotMergeable(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		status int
+		body   any
+		reason string
+	}{
+		{http.StatusMethodNotAllowed, map[string]any{keyMessage: "405 Method Not Allowed"}, "405 Method Not Allowed"},
+		{http.StatusNotAcceptable, map[string]any{keyMessage: cannotMerge}, cannotMerge},
+		{http.StatusConflict, map[string]any{keyMessage: "SHA does not match HEAD of source branch: 1a2b3c"}, "SHA does not match"},
+		{http.StatusUnprocessableEntity, map[string]any{keyMessage: map[string]any{"base": []string{cannotMerge}}}, cannotMerge},
+	}
+
+	for _, tt := range tests {
+		f, c := newFakeGitLab(t)
+		f.merge = func(map[string]any) (int, any) { return tt.status, tt.body }
+
+		_, err := c.Merge(t.Context(), dotComConn(t), mrURL, ports.Merge{Method: methodSquash, HeadSHA: headSHA})
+		if !errors.Is(err, ports.ErrNotMergeable) || !strings.Contains(err.Error(), tt.reason) {
+			t.Errorf("merge answered %d: err = %v; want ErrNotMergeable with GitLab's reason", tt.status, err)
+		}
+	}
+}
+
+func TestDeleteBranch_DeletesTheBranchAndToleratesAGoneOne(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitLab(t)
+
+	if err := c.DeleteBranch(t.Context(), dotComConn(t), mrURL, branch); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(f.deleted) != 1 || f.deleted[0] != "goal%2F3-add-x" {
+		t.Errorf("deleted %v; want goal/3-add-x, encoded as one path segment", f.deleted)
+	}
+
+	if err := c.DeleteBranch(t.Context(), dotComConn(t), "https://gitlab.com/acme/platform/web/-/merge_requests/9", branch); err != nil {
+		t.Errorf("deleting on a project path the fake does not know (404) = %v; want nil", err)
+	}
+
+	if err := c.DeleteBranch(t.Context(), dotComConn(t), mrURL, "../main"); err == nil {
+		t.Error("deleting ../main succeeded; want refused")
+	}
+}
+
+func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitLab(t)
+
+	// GitLab echoing the credential back must not put it in an error.
+	f.merge = func(map[string]any) (int, any) {
+		return http.StatusInternalServerError, map[string]any{keyMessage: "bad token " + token}
+	}
+
+	if _, err := c.Merge(t.Context(), dotComConn(t), mrURL, ports.Merge{Method: methodSquash, HeadSHA: headSHA}); err == nil ||
+		strings.Contains(err.Error(), token) {
+		t.Errorf("err = %v; want an error without the token", err)
+	}
+
+	// A redirect is not followed: the token would travel to another host.
+	var leaked bool
+
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		leaked = leaked || r.Header.Get("PRIVATE-TOKEN") != ""
+	}))
+	t.Cleanup(elsewhere.Close)
+
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, elsewhere.URL+r.URL.Path, http.StatusTemporaryRedirect) //nolint:gosec // the redirect under test
+	}))
+	t.Cleanup(redirect.Close)
+
+	moved := New(Config{APIURL: redirect.URL})
+
+	if _, err := moved.PullRequest(t.Context(), dotComConn(t), mrURL); err == nil || leaked {
+		t.Errorf("PullRequest via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", err, leaked)
+	}
+}

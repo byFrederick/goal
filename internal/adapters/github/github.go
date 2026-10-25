@@ -1,13 +1,15 @@
 // Package github implements ports.CodeHost with GitHub's REST API, called from the goald host
-// with the factory repository's token (resolved through ports.Secrets for every call).
+// with the credential of a connection whose kind's code host is github (spec 4 §5.5).
 //
-// It reads pull requests, merges them and deletes branches, nothing else. A pull request must
-// live on the factory's own repository. A merge names the head SHA it was asked for, so GitHub
-// refuses it if the branch moved, and it is never forced: GitHub's refusals (not mergeable,
-// head moved, invalid) come back as ports.ErrNotMergeable. The token travels only in the
-// Authorization header of requests to the configured API; redirects are not followed, and the
-// token is scrubbed from every error. A token reference naming a variable the install reserves
-// (Config.Policy) is refused before it is resolved.
+// It reads pull requests, merges them and deletes branches, nothing else. The connection's
+// rendered git login says which host it serves and holds the token; a pull request URL on any
+// other host is refused before anything is sent, and the repository is the URL's own. The API is
+// https://api.github.com for github.com, https://api.<host> for a GitHub Enterprise Cloud host
+// (<name>.ghe.com) and https://<host>/api/v3 for a GitHub Enterprise Server. A merge names the
+// head SHA it was asked for, so GitHub refuses it if the branch moved, and it is never forced:
+// GitHub's refusals (not mergeable, head moved, invalid) come back as ports.ErrNotMergeable. The
+// token travels only in the Authorization header of requests to that API; redirects are not
+// followed, and the token is scrubbed from every error.
 package github
 
 import (
@@ -29,83 +31,62 @@ import (
 
 var _ ports.CodeHost = (*Client)(nil)
 
-// Config says where GitHub is. The zero value of each field means its default.
+// Config tunes the client. The zero value of each field means its default.
 type Config struct {
-	// APIURL is the REST API root. Default: https://api.github.com.
+	// APIURL, when set, is the REST API root for every host instead of the one derived from the
+	// connection's: goald's GOAL_GITHUB_API_URL until runs get connections (spec 4 PR 4-14), a
+	// stand-in GitHub in tests.
 	APIURL string
-	// WebHost is the host of repository and pull request URLs. Default: github.com.
-	WebHost string
 	// Timeout bounds one request. Default: 30s.
 	Timeout time.Duration
-	// Policy is the install's rule for env:NAME references (goald's settings): a repository token
-	// naming a reserved variable is refused before it is resolved. The zero value refuses none.
-	Policy domain.SecretPolicy
 }
 
 const (
 	apiVersion   = "2022-11-28"
 	maxBodyBytes = 1 << 20
+	dotCom       = "github.com"
 )
 
 // Client calls GitHub's REST API. It is safe for concurrent use and keeps no state.
 type Client struct {
-	secrets ports.Secrets
-	policy  domain.SecretPolicy
-	api     string
-	web     string
-	http    *http.Client
+	api  string
+	http *http.Client
 }
 
-// New returns a client that resolves repository tokens through secrets. cfg.APIURL must be an
-// http(s) URL; goald's settings check it.
-func New(secrets ports.Secrets, cfg Config) *Client {
-	if cfg.APIURL == "" {
-		cfg.APIURL = "https://api.github.com"
-	}
-
-	if cfg.WebHost == "" {
-		cfg.WebHost = "github.com"
-	}
-
+// New returns a client. cfg.APIURL, when set, must be an http(s) URL; goald's settings check it.
+func New(cfg Config) *Client {
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = 30 * time.Second
 	}
 
 	return &Client{
-		secrets: secrets, policy: cfg.Policy, api: strings.TrimSuffix(cfg.APIURL, "/"), web: strings.ToLower(cfg.WebHost),
+		api: strings.TrimSuffix(cfg.APIURL, "/"),
 		http: &http.Client{
 			Timeout: cfg.Timeout,
-			// A credentialed request is never sent anywhere but the configured API.
+			// A credentialed request is never sent anywhere but the connection's API.
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}
 }
 
-// pull is one pull request on a repository.
+// pull is one pull request, with the API and the token that reach it.
 type pull struct {
+	api, token  string
 	owner, repo string
 	number      string
 }
 
-func (p pull) path(rest string) string {
-	return "/repos/" + url.PathEscape(p.owner) + "/" + url.PathEscape(p.repo) + "/pulls/" + p.number + rest
+func (p pull) repoPath(rest string) string {
+	return "/repos/" + url.PathEscape(p.owner) + "/" + url.PathEscape(p.repo) + rest
 }
 
-var (
-	repoPath = regexp.MustCompile(`^/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$`)
-	pullPath = regexp.MustCompile(`^/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/pull/([1-9][0-9]*)/?$`)
-)
+var pullPath = regexp.MustCompile(`^/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/pull/([1-9][0-9]*)/?$`)
 
-// parse checks that prURL is a pull request of repo on the web host and names it.
-func (c *Client) parse(repo domain.Repository, prURL string) (pull, error) {
-	ru, err := url.Parse(repo.URL)
+// open checks that prURL is a pull request on the host of c's git login and names it.
+func (cl *Client) open(c domain.ResolvedConnection, prURL string) (pull, error) {
+	host, token, err := c.GitLogin()
 	if err != nil {
-		return pull{}, fmt.Errorf("repository URL: %w", err)
-	}
-
-	rm := repoPath.FindStringSubmatch(ru.Path)
-	if ru.Scheme != "https" || strings.ToLower(ru.Host) != c.web || rm == nil {
-		return pull{}, fmt.Errorf("repository %s is not a %s repository", repo.URL, c.web)
+		return pull{}, err
 	}
 
 	pu, err := url.Parse(prURL)
@@ -113,16 +94,28 @@ func (c *Client) parse(repo domain.Repository, prURL string) (pull, error) {
 		return pull{}, fmt.Errorf("pull request %q: %w", prURL, ports.ErrNotMergeable)
 	}
 
-	pm := pullPath.FindStringSubmatch(pu.Path)
-	if pu.Scheme != "https" || strings.ToLower(pu.Host) != c.web || pm == nil || pu.RawQuery != "" || pu.Fragment != "" {
+	m := pullPath.FindStringSubmatch(pu.Path)
+	if pu.Scheme != "https" || pu.User != nil || pu.RawQuery != "" || pu.Fragment != "" || m == nil {
 		return pull{}, fmt.Errorf("%q is not a pull request URL: %w", prURL, ports.ErrNotMergeable)
 	}
 
-	if !strings.EqualFold(pm[1], rm[1]) || !strings.EqualFold(pm[2], rm[2]) {
-		return pull{}, fmt.Errorf("%s is not on the factory's repository %s/%s: %w", prURL, rm[1], rm[2], ports.ErrNotMergeable)
+	if !strings.EqualFold(pu.Host, host) {
+		return pull{}, fmt.Errorf("%s is not on %s, the host of connection %s: %w", prURL, host, c.Connection.Name, ports.ErrNotMergeable)
 	}
 
-	return pull{owner: rm[1], repo: rm[2], number: pm[3]}, nil
+	return pull{api: cl.apiFor(host), token: token, owner: m[1], repo: m[2], number: m[3]}, nil
+}
+
+// apiFor is the REST API root of host.
+func (cl *Client) apiFor(host string) string {
+	switch {
+	case cl.api != "":
+		return cl.api
+	case host == dotCom || strings.HasSuffix(host, ".ghe.com"):
+		return "https://api." + host
+	default:
+		return "https://" + host + "/api/v3"
+	}
 }
 
 // pullJSON is the part of GitHub's pull request object goald reads.
@@ -147,15 +140,15 @@ type repoJSON struct {
 }
 
 // PullRequest implements ports.CodeHost.
-func (c *Client) PullRequest(ctx context.Context, repo domain.Repository, prURL string) (ports.PullRequest, error) {
-	p, err := c.parse(repo, prURL)
+func (cl *Client) PullRequest(ctx context.Context, c domain.ResolvedConnection, prURL string) (ports.PullRequest, error) {
+	p, err := cl.open(c, prURL)
 	if err != nil {
 		return ports.PullRequest{}, err
 	}
 
 	var pj pullJSON
 
-	status, _, err := c.call(ctx, repo, http.MethodGet, p.path(""), nil, &pj)
+	status, _, err := cl.call(ctx, p, http.MethodGet, p.repoPath("/pulls/"+p.number), nil, &pj)
 
 	switch {
 	case err != nil:
@@ -180,8 +173,8 @@ func (c *Client) PullRequest(ctx context.Context, repo domain.Repository, prURL 
 }
 
 // Merge implements ports.CodeHost.
-func (c *Client) Merge(ctx context.Context, repo domain.Repository, prURL string, m ports.Merge) (string, error) {
-	p, err := c.parse(repo, prURL)
+func (cl *Client) Merge(ctx context.Context, c domain.ResolvedConnection, prURL string, m ports.Merge) (string, error) {
+	p, err := cl.open(c, prURL)
 	if err != nil {
 		return "", err
 	}
@@ -195,7 +188,7 @@ func (c *Client) Merge(ctx context.Context, repo domain.Repository, prURL string
 		Merged bool   `json:"merged"`
 	}
 
-	status, msg, err := c.call(ctx, repo, http.MethodPut, p.path("/merge"), map[string]string{
+	status, msg, err := cl.call(ctx, p, http.MethodPut, p.repoPath("/pulls/"+p.number+"/merge"), map[string]string{
 		"merge_method": m.Method, "sha": m.HeadSHA,
 	}, &res)
 
@@ -213,15 +206,10 @@ func (c *Client) Merge(ctx context.Context, repo domain.Repository, prURL string
 }
 
 // DeleteBranch implements ports.CodeHost.
-func (c *Client) DeleteBranch(ctx context.Context, repo domain.Repository, branch string) error {
-	ru, err := url.Parse(repo.URL)
+func (cl *Client) DeleteBranch(ctx context.Context, c domain.ResolvedConnection, prURL, branch string) error {
+	p, err := cl.open(c, prURL)
 	if err != nil {
-		return fmt.Errorf("repository URL: %w", err)
-	}
-
-	rm := repoPath.FindStringSubmatch(ru.Path)
-	if rm == nil || strings.ToLower(ru.Host) != c.web {
-		return fmt.Errorf("repository %s is not a %s repository", repo.URL, c.web)
+		return err
 	}
 
 	if branch == "" || strings.Contains(branch, "..") {
@@ -233,9 +221,7 @@ func (c *Client) DeleteBranch(ctx context.Context, repo domain.Repository, branc
 		segments[i] = url.PathEscape(s)
 	}
 
-	path := "/repos/" + url.PathEscape(rm[1]) + "/" + url.PathEscape(rm[2]) + "/git/refs/heads/" + strings.Join(segments, "/")
-
-	status, msg, err := c.call(ctx, repo, http.MethodDelete, path, nil, nil)
+	status, msg, err := cl.call(ctx, p, http.MethodDelete, p.repoPath("/git/refs/heads/"+strings.Join(segments, "/")), nil, nil)
 
 	switch {
 	case err != nil:
@@ -248,33 +234,14 @@ func (c *Client) DeleteBranch(ctx context.Context, repo domain.Repository, branc
 	}
 }
 
-// call sends one API request with the repository's token and decodes a successful JSON answer
+// call sends one API request with the connection's token and decodes a successful JSON answer
 // into out (when out is not nil). It returns the status and GitHub's message, if any; err is
 // only for requests that got no answer or an unreadable one. The token is scrubbed from the
 // message and from errors.
-func (c *Client) call(ctx context.Context, repo domain.Repository, method, path string, body, out any) (int, string, error) {
-	if repo.AuthRef == "" {
-		return 0, "", errors.New("the repository has no token (runtime.repository.token)")
-	}
+func (cl *Client) call(ctx context.Context, p pull, method, path string, body, out any) (int, string, error) {
+	status, msg, err := cl.send(ctx, p, method, path, body, out)
 
-	if c.policy.ForRepository(repo.AuthRef) == domain.SecretReserved {
-		return 0, "", fmt.Errorf("repository token %s: %w", repo.AuthRef, domain.ErrSecretReserved)
-	}
-
-	token, err := c.secrets.Resolve(ctx, repo.AuthRef)
-	if err != nil {
-		return 0, "", fmt.Errorf("repository token: %w", err)
-	}
-
-	status, msg, err := c.send(ctx, token, method, path, body, out)
-
-	scrub := func(s string) string {
-		if token == "" {
-			return s
-		}
-
-		return strings.ReplaceAll(s, token, "[redacted]")
-	}
+	scrub := func(s string) string { return strings.ReplaceAll(s, p.token, "[redacted]") }
 
 	if err != nil {
 		err = errors.New(scrub(err.Error()))
@@ -283,7 +250,7 @@ func (c *Client) call(ctx context.Context, repo domain.Repository, method, path 
 	return status, scrub(msg), err
 }
 
-func (c *Client) send(ctx context.Context, token, method, path string, body, out any) (int, string, error) {
+func (cl *Client) send(ctx context.Context, p pull, method, path string, body, out any) (int, string, error) {
 	var reader io.Reader
 
 	if body != nil {
@@ -295,13 +262,13 @@ func (c *Client) send(ctx context.Context, token, method, path string, body, out
 		reader = bytes.NewReader(b)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, c.api+path, reader)
+	req, err := http.NewRequestWithContext(ctx, method, p.api+path, reader)
 	if err != nil {
 		return 0, "", err
 	}
 
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", "Bearer "+p.token)
 	req.Header.Set("X-GitHub-Api-Version", apiVersion)
 	req.Header.Set("User-Agent", "goald")
 
@@ -309,7 +276,7 @@ func (c *Client) send(ctx context.Context, token, method, path string, body, out
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	res, err := c.http.Do(req)
+	res, err := cl.http.Do(req)
 	if err != nil {
 		return 0, "", err
 	}
