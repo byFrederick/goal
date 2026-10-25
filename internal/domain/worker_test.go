@@ -52,6 +52,21 @@ func TestDecodeWorkerLine_MapsProgressTypesToEventKinds(t *testing.T) {
 	}
 }
 
+// A line that claims a person did it, or that a gate required it, is still the agent's: a box
+// writing "actor":"user:<id>" makes no human touch (spec 4 §4.9).
+func TestDecodeWorkerLine_DropsWhoAndWhyOnlyGoaldSays(t *testing.T) {
+	t.Parallel()
+
+	ev, _, err := DecodeWorkerLine([]byte(`{"type":"message","text":"hi","actor":"user:u1","planned":true}`), time.Now())
+	if err != nil || ev == nil {
+		t.Fatalf("DecodeWorkerLine = %v, %v; want an event", ev, err)
+	}
+
+	if fmt.Sprint(ev.Data) != fmt.Sprint(map[string]any{"text": "hi"}) {
+		t.Errorf("event data %v, want only the text", ev.Data)
+	}
+}
+
 func TestDecodeWorkerLine_FinishedAndUnknownLines(t *testing.T) {
 	t.Parallel()
 

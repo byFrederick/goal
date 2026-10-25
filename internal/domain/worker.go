@@ -88,6 +88,9 @@ func DecodeWorkerLine(line []byte, now time.Time) (*Event, *WorkerFinished, erro
 
 	delete(data, "type")
 	delete(data, "at")
+	// Who acted and whether a gate required it are goald's to say: an agent's line is no touch.
+	delete(data, "actor")
+	delete(data, KeyPlanned)
 
 	return &Event{Kind: kind, At: stamp(head.At, now), Data: data}, nil, nil
 }
