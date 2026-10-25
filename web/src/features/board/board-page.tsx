@@ -8,10 +8,10 @@ import type { Board, BoardStation, ItemCard, TouchHeadline } from '../../api/typ
 import { AndonButton, LineStatus } from '../../shared/andon';
 import { factoryTitle, itemKey, useFactory, useFactoryParams } from '../../shared/factory';
 import { formatPercent, humanize } from '../../shared/format';
+import { InboxButton } from '../../shared/inbox-drawer';
 import { waitingOnYou } from '../../shared/item-state';
 import { MoveDialog } from '../../shared/move-menu';
 import { NewItemButton } from '../../shared/new-item';
-import { InboxButton } from '../../shared/inbox-drawer';
 import { useOrg } from '../../shared/org';
 import { factoryRoleNote, holds, reasons } from '../../shared/permissions';
 import { perItem, stationRates } from '../../shared/touches';

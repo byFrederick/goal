@@ -51,7 +51,8 @@ function place(e: InboxEntry): Placed | null {
     case 'expedite':
       return null;
     case 'decision':
-      if (!item) return { group: 'decide', action: 'open', status: 'waiting', why: `Waiting at ${station}`, to: 'board' };
+      if (!item)
+        return { group: 'decide', action: 'open', status: 'waiting', why: `Waiting at ${station}`, to: 'board' };
       if (e.action === 'merge') {
         return { group: 'ready', action: 'merge', status: 'ready', why: `Ready to merge at ${station}`, to: 'item' };
       }

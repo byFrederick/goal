@@ -61,7 +61,11 @@ function InboxBody({ factory, onNavigate }: { factory: Factory; onNavigate: () =
   const inbox = useQuery(inboxQuery(org.id, scope === 'factory' ? factory.id : undefined));
   const factories = useQuery(factoriesQuery(org.id)).data ?? [];
   const groups = useMemo(() => inboxGroups(inbox.data?.entries ?? []), [inbox.data]);
-  const canDecide = (row: InboxRow) => holds(factories.find((f) => f.id === row.entry.factory.id), 'item:decide');
+  const canDecide = (row: InboxRow) =>
+    holds(
+      factories.find((f) => f.id === row.entry.factory.id),
+      'item:decide',
+    );
 
   return (
     <>
