@@ -61,6 +61,26 @@ func testNotices(f *fixture) {
 			t.Errorf("notice = %+v; want %+v", n, want)
 		}
 	}
+
+	// Pausing, archiving and restoring each move the factory: every goald refreshes its lines.
+	if _, err := f.Definitions.SetPaused(f.ctx(t), r.ID, true, local); err != nil {
+		t.Fatalf("SetPaused: %v", err)
+	}
+
+	if _, err := f.Definitions.ArchiveFactory(f.ctx(t), r.ID, local); err != nil {
+		t.Fatalf("ArchiveFactory: %v", err)
+	}
+
+	if _, err := f.Definitions.RestoreArchivedFactory(f.ctx(t), r.ID, local); err != nil {
+		t.Fatalf("RestoreArchivedFactory: %v", err)
+	}
+
+	for _, change := range []string{"paused", "archived", "restored"} {
+		want := ports.DefinitionNotice{OrgID: f.org, FactoryID: r.ID, Kind: ports.NoticeCurrent, VersionID: v.ID, Number: 1}
+		if n := next(t, got, mine(ports.NoticeCurrent)); n != want {
+			t.Errorf("notice once %s = %+v; want %+v", change, n, want)
+		}
+	}
 }
 
 // next returns the next notice that matches, failing the test when none comes in time.
@@ -100,6 +120,10 @@ func testNoOrg(f *fixture) {
 	expect(t, "DeleteUnpublished", s.DeleteUnpublished(ctx, r.ID, local), domain.ErrNoOrg)
 	_, err = s.SetPaused(ctx, r.ID, true, local)
 	expect(t, "SetPaused", err, domain.ErrNoOrg)
+	_, err = s.ArchiveFactory(ctx, r.ID, local)
+	expect(t, "ArchiveFactory", err, domain.ErrNoOrg)
+	_, err = s.RestoreArchivedFactory(ctx, r.ID, local)
+	expect(t, "RestoreArchivedFactory", err, domain.ErrNoOrg)
 	_, err = s.PutBlobs(ctx, map[string][]byte{"x.md": []byte("x")})
 	expect(t, "PutBlobs", err, domain.ErrNoOrg)
 	_, err = s.Blob(ctx, m[factoryYAML])
@@ -163,11 +187,15 @@ func testOtherOrg(f *fixture) {
 	expect(t, "Restore from another org", err, ports.ErrNotFound)
 	_, err = s.SetPaused(ctx, r.ID, true, local)
 	expect(t, "SetPaused from another org", err, ports.ErrNotFound)
+	_, err = s.ArchiveFactory(ctx, r.ID, local)
+	expect(t, "ArchiveFactory from another org", err, ports.ErrNotFound)
+	_, err = s.RestoreArchivedFactory(ctx, r.ID, local)
+	expect(t, "RestoreArchivedFactory from another org", err, ports.ErrNotFound)
 	expect(t, "DeleteUnpublished from another org", s.DeleteUnpublished(ctx, r.ID, local), ports.ErrNotFound)
 
 	other.seesNothing(t, r.ID, v1.Manifest)
 
-	if got := f.record(t, r.ID); got.Current == nil || got.Current.ID != v1.ID || got.Draft == nil || got.Draft.ID != d.ID || got.Paused() {
+	if got := f.record(t, r.ID); got.Current == nil || got.Current.ID != v1.ID || got.Draft == nil || got.Draft.ID != d.ID || got.Paused() || got.Archived() {
 		t.Errorf("record = %+v; want it untouched by the other org", got)
 	}
 }

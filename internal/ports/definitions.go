@@ -24,6 +24,10 @@ var (
 	// ErrItemsAtRemovedStation means a publish or restore would drop stations that open items
 	// still sit at; the error is an *ItemsAtRemovedStationError.
 	ErrItemsAtRemovedStation = errors.New("items at a removed station")
+	// ErrFactoryRunning means a factory must be paused first: archiving a running factory.
+	ErrFactoryRunning = errors.New("factory running")
+	// ErrFactoryBusy means one of the factory's items holds a lease: a run is still working it.
+	ErrFactoryBusy = errors.New("factory busy")
 )
 
 // DefinitionStore keeps factory definitions: file content as immutable blobs in the bucket
@@ -48,6 +52,15 @@ type DefinitionStore interface {
 	// SetPaused pauses or resumes a factory: a paused factory takes no work. Setting the state
 	// it already has changes nothing. Audit: factory.paused or factory.resumed.
 	SetPaused(ctx context.Context, id domain.FactoryID, paused bool, by domain.Actor) (FactoryRecord, error)
+	// ArchiveFactory retires a factory: it stays readable, with its items where they are, and is
+	// still listed (FactoryRecord.Archived). Only a paused factory none of whose items holds a
+	// lease is archived: ErrFactoryRunning otherwise, or ErrFactoryBusy. Archiving an archived
+	// factory changes nothing. Audit: factory.archived.
+	ArchiveFactory(ctx context.Context, id domain.FactoryID, by domain.Actor) (FactoryRecord, error)
+	// RestoreArchivedFactory undoes ArchiveFactory; the factory stays paused, its items where
+	// they were. Restoring a factory that is not archived changes nothing. Audit:
+	// factory.restored.
+	RestoreArchivedFactory(ctx context.Context, id domain.FactoryID, by domain.Actor) (FactoryRecord, error)
 
 	// PutBlobs stores files by their content hash (only blobs the organization lacks are
 	// uploaded) and returns their manifest. A file over domain.MaxBlobSize is refused with an
@@ -120,15 +133,21 @@ type FactoryRecord struct {
 	// v(LastVersionNumber+1)". After a restore it is above Current's number.
 	LastVersionNumber int
 	// PausedAt is when the factory was paused, and PausedBy by whom; zero while it runs.
-	PausedAt  time.Time
-	PausedBy  domain.Actor
-	CreatedAt time.Time
+	PausedAt time.Time
+	PausedBy domain.Actor
+	// ArchivedAt is when the factory was archived, and ArchivedBy by whom; zero unless it is.
+	ArchivedAt time.Time
+	ArchivedBy domain.Actor
+	CreatedAt  time.Time
 	// CreatedBy is the zero Actor for a factory registered before versions existed.
 	CreatedBy domain.Actor
 }
 
 // Paused reports whether the factory takes no work.
 func (r FactoryRecord) Paused() bool { return !r.PausedAt.IsZero() }
+
+// Archived reports whether the factory is retired (DefinitionStore.ArchiveFactory).
+func (r FactoryRecord) Archived() bool { return !r.ArchivedAt.IsZero() }
 
 // VersionRef names a version in listings, without its manifest.
 type VersionRef struct {
@@ -256,7 +275,7 @@ const (
 	// NoticeFactory: a factory was created or deleted.
 	NoticeFactory = "factory"
 	// NoticeCurrent: the factory's current version moved (publish, restore) or
-	// it was paused or resumed. VersionID and Number are the current version's.
+	// it was paused, resumed, archived or restored from the archive. VersionID and Number are the current version's.
 	NoticeCurrent = "current"
 	// NoticeDraft: a version row changed: a draft opened, saved, discarded or published.
 	// VersionID, Number (once published), Revision and By are that version's.

@@ -201,6 +201,87 @@ func (d *Definitions) SetPaused(ctx context.Context, id domain.FactoryID, paused
 	return rec, nil
 }
 
+// ArchiveFactory implements ports.DefinitionStore. Paused and leases are checked under the
+// factory's row lock (see FactoryLeased for the one claim it cannot see).
+func (d *Definitions) ArchiveFactory(ctx context.Context, id domain.FactoryID, by domain.Actor) (ports.FactoryRecord, error) {
+	rec, err := d.setArchived(ctx, id, true, by)
+	if err != nil {
+		return ports.FactoryRecord{}, fmt.Errorf("archive factory: %w", err)
+	}
+
+	return rec, nil
+}
+
+// RestoreArchivedFactory implements ports.DefinitionStore.
+func (d *Definitions) RestoreArchivedFactory(ctx context.Context, id domain.FactoryID, by domain.Actor) (ports.FactoryRecord, error) {
+	rec, err := d.setArchived(ctx, id, false, by)
+	if err != nil {
+		return ports.FactoryRecord{}, fmt.Errorf("restore archived factory: %w", err)
+	}
+
+	return rec, nil
+}
+
+func (d *Definitions) setArchived(ctx context.Context, id domain.FactoryID, archive bool, by domain.Actor) (ports.FactoryRecord, error) {
+	var rec ports.FactoryRecord
+
+	err := d.change(ctx, id, func(q *db.Queries, f db.LockFactoryRow) error {
+		if archive != (f.ArchivedAt != nil) {
+			if err := archiveLocked(ctx, q, f, archive, by); err != nil {
+				return fmt.Errorf("factory %s: %w", id, err)
+			}
+		}
+
+		var err error
+
+		rec, err = factoryRecord(ctx, q, f.ID)
+
+		return err
+	})
+
+	return rec, err
+}
+
+// archiveLocked archives or restores the locked factory f, audited.
+func archiveLocked(ctx context.Context, q *db.Queries, f db.LockFactoryRow, archive bool, by domain.Actor) error {
+	action := domain.AuditFactoryRestored
+
+	if archive {
+		action = domain.AuditFactoryArchived
+
+		if err := archivable(ctx, q, f); err != nil {
+			return err
+		}
+	}
+
+	if err := q.SetFactoryArchived(ctx, db.SetFactoryArchivedParams{ID: f.ID, Archived: archive, ArchivedBy: by.Ref()}); err != nil {
+		return err
+	}
+
+	id := domain.FactoryID(f.ID.String())
+
+	return appendAudit(ctx, q, factoryEntry(by, action, id, map[string]any{auditName: f.Name}))
+}
+
+// archivable returns nil when the locked factory f may be archived: it is paused and none of its
+// items holds a lease.
+func archivable(ctx context.Context, q *db.Queries, f db.LockFactoryRow) error {
+	if f.PausedAt == nil {
+		return ports.ErrFactoryRunning
+	}
+
+	leased, err := q.FactoryLeased(ctx, f.ID)
+	if err != nil {
+		return fmt.Errorf("leases: %w", err)
+	}
+
+	if leased {
+		return ports.ErrFactoryBusy
+	}
+
+	return nil
+}
+
 // PutBlobs implements ports.DefinitionStore. Objects go to the bucket first; their rows are
 // recorded after, so a crash in between leaves only an unreferenced object, which the next put
 // of the same content adopts.
@@ -550,6 +631,13 @@ func recordFrom(r db.FactoryRecord) (ports.FactoryRecord, error) {
 		rec.PausedAt = r.PausedAt.UTC()
 		if rec.PausedBy, err = actorOrZero(r.PausedBy); err != nil {
 			return ports.FactoryRecord{}, fmt.Errorf("factory %s: paused by: %w", r.ID, err)
+		}
+	}
+
+	if r.ArchivedAt != nil {
+		rec.ArchivedAt = r.ArchivedAt.UTC()
+		if rec.ArchivedBy, err = actorOrZero(r.ArchivedBy); err != nil {
+			return ports.FactoryRecord{}, fmt.Errorf("factory %s: archived by: %w", r.ID, err)
 		}
 	}
 
