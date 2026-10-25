@@ -1,7 +1,10 @@
 [tools]
 go = "1.26"
 node = "22"
-"npm:pnpm" = "12.15.0"  # npm backend: older mise releases cannot find pnpm 12 macOS assets
+# npm backend: older mise releases cannot find pnpm 12 macOS assets. Its postinstall puts the native
+# binary in place of a shell stub that only a shell can run (task and other programs exec it directly);
+# mise skips install scripts unless asked, so this one is allowed.
+"npm:pnpm" = { version = "12.15.0", npm_args = "--ignore-scripts=false" }
 # terraform/: the exact versions the stack is planned and applied with (CI reads the same).
 terraform = "1.15.7"
 tflint = "0.64.0"
