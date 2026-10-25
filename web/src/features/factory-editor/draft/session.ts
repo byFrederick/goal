@@ -193,6 +193,8 @@ export class DraftSession {
   private readonly inflight = new Map<Key, Promise<void>>();
   /** Files and removals edits attached to a section, sent with its next save. */
   private readonly pendingFiles = new Map<Section, { files: FileMap; remove: Set<string> }>();
+  /** The files and removals of each section save in flight. */
+  private readonly sendingFiles = new Map<Section, { files: FileMap; remove: Set<string> }>();
   /** Keys whose last save failed and wait for the retry timer. */
   private readonly failed = new Set<Key>();
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -473,6 +475,18 @@ export class DraftSession {
     return back;
   }
 
+  /**
+   * A move (one file written, one removed: a renamed agent's prompt) undone or redone carries the
+   * text the moved file has now, since typing into a prompt is not an undo step of its own.
+   */
+  private moved(change: FileChange): FileChange {
+    const [to, ...more] = Object.keys(change.files);
+    const [from] = change.remove;
+    const now = from !== undefined ? this.state.files.get(from)?.text : undefined;
+    if (to === undefined || more.length > 0 || change.remove.length !== 1 || now === undefined) return change;
+    return { files: { [to]: { text: now } }, remove: change.remove };
+  }
+
   private setLocal<S extends Section>(section: S, value: SectionValues[S]): void {
     const cur = this.state.sections[section];
     const dirty = !equal(value, cur.server) || this.pendingFiles.has(section);
@@ -498,7 +512,7 @@ export class DraftSession {
     if (below) delete below.coalesce;
     this.redoStack.push(entry);
     for (const c of [...entry.changes].reverse()) {
-      if (c.undoFiles) this.changeFiles(c.section, c.undoFiles);
+      if (c.undoFiles) this.changeFiles(c.section, this.moved(c.undoFiles));
       this.setLocal(c.section, c.before as SectionValues[Section]);
     }
     this.set({});
@@ -511,7 +525,7 @@ export class DraftSession {
     if (!entry) return false;
     this.undoStack.push(entry);
     for (const c of entry.changes) {
-      if (c.files) this.changeFiles(c.section, c.files);
+      if (c.files) this.changeFiles(c.section, this.moved(c.files));
       this.setLocal(c.section, c.after as SectionValues[Section]);
     }
     this.set({});
@@ -651,8 +665,10 @@ export class DraftSession {
       ...(pending && pending.remove.size > 0 ? { remove_files: [...pending.remove] } : {}),
     };
     this.setSection(section, { inFlight: true });
+    if (pending) this.sendingFiles.set(section, pending);
     try {
       const result = await this.api.saveDraftSection(this.opts.org, this.opts.factory, section, cur.serverEtag, save);
+      this.sendingFiles.delete(section);
       const now = this.state.sections[section];
       this.setSection(section, {
         server: sent,
@@ -663,7 +679,11 @@ export class DraftSession {
       this.heldAt.set(section, result.revision);
       this.saved(result);
       if (this.state.sections[section].dirty) this.schedule(section);
+      // Typing into a file this save wrote waited for it (sendFile): goald has the file now.
+      for (const path of Object.keys(pending?.files ?? {}))
+        if (this.dirty(fileKey(path))) void this.send(fileKey(path));
     } catch (err) {
+      this.sendingFiles.delete(section);
       this.restorePending(section, pending);
       this.setSection(section, { inFlight: false });
       this.failedSave(section, err);
@@ -679,8 +699,23 @@ export class DraftSession {
     });
   }
 
+  /** The section whose save writes or removes the file, pending or in flight: goald lacks it until then. */
+  private carrier(path: string): Section | undefined {
+    for (const queue of [this.sendingFiles, this.pendingFiles]) {
+      for (const [section, p] of queue) if (path in p.files || p.remove.has(path)) return section;
+    }
+    return undefined;
+  }
+
   private async sendFile(path: string): Promise<void> {
     if (!(await this.opened(fileKey(path)))) return;
+    // A file's save never overtakes the section save that writes it (a 412 for a file nobody else
+    // touched); that save sends the file once it lands.
+    const carrier = this.carrier(path);
+    if (carrier) {
+      if (!this.inflight.has(carrier)) void this.send(carrier);
+      return;
+    }
     const cur = this.state.files.get(path);
     if (!cur?.dirty || this.blocked(fileKey(path))) return;
     const sent = cur.text;

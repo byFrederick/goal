@@ -511,6 +511,23 @@ describe('undo', () => {
   });
 });
 
+describe('undoing a rename after typing in the prompt', () => {
+  it('moves the prompt back with what was typed into it since', async () => {
+    session.adoptFile('agents/engineer.md', { text: '# engineer\n', sha256: 'aaa' });
+    session.edit(renameAgent(shown(session), 'engineer', 'builder', '# engineer\n'));
+    void session.flush();
+    await flushPromises();
+    while (fake.saves.length > 0) await fake.ok();
+
+    // Typing into a prompt is not an undo step: the undo of the rename keeps it.
+    session.editFile('agents/builder.md', '# builder\n\nBuild it.\n');
+    session.undo();
+    expect(session.getSnapshot().files.get('agents/engineer.md')?.text).toBe('# builder\n\nBuild it.\n');
+    session.redo();
+    expect(session.getSnapshot().files.get('agents/builder.md')?.text).toBe('# builder\n\nBuild it.\n');
+  });
+});
+
 describe('undoing a removal', () => {
   // engineer works at stations, so its removal is written as the agents edit Remove… makes.
   const removeEngineer = () =>
@@ -695,6 +712,43 @@ describe('files', () => {
 
     const sha = createHash('sha256').update('# reviewer\n').digest('hex');
     expect(fake.files[0]).toMatchObject({ path: 'agents/reviewer.md', base: { sha256: sha } });
+  });
+
+  it('sends typing into a file an edit wrote only after the section save that writes it lands', async () => {
+    session.edit(addAgent(session.getSnapshot().sections.agents.local, 'reviewer'));
+    void session.flush();
+    await flushPromises();
+    expect(fake.saves).toHaveLength(1);
+
+    // Typing into the new prompt while its agents save is in flight: goald doesn't have the file yet.
+    session.editFile('agents/reviewer.md', '# reviewer\n\nReview the change.\n');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fake.files).toHaveLength(0);
+
+    await fake.ok();
+    await flushPromises();
+    const sha = createHash('sha256').update('# reviewer\n').digest('hex');
+    expect(fake.files).toHaveLength(1);
+    expect(fake.files[0]).toMatchObject({ path: 'agents/reviewer.md', base: { sha256: sha } });
+    expect(session.getSnapshot().fileConflicts).toEqual({});
+  });
+
+  it('keeps typing into a new file waiting while the section save that writes it fails, then sends both', async () => {
+    session.edit(addAgent(session.getSnapshot().sections.agents.local, 'reviewer'));
+    session.editFile('agents/reviewer.md', '# reviewer\n\nReview the change.\n');
+    await vi.advanceTimersByTimeAsync(1000);
+    // Only the section went: the file waits for it.
+    expect(fake.saves).toHaveLength(1);
+    expect(fake.files).toHaveLength(0);
+    fake.saves.shift()?.reject(new ApiError({ title: 'Bad Gateway', status: 502 }));
+    await flushPromises();
+    expect(fake.files).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(1000); // the retry
+    expect(fake.saves[0]?.save.files).toHaveProperty(['agents/reviewer.md']);
+    await fake.ok();
+    await flushPromises();
+    expect(fake.files.map((f) => f.path)).toEqual(['agents/reviewer.md']);
   });
 
   it('forgets a deleted file and its pending save', async () => {
