@@ -3666,6 +3666,14 @@ components:
         touch_count:
           type: integer
           description: The item's human touches so far
+        board_lane:
+          type: string
+          nullable: true
+          description: >-
+            The key of the station's lane (BoardLane.key) the item belongs to: the agent holding its
+            lease while in progress, else the agent its station routes its lane to at an agent
+            station, the person lane at a human station; absent or null at queue and done stations,
+            or when the station has no route for the item's lane
     ItemPage:
       type: object
       required: [items, next_after]
@@ -3828,6 +3836,48 @@ components:
           type: integer
           nullable: true
           description: "The done station: items that reached done today (UTC); null elsewhere"
+        lanes:
+          type: array
+          items: { $ref: "#/components/schemas/BoardLane" }
+          description: >-
+            The station's lanes, sorted by role: at an agent station one per distinct agent that
+            works there (its agent, or each agent its route uses), at a human station one for the
+            person; none at queue and done stations. Cards name theirs in ItemCard.board_lane
+    BoardLane:
+      type: object
+      description: One lane of a board station, by who works it (a role, never a numbered agent copy)
+      required: [key, kind, role, model, model_label, slots, busy]
+      properties:
+        key:
+          type: string
+          description: "What cards name in board_lane: the agent's name, or `person` for a person lane"
+        kind: { type: string, enum: [agent, person] }
+        role:
+          type: string
+          description: >-
+            The name people read: the agent's name humanized ("infra-engineer" → "Infra engineer"),
+            the station's id humanized for a person lane
+        model:
+          type: string
+          nullable: true
+          description: The model the agent runs (its own, else the runtime's); null for a person lane or when neither names one
+        model_label:
+          type: string
+          nullable: true
+          description: >-
+            The model's label among goald's models (GOAL_MODELS) without a leading "Claude "
+            ("Opus 5.5"), else the model id; null when model is
+        slots:
+          type: integer
+          nullable: true
+          description: >-
+            How many runs the lane can have at once: the station's slots, min(agents, wip), shared by
+            all its lanes; null for a person lane
+        busy:
+          type: integer
+          description: >-
+            Agent lanes: the station's live leases held by that agent; a person lane: the items
+            waiting on a person there
     Metrics:
       type: object
       required:

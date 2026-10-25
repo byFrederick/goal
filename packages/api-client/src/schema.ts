@@ -2911,6 +2911,8 @@ export interface components {
             rope_held: boolean;
             /** @description The item's human touches so far */
             touch_count: number;
+            /** @description The key of the station's lane (BoardLane.key) the item belongs to: the agent holding its lease while in progress, else the agent its station routes its lane to at an agent station, the person lane at a human station; absent or null at queue and done stations, or when the station has no route for the item's lane */
+            board_lane?: string | null;
         };
         ItemPage: {
             items: components["schemas"]["ItemCard"][];
@@ -3026,6 +3028,25 @@ export interface components {
             oldest_waiting_seconds: number | null;
             /** @description The done station: items that reached done today (UTC); null elsewhere */
             done_today: number | null;
+            /** @description The station's lanes, sorted by role: at an agent station one per distinct agent that works there (its agent, or each agent its route uses), at a human station one for the person; none at queue and done stations. Cards name theirs in ItemCard.board_lane */
+            lanes?: components["schemas"]["BoardLane"][];
+        };
+        /** @description One lane of a board station, by who works it (a role, never a numbered agent copy) */
+        BoardLane: {
+            /** @description What cards name in board_lane: the agent's name, or `person` for a person lane */
+            key: string;
+            /** @enum {string} */
+            kind: "agent" | "person";
+            /** @description The name people read: the agent's name humanized ("infra-engineer" → "Infra engineer"), the station's id humanized for a person lane */
+            role: string;
+            /** @description The model the agent runs (its own, else the runtime's); null for a person lane or when neither names one */
+            model: string | null;
+            /** @description The model's label among goald's models (GOAL_MODELS) without a leading "Claude " ("Opus 5.5"), else the model id; null when model is */
+            model_label: string | null;
+            /** @description How many runs the lane can have at once: the station's slots, min(agents, wip), shared by all its lanes; null for a person lane */
+            slots: number | null;
+            /** @description Agent lanes: the station's live leases held by that agent; a person lane: the items waiting on a person there */
+            busy: number;
         };
         Metrics: {
             /** @description The range's length in days, as in 7d */
