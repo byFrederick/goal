@@ -3,6 +3,7 @@ import { createRootRouteWithContext, HeadContent, Outlet } from '@tanstack/react
 import { Toaster } from 'sonner';
 import { pageTitle, useRouteFocus } from '../app/route-focus';
 import { ReauthHost } from '../shared/reauth';
+import { useTheme } from '../shared/theme';
 import { TooltipProvider } from '../ui/tooltip';
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
@@ -12,6 +13,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function Root() {
   useRouteFocus();
+  const { resolved } = useTheme();
   return (
     <TooltipProvider>
       {/* The current route's <title>; React hoists it into <head>. */}
@@ -19,6 +21,7 @@ function Root() {
       <Outlet />
       <ReauthHost />
       <Toaster
+        theme={resolved}
         position="top-center"
         toastOptions={{
           classNames: {

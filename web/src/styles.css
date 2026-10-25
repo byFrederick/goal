@@ -7,9 +7,12 @@
 
 @theme {
   --color-*: initial;
+  /* The text on an ink fill (the primary button, the ink mark): white in light, the shell's dark in dark. */
   --color-white: #ffffff;
   --color-transparent: transparent;
   --color-current: currentColor;
+  /* The tint of every shadow: ink in light, black in dark (see the dark overrides below). */
+  --color-shadow: #1d2733;
 
   /* Surfaces */
   --color-shell: #eef1ef;
@@ -62,16 +65,105 @@
   --radius-control: 8px;
   --radius-chip: 6px;
 
-  --shadow-raise: 0 1px 2px rgb(29 39 51 / 0.08);
-  --shadow-lift: 0 4px 12px -6px rgb(29 39 51 / 0.25);
-  --shadow-dialog: 0 20px 25px -5px rgb(29 39 51 / 0.2);
-  --shadow-tip: 0 8px 20px -8px rgb(29 39 51 / 0.35);
-  --shadow-menu: 0 18px 40px -16px rgb(29 39 51 / 0.38);
+  --shadow-raise: 0 1px 2px color-mix(in srgb, var(--color-shadow) 8%, transparent);
+  --shadow-lift: 0 4px 12px -6px color-mix(in srgb, var(--color-shadow) 25%, transparent);
+  --shadow-dialog: 0 20px 25px -5px color-mix(in srgb, var(--color-shadow) 20%, transparent);
+  --shadow-tip: 0 8px 20px -8px color-mix(in srgb, var(--color-shadow) 35%, transparent);
+  --shadow-menu: 0 18px 40px -16px color-mix(in srgb, var(--color-shadow) 38%, transparent);
+  --shadow-sheet: 0 -12px 32px -12px color-mix(in srgb, var(--color-shadow) 35%, transparent);
 
   @keyframes fade-in {
     from {
       opacity: 0;
     }
+  }
+}
+
+/* Dark values (design-system/goal/MASTER.md, "Dark theme"): the same tokens, redefined. Two blocks
+   with the same declarations: the choice is written to data-theme by theme.js before first paint
+   (and by src/shared/theme.ts afterwards); the media query covers a page that has no script yet.
+   Data-theme=light always wins over the system. Components never name a color: they use these. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-white: #0f161d;
+  --color-shell: #0f161d;
+  --color-card: #18212a;
+  --color-surface: #1e2a35;
+  --color-control: #26323e;
+  --color-control-hover: #2e3b48;
+  --color-nav-hover: #223039;
+  --color-ink: #e6ecea;
+  --color-ink-soft: #c2cbc7;
+  --color-muted: #b0bbb6;
+  --color-rule: #75838c;
+  --color-rule-strong: #9aa6ae;
+  --color-line: #2c3741;
+  --color-hairline: #242e37;
+  --color-faint: #8a9690;
+  --color-run: #6cc0dc;
+  --color-run-tint: #173f4d;
+  --color-run-hatch: #3a7a92;
+  --color-amber: #f5b21a;
+  --color-amber-tint: #3a2d0c;
+  --color-amber-line: #6b5216;
+  --color-amber-ink: #f5c75a;
+  --color-you: #a99bea;
+  --color-you-tint: #2a2647;
+  --color-you-line: #4b4290;
+  --color-you-ink: #cfc8f5;
+  --color-rework: #f07f5c;
+  --color-rework-tint: #3d1f17;
+  --color-rework-line: #6e3524;
+  --color-rework-ink: #f7a68d;
+  --color-rework-hatch: #b45a38;
+  --color-ok: #6fcb9c;
+  --color-ok-tint: #173a2a;
+  --color-ok-ink: #8fddb5;
+  --color-ok-dot: #4fbf86;
+  --color-target: #8e9b95;
+  --color-shadow: #000000;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --color-white: #0f161d;
+    --color-shell: #0f161d;
+    --color-card: #18212a;
+    --color-surface: #1e2a35;
+    --color-control: #26323e;
+    --color-control-hover: #2e3b48;
+    --color-nav-hover: #223039;
+    --color-ink: #e6ecea;
+    --color-ink-soft: #c2cbc7;
+    --color-muted: #b0bbb6;
+    --color-rule: #75838c;
+    --color-rule-strong: #9aa6ae;
+    --color-line: #2c3741;
+    --color-hairline: #242e37;
+    --color-faint: #8a9690;
+    --color-run: #6cc0dc;
+    --color-run-tint: #173f4d;
+    --color-run-hatch: #3a7a92;
+    --color-amber: #f5b21a;
+    --color-amber-tint: #3a2d0c;
+    --color-amber-line: #6b5216;
+    --color-amber-ink: #f5c75a;
+    --color-you: #a99bea;
+    --color-you-tint: #2a2647;
+    --color-you-line: #4b4290;
+    --color-you-ink: #cfc8f5;
+    --color-rework: #f07f5c;
+    --color-rework-tint: #3d1f17;
+    --color-rework-line: #6e3524;
+    --color-rework-ink: #f7a68d;
+    --color-rework-hatch: #b45a38;
+    --color-ok: #6fcb9c;
+    --color-ok-tint: #173a2a;
+    --color-ok-ink: #8fddb5;
+    --color-ok-dot: #4fbf86;
+    --color-target: #8e9b95;
+    --color-shadow: #000000;
   }
 }
 
@@ -101,7 +193,7 @@
   }
 
   ::selection {
-    background: var(--color-run-hatch);
+    background: var(--color-run-tint);
     color: var(--color-ink);
   }
 
