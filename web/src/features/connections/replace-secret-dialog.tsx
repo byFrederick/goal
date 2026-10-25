@@ -33,6 +33,8 @@ export function ReplaceSecretDialog({
   const set = connection.secrets_set.includes(field?.name ?? '');
 
   const replace = useMutation({
+    // The secret is in mutationFn's closure: forget the mutation once nothing shows it.
+    gcTime: 0,
     mutationFn: (f: ConnectionKindField) => updateConnection(org, connection.name, { secrets: { [f.name]: value } }),
     onSuccess: async (updated, f) => {
       setValue('');

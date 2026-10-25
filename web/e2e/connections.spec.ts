@@ -83,7 +83,8 @@ test.describe('the Connections page', () => {
     const dialog = page.getByRole('dialog', { name: 'Replace api key of pagerduty' });
     const input = dialog.getByLabel('API key');
     await expect(input).toHaveAttribute('type', 'password');
-    await expect(input).toHaveAttribute('autocomplete', 'off');
+    // Browsers ignore autocomplete=off on a password input: new-password keeps saved passwords out.
+    await expect(input).toHaveAttribute('autocomplete', 'new-password');
     await input.fill('a-fresh-pagerduty-key');
     await fits(page);
     await dialog.getByRole('button', { name: 'Replace api key' }).click();

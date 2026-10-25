@@ -1,21 +1,23 @@
-// A secret field's input: a password input that is never filled from anywhere (autocomplete off,
-// no value from goald, which never answers one), with Show to check what was pasted.
+// A secret field's input: a password input that is never filled from anywhere (new-password,
+// since browsers ignore autocomplete=off on a password input and would offer a saved one; no
+// value from goald, which never answers one), with Show to check what was pasted.
 import { Eye, EyeOff } from 'lucide-react';
 import { type ComponentProps, useState } from 'react';
+import { cn } from '../../ui/cn';
 import { Input } from '../../ui/field';
 
-export function SecretInput(props: Omit<ComponentProps<typeof Input>, 'type' | 'autoComplete'>) {
+export function SecretInput({ className, ...props }: Omit<ComponentProps<typeof Input>, 'type' | 'autoComplete'>) {
   const [shown, setShown] = useState(false);
   return (
     <span className="relative flex min-w-0">
       <Input
         {...props}
         type={shown ? 'text' : 'password'}
-        autoComplete="off"
+        autoComplete="new-password"
         autoCapitalize="off"
         spellCheck={false}
         data-1p-ignore=""
-        className="pr-12 font-mono md:text-sm"
+        className={cn('pr-12 font-mono md:text-sm', className)}
       />
       <button
         type="button"

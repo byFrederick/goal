@@ -235,6 +235,8 @@ function ConnectionForm({ kind }: { kind: ConnectionKind }) {
   };
 
   const create = useMutation({
+    // The secrets are in mutationFn's closure: forget the mutation once nothing shows it.
+    gcTime: 0,
     mutationFn: () => {
       const fields: Record<string, string> = {};
       const secrets: Record<string, string> = {};
