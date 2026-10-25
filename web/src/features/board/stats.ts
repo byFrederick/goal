@@ -140,10 +140,42 @@ export function agentCopy(item: Pick<ItemCard, 'agent' | 'slot'>): string {
 
 const times = ['once', 'twice'];
 
+/** The most characters of a done item's summary a card shows; the item page shows all of it. */
+const excerptLength = 100;
+
+/**
+ * The first line of a summary with its markdown markers (headings, bullets, numbering, quotes,
+ * bold and code marks) taken off, or null when no line has words in it.
+ */
+function summaryLine(summary: string): string | null {
+  for (const line of summary.split('\n')) {
+    const text = line
+      .replace(/^(?:#{1,6}(?:\s+|$)|[-*+](?:\s+|$)|>\s*|\d+[.)](?:\s+|$))+/, '')
+      .replace(/\*\*|`/g, '')
+      .trim();
+    if (text) return text;
+  }
+  return null;
+}
+
+/**
+ * A short excerpt of a done item's summary for its card: the first line, cut at a word boundary to
+ * at most 100 characters and ended with '…' when cut. Null when the summary has no words.
+ */
+export function summaryExcerpt(summary: string): string | null {
+  const line = summaryLine(summary);
+  if (line === null) return null;
+  const chars = Array.from(line);
+  if (chars.length <= excerptLength) return line;
+  const head = chars.slice(0, excerptLength - 1).join('');
+  const lastSpace = head.search(/\s\S*$/);
+  return `${(lastSpace > 0 ? head.slice(0, lastSpace) : head).trimEnd()}…`;
+}
+
 /**
  * A card's state line: the agent copy and its turn while worked, "Needs your OK", work waiting in
  * the drum's buffer or held back by the rope, how often work was sent back, what a done item
- * became (its summary); otherwise the item's state.
+ * became (an excerpt of its summary); otherwise the item's state.
  */
 export function cardState(
   item: Pick<ItemCard, 'state' | 'agent' | 'slot' | 'turn' | 'rework_count' | 'summary' | 'in_buffer' | 'rope_held'>,
@@ -156,7 +188,7 @@ export function cardState(
     case 'waiting_human':
       return decides ? { text: 'Needs your OK', tone: 'you' } : { text: 'Waiting on an approver', tone: 'muted' };
     case 'done':
-      return { text: item.summary ?? 'Done', tone: 'ok' };
+      return { text: summaryExcerpt(item.summary ?? '') ?? 'Done', tone: 'ok' };
     case 'queued':
     case 'ready':
       if (item.in_buffer) return { text: 'Ready in buffer', tone: 'muted' };
