@@ -1,10 +1,11 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
@@ -76,10 +77,17 @@ func (s *server) GetBoard(ctx context.Context, req gen.GetBoardRequestObject) (g
 	}
 	board.Factory.Id, board.Factory.Name, board.Factory.Title = f.Metadata.ID, f.Metadata.Name, optional(f.Metadata.Title)
 
+	labels := s.modelLabels(ctx)
+
 	for _, st := range l.Stations {
+		lanes, err := s.lanes(ctx, l, st, loads[st.ID], labels)
+		if err != nil {
+			return nil, err
+		}
+
 		bs := gen.BoardStation{
-			Id: st.ID, Kind: gen.StationKind(st.Kind), Action: actionOf(string(st.Action)), Agents: agentsAt(st),
-			Waiting: loads[st.ID].Waiting, InProgress: loads[st.ID].Busy(), Items: byStation[st.ID],
+			Id: st.ID, Kind: gen.StationKind(st.Kind), Action: actionOf(string(st.Action)), Agents: st.LaneAgents(),
+			Waiting: loads[st.ID].Waiting, InProgress: loads[st.ID].Busy(), Items: byStation[st.ID], Lanes: &lanes,
 		}
 
 		if st.WIP > 0 {
@@ -217,13 +225,100 @@ func maxTime(a, b time.Time) time.Time {
 	return b
 }
 
-// agentsAt names the agents that work at a station: its agent, or every agent its route uses.
-func agentsAt(st domain.Station) []string {
-	if st.Agent != "" {
-		return []string{st.Agent}
+// personLane is the key of a human station's one lane, the person who decides there.
+const personLane = "person"
+
+// lanes are station st's lanes, sorted by role: one per agent that works at an agent station,
+// with the station's shared slots and the live leases that agent holds there, one for the person
+// at a human station with the items waiting on them, none elsewhere.
+func (s *server) lanes(ctx context.Context, l domain.Line, st domain.Station, load domain.StationLoad, labels map[string]string) ([]gen.BoardLane, error) {
+	switch st.Kind {
+	case domain.KindHuman:
+		return []gen.BoardLane{{Key: personLane, Kind: gen.BoardLaneKindPerson, Role: domain.Humanize(st.ID), Busy: load.WaitingHuman}}, nil
+	case domain.KindQueue, domain.KindDone:
+		return []gen.BoardLane{}, nil
+	case domain.KindAgent:
 	}
 
-	return append([]string{}, slices.Compact(slices.Sorted(maps.Values(st.Route)))...)
+	// Busy comes from the leases, not the cards: the board shows at most boardOpenItems.
+	busy := map[string]int{}
+
+	if load.InProgress > 0 {
+		held, err := s.items.Leases(ctx, l.FactoryID, st.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, ls := range held {
+			busy[ls.Agent]++
+		}
+	}
+
+	slots := st.Capacity()
+	agents := st.LaneAgents()
+	out := make([]gen.BoardLane, 0, len(agents))
+
+	for _, name := range agents {
+		lane := gen.BoardLane{Key: name, Kind: gen.BoardLaneKindAgent, Role: domain.Humanize(name), Slots: &slots, Busy: busy[name]}
+
+		if model := modelOf(l, name); model != "" {
+			lane.Model, lane.ModelLabel = &model, new(cmp.Or(labels[model], model))
+		}
+
+		out = append(out, lane)
+	}
+
+	slices.SortStableFunc(out, func(a, b gen.BoardLane) int { return strings.Compare(a.Role, b.Role) })
+
+	return out, nil
+}
+
+// modelOf is the model agent runs: its own, else the line runtime's; "" when neither names one.
+func modelOf(l domain.Line, agent string) string {
+	a, _ := l.Agent(agent)
+
+	return cmp.Or(a.Model, l.Runtime.Model)
+}
+
+// modelLabels are the short labels of goald's models by id: their label without a leading
+// "Claude " ("Opus 5.5").
+func (s *server) modelLabels(ctx context.Context) map[string]string {
+	models := s.builder.Meta(ctx).Models
+	labels := make(map[string]string, len(models))
+
+	for _, m := range models {
+		if label := strings.TrimSpace(strings.TrimPrefix(m.Label, "Claude ")); label != "" {
+			labels[m.ID] = label
+		}
+	}
+
+	return labels
+}
+
+// boardLane is the key of the lane of station st that item it belongs to, the one holding it or
+// to pick it up: ls's agent while in progress (held), else the agent st routes its lane to, the
+// person at a human station; nil at queue and done stations, without a route for its lane, and
+// for a done or cancelled item.
+func boardLane(st domain.Station, it domain.Item, ls domain.Lease, held bool) *string {
+	if it.State == domain.StateDone || it.State == domain.StateCancelled {
+		return nil
+	}
+
+	switch st.Kind {
+	case domain.KindQueue, domain.KindDone:
+	case domain.KindHuman:
+		return new(personLane)
+	case domain.KindAgent:
+		if held && ls.Agent != "" {
+			return new(ls.Agent)
+		}
+
+		if a, err := st.AgentFor(it.Lane); err == nil {
+			return &a
+		}
+	}
+
+	return nil
 }
 
 func (s *server) ListItems(ctx context.Context, req gen.ListItemsRequestObject) (gen.ListItemsResponseObject, error) {
@@ -325,11 +420,15 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 		}
 
 		// Whoever merges sees every pull request the merge lands (spec 4 §4.7), not just the latest.
-		if st, _ := l.Station(it.Station); st.Action == domain.ActionMerge {
+		st, _ := l.Station(it.Station)
+		if st.Action == domain.ActionMerge {
 			c.PullRequests = it.PullRequests(l)
 		}
 
-		if ls, ok := leases[it.ID]; ok {
+		ls, held := leases[it.ID]
+		c.BoardLane = boardLane(st, it, ls, held)
+
+		if held {
 			c.Agent = optional(ls.Agent)
 
 			if st, ok := l.Station(ls.Station); ok && st.Capacity() > 1 {

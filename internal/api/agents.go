@@ -64,7 +64,7 @@ func (s *server) GetAgentStats(ctx context.Context, req gen.GetAgentStatsRequest
 	out.From, out.To = openapi_types.Date{Time: r.from}, openapi_types.Date{Time: r.to}
 
 	for _, station := range l.Stations {
-		if slices.Contains(agentsAt(station), agent.Name) {
+		if slices.Contains(station.LaneAgents(), agent.Name) {
 			out.Stations = append(out.Stations, gen.AgentStation{Id: station.ID, Slots: station.Capacity(), Constraint: station.ID == drum})
 		}
 	}

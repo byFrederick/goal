@@ -59,6 +59,7 @@ kind: Factory
 metadata: { id: ` + lineID + `, name: line }
 spec:
   runtime:
+    model: claude-fable-5-1
     modelConnection: claude
     repository: { url: "https://github.com/acme/app.git", connection: repo }
     budget: { weeklyUsd: 70, perItemUsd: 4, maxTurnsPerTask: 80 }
@@ -67,7 +68,7 @@ spec:
     change: ./contracts/change.schema.json
   agents:
     - { name: backend, prompt: ./agents/backend.md }
-    - { name: frontend, prompt: ./agents/frontend.md }
+    - { name: frontend, prompt: ./agents/frontend.md, model: claude-haiku-5-5 }
   board:
     stations:
       - { id: inbox, kind: queue }
