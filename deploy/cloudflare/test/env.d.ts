@@ -1,3 +1,9 @@
+/** A file's text, as Vite's ?raw imports give it. */
+declare module '*?raw' {
+  const text: string;
+  export default text;
+}
+
 // The bindings and exports of the Worker the tests run (cloudflare:test's env, cloudflare:workers' exports).
 declare namespace Cloudflare {
   interface Env {
