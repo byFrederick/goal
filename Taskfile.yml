@@ -329,6 +329,19 @@ tasks:
         cd ..
         go run ./cmd/goal db {{.CLI_ARGS}}
 
+  deploy:token:
+    desc: "Put the deploy token (terraform output deploy_api_token) into GitHub environment secret GOAL_DEPLOY_API_TOKEN of production, piped, never printed; after task tf:apply"
+    deps: [tf:credentials]
+    preconditions:
+      - sh: gh auth status >/dev/null 2>&1
+        msg: "gh is not signed in: gh auth login, as someone who may edit byFrederick/goal's environments"
+    cmds:
+      - |
+        cd terraform
+        {{.TF_ONLINE}}
+        set -o pipefail
+        terraform output -raw deploy_api_token | gh secret set GOAL_DEPLOY_API_TOKEN --env production --repo byFrederick/goal
+
   migrate-check:
     desc: Apply all migrations to a throwaway PostgreSQL 18 with pgvector (in Docker, or a local cluster without Docker)
     cmds:
