@@ -169,7 +169,10 @@ PostgreSQL 18 is the only database: work items, the event log, leases (`FOR UPDA
 task tf:check                 # fmt, validate, tflint, terraform test: offline, part of task check
 task secrets:edit             # the production secrets, decrypted in memory only
 task tf:plan                  # needs the operator's credentials (task tf:credentials lists them)
+task deploy:production        # wrangler deploy (builds and pushes the images), then the health check
 ```
+
+A merge to main that changes the app deploys production on its own once `ci` passes (`.github/workflows/deploy.yml`: `task deploy:worker`, then `task deploy:health` polls `GET /v1/health` until it is healthy or fails after 5 minutes); `terraform/`-only and docs-only changes deploy nothing. To roll back, run the deploy workflow by hand with the sha of an earlier commit of main.
 
 Bootstrap, deploys, master key escrow and rotation, and restores: [docs/engineering/cloudflare-operations.md](docs/engineering/cloudflare-operations.md). Agents format, check and plan; only the owner, or the coordinator the owner authorizes, applies.
 

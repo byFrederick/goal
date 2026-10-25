@@ -521,6 +521,59 @@ tasks:
     cmds:
       - sh deploy/cloudflare/topology.sh
 
+  deploy:production:
+    desc: >-
+      Deploy production as .github/workflows/deploy.yml does: deploy:worker, then deploy:health. CLOUDFLARE_API_TOKEN is
+      the deploy token (docs/engineering/cloudflare-operations.md, Deploys). The owner, or CI from main
+    cmds:
+      - task: deploy:worker
+      - task: deploy:health
+
+  deploy:worker:
+    desc: >-
+      wrangler deploy from deploy/cloudflare: builds the goald, auth and goal-agent images with Docker, pushes them to
+      Cloudflare's registry and deploys the control Worker; passes GOAL_BOOTSTRAP_OWNER_EMAIL as a --var when it is set
+    deps: [worker:install]
+    dir: deploy/cloudflare
+    preconditions:
+      - sh: test -n "${CLOUDFLARE_API_TOKEN:-}" && test -n "${CLOUDFLARE_ACCOUNT_ID:-}"
+        msg: "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are not set: the deploy token and the account (docs/engineering/cloudflare-operations.md, Deploys)"
+      - sh: docker info >/dev/null 2>&1
+        msg: "Docker is not running: wrangler builds the container images with it"
+    cmds:
+      - |
+        set -eu
+        if [ -n "${GOAL_BOOTSTRAP_OWNER_EMAIL:-}" ]; then
+          pnpm exec wrangler deploy --var "GOAL_BOOTSTRAP_OWNER_EMAIL:$GOAL_BOOTSTRAP_OWNER_EMAIL"
+        else
+          pnpm exec wrangler deploy
+        fi
+
+  deploy:health:
+    desc: >-
+      Poll GET /v1/health on the public host until it answers {"status":"ok"}; fails after DEPLOY_HEALTH_TIMEOUT seconds
+      (default 300: a cold goald takes about 47 s). DEPLOY_HEALTH_URL overrides the URL
+    vars:
+      URL: '{{.DEPLOY_HEALTH_URL | default "https://goal.byfrederick.work/v1/health"}}'
+      TIMEOUT: '{{.DEPLOY_HEALTH_TIMEOUT | default "300"}}'
+    silent: true
+    cmds:
+      - |
+        set -eu
+        deadline=$(( $(date +%s) + {{.TIMEOUT}} ))
+        while :; do
+          status=$(curl -fsS --max-time 20 '{{.URL}}' 2>/dev/null | jq -r '.status' 2>/dev/null || true)
+          if [ "$status" = ok ]; then
+            echo "deploy:health: {{.URL}} is healthy"
+            exit 0
+          fi
+          if [ "$(date +%s)" -ge "$deadline" ]; then
+            echo "deploy:health: {{.URL}} did not answer {\"status\":\"ok\"} within {{.TIMEOUT}} s" >&2
+            exit 1
+          fi
+          sleep 10
+        done
+
   auth:check:
     desc: Auth service typecheck, Biome lint, Vitest unit tests (no database) and pnpm audit of its production dependencies
     deps: [worker:install]
