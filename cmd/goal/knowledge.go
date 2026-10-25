@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
+	"github.com/byFrederick/goal/internal/domain"
 )
 
 // knowledgeCommand runs goal knowledge sources | add | sync | upload | documents | rm | search: the
@@ -190,8 +191,10 @@ func knowledgeSync(ctx context.Context, out *printer, getenv func(string) string
 	return nil
 }
 
-// knowledgeUpload uploads files to an upload source in one request: goald stores all of them or,
-// when one is refused, none.
+// knowledgeUpload uploads files to an upload source, one request each: goald bounds a request
+// by one file's size limit. Every file is read and its type checked first, so a missing or
+// unsupported one uploads nothing; a refusal from goald stops at its file, those before it
+// uploaded.
 func knowledgeUpload(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs := newFlags("knowledge upload")
 	orgFlag := addOrgFlag(fs)
@@ -201,9 +204,7 @@ func knowledgeUpload(ctx context.Context, out *printer, getenv func(string) stri
 		return errUsage
 	}
 
-	var body bytes.Buffer
-
-	mw := multipart.NewWriter(&body)
+	bodies := make([][]byte, 0, len(pos)-1)
 
 	for _, path := range pos[1:] {
 		raw, err := os.ReadFile(path) //nolint:gosec // a file the user names to upload
@@ -211,18 +212,11 @@ func knowledgeUpload(ctx context.Context, out *printer, getenv func(string) stri
 			return err
 		}
 
-		part, err := mw.CreateFormFile("files", filepath.Base(path))
-		if err != nil {
+		if _, err := domain.DocumentType(filepath.Base(path), raw); err != nil {
 			return err
 		}
 
-		if _, err := part.Write(raw); err != nil {
-			return err
-		}
-	}
-
-	if err := mw.Close(); err != nil {
-		return err
+		bodies = append(bodies, raw)
 	}
 
 	c, err := connect(ctx, getenv, *orgFlag)
@@ -230,20 +224,49 @@ func knowledgeUpload(ctx context.Context, out *printer, getenv func(string) stri
 		return err
 	}
 
-	res, err := c.UploadKnowledgeDocumentsWithBodyWithResponse(ctx, c.org, pos[0], mw.FormDataContentType(), &body)
-	if err != nil {
-		return apiDown(err)
-	}
+	for i, path := range pos[1:] {
+		body, contentType, err := uploadForm(filepath.Base(path), bodies[i])
+		if err != nil {
+			return err
+		}
 
-	if res.JSON202 == nil {
-		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
-	}
+		res, err := c.UploadKnowledgeDocumentsWithBodyWithResponse(ctx, c.org, pos[0], contentType, body)
+		if err != nil {
+			return apiDown(err)
+		}
 
-	for _, d := range res.JSON202.Documents {
-		out.printf("✓ uploaded %s (%s), %s until the next sync of %s\n", d.Title, d.Id, d.Status, pos[0])
+		if res.JSON202 == nil {
+			return fmt.Errorf("%s: %w", filepath.Base(path), problem(res.HTTPResponse, res.ApplicationproblemJSONDefault))
+		}
+
+		for _, d := range res.JSON202.Documents {
+			out.printf("✓ uploaded %s (%s), %s until the next sync of %s\n", d.Title, d.Id, d.Status, pos[0])
+		}
 	}
 
 	return nil
+}
+
+// uploadForm is the multipart form of one file named name, and its content type.
+func uploadForm(name string, raw []byte) (*bytes.Buffer, string, error) {
+	var body bytes.Buffer
+
+	mw := multipart.NewWriter(&body)
+
+	part, err := mw.CreateFormFile("files", name)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if _, err := part.Write(raw); err != nil {
+		return nil, "", err
+	}
+
+	if err := mw.Close(); err != nil {
+		return nil, "", err
+	}
+
+	return &body, mw.FormDataContentType(), nil
 }
 
 // knowledgeDocuments lists every document of a source, page by page.
