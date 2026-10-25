@@ -1,19 +1,22 @@
 // Organization settings (C §10.9, canvas "Org-Settings"): one form for General (name, short
 // mark, address) and the slot limits, saved by "Save changes" with only what changed; Model
-// access and Vault arrive with credentials (phase 4); the Danger zone deletes the organization.
+// access names the organization's model connections (spec 4) and Secrets points at Connections,
+// which hold them; the Danger zone deletes the organization.
 // Leaving with unsaved changes asks first. A new address moves the page to it: links with the
 // old one stop working (review decision 2). What the caller may do comes from the organization's
 // `can` (spec 3 §10.2): without org:manage the form is shown read-only, with who changes it; the
 // Danger zone shows only to owners: Transfer ownership (org:transfer, with sign-in on) and Delete
 // (org:delete).
-import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
-import { useBlocker, useNavigate, useRouter } from '@tanstack/react-router';
+import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
+import { Link, useBlocker, useNavigate, useRouter } from '@tanstack/react-router';
 import { TriangleAlert } from 'lucide-react';
 import { type FormEvent, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError, patchOrgSettings } from '../../api/client';
-import { authConfigQuery, keys, settingsQuery } from '../../api/queries';
+import { authConfigQuery, connectionKindsQuery, connectionsQuery, keys, settingsQuery } from '../../api/queries';
 import type { OrgSettings, OrgSettingsPatch, OrgSummary } from '../../api/types';
+import { namesText, usedByText } from '../../shared/connections';
+import { plural } from '../../shared/format';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { reasons } from '../../shared/permissions';
 import { Button } from '../../ui/button';
@@ -224,12 +227,9 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
 
             <SettingsSection
               title="Model access"
-              lede={`How ${saved.name}’s agents reach Claude. Slots are how many agents can run at once across all factories.`}
+              lede={`How ${saved.name}’s agents reach the model: a connection of a model kind. Slots are how many agents can run at once across all factories.`}
             >
-              <p className="m-0 rounded-control border border-line bg-surface px-4 py-3.5 text-sm leading-normal text-muted">
-                Model access is a platform setting of this install. Choosing a subscription or API key arrives with
-                credentials.
-              </p>
+              <ModelConnections org={org} />
               <div className="flex flex-col gap-3 rounded-card border border-line bg-card p-4">
                 <Field
                   label="Slots shared by every factory"
@@ -273,12 +273,10 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
             </SettingsSection>
 
             <SettingsSection
-              title="Vault"
-              lede={`Where ${saved.name}’s credentials are kept. Agents never see them; Goal adds them when a tool runs.`}
+              title="Secrets"
+              lede={`Connections hold ${saved.name}’s secrets. Each run gets the values of the connections its factory uses.`}
             >
-              <p className="m-0 rounded-control border border-dashed border-rule px-4 py-3.5 text-sm text-muted">
-                Arrives with credentials
-              </p>
+              <ConnectionsCount org={org} />
             </SettingsSection>
           </form>
         </ReadOnly>
@@ -309,5 +307,73 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
         onConfirm={() => blocker.proceed?.()}
       />
     </>
+  );
+}
+
+/** The organization's model connections and what uses each, with New model connection. */
+function ModelConnections({ org }: { org: OrgSummary }) {
+  const read = useOrgHolds('connection:read');
+  const manage = useOrgHolds('connection:manage');
+  const connections = useQuery({ ...connectionsQuery(org.id), enabled: read }).data ?? [];
+  const kinds = useQuery({ ...connectionKindsQuery(org.id), enabled: read }).data ?? [];
+  const models = connections.filter((c) => kinds.some((k) => k.name === c.kind && k.model));
+  const title = (kind: string) => kinds.find((k) => k.name === kind)?.title ?? kind;
+  return (
+    <div className="flex flex-col items-start gap-3 rounded-control border border-line bg-surface px-4 py-3.5 text-sm leading-normal">
+      <p className="m-0">
+        Each factory picks a model connection in its Basics.{' '}
+        {models.length === 0
+          ? `${org.name} has none yet.`
+          : `${org.name} has ${models.length === 1 ? 'one' : models.length}: `}
+        {models.map((c, i) => (
+          <span key={c.id}>
+            {i > 0 ? '; ' : ''}
+            <span translate="no" className="font-mono">
+              {c.name}
+            </span>
+            , {title(c.kind)}
+            {c.used_by.factories.length > 0 ? `, used by ${usedByText(c)}` : ''}
+          </span>
+        ))}
+        {models.length > 0 ? '.' : ''}
+      </p>
+      {manage ? (
+        <Link
+          to="/o/$org/connections/new"
+          params={{ org: org.slug }}
+          className="text-ink underline underline-offset-3 hover:text-run"
+        >
+          New model connection
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
+/** How many connections hold secrets, and Open Connections. */
+function ConnectionsCount({ org }: { org: OrgSummary }) {
+  const read = useOrgHolds('connection:read');
+  const connections = useQuery({ ...connectionsQuery(org.id), enabled: read }).data;
+  const failing = connections?.filter((c) => c.status === 'failing').map((c) => c.name) ?? [];
+  return (
+    <div className="flex flex-col items-start gap-3 rounded-control border border-line bg-surface px-4 py-3.5 text-sm leading-normal">
+      <p className="m-0">
+        {connections ? `${plural(connections.length, 'connection')}. ` : ''}
+        Their secrets are encrypted in Goal’s database and are write-only: owners and admins replace them, nobody reads
+        them back.
+        {failing.length > 0
+          ? ` ${namesText(failing)} failed ${failing.length === 1 ? 'its test' : 'their tests'}.`
+          : ''}
+      </p>
+      {read ? (
+        <Link
+          to="/o/$org/connections"
+          params={{ org: org.slug }}
+          className="text-ink underline underline-offset-3 hover:text-run"
+        >
+          Open Connections
+        </Link>
+      ) : null}
+    </div>
   );
 }

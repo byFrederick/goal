@@ -23,6 +23,9 @@ import { Route as OOrgOrgMembersRouteImport } from './routes/o.$org._org.members
 import { Route as OOrgOrgSettingsRouteImport } from './routes/o.$org._org.settings'
 import { Route as OOrgFFactoryRouteImport } from './routes/o.$org.f.$factory'
 import { Route as OOrgNewStepRouteImport } from './routes/o.$org.new.$step'
+import { Route as OOrgOrgConnectionsIndexRouteImport } from './routes/o.$org._org.connections.index'
+import { Route as OOrgOrgConnectionsConnectionRouteImport } from './routes/o.$org._org.connections.$connection'
+import { Route as OOrgOrgConnectionsNewRouteImport } from './routes/o.$org._org.connections.new'
 import { Route as OOrgFFactoryIndexRouteImport } from './routes/o.$org.f.$factory.index'
 import { Route as OOrgFFactoryBoardRouteImport } from './routes/o.$org.f.$factory.board'
 import { Route as OOrgFFactoryDefinitionRouteImport } from './routes/o.$org.f.$factory.definition'
@@ -101,6 +104,22 @@ const OOrgNewStepRoute = OOrgNewStepRouteImport.update({
   path: '/new/$step',
   getParentRoute: () => OOrgRoute,
 } as any)
+const OOrgOrgConnectionsIndexRoute = OOrgOrgConnectionsIndexRouteImport.update({
+  id: '/connections/',
+  path: '/connections/',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
+const OOrgOrgConnectionsConnectionRoute =
+  OOrgOrgConnectionsConnectionRouteImport.update({
+    id: '/connections/$connection',
+    path: '/connections/$connection',
+    getParentRoute: () => OOrgOrgRoute,
+  } as any)
+const OOrgOrgConnectionsNewRoute = OOrgOrgConnectionsNewRouteImport.update({
+  id: '/connections/new',
+  path: '/connections/new',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
 const OOrgFFactoryIndexRoute = OOrgFFactoryIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -158,8 +177,11 @@ export interface FileRoutesByFullPath {
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
   '/o/$org/new/$step': typeof OOrgNewStepRoute
   '/o/$org/': typeof OOrgOrgIndexRoute
+  '/o/$org/connections/$connection': typeof OOrgOrgConnectionsConnectionRoute
+  '/o/$org/connections/new': typeof OOrgOrgConnectionsNewRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
   '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionRouteWithChildren
+  '/o/$org/connections/': typeof OOrgOrgConnectionsIndexRoute
   '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
@@ -179,7 +201,10 @@ export interface FileRoutesByTo {
   '/o/$org/members': typeof OOrgOrgMembersRoute
   '/o/$org/settings': typeof OOrgOrgSettingsRoute
   '/o/$org/new/$step': typeof OOrgNewStepRoute
+  '/o/$org/connections/$connection': typeof OOrgOrgConnectionsConnectionRoute
+  '/o/$org/connections/new': typeof OOrgOrgConnectionsNewRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
+  '/o/$org/connections': typeof OOrgOrgConnectionsIndexRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
@@ -203,8 +228,11 @@ export interface FileRoutesById {
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
   '/o/$org/new/$step': typeof OOrgNewStepRoute
   '/o/$org/_org/': typeof OOrgOrgIndexRoute
+  '/o/$org/_org/connections/$connection': typeof OOrgOrgConnectionsConnectionRoute
+  '/o/$org/_org/connections/new': typeof OOrgOrgConnectionsNewRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
   '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionRouteWithChildren
+  '/o/$org/_org/connections/': typeof OOrgOrgConnectionsIndexRoute
   '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
@@ -228,8 +256,11 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory'
     | '/o/$org/new/$step'
     | '/o/$org/'
+    | '/o/$org/connections/$connection'
+    | '/o/$org/connections/new'
     | '/o/$org/f/$factory/board'
     | '/o/$org/f/$factory/definition'
+    | '/o/$org/connections/'
     | '/o/$org/f/$factory/'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
@@ -249,7 +280,10 @@ export interface FileRouteTypes {
     | '/o/$org/members'
     | '/o/$org/settings'
     | '/o/$org/new/$step'
+    | '/o/$org/connections/$connection'
+    | '/o/$org/connections/new'
     | '/o/$org/f/$factory/board'
+    | '/o/$org/connections'
     | '/o/$org/f/$factory'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
@@ -272,8 +306,11 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory'
     | '/o/$org/new/$step'
     | '/o/$org/_org/'
+    | '/o/$org/_org/connections/$connection'
+    | '/o/$org/_org/connections/new'
     | '/o/$org/f/$factory/board'
     | '/o/$org/f/$factory/definition'
+    | '/o/$org/_org/connections/'
     | '/o/$org/f/$factory/'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
@@ -392,6 +429,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OOrgNewStepRouteImport
       parentRoute: typeof OOrgRoute
     }
+    '/o/$org/_org/connections/': {
+      id: '/o/$org/_org/connections/'
+      path: '/connections'
+      fullPath: '/o/$org/connections/'
+      preLoaderRoute: typeof OOrgOrgConnectionsIndexRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
+    '/o/$org/_org/connections/$connection': {
+      id: '/o/$org/_org/connections/$connection'
+      path: '/connections/$connection'
+      fullPath: '/o/$org/connections/$connection'
+      preLoaderRoute: typeof OOrgOrgConnectionsConnectionRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
+    '/o/$org/_org/connections/new': {
+      id: '/o/$org/_org/connections/new'
+      path: '/connections/new'
+      fullPath: '/o/$org/connections/new'
+      preLoaderRoute: typeof OOrgOrgConnectionsNewRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
     '/o/$org/f/$factory/': {
       id: '/o/$org/f/$factory/'
       path: '/'
@@ -456,6 +514,9 @@ interface OOrgOrgRouteChildren {
   OOrgOrgMembersRoute: typeof OOrgOrgMembersRoute
   OOrgOrgSettingsRoute: typeof OOrgOrgSettingsRoute
   OOrgOrgIndexRoute: typeof OOrgOrgIndexRoute
+  OOrgOrgConnectionsConnectionRoute: typeof OOrgOrgConnectionsConnectionRoute
+  OOrgOrgConnectionsNewRoute: typeof OOrgOrgConnectionsNewRoute
+  OOrgOrgConnectionsIndexRoute: typeof OOrgOrgConnectionsIndexRoute
 }
 
 const OOrgOrgRouteChildren: OOrgOrgRouteChildren = {
@@ -463,6 +524,9 @@ const OOrgOrgRouteChildren: OOrgOrgRouteChildren = {
   OOrgOrgMembersRoute: OOrgOrgMembersRoute,
   OOrgOrgSettingsRoute: OOrgOrgSettingsRoute,
   OOrgOrgIndexRoute: OOrgOrgIndexRoute,
+  OOrgOrgConnectionsConnectionRoute: OOrgOrgConnectionsConnectionRoute,
+  OOrgOrgConnectionsNewRoute: OOrgOrgConnectionsNewRoute,
+  OOrgOrgConnectionsIndexRoute: OOrgOrgConnectionsIndexRoute,
 }
 
 const OOrgOrgRouteWithChildren =

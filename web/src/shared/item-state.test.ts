@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { controlsFor, decisionsFor, describeState, pausedNow, pullRequestOf, waitingOnYou } from './item-state';
+import {
+  controlsFor,
+  decisionsFor,
+  describeState,
+  pausedNow,
+  pullRequestLabel,
+  pullRequestsOf,
+  waitingOnYou,
+} from './item-state';
 
 const none = { approve: false, reject: false, merge: false, retry: false };
 
@@ -85,19 +93,39 @@ describe('describeState', () => {
   });
 });
 
-describe('pullRequestOf', () => {
+describe('pullRequestsOf', () => {
   const line = ['spec', 'build', 'review', 'merge'];
 
-  it('takes the pull request of the latest station output that names one', () => {
+  it('takes every pull request the outputs name, station by station in line order, each once', () => {
     const outputs = {
-      build: { pull_request: 'https://github.com/acme/goal/pull/7' },
       review: { decision: 'approve', pull_request: { html_url: 'https://github.com/acme/goal/pull/8' } },
+      build: {
+        pull_request: 'https://github.com/acme/goal/pull/7',
+        pull_requests: [
+          'https://gitlab.example.com/acme/infra/-/merge_requests/3',
+          'https://github.com/acme/goal/pull/7',
+        ],
+      },
       spec: { summary: 'x' },
     };
-    expect(pullRequestOf(outputs, line)).toBe('https://github.com/acme/goal/pull/8');
+    expect(pullRequestsOf(outputs, line)).toEqual([
+      'https://github.com/acme/goal/pull/7',
+      'https://gitlab.example.com/acme/infra/-/merge_requests/3',
+      'https://github.com/acme/goal/pull/8',
+    ]);
   });
 
-  it('is null when no output names a pull request', () => {
-    expect(pullRequestOf({ spec: { summary: 'x', pull_request: 'not a url' } }, line)).toBeNull();
+  it('is empty when no output names a pull request', () => {
+    expect(pullRequestsOf({ spec: { summary: 'x', pull_request: 'not a url', pull_requests: [3] } }, line)).toEqual([]);
+  });
+});
+
+describe('pullRequestLabel', () => {
+  it('names GitHub pull requests and GitLab merge requests, with their repository when asked', () => {
+    expect(pullRequestLabel('https://github.com/acme/goal/pull/41')).toBe('PR #41');
+    expect(pullRequestLabel('https://gitlab.example.com/acme/platform/infra/-/merge_requests/3', true)).toBe(
+      'acme/platform/infra MR !3',
+    );
+    expect(pullRequestLabel('https://example.com/change/9')).toBe('Pull request');
   });
 });

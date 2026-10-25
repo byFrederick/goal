@@ -128,28 +128,35 @@ function urlOf(v: unknown): string | null {
   return null;
 }
 
-/** The pull request a station output names (its pull_request field), or null. */
-export function pullRequestIn(output: unknown): string | null {
-  if (!output || typeof output !== 'object') return null;
+/**
+ * The pull requests a station output names: its pull_request (or the older pr_url) and its
+ * pull_requests list (spec 4 §4.7: an item may open several, in several repositories), each once.
+ */
+export function pullRequestsIn(output: unknown): string[] {
+  if (!output || typeof output !== 'object') return [];
   const o = output as Record<string, unknown>;
-  return urlOf(o.pull_request) ?? urlOf(o.pr_url);
+  const list = Array.isArray(o.pull_requests) ? o.pull_requests.map(urlOf) : [];
+  return [...new Set([urlOf(o.pull_request) ?? urlOf(o.pr_url), ...list].filter((u): u is string => u !== null))];
 }
 
 /**
- * The pull request an item links to: the latest one its station outputs name, in line order
- * (the item endpoint has no pr_url; cards do).
+ * Every pull request an item's outputs name, as the merge station merges them: station by station
+ * in line order, each once (the item endpoint has no pr_url; cards do).
  */
-export function pullRequestOf(outputs: Record<string, unknown>, lineOrder: string[]): string | null {
-  const stations = Object.keys(outputs).sort((a, b) => lineOrder.indexOf(b) - lineOrder.indexOf(a));
-  for (const s of stations) {
-    const pr = pullRequestIn(outputs[s]);
-    if (pr) return pr;
-  }
-  return null;
+export function pullRequestsOf(outputs: Record<string, unknown>, lineOrder: string[]): string[] {
+  const rank = (s: string) => (lineOrder.includes(s) ? lineOrder.indexOf(s) : lineOrder.length);
+  const stations = Object.keys(outputs).sort((a, b) => rank(a) - rank(b));
+  return [...new Set(stations.flatMap((s) => pullRequestsIn(outputs[s])))];
 }
 
-/** "#41" from a GitHub pull request URL, or "Pull request" when it is not one. */
-export function pullRequestLabel(url: string): string {
-  const m = url.match(/\/pull\/(\d+)/);
-  return m ? `PR #${m[1]}` : 'Pull request';
+/**
+ * "PR #41" from a GitHub pull request URL, "MR !3" from a GitLab merge request's, with the
+ * repository when asked ("acme/web PR #41"); "Pull request" for any other URL.
+ */
+export function pullRequestLabel(url: string, withRepo = false): string {
+  const github = url.match(/^https?:\/\/[^/]+\/(.+?)\/pull\/(\d+)/);
+  if (github) return `${withRepo ? `${github[1]} ` : ''}PR #${github[2]}`;
+  const gitlab = url.match(/^https?:\/\/[^/]+\/(.+?)\/-\/merge_requests\/(\d+)/);
+  if (gitlab) return `${withRepo ? `${gitlab[1]} ` : ''}MR !${gitlab[2]}`;
+  return 'Pull request';
 }

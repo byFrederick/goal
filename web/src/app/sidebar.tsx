@@ -65,7 +65,7 @@ export function SidebarGroup({ label, children }: { label?: string; children: Re
 export function LaterEntry({ label, icon: Icon }: { label: string; icon: LucideIcon }) {
   return (
     <li>
-      {/* A long label ("Connector catalog") wraps rather than truncates beside "Later". */}
+      {/* A long label wraps rather than truncates beside "Later". */}
       <span
         aria-disabled="true"
         className={cn(

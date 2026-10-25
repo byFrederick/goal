@@ -191,7 +191,10 @@ test('the rail moves by arrow keys and opens a factory', async ({ page }) => {
   await page.keyboard.press('End');
   await expect(rail.getByRole('button', { name: 'LU, Local user, account' })).toBeFocused();
   await page.keyboard.press('ArrowUp');
-  await expect(rail.getByRole('button', { name: 'Credentials' })).toBeFocused();
+  await expect(rail.getByRole('button', { name: 'Knowledge' })).toBeFocused();
+  await page.keyboard.press('ArrowUp');
+  // A connection's test failed (pagerduty): the rail's Connections says so.
+  await expect(rail.getByRole('link', { name: 'Connections, 1 failing' })).toBeFocused();
   await page.keyboard.press('Home');
   await expect(mark).toBeFocused();
 
@@ -358,21 +361,58 @@ test('send an item back with a reason', async ({ page }) => {
   ).toBeVisible();
 });
 
-test('merge a pull request at the merge station', async ({ page }) => {
+test('merge every pull request at the merge station', async ({ page }) => {
   await page.goto('/o/acme/f/goal/items/6');
+  // goal#6 opened two: one on GitHub, one on GitLab; the item and its output name both.
+  const outputs = page.getByRole('region', { name: 'Outputs' });
+  await expect(outputs.getByRole('link', { name: /acme\/goal PR #38/ })).toBeVisible();
+  await expect(outputs.getByRole('link', { name: /acme\/design-tokens MR !12/ })).toHaveAttribute(
+    'href',
+    'https://gitlab.example.com/acme/design-tokens/-/merge_requests/12',
+  );
   await page.getByRole('button', { name: 'Merge' }).click();
 
-  const dialog = page.getByRole('dialog', { name: 'Merge PR #38?' });
-  await expect(dialog.getByRole('link', { name: /Review PR #38 first/ })).toHaveAttribute(
+  const dialog = page.getByRole('dialog', { name: 'Merge 2 pull requests?' });
+  await expect(dialog.getByRole('link', { name: /Review acme\/goal PR #38 first/ })).toHaveAttribute(
     'href',
     'https://github.com/acme/goal/pull/38',
   );
+  await expect(dialog.getByRole('link', { name: /Review acme\/design-tokens MR !12 first/ })).toBeVisible();
   await expectAccessible(page);
   await dialog.getByRole('button', { name: 'Squash and merge' }).click();
 
   await expect(page.getByText('Merged goal#6. It is done.')).toBeVisible();
   await expect(page.getByText('At Done', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Merge' })).toHaveCount(0);
+});
+
+test('a refused merge says which pull request stopped it, and the item stays', async ({ page, request }) => {
+  const refusals = [
+    {
+      code: 'cannot-merge',
+      detail: 'https://gitlab.example.com/acme/design-tokens/-/merge_requests/12 has conflicts',
+      says: /goald stopped at a pull request it could not merge: .*merge_requests\/12 has conflicts\. Pull requests merged before it stay merged/,
+    },
+    {
+      code: 'no-code-host-connection',
+      detail: 'no connection of goal signs git in to gitlab.example.com',
+      says: /No connection of this factory signs in to that host, so nothing was merged: no connection of goal signs git in to gitlab\.example\.com/,
+    },
+  ];
+  await page.goto('/o/acme/f/goal/items/6');
+  for (const r of refusals) {
+    await request.post('/__mock/fail', {
+      data: { path: '/items/', method: 'POST', status: 409, code: r.code, detail: r.detail },
+    });
+    await page.getByRole('button', { name: 'Merge', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Merge 2 pull requests?' });
+    await dialog.getByRole('button', { name: /Squash and merge|Merge again/ }).click();
+    await expect(dialog.getByRole('alert')).toHaveText(r.says);
+    await expect(dialog.getByRole('button', { name: 'Merge again' })).toBeVisible();
+    await expectAccessible(page);
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+  }
+  await expect(page.getByRole('button', { name: 'Merge', exact: true })).toBeVisible();
 });
 
 test('retry a blocked item', async ({ page }) => {
@@ -620,7 +660,8 @@ test('switch organization from the menu by keyboard', async ({ page }) => {
     'aria-checked',
     'false',
   );
-  await expect(menu.getByRole('menuitem', { name: /Credentials/ })).toHaveAttribute('aria-disabled', 'true');
+  await expect(menu.getByRole('menuitem', { name: 'Connections' })).toHaveAttribute('href', '/o/acme/connections');
+  await expect(menu.getByRole('menuitem', { name: /Knowledge/ })).toHaveAttribute('aria-disabled', 'true');
   await expect(menu.getByRole('menuitem', { name: 'Organization settings' })).toHaveAttribute(
     'href',
     '/o/acme/settings',

@@ -1,5 +1,5 @@
-// Fault injection for the e2e tests: POST /__mock/fail {path, method?, status?, code?, times?,
-// delay_ms?, problems?} makes the next `times` requests (1 by default, 0 for every one until a
+// Fault injection for the e2e tests: POST /__mock/fail {path, method?, status?, code?, detail?,
+// times?, delay_ms?, problems?} makes the next `times` requests (1 by default, 0 for every one until a
 // reset) whose path contains `path` (and whose method is `method`, when given) wait `delay_ms`,
 // then answer `status` instead of being served. Without a status the request is only delayed.
 // DELETE /__mock/fail clears them; POST /__mock/reset does too.
@@ -10,6 +10,8 @@ export interface MockFault {
   method?: string;
   status?: number;
   code?: string;
+  /** The Problem's detail, as goald would say it. */
+  detail?: string;
   /** Requests left; 0 is every request until a reset. */
   times: number;
   delay_ms?: number;
@@ -26,6 +28,7 @@ export function parseFault(body: Record<string, unknown>): MockFault | undefined
   const status = int(body.status);
   if (status !== undefined) fault.status = status;
   if (typeof body.code === 'string') fault.code = body.code;
+  if (typeof body.detail === 'string') fault.detail = body.detail;
   const delay = int(body.delay_ms);
   if (delay !== undefined) fault.delay_ms = delay;
   if (Array.isArray(body.problems)) fault.problems = body.problems as DefinitionProblem[];

@@ -1,7 +1,14 @@
 import { readdirSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { Connection, ConnectionKindList, ConnectionList, ConnectionTestResult, Problem } from '@goal/api-client';
+import type {
+  Connection,
+  ConnectionKindList,
+  ConnectionList,
+  ConnectionTestResult,
+  Problem,
+  Validation,
+} from '@goal/api-client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createMockApi, type MockApi } from './api.ts';
 
@@ -83,7 +90,7 @@ describe('the mock connections', () => {
 
   it("keeps what the goal factory names, and tests a kind's connection", async () => {
     const list = await call<ConnectionList>(`${connections}?factory=goal`);
-    expect(list.body.connections.map((c) => c.name)).toEqual(['claude', 'github']);
+    expect(list.body.connections.map((c) => c.name)).toEqual(['claude', 'github', 'playwright']);
     expect((await call<Problem>(`${connections}/github`, 'DELETE')).body.code).toBe('connection-in-use');
     expect((await call<Problem>(`${connections}/github`, 'PATCH', { name: 'repos' })).body.code).toBe(
       'connection-in-use',
@@ -95,5 +102,60 @@ describe('the mock connections', () => {
 
     const detail = await call<Connection>(`${connections}/github`);
     expect(detail.body).toMatchObject({ status: 'ok', env: ['GH_HOST', 'GH_TOKEN'] });
+  });
+
+  it("answers a revoked key's test as failed until the key is replaced", async () => {
+    const failed = await call<ConnectionTestResult>(`${connections}/pagerduty/test`, 'POST');
+    expect(failed.status).toBe(200);
+    expect(failed.body).toMatchObject({ ok: false, status: 401 });
+    expect((await call<Connection>(`${connections}/pagerduty`)).body.status).toBe('failing');
+
+    await call<Connection>(`${connections}/pagerduty`, 'PATCH', { secrets: { token: 'a-new-key' } });
+    const passed = await call<ConnectionTestResult>(`${connections}/pagerduty/test`, 'POST');
+    expect(passed.body).toMatchObject({ ok: true, status: 200 });
+  });
+
+  it('says what uses a connection from the current versions, and a missing secret', async () => {
+    const { body } = await call<ConnectionList>(connections);
+    const by = (name: string) => body.connections.find((c) => c.name === name);
+    expect(by('claude')?.used_by.factories.map((f) => f.name)).toEqual(['goal', 'sre', 'support']);
+    expect(by('aws-prod')?.used_by.factories.map((f) => f.name)).toEqual(['sre']);
+    expect(by('gitlab-infra')?.used_by.factories).toEqual([]);
+    expect(by('status-api')?.status).toBe('missing-secret');
+  });
+
+  it("checks the connections a definition names, with goald's fixes", async () => {
+    const yaml = `apiVersion: goal/v1
+kind: Factory
+metadata:
+  name: probe
+spec:
+  runtime:
+    modelConnection: github
+    tools: [go@1.26.10, "rm -rf /"]
+    repository: { url: "https://gitlab.example.com/acme/infra", connection: github }
+  connections: [aws-prod, nothing]
+  knowledge: { sources: [handbook] }
+  agents:
+    - { name: worker, connections: [aws-prod] }
+  board:
+    stations:
+      - { id: inbox, kind: queue }
+      - { id: done, kind: done }
+`;
+    const { body } = await call<Validation>('/v1/orgs/acme/definitions/validate', 'POST', {
+      files: { 'factory.yaml': { text: yaml } },
+    });
+    const at = (code: string) =>
+      body.problems.filter((p) => p.code === code).map((p) => [p.pointer, p.fixes.map((f) => f.label)]);
+    expect(at('connection-not-model')).toEqual([['/basics/model_connection', ['Use claude']]]);
+    expect(at('repository-host-mismatch')).toEqual([
+      ['/basics/repository/connection', ['Use gitlab-infra', 'Clone without a connection']],
+    ]);
+    expect(at('connection-unknown')).toEqual([['/connections/1', ['Remove nothing']]]);
+    expect(at('tool-spec-invalid')).toEqual([['/basics/tools/1', ['Remove rm -rf /']]]);
+    expect(at('knowledge-source-unknown')).toEqual([['/basics/knowledge_sources/0', ['Remove handbook']]]);
+    // The model connection (github) and aws-prod set no variable in common.
+    expect(at('connection-env-conflict')).toEqual([]);
   });
 });

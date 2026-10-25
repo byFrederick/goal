@@ -13,6 +13,7 @@ import { useEdited } from './use-editor';
 
 export function SectionShell({
   section,
+  title,
   description,
   descriptionId,
   aside,
@@ -20,6 +21,8 @@ export function SectionShell({
   children,
 }: {
   section: EditorSection;
+  /** The h2, when it says more than the section's name ("Connections and knowledge"). */
+  title?: string;
   /** The sentence under the h2, when the section says more than its standard one. */
   description?: ReactNode;
   /** The description's id, for a control it describes (the Line's reorder instructions). */
@@ -44,7 +47,7 @@ export function SectionShell({
             tabIndex={-1}
             className="m-0 text-xl font-medium tracking-[-0.01em] outline-none"
           >
-            {info.label}
+            {title ?? info.label}
           </h2>
           <p id={descriptionId} className="m-0 mt-1 max-w-[72ch] text-sm leading-normal text-muted">
             {description ?? info.description}

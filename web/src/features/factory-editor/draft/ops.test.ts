@@ -16,8 +16,9 @@ import {
   removeConnection,
   renameAgent,
   SkillExistsError,
+  setAgentConnection,
   setBuiltin,
-  setConnectionAgents,
+  setFactoryConnection,
   setStationKind,
   setStationName,
 } from './ops';
@@ -257,23 +258,25 @@ describe('agents', () => {
 });
 
 describe('connections', () => {
-  it("grants a connector-form connection to agents, and a legacy one through each agent's list", () => {
-    const m = model();
-    expect(setConnectionAgents(m, 'github', ['web'])).toMatchObject({
-      section: 'connections',
-      value: [{ agents: ['web'] }, {}],
-    });
-    const legacy = setConnectionAgents(m, 'docs', ['web']);
-    expect(legacy.section).toBe('agents');
-    const agents = (legacy.value as Model['agents']).agents;
-    expect(agents?.map((a) => a.connections)).toEqual([[], ['docs']]);
+  it('ticks an organization connection into the factory as {name}, once', () => {
+    const edits = setFactoryConnection(model(), 'jira', true);
+    expect(sectionValue(edits, 'connections').map((c) => c.name)).toEqual(['github', 'docs', 'jira']);
+    expect(sectionValue(edits, 'connections')[2]).toEqual({ name: 'jira' });
+    expect(setFactoryConnection(model(), 'docs', true)).toEqual([]);
   });
 
-  it("grants an organization connection through each agent's list", () => {
-    const m = { ...model(), connections: [...model().connections, { name: 'jira' }] };
-    const grant = setConnectionAgents(m, 'jira', ['web']);
-    expect(grant.section).toBe('agents');
-    expect((grant.value as Model['agents']).agents?.map((a) => a.connections)).toEqual([['docs'], ['jira']]);
+  it('unticks a connection with every agent reference to it', () => {
+    const edits = setFactoryConnection(model(), 'docs', false);
+    expect(sectionValue(edits, 'connections').map((c) => c.name)).toEqual(['github']);
+    expect(sectionValue(edits, 'agents').agents?.[0]?.connections).toEqual([]);
+  });
+
+  it("gives one agent's runs a connection, or takes it away", () => {
+    const m = model();
+    const given = setAgentConnection(m.agents, 'web', 'github', true);
+    expect(given.value.agents?.map((a) => a.connections)).toEqual([['docs'], ['github']]);
+    const taken = setAgentConnection(m.agents, 'engineer', 'docs', false);
+    expect(taken.value.agents?.[0]?.connections).toEqual([]);
   });
 
   it('removes a connection with every reference to it', () => {

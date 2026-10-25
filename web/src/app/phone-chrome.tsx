@@ -70,8 +70,8 @@ const tabActive = { className: 'font-semibold text-ink shadow-[inset_0_2px_0_var
 export function TabBar({ org, factory }: { org: OrgSummary; factory: Factory }) {
   const params = { org: org.slug, factory: factory.name };
   const work = factoryScreens.filter((s) => s.group === 'work');
-  // Build goes to the first Build screen that exists.
-  const build = factoryScreens.find((s) => s.group === 'build' && s.available);
+  // Build goes to the factory's Definition.
+  const build = factoryScreens.find((s) => s.id === 'definition');
 
   return (
     <nav
@@ -79,7 +79,7 @@ export function TabBar({ org, factory }: { org: OrgSummary; factory: Factory }) 
       className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-card pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       {work.map((s) =>
-        s.available ? (
+        s.available && 'to' in s ? (
           <Link
             key={s.id}
             to={s.to}
@@ -93,7 +93,7 @@ export function TabBar({ org, factory }: { org: OrgSummary; factory: Factory }) 
           </Link>
         ) : null,
       )}
-      {build?.available ? (
+      {build?.available && 'to' in build ? (
         <Link to={build.to} params={params} className={tab} activeProps={tabActive}>
           <Bot size={20} strokeWidth={1.5} aria-hidden="true" />
           Build

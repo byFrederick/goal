@@ -157,6 +157,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   const subscribers = new Set<Subscriber>();
   const definitions = createDefinitions({
     state: () => state,
+    // Read at request time: the connections are made just below.
+    connections: (org) => connections.outlines(org),
     broadcast: (org, event, data) => {
       for (const sub of subscribers) {
         if (sub.org === org) sub.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -178,7 +180,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     actor: (req) => auth.actor(req),
     stale: (req, res) => stale(req, res),
     factories: (org) => state.factories.filter((f) => f.org_id === org),
-    audit: (org, by, action, target, data) => auditAs(org, by, action, target, data),
+    names: (factory) => definitions.connectionNames(factory),
+    audit: (org, by, action, target, data, at) => auditAs(org, by, action, target, data, at),
     broadcast: (org, event, data) => {
       for (const sub of subscribers) {
         if (sub.org === org) sub.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -474,17 +477,18 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   const audit = (org: Org, action: string, data: Record<string, unknown>) =>
     auditAs(org.id, { kind: 'user', id: 'local', name: localUser }, action, { kind: 'org', id: org.id }, data);
 
-  /** An audit entry of org by `by` about target. */
+  /** An audit entry of org by `by` about target, now or `at`. */
   function auditAs(
     org: string,
     by: Actor,
     action: string,
     target: { kind: string; id: string },
     data: Record<string, unknown>,
+    at = clock(),
   ) {
     state.audit.push({
       org,
-      entry: { id: state.nextAuditId++, at: new Date(clock()).toISOString(), actor: by, action, target, data },
+      entry: { id: state.nextAuditId++, at: new Date(at).toISOString(), actor: by, action, target, data },
     });
   }
 
@@ -541,8 +545,13 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return json(res, 200, settingsOf(org));
   };
 
-  const emit = (it: MockItem, kind: string, actor: string, data: Record<string, unknown> = {}) => {
-    const at = new Date(clock()).toISOString();
+  const emit = (
+    it: MockItem,
+    kind: string,
+    actor: string,
+    data: Record<string, unknown> = {},
+    at = new Date(clock()).toISOString(),
+  ) => {
     const event: ItemEvent = { id: state.nextEventId++, item_id: it.id, at, kind, station: it.station, actor, data };
     state.events.push(event);
     it.updated_at = at;
@@ -1592,8 +1601,22 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       if (action === 'merge') {
         if (station?.action !== 'merge')
           return problem(res, 409, 'Not a merge station', `${it.station} does not merge`);
-        if (!it.pr_url) return problem(res, 409, 'Nothing to merge', `${ref(it)} has no pull request`);
-        emit(it, 'merged', by, { pull_request: it.pr_url, method: 'squash', planned: true, actor: 'user:local' });
+        // Every pull request the outputs name, station by station, each once (spec 4 §4.7).
+        const prs = [
+          ...new Set(
+            stations.flatMap((s) => {
+              const out = it.outputs[s.id] as { pull_request?: unknown; pull_requests?: unknown } | undefined;
+              const list = Array.isArray(out?.pull_requests) ? out.pull_requests : [];
+              return [out?.pull_request, ...list].filter((u): u is string => typeof u === 'string');
+            }),
+          ),
+        ];
+        if (prs.length === 0) return problem(res, 409, 'Nothing to merge', `${ref(it)} has no pull request`);
+        // One merged event per pull request, at one time: one person's one touch.
+        const at = new Date(clock()).toISOString();
+        for (const pr of prs) {
+          emit(it, 'merged', by, { pull_request: pr, method: 'squash', planned: true, actor: 'user:local' }, at);
+        }
       } else if (station?.action === 'merge') {
         return problem(res, 409, 'Merge, do not approve', `${it.station} merges the pull request; use merge`);
       }

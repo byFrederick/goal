@@ -162,11 +162,21 @@ const bindings: Record<Section, Binding[]> = {
     { key: 'title', path: ['metadata', 'title'], shape: renamed },
     { key: 'purpose', path: ['metadata', 'purpose'], shape: renamed },
     { key: 'work_types', path: ['spec', 'board', 'workTypes'], shape: verbatim },
+    { key: 'model_connection', path: ['spec', 'runtime', 'modelConnection'], shape: renamed },
+    { key: 'size', path: ['spec', 'runtime', 'size'], shape: renamed },
+    { key: 'tools', path: ['spec', 'runtime', 'tools'], shape: verbatim },
     {
       key: 'repository',
       path: ['spec', 'runtime', 'repository'],
-      shape: { verbatim: true, order: ['url', 'token', 'connection', 'repo'] },
+      shape: { verbatim: true, order: ['url', 'connection', 'token'] },
     },
+    { key: 'knowledge_sources', path: ['spec', 'knowledge', 'sources'], shape: verbatim },
+    // Removed in phase 4 (field-removed): here so their quick fixes can take them out.
+    { key: 'runner', path: ['spec', 'runtime', 'runner'], shape: renamed },
+    { key: 'image', path: ['spec', 'runtime', 'image'], shape: renamed },
+    { key: 'auth', path: ['spec', 'runtime', 'auth'], shape: renamed },
+    { key: 'secrets', path: ['spec', 'secrets'], shape: renamed },
+    { key: 'knowledge_base', path: ['spec', 'knowledgeBase'], shape: renamed },
   ],
   line: [
     { key: 'stations', path: ['spec', 'board', 'stations'], shape: { elem: station, identity: 'id' } },
@@ -215,8 +225,20 @@ const connectionKeys = new Set(['name', 'connector', 'type', 'credential', 'agen
 const containerOrder: Record<string, string[]> = {
   '': ['apiVersion', 'kind', 'metadata', 'spec'],
   metadata: ['id', 'name', 'title', 'purpose', 'description', 'owner'],
-  spec: ['runtime', 'knowledgeBase', 'secrets', 'connections', 'skills', 'contracts', 'agents', 'board', 'learning'],
-  'spec.runtime': ['runner', 'image', 'auth', 'model', 'repository', 'budget'],
+  spec: [
+    'runtime',
+    'knowledgeBase',
+    'secrets',
+    'connections',
+    'knowledge',
+    'skills',
+    'contracts',
+    'agents',
+    'board',
+    'learning',
+  ],
+  'spec.runtime': ['runner', 'image', 'auth', 'model', 'modelConnection', 'size', 'tools', 'repository', 'budget'],
+  'spec.knowledge': ['sources'],
   'spec.board': ['workTypes', 'intake', 'stations', 'flow'],
   'spec.learning': ['librarian', 'kaizen'],
   'spec.learning.librarian': ['agent', 'after', 'writes'],
@@ -420,6 +442,8 @@ function readNode(r: Reader, n: unknown, s: Shape, pointer: string): unknown {
   const node = deref(r.p, n);
   if (s.kind === 'prompt' && isScalar(node)) return promptOf(r.files, String(node.value));
   if (s.kind === 'runMode' && isScalar(node)) return { mode: scalarValue(node) };
+  // An organization connection is its bare name in factory.yaml and {name} in the model.
+  if (s.kind === 'connection' && isScalar(node) && typeof node.value === 'string') return { name: node.value };
   if (isMap(node)) return readMap(r, node as YAMLMap, s, pointer);
   if (isSeq(node)) {
     return (node as YAMLSeq).items.map((c, i) => {
@@ -462,6 +486,17 @@ function readMap(r: Reader, map: YAMLMap, s: Shape, pointer: string): Json {
 }
 
 const connectorName = (c: string) => c.split('@')[0] ?? c;
+
+/**
+ * The name of a connections item that names an organization connection: {name} alone (the
+ * model's form, which may carry legacy false) or the name itself; undefined for an inline one.
+ */
+function orgConnection(v: unknown): string | undefined {
+  if (typeof v === 'string') return v;
+  if (!isObject(v) || typeof v.name !== 'string') return undefined;
+  const others = Object.entries(v).filter(([k, x]) => k !== 'name' && !(k === 'legacy' && x === false));
+  return others.length === 0 ? v.name : undefined;
+}
 
 function bytesOf(v: string | Uint8Array): Uint8Array {
   return typeof v === 'string' ? new TextEncoder().encode(v) : v;
@@ -651,7 +686,12 @@ function setValue(doc: Document, node: unknown, value: unknown, s: Shape): unkno
     if (node.value !== value.mode) node.value = value.mode;
     return node;
   }
-  if (isObject(value) && isMap(node)) {
+  const name = s.kind === 'connection' ? orgConnection(value) : undefined;
+  if (name !== undefined && isScalar(node)) {
+    if (node.value !== name) node.value = name;
+    return node;
+  }
+  if (name === undefined && isObject(value) && isMap(node)) {
     mergeMap(doc, node as YAMLMap, value, s);
     return node;
   }
@@ -719,6 +759,7 @@ function mergeMap(doc: Document, map: YAMLMap, value: Json, s: Shape): void {
 
 function identityOfNode(doc: Document, n: unknown, s: Shape): string {
   const node = isAlias(n) ? n.resolve(doc) : n;
+  if (s.elem?.kind === 'connection' && isScalar(node)) return String(node.value);
   const v = pairOf(node, s.identity ?? '')?.value;
   const id = isScalar(v) ? String(v.value) : '';
   if (id || s.elem?.kind !== 'connection') return id;
@@ -765,6 +806,10 @@ function mergeSeq(doc: Document, seq: YAMLSeq, values: unknown[], s: Shape): voi
 function toYaml(value: unknown, s: Shape): unknown {
   if (s.kind === 'prompt') return isObject(value) ? value.path : value;
   if (s.kind === 'runMode' && isObject(value) && isEmpty(value.commands)) return value.mode;
+  if (s.kind === 'connection') {
+    const name = orgConnection(value);
+    if (name !== undefined) return name;
+  }
   if (Array.isArray(value)) return value.map((v) => toYaml(v, child(s)));
   if (!isObject(value)) return value;
   const order = s.order ?? [];
@@ -821,6 +866,7 @@ function normalize(value: unknown, s: Shape): unknown {
   let v = value;
   if (typeof v === 'string' && s.kind === 'prompt') v = { path: v };
   if (typeof v === 'string' && s.kind === 'runMode') v = { mode: v };
+  if (typeof v === 'string' && s.kind === 'connection') v = { name: v };
   if (Array.isArray(v)) return v.map((e) => normalize(e, child(s)));
   if (!isObject(v)) return v;
   const out: Json = {};

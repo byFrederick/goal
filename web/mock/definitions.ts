@@ -37,6 +37,8 @@ import type {
   VersionRef,
 } from '@goal/api-client';
 import { parse as parseYaml } from 'yaml';
+import type { ConnectionOutline } from './connections.ts';
+import { checkConnections, connectionNames } from './connections-check.ts';
 import { localUser, type MockDefinition, type MockSkill, type MockVersion, type Tree } from './definition-seed.ts';
 import type { MockFault } from './faults.ts';
 import { factoryCan, type MockState } from './fixtures.ts';
@@ -64,6 +66,8 @@ type Json = Record<string, unknown>;
 
 export interface DefinitionsDeps {
   state: () => MockState;
+  /** What runs get from each of the organization's connections (the connections check). */
+  connections: (org: string) => ConnectionOutline[];
   /** Sends one event to every stream subscriber of the organization. */
   broadcast: (org: string, event: string, data: unknown) => void;
 }
@@ -183,6 +187,9 @@ const passed: Record<string, string> = {
   schema: 'factory.yaml matches the schema',
   references: 'Every agent, skill, contract, connection and prompt it names exists',
   availability: 'Everything it declares is available on this install',
+  tools: 'Every tool is a mise tool spec',
+  removed: 'Nothing removed in phase 4',
+  connections: 'Every connection it names exists and fits where it is used',
 };
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? `1 ${one}` : `${n} ${many}`);
@@ -200,13 +207,13 @@ metadata:
   id: 00000000-0000-0000-0000-000000000000
   name: new-factory
 spec:
-  runtime:
-    runner: docker
-    image: "ghcr.io/byfrederick/goal-agent:0.1.0"
-    auth: claude-subscription
+  runtime: { size: medium }
 `;
 
-function validate(t: Tree, opts: { org: string; factory?: string; state: MockState; changes: number }): Checked {
+function validate(
+  t: Tree,
+  opts: { org: string; factory?: string; state: MockState; changes: number; connections: ConnectionOutline[] },
+): Checked {
   const problems: DefinitionProblem[] = [];
   const counts: DefinitionCounts = {
     stations: 0,
@@ -489,12 +496,18 @@ function validate(t: Tree, opts: { org: string; factory?: string; state: MockSta
     });
   });
 
+  checkConnections(model, opts.connections, add);
+
   // name
   const taken = opts.state.factories.some((f) => f.org_id === opts.org && f.name === name && f.id !== opts.factory);
   if (name && taken)
     add('name-taken', 'error', 'name', '/basics/name', `the organization already has a factory named ${name}`);
 
-  return finish(['yaml', 'schema', 'line', 'references', 'availability', 'name'], read, name);
+  return finish(
+    ['yaml', 'schema', 'line', 'references', 'tools', 'removed', 'connections', 'availability', 'name'],
+    read,
+    name,
+  );
 }
 
 function replaceFix(label: string, section: string, path: string, value: unknown): ProblemFix {
@@ -757,6 +770,8 @@ export interface Definitions {
   ) => Promise<boolean>;
   /** The body of an injected fault, as goald would answer that status at that path. */
   faultBody: (path: string, fault: MockFault) => Json;
+  /** The connection names the factory's current version uses (config.Factory.ConnectionNames). */
+  connectionNames: (factory: Factory) => string[];
 }
 
 export function createDefinitions(deps: DefinitionsDeps): Definitions {
@@ -853,7 +868,13 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
 
   const checked = (f: Factory, t: Tree, reference: Tree | undefined, moves: Json = {}) => {
     const changes = reference ? diff(side(reference), side(t)).changes : [];
-    const result = validate(t, { org: f.org_id, factory: f.id, state: st(), changes: changes.length });
+    const result = validate(t, {
+      org: f.org_id,
+      factory: f.id,
+      state: st(),
+      connections: deps.connections(f.org_id),
+      changes: changes.length,
+    });
     const items = result.read ? itemProblems(f, t, moves) : [];
     if (result.read && defOf(f).current) {
       const v = result.validation;
@@ -996,7 +1017,13 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
   const versionOut = (def: MockDefinition, f: Factory, v: MockVersion): Version => {
     const previous = v.number ? def.versions.find((x) => x.number === (v.number as number) - 1) : byId(def, v.base);
     const changes = previous ? diff(side(previous.files), side(v.files)).changes.length : 0;
-    const { validation } = validate(v.files, { org: f.org_id, factory: f.id, state: st(), changes });
+    const { validation } = validate(v.files, {
+      org: f.org_id,
+      factory: f.id,
+      state: st(),
+      connections: deps.connections(f.org_id),
+      changes,
+    });
     return {
       id: v.id,
       number: v.number,
@@ -1272,7 +1299,12 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
     }
     if (rest === '/definitions/validate' && method === 'POST') {
       const body = await readJson(req);
-      send(res, 200, validate(treeOf(body.files), { org: org.id, state: st(), changes: 0 }).validation);
+      send(
+        res,
+        200,
+        validate(treeOf(body.files), { org: org.id, state: st(), connections: deps.connections(org.id), changes: 0 })
+          .validation,
+      );
       return true;
     }
     if (rest === '/definitions/format' && method === 'POST') {
@@ -1712,6 +1744,12 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
       }
     },
 
+    connectionNames: (f) => {
+      const def = st().definitions[f.id];
+      const current = def?.versions.find((v) => v.id === def.current);
+      const read = current ? modelOf(current.files) : undefined;
+      return read && !(read instanceof ParseError) ? connectionNames(read.model) : [];
+    },
     faultBody: (path, fault) => {
       const status = fault.status ?? 500;
       const title =
@@ -1762,7 +1800,7 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
       if (status === 409 && fault.code === 'yaml-invalid') {
         return problem(409, title, 'yaml-invalid', { parse_error: { line: 1, column: 1, message: 'injected' } });
       }
-      return problem(status, title, fault.code);
+      return problem(status, title, fault.code, {}, fault.detail);
     },
   };
 }

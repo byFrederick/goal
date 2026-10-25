@@ -6,8 +6,11 @@
 // connection-kind-name-taken, connection-kind-in-use, a fresh sign-in for every change). The
 // platform's kinds are goald's own files (internal/connkind/kinds), read once. Secret values are
 // write-only: kept nowhere but as the names of the secret fields set. Each change and test is
-// audited and broadcast as `event: connection`. acme starts with GitHub and a Claude subscription
-// that its goal factory names, a failing Datadog and a Playwright MCP server.
+// audited and broadcast as `event: connection`. What uses a connection is read from the
+// factories' current versions (their spec.connections, model and repository connections), as
+// goald does. acme starts with the connections its factories name and a few more: a PagerDuty key
+// whose test fails until its key is replaced, a GitLab account never tested, an HTTP API key whose
+// secret is missing.
 import { readdirSync, readFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
@@ -22,8 +25,9 @@ import type {
 } from '@goal/api-client';
 import { parse } from 'yaml';
 
-const dayMs = 86_400_000;
+const minuteMs = 60_000;
 const hourMs = 3_600_000;
+const dayMs = 86_400_000;
 
 const namePattern = /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/;
 
@@ -32,6 +36,8 @@ interface MockKind {
   kind: ConnectionKind;
   /** Its test's expected status; undefined without a test. */
   expect?: number;
+  /** The host its git block signs in to, as written ({{host}}); undefined without one. */
+  gitHost?: string;
 }
 
 /** A kind file (schema/connection-kind.schema.json) as the mock reads it. */
@@ -41,7 +47,7 @@ interface KindFile {
     fields?: Partial<ConnectionKindField>[];
     env?: Record<string, string>;
     cli?: unknown;
-    git?: unknown;
+    git?: { host?: unknown };
     mcp?: unknown;
     model?: boolean;
     codeHost?: string;
@@ -88,7 +94,11 @@ function kindOf(file: KindFile, platform: boolean): MockKind | undefined {
     env,
     ...(s.docs ? { docs: s.docs } : {}),
   };
-  return s.test ? { kind, expect: s.test.expect ?? 200 } : { kind };
+  return {
+    kind,
+    ...(s.test ? { expect: s.test.expect ?? 200 } : {}),
+    ...(typeof s.git?.host === 'string' ? { gitHost: s.git.host } : {}),
+  };
 }
 
 /** goald's platform kinds, from internal/connkind/kinds. */
@@ -104,13 +114,28 @@ function platformKinds(): MockKind[] {
 /** A connection as the mock keeps it: no secret value, only the names set. */
 interface MockConnection {
   connection: Connection;
-  /** The names of the factories that name it (the mock has no definitions to read them from). */
-  usedBy: string[];
+  /** The error its next test answers (a revoked key) until a secret is replaced. */
+  failing?: { status: number; error: string };
+}
+
+/** What a run gets from one connection, without a value (domain.ConnectionKind.Outline). */
+export interface ConnectionOutline {
+  name: string;
+  kind: string;
+  /** The kind's title, as the connections check names it. */
+  title: string;
+  model: boolean;
+  /** The env names a run gets, templates filled in from the connection's fields. */
+  env: string[];
+  /** The host its git block signs in to; '' for none. */
+  gitHost: string;
 }
 
 export interface MockConnections {
   /** Starts over with the seed's connections and no organization kinds, dated from now. */
   reset: (now: number) => void;
+  /** What a run gets from each of the organization's connections (the definitions' check). */
+  outlines: (org: string) => ConnectionOutline[];
   /** Serves the organization's connection routes; false for any other. */
   handle: (
     org: Org,
@@ -128,12 +153,15 @@ interface Deps {
   /** Answers 403 reauth-required, and reports true, when the caller's sign-in is not recent. */
   stale: (req: IncomingMessage, res: ServerResponse) => boolean;
   factories: (org: string) => Factory[];
+  /** The connection names a factory's current version uses (none before its first publish). */
+  names: (factory: Factory) => string[];
   audit: (
     org: string,
     by: Actor,
     action: string,
     target: { kind: string; id: string },
     data: Record<string, unknown>,
+    at?: number,
   ) => void;
   broadcast: (org: string, event: string, data: unknown) => void;
   acme: string;
@@ -154,18 +182,28 @@ const refuse = (res: ServerResponse, status: number, detail: string, code?: stri
 const strings = (v: unknown): Record<string, string> =>
   v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, String(x)])) : {};
 
-/** acme's connections, dated from now. */
-function seedConnections(now: number, goal: Factory | undefined, by: Actor): MockConnection[] {
+/** A kind's template ({{field}}) filled in from the connection's fields and the kind's defaults. */
+function render(template: string, kind: ConnectionKind, fields: Record<string, string>): string {
+  return template.replace(/\{\{([a-z0-9_]+)\}\}/g, (all, name: string) => {
+    const field = kind.fields.find((f) => f.name === name);
+    return fields[name] || field?.default || all;
+  });
+}
+
+const system: Actor = { kind: 'system', id: 'connection-tests', name: 'Goal' };
+
+/** acme's connections, dated from now, with the audit entries of their recent use. */
+function seedConnections(now: number, by: Actor): { conns: MockConnection[]; history: SeedEntry[] } {
   const at = (ms: number) => new Date(now + ms).toISOString();
   const made = (
     n: number,
     name: string,
     kind: string,
     extra: Partial<Connection>,
-    usedBy: string[] = [],
-  ): MockConnection => ({
-    connection: {
-      id: `019a1c00-0000-7000-8000-0000000000c${n}`,
+    failing?: MockConnection['failing'],
+  ) => {
+    const connection: Connection = {
+      id: `019a1c00-0000-7000-8000-0000000000${String(n).padStart(2, '0')}`,
       name,
       kind,
       description: '',
@@ -180,49 +218,115 @@ function seedConnections(now: number, goal: Factory | undefined, by: Actor): Moc
       updated_by: by,
       updated_at: at(-30 * dayMs),
       ...extra,
-    },
-    usedBy,
-  });
-  const goalName = goal ? [goal.name] : [];
-  return [
-    made(
-      1,
-      'github',
-      'github',
-      {
-        description: "The goal factory's repositories",
-        secrets_set: ['token'],
-        status: 'ok',
-        last_used_at: at(-2 * hourMs),
-        last_test: { ok: true, status: 200, at: at(-1 * dayMs) },
-      },
-      goalName,
-    ),
-    made(2, 'claude', 'claude-subscription', { secrets_set: ['token'], last_used_at: at(-2 * hourMs) }, goalName),
+    };
+    return failing ? { connection, failing } : { connection };
+  };
+  const ok = (ago: number) => ({ ok: true, status: 200, at: at(-ago) });
+  const conns: MockConnection[] = [
+    made(1, 'github', 'github', {
+      description: 'acme-bot, fine-grained token',
+      secrets_set: ['token'],
+      status: 'ok',
+      last_used_at: at(-4 * minuteMs),
+      last_test: ok(2 * hourMs),
+    }),
+    made(2, 'claude', 'anthropic', {
+      description: 'Acme’s API key, model access',
+      secrets_set: ['key'],
+      status: 'ok',
+      last_used_at: at(-1 * minuteMs),
+      last_test: ok(2 * hourMs),
+    }),
     made(3, 'datadog', 'datadog', {
       fields: { site: 'datadoghq.eu' },
       secrets_set: ['api_key', 'app_key'],
-      status: 'failing',
-      last_test: {
-        ok: false,
-        status: 403,
-        error: 'GET https://api.datadoghq.eu/api/v1/validate answered 403, not 200',
-        at: at(-3 * hourMs),
-      },
+      status: 'ok',
+      last_used_at: at(-9 * minuteMs),
+      last_test: ok(2 * hourMs),
     }),
-    made(4, 'playwright', 'mcp-server', { fields: { command: 'npx -y @playwright/mcp@0.0.41' } }),
+    made(4, 'playwright', 'mcp-server', {
+      description: 'npx @playwright/mcp, no secret',
+      fields: { command: 'npx -y @playwright/mcp@0.0.41' },
+      last_used_at: at(-40 * minuteMs),
+    }),
+    made(5, 'aws-prod', 'aws', {
+      description: 'Production, read-only role',
+      fields: { role_arn: 'arn:aws:iam::123456789012:role/goal-read', region: 'us-east-1' },
+      secrets_set: ['access_key_id', 'secret_access_key'],
+      last_used_at: at(-1 * minuteMs),
+    }),
+    made(
+      6,
+      'pagerduty',
+      'pagerduty',
+      {
+        description: 'acme.pagerduty.com',
+        secrets_set: ['token'],
+        status: 'failing',
+        last_used_at: at(-2 * hourMs),
+        last_test: {
+          ok: false,
+          status: 401,
+          error: 'GET https://api.pagerduty.com/abilities answered 401, not 200: the key was revoked',
+          at: at(-3 * hourMs),
+        },
+      },
+      { status: 401, error: 'GET https://api.pagerduty.com/abilities answered 401, not 200: the key was revoked' },
+    ),
+    made(7, 'gitlab-infra', 'gitlab', {
+      description: 'gitlab.example.com',
+      fields: { host: 'gitlab.example.com' },
+      secrets_set: ['token'],
+    }),
+    made(8, 'status-api', 'http-api-key', {
+      description: 'status.example.com/api',
+      fields: { prefix: 'STATUS', base_url: 'https://status.example.com/api' },
+    }),
   ];
+  const id = (name: string) => conns.find((c) => c.connection.name === name)?.connection.id ?? '';
+  const agent = (name: string): Actor => ({ kind: 'agent', id: name, name });
+  const history: SeedEntry[] = [
+    ['connection.created', id('gitlab-infra'), by, { name: 'gitlab-infra', kind: 'gitlab' }, -4 * dayMs],
+    ['connection.created', id('status-api'), by, { name: 'status-api', kind: 'http-api-key' }, -3 * dayMs],
+    ['connection.secret_replaced', id('github'), by, { name: 'github', secrets: ['token'] }, -2 * dayMs],
+    [
+      'connection.tested',
+      id('pagerduty'),
+      system,
+      { name: 'pagerduty', ok: false, error: 'GET https://api.pagerduty.com/abilities answered 401, not 200' },
+      -3 * hourMs,
+    ],
+    ['connection.used', id('pagerduty'), agent('investigator'), { name: 'pagerduty', run_id: 'run-147' }, -2 * hourMs],
+    ['connection.used', id('aws-prod'), agent('investigator'), { name: 'aws-prod', run_id: 'run-151' }, -minuteMs],
+  ];
+  return { conns, history };
 }
 
-export function createConnections({ clock, actor, stale, factories, audit, broadcast, acme }: Deps): MockConnections {
+/** One seeded audit entry: action, connection id, by, data, when (ms from now). */
+type SeedEntry = [string, string, Actor, Record<string, unknown>, number];
+
+export function createConnections({
+  clock,
+  actor,
+  stale,
+  factories,
+  names,
+  audit,
+  broadcast,
+  acme,
+}: Deps): MockConnections {
   const platform = platformKinds();
   let orgKinds = new Map<string, MockKind[]>();
   let conns = new Map<string, MockConnection[]>();
 
   const reset = (now: number) => {
     orgKinds = new Map();
-    const goal = factories(acme).find((f) => f.name === 'goal');
-    conns = new Map([[acme, seedConnections(now, goal, { kind: 'user', id: 'local', name: 'Local user' })]]);
+    const by: Actor = { kind: 'user', id: 'local', name: 'Local user' };
+    const { conns: seeded, history } = seedConnections(now, by);
+    conns = new Map([[acme, seeded]]);
+    for (const [action, id, who, data, ago] of history.sort((a, b) => a[4] - b[4])) {
+      audit(acme, who, action, { kind: 'connection', id }, data, now + ago);
+    }
   };
   reset(clock());
 
@@ -236,22 +340,45 @@ export function createConnections({ clock, actor, stale, factories, audit, broad
   const kindNamed = (org: string, name: string) => kinds(org).find((k) => k.kind.name === name);
   const list = (org: string) => conns.get(org) ?? [];
   const named = (org: string, name: string) => list(org).find((c) => c.connection.name === name);
+  /** The factories whose current version names the connection. */
+  const usersOf = (org: string, name: string) => factories(org).filter((f) => names(f).includes(name));
 
   /** The connection as the contract has it: what uses it, by the factories' current names. */
   const out = (org: string, c: MockConnection, detail = false): Connection => {
-    const fs = factories(org).filter((f) => c.usedBy.includes(f.name));
     const kind = kindNamed(org, c.connection.kind);
     const missing = kind?.kind.fields.some((f) => f.secret && f.required && !c.connection.secrets_set.includes(f.name));
     const status = missing ? 'missing-secret' : c.connection.status;
     const base: Connection = {
       ...structuredClone(c.connection),
       status,
-      used_by: { factories: fs.map((f) => ({ id: f.id, name: f.name })), knowledge_sources: [] },
+      used_by: {
+        factories: usersOf(org, c.connection.name).map((f) => ({ id: f.id, name: f.name })),
+        knowledge_sources: [],
+      },
     };
     if (!detail) return base;
-    const env = (kind?.kind.env ?? []).filter((e) => !e.includes('{{'));
-    return { ...base, env, ...(kind?.kind.docs ? { docs: kind.kind.docs } : {}) };
+    return {
+      ...base,
+      env: kind ? outline(kind, c).env : [],
+      ...(kind?.kind.docs ? { docs: kind.kind.docs } : {}),
+    };
   };
+
+  function outline(kind: MockKind, c: MockConnection): ConnectionOutline {
+    const fields = c.connection.fields;
+    const env = kind.kind.env
+      .map((e) => render(e, kind.kind, fields))
+      .filter((e) => !e.includes('{{'))
+      .sort();
+    return {
+      name: c.connection.name,
+      kind: kind.kind.name,
+      title: kind.kind.title,
+      model: kind.kind.model,
+      env,
+      gitHost: kind.gitHost ? render(kind.gitHost, kind.kind, fields) : '',
+    };
+  }
 
   const event = (org: string, c: Connection, change: ConnectionEvent['change']) =>
     broadcast(org, 'connection', { connection_id: c.id, name: c.name, change } satisfies ConnectionEvent);
@@ -273,6 +400,19 @@ export function createConnections({ clock, actor, stale, factories, audit, broad
       (f) => f.required && !(f.secret ? secrets.includes(f.name) : Boolean(fields[f.name] || f.default)),
     );
     return missing ? [`field "${missing.name}" is required`, 'field-required'] : undefined;
+  };
+
+  /** 409 connection-in-use naming the factories, as goald does; false when nothing uses it. */
+  const inUse = (org: string, c: MockConnection, res: ServerResponse) => {
+    const users = usersOf(org, c.connection.name).map((f) => f.name);
+    if (users.length === 0) return false;
+    refuse(
+      res,
+      409,
+      `connection "${c.connection.name}" is used by ${users.map((u) => `${u}'s current version`).join(', ')}`,
+      'connection-in-use',
+    );
+    return true;
   };
 
   function create(org: Org, req: IncomingMessage, res: ServerResponse, b: Record<string, unknown>) {
@@ -308,7 +448,6 @@ export function createConnections({ clock, actor, stale, factories, audit, broad
         updated_by: by,
         updated_at: now,
       },
-      usedBy: [],
     };
     conns.set(org.id, [...list(org.id), c]);
     audit(
@@ -316,7 +455,7 @@ export function createConnections({ clock, actor, stale, factories, audit, broad
       by,
       'connection.created',
       { kind: 'connection', id: c.connection.id },
-      { name, kind: kind.kind.name, secrets },
+      { name, kind: kind.kind.name, fields: Object.keys(fields).sort(), secrets },
     );
     event(org.id, c.connection, 'created');
     send(res, 201, out(org.id, c));
@@ -328,18 +467,14 @@ export function createConnections({ clock, actor, stale, factories, audit, broad
     const name = typeof b.name === 'string' ? b.name : c.connection.name;
     if (!namePattern.test(name))
       return refuse(res, 400, `name "${name}" must be 3 to 40 lowercase letters, digits or dashes`);
-    if (name !== c.connection.name && c.usedBy.length > 0) {
-      return refuse(
-        res,
-        409,
-        `connection "${c.connection.name}" is named by ${c.usedBy.join(', ')}`,
-        'connection-in-use',
-      );
-    }
+    if (name !== c.connection.name && inUse(org.id, c, res)) return;
     if (name !== c.connection.name && named(org.id, name)) {
       return refuse(res, 409, `connection "${name}" is taken`, 'connection-name-taken');
     }
-    const fields = b.fields === undefined ? c.connection.fields : strings(b.fields);
+    const fields =
+      b.fields === undefined
+        ? c.connection.fields
+        : Object.fromEntries(Object.entries(strings(b.fields)).filter(([, v]) => v !== ''));
     const secrets = new Set(c.connection.secrets_set);
     for (const [k, v] of Object.entries(strings(b.secrets))) {
       if (v === '') secrets.delete(k);
@@ -348,6 +483,7 @@ export function createConnections({ clock, actor, stale, factories, audit, broad
     const broken = fieldRefusal(kind, fields, [...secrets].sort());
     if (broken) return refuse(res, 400, ...broken);
     const by = actor(req);
+    const from = c.connection.name;
     Object.assign(c.connection, {
       name,
       description: typeof b.description === 'string' ? b.description : c.connection.description,
@@ -358,10 +494,16 @@ export function createConnections({ clock, actor, stale, factories, audit, broad
     });
     const target = { kind: 'connection', id: c.connection.id };
     if (b.name !== undefined || b.description !== undefined || b.fields !== undefined) {
-      audit(org.id, by, 'connection.updated', target, { name });
+      audit(org.id, by, 'connection.updated', target, { name, ...(name !== from ? { from } : {}) });
     }
-    if (b.secrets !== undefined)
-      audit(org.id, by, 'connection.secret_replaced', target, { name, secrets: Object.keys(strings(b.secrets)) });
+    if (b.secrets !== undefined) {
+      audit(org.id, by, 'connection.secret_replaced', target, {
+        name,
+        secrets: Object.keys(strings(b.secrets)).sort(),
+      });
+      // A replaced key is a fresh one: its next test passes.
+      delete c.failing;
+    }
     event(org.id, c.connection, 'updated');
     send(res, 200, out(org.id, c));
   }
@@ -369,14 +511,17 @@ export function createConnections({ clock, actor, stale, factories, audit, broad
   function test(org: Org, c: MockConnection, req: IncomingMessage, res: ServerResponse) {
     const kind = kindNamed(org.id, c.connection.kind);
     if (!kind?.expect) return refuse(res, 409, `kind ${c.connection.kind} has no test`, 'connection-not-testable');
-    const result: ConnectionTestResult = { ok: true, status: kind.expect, at: new Date(clock()).toISOString() };
-    Object.assign(c.connection, { last_test: result, status: 'ok' });
+    const at = new Date(clock()).toISOString();
+    const result: ConnectionTestResult = c.failing
+      ? { ok: false, status: c.failing.status, error: c.failing.error, at }
+      : { ok: true, status: kind.expect, at };
+    Object.assign(c.connection, { last_test: result, status: result.ok ? 'ok' : 'failing' });
     audit(
       org.id,
       actor(req),
       'connection.tested',
       { kind: 'connection', id: c.connection.id },
-      { name: c.connection.name, ok: true },
+      { name: c.connection.name, ok: result.ok, ...(result.error ? { error: result.error } : {}) },
     );
     event(org.id, c.connection, 'tested');
     send(res, 200, result);
@@ -433,6 +578,11 @@ export function createConnections({ clock, actor, stale, factories, audit, broad
 
   return {
     reset,
+    outlines: (org) =>
+      list(org).flatMap((c) => {
+        const kind = kindNamed(org, c.connection.kind);
+        return kind ? [outline(kind, c)] : [];
+      }),
     async handle(org, rest, method, req, res, body) {
       if (rest === '/connection-kinds' && method === 'GET') {
         send(res, 200, { kinds: kinds(org.id).map((k) => k.kind) });
@@ -455,8 +605,9 @@ export function createConnections({ clock, actor, stale, factories, audit, broad
           send(res, 404, { title: 'Factory not found', status: 404, code: 'factory-not-found' });
           return true;
         }
+        const used = factory ? names(factory) : [];
         const shown = list(org.id)
-          .filter((c) => (!kind || c.connection.kind === kind) && (!factory || c.usedBy.includes(factory.name)))
+          .filter((c) => (!kind || c.connection.kind === kind) && (!factory || used.includes(c.connection.name)))
           .sort((a, b) => a.connection.name.localeCompare(b.connection.name));
         send(res, 200, { connections: shown.map((c) => out(org.id, c)) });
         return true;
@@ -478,9 +629,7 @@ export function createConnections({ clock, actor, stale, factories, audit, broad
       if (m[2]) test(org, c, req, res);
       else if (method === 'GET') send(res, 200, out(org.id, c, true));
       else if (method === 'PATCH') update(org, c, req, res, await body());
-      else if (c.usedBy.length > 0) {
-        refuse(res, 409, `connection "${c.connection.name}" is named by ${c.usedBy.join(', ')}`, 'connection-in-use');
-      } else {
+      else if (!inUse(org.id, c, res)) {
         conns.set(
           org.id,
           list(org.id).filter((x) => x !== c),
@@ -490,7 +639,7 @@ export function createConnections({ clock, actor, stale, factories, audit, broad
           actor(req),
           'connection.deleted',
           { kind: 'connection', id: c.connection.id },
-          { name: c.connection.name },
+          { name: c.connection.name, kind: c.connection.kind },
         );
         event(org.id, c.connection, 'deleted');
         send(res, 204, null);

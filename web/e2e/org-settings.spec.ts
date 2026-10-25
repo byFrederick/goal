@@ -31,9 +31,12 @@ test('organization settings is accessible and fits the screen', async ({ page })
   await expect(page.getByLabel('Slots shared by every factory')).toHaveValue('6');
   await expect(slotsFor(page).getByLabel('goal')).toHaveValue('3');
   await expect(slotsFor(page).getByLabel('support')).toHaveValue('');
-  // Credentials (phase 4) and Transfer ownership (phase 3) come later; until then the page says so
-  // and has no controls for them.
-  await expect(page.getByText('Arrives with credentials', { exact: true })).toBeVisible();
+  // Model access names the organization's model connections; Secrets points at Connections. Transfer
+  // ownership needs sign-in, which is off here.
+  await expect(
+    page.getByText(/Acme has one: claude, Anthropic API key, used by goal, sre and support\./),
+  ).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open Connections' })).toHaveAttribute('href', '/o/acme/connections');
   await expect(page.getByRole('radio')).toHaveCount(0);
   await expect(page.getByText(/Transfer/)).toHaveCount(0);
   await expect(save(page)).toBeDisabled();

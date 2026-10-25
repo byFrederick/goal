@@ -4,7 +4,7 @@
 import { ExternalLink } from 'lucide-react';
 import type { CurrentRun, Factory, Item, ItemFlow, ItemSpan, Station } from '../../api/types';
 import { formatClock, formatDuration, formatUsd, humanize } from '../../shared/format';
-import { describeState, pullRequestLabel, pullRequestOf } from '../../shared/item-state';
+import { describeState, pullRequestLabel, pullRequestsOf } from '../../shared/item-state';
 import { holds } from '../../shared/permissions';
 import { SectionCard, StatRow } from '../../ui/card';
 import { cn } from '../../ui/cn';
@@ -73,7 +73,7 @@ export function TimeCard({
   const run = flow.current_run;
   const expedite = item.class_of_service === 'expedite';
   const target = flow.target_seconds ? formatTarget(flow.target_seconds) : null;
-  const pr = pullRequestOf(
+  const prs = pullRequestsOf(
     item.outputs,
     factory.stations.map((s) => s.id),
   );
@@ -174,13 +174,23 @@ export function TimeCard({
             {item.rework_count === 0 ? 'Never' : `${item.rework_count}×`}
           </span>
         </StatRow>
-        {pr ? (
-          <StatRow label="Change">
-            <a href={pr} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-run">
-              {pullRequestLabel(pr)}
-              <ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" />
-              <span className="sr-only">(opens in a new tab)</span>
-            </a>
+        {prs.length > 0 ? (
+          <StatRow label={prs.length === 1 ? 'Change' : 'Changes'}>
+            <span className="flex flex-col items-end gap-0.5">
+              {prs.map((pr) => (
+                <a
+                  key={pr}
+                  href={pr}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 hover:text-run"
+                >
+                  {pullRequestLabel(pr, prs.length > 1)}
+                  <ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" />
+                  <span className="sr-only">(opens in a new tab)</span>
+                </a>
+              ))}
+            </span>
           </StatRow>
         ) : null}
       </div>

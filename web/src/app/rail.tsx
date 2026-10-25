@@ -1,15 +1,15 @@
 // The rail (≥ 768 px): 72 px, pinned to the left edge at full height. Top to bottom: the
 // organization mark, a rule, one square per factory of this organization (scrolling when there
-// are many), New factory, and at the bottom Connector catalog, Credentials and the account
-// (C §10.3, canvas "Main" and "Factories").
+// are many), New factory, and at the bottom Connections, Knowledge and the account (C §10.3,
+// MASTER.md navigation, canvas "Main" and "Connections").
 import { Plus } from 'lucide-react';
 import type { OrgSummary } from '../api/types';
 import { useOrgHolds } from '../shared/org';
 import { AccountMenu } from './account-menu';
 import { useFactorySquares } from './factory-squares';
 import { OrgMark } from './org-mark';
-import { FactorySquareLink, LaterRailItem, NewFactoryLink, useRailKeys } from './rail-items';
-import { catalogScreen, credentialsScreen } from './screens';
+import { ConnectionsRailLink, FactorySquareLink, LaterRailItem, NewFactoryLink, useRailKeys } from './rail-items';
+import { knowledgeScreen } from './screens';
 
 const iconProps = { size: 20, strokeWidth: 1.5, 'aria-hidden': true } as const;
 
@@ -18,8 +18,7 @@ export function Rail({ org }: { org: OrgSummary }) {
   // New factory only for whoever may create one (owners and admins).
   const mayCreate = useOrgHolds('factory:create');
   const onKeyDown = useRailKeys('vertical');
-  const Catalog = catalogScreen.icon;
-  const Credentials = credentialsScreen.icon;
+  const Knowledge = knowledgeScreen.icon;
 
   return (
     <nav
@@ -45,11 +44,9 @@ export function Rail({ org }: { org: OrgSummary }) {
         ) : null}
       </ul>
       <div className="mt-auto flex flex-col items-center gap-1.5 pt-3">
-        <LaterRailItem label={catalogScreen.label} kind="icon" size="rail">
-          <Catalog {...iconProps} />
-        </LaterRailItem>
-        <LaterRailItem label={credentialsScreen.label} kind="icon" size="rail">
-          <Credentials {...iconProps} />
+        <ConnectionsRailLink org={org} />
+        <LaterRailItem label={knowledgeScreen.label} kind="icon" size="rail">
+          <Knowledge {...iconProps} />
         </LaterRailItem>
         <AccountMenu org={org} size="rail" />
       </div>

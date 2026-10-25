@@ -74,8 +74,8 @@ test('a factory from a template, step by step (flow 1)', async ({ page }) => {
   const addType = page.getByRole('textbox', { name: 'Add a work type' });
   await addType.fill('finding');
   await addType.press('Enter');
-  await page.getByRole('textbox', { name: 'Repository' }).fill('https://github.com/acme/infra');
-  await page.getByRole('textbox', { name: 'Repository' }).blur();
+  await page.getByRole('textbox', { name: 'Repository URL' }).fill('https://github.com/acme/infra');
+  await page.getByRole('textbox', { name: 'Repository URL' }).blur();
   await expect(saved(page)).toBeVisible();
   await expect(page.getByRole('heading', { level: 1, name: 'cloud-costs' })).toBeVisible();
   await checkPage(page);
@@ -118,16 +118,12 @@ test('a factory from a template, step by step (flow 1)', async ({ page }) => {
   await expect(saved(page)).toBeVisible();
   await checkPage(page);
 
-  // Connections: the template's github connection, given to the proposer; the catalog's placeholder.
+  // Connections: the template's github connection, given to the proposer.
   await continueTo(page, 'Connections').click();
-  await expect(page.getByRole('region', { name: 'Add from the catalog' })).toBeVisible();
-  await page
-    .getByRole('navigation', { name: 'Connections' })
-    .getByRole('link', { name: /github/ })
-    .click();
-  const access = page.getByRole('group', { name: 'Agents allowed to use github' });
-  await access.getByRole('checkbox', { name: 'proposer' }).check();
-  await expect(access.getByRole('checkbox', { name: 'proposer' })).toBeChecked();
+  await expect(page.getByRole('heading', { level: 2, name: 'Connections and knowledge' })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: /^github/ })).toBeChecked();
+  await page.getByRole('checkbox', { name: 'proposer gets github' }).check();
+  await expect(page.getByRole('checkbox', { name: 'proposer gets github' })).toBeChecked();
   await expect(saved(page)).toBeVisible();
   await checkPage(page);
 

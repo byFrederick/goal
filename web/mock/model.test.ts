@@ -185,6 +185,79 @@ describe('applySection', () => {
   });
 });
 
+describe('phase 4 forms (spec 4 §4.4)', () => {
+  const v4 = `apiVersion: goal/v1
+kind: Factory
+metadata:
+  name: acme-line
+spec:
+  runtime:
+    model: claude-sonnet-5-5
+    repository: { url: "https://github.com/acme/line" }
+  connections:
+    - github # pull requests
+    - { name: legacy-mcp, type: mcp, url: "https://mcp.example.com/" }
+`;
+  const read = () => {
+    const r = readModel(v4);
+    if (r instanceof ParseError) throw r;
+    return r.model;
+  };
+
+  it('reads an organization connection as {name} and an inline one as its form', () => {
+    const connections = read().connections as Json[];
+    expect(connections[0]).toEqual({ name: 'github' });
+    expect(connections[1]).toMatchObject({ name: 'legacy-mcp', type: 'mcp', legacy: true });
+  });
+
+  it('writes an added organization connection as its bare name and keeps the comments', () => {
+    const connections = read().connections as Json[];
+    const out = applySection(v4, 'connections', [...connections, { name: 'datadog' }]);
+    expect(out).toContain('    - github # pull requests\n');
+    expect(out).toContain('    - datadog\n');
+  });
+
+  it('writes an inline connection replaced by the organization connection of its name as the name', () => {
+    const connections = read().connections as Json[];
+    const out = applySection(v4, 'connections', [connections[0], { name: 'legacy-mcp' }]);
+    expect(out).toContain('    - legacy-mcp\n');
+    expect(out).not.toContain('mcp.example.com');
+  });
+
+  it('writes the runtime keys in their place and reads them back', () => {
+    const basics = read().basics as Json;
+    const out = applySection(v4, 'basics', {
+      ...basics,
+      model_connection: 'claude',
+      size: 'large',
+      tools: ['go@1.26.10'],
+      repository: { url: 'https://github.com/acme/line', connection: 'github' },
+      knowledge_sources: ['handbook'],
+    });
+    expect(out).toContain('    model: claude-sonnet-5-5\n    modelConnection: claude\n    size: large\n    tools:');
+    expect(out).toContain('connection: github');
+    expect(out).toContain('  knowledge:\n    sources:');
+    const back = readModel(out);
+    if (back instanceof ParseError) throw back;
+    expect(back.model.basics).toMatchObject({
+      model_connection: 'claude',
+      size: 'large',
+      tools: ['go@1.26.10'],
+      knowledge_sources: ['handbook'],
+    });
+  });
+
+  it('reads the removed keys so their fixes can take them out', () => {
+    const old = v4.replace('    model:', '    runner: docker\n    image: ghcr.io/acme/agent:1\n    model:');
+    const r = readModel(old);
+    if (r instanceof ParseError) throw r;
+    const basics = r.model.basics as Json;
+    expect(basics).toMatchObject({ runner: 'docker', image: 'ghcr.io/acme/agent:1' });
+    const { runner: _r, image: _i, ...rest } = basics;
+    expect(applySection(old, 'basics', rest)).toBe(v4);
+  });
+});
+
 describe('sectionEtag', () => {
   it('names a value, whatever the order of its keys', () => {
     expect(sectionEtag({ a: 1, b: [{ c: 2, d: 3 }] })).toBe(sectionEtag({ b: [{ d: 3, c: 2 }], a: 1 }));

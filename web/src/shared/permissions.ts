@@ -16,7 +16,10 @@ export type OrgPermission =
   | 'api_key:read'
   | 'api_key:manage'
   | 'personal_token:read'
-  | 'personal_token:manage';
+  | 'personal_token:manage'
+  | 'connection:read'
+  | 'connection:manage'
+  | 'audit:read';
 export type FactoryPermission =
   | 'item:create'
   | 'item:decide'
@@ -51,6 +54,7 @@ export const reasons = {
   settings: (org: string) => `View only. Owners and admins of ${org} change its settings.`,
   members: (org: string) => `View only. Owners and admins of ${org} invite people and change roles.`,
   newFactory: (org: string) => `Owners and admins of ${org} create factories.`,
+  connections: (org: string) => `Owners and admins of ${org} add, test and change connections.`,
 } as const;
 
 const article = (role: string) => (/^[aeiou]/.test(role) ? 'an' : 'a');

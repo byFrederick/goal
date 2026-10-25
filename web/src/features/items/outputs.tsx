@@ -3,7 +3,7 @@
 import { ExternalLink } from 'lucide-react';
 import type { Factory } from '../../api/types';
 import { humanize } from '../../shared/format';
-import { pullRequestIn, pullRequestLabel } from '../../shared/item-state';
+import { pullRequestLabel, pullRequestsIn } from '../../shared/item-state';
 import { SectionCard } from '../../ui/card';
 
 const prose = ['summary', 'description', 'diagnosis', 'reason', 'text'];
@@ -58,25 +58,31 @@ function Value({ name, value }: { name: string; value: unknown }) {
 function Output({ station, value }: { station: string; value: unknown }) {
   const obj =
     value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-  const pr = pullRequestIn(value);
+  const prs = pullRequestsIn(value);
   const lead = obj ? prose.find((k) => typeof obj[k] === 'string') : undefined;
-  const rest = obj ? Object.entries(obj).filter(([k]) => k !== lead && k !== 'pull_request' && k !== 'pr_url') : [];
+  const linked = new Set(['pull_request', 'pull_requests', 'pr_url']);
+  const rest = obj ? Object.entries(obj).filter(([k]) => k !== lead && !linked.has(k)) : [];
 
   return (
     <article className="flex flex-col gap-3 rounded-control border border-line bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="m-0 text-[15px] font-medium">{humanize(station)}</h3>
-        {pr ? (
-          <a
-            href={pr}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex h-9 items-center gap-1.5 rounded-control bg-control px-3 text-sm no-underline hover:bg-control-hover"
-          >
-            {pullRequestLabel(pr)}
-            <ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" />
-            <span className="sr-only">(opens in a new tab)</span>
-          </a>
+        {prs.length > 0 ? (
+          <span className="flex flex-wrap gap-2">
+            {prs.map((pr) => (
+              <a
+                key={pr}
+                href={pr}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-9 items-center gap-1.5 rounded-control bg-control px-3 text-sm no-underline hover:bg-control-hover"
+              >
+                {pullRequestLabel(pr, prs.length > 1)}
+                <ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" />
+                <span className="sr-only">(opens in a new tab)</span>
+              </a>
+            ))}
+          </span>
         ) : null}
       </div>
       {obj ? (

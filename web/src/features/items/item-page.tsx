@@ -7,7 +7,7 @@ import type { Item, Station } from '../../api/types';
 import { factoryTitle, itemKey, useFactory, useFactoryParams } from '../../shared/factory';
 import { humanize, plural } from '../../shared/format';
 import { type ItemControls, ItemDecisions } from '../../shared/item-actions';
-import { describeState, pausedNow, pullRequestOf, type Tone } from '../../shared/item-state';
+import { describeState, pausedNow, pullRequestsOf, type Tone } from '../../shared/item-state';
 import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
@@ -113,7 +113,7 @@ export function ItemPage() {
     ref: item.ref,
     title: item.title,
     state: item.state,
-    pr_url: pullRequestOf(
+    pull_requests: pullRequestsOf(
       item.outputs,
       factory.stations.map((s) => s.id),
     ),

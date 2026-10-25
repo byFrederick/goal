@@ -11,11 +11,14 @@ export const sections = ['basics', 'line', 'agents', 'connections', 'review'] as
 
 export interface Repository {
   url?: string;
-  /** An env: reference until phase 4 (read-only in Basics). */
-  token?: string;
+  /** The organization connection git signs in with; absent for a public repository. */
   connection?: string;
-  repo?: string;
+  /** Removed in phase 4 (env-reference-removed): present while a version still has it, so its fix can remove it. */
+  token?: string;
 }
+
+/** Each run's box (runtime.size); medium when absent. */
+export type SandboxSize = 'small' | 'medium' | 'large';
 
 export interface BasicsSection {
   /** metadata.id, read-only. */
@@ -24,7 +27,20 @@ export interface BasicsSection {
   title?: string;
   purpose?: string;
   work_types?: string[];
+  /** runtime.modelConnection: the organization connection that gives every run its model. */
+  model_connection?: string;
+  size?: SandboxSize;
+  /** runtime.tools: mise tool specs every run installs after the repository's own. */
+  tools?: string[];
   repository?: Repository | null;
+  /** knowledge.sources: the organization's knowledge sources the factory may search. */
+  knowledge_sources?: string[];
+  // Removed in phase 4 (field-removed): present while factory.yaml has them, so their fixes apply.
+  runner?: string;
+  image?: string;
+  auth?: string;
+  secrets?: Record<string, unknown>;
+  knowledge_base?: Record<string, unknown>;
 }
 
 export type StationKind = 'queue' | 'agent' | 'human' | 'done';

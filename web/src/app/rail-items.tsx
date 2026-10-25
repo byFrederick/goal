@@ -1,14 +1,17 @@
 // The pieces the rail and the phone's top row share: one stop of the arrow-key movement, a
-// factory's square and a screen a later phase builds (the account is account-menu.tsx).
+// factory's square, the organization's Connections and a screen a later phase builds (the account
+// is account-menu.tsx).
 import { Link, useRouterState } from '@tanstack/react-router';
 import { type KeyboardEvent, type ReactNode, useCallback } from 'react';
 import type { OrgSummary } from '../api/types';
+import { useConnectionTrouble } from '../shared/connections';
+import { useOrgHolds } from '../shared/org';
 import { cn } from '../ui/cn';
 import { Mark } from '../ui/mark';
 import { Tooltip } from '../ui/tooltip';
 import type { FactorySquare } from './factory-squares';
 import { type RailAxis, railFocusTarget } from './rail-focus';
-import { laterText, newFactoryScreen } from './screens';
+import { connectionsScreen, laterText, newFactoryScreen } from './screens';
 
 /** A 44px target around a mark; `group` passes hover to the mark. */
 export const railItemClass =
@@ -95,8 +98,36 @@ function useIsWizard(): boolean {
 }
 
 /**
- * A screen a later phase builds (Connector catalog, Credentials): marked disabled, going nowhere.
+ * The organization's Connections (rail only): ink while one of its pages is open, a rust dot when
+ * a connection's test failed or its secret is missing, said in the name ("Connections, 1
+ * failing"). Only for whoever may read connections.
  */
+export function ConnectionsRailLink({ org }: { org: OrgSummary }) {
+  const read = useOrgHolds('connection:read');
+  const trouble = useConnectionTrouble(org.id);
+  if (!read) return null;
+  const Icon = connectionsScreen.icon;
+  const detail = trouble > 0 ? `${trouble} failing` : undefined;
+  return (
+    <Tooltip label={connectionsScreen.label} detail={detail}>
+      <Link
+        to="/o/$org/connections"
+        params={{ org: org.slug }}
+        aria-label={detail ? `${connectionsScreen.label}, ${detail}` : connectionsScreen.label}
+        className={railItemClass}
+        {...railItem}
+      >
+        {({ isActive }) => (
+          <Mark kind="icon" size="rail" current={isActive} dot={trouble > 0}>
+            <Icon size={20} strokeWidth={1.5} aria-hidden="true" />
+          </Mark>
+        )}
+      </Link>
+    </Tooltip>
+  );
+}
+
+/** A screen a later phase builds (Knowledge): marked disabled, going nowhere. */
 export function LaterRailItem({
   label,
   kind,

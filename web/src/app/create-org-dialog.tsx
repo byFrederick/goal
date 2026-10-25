@@ -84,7 +84,7 @@ function CreateOrgForm({ onDone, returnFocus }: { onDone: () => void; returnFocu
   return (
     <DialogContent
       title="Create organization"
-      description="Factories, credentials and settings belong to an organization."
+      description="Factories, connections and settings belong to an organization."
       initialFocus={nameRef}
       onCloseAutoFocus={(e) => {
         e.preventDefault();

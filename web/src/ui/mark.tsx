@@ -8,7 +8,7 @@ const kinds = {
   factory: 'rounded-control border border-rule bg-surface font-medium text-ink group-hover:border-rule-strong',
   /** New factory: a dashed square; ink while the wizard is open. */
   add: 'rounded-control border border-dashed border-rule-strong bg-transparent text-ink-soft',
-  /** An icon on the rail (catalog, credentials). */
+  /** An icon on the rail (Connections, Knowledge). */
   icon: 'rounded-control text-ink-soft group-hover:bg-nav-hover',
 } as const;
 

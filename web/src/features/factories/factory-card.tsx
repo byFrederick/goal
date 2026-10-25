@@ -96,7 +96,7 @@ export function FactoryCard({ org, overview, mark }: { org: string; overview: Fa
             </Link>
           )}
         </Button>
-        {definition?.available ? (
+        {definition?.available && 'to' in definition ? (
           <Button asChild size="sm">
             <Link to={definition.to} params={params}>
               {definition.label}

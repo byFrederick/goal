@@ -7,6 +7,7 @@ import { createContext, type ReactNode, use, useEffect, useState } from 'react';
 import { type StreamStatus, subscribeToOrg } from '../api/client';
 import { meQuery } from '../api/queries';
 import {
+  connectionInvalidations,
   definitionInvalidations,
   factoryInvalidations,
   heldByMove,
@@ -22,13 +23,14 @@ export function useStreamStatus(): StreamStatus {
 }
 
 /**
- * The queries other event names invalidate, by name. Later phases register theirs here (B
- * `definition`, phase 4 `credential`, `approval`, `connection`); names nobody registered are
- * ignored, so new events never break an older client. E's `factory` events arrive typed through
+ * The queries other event names invalidate, by name: B's `definition` and phase 4's `connection`
+ * (later `knowledge`); names nobody registered are ignored, so new events never break an older
+ * client. E's `factory` events arrive typed through
  * the client's `onFactory` (factoryInvalidations).
  */
 export const streamHandlers: Readonly<Record<string, (org: string, data: unknown) => QueryKey[]>> = {
   definition: definitionInvalidations,
+  connection: connectionInvalidations,
 };
 
 const batchMs = 300;

@@ -29,7 +29,10 @@ export const sectionInfo: Record<EditorSection, SectionInfo> = {
     description:
       'Who works on the line. Each agent gets a role, a model, a prompt, skills and the built-in tools it may use.',
   },
-  connections: { label: 'Connections', description: 'The services agents can reach, and which agents may use each.' },
+  connections: {
+    label: 'Connections',
+    description: 'Which organization connections runs get, per agent, and the knowledge agents may search.',
+  },
   review: { label: 'Review and publish', description: 'Checks, the changes from the running version, and publish.' },
   versions: { label: 'Versions', description: 'Every published version, the one that runs, compare and restore.' },
 };

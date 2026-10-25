@@ -81,14 +81,16 @@ metadata:
   purpose: "Builds the Goal platform from this repository: engine, UI, infrastructure and its own factories."
 spec:
   runtime:
-    runner: docker
-    image: ghcr.io/acme/goal-agent:1.4.0
     model: claude-sonnet-5-5
-    repository: { url: "https://github.com/acme/goal", token: env:GOAL_GITHUB_TOKEN }
+    modelConnection: claude
+    size: large
+    tools: [golangci-lint@2.1, sqlc@1.27]
+    repository: { url: "https://github.com/acme/goal", connection: github }
     budget: { weeklyUsd: 60, perItemUsd: 4, onExhausted: drain }
   connections:
     # pull requests and issues of the repository
-    - { name: github, type: mcp, transport: http, url: "https://api.example.com/mcp/", headers: { Authorization: env:GOAL_GITHUB_TOKEN } }
+    - github
+    - playwright
   skills:
     - { name: acme-conventions, source: ./skills/acme-conventions }
   agents:
@@ -107,6 +109,7 @@ spec:
       description: Builds web changes from the spec.
       prompt: ./agents/frontend-engineer.md
       skills: [acme-conventions]
+      connections: [playwright]
       builtins: { read: allowed, edit: allowed, run: { mode: allowed, commands: [pnpm, git] }, web: ${o.draft ? 'ask' : 'off'} }
     - name: reviewer
       description: Reviews the pull request against the spec.
@@ -180,7 +183,9 @@ metadata:
 spec:
   runtime:
     model: claude-sonnet-5-5
+    modelConnection: claude
     budget: { weeklyUsd: 20, onExhausted: stop }
+  connections: [aws-prod, datadog, pagerduty]
   skills:
     - { name: aws-investigation, source: ./skills/aws-investigation }
     - { name: incident-triage, source: ./skills/incident-triage }
@@ -197,6 +202,7 @@ spec:
       prompt: ./agents/investigator.md
       maxTurns: 40
       skills: [aws-investigation, incident-triage, postmortem-writing]
+      connections: [aws-prod, datadog, pagerduty]
       # rules from before the built-in settings: read and run, never change anything
       tools:
         allow: [Read, Grep, Glob, Bash, WebFetch]
@@ -233,6 +239,7 @@ metadata:
   title: Support
   purpose: Answers questions from the acme shop, citing runbooks.
 spec:
+  runtime: { modelConnection: claude }
   agents:
     - name: responder
       prompt: ./agents/responder.md
@@ -403,7 +410,7 @@ interface TemplateSpec {
   connectors: string[];
   changed: string;
   workTypes: string[];
-  /** Inline connections, as flow mappings. */
+  /** The organization connections it uses, by name. */
   connections?: string[];
   agents: { name: string; description: string; prompt: string }[];
   stations: TemplateLine[];
@@ -484,9 +491,7 @@ const templateSpecs: TemplateSpec[] = [
     connectors: ['aws', 'github'],
     changed: '2026-10-09',
     workTypes: ['cost-review'],
-    connections: [
-      '{ name: github, type: mcp, transport: http, url: "https://api.example.com/mcp/", headers: { Authorization: env:GOAL_GITHUB_TOKEN } }',
-    ],
+    connections: ['github'],
     agents: [
       { name: 'cost-analyst', description: 'Reads the cost report.', prompt: 'Find the largest avoidable costs.' },
       {

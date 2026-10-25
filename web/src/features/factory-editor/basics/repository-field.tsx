@@ -1,79 +1,89 @@
-// The repository (D §10.5): an https URL, or none for a factory that doesn't change code. How it
-// signs in is read-only until credentials arrive: the draft's `env:` reference is named, never
-// rewritten (D §14.4).
-import { useId, useRef } from 'react';
+// The repository (spec 4 §4.4, canvas Define-Basics): an https URL cloned into the box before the
+// agent starts, and the organization connection git signs in with (a kind with a git block; none
+// for a public repository). An empty URL without a connection means no repository: no checkout,
+// no pull requests. A version published before phase 4 may still name an env: token; its fix
+// (env-reference-removed) removes it.
+import { useId } from 'react';
+import type { Connection, ConnectionKind } from '../../../api/types';
 import type { BasicsSection, Repository } from '../../../shared/definition/model';
-import { Field, Input } from '../../../ui/field';
+import { Input, NativeSelect } from '../../../ui/field';
 import { setBasics } from '../draft/ops';
-import { useDraft, useDraftSession, useViewOnly } from '../draft/use-draft';
+import { useDraftSession } from '../draft/use-draft';
+import { ProblemFixes } from '../frame/problem-fixes';
 import { EditedMark } from '../frame/section-shell';
 import { useProblemText } from '../frame/use-editor';
 
-function signsIn(repository: Repository | null | undefined): string {
-  const token = repository?.token;
-  if (token?.startsWith('env:')) {
-    return `Signs in with ${token}, a platform secret of this install. Choosing a credential arrives with credentials.`;
-  }
-  return 'How it signs in is set in YAML. Choosing a credential arrives with credentials.';
+/** The repository with `patch` applied; none once it has neither a URL nor a connection. */
+export function patchRepository(repository: Repository | null | undefined, patch: Repository): Repository | undefined {
+  const next: Repository = { ...repository, ...patch };
+  for (const key of ['url', 'connection'] as const) if (next[key] === '') delete next[key];
+  return next.url || next.connection || next.token ? next : undefined;
 }
 
-export function RepositoryField({ basics }: { basics: BasicsSection }) {
+export function RepositoryField({
+  basics,
+  connections,
+  kindOf,
+}: {
+  basics: BasicsSection;
+  connections: Connection[];
+  kindOf: (c: Connection) => ConnectionKind | undefined;
+}) {
   const session = useDraftSession();
-  const viewOnly = useViewOnly();
-  const id = useId();
-  const saved = useDraft((s) => s.sections.basics.server.repository);
-  // The repository a "None" replaced, put back when it is unchecked.
-  const before = useRef<Repository | null | undefined>(null);
-  const repository = basics.repository;
-  const none = repository === null;
-  const problem = useProblemText('/basics/repository');
-
-  const setUrl = (url: string) =>
-    session.edit(setBasics(basics, 'repository', { ...repository, url }), { coalesce: '/basics/repository/url' });
-
-  const setNone = (on: boolean) => {
-    if (on) {
-      before.current = repository;
-      session.edit(setBasics(basics, 'repository', null));
-      return;
-    }
-    const back = before.current ?? (saved ? saved : { url: '' });
-    session.edit(setBasics(basics, 'repository', back));
-  };
+  const help = useId();
+  const repository = basics.repository ?? undefined;
+  const urlProblem = useProblemText('/basics/repository/url');
+  const gitConnections = connections.filter((c) => kindOf(c)?.modes.includes('git'));
+  const chosen = repository?.connection ?? '';
+  const known = chosen === '' || gitConnections.some((c) => c.name === chosen);
+  const edit = (patch: Repository, coalesce?: string) =>
+    session.edit(setBasics(basics, 'repository', patchRepository(repository, patch)), coalesce ? { coalesce } : {});
 
   return (
-    <Field
-      label="Repository"
-      aside={<EditedMark section="basics" pointer="/basics/repository" label="the repository" />}
-      error={problem}
-      help={none ? 'Agents work without a repository: no checkout, no pull requests.' : signsIn(repository)}
-    >
-      <Input
-        type="url"
-        inputMode="url"
-        value={repository?.url ?? ''}
-        disabled={none}
-        onChange={(e) => setUrl(e.target.value)}
-        onBlur={() => void session.flush()}
-        placeholder="https://github.com/acme/goal"
-        autoComplete="off"
-        spellCheck={false}
-        className="disabled:cursor-not-allowed disabled:bg-control disabled:text-muted"
-      />
-      <label
-        htmlFor={`${id}-none`}
-        className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm has-[:disabled]:cursor-default md:min-h-8"
-      >
-        <input
-          id={`${id}-none`}
-          type="checkbox"
-          checked={none}
-          disabled={viewOnly}
-          onChange={(e) => setNone(e.target.checked)}
-          className="size-4 accent-ink"
+    <div className="col-span-full flex min-w-0 flex-col gap-1.5">
+      <div className="flex min-h-6 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <span className="text-sm font-medium">
+          Repository <span className="font-normal text-muted">optional</span>
+        </span>
+        <EditedMark section="basics" pointer="/basics/repository" label="the repository" />
+      </div>
+      <div className="grid grid-cols-1 gap-2 @[640px]:grid-cols-[minmax(0,1fr)_200px]">
+        <Input
+          type="url"
+          inputMode="url"
+          aria-label="Repository URL"
+          aria-describedby={help}
+          aria-invalid={urlProblem ? true : undefined}
+          value={repository?.url ?? ''}
+          onChange={(e) => edit({ url: e.target.value }, '/basics/repository/url')}
+          onBlur={() => void session.flush()}
+          placeholder="https://github.com/acme/goal"
+          autoComplete="off"
+          spellCheck={false}
         />
-        None, this factory doesn’t change code
-      </label>
-    </Field>
+        <NativeSelect
+          aria-label="Repository connection"
+          aria-describedby={help}
+          value={chosen}
+          onChange={(e) => edit({ connection: e.target.value })}
+        >
+          <option value="">Public, no connection</option>
+          {known ? null : <option value={chosen}>{chosen}</option>}
+          {gitConnections.map((c) => (
+            <option key={c.name} value={c.name}>
+              {c.name}
+            </option>
+          ))}
+        </NativeSelect>
+      </div>
+      {urlProblem ? <p className="m-0 text-[13px] leading-snug text-rework-ink">{urlProblem}</p> : null}
+      <ProblemFixes pointer="/basics/repository/connection" />
+      <ProblemFixes pointer="/basics/repository/token" />
+      <p id={help} className="m-0 text-[13px] leading-snug text-muted">
+        {repository?.url
+          ? 'Cloned into the box before the agent starts. Agents can clone other repositories their connection’s token allows.'
+          : 'Without one, agents work without a checkout and open no pull requests.'}
+      </p>
+    </div>
   );
 }

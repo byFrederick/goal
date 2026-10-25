@@ -6,8 +6,6 @@ import {
   Code,
   Factory,
   Kanban,
-  KeyRound,
-  Layers,
   LayoutGrid,
   type LucideIcon,
   Plug,
@@ -32,11 +30,18 @@ export type FactoryPath =
   | '/o/$org/f/$factory/items'
   | '/o/$org/f/$factory/definition';
 /** Paths of the organization's screens; their only param is its slug. */
-export type OrgPath = '/o/$org' | '/o/$org/members' | '/o/$org/settings' | '/o/$org/api-keys';
+export type OrgPath = '/o/$org' | '/o/$org/members' | '/o/$org/settings' | '/o/$org/api-keys' | '/o/$org/connections';
 
 type Availability<Path> = { available: true; to: Path; exact?: boolean } | { available: false };
 
-export type FactoryScreen = Screen & { group: 'work' | 'build' | 'learn' } & Availability<FactoryPath>;
+/**
+ * A factory screen: one of its own pages, or (`filters`) an organization page filtered to the
+ * factory (?factory=<name>), as the factory's Connections and Knowledge are.
+ */
+export type FactoryScreen = Screen & { group: 'work' | 'build' | 'learn' } & (
+    | Availability<FactoryPath>
+    | { available: true; filters: '/o/$org/connections' }
+  );
 /**
  * An organization screen; one with `permissions` is listed only for people who hold at least one
  * of them (Org.can).
@@ -65,9 +70,16 @@ export const factoryScreens: readonly FactoryScreen[] = [
     available: true,
     to: '/o/$org/f/$factory/definition',
   },
-  // Phase 4.2: /connections.
-  { id: 'connections', label: 'Connections', icon: Plug, group: 'build', available: false },
-  // Later: /knowledge, /jonah.
+  // The organization's Connections, filtered to the factory (spec 4 §10).
+  {
+    id: 'connections',
+    label: 'Connections',
+    icon: Plug,
+    group: 'build',
+    available: true,
+    filters: '/o/$org/connections',
+  },
+  // Later: /knowledge (4-20), /jonah (phase 5).
   { id: 'knowledge', label: 'Knowledge', icon: BookOpen, group: 'learn', available: false },
   { id: 'jonah', label: 'Jonah', icon: SearchCheck, group: 'learn', available: false },
 ];
@@ -107,15 +119,17 @@ export const apiKeysScreen: OrgScreen = {
   to: '/o/$org/api-keys',
   permissions: ['api_key:read', 'personal_token:read'],
 };
-// Phase 4.2: /o/:org/catalog.
-export const catalogScreen: OrgScreen = { id: 'catalog', label: 'Connector catalog', icon: Layers, available: false };
-// Phase 4.1: /o/:org/credentials.
-export const credentialsScreen: OrgScreen = {
-  id: 'credentials',
-  label: 'Credentials',
-  icon: KeyRound,
-  available: false,
+/** The organization's connections (spec 4 §10): every member reads them; owners and admins change them. */
+export const connectionsScreen: OrgScreen = {
+  id: 'connections',
+  label: 'Connections',
+  icon: Plug,
+  available: true,
+  to: '/o/$org/connections',
+  permissions: ['connection:read'],
 };
+// 4-20: /o/:org/knowledge.
+export const knowledgeScreen: OrgScreen = { id: 'knowledge', label: 'Knowledge', icon: BookOpen, available: false };
 export const settingsScreen: OrgScreen = {
   id: 'settings',
   label: 'Settings',
@@ -129,8 +143,8 @@ export const orgScreens: readonly OrgScreen[] = [
   factoriesScreen,
   membersScreen,
   apiKeysScreen,
-  catalogScreen,
-  credentialsScreen,
+  connectionsScreen,
+  knowledgeScreen,
   settingsScreen,
 ];
 

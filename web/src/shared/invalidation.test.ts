@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { defKeys, keys } from '../api/queries';
 import type { DefinitionEvent, StreamEvent } from '../api/types';
 import {
+  connectionInvalidations,
   definitionInvalidations,
   factoryInvalidations,
   heldByMove,
@@ -243,6 +244,33 @@ describe('definitionInvalidations', () => {
   test('ignores data that is no definition event', () => {
     expect(definitionInvalidations(acme, { kind: 'draft' })).toEqual([]);
     expect(definitionInvalidations(acme, null)).toEqual([]);
+  });
+});
+
+describe('connectionInvalidations', () => {
+  test('re-reads the lists, the connection and its activity, never a definition or the work', async () => {
+    const client = definitionCache();
+    client.setQueryData(keys.connectionList(acme, {}), []);
+    client.setQueryData(keys.connectionList(acme, { factory: goal }), []);
+    client.setQueryData(keys.connection(acme, 'github'), {});
+    client.setQueryData(keys.connectionActivity(acme), {});
+    client.setQueryData(keys.connectionKinds(acme), []);
+    client.setQueryData(keys.connectionList(labs, {}), []);
+
+    const stale = await staleAfter(client, connectionInvalidations(acme));
+
+    expect(stale).toEqual([
+      keys.connectionList(acme, {}),
+      keys.connectionList(acme, { factory: goal }),
+      keys.connection(acme, 'github'),
+      keys.connectionActivity(acme),
+    ]);
+  });
+
+  test('a publish re-reads what uses each connection', () => {
+    expect(definitionInvalidations(acme, definition({ kind: 'current', number: 9 }))).toContainEqual(
+      keys.connections(acme),
+    );
   });
 });
 

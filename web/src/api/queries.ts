@@ -39,6 +39,13 @@ import {
   listOrgs,
 } from './client';
 import {
+  type ConnectionFilter,
+  getConnection,
+  listConnectionAudit,
+  listConnectionKinds,
+  listConnections,
+} from './connections';
+import {
   getDraft,
   getDraftFile,
   getDraftModel,
@@ -117,6 +124,16 @@ export const keys = {
   /** Every member's personal tokens (owners and admins). */
   memberTokens: (org: string) => ['org', org, 'member-tokens'] as const,
   factories: (org: string) => ['org', org, 'factories'] as const,
+  /**
+   * The prefix of everything about the organization's connections (spec 4 §10): lists by filter,
+   * one connection by name, the audit entries about them. `event: connection` invalidates it.
+   */
+  connections: (org: string) => ['org', org, 'connections'] as const,
+  connectionList: (org: string, filter: ConnectionFilter) => ['org', org, 'connections', filter] as const,
+  connection: (org: string, name: string) => ['org', org, 'connections', 'detail', name] as const,
+  /** Audit entries about connections: every one's (`all`) or one's, by its id. */
+  connectionActivity: (org: string, id?: string) => ['org', org, 'connections', 'activity', id ?? 'all'] as const,
+  connectionKinds: (org: string) => ['org', org, 'connection-kinds'] as const,
   /** The prefix of every factory overview window. */
   overviews: (org: string) => ['org', org, 'overview'] as const,
   overview: (org: string, window: string) => ['org', org, 'overview', window] as const,
@@ -212,6 +229,38 @@ export const memberTokensQuery = (org: string) =>
   queryOptions({
     queryKey: keys.memberTokens(org),
     queryFn: ({ signal }) => listMemberTokens(org, signal),
+    staleTime: 30_000,
+  });
+
+/** The organization's connections; `factory` (an id) narrows them to what its current version names. */
+export const connectionsQuery = (org: string, filter: ConnectionFilter = {}) =>
+  queryOptions({
+    queryKey: keys.connectionList(org, filter),
+    queryFn: ({ signal }) => listConnections(org, filter, signal),
+    staleTime: 30_000,
+  });
+
+export const connectionQuery = (org: string, name: string) =>
+  queryOptions({
+    queryKey: keys.connection(org, name),
+    queryFn: ({ signal }) => getConnection(org, name, signal),
+    staleTime: 30_000,
+    retry: retryUnlessRefused,
+  });
+
+/** A kind changes with a goald release or an admin's edit: minutes are fresh enough. */
+export const connectionKindsQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.connectionKinds(org),
+    queryFn: ({ signal }) => listConnectionKinds(org, signal),
+    staleTime: 5 * 60_000,
+  });
+
+/** The newest audit entries about connections (owners and admins: audit:read). */
+export const connectionActivityQuery = (org: string, id?: string) =>
+  queryOptions({
+    queryKey: keys.connectionActivity(org, id),
+    queryFn: ({ signal }) => listConnectionAudit(org, { connection: id, limit: id ? 6 : 5 }, signal),
     staleTime: 30_000,
   });
 

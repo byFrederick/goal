@@ -9,7 +9,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, Check, ExternalLink, GitMerge, Pause, Play, RotateCcw, Undo2 } from 'lucide-react';
 import { type FormEvent, useId, useState } from 'react';
 import { toast } from 'sonner';
-import { approveItem, mergeItem, pauseItem, rejectItem, retryItem } from '../api/client';
+import { ApiError, approveItem, mergeItem, pauseItem, rejectItem, retryItem } from '../api/client';
 import { keys } from '../api/queries';
 import type { Factory, Item, ItemState, Station } from '../api/types';
 import { Button } from '../ui/button';
@@ -29,8 +29,10 @@ export interface DecidableItem {
   ref: string;
   title: string;
   state: ItemState;
-  /** The pull request a merge would land, when known. */
+  /** The pull request a merge would land, when known (a card's). */
   pr_url?: string | null | undefined;
+  /** Every pull request a merge would land (the item's outputs), when known. */
+  pull_requests?: string[] | undefined;
 }
 
 type Decision =
@@ -72,6 +74,8 @@ function useDecision(item: DecidableItem, factory: string) {
       toast.success(`${done} ${d.kind === 'retry' || d.kind === 'pause' ? '' : where}`.trim());
     },
     onError: (err, d) => {
+      // A merge goald refuses (cannot-merge, no-code-host-connection) is said in the merge dialog.
+      if (d.kind === 'merge' && mergeRefusal(err)) return;
       const verb = { approve: 'approve', reject: 'send back', merge: 'merge', retry: 'retry', pause: 'pause' }[d.kind];
       toast.error(`Could not ${verb} ${item.ref}`, { description: err.message });
     },
@@ -244,9 +248,14 @@ export function ItemDecisions({
         <MergeDialog
           item={item}
           open={open === 'merge'}
-          onOpenChange={(o) => setOpen(o ? 'merge' : null)}
+          onOpenChange={(o) => {
+            setOpen(o ? 'merge' : null);
+            // A refusal said in the dialog goes with it.
+            if (!o) decide.reset();
+          }}
           onConfirm={() => decide.mutate({ kind: 'merge' }, { onSuccess: () => setOpen(null) })}
           pending={pending === 'merge'}
+          refusal={decide.variables?.kind === 'merge' ? mergeRefusal(decide.error) : undefined}
         />
       ) : null}
     </div>
@@ -378,13 +387,39 @@ function PauseDialog({ item, open, onOpenChange, onConfirm, pending }: DialogPro
   );
 }
 
-function MergeDialog({ item, open, onOpenChange, onConfirm, pending }: DialogProps<void>) {
-  const pr = item.pr_url ? pullRequestLabel(item.pr_url) : 'the pull request';
+/**
+ * Why goald refused a merge, in the dialog's words (spec 4 §4.7): a pull request it could not
+ * merge (409 cannot-merge, naming it; the ones before it stay merged and are skipped next time) or
+ * a host no connection of the factory serves (409 no-code-host-connection); undefined otherwise.
+ */
+export function mergeRefusal(err: unknown): string | undefined {
+  if (!(err instanceof ApiError) || err.status !== 409) return undefined;
+  const detail = err.detail ?? err.title;
+  if (err.code === 'cannot-merge') {
+    return `goald stopped at a pull request it could not merge: ${detail}. Pull requests merged before it stay merged; fix this one and merge again.`;
+  }
+  if (err.code === 'no-code-host-connection') {
+    return `No connection of this factory signs in to that host, so nothing was merged: ${detail}. Add the host’s connection to the factory’s Connections, then merge again.`;
+  }
+  return undefined;
+}
+
+function MergeDialog({
+  item,
+  open,
+  onOpenChange,
+  onConfirm,
+  pending,
+  refusal,
+}: DialogProps<void> & { refusal: string | undefined }) {
+  const prs = item.pull_requests ?? (item.pr_url ? [item.pr_url] : []);
+  const one = prs.length === 1 ? prs[0] : undefined;
+  const what = one ? pullRequestLabel(one) : prs.length > 1 ? `${prs.length} pull requests` : 'the pull request';
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        title={`Merge ${pr}?`}
-        description={`goald squash-merges the pull request of ${item.ref}, deletes its branch and approves the item. It refuses a pull request with conflicts or failing checks, and then nothing changes.`}
+        title={`Merge ${what}?`}
+        description={`goald squash-merges ${prs.length > 1 ? 'every pull request' : 'the pull request'} of ${item.ref}, deletes ${prs.length > 1 ? 'their branches' : 'its branch'} and approves the item. It refuses a pull request with conflicts or failing checks, and then the item stays here.`}
       >
         <form
           className="flex flex-col gap-4"
@@ -394,17 +429,31 @@ function MergeDialog({ item, open, onOpenChange, onConfirm, pending }: DialogPro
           }}
         >
           <p className="m-0 text-[15px] leading-snug">{item.title}</p>
-          {item.pr_url ? (
-            <a
-              href={item.pr_url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 self-start text-sm hover:text-run"
+          {prs.length > 0 ? (
+            <ul className="m-0 flex list-none flex-col gap-1 p-0">
+              {prs.map((pr) => (
+                <li key={pr}>
+                  <a
+                    href={pr}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm hover:text-run"
+                  >
+                    Review {pullRequestLabel(pr, prs.length > 1)} first
+                    <ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" />
+                    <span className="sr-only">(opens in a new tab)</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {refusal ? (
+            <p
+              role="alert"
+              className="m-0 rounded-control border border-rework-line bg-rework-tint px-3 py-2.5 text-sm leading-snug text-rework-ink"
             >
-              Review {pr} first
-              <ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" />
-              <span className="sr-only">(opens in a new tab)</span>
-            </a>
+              {refusal}
+            </p>
           ) : null}
           <div className="flex flex-wrap justify-end gap-2">
             <DialogClose asChild>
@@ -412,7 +461,7 @@ function MergeDialog({ item, open, onOpenChange, onConfirm, pending }: DialogPro
             </DialogClose>
             <Button type="submit" variant="primary" disabled={pending}>
               <GitMerge size={16} strokeWidth={1.75} aria-hidden="true" />
-              {pending ? 'Merging…' : 'Squash and merge'}
+              {pending ? 'Merging…' : refusal ? 'Merge again' : 'Squash and merge'}
             </Button>
           </div>
         </form>

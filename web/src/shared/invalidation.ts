@@ -88,7 +88,8 @@ function isDefinitionEvent(data: unknown): data is DefinitionEvent {
  *   factory (its draft chip) and the factory list; nothing when this tab saved that revision of
  *   that draft itself (the event is its echo), and the versions too once the version is published;
  * - `current`, the version that runs moved or the factory was paused or resumed: the factory and
- *   the list, its versions, draft (based on, running), comparisons, board and overviews;
+ *   the list, its versions, draft (based on, running), comparisons, board, overviews and the
+ *   connections (what uses each);
  * - `factory`, a factory created or deleted: the factory and the list, attention and overviews.
  */
 export function definitionInvalidations(org: string, data: unknown): QueryKey[] {
@@ -114,12 +115,23 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
         defKeys.compares(org, f),
         keys.board(org, f),
         keys.overviews(org),
+        // What uses a connection is read from the current versions.
+        keys.connections(org),
       ];
     case 'factory':
       return [...factory, keys.attention(org), keys.overviews(org)];
     default:
       return [];
   }
+}
+
+/**
+ * The queries one `connection` event touches (spec 4 §8.3): a connection created, changed, tested
+ * or deleted changes the lists, that connection and the audit entries about connections, all
+ * under one prefix; it carries no value.
+ */
+export function connectionInvalidations(org: string): QueryKey[] {
+  return [keys.connections(org)];
 }
 
 /** A resync may have missed anything of the organization: everything under it is re-read. */

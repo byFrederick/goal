@@ -28,8 +28,8 @@ import { SheetContent, SheetLabel } from '../ui/sheet';
 import { AccountBlock } from './account-menu';
 import {
   apiKeysScreen,
-  catalogScreen,
-  credentialsScreen,
+  connectionsScreen,
+  knowledgeScreen,
   laterText,
   membersScreen,
   type OrgScreen,
@@ -47,7 +47,7 @@ interface OrgChoice {
 
 interface OrgMenuModel {
   orgs: OrgChoice[];
-  /** The current organization's pages: members, API keys (with api_key:read), catalog and credentials (phase 4), settings (C7). */
+  /** The current organization's pages: members, API keys, connections, knowledge (4-20) and settings. */
   links: { screen: OrgScreen; label: string }[];
   /** Create organization is offered: to platform admins, or to the local user with sign-in off. */
   canCreate: boolean;
@@ -68,7 +68,7 @@ function useOrgMenuModel(current: OrgSummary): OrgMenuModel {
   // Hidden until goald says who this is: only platform admins create organizations.
   const { data: canCreate = false } = useQuery({ ...meQuery, select: (me) => me.mode === 'none' || me.platform_admin });
   const can = useOrgGrants()?.can;
-  const shown = screensFor([membersScreen, apiKeysScreen, catalogScreen, credentialsScreen, settingsScreen], can);
+  const shown = screensFor([membersScreen, apiKeysScreen, connectionsScreen, knowledgeScreen, settingsScreen], can);
   const labels: Record<string, string> = { [settingsScreen.id]: 'Organization settings' };
   return {
     orgs: data.map((org) => ({

@@ -286,7 +286,7 @@ function mapAgent(agents: AgentsSection, name: string, f: (a: ModelAgent) => Mod
 
 const promptPathFor = (name: string) => `./agents/${name}.md`;
 
-/** The model agents use when they name none (Basics › Advanced); undefined leaves goald's default. */
+/** The model agents use when they name none (Basics › Runtime); undefined leaves goald’s default. */
 export function setDefaultModel(agents: AgentsSection, model: string | undefined): Edit<'agents'> {
   const { default_model: _old, ...rest } = agents;
   return edit('agents', model === undefined ? rest : { ...rest, default_model: model });
@@ -583,26 +583,25 @@ export function useBuiltins(agents: AgentsSection, agent: string): Edit<'agents'
 // Connections.
 
 /**
- * Sets which agents may use a connection: a connector-form entry's own `agents`; for any other
- * (an organization connection, an inline one), each agent's `connections` (an agents save).
+ * Ticks or unticks one of the organization's connections for the factory (spec 4 §4.4): ticked,
+ * it joins spec.connections as {name} (written as the bare name); unticked, it leaves with every
+ * agent's reference to it.
  */
-export function setConnectionAgents(model: Model, name: string, allowed: string[]): AnyEdit {
-  const connection = model.connections.find((c) => c.name === name);
-  if (connection?.connector) {
-    return edit(
-      'connections',
-      model.connections.map((c) => (c.name === name ? { ...c, agents: allowed } : c)),
-    );
-  }
+export function setFactoryConnection(model: Model, name: string, on: boolean): AnyEdit[] {
+  if (!on) return removeConnection(model, name);
+  if (model.connections.some((c) => c.name === name)) return [];
+  return [edit('connections', [...model.connections, { name }])];
+}
+
+/** Gives one agent's runs a connection of the factory's, or takes it away (its `connections`). */
+export function setAgentConnection(agents: AgentsSection, agent: string, name: string, on: boolean): Edit<'agents'> {
   return edit('agents', {
-    ...model.agents,
-    agents: agentsOf(model.agents).map((a) => {
-      const has = a.connections?.includes(name) ?? false;
-      const wants = allowed.includes(a.name);
-      if (has === wants) return a;
+    ...agents,
+    agents: agentsOf(agents).map((a) => {
+      if (a.name !== agent || (a.connections?.includes(name) ?? false) === on) return a;
       return {
         ...a,
-        connections: wants ? [...(a.connections ?? []), name] : (a.connections ?? []).filter((c) => c !== name),
+        connections: on ? [...(a.connections ?? []), name] : (a.connections ?? []).filter((c) => c !== name),
       };
     }),
   });

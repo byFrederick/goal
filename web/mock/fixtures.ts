@@ -692,6 +692,8 @@ const goalSeeds: Seed[] = [
       spec: specOutput('Daily throughput bars on the floor.', ['Bars are labelled', 'Today is solid teal'], 'web'),
       build: {
         pull_request: `${repo}/pull/38`,
+        // The bars' tokens live in the design repository too: a second change, on GitLab.
+        pull_requests: ['https://gitlab.example.com/acme/design-tokens/-/merge_requests/12'],
         branch: 'goal/6',
         summary: 'Added DailyBars with an SVG hatch pattern and labels.',
       },

@@ -1,5 +1,6 @@
 // A factory's sidebar: the organization as eyebrow, the factory's name and title, then Work
-// (Floor, Board, Items with what waits on you), Build and Learn (C §10.5, canvas "Main").
+// (Floor, Board, Items with what waits on you), Build (Definition; Connections, the
+// organization's page filtered to the factory) and Learn (C §10.5, canvas "Main").
 import { Link } from '@tanstack/react-router';
 import type { Factory, OrgSummary } from '../api/types';
 import { Count } from '../ui/count';
@@ -22,7 +23,19 @@ export function FactorySidebar({ org, factory }: { org: OrgSummary; factory: Fac
           {factoryScreens
             .filter((s) => s.group === group.id)
             .map((s) =>
-              s.available ? (
+              s.available && 'filters' in s ? (
+                <li key={s.id}>
+                  <Link
+                    to={s.filters}
+                    params={{ org: org.slug }}
+                    search={{ factory: factory.name }}
+                    className={entryClass}
+                  >
+                    <s.icon {...iconProps} />
+                    {s.label}
+                  </Link>
+                </li>
+              ) : s.available ? (
                 <li key={s.id}>
                   <Link to={s.to} params={params} activeOptions={{ exact: s.exact ?? false }} className={entryClass}>
                     <s.icon {...iconProps} />
