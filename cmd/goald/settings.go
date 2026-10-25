@@ -312,11 +312,7 @@ func sandboxSettings(s *settings, getenv func(string) string, or func(name, def 
 		s.Sandbox = backend
 	case sandboxCloudflare:
 		s.Sandbox = backend
-
-		if _, err := cloudflare.New(cloudflare.Config{URL: s.SandboxURL, Key: s.SandboxKey}, slog.New(slog.DiscardHandler)); err != nil {
-			errs = append(errs, fmt.Errorf("GOAL_SANDBOX=cloudflare needs %s, the control Worker's sandbox API (http://sandbox.internal), and %s: %w",
-				sandboxURLEnv, sandboxKeyEnv, err))
-		}
+		errs = append(errs, cloudflareErrors(*s)...)
 	default:
 		errs = append(errs, fmt.Errorf("%s %q is not docker or cloudflare", sandboxEnv, string(backend)))
 	}
@@ -329,6 +325,26 @@ func sandboxSettings(s *settings, getenv func(string) string, or func(name, def 
 
 	if u, err := url.Parse(s.GatewayURL); err != nil || (u.Scheme != schemeHTTP && u.Scheme != schemeHTTPS) || u.Host == "" || u.Path == "" || u.RawQuery != "" {
 		errs = append(errs, fmt.Errorf("%s %q is not an http(s) URL with a path and no query, such as http://127.0.0.1:8080/mcp", gatewayURLEnv, s.GatewayURL))
+	}
+
+	return errs
+}
+
+// cloudflareErrors checks what GOAL_SANDBOX=cloudflare needs: the control Worker's sandbox API and,
+// under session, the Worker as a trusted proxy. Every request comes from the Worker, which names
+// the client in X-Forwarded-For; believing no proxy, the auth service's rate limits would count
+// everyone as the Worker, so anyone could use up everyone's sign-in codes.
+func cloudflareErrors(s settings) []error {
+	var errs []error
+
+	if _, err := cloudflare.New(cloudflare.Config{URL: s.SandboxURL, Key: s.SandboxKey}, slog.New(slog.DiscardHandler)); err != nil {
+		errs = append(errs, fmt.Errorf("GOAL_SANDBOX=cloudflare needs %s, the control Worker's sandbox API (http://sandbox.internal), and %s: %w",
+			sandboxURLEnv, sandboxKeyEnv, err))
+	}
+
+	if s.Auth == authSession && len(s.TrustedProxies) == 0 {
+		errs = append(errs, fmt.Errorf("GOAL_SANDBOX=cloudflare under GOAL_AUTH=session needs %s, the control Worker's addresses "+
+			"(deploy/cloudflare sets it), so the auth service's rate limits see each client's own address", proxiesEnv))
 	}
 
 	return errs

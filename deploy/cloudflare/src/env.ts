@@ -40,6 +40,12 @@ const goaldTopology = {
   GOAL_AUTH_UPSTREAM: `http://${hosts.auth}`,
   GOAL_SANDBOX: 'cloudflare',
   GOAL_SANDBOX_URL: `http://${hosts.sandbox}`,
+  // Nothing but this Worker reaches goald's port 8080 (a container has no address of its own on
+  // the internet, and boxes reach only the gateway's 8090), and the Worker replaces X-Forwarded-For
+  // with Cloudflare's client address: so goald believes every peer, whatever address Cloudflare
+  // gives the Worker's requests inside the container, and the auth service's rate limits see each
+  // client instead of the Worker (goald refuses GOAL_SANDBOX=cloudflare under session without it).
+  GOAL_TRUSTED_PROXIES: '0.0.0.0/0,::/0',
 };
 
 /** goald's settings the Worker passes on when it has them (cmd/goald/settings.go reads them). */
@@ -47,7 +53,6 @@ const goaldSettings = [
   'GOAL_PUBLIC_URL',
   'GOAL_AUTH',
   'GOAL_AUTH_GOOGLE',
-  'GOAL_TRUSTED_PROXIES',
   'GOAL_DATABASE_URL',
   'GOAL_MIGRATE_DATABASE_URL',
   'GOAL_S3_BUCKET',

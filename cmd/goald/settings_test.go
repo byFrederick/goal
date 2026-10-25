@@ -153,14 +153,15 @@ func TestSettings_TheCutoverIgnoresTheEnvironmentCredentials(t *testing.T) {
 func TestSettings_Cloudflare(t *testing.T) {
 	t.Parallel()
 
-	s, err := settingsFrom(envOf(map[string]string{
-		sandboxEnv: string(sandboxCloudflare), sandboxURLEnv: "http://sandbox.internal", sandboxKeyEnv: "sandbox-key", upstreamEnv: "http://auth.internal",
-	}))
+	env := cloudflareEnv()
+	env[proxiesEnv] = "0.0.0.0/0,::/0"
+
+	s, err := settingsFrom(envOf(env))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if s.Sandbox != sandboxCloudflare || s.SandboxURL != "http://sandbox.internal" || s.SandboxKey != "sandbox-key" {
+	if s.Sandbox != sandboxCloudflare || s.SandboxURL != env[sandboxURLEnv] || s.SandboxKey != "sandbox-key" {
 		t.Errorf("sandbox %q at %q (key set %v); want cloudflare at http://sandbox.internal", s.Sandbox, s.SandboxURL, s.SandboxKey != "")
 	}
 
@@ -171,6 +172,31 @@ func TestSettings_Cloudflare(t *testing.T) {
 	local, err := settingsFrom(envOf(nil))
 	if err != nil || local.Sandbox != sandboxDocker {
 		t.Errorf("default sandboxes = %q, %v; want docker", local.Sandbox, err)
+	}
+}
+
+// On Cloudflare every request reaches goald from the control Worker, which names the client in
+// X-Forwarded-For. Without GOAL_TRUSTED_PROXIES the auth service would count every sign-in under
+// the Worker's one address, so anyone could use up everyone's sign-in codes (phase 4 review, M3):
+// goald refuses to start. GOAL_AUTH=none proxies nothing to the auth service, so it needs none.
+func TestSettings_CloudflareSessionNeedsTrustedProxies(t *testing.T) {
+	t.Parallel()
+
+	env := cloudflareEnv()
+	if _, err := settingsFrom(envOf(env)); err == nil || !strings.Contains(err.Error(), proxiesEnv) {
+		t.Errorf("GOAL_SANDBOX=cloudflare under session without %s: err = %v; want a refusal naming it", proxiesEnv, err)
+	}
+
+	env[authEnv] = string(authNone)
+	if _, err := settingsFrom(envOf(env)); err != nil {
+		t.Errorf("GOAL_SANDBOX=cloudflare under none: %v; want no trusted proxies needed", err)
+	}
+}
+
+// cloudflareEnv is the control Worker's topology for goald, but GOAL_TRUSTED_PROXIES.
+func cloudflareEnv() map[string]string {
+	return map[string]string{
+		sandboxEnv: string(sandboxCloudflare), sandboxURLEnv: "http://sandbox.internal", sandboxKeyEnv: "sandbox-key", upstreamEnv: "http://auth.internal",
 	}
 }
 

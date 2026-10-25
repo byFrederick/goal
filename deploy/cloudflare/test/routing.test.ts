@@ -46,6 +46,9 @@ describe('routing', () => {
       GOAL_AUTH_UPSTREAM: 'http://auth.internal',
       GOAL_SANDBOX: 'cloudflare',
       GOAL_SANDBOX_URL: 'http://sandbox.internal',
+      // Only this Worker reaches goald's port 8080, and it writes X-Forwarded-For itself: goald
+      // believes it, so the auth service's rate limits see each client (phase 4 review, M3).
+      GOAL_TRUSTED_PROXIES: '0.0.0.0/0,::/0',
     });
     // The auth service's secrets and anything unlisted stay out of goald (AGENTS.md rule 7).
     for (const name of ['BETTER_AUTH_SECRETS', 'GOAL_AUTH_DATABASE_URL', 'UNLISTED_SETTING']) {

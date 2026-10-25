@@ -37,17 +37,23 @@ import (
 // on ports of their own, a database and a bucket of their own, compose's Mailpit. The install's
 // goald (127.0.0.1:8080), database and bucket are never touched.
 const (
-	e2eListen     = "127.0.0.1:18089"
-	e2eAuthListen = "127.0.0.1:18091"
+	e2eHost       = "127.0.0.1" // also the client's address, as goald and the auth service see it
+	e2eListen     = e2eHost + ":18089"
+	e2eAuthListen = e2eHost + ":18091"
 	e2eMailpit    = "http://127.0.0.1:8025"
 	e2ePublicURL  = "http://" + e2eListen
 )
 
 // e2eStack is one run's goald, auth service, database and bucket.
 type e2eStack struct {
-	owner  string // the bootstrap owner's email
-	client *http.Client
+	owner    string // the bootstrap owner's email
+	database string
+	client   *http.Client
 }
+
+// forgedClientAddr is the X-Forwarded-For every request of the stack's client carries: goald
+// believes no proxy here, as on a laptop, so it must never reach the auth service.
+const forgedClientAddr = "203.0.113.50"
 
 // Spec 3 §13 and §15 (3-9): with GOAL_AUTH=session, the bootstrap owner signs in with the code
 // Mailpit received, through goald's /api/auth proxy; goald then answers as them (platform admin,
@@ -66,6 +72,7 @@ func TestE2E_SignInWithAnEmailedCode(t *testing.T) {
 	}
 
 	s.signIn(t)
+	s.checkClientAddress(t)
 	s.checkTheOwner(t)
 	s.checkTheirOrganizations(t)
 	newOwner := s.membersFlow(t)
@@ -80,6 +87,34 @@ func TestE2E_SignInWithAnEmailedCode(t *testing.T) {
 
 	if os.Getenv("GOAL_E2E_WEB") != "" {
 		s.webFlow(t)
+	}
+}
+
+// checkClientAddress checks the auth service records and rate-limits the client by the address
+// goald's proxy names (X-Goal-Client-Ip, Better Auth's ipAddressHeaders): with no proxy believed,
+// the peer's, never the X-Forwarded-For the client forged (phase 4 review, M3).
+func (s *e2eStack) checkClientAddress(t *testing.T) {
+	t.Helper()
+
+	conn, err := pgx.Connect(t.Context(), roleURL(t, s.database, postgres.AuthRole))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close(context.WithoutCancel(t.Context())) }()
+
+	var sessionIPs []string
+	if err := conn.QueryRow(t.Context(), `SELECT array_agg(DISTINCT "ipAddress") FROM auth.session`).Scan(&sessionIPs); err != nil {
+		t.Fatal(err)
+	}
+
+	var counted, forged int
+	if err := conn.QueryRow(t.Context(), `SELECT count(*) FILTER (WHERE key LIKE $1||'%'), count(*) FILTER (WHERE key LIKE '%'||$2||'%')
+		FROM auth."rateLimit"`, e2eHost, forgedClientAddr).Scan(&counted, &forged); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(sessionIPs) != 1 || sessionIPs[0] != e2eHost || counted == 0 || forged != 0 {
+		t.Errorf("session addresses %v, rate limits under 127.0.0.1 %d, under the forged address %d; want the peer's alone", sessionIPs, counted, forged)
 	}
 }
 
@@ -305,6 +340,7 @@ func startE2EStack(t *testing.T) *e2eStack {
 	s.client = &http.Client{Jar: jar, Timeout: 30 * time.Second}
 
 	database := e2eDatabase(t, "goal_e2e_"+suffix)
+	s.database = database
 	bucket := e2eBucket(t, "goal-e2e-"+suffix)
 
 	startMailpit(t)
@@ -554,7 +590,8 @@ type e2eResponse struct {
 	body   []byte
 }
 
-// do sends a request to goald with the client's cookies, from goald's own origin.
+// do sends a request to goald with the client's cookies, from goald's own origin, naming a
+// client address of its own in X-Forwarded-For that goald must not believe.
 func (s *e2eStack) do(t *testing.T, method, path, body string) e2eResponse {
 	t.Helper()
 
@@ -565,6 +602,7 @@ func (s *e2eStack) do(t *testing.T, method, path, body string) e2eResponse {
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", e2ePublicURL)
+	req.Header.Set("X-Forwarded-For", forgedClientAddr)
 
 	res, err := s.client.Do(req)
 	if err != nil {

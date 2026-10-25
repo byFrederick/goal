@@ -264,7 +264,7 @@ The CSP itself (`web/csp.txt`, with `worker-src 'self'`) and `X-Frame-Options: D
 | `GOAL_AUTH` | goald | `none` until 3-16, then `session` (the default lives in `cmd/goald/settings.go`; `goal up` only passes it on) · `none` only with a loopback `GOAL_LISTEN`; read since 3-7, which refuses `session` until 3-9 makes it work |
 | `GOAL_PUBLIC_URL` | goald, auth (as `BETTER_AUTH_URL`) | `http://<GOAL_LISTEN>` on loopback, required otherwise · https unless loopback or a `*.localhost` name (review L5: `http://goal.localhost:8080` keeps the session cookie from other local web servers, row 57); the origin people open (`localhost` and `127.0.0.1` are different origins to Better Auth) |
 | `GOAL_AUTH_UPSTREAM` | goald | `http://127.0.0.1:8081` · loopback http only |
-| `GOAL_TRUSTED_PROXIES` | goald | empty · comma-separated CIDRs (or single addresses) of proxies whose `X-Forwarded-For` is believed |
+| `GOAL_TRUSTED_PROXIES` | goald | empty · comma-separated CIDRs (or single addresses) of proxies whose `X-Forwarded-For` is believed; on Cloudflare the control Worker sets every address (spec 4 §5.12), and goald refuses `GOAL_SANDBOX=cloudflare` under `session` without it |
 | `GOAL_GATEWAY_LISTEN` | goald | the main listener · required and different when `GOAL_LISTEN` is not loopback (§5.5) |
 | `GOAL_AUTH_GOOGLE` | goald, auth | `off` · `on` needs `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (auth) |
 | `GOAL_AUTH_LISTEN` | auth | `127.0.0.1:8081` · loopback only |

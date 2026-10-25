@@ -20,8 +20,10 @@ has "$public" '"port":8080' || fail "public request: $public"
 has "$public" '10.9.9.9' && fail "the client's X-Forwarded-For reached goald: $public"
 has "$public" '"GOAL_MASTER_KEYS"' || fail "goald lacks its master key: $public"
 has "$public" '"GOAL_SANDBOX_URL"' || fail "goald lacks the topology: $public"
+has "$public" '"GOAL_TRUSTED_PROXIES"' || fail "goald believes no proxy, so the auth service would see only the Worker: $public"
 for name in BETTER_AUTH_SECRETS UNLISTED_SETTING; do has "$public" "\"$name\"" && fail "goald has $name"; done
-echo "ok: public https -> goald:8080, with goald's settings only"
+echo "ok: public https -> goald:8080, with goald's settings only, believing the Worker's X-Forwarded-For"
+echo "    (the Worker's requests reach goald's container from $(printf '%s' "$public" | sed -n 's/.*"peer":"\([^"]*\)".*/\1/p'))"
 
 goald=$(docker ps --format '{{.Names}}' | grep '^workerd-goal-topology-Goald' | grep -v proxy | head -n 1)
 [ -n "$goald" ] || fail "no goald container"

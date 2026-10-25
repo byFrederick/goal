@@ -238,6 +238,7 @@ func TestAuthProxy_ReplacesForwardingHeaders(t *testing.T) {
 	t.Parallel()
 
 	trusted := []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8"), netip.MustParsePrefix("fd00::/8")}
+	everyAddress := []netip.Prefix{netip.MustParsePrefix("0.0.0.0/0"), netip.MustParsePrefix("::/0")}
 
 	tests := []struct {
 		name    string
@@ -265,6 +266,9 @@ func TestAuthProxy_ReplacesForwardingHeaders(t *testing.T) {
 		{name: "malformed entry", trusted: trusted, peer: proxyPeer, xff: []string{"203.0.113.5, not-an-ip"}, want: "10.0.0.2"},
 		{name: "entry with a port", trusted: trusted, peer: "[fd00::2]:5100", xff: []string{"[2001:db8::1]:4711"}, want: "2001:db8::1"},
 		{name: "mapped IPv4 peer", peer: "[::ffff:192.0.2.10]:5100", want: "192.0.2.10"},
+		// Cloudflare: the control Worker, goald's only peer, writes the one entry itself (deploy/cloudflare).
+		{name: "every peer trusted", trusted: everyAddress, peer: "[fd00:1::5]:5100", xff: []string{"2001:db8::7"}, want: "2001:db8::7"},
+		{name: "every peer trusted, no header", trusted: everyAddress, peer: "100.64.0.9:5100", want: "100.64.0.9"},
 		// Not from a TCP listener: goald knows no address, and the client's own never passes.
 		{name: "peer without an address", peer: "@", xff: []string{clientAddr}},
 	}
