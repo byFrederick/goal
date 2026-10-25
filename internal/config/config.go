@@ -245,8 +245,8 @@ type Station struct {
 	Output      string            `json:"output,omitempty"`
 	Checks      []StationCheck    `json:"checks,omitempty"`
 	Gate        *Gate             `json:"gate,omitempty"`
-	// Action makes goald act when a human approves at this (human) station: "merge" merges
-	// the item's pull request first.
+	// Action makes goald act when the item is approved at this station, a human station or an
+	// agent station with a gate: "merge" merges the item's pull requests first.
 	Action string `json:"action,omitempty"`
 }
 

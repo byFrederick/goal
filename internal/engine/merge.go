@@ -2,19 +2,22 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
 )
 
-// ErrNotMergeStep means a merge was asked for an item that is not waiting at a human station
-// whose action is merge.
+// ErrNotMergeStep means a merge was asked for an item that is not waiting for a person at a
+// station whose action is merge.
 var ErrNotMergeStep = errors.New("item is not waiting at a merge station")
 
 // ErrNoCodeHost means a pull request is on a host that none of the factory's connections serves:
@@ -44,37 +47,19 @@ func (e *Engine) Merge(ctx context.Context, id domain.ItemID, by domain.Actor, m
 		return domain.Item{}, fmt.Errorf("merge %s: station %s does not merge: %w", id, it.Station, ErrNotMergeStep)
 	}
 
-	urls := it.PullRequests(l)
-	if len(urls) == 0 {
-		return domain.Item{}, fmt.Errorf("merge %s: no output names a pull_request or pull_requests: %w", id, ports.ErrNotMergeable)
-	}
-
 	if method == "" {
 		method = MergeSquash
-	}
-
-	targets, err := e.mergeTargets(ctx, l, urls, domain.ConnectionUse{By: by, Item: it.ID})
-	if err != nil {
-		return domain.Item{}, fmt.Errorf("merge %s: %w", id, err)
-	}
-
-	merged := make([]map[string]any, 0, len(targets))
-
-	for _, t := range targets {
-		data, err := e.mergeOne(ctx, id, t, method)
-		if err != nil {
-			return domain.Item{}, fmt.Errorf("merge %s: %w", id, err)
-		}
-
-		merged = append(merged, data)
 	}
 
 	now := e.clock.Now()
 	t := ports.Transition{ItemID: it.ID, From: it.Position(), At: now}
 
-	for _, data := range merged {
-		t.Events = append(t.Events, decision(it, domain.EventMerged, now, by, data))
+	merged, err := e.mergeAll(ctx, l, it, by, method, now)
+	if err != nil {
+		return domain.Item{}, fmt.Errorf("merge %s: %w", id, err)
 	}
+
+	t.Events = append(t.Events, merged...)
 
 	// A merge at a merge station is a decision the line requires (spec 4 §4.9).
 	t.Events = append(t.Events, decision(it, domain.EventApproved, now, by, map[string]any{domain.KeyPlanned: true}))
@@ -84,6 +69,73 @@ func (e *Engine) Merge(ctx context.Context, id domain.ItemID, by domain.Actor, m
 	}
 
 	return e.decide(ctx, "merge", t)
+}
+
+// gateMergeTimeout bounds a gate's merge, which runs after the run, while the lease is held,
+// and goes on through a shutdown so the item does not stay in progress with some pull requests
+// merged.
+const gateMergeTimeout = 2 * time.Minute
+
+// mergeOnApproval merges the item's pull requests when the gate that approved it, an agent
+// station, has action merge (spec 4 §4.7), and adds the merged events to t. It is Merge's merge
+// with the engine as actor: the connections are opened for the engine's use on the item, so it
+// is no person's touch. The pull requests are those of the item's outputs and of the gate's own
+// output, which only t holds yet. A refusal is returned, so the item blocks at the gate and
+// never moves on unmerged.
+func (e *Engine) mergeOnApproval(ctx context.Context, c claimed, l domain.Line, t *ports.Transition) error {
+	if c.station.Action != domain.ActionMerge {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), gateMergeTimeout)
+	defer cancel()
+
+	it := c.item
+	it.Outputs = maps.Clone(it.Outputs)
+
+	if it.Outputs == nil {
+		it.Outputs = map[string]json.RawMessage{}
+	}
+
+	it.Outputs[c.station.ID] = t.Output
+
+	merged, err := e.mergeAll(ctx, l, it, domain.EngineActor, MergeSquash, t.At)
+	if err != nil {
+		return fmt.Errorf("merge on the gate's approval: %w", err)
+	}
+
+	t.Events = append(t.Events, merged...)
+
+	return nil
+}
+
+// mergeAll merges every pull request the item's outputs name (domain.Item.PullRequests) through
+// the line's code host connections, opened for by's merge of it, and returns one merged event
+// by that actor per pull request. It stops at the first refusal; the ones merged before it stay merged
+// and are skipped when asked again.
+func (e *Engine) mergeAll(ctx context.Context, l domain.Line, it domain.Item, by domain.Actor, method string, at time.Time) ([]domain.Event, error) {
+	urls := it.PullRequests(l)
+	if len(urls) == 0 {
+		return nil, fmt.Errorf("no output names a pull_request or pull_requests: %w", ports.ErrNotMergeable)
+	}
+
+	targets, err := e.mergeTargets(ctx, l, urls, domain.ConnectionUse{By: by, Item: it.ID})
+	if err != nil {
+		return nil, err
+	}
+
+	events := make([]domain.Event, 0, len(targets))
+
+	for _, t := range targets {
+		data, err := e.mergeOne(ctx, it.ID, t, method)
+		if err != nil {
+			return nil, err
+		}
+
+		events = append(events, decision(it, domain.EventMerged, at, by, data))
+	}
+
+	return events, nil
 }
 
 // mergeTarget is one pull request to merge, with the connection and code host that serve it.

@@ -337,7 +337,7 @@
         },
         "action": {
           "enum": ["merge"],
-          "description": "On a human station: what goald does when the human approves. merge merges every pull request the item's outputs name first (the pull_request and pull_requests fields of each station's latest output), each through the factory's code host connection for its host."
+          "description": "On a human station or an agent station with a gate: what goald does when the human or the gate approves. merge merges every pull request the item's outputs name first (the pull_request and pull_requests fields of each station's latest output, the gate's own included), each through the factory's code host connection for its host; at a gate goald merges as the engine, and a refused merge blocks the item at the gate."
         },
         "gate": {
           "type": "object",
@@ -351,7 +351,15 @@
       },
       "allOf": [
         { "if": { "properties": { "kind": { "const": "agent" } } }, "then": { "oneOf": [ { "required": ["agent"] }, { "required": ["route"] } ] } },
-        { "if": { "required": ["action"] }, "then": { "properties": { "kind": { "const": "human" } } } }
+        {
+          "if": { "required": ["action"] },
+          "then": {
+            "oneOf": [
+              { "properties": { "kind": { "const": "human" } } },
+              { "properties": { "kind": { "const": "agent" } }, "required": ["gate"] }
+            ]
+          }
+        }
       ]
     },
     "board": {
