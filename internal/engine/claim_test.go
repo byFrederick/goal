@@ -212,3 +212,38 @@ func TestDecisions_OnAnItemOfAnotherOrgAreNotFound(t *testing.T) {
 		t.Errorf("item is %s, want still waiting_human", got.State)
 	}
 }
+
+func TestEngine_ClaimWaitsForNeeds(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, lineOf(agentStation(stWork, agWorker, 2, 2)), porttest.Succeed(`{}`))
+
+	part := h.submit(t, domain.NewItem{Title: "part"})
+	need := h.submit(t, domain.NewItem{Title: "need"})
+
+	if _, err := h.store.AddEdge(inOrg(t), domain.NewEdge{
+		Item: part.ID, Needs: need.ID, Kind: domain.EdgePlanned, By: domain.LocalUser, At: t0,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	h.step(t)
+
+	if got := h.item(t, need.ID); got.State != domain.StateDone {
+		t.Fatalf("need = %s at %s; want done", got.State, got.Station)
+	}
+
+	if got := h.item(t, part.ID); got.Station != stWork || got.State != domain.StateQueued {
+		t.Fatalf("part = %s at %s; want queued at %s while its need is open", got.State, got.Station, stWork)
+	}
+
+	if runs := h.runs(t, testOrg, part.ID); len(runs) != 0 {
+		t.Fatalf("part ran %d times before its need was done", len(runs))
+	}
+
+	h.step(t)
+
+	if got := h.item(t, part.ID); got.State != domain.StateDone {
+		t.Errorf("part = %s at %s on the tick after its need is done; want done", got.State, got.Station)
+	}
+}
