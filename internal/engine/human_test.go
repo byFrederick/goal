@@ -406,7 +406,7 @@ func TestHumanControl_MidRunCancelsTheRun(t *testing.T) {
 	}
 }
 
-// A run still winding down after a person sent its item back (agent stop, sidecars, sandbox)
+// A run still winding down after a person sent its item back (agent stop, sandbox)
 // must not stop the item's next run: when the old run's work ends it forgets and cancels only
 // its own claim, so the next one keeps running and finishes.
 func TestHumanControl_WindingDownRunLeavesTheNextClaimRunning(t *testing.T) {
@@ -542,9 +542,5 @@ func (h *harness) expectRunTaken(t *testing.T, id domain.ItemID, want domain.Pos
 		if n := len(h.eventsOf(id, k)); n != 0 {
 			t.Errorf("events %v; the instance that lost the run must not move the item (%s)", h.kinds(id), k)
 		}
-	}
-
-	if ended := h.endedRuns(); len(ended) != 1 {
-		t.Errorf("RunEnded told %v; want the cancelled run", ended)
 	}
 }

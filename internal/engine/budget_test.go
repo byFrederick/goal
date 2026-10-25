@@ -32,6 +32,14 @@ func (l *logBuffer) Write(p []byte) (int, error) {
 	return l.b.Write(p)
 }
 
+// String is everything logged so far.
+func (l *logBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	return l.b.String()
+}
+
 // budgetLogs returns the budget transitions logged so far, in order, as "<msg> <gauge>".
 func (l *logBuffer) budgetLogs(t *testing.T) []string {
 	t.Helper()

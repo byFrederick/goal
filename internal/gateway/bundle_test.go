@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -18,21 +19,91 @@ import (
 	"github.com/byFrederick/goal/internal/ports/porttest"
 )
 
-const cloneToken = "acme-repo-s3cr3t-0123456789" //nolint:gosec // a fake secret the bundle must not carry
+// The secret values of the harness's connections, which no bundle carries.
+const (
+	cloneToken   = "acme-repo-s3cr3t-0123456789"   //nolint:gosec // a fake secret the bundle must not carry
+	issuesToken  = "acme-issues-s3cr3t-0123456789" //nolint:gosec // a fake secret the bundle must not carry
+	modelAPIKey  = "acme-model-s3cr3t-0123456789"  //nolint:gosec // a fake secret the bundle must not carry
+	connTracker  = "issues"
+	connDocs     = "docs"
+	trackerTitle = "Issue tracker"
+	fieldToken   = "token"
+	kindStdio    = "stdio-server"
+)
 
-// bundleYAML is a factory with a private repository, a contract at the agent's station and the
-// limits and tool rules a run carries.
+// testKinds are the platform kinds of the harness's connections: a model's access, git over https
+// with an API token, an issue tracker with a CLI and a remote MCP server, and a stdio server.
+func testKinds() []domain.ConnectionKind {
+	token := domain.KindField{Name: fieldToken, Title: "Token", Secret: true, Required: true}
+
+	return []domain.ConnectionKind{
+		{Name: "model-key", Title: "Model key", Platform: true, Spec: domain.KindSpec{
+			Fields: []domain.KindField{token}, Env: map[string]string{"MODEL_KEY": "{{token}}"}, Model: true,
+		}},
+		{Name: "code-host", Title: "Code host", Platform: true, Spec: domain.KindSpec{
+			Fields: []domain.KindField{token, {Name: "host", Title: "Host", Default: "github.com"}},
+			Env:    map[string]string{"CODE_TOKEN": "{{token}}"},
+			Git:    &domain.KindGit{Host: "{{host}}", Username: "x-access-token", PasswordEnv: "CODE_TOKEN"},
+		}},
+		{Name: "issue-tracker", Title: trackerTitle, Platform: true, Spec: domain.KindSpec{
+			Fields: []domain.KindField{token, {Name: "site", Title: "Site", Required: true}},
+			Env:    map[string]string{"ISSUES_TOKEN": "{{token}}", "ISSUES_SITE": "{{site}}"},
+			CLI:    &domain.KindCLI{Tool: "npm:@acme/issues-cli@2.0.0"},
+			MCP:    &domain.KindMCP{URL: "https://{{site}}/mcp", Headers: map[string]string{"Authorization": "Bearer ${ISSUES_TOKEN}"}},
+			Docs:   "File and read issues with the issues CLI or its MCP tools.",
+		}},
+		{Name: kindStdio, Title: "MCP server", Platform: true, Spec: domain.KindSpec{
+			Fields: []domain.KindField{{Name: "command", Title: "Command"}}, MCP: &domain.KindMCP{Command: []string{"sh", "-c", "{{command}}"}},
+		}},
+	}
+}
+
+// newConnections makes an organization and its connections of testKinds: claude (the model),
+// code (git to github.com), issues, docs (a stdio server) and wiki (a stdio server too).
+func newConnections(t *testing.T, clock *porttest.Clock) (domain.OrgID, *porttest.Connections) {
+	t.Helper()
+
+	tenancy := porttest.NewTenancy(clock.Now)
+
+	org, err := tenancy.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: "acme", Name: "Acme"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy)
+	if err := c.SyncPlatformKinds(t.Context(), testKinds()); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, n := range []domain.NewConnection{
+		{Name: "claude", Kind: "model-key", Secrets: map[string]string{fieldToken: modelAPIKey}},
+		{Name: "code", Kind: "code-host", Secrets: map[string]string{fieldToken: cloneToken}},
+		{Name: connTracker, Kind: "issue-tracker", Fields: map[string]string{"site": "issues.example.com"}, Secrets: map[string]string{fieldToken: issuesToken}},
+		{Name: connDocs, Kind: kindStdio, Fields: map[string]string{"command": "npx -y @acme/docs-mcp@1.0.0"}},
+		{Name: "wiki", Kind: kindStdio, Fields: map[string]string{"command": "npx -y @acme/wiki-mcp@1.0.0"}},
+	} {
+		if _, err := c.Create(domain.WithOrg(t.Context(), org.ID), n, domain.LocalUser); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	return org.ID, c
+}
+
+// bundleYAML is a factory on connections with a private repository, a contract at the agent's
+// station and the limits, tools and tool rules a run carries. Its agent names two organization
+// connections its token grants and one (wiki) it does not.
 const bundleYAML = `apiVersion: goal/v1
 kind: Factory
 metadata: { id: ` + string(factoryID) + `, name: acme-bundle, purpose: Ship small changes to acme's API. }
 spec:
   runtime:
-    runner: docker
-    image: ghcr.io/acme/agent:1.0.0
-    auth: anthropic-api-key
     model: claude-sonnet-5-5
-    repository: { url: "https://github.com/acme/api.git", token: "env:ACME_REPO_TOKEN" }
+    modelConnection: claude
+    tools: ["task@3.46.1"]
+    repository: { url: "https://github.com/acme/api.git", connection: code }
     budget: { maxTurnsPerTask: 40, perItemUsd: 6 }
+  connections: [issues, docs, wiki]
   skills:
     - { name: acme-conventions, source: ./skills/acme-conventions }
   contracts: { change: contracts/change.json }
@@ -41,13 +112,34 @@ spec:
       prompt: ./agents/engineer.md
       model: claude-opus-5-5
       skills: [acme-conventions]
+      connections: [issues, docs, wiki]
       tools:
-        allow: [Read, Edit, "Bash(npm test*)"]
-        deny: ["Bash(git push --force*)"]
+        allow: [Read, Edit, "Bash(npm test*)", "issues__get_*"]
+        deny: ["Bash(git push --force*)", issues__get_secret]
   board:
     stations:
       - { id: spec, kind: human }
       - { id: build, kind: agent, agent: engineer, output: change }
+      - { id: done, kind: done }
+`
+
+// legacyBundleYAML is the factory of a version published before connections: the repository is
+// cloned with a token from goald's environment.
+const legacyBundleYAML = `apiVersion: goal/v1
+kind: Factory
+metadata: { id: ` + string(factoryID) + `, name: acme-bundle }
+spec:
+  runtime:
+    runner: docker
+    image: ghcr.io/acme/agent:1.0.0
+    auth: anthropic-api-key
+    repository: { url: "https://github.com/acme/api.git", token: "env:ACME_REPO_TOKEN" }
+  agents:
+    - { name: engineer, prompt: ./agents/engineer.md }
+  board:
+    stations:
+      - { id: spec, kind: human }
+      - { id: build, kind: agent, agent: engineer }
       - { id: done, kind: done }
 `
 
@@ -120,16 +212,17 @@ func request(t *testing.T, method, url, token string) (int, http.Header, []byte)
 }
 
 // The bundle is the run's task, its agent's files from the run's version, the repository with
-// the item's branch and a git credential that names the token's variable, never its value.
+// the item's branch, and what the run's connections give the box without a value: the agent's
+// connections its token grants (env names, MCP servers with headers naming env variables, docs),
+// a git login per connection that signs git in, naming the variable of its password, and the
+// runtime's tools with the connections' CLI tools.
 func TestServeRun_ServesTheRunsBundle(t *testing.T) {
 	t.Parallel()
 
-	h := newHarnessWith(t, Config{}, harnessDeps{
-		yaml: bundleYAML, files: bundleFiles, secrets: porttest.Secrets{"ACME_REPO_TOKEN": cloneToken},
-	})
+	h := newHarnessWith(t, Config{}, harnessDeps{yaml: bundleYAML, files: bundleFiles, secrets: porttest.Secrets{}})
 	it := h.submit(t, factoryID, "Add a health endpoint", "For the load balancer.")
 	c := h.claims()
-	c.ItemID = it.ID
+	c.ItemID, c.Connections = it.ID, []string{connTracker, connDocs}
 
 	status, header, body := request(t, http.MethodGet, h.runServer(t), h.token(t, c))
 	if status != http.StatusOK {
@@ -140,8 +233,10 @@ func TestServeRun_ServesTheRunsBundle(t *testing.T) {
 		t.Errorf("Content-Type %q, Cache-Control %q; want application/json, no-store", ct, cc)
 	}
 
-	if strings.Contains(string(body), cloneToken) {
-		t.Fatal("the bundle carries the repository token")
+	for _, secret := range []string{cloneToken, issuesToken, modelAPIKey} {
+		if strings.Contains(string(body), secret) {
+			t.Fatalf("the bundle carries a connection's secret value:\n%s", body)
+		}
 	}
 
 	// The worker's Vitest parses the same file with its Bundle schema, so both ends agree.
@@ -155,19 +250,83 @@ func TestServeRun_ServesTheRunsBundle(t *testing.T) {
 	want := runBundle{
 		Spec: bundleSpec{
 			FactoryID: factoryID, ItemID: it.ID, RunID: c.RunID, Station: c.Station, Agent: c.Agent, Model: "claude-opus-5-5",
-			Skills: []string{"acme-conventions"}, ToolsAllow: []string{"Read", "Edit", "Bash(npm test*)"},
-			ToolsDeny: []string{"Bash(git push --force*)"}, Purpose: "Ship small changes to acme's API.",
+			Skills: []string{"acme-conventions"}, ToolsAllow: []string{"Read", "Edit", "Bash(npm test*)", "issues__get_*"},
+			ToolsDeny: []string{"Bash(git push --force*)", "issues__get_secret"}, Purpose: "Ship small changes to acme's API.",
 			Brief:  "Add a health endpoint\n\nFor the load balancer.",
 			Inputs: map[string]json.RawMessage{"spec": json.RawMessage(`{"lane":"backend"}`)},
 			Output: "change", MaxTurns: 40, MaxUSD: 6,
+			Connections: []bundleConnection{
+				{
+					Name: connTracker, Kind: "issue-tracker", Title: trackerTitle, Env: []string{"ISSUES_SITE", "ISSUES_TOKEN"},
+					MCP:  &domain.KindMCP{URL: "https://issues.example.com/mcp", Headers: map[string]string{"Authorization": "Bearer ${ISSUES_TOKEN}"}},
+					Docs: "File and read issues with the issues CLI or its MCP tools.",
+				},
+				{
+					Name: connDocs, Kind: kindStdio, Title: "MCP server", Env: []string{},
+					MCP: &domain.KindMCP{Command: []string{"sh", "-c", "npx -y @acme/docs-mcp@1.0.0"}},
+				},
+			},
 		},
 		Files:      map[string][]byte{"agent/prompt.md": []byte("# engineer\n"), "agent/output.schema.json": []byte(`{"type":"object"}`)},
 		Repository: &bundleRepository{URL: "https://github.com/acme/api.git", Branch: it.Branch()},
-		Git:        []gitCredential{{Host: "github.com", Username: repositoryUser, PasswordEnv: domain.RunEnvRepositoryToken}},
+		Git:        []gitCredential{{Host: "github.com", Username: repositoryUser, PasswordEnv: "CODE_TOKEN"}},
+		Tools:      []string{"task@3.46.1", "npm:@acme/issues-cli@2.0.0"},
 	}
 
 	if g, w := mustJSON(t, got), mustJSON(t, want); g != w {
 		t.Errorf("bundle\n got %s\nwant %s", g, w)
+	}
+}
+
+// A version published before connections clones with the repository token, whose variable the
+// git credential names; its runs get no connection in the bundle.
+func TestServeRun_LegacyRepositoryToken(t *testing.T) {
+	t.Parallel()
+
+	h := newHarnessWith(t, Config{}, harnessDeps{yaml: legacyBundleYAML, secrets: porttest.Secrets{"ACME_REPO_TOKEN": cloneToken}})
+	it := h.submit(t, factoryID, "Add a health endpoint", "")
+	c := h.claims()
+	c.ItemID = it.ID
+
+	status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, c))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (%s)", status, body)
+	}
+
+	var got runBundle
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []gitCredential{{Host: "github.com", Username: repositoryUser, PasswordEnv: domain.RunEnvRepositoryToken}}
+	if !reflect.DeepEqual(got.Git, want) || len(got.Spec.Connections) != 0 || strings.Contains(string(body), cloneToken) {
+		t.Errorf("git credentials %+v and connections %+v; want %+v and none, without the token", got.Git, got.Spec.Connections, want)
+	}
+}
+
+// A repository connection that is also one of the agent's signs git in once.
+func TestServeRun_OneGitLoginPerCredential(t *testing.T) {
+	t.Parallel()
+
+	yaml := strings.ReplaceAll(strings.ReplaceAll(bundleYAML, "connections: [issues, docs, wiki]\n  skills", "connections: [issues, docs, wiki, code]\n  skills"),
+		"connections: [issues, docs, wiki]\n      tools", "connections: [code, issues]\n      tools")
+	h := newHarnessWith(t, Config{}, harnessDeps{yaml: yaml, files: bundleFiles, secrets: porttest.Secrets{}})
+	it := h.submit(t, factoryID, "Add a health endpoint", "")
+	c := h.claims()
+	c.ItemID, c.Connections = it.ID, []string{"code", connTracker}
+
+	status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, c))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (%s)", status, body)
+	}
+
+	var got runBundle
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(got.Git) != 1 || len(got.Spec.Connections) != 2 || got.Spec.Connections[0].Name != "code" {
+		t.Errorf("git credentials %+v and connections %+v; want one login and the agent's two connections in its order", got.Git, got.Spec.Connections)
 	}
 }
 

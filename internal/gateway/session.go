@@ -16,22 +16,18 @@ import (
 
 	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
 )
 
 // Reasons a granted connection is not served. They reach the agent and the logs, so they
 // never carry a value.
 const (
-	reasonStdio    = "stdio (container) MCP servers are not served by this goald"
-	reasonHost     = "a stdio server without an image would run on the host, which the gateway never does"
-	reasonUnpinned = "its image is not pinned to a version tag or a digest"
-	reasonKind     = " connections are not served yet"
-	// reasonOrganization: an organization connection (spec 4 §4.4), which the gateway never serves.
-	reasonOrganization = "runs reach the organization's connections from their own box, not through the gateway"
-	reasonURL          = "its url is not https (plain http is allowed to loopback only)"
-	reasonCredentials  = "its credentials are not configured"
-	reasonRefused      = "it references a secret this install does not send there"
-	reasonUpstream     = "the upstream server did not answer"
+	// reasonStdio: stdio servers run only inside a run's box, as organization connections.
+	reasonStdio       = "stdio MCP servers run in the box: make it an organization connection (kind mcp-server)"
+	reasonKind        = " connections are not served"
+	reasonURL         = "its url is not https (plain http is allowed to loopback only)"
+	reasonCredentials = "its credentials are not configured"
+	reasonRefused     = "it references a secret this install does not send there"
+	reasonUpstream    = "the upstream server did not answer"
 )
 
 // metaConnections is the tools/list _meta key that reports each granted connection's status.
@@ -49,22 +45,22 @@ type session struct {
 	secrets []string
 }
 
-// connection is a granted connection: a remote server (url and headers) or a sidecar.
-// unavailable, when set, says why it is not served and err holds the cause for the log.
+// connection is a granted inline connection's remote server (url and headers). unavailable, when
+// set, says why it is not served and err holds the cause for the log.
 type connection struct {
 	name        string
 	url         string
 	headers     map[string]string
-	sidecar     *ports.SidecarSpec
 	unavailable string
 	err         error
 }
 
-// grant prepares the connections named both by the agent and by the token, in agent order.
+// grant prepares the inline connections named both by the agent and by the token, in agent
+// order. The organization's connections are the box's, so they are not the gateway's to serve.
 func (s *session) grant(ctx context.Context, all []config.Connection, agentConns []string) {
 	for _, name := range agentConns {
 		i := slices.IndexFunc(all, func(c config.Connection) bool { return c.Name == name })
-		if i < 0 || !slices.Contains(s.claims.Connections, name) {
+		if i < 0 || !all[i].Inline() || !slices.Contains(s.claims.Connections, name) {
 			continue
 		}
 
@@ -76,13 +72,9 @@ func (s *session) prepare(ctx context.Context, c config.Connection) *connection 
 	conn := &connection{name: c.Name, url: c.URL}
 
 	switch {
-	case !c.Inline():
-		conn.unavailable = reasonOrganization
-
-		return conn
 	case c.Type == "mcp" && c.Transport == "http":
 	case c.Type == "mcp":
-		s.prepareSidecar(ctx, c, conn)
+		conn.unavailable = reasonStdio
 
 		return conn
 	default:
@@ -124,55 +116,6 @@ func (s *session) unresolved(ctx context.Context, conn *connection, err error) {
 		s.g.log.WarnContext(ctx, "gateway refused to send a secret", claimAttrs(s.claims,
 			"connection", conn.name, "error", s.redactErr(err))...)
 	}
-}
-
-// prepareSidecar describes the sidecar of a stdio connection, with its env values and command
-// words resolved on the host.
-func (s *session) prepareSidecar(ctx context.Context, c config.Connection, conn *connection) {
-	switch {
-	case s.g.sidecars == nil:
-		conn.unavailable = reasonStdio
-
-		return
-	case c.Image == "":
-		conn.unavailable = reasonHost
-
-		return
-	case !config.Pinned(c.Image):
-		conn.unavailable = reasonUnpinned
-
-		return
-	}
-
-	spec := &ports.SidecarSpec{
-		OrgID: s.claims.OrgID, FactoryID: s.claims.FactoryID, ItemID: s.claims.ItemID, RunID: s.claims.RunID, Connection: c.Name,
-		Image: c.Image, Network: c.Network, Env: make(map[string]string, len(c.Env)),
-	}
-
-	// A sidecar has no url: its network, when it has one, reaches any host.
-	for _, name := range slices.Sorted(maps.Keys(c.Env)) {
-		v, err := s.resolve(ctx, c.Env[name], "")
-		if err != nil {
-			s.unresolved(ctx, conn, fmt.Errorf("env %s: %w", name, err))
-
-			return
-		}
-
-		spec.Env[name] = v
-	}
-
-	for i, arg := range c.Command {
-		v, err := s.resolve(ctx, arg, "")
-		if err != nil {
-			s.unresolved(ctx, conn, fmt.Errorf("command argument %d: %w", i+1, err))
-
-			return
-		}
-
-		spec.Command = append(spec.Command, v)
-	}
-
-	conn.sidecar = spec
 }
 
 func (s *session) connection(name string) *connection {
@@ -367,9 +310,7 @@ func (s *session) forward(ctx context.Context, c *connection, tool string, args 
 		params.Arguments = args
 	}
 
-	if c.sidecar == nil {
-		learnTool(ctx, cs, tool)
-	}
+	learnTool(ctx, cs, tool)
 
 	res, err := cs.CallTool(ctx, params)
 	if err != nil {

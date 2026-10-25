@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/byFrederick/goal/internal/domain"
@@ -603,41 +602,6 @@ type Merge struct {
 	// Method is squash, merge or rebase.
 	Method  string
 	HeadSHA string
-}
-
-// Sidecars runs the stdio MCP servers of a run's connections, each in its own hardened
-// container (a sidecar), so the gateway can serve their tools without running them on the host
-// or in the agent's container.
-type Sidecars interface {
-	// Start pulls the image when it is missing and starts one sidecar. ctx bounds the start
-	// only; the sidecar runs until it is closed, its server exits, or its run is reaped.
-	Start(ctx context.Context, s SidecarSpec) (Sidecar, error)
-}
-
-// SidecarSpec is one stdio MCP server for one run.
-type SidecarSpec struct {
-	// OrgID is the organization of the run, which the sidecar is labelled with like its sandbox.
-	OrgID      domain.OrgID
-	FactoryID  domain.FactoryID
-	ItemID     domain.ItemID
-	RunID      domain.RunID
-	Connection string
-	// Image should be pinned (a version tag or a digest); the gateway never starts one that
-	// is not.
-	Image string
-	// Command replaces the image's command (the arguments to its entrypoint) when set.
-	Command []string
-	// Env holds resolved values, credentials included; adapters never log it.
-	Env map[string]string
-	// Network gives the sidecar outbound network access; without it the sidecar has none.
-	Network bool
-}
-
-// Sidecar is a started sidecar: reads return the server's stdout and writes go to its stdin
-// (newline-delimited JSON-RPC). Close stops and removes the container; it is safe to call more
-// than once.
-type Sidecar interface {
-	io.ReadWriteCloser
 }
 
 // Secrets resolves secret references at the edge. A reference is either a literal value or

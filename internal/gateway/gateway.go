@@ -1,7 +1,10 @@
-// Package gateway is goald's MCP gateway: the one MCP endpoint (streamable HTTP) through which
-// agent containers reach the tools of their factory's connections. Credentials stay on the
-// host: the gateway resolves them through ports.Secrets and adds them to upstream requests,
-// so an agent only ever holds its per-task token.
+// Package gateway is Goal's MCP server for runs (spec 4 §5.9): the run bundle (GET /run) and one
+// MCP endpoint (streamable HTTP) for Goal's own tools, authorized by the run's task token. It
+// proxies no organization connection: a run uses those directly from its box, MCP servers
+// included, with the env the engine gave it. Until the cutover (spec 4, 4-14) the endpoint also
+// serves the remote MCP servers of inline connections in versions published before phase 4,
+// whose credentials stay on the host: the gateway resolves them through ports.Secrets and adds
+// them to upstream requests.
 //
 // # Auth
 //
@@ -16,59 +19,45 @@
 //
 // ServeRun answers GET /run with the bundle of the run in the token, which goal-agent prepare
 // writes to /goal in the run's sandbox: the task (spec.json: brief, earlier outputs, model, tool
-// rules, limits), the agent's prompt, skills and output schema from the definition version the
-// run started on, the repository and the item's branch to check out, and the git credentials to
-// configure, each naming the environment variable that holds its password. The bundle holds no
-// secret, and it proxies nothing: everything it describes is used from the sandbox.
+// rules, limits, the agent's connections), the agent's prompt, skills and output schema from the
+// definition version the run started on, the repository and the item's branch to check out, the
+// git credentials to configure, each naming the environment variable that holds its password,
+// and the tools to install. It describes the run's organization connections from what anyone may
+// see of them (domain.ConnectionKind.Outline): env names, MCP servers whose headers name env
+// variables (${NAME}, expanded by Claude Code in the box), git logins, CLI tools and docs. The
+// bundle holds no secret, and it proxies nothing: everything it describes is used from the box.
 //
-// # Connections and tools
+// # Inline connections and tools
 //
-// A task is granted the connections that are both in its token and in its agent's
-// connections in the current definition. Remote MCP servers (type mcp, transport http) and
-// stdio servers with an image (sidecars, below) are served; every other kind (builtin, aws, a
-// stdio command without an image) is reported unavailable, not an error. Tools are exposed as
-// "<connection>__<tool>"; connection names are slugs without underscores, so the first "__"
-// always splits a name unambiguously.
-//
-// # Sidecars
-//
-// A stdio connection's server runs in its own hardened container per run, through
-// ports.Sidecars: never on the host and never in the agent's container. Its env values and
-// command words that are secret references are resolved on the host and passed only to the
-// sidecar. Its image must be pinned (config.Pinned); an unpinned one is reported unavailable.
-// The sidecar starts on the run's first tools/list or tools/call that needs it, keeps one MCP
-// session over its stdio for the rest of the run, and stops when goald reports the run ended
-// (EndRun), after SidecarIdle without requests, or when its server exits. MaxSidecars caps the
-// sidecars of one goald; past it a connection is unavailable until a run ends. A sidecar that
-// fails to start makes its connection unavailable for that request only.
+// A task is granted the inline connections that are both in its token and in its agent's
+// connections in the definition version. Their remote MCP servers (type mcp, transport http)
+// are served; every other kind (builtin, aws, stdio) is reported unavailable, not an error.
+// Organization connections are not listed: the worker configures their MCP servers in the box.
+// Tools are exposed as "<connection>__<tool>"; connection names are slugs without underscores,
+// so the first "__" always splits a name unambiguously.
 //
 // An agent's tools.allow and tools.deny entries of the form "<connection>__<tool pattern>",
 // where <connection> is one of the factory's connections, apply to gateway tools (patterns as
-// in path.Match, so "github__get_*"). Other entries (Read, Bash(git push*)) are the worker's
-// business and are ignored here. Deny wins; a connection with at least one allow entry serves
-// only the tools its allow entries match; a connection with none serves all its tools.
+// in path.Match, so "github__get_*"); the worker applies the same entries to the MCP servers of
+// organization connections. Other entries (Read, Bash(git push*)) are the worker's business and
+// are ignored here. Deny wins; a connection with at least one allow entry serves only the tools
+// its allow entries match; a connection with none serves all its tools.
 //
 // # Secret policy
 //
-// Before it resolves a header value, env value or command word, the gateway checks each of its
-// env:NAME references against Config.SecretPolicy, the same domain.SecretPolicy goald's
-// credentials check validates definitions with: a reserved variable goes to no connection, and
-// a host-bound one (the install's repository token) only in the headers of an https connection
-// to one of the policy's hosts (GitHub's MCP server), never to a sidecar, whose network reaches
-// any host. A refused connection is unavailable (its tools are not listed and calling one is an
-// error): the refused reference is never resolved, nothing is sent to its server or sidecar,
-// and the refusal is logged with the reference, never a value. This protects versions
+// Before it resolves a header value, the gateway checks each of its env:NAME references against
+// Config.SecretPolicy, the same domain.SecretPolicy goald's credentials check validates
+// definitions with: a reserved variable goes to no connection, and a host-bound one (the
+// install's repository token) only in the headers of an https connection to one of the policy's
+// hosts (GitHub's MCP server). A refused connection is unavailable (its tools are not listed and
+// calling one is an error): the refused reference is never resolved, nothing is sent to its
+// server, and the refusal is logged with the reference, never a value. This protects versions
 // published before the credentials check refused them.
 //
 // # State
 //
-// The gateway is stateless towards agents: every HTTP request is verified and served on its own
-// (the SDK's stateless mode) and opens its own short sessions with remote servers. The registry
-// of running sidecars, keyed by run, is its only state, and it is per instance: a run's MCP
-// traffic must reach the goald that runs its sidecars. In phase 2 one goald serves a laptop, so
-// it always does; several instances will need requests routed by run (the run id is in the
-// token) or sidecars any instance can reach. A goald that dies leaves its sidecars to the
-// runner's Reap, as it does its agent containers.
+// None: every HTTP request is verified and served on its own (the SDK's stateless mode) and opens
+// its own short sessions with remote servers, so any goald serves any run.
 //
 // # Audit
 //
@@ -115,20 +104,27 @@ type Events interface {
 	AppendEvents(ctx context.Context, events ...domain.Event) error
 }
 
+// Connections reads an organization's connections and kinds without their secret values, for the
+// run bundle; ports.Connections satisfies it.
+type Connections interface {
+	Get(ctx context.Context, name string) (domain.Connection, error)
+	Kind(ctx context.Context, name string) (domain.ConnectionKind, error)
+}
+
 // Deps are the gateway's collaborators. Transport may be nil (http.DefaultTransport); Logger
-// may be nil (logs discarded); Sidecars may be nil (stdio connections are unavailable).
+// may be nil (logs discarded).
 type Deps struct {
 	Definitions Definitions
 	// Items gives the run bundle the item's brief, earlier outputs and branch.
-	Items   Items
-	Secrets ports.Secrets
-	Events  Events
-	Clock   ports.Clock
-	Logger  *slog.Logger
+	Items Items
+	// Connections describe the run's organization connections in its bundle.
+	Connections Connections
+	Secrets     ports.Secrets
+	Events      Events
+	Clock       ports.Clock
+	Logger      *slog.Logger
 	// Transport carries upstream requests.
 	Transport http.RoundTripper
-	// Sidecars runs the servers of stdio connections.
-	Sidecars ports.Sidecars
 }
 
 // Config bounds the gateway. Zero values take the defaults below.
@@ -143,26 +139,17 @@ type Config struct {
 	MaxResponseBytes int64
 	// MaxRequestBytes caps one request from an agent (default 4 MiB).
 	MaxRequestBytes int64
-	// SidecarIdle stops a sidecar no request has used for this long (default 10m).
-	SidecarIdle time.Duration
-	// SidecarStartTimeout bounds starting one sidecar, pulling its image included (default 5m).
-	SidecarStartTimeout time.Duration
-	// MaxSidecars caps the sidecars this goald runs at once (default 16).
-	MaxSidecars int
 	// SecretPolicy says which env:NAME references a connection may send where; goald passes
 	// the policy authoring validates with. The zero value restricts nothing.
 	SecretPolicy domain.SecretPolicy
 }
 
 const (
-	defaultCallTimeout         = 2 * time.Minute
-	defaultListTimeout         = 30 * time.Second
-	defaultMaxResponseBytes    = 8 << 20
-	defaultMaxRequestBytes     = 4 << 20
-	defaultSidecarIdle         = 10 * time.Minute
-	defaultSidecarStartTimeout = 5 * time.Minute
-	defaultMaxSidecars         = 16
-	auditTimeout               = 5 * time.Second
+	defaultCallTimeout      = 2 * time.Minute
+	defaultListTimeout      = 30 * time.Second
+	defaultMaxResponseBytes = 8 << 20
+	defaultMaxRequestBytes  = 4 << 20
+	auditTimeout            = 5 * time.Second
 )
 
 // implementation identifies the gateway to agents and to upstream servers.
@@ -170,22 +157,22 @@ var implementation = &mcp.Implementation{Name: "goal-gateway", Version: "1"}
 
 // Gateway serves the MCP endpoint. It is an http.Handler, safe for concurrent use.
 type Gateway struct {
-	defs      Definitions
-	items     Items
-	secrets   ports.Secrets
-	events    Events
-	clock     ports.Clock
-	log       *slog.Logger
-	transport http.RoundTripper
-	sidecars  *sidecarPool // nil without Deps.Sidecars
-	cfg       Config
-	mcp       http.Handler
+	defs        Definitions
+	items       Items
+	connections Connections
+	secrets     ports.Secrets
+	events      Events
+	clock       ports.Clock
+	log         *slog.Logger
+	transport   http.RoundTripper
+	cfg         Config
+	mcp         http.Handler
 }
 
 // New returns a gateway; goald mounts it at its MCP path.
 func New(d Deps, cfg Config) (*Gateway, error) {
-	if d.Definitions == nil || d.Items == nil || d.Secrets == nil || d.Events == nil || d.Clock == nil {
-		return nil, errors.New("gateway: Definitions, Items, Secrets, Events and Clock are required")
+	if d.Definitions == nil || d.Items == nil || d.Connections == nil || d.Secrets == nil || d.Events == nil || d.Clock == nil {
+		return nil, errors.New("gateway: Definitions, Items, Connections, Secrets, Events and Clock are required")
 	}
 
 	if len(cfg.Key) == 0 {
@@ -196,12 +183,9 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 	cfg.ListTimeout = cmp.Or(cfg.ListTimeout, defaultListTimeout)
 	cfg.MaxResponseBytes = cmp.Or(cfg.MaxResponseBytes, defaultMaxResponseBytes)
 	cfg.MaxRequestBytes = cmp.Or(cfg.MaxRequestBytes, defaultMaxRequestBytes)
-	cfg.SidecarIdle = cmp.Or(cfg.SidecarIdle, defaultSidecarIdle)
-	cfg.SidecarStartTimeout = cmp.Or(cfg.SidecarStartTimeout, defaultSidecarStartTimeout)
-	cfg.MaxSidecars = cmp.Or(cfg.MaxSidecars, defaultMaxSidecars)
 
 	g := &Gateway{
-		defs: d.Definitions, items: d.Items, secrets: d.Secrets, events: d.Events, clock: d.Clock,
+		defs: d.Definitions, items: d.Items, connections: d.Connections, secrets: d.Secrets, events: d.Events, clock: d.Clock,
 		log: d.Logger, transport: d.Transport, cfg: cfg,
 	}
 	if g.log == nil {
@@ -210,10 +194,6 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 
 	if g.transport == nil {
 		g.transport = http.DefaultTransport
-	}
-
-	if d.Sidecars != nil {
-		g.sidecars = newSidecarPool(d.Sidecars, cfg, g.log)
 	}
 
 	g.mcp = mcp.NewStreamableHTTPHandler(serverOf, &mcp.StreamableHTTPOptions{
@@ -226,22 +206,6 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 	})
 
 	return g, nil
-}
-
-// EndRun stops the sidecars of a run that has finished and waits until they are gone. goald
-// calls it when the run's agent task ends; ending a run without sidecars is a no-op.
-func (g *Gateway) EndRun(_ context.Context, run domain.RunID) {
-	if g.sidecars != nil {
-		g.sidecars.end(run, false)
-	}
-}
-
-// Close stops every sidecar and starts no more; goald calls it at shutdown, after the HTTP
-// server stopped.
-func (g *Gateway) Close() {
-	if g.sidecars != nil {
-		g.sidecars.end("", true)
-	}
 }
 
 // errForbidden means a valid token asks for something the current definition does not grant.

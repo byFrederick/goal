@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -198,13 +199,20 @@ func (e *Engine) runOnce(ctx context.Context, c claimed, b *box, feedback string
 func (e *Engine) runInBox(ctx context.Context, c claimed, runID domain.RunID, b *box, feedback string) (domain.RunResult, *domain.Verdict, error) {
 	token, err := e.gatewayToken(ctx, c, runID)
 
-	var env map[string]string
+	var (
+		env   runEnv
+		scrub scrubber
+	)
+
 	if err == nil {
-		env, err = e.taskEnv(ctx)
+		env, err = e.runEnv(ctx, c, runID)
+		scrub = newScrubber(append(env.secrets, token)...)
 	}
 
 	if err == nil {
-		err = e.open(ctx, c, runID, b, token)
+		prepareEnv := maps.Clone(env.prepare)
+		prepareEnv[envGatewayToken] = token
+		err = e.open(ctx, c, runID, b, prepareEnv, scrub)
 	}
 
 	if err != nil {
@@ -212,12 +220,14 @@ func (e *Engine) runInBox(ctx context.Context, c claimed, runID domain.RunID, b 
 		return domain.RunResult{}, nil, err
 	}
 
-	env[envGatewayToken] = token
-	if f := joinParts(feedback, workspaceNote(c, b)); f != "" {
-		env[envFeedback] = f
+	agentEnv := maps.Clone(env.agent)
+	agentEnv[envGatewayToken] = token
+
+	if f := joinParts(feedback, workspaceNote(c, b, env)); f != "" {
+		agentEnv[envFeedback] = f
 	}
 
-	res := e.agent(ctx, c, runID, b, env, newScrubber(append(slices.Collect(maps.Values(env)), b.repoToken)...))
+	res := e.agent(ctx, c, runID, b, agentEnv, scrub)
 	e.finishRun(ctx, runID, res)
 
 	if res.Status != domain.RunSucceeded {
@@ -229,7 +239,7 @@ func (e *Engine) runInBox(ctx context.Context, c claimed, runID domain.RunID, b 
 		return res, nil, &outputError{err: err}
 	}
 
-	if err := e.runChecks(ctx, c, runID, b); err != nil {
+	if err := e.runChecks(ctx, c, runID, b, scrub); err != nil {
 		return res, nil, err
 	}
 
@@ -316,10 +326,9 @@ const exitTimedOut = 124
 
 // runChecks runs the station's command checks in order in the claim's sandbox, in its workspace,
 // with no credential, and stops at the first that fails, which is returned as an *outputError.
-// The exit code is the runtime's: nothing the agent left in the sandbox can report a pass.
-func (e *Engine) runChecks(ctx context.Context, c claimed, runID domain.RunID, b *box) error {
-	scrub := newScrubber(b.repoToken)
-
+// The exit code is the runtime's: nothing the agent left in the sandbox can report a pass. What a
+// check prints is scrubbed of the run's secrets, which the agent may have left in a file.
+func (e *Engine) runChecks(ctx context.Context, c claimed, runID domain.RunID, b *box, scrub scrubber) error {
 	for _, cmd := range c.station.Checks {
 		started := e.clock.Now()
 		out := &tail{max: maxCheckOutput}
@@ -380,8 +389,8 @@ func joinParts(parts ...string) string {
 }
 
 // workspaceNote tells the agent what its working directory holds, as the sandbox's prepare left
-// it; nothing without a repository.
-func workspaceNote(c claimed, b *box) string {
+// it, and whether git can push from it; nothing without a repository.
+func workspaceNote(c claimed, b *box, env runEnv) string {
 	r := c.line.Runtime.Repository
 	if r.URL == "" {
 		return ""
@@ -392,11 +401,17 @@ func workspaceNote(c claimed, b *box) string {
 		state = "it already exists: it holds the work of earlier runs of this item"
 	}
 
-	return fmt.Sprintf("## Workspace\n\nYour working directory is a clone of %s with branch `%s` checked out (%s). "+
-		"It holds no git credentials.", r.URL, c.item.Branch(), state)
+	host := r.URL
+	if u, err := url.Parse(r.URL); err == nil {
+		host = u.Host
+	}
+
+	return fmt.Sprintf("## Workspace\n\nYour working directory is a clone of %s with branch `%s` checked out (%s). %s",
+		r.URL, c.item.Branch(), state, env.pushNote(host))
 }
 
-// taskEnv resolves the variables every agent run gets (Config.TaskEnv).
+// taskEnv resolves the variables every agent run gets in a version without a model connection
+// (Config.TaskEnv).
 func (e *Engine) taskEnv(ctx context.Context) (map[string]string, error) {
 	env := make(map[string]string, len(e.cfg.TaskEnv)+2)
 
@@ -458,17 +473,13 @@ func (e *Engine) heartbeat(ctx context.Context, lease domain.Lease, stopTask con
 	}
 }
 
-// finishRun records a run's result and tells RunEnded that the run is over.
+// finishRun records a run's result.
 func (e *Engine) finishRun(ctx context.Context, id domain.RunID, res domain.RunResult) {
 	ctx, cancel := cleanup(ctx)
 	defer cancel()
 
 	if err := e.store.FinishRun(ctx, id, res, e.clock.Now()); err != nil {
 		e.log.ErrorContext(ctx, "record run result", slog.String("run", string(id)), slog.Any("error", err))
-	}
-
-	if e.runEnded != nil {
-		e.runEnded(ctx, id)
 	}
 }
 

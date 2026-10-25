@@ -1,6 +1,8 @@
 package engine_test
 
 import (
+	"context"
+	"io"
 	"slices"
 	"strings"
 	"testing"
@@ -11,6 +13,57 @@ import (
 
 // makeTest is the station check the tests script.
 const makeTest = "make test"
+
+// Threat row 6 (spec 4 §11.2): a check passes or fails by the exit status the runtime reports,
+// whatever the agent claims in its output or prints that looks like a check result.
+func TestEngine_CheckResultFromExitStatus(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		claim string
+		exit  int
+		want  domain.ItemState
+		kind  domain.EventKind
+	}{
+		{name: "the agent claims a pass, the check fails", claim: "passed", exit: 1, want: domain.StateBlocked, kind: domain.EventCheckFailed},
+		{name: "the agent claims a failure, the check passes", claim: "failed", exit: 0, want: domain.StateDone, kind: domain.EventCheckPassed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			work := agentStation(stWork, agWorker, 1, 1)
+			work.Checks = []string{makeTest}
+			h := newHarness(t, lineOf(work), func(_ context.Context, _ porttest.ExecCall, stdout io.Writer) domain.RunResult {
+				_, _ = io.WriteString(stdout, `{"type":"check_`+tt.claim+`","command":"make test","exit_code":0}`+"\n")
+
+				return ok(`{"checks":"` + tt.claim + `"}`)
+			})
+			h.worker.Exit(makeTest, tt.exit)
+			it := h.submit(t, domain.NewItem{})
+
+			h.step(t)
+
+			if got := h.item(t, it.ID); got.State != tt.want {
+				t.Fatalf("item is %s, want %s (events %v)", got.State, tt.want, h.kinds(it.ID))
+			}
+
+			checks := slices.Concat(h.eventsOf(it.ID, domain.EventCheckPassed), h.eventsOf(it.ID, domain.EventCheckFailed))
+			if len(checks) == 0 {
+				t.Fatal("no check events")
+			}
+
+			for _, e := range checks {
+				if e.Kind != tt.kind || e.Actor != domain.ActorEngine || e.Data["exit_code"] != tt.exit {
+					t.Errorf("check event %s by %s with exit %v; want %s by the engine with the runtime's exit %d",
+						e.Kind, e.Actor, e.Data["exit_code"], tt.kind, tt.exit)
+				}
+			}
+		})
+	}
+}
 
 func TestChecks_FailureRetriesWithItsOutputThenBlocks(t *testing.T) {
 	t.Parallel()

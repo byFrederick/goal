@@ -111,7 +111,7 @@ type settings struct {
 	// agent image this repository builds, task worker:image); a definition's runtime.image, a
 	// removed key (field-removed), is ignored.
 	AgentImage string
-	// SandboxNetwork is the Docker network sandboxes and sidecars run on (GOAL_SANDBOX_NETWORK,
+	// SandboxNetwork is the Docker network sandboxes run on (GOAL_SANDBOX_NETWORK,
 	// default goal_agents): compose.yaml's agents network, whose goal-egress service is their
 	// only way out (ADR 0009 and its phase 4 amendment).
 	SandboxNetwork string

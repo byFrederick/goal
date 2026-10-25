@@ -62,15 +62,6 @@ func withProxyEnv(env map[string]string) []string {
 	return out
 }
 
-// route is how a container reaches the outside: the network it runs on and the proxy variables
-// that send its HTTP clients through the proxy.
-type route struct {
-	network string
-	env     map[string]string
-}
-
-func agentsRoute(network string) route { return route{network: network, env: proxyEnv()} }
-
 // BoxGatewayURL is the URL a box is given for goald's gateway at the URL gateway (GOAL_GATEWAY_URL):
 // the egress proxy's, at the gateway's path, which the proxy forwards to goald.
 func BoxGatewayURL(gateway string) (string, error) {

@@ -350,20 +350,6 @@ func TestRun_GatewayTokenIsScopedToTheTask(t *testing.T) {
 	}
 }
 
-func TestRun_EndedRunsAreReported(t *testing.T) {
-	t.Parallel()
-
-	h := newHarness(t, lineOf(agentStation(stWork, agWorker, 1, 1)),
-		porttest.Sequence(domain.RunResult{Status: domain.RunFailed, Error: "container exited 1"}))
-	it := h.submit(t, domain.NewItem{})
-
-	h.step(t)
-
-	if got, want := h.endedRuns(), []domain.RunID{h.runs(t, testOrg, it.ID)[0].ID}; !slices.Equal(got, want) {
-		t.Fatalf("ended runs = %v, want %v: the gateway would keep the run's sidecars", got, want)
-	}
-}
-
 func TestRun_FailedTaskBlocksItem(t *testing.T) {
 	t.Parallel()
 

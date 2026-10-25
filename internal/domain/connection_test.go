@@ -289,8 +289,9 @@ func TestConnectionKind_RenderErrorsHoldNoValue(t *testing.T) {
 	}
 }
 
-// Outline says which variables and git host a connection gives a run from what anyone may see
-// of it: its non-secret fields and which secret fields are set.
+// Outline says what a connection gives a run from what anyone may see of it, its non-secret fields
+// and which secret fields are set: the names of its variables, its git login, MCP server and CLI
+// tool, none holding a secret value.
 func TestConnectionKind_Outline(t *testing.T) {
 	t.Parallel()
 
@@ -299,35 +300,44 @@ func TestConnectionKind_Outline(t *testing.T) {
 		Mint:   mintAWSSTS,
 		Env:    map[string]string{"AWS_ACCESS_KEY_ID": "{{minted.access_key_id}}", envAWSRegion: "{{region}}"},
 	}}
+	copilot := &KindMCP{URL: "https://api.githubcopilot.com/mcp/", Headers: map[string]string{headerAuthorization: "Bearer ${GH_TOKEN}"}}
+	login := func(host string) *KindGit {
+		return &KindGit{Host: host, Username: "x-access-token", PasswordEnv: envGHToken}
+	}
 
 	tests := []struct {
-		name    string
-		kind    ConnectionKind
-		conn    Connection
-		env     []string
-		gitHost string
+		name string
+		kind ConnectionKind
+		conn Connection
+		want ConnectionOutline
 	}{
 		{
 			name: "the default host", kind: githubKind(), conn: Connection{SecretFields: []string{fieldToken}},
-			env: []string{envGHHost, envGHToken}, gitHost: hostGitHub,
+			want: ConnectionOutline{Env: []string{envGHHost, envGHToken}, Git: login(hostGitHub), MCP: copilot, CLI: "gh"},
 		},
 		{
 			name: "a host of its own", kind: githubKind(),
 			conn: Connection{Fields: map[string]string{fieldHost: "git.example.com"}, SecretFields: []string{fieldToken}},
-			env:  []string{envGHHost, envGHToken}, gitHost: "git.example.com",
+			want: ConnectionOutline{Env: []string{envGHHost, envGHToken}, Git: login("git.example.com"), MCP: copilot, CLI: "gh"},
 		},
 		{
-			name: "no token, no git login", kind: githubKind(),
-			env: []string{envGHHost},
+			name: "no token, no git login and no header", kind: githubKind(),
+			want: ConnectionOutline{
+				Env: []string{envGHHost}, MCP: &KindMCP{URL: copilot.URL, Headers: map[string]string{}}, CLI: "gh",
+			},
 		},
 		{
 			name: "env names from a field", kind: apiKeyKind(),
 			conn: Connection{Fields: map[string]string{fieldPrefix: "ACME", fieldBaseURL: apiExampleURL}, SecretFields: []string{fieldKey}},
-			env:  []string{"ACME_HEADER", "ACME_KEY", "ACME_URL"},
+			want: ConnectionOutline{Env: []string{"ACME_HEADER", "ACME_KEY", "ACME_URL"}},
+		},
+		{
+			name: "a stdio server", kind: mcpKind(), conn: Connection{Fields: map[string]string{"command": "npx -y @acme/mcp@1.0.0"}},
+			want: ConnectionOutline{MCP: &KindMCP{Command: []string{"sh", "-c", "npx -y @acme/mcp@1.0.0"}}},
 		},
 		{
 			name: "minted values", kind: aws, conn: Connection{SecretFields: []string{fieldKey}},
-			env: []string{"AWS_ACCESS_KEY_ID", envAWSRegion},
+			want: ConnectionOutline{Env: []string{"AWS_ACCESS_KEY_ID", envAWSRegion}},
 		},
 	}
 
@@ -335,9 +345,8 @@ func TestConnectionKind_Outline(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := tt.kind.Outline(tt.conn)
-			if !reflect.DeepEqual(got, ConnectionOutline{Env: tt.env, GitHost: tt.gitHost}) {
-				t.Errorf("Outline = %+v; want env %v and git host %q", got, tt.env, tt.gitHost)
+			if got := tt.kind.Outline(tt.conn); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Outline =\n%#v\nwant\n%#v", got, tt.want)
 			}
 		})
 	}

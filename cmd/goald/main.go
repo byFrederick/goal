@@ -3,13 +3,12 @@
 // its own with GOAL_GATEWAY_LISTEN), and runs every agent run in a sandbox of its own in Docker.
 //
 // All wiring happens here, by hand: PostgreSQL (store, definition versions, item and definition
-// notices), the bucket (definition file content), environment secrets, GitHub and GitLab (merges), Docker's
-// sandboxes and MCP sidecars, the system clock, the engine, the gateway, definition authoring, the
-// API and its stream feed. Configuration comes from the environment; settings.go lists every
-// variable. goald keeps nothing another instance would need: work state and definition versions
-// are in PostgreSQL, file content is in the bucket, and its runs' sandboxes are scratch, reaped by
-// any instance once their run is over. The exception is the gateway's running MCP sidecars, which
-// serve only the runs this instance started (see internal/gateway).
+// notices, connections), the bucket (definition file content), environment secrets, GitHub and
+// GitLab (merges), Docker's sandboxes, the system clock, the engine, the gateway, definition
+// authoring, the API and its stream feed. Configuration comes from the environment; settings.go
+// lists every variable. goald keeps nothing another instance would need: work state, connections
+// and definition versions are in PostgreSQL, file content is in the bucket, and its runs'
+// sandboxes are scratch, reaped by any instance once their run is over.
 package main
 
 import (
@@ -123,8 +122,8 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	// Connections and their kinds (spec 4): definitions are validated against them and the API
-	// serves them; the runs use them from 4-11 on.
+	// Connections and their kinds (spec 4): definitions are validated against them, the API serves
+	// them, runs get them and the gateway describes them in run bundles.
 	connections, err := openConnections(ctx, store, os.Getenv, log)
 	if err != nil {
 		return err
@@ -176,23 +175,22 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}
 
 	gw, err := gateway.New(gateway.Deps{
-		Definitions: defs, Items: store, Secrets: secrets, Events: store, Clock: clock, Logger: log,
-		Sidecars: docker.NewSidecars(dockerClient, docker.Config{Network: s.SandboxNetwork}, log),
+		Definitions: defs, Items: store, Connections: connections, Secrets: secrets, Events: store, Clock: clock, Logger: log,
 	}, gateway.Config{Key: []byte(key), SecretPolicy: policy})
 	if err != nil {
 		return err
 	}
-	// Runs after serve returns: HTTP is drained and the engine's runs have ended.
-	defer gw.Close()
 
 	// Merges reach GitHub and GitLab with a connection: until 4-14, the repository token's.
 	mergeWith := repositoryConnections(secrets, policy, s.GitHubWebHost)
 
-	// The engine runs each claim in a sandbox and, at its start and every ReapEvery, deletes the
-	// sandboxes of runs that are over, whichever goald on this Docker host started them.
+	// The engine runs each claim in a sandbox with the run's connections and, at its start and
+	// every ReapEvery, deletes the sandboxes of runs that are over, whichever goald on this Docker
+	// host started them.
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: docker.NewSandboxes(dockerClient, s.SandboxNetwork, log),
-		Contracts: defs, Secrets: secrets, CodeHosts: codeHosts(s), MergeConnections: mergeWith, Clock: clock, Logger: log, RunEnded: gw.EndRun,
+		Contracts: defs, Secrets: secrets, Connections: connections, CodeHosts: codeHosts(s), MergeConnections: mergeWith, Clock: clock,
+		Logger: log,
 	}, engine.Config{
 		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxGateway, GatewayKeyRef: s.GatewayKeyRef, TaskEnv: s.TaskEnv,
 		MaxRuns: s.MaxRuns, RepositoryHosts: []string{s.GitHubWebHost}, SecretPolicy: policy,

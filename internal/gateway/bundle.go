@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"slices"
 
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
@@ -21,7 +22,8 @@ type Items interface {
 
 // runBundle is the body of GET /run: what a run's sandbox needs to prepare and run its agent
 // (goal-agent prepare writes it to /goal; worker/README.md documents the layout). It holds no
-// secret: a git credential names the environment variable that carries its password.
+// secret: a git credential names the environment variable that carries its password, and a
+// connection's MCP headers name the variables Claude Code expands in the box.
 type runBundle struct {
 	Spec bundleSpec `json:"spec"`
 	// Files are written under /goal at their slash-separated paths (agent/prompt.md, …); their
@@ -29,8 +31,12 @@ type runBundle struct {
 	Files map[string][]byte `json:"files"`
 	// Repository is cloned into the workspace; nil leaves the workspace empty.
 	Repository *bundleRepository `json:"repository,omitempty"`
-	// Git configures a credential helper per host.
+	// Git configures a credential helper per login: the repository connection's and those of the
+	// agent's connections.
 	Git []gitCredential `json:"git_credentials"`
+	// Tools are mise tool specs installed after the repository's own: the runtime's, then the CLI
+	// tools of the agent's connections.
+	Tools []string `json:"tools"`
 }
 
 // bundleSpec is the task as the worker reads it from /goal/spec.json, less the gateway's URL,
@@ -51,6 +57,23 @@ type bundleSpec struct {
 	Output     string                     `json:"output,omitempty"`
 	MaxTurns   int                        `json:"max_turns,omitempty"`
 	MaxUSD     float64                    `json:"max_usd,omitempty"`
+	// Connections are the agent's organization connections its token grants, in its order: the
+	// worker configures their MCP servers and tells the agent about them.
+	Connections []bundleConnection `json:"connections"`
+}
+
+// bundleConnection is what the agent hears and the worker configures of one connection: the
+// names of the variables it sets in the agent's env, never their values, its MCP server and the
+// kind's docs.
+type bundleConnection struct {
+	Name  string   `json:"name"`
+	Kind  string   `json:"kind"`
+	Title string   `json:"title"`
+	Env   []string `json:"env"`
+	// MCP is a remote server (url, headers naming env variables as ${NAME}) or a stdio command
+	// the worker starts in the box; nil without one.
+	MCP  *domain.KindMCP `json:"mcp,omitempty"`
+	Docs string          `json:"docs,omitempty"`
 }
 
 // bundleRepository is the factory's repository and the item's branch, which prepare checks out:
@@ -160,9 +183,11 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 			Model: cmp.Or(agent.Model, line.Runtime.Model), Skills: make([]string, 0, len(agent.Skills)),
 			ToolsAllow: nonNil(agent.ToolsAllow), ToolsDeny: nonNil(agent.ToolsDeny), Purpose: line.Purpose,
 			Brief: it.Work(), Inputs: it.Outputs, Output: station.Output, MaxTurns: maxTurns, MaxUSD: maxUSD,
+			Connections: []bundleConnection{},
 		},
 		Files: make(map[string][]byte, len(agentFiles)),
 		Git:   []gitCredential{},
+		Tools: append([]string{}, line.Runtime.Tools...),
 	}
 
 	for _, sk := range agent.Skills {
@@ -173,20 +198,104 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 		b.Files[path.Join("agent", p)] = body
 	}
 
-	if repo := line.Runtime.Repository; repo.URL != "" {
-		b.Repository = &bundleRepository{URL: repo.URL, Branch: it.Branch()}
+	if err := g.addConnections(ctx, c, line, agent, &b); err != nil {
+		return runBundle{}, err
+	}
 
-		if repo.AuthRef != "" {
-			u, err := url.Parse(repo.URL)
-			if err != nil {
-				return runBundle{}, fmt.Errorf("repository url: %w", err)
-			}
-
-			b.Git = append(b.Git, gitCredential{Host: u.Host, Username: repositoryUser, PasswordEnv: domain.RunEnvRepositoryToken})
-		}
+	if err := g.addRepository(ctx, line.Runtime.Repository, it.Branch(), &b); err != nil {
+		return runBundle{}, err
 	}
 
 	return b, nil
+}
+
+// addRepository puts the repository in b with the git login that clones it: its connection's or,
+// for a version published before connections, one for the repository token
+// (GOAL_REPOSITORY_TOKEN).
+func (g *Gateway) addRepository(ctx context.Context, repo domain.Repository, branch string, b *runBundle) error {
+	if repo.URL == "" {
+		return nil
+	}
+
+	b.Repository = &bundleRepository{URL: repo.URL, Branch: branch}
+
+	switch {
+	case repo.Connection != "":
+		o, _, err := g.outline(ctx, repo.Connection)
+		if err != nil {
+			return err
+		}
+
+		if o.Git != nil {
+			b.addGit(gitCredentialOf(*o.Git))
+		}
+	case repo.AuthRef != "":
+		u, err := url.Parse(repo.URL)
+		if err != nil {
+			return fmt.Errorf("repository url: %w", err)
+		}
+
+		b.addGit(gitCredential{Host: u.Host, Username: repositoryUser, PasswordEnv: domain.RunEnvRepositoryToken})
+	}
+
+	return nil
+}
+
+// addConnections describes the agent's organization connections that its token grants in b, with
+// their git logins and CLI tools. The model connection gives the agent's env only, so it is not
+// described.
+func (g *Gateway) addConnections(ctx context.Context, c domain.TaskClaims, line domain.Line, agent domain.AgentSpec, b *runBundle) error {
+	for _, name := range agent.Connections {
+		if !slices.Contains(line.Connections, name) || !slices.Contains(c.Connections, name) {
+			continue // an inline connection (served at /mcp) or one the token does not grant
+		}
+
+		o, k, err := g.outline(ctx, name)
+		if err != nil {
+			return err
+		}
+
+		b.Spec.Connections = append(b.Spec.Connections, bundleConnection{
+			Name: name, Kind: k.Name, Title: k.Title, Env: nonNil(o.Env), MCP: o.MCP, Docs: k.Spec.Docs,
+		})
+
+		if o.Git != nil {
+			b.addGit(gitCredentialOf(*o.Git))
+		}
+
+		if o.CLI != "" && !slices.Contains(b.Tools, o.CLI) {
+			b.Tools = append(b.Tools, o.CLI)
+		}
+	}
+
+	return nil
+}
+
+// outline is the connection name of the organization in ctx, as its kind renders it without any
+// secret value.
+func (g *Gateway) outline(ctx context.Context, name string) (domain.ConnectionOutline, domain.ConnectionKind, error) {
+	conn, err := g.connections.Get(ctx, name)
+	if err != nil {
+		return domain.ConnectionOutline{}, domain.ConnectionKind{}, fmt.Errorf("connection %s: %w", name, err)
+	}
+
+	k, err := g.connections.Kind(ctx, conn.Kind)
+	if err != nil {
+		return domain.ConnectionOutline{}, domain.ConnectionKind{}, fmt.Errorf("connection %s: kind %s: %w", name, conn.Kind, err)
+	}
+
+	return k.Outline(conn), k, nil
+}
+
+func gitCredentialOf(g domain.KindGit) gitCredential {
+	return gitCredential{Host: g.Host, Username: g.Username, PasswordEnv: g.PasswordEnv}
+}
+
+// addGit adds a git login once.
+func (b *runBundle) addGit(c gitCredential) {
+	if !slices.Contains(b.Git, c) {
+		b.Git = append(b.Git, c)
+	}
 }
 
 func nonNil(s []string) []string {

@@ -224,7 +224,6 @@ func boxContainerOf(limits Config, network string, spec ports.SandboxSpec, now t
 	}
 
 	hc := isolated(limits)
-	hc.ReadonlyRootfs = false
 	hc.NetworkMode = container.NetworkMode(network)
 
 	return cc, hc

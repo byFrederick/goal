@@ -11,6 +11,31 @@ export const paths = {
   claudeConfig: '/home/node/.claude',
 } as const;
 
+/** A variable name; never an option or a shell word. */
+const envName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
+
+/**
+ * One of the agent's organization connections, as the run bundle describes it without a value: the
+ * variables it sets in the agent's env, its MCP server (remote, whose headers name variables as
+ * ${NAME} for Claude Code to expand, or a stdio command started in the box) and its kind's docs.
+ */
+export const Connection = z.object({
+  /** A slug (lowercase letters, digits, inner dashes): an MCP server name and a tool rule prefix. */
+  name: z.string().regex(/^[a-z][a-z0-9-]{1,38}[a-z0-9]$/),
+  kind: z.string(),
+  title: z.string(),
+  env: z.array(envName),
+  mcp: z
+    .object({
+      url: z.url().optional(),
+      headers: z.record(z.string(), z.string()).optional(),
+      command: z.array(z.string()).min(1).optional(),
+    })
+    .optional(),
+  docs: z.string().optional(),
+});
+export type Connection = z.infer<typeof Connection>;
+
 /** The task as /goal/spec.json holds it: the bundle's spec plus the gateway's URL. It holds no secrets. */
 export const TaskSpec = z.object({
   factory_id: z.string().min(1),
@@ -29,6 +54,8 @@ export const TaskSpec = z.object({
   output: z.string().optional(),
   max_turns: z.number().int().positive().optional(),
   max_usd: z.number().positive().optional(),
+  /** The agent's organization connections its token grants; absent from a goald before connections. */
+  connections: z.array(Connection).default([]),
 });
 export type TaskSpec = z.infer<typeof TaskSpec>;
 

@@ -31,7 +31,7 @@ const redacted = "[redacted]"
 var errRefused = errors.New("refused by the install's secret policy")
 
 // resolve resolves every secret reference word in a value bound for target (a connection's
-// url, or "" for a sidecar) through ports.Secrets and remembers the values so they can be
+// url) through ports.Secrets and remembers the values so they can be
 // scrubbed. It first checks every word against the install's SecretPolicy and resolves
 // nothing when one is refused: the definition version may predate the check that refuses it.
 func (s *session) resolve(ctx context.Context, value, target string) (string, error) {
@@ -153,13 +153,8 @@ func upstreamContext(ctx context.Context, timeout time.Duration) (context.Contex
 	}
 }
 
-// open returns an MCP session with c's server and the func that ends the request's use of it:
-// the run's sidecar session, or a short session with a remote server.
+// open returns a short MCP session with c's remote server and the func that ends it.
 func (s *session) open(ctx context.Context, c *connection) (*mcp.ClientSession, func(), error) {
-	if c.sidecar != nil {
-		return s.g.sidecars.session(ctx, *c.sidecar)
-	}
-
 	cs, err := s.connect(ctx, c)
 	if err != nil {
 		return nil, nil, err

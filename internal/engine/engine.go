@@ -15,7 +15,9 @@
 // check runs in the same sandbox, and the station's checks are commands in it whose exit codes
 // come from the runtime. The sandbox is deleted when the claim ends, however it ends. Nothing
 // runs while nothing is claimable: a station's slots are its sandboxes, from zero to its agent
-// count (capped by WIP).
+// count (capped by WIP). Each run gets its organization's connections (connections.go), each
+// command only its part: prepare the repository's git login, the agent the model's access and its
+// own connections' env, a check nothing; their secret values are scrubbed from what runs report.
 //
 // Organizations. Every line belongs to one organization, and every store call the engine makes
 // for a line is bound to it (domain.WithOrg), so row-level security keeps each organization's
@@ -95,20 +97,19 @@ type Deps struct {
 	Sandboxes ports.Sandboxes
 	Contracts ports.Contracts
 	Secrets   ports.Secrets
+	// Connections give each run its organization's connections (spec 4 §4.5).
+	Connections ports.Connections
 	// CodeHosts are the code host adapters by the name a connection kind gives (KindSpec.CodeHost),
 	// and MergeConnections the connections merges reach them with.
 	CodeHosts        map[string]ports.CodeHost
 	MergeConnections MergeConnections
 	Clock            ports.Clock
 	Logger           *slog.Logger // nil discards logs
-	// RunEnded, when set, is told each run whose agent has ended (goald stops the run's MCP
-	// sidecars). It is called once per run, with the run's result already recorded.
-	RunEnded func(ctx context.Context, run domain.RunID)
 }
 
 func (d Deps) complete() bool {
-	return d.Store != nil && d.Orgs != nil && d.Sandboxes != nil && d.Contracts != nil && d.Secrets != nil && d.CodeHosts != nil &&
-		d.MergeConnections != nil && d.Clock != nil
+	return d.Store != nil && d.Orgs != nil && d.Sandboxes != nil && d.Contracts != nil && d.Secrets != nil &&
+		d.Connections != nil && d.CodeHosts != nil && d.MergeConnections != nil && d.Clock != nil
 }
 
 // Config is the engine's behaviour; zero durations take the defaults below.
@@ -175,17 +176,17 @@ const (
 
 // Engine runs factory lines. It is safe for concurrent use.
 type Engine struct {
-	store     ports.Store
-	orgs      Orgs
-	sandboxes ports.Sandboxes
-	contracts ports.Contracts
-	secrets   ports.Secrets
-	codehosts map[string]ports.CodeHost
-	mergeWith MergeConnections
-	clock     ports.Clock
-	log       *slog.Logger
-	runEnded  func(context.Context, domain.RunID)
-	cfg       Config
+	store       ports.Store
+	orgs        Orgs
+	sandboxes   ports.Sandboxes
+	contracts   ports.Contracts
+	secrets     ports.Secrets
+	connections ports.Connections
+	codehosts   map[string]ports.CodeHost
+	mergeWith   MergeConnections
+	clock       ports.Clock
+	log         *slog.Logger
+	cfg         Config
 
 	mu    sync.RWMutex
 	lines map[domain.FactoryID]domain.Line
@@ -238,8 +239,8 @@ func New(d Deps, cfg Config) (*Engine, error) {
 	}
 
 	return &Engine{
-		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, codehosts: d.CodeHosts,
-		mergeWith: d.MergeConnections, clock: d.Clock, log: log, runEnded: d.RunEnded, cfg: cfg, lines: lines,
+		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, connections: d.Connections,
+		codehosts: d.CodeHosts, mergeWith: d.MergeConnections, clock: d.Clock, log: log, cfg: cfg, lines: lines,
 		active: map[domain.ItemID]*activeRun{}, exhausted: map[domain.FactoryID]bool{},
 	}, nil
 }

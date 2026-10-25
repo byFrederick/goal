@@ -778,10 +778,24 @@ func (k ConnectionKind) expand(s string, values, minted map[string]string) (out 
 }
 
 // ConnectionOutline is what a run's box gets from a connection, without any value: the names of
-// its env variables, sorted, and the host of its git login ("" without one).
+// its env variables, sorted, its git login, its MCP server (whose headers name env variables, never
+// values) and its CLI tool. None of these can hold a secret (Check), so a run's bundle carries them.
 type ConnectionOutline struct {
-	Env     []string
-	GitHost string
+	Env []string
+	// Git is nil without a git login, MCP without an MCP server.
+	Git *KindGit
+	MCP *KindMCP
+	// CLI is a mise tool spec, or "".
+	CLI string
+}
+
+// GitHost is the host of the outline's git login, "" without one.
+func (o ConnectionOutline) GitHost() string {
+	if o.Git == nil {
+		return ""
+	}
+
+	return o.Git.Host
 }
 
 // outlinePlaceholder stands in for the secret and minted values Outline never sees.
@@ -789,8 +803,8 @@ const outlinePlaceholder = "set"
 
 // Outline renders k for c from what members may see of it, its non-secret fields and which secret
 // fields are set, with a placeholder for every secret and minted value, so a definition's checks
-// know which variables and git host a run would get (spec 4 §4.4). A connection its kind cannot
-// render outlines as nothing.
+// know which variables and git host a run would get (spec 4 §4.4) and the gateway can describe a
+// run's connections in its bundle (§5.9). A connection its kind cannot render outlines as nothing.
 func (k ConnectionKind) Outline(c Connection) ConnectionOutline {
 	values := maps.Clone(c.Fields)
 	if values == nil {
@@ -816,12 +830,7 @@ func (k ConnectionKind) Outline(c Connection) ConnectionOutline {
 		return ConnectionOutline{}
 	}
 
-	out := ConnectionOutline{Env: slices.Sorted(maps.Keys(rc.Env))}
-	if rc.Git != nil {
-		out.GitHost = rc.Git.Host
-	}
-
-	return out
+	return ConnectionOutline{Env: slices.Sorted(maps.Keys(rc.Env)), Git: rc.Git, MCP: rc.MCP, CLI: rc.CLI}
 }
 
 // EngineActor is who uses a connection for a run in the audit log (connection.used names the run).

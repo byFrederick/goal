@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"sync/atomic"
 	"testing"
 
 	"github.com/moby/moby/client"
@@ -17,9 +16,6 @@ import (
 
 // testOrg labels the tests' containers; no store knows it.
 const testOrg = "org-reap-it"
-
-// runSeq numbers the tests' runs, so their containers' names never collide.
-var runSeq atomic.Int64
 
 // newTestDocker returns a client of the local Docker, closed when the test ends. It skips the
 // test when Docker is not reachable.

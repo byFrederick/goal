@@ -39,8 +39,6 @@ var (
 // it too. The claim's work deletes it when it ends.
 type box struct {
 	sandbox ports.Sandbox
-	// repoToken is the repository token prepare got, scrubbed from what the sandbox reports.
-	repoToken string
 	// existed reports whether the item's branch was on the remote when prepare checked it out.
 	existed bool
 }
@@ -53,16 +51,12 @@ type prepared struct {
 	BranchExisted bool    `json:"branch_existed"`
 }
 
-// open creates the claim's sandbox on its first run and prepares it with the run's task token
-// and the repository token; a box already open is left as it is.
-func (e *Engine) open(ctx context.Context, c claimed, runID domain.RunID, b *box, token string) error {
+// open creates the claim's sandbox on its first run and prepares it with env (the run's task token
+// and what clones the repository); a box already open is left as it is. scrub holds the run's
+// secrets.
+func (e *Engine) open(ctx context.Context, c claimed, runID domain.RunID, b *box, env map[string]string, scrub scrubber) error {
 	if b.sandbox != nil {
 		return nil
-	}
-
-	repoToken, err := e.repositoryToken(ctx, c.line.Runtime.Repository)
-	if err != nil {
-		return err
 	}
 
 	started := e.clock.Now()
@@ -78,16 +72,9 @@ func (e *Engine) open(ctx context.Context, c claimed, runID domain.RunID, b *box
 		return fmt.Errorf("create sandbox: %w", err)
 	}
 
-	b.sandbox, b.repoToken = sb, repoToken
+	b.sandbox = sb
 
 	e.record(ctx, c, runID, domain.EventSandboxStarted, map[string]any{"size": string(size), "seconds": e.since(started)})
-
-	env := map[string]string{envGatewayToken: token}
-	if repoToken != "" {
-		env[domain.RunEnvRepositoryToken] = repoToken
-	}
-
-	scrub := newScrubber(token, repoToken)
 
 	var line *prepared
 

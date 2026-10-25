@@ -231,7 +231,7 @@ func (r *connectionsRun) repository() {
 	var fixes []domain.ProblemFix
 
 	for _, n := range slices.Sorted(maps.Keys(r.conns)) {
-		if n != repo.Connection && host != "" && strings.EqualFold(r.outline(n).GitHost, host) {
+		if n != repo.Connection && host != "" && strings.EqualFold(r.outline(n).GitHost(), host) {
 			fixes = append(fixes, config.ReplaceFix("Use "+n, p, n))
 		}
 	}
@@ -244,7 +244,7 @@ func (r *connectionsRun) repository() {
 		return
 	}
 
-	switch got := r.outline(repo.Connection).GitHost; {
+	switch got := r.outline(repo.Connection).GitHost(); {
 	case got == "":
 		r.add(p, CodeRepositoryHostMismatch, fmt.Sprintf(
 			"runtime.repository: %s signs git in to no host, so it cannot clone the repository on %s", repo.Connection, host), fixes...)

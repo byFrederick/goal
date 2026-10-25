@@ -70,11 +70,12 @@ type harness struct {
 	contracts *porttest.Contracts
 	codehost  *porttest.CodeHost // the github code host
 	gitlab    *porttest.CodeHost // the gitlab code host
-	line      domain.Line
-	logs      *logBuffer // what every engine of the harness logs
+	// connections hold the test organization's connections (connections_test.go).
+	connections *porttest.Connections
+	line        domain.Line
+	logs        *logBuffer // what every engine of the harness logs
 
-	mu    sync.Mutex
-	ended []domain.RunID // runs reported to RunEnded
+	mu sync.Mutex
 	// codeConns are the connections merges get (engine.MergeConnections): by default one of a
 	// github kind on github.com.
 	codeConns []domain.ResolvedConnection
@@ -92,13 +93,6 @@ const (
 	modelToken = "model-token-for-tests"
 )
 
-func (h *harness) runEnded(_ context.Context, run domain.RunID) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	h.ended = append(h.ended, run)
-}
-
 // mergeConnections are the connections the harness's merges get.
 func (h *harness) mergeConnections(context.Context, domain.Line) ([]domain.ResolvedConnection, error) {
 	h.mu.Lock()
@@ -113,13 +107,6 @@ func (h *harness) setCodeConnections(conns ...domain.ResolvedConnection) {
 	defer h.mu.Unlock()
 
 	h.codeConns = conns
-}
-
-func (h *harness) endedRuns() []domain.RunID {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	return slices.Clone(h.ended)
 }
 
 // runs returns an item's runs in org, oldest first.
@@ -171,6 +158,7 @@ func newHarness(t *testing.T, line domain.Line, run porttest.AgentFunc) *harness
 		t.Fatalf("the first organization is %s, want %s", org, testOrg)
 	}
 
+	h.connections = newConnections(t, h.tenancy)
 	h.e = h.engine(t, h.store)
 
 	return h
@@ -201,10 +189,10 @@ func (h *harness) engineWith(t *testing.T, store ports.Store, maxRuns int, lines
 
 	e, err := engine.New(engine.Deps{
 		Store: store, Orgs: h.tenancy, Sandboxes: h.sandboxes, Contracts: h.contracts, Clock: h.clock,
-		Secrets:   porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y", "MODEL_ACCESS": modelToken, "GIT_TOKEN": gitToken, "REPO_TOKEN": gitToken},
-		CodeHosts: map[string]ports.CodeHost{codeHostGitHub: h.codehost, codeHostGitLab: h.gitlab},
-		RunEnded:  h.runEnded, MergeConnections: h.mergeConnections,
-		Logger: slog.New(slog.NewJSONHandler(h.logs, nil)),
+		Secrets:     porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y", "MODEL_ACCESS": modelToken, "GIT_TOKEN": gitToken, "REPO_TOKEN": gitToken},
+		Connections: h.connections, CodeHosts: map[string]ports.CodeHost{codeHostGitHub: h.codehost, codeHostGitLab: h.gitlab},
+		MergeConnections: h.mergeConnections,
+		Logger:           slog.New(slog.NewJSONHandler(h.logs, nil)),
 	}, engine.Config{
 		Lines:           lines,
 		MaxRuns:         maxRuns,

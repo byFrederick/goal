@@ -46,7 +46,14 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   await put(join(deps.dirs.goal, 'spec.json'), JSON.stringify({ ...bundle.spec, gateway_url: gateway }));
 
   for (const c of bundle.git_credentials) {
-    await must(deps, 'git', ['config', '--global', `credential.https://${c.host}.helper`, credentialHelper(c)]);
+    // --add: two connections may sign git in to one host; git asks each helper until one answers.
+    await must(deps, 'git', [
+      'config',
+      '--global',
+      '--add',
+      `credential.https://${c.host}.helper`,
+      credentialHelper(c),
+    ]);
   }
 
   const out: Prepared = { type: 'prepared', at: '', seconds: 0, tools: bundle.tools.length };

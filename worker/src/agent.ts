@@ -1,7 +1,7 @@
-import type { Options, Settings } from '@anthropic-ai/claude-agent-sdk';
-import { type AgentFiles, paths, type TaskSpec } from './spec.js';
+import type { CanUseTool, McpServerConfig, Options, Settings } from '@anthropic-ai/claude-agent-sdk';
+import { type AgentFiles, type Connection, paths, type TaskSpec } from './spec.js';
 
-/** The only MCP server an agent sees: goald's gateway. Its tools are mcp__goal__<tool>. */
+/** goald's gateway as an MCP server: Goal's own tools, mcp__goal__<tool>. */
 export const gatewayServer = 'goal';
 
 /** Tools an agent gets when its definition allows none: it can read the workspace, nothing more. */
@@ -9,7 +9,6 @@ const readOnlyTools = ['Read', 'Grep', 'Glob'];
 
 /** Environment variables the agent's process never sees. */
 const hiddenEnv = [
-  'ANTHROPIC_API_KEY', // model auth is the subscription token; an API key must never take over
   'GOAL_GATEWAY_TOKEN', // reaches the gateway as a header, not the agent's shell
 ];
 
@@ -33,13 +32,15 @@ export function agentQuery(
   env: NodeJS.ProcessEnv,
   abortController: AbortController,
 ): AgentQuery {
-  const gatewayToken = env.GOAL_GATEWAY_TOKEN;
   const options: Options = {
     cwd: paths.workspace,
     systemPrompt: { type: 'preset', preset: 'claude_code', append: systemAppend(spec, files) },
     ...toolPolicy(spec, spec.gateway_url !== undefined),
-    // Pre-approved rules run; anything else is denied, since nobody is there to ask.
-    permissionMode: 'dontAsk',
+    // Pre-approved rules run; every other call reaches canUseTool, which allows a connection's MCP
+    // tools as the agent's rules say and denies the rest, since nobody is there to ask. (dontAsk
+    // would deny those calls before canUseTool sees them.)
+    permissionMode: 'default',
+    canUseTool: connectionPermission(spec),
     // Only the definition's skills are listed to the model and accepted by the Skill tool. Claude
     // Code would otherwise also offer the skills bundled with it, skills and plugins synced from
     // the claude.ai account behind the token, and the checkout's .claude/skills.
@@ -48,19 +49,7 @@ export function agentQuery(
     // user: the agent's skills, copied to paths.claudeConfig/skills; project: the checkout's
     // CLAUDE.md and .claude/ settings.
     settingSources: ['user', 'project'],
-    mcpServers: spec.gateway_url
-      ? {
-          [gatewayServer]: {
-            type: 'http',
-            url: spec.gateway_url,
-            headers: gatewayToken ? { Authorization: `Bearer ${gatewayToken}` } : {},
-            // The gateway already serves only the agent's allowed tools; loading them up front
-            // (instead of deferring them behind tool search) is what lets agents call them
-            // reliably, and it waits for the connection before the first turn.
-            alwaysLoad: true,
-          },
-        }
-      : {},
+    mcpServers: mcpServers(spec, env.GOAL_GATEWAY_TOKEN),
     strictMcpConfig: true,
     // The stream's message_delta events carry each API call's final token counts.
     includePartialMessages: true,
@@ -78,17 +67,47 @@ export function agentQuery(
 }
 
 /**
+ * The MCP servers of the run: goald's gateway (Goal's tools) and each connection's own, which
+ * Claude Code reaches from the box like any API. A remote server's headers name the box's env
+ * variables (${NAME}), which Claude Code expands, so no value is in the config; a stdio server is
+ * started in the box and inherits the agent's env. A connection with both a URL and a command is
+ * reached at its URL. Every server's tools are loaded up front: deferred behind tool search,
+ * agents called them by name and failed.
+ */
+function mcpServers(spec: TaskSpec, gatewayToken: string | undefined): Record<string, McpServerConfig> {
+  const servers: Record<string, McpServerConfig> = {};
+  if (spec.gateway_url) {
+    servers[gatewayServer] = {
+      type: 'http',
+      url: spec.gateway_url,
+      headers: gatewayToken ? { Authorization: `Bearer ${gatewayToken}` } : {},
+      alwaysLoad: true,
+    };
+  }
+  for (const c of spec.connections) {
+    if (c.name === gatewayServer) throw new Error(`connection ${c.name}: the name is goald's gateway's`);
+    const [command, ...args] = c.mcp?.command ?? [];
+    if (c.mcp?.url) {
+      servers[c.name] = { type: 'http', url: c.mcp.url, headers: c.mcp.headers ?? {}, alwaysLoad: true };
+    } else if (command) {
+      servers[c.name] = { type: 'stdio', command, args, alwaysLoad: true };
+    }
+  }
+  return servers;
+}
+
+/**
  * Maps the agent's tool rules onto the SDK. Allow rules use Claude Code's permission syntax
  * ("Read", "Bash(npm test*)"): their tool names are the only built-in tools available, and the
- * rules themselves are pre-approved. Deny rules always win. Rules for gateway tools
- * ("github__get_*": a connection, two underscores, a tool pattern) are enforced by goald's
- * gateway, which serves only the allowed ones, so they are left out here.
+ * rules themselves are pre-approved. Deny rules always win. Rules for connection tools
+ * ("github__get_*": a connection, two underscores, a tool pattern) are left out: the gateway
+ * enforces them for its tools and connectionPermission for the connections' own servers.
  */
 export function toolPolicy(
   spec: Pick<TaskSpec, 'tools_allow' | 'tools_deny' | 'skills'>,
   gateway: boolean,
 ): Pick<Options, 'tools' | 'allowedTools' | 'disallowedTools'> {
-  const builtin = spec.tools_allow.filter((rule) => !isGatewayRule(rule));
+  const builtin = spec.tools_allow.filter((rule) => !isConnectionRule(rule));
   const allow = builtin.length > 0 ? builtin : readOnlyTools;
   const tools = new Set(allow.map((rule) => rule.replace(/\(.*$/, '')).filter((name) => !name.startsWith('mcp__')));
   if (spec.skills.length > 0) tools.add('Skill');
@@ -96,21 +115,81 @@ export function toolPolicy(
   return {
     tools: [...tools],
     allowedTools: gateway ? [...allow, `mcp__${gatewayServer}`] : [...allow],
-    disallowedTools: spec.tools_deny.filter((rule) => !isGatewayRule(rule)),
+    disallowedTools: spec.tools_deny.filter((rule) => !isConnectionRule(rule)),
   };
 }
 
-/** Gateway tool rules name "<connection>__<tool pattern>"; built-in tool names have no "__". */
-function isGatewayRule(rule: string): boolean {
+/** Connection tool rules name "<connection>__<tool pattern>"; built-in tool names have no "__". */
+function isConnectionRule(rule: string): boolean {
   const name = rule.replace(/\(.*$/, '');
   return name.includes('__') && !name.startsWith('mcp__');
 }
 
 /**
+ * The permission check of calls nothing pre-approved. A tool of a connection's MCP server
+ * (mcp__<connection>__<tool>) is allowed by the agent's rules for it, as the gateway applies them
+ * to its tools: deny wins, a malformed deny pattern denies the connection's every tool, and a
+ * connection with allow rules allows only the tools they match. Every other call is denied, as
+ * Claude Code's dontAsk mode would.
+ */
+export function connectionPermission(spec: Pick<TaskSpec, 'tools_allow' | 'tools_deny' | 'connections'>): CanUseTool {
+  const servers = new Set(spec.connections.filter((c) => c.mcp).map((c) => c.name));
+  const rules = (list: string[], conn: string) =>
+    list
+      .filter(isConnectionRule)
+      .flatMap((rule) => (rule.startsWith(`${conn}__`) ? [rule.slice(conn.length + 2)] : []));
+
+  return async (toolName, input) => {
+    const [, conn = '', tool = ''] = /^mcp__([a-z0-9-]+)__(.+)$/.exec(toolName) ?? [];
+    if (!servers.has(conn))
+      return { behavior: 'deny', message: `${toolName} is not allowed by the agent's tool rules.` };
+
+    const allow = rules(spec.tools_allow, conn);
+    const denied = rules(spec.tools_deny, conn).some((p) => matches(p, tool) ?? true);
+    if (denied || (allow.length > 0 && !allow.some((p) => matches(p, tool) ?? false))) {
+      return { behavior: 'deny', message: `The agent's tool rules do not let it call ${conn}__${tool}.` };
+    }
+    return { behavior: 'allow', updatedInput: input };
+  };
+}
+
+/**
+ * Whether name matches pattern as Go's path.Match does on a tool name (no "/"): "*" any run of
+ * characters, "?" one, "[…]" a class ("[^…]" or "[!…]" negated), "\\" escaping the next one.
+ * A malformed pattern matches nothing and returns undefined.
+ */
+export function matches(pattern: string, name: string): boolean | undefined {
+  let re = '';
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern.charAt(i);
+    if (ch === '*') re += '.*';
+    else if (ch === '?') re += '.';
+    else if (ch === '\\') {
+      if (i + 1 >= pattern.length) return undefined;
+      re += literal(pattern.charAt(++i));
+    } else if (ch === '[') {
+      const end = pattern.indexOf(']', i + 2);
+      if (end < 0) return undefined;
+      let body = pattern.slice(i + 1, end);
+      const negated = body.startsWith('^') || body.startsWith('!');
+      if (negated) body = body.slice(1);
+      if (body === '') return undefined;
+      re += `[${negated ? '^' : ''}${body.replace(/[\\\]^]/g, '\\$&')}]`;
+      i = end;
+    } else re += literal(ch);
+  }
+  return new RegExp(`^${re}$`, 's').test(name);
+}
+
+function literal(ch: string): string {
+  return ch.replace(/[.*+?^${}()|[\]\\/-]/g, '\\$&');
+}
+
+/**
  * The agent's environment: the container's, without hiddenEnv, with Claude Code's config in the
- * throwaway home and its nonessential traffic (telemetry, error reports, the updater) off. The
- * container reaches the outside only through goald's egress proxy (HTTPS_PROXY), which lets an
- * agent reach the model API and the gateway and refuses everything else.
+ * throwaway home and its nonessential traffic (telemetry, error reports, the updater) off. goald
+ * gives the agent's exec exactly the model's access and its connections' env, so whatever model
+ * credential is here is the model connection's.
  */
 export function agentEnv(env: NodeJS.ProcessEnv): Record<string, string | undefined> {
   const out: Record<string, string | undefined> = {
@@ -123,9 +202,32 @@ export function agentEnv(env: NodeJS.ProcessEnv): Record<string, string | undefi
   return out;
 }
 
-/** What goes after Claude Code's system prompt: the factory's purpose, when it has one, then the agent's prompt. */
-export function systemAppend(spec: Pick<TaskSpec, 'purpose'>, files: Pick<AgentFiles, 'prompt'>): string {
-  return spec.purpose ? `## This factory\n${spec.purpose}\n\n${files.prompt}` : files.prompt;
+/**
+ * What goes after Claude Code's system prompt: the factory's purpose, when it has one, the agent's
+ * prompt, then the agent's connections.
+ */
+export function systemAppend(
+  spec: Pick<TaskSpec, 'purpose' | 'connections'>,
+  files: Pick<AgentFiles, 'prompt'>,
+): string {
+  const parts = spec.purpose ? [`## This factory\n${spec.purpose}`, files.prompt] : [files.prompt];
+  if (spec.connections.length > 0) parts.push(connectionsSection(spec.connections));
+  return parts.join('\n\n');
+}
+
+/** The "Connections" section: each connection's name, kind, env names and MCP server, and its kind's docs; never a value. */
+function connectionsSection(connections: Connection[]): string {
+  const parts = [
+    '## Connections',
+    'Your environment holds these connections. Their variables carry credentials: use them, never print or share their values.',
+  ];
+  for (const c of connections) {
+    const facts = [];
+    if (c.env.length > 0) facts.push(`Environment: ${c.env.map((n) => `\`${n}\``).join(', ')}.`);
+    if (c.mcp) facts.push(`MCP server \`${c.name}\`: its tools are \`mcp__${c.name}__*\`.`);
+    parts.push([`### ${c.name} (${c.title})`, facts.join(' '), c.docs].filter(Boolean).join('\n\n'));
+  }
+  return parts.join('\n\n');
 }
 
 /**

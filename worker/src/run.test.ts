@@ -27,7 +27,6 @@ const files: AgentFiles = { prompt: 'You are the engineer.', outputSchema: { typ
 const env = {
   PATH: '/usr/bin',
   CLAUDE_CODE_OAUTH_TOKEN: 'oauth-token',
-  ANTHROPIC_API_KEY: 'sk-ant-must-not-pass',
   GOAL_GATEWAY_TOKEN: 'gateway-token',
 };
 const at = new Date('2026-10-23T10:00:00Z');
@@ -75,7 +74,7 @@ async function run(
 }
 
 describe('runTask', () => {
-  it('runs the agent with the task policy, one gateway and no API key', async () => {
+  it("runs the agent with the task policy, the gateway and the model's access goald gave it", async () => {
     const { calls } = await run([success]);
     const options = calls[0]?.options;
 
@@ -86,7 +85,7 @@ describe('runTask', () => {
       tools: ['Read', 'Edit', 'Bash', 'Skill'],
       allowedTools: ['Read', 'Edit', 'Bash(npm test*)', 'mcp__goal'],
       disallowedTools: ['Bash(git push*)'],
-      permissionMode: 'dontAsk',
+      permissionMode: 'default',
       skills: ['acme-conventions'],
       mcpServers: {
         goal: {
@@ -104,7 +103,6 @@ describe('runTask', () => {
     });
     expect(Object.keys(options?.mcpServers ?? {})).toEqual(['goal']);
     expect(options?.env).toMatchObject({ CLAUDE_CODE_OAUTH_TOKEN: 'oauth-token', PATH: '/usr/bin' });
-    expect(options?.env).not.toHaveProperty('ANTHROPIC_API_KEY');
     expect(options?.env).not.toHaveProperty('GOAL_GATEWAY_TOKEN');
     expect(calls[0]?.prompt).toContain('Add a health endpoint');
     expect(calls[0]?.prompt).toContain('"lane": "backend"');

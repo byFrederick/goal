@@ -125,14 +125,33 @@ describe('prepare', () => {
     expect(await readFile(join(dirs.goal, 'agent/prompt.md'), 'utf8')).toBe('# engineer\n');
     expect(await readFile(join(dirs.goal, 'agent/output.schema.json'), 'utf8')).toBe('{"type":"object"}');
     expect(calls.map((c) => `${c.command} ${c.args.join(' ')}`)).toEqual([
-      `git config --global credential.https://github.com.helper ${credentialHelper(served.git_credentials[0])}`,
+      `git config --global --add credential.https://github.com.helper ${credentialHelper(served.git_credentials[0])}`,
       'git check-ref-format --branch goal/1-add-a-health-endpoint',
       `git clone --quiet -- https://github.com/acme/api.git ${dirs.workspace}`,
       'git rev-parse --verify --quiet refs/remotes/origin/goal/1-add-a-health-endpoint',
       'git checkout --quiet -b goal/1-add-a-health-endpoint',
       'mise install --yes',
+      'mise use --global --yes task@3.46.1 npm:@acme/issues-cli@2.0.0',
     ]);
-    expect(prepared).toMatchObject({ branch: 'goal/1-add-a-health-endpoint', branch_existed: false, tools: 0 });
+    expect(prepared).toMatchObject({ branch: 'goal/1-add-a-health-endpoint', branch_existed: false, tools: 2 });
+  });
+
+  it('signs git in to one host with whichever connection the exec has: each helper answers only for its own variable', async () => {
+    const repository = { host: 'github.com', username: 'x-access-token', password_env: 'CODE_TOKEN' };
+    const agents = { host: 'github.com', username: 'x-access-token', password_env: 'GH_TOKEN' };
+    const { fake } = gatewayServing({ spec, files: {}, git_credentials: [repository, agents] });
+    const { exec } = recorder();
+
+    await prepare(depsWith(fake, exec));
+
+    const fill = (env: NodeJS.ProcessEnv) =>
+      execFileSync('git', ['credential', 'fill'], {
+        env: { ...gitEnv(), ...env },
+        input: 'protocol=https\nhost=github.com\n\n',
+        encoding: 'utf8',
+      });
+    expect(fill({ CODE_TOKEN: 'clone-s3cr3t' })).toContain('password=clone-s3cr3t');
+    expect(fill({ GH_TOKEN: 'push-s3cr3t' })).toContain('password=push-s3cr3t');
   });
 
   it("writes the run bundle to /goal with the gateway's URL in spec.json", async () => {
@@ -148,7 +167,11 @@ describe('prepare', () => {
     expect(requests).toEqual([{ url: 'http://goal-egress:3128/run', auth: `Bearer ${token}` }]);
     expect(await readFile(join(dirs.goal, 'agent/prompt.md'), 'utf8')).toBe('You are the engineer.\n');
     expect(await readFile(join(dirs.goal, 'agent/skills/acme-conventions/SKILL.md'), 'utf8')).toBe('# acme\n');
-    expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8'))).toEqual({ ...spec, gateway_url: gateway });
+    expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8'))).toEqual({
+      ...spec,
+      connections: [],
+      gateway_url: gateway,
+    });
     expect(prepared).toEqual({ type: 'prepared', at: later.toISOString(), seconds: 12.3, tools: 0 });
     // No repository: nothing cloned, no repository tools.
     expect(calls).toEqual([]);

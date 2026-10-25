@@ -27,8 +27,8 @@ goald creates one sandbox per run (`ports.Sandboxes`) and execs, in order:
 
 | Exec | Environment from goald | Does |
 | --- | --- | --- |
-| `goal-agent prepare` | `GOAL_GATEWAY_URL` (the sandbox's), `GOAL_GATEWAY_TOKEN`, each git credential's password variable (`GOAL_REPOSITORY_TOKEN` for the factory's repository) | builds `/goal` and `/workspace` from the run bundle (below); one `prepared` line on stdout; exit 0, or 1 with the reason on stderr |
-| `goal-agent run` | `GOAL_GATEWAY_TOKEN`, the model's credential, `GOAL_FEEDBACK` when goald adds to the brief | runs the agent once (How the agent runs); the stdout protocol; exit 0 with a result, 1 when the worker crashed |
+| `goal-agent prepare` | `GOAL_GATEWAY_URL` (the sandbox's), `GOAL_GATEWAY_TOKEN`, the password variable of the repository's git login: its connection's (such as `GH_TOKEN`), or `GOAL_REPOSITORY_TOKEN` for a version published before connections | builds `/goal` and `/workspace` from the run bundle (below); one `prepared` line on stdout; exit 0, or 1 with the reason on stderr |
+| `goal-agent run` | `GOAL_GATEWAY_TOKEN`, the model connection's env (the install's `GOAL_TASK_ENV` for a version without `runtime.modelConnection`, until 4-14), the env of the agent's own connections, `GOAL_FEEDBACK` when goald adds to the brief | runs the agent once (How the agent runs); the stdout protocol; exit 0 with a result, 1 when the worker crashed |
 | a station check, `sh -c '<command>'` in `/workspace` | `HOME`, `CI=true` | the exit code is the runtime's |
 
 `goal-agent` without a command prints its usage and exits 2.
@@ -42,28 +42,28 @@ goald creates one sandbox per run (`ports.Sandboxes`) and execs, in order:
 | `/workspace` | the factory's repository on the item's branch, or empty; the agent's working directory |
 | `/home/node` | `HOME`: Claude Code's config dir (`.claude`), mise's global config, git's credential helpers |
 
-`GOAL_FEEDBACK` is what goald adds to the brief for one attempt: the notes people left and, on a retry in the same sandbox, why the previous attempt was rejected. The worker puts it right after the brief. `ANTHROPIC_API_KEY` and `GOAL_GATEWAY_TOKEN` are removed from the agent's own environment (the token reaches the gateway only as a header).
+`GOAL_FEEDBACK` is what goald adds to the brief for one attempt: the notes people left and, on a retry in the same sandbox, why the previous attempt was rejected. The worker puts it right after the brief. `GOAL_GATEWAY_TOKEN` is removed from the agent's own environment (the token reaches the gateway only as a header); everything else goald gave the exec is the agent's, its connections' credentials included (spec 4 §11.3).
 
 ### prepare and the run bundle
 
-`goal-agent prepare` fetches `GET <origin of GOAL_GATEWAY_URL>/run` with `Authorization: Bearer $GOAL_GATEWAY_TOKEN` (`internal/gateway`, `ServeRun`; 401 for a bad token, 403 for a run the token's version or organization does not have). The bundle holds no secret:
+`goal-agent prepare` fetches `GET <origin of GOAL_GATEWAY_URL>/run` with `Authorization: Bearer $GOAL_GATEWAY_TOKEN` (`internal/gateway`, `ServeRun`; 401 for a bad token, 403 for a run the token's version or organization does not have). The bundle holds no secret: git credentials and MCP headers name the variables that hold the values.
 
 ```json
 {
   "spec": { "…": "spec.json below, without gateway_url" },
   "files": { "agent/prompt.md": "<base64>", "agent/skills/acme-conventions/SKILL.md": "<base64>", "agent/output.schema.json": "<base64>" },
   "repository": { "url": "https://github.com/acme/api.git", "branch": "goal/7-add-a-health-endpoint" },
-  "git_credentials": [{ "host": "github.com", "username": "x-access-token", "password_env": "GOAL_REPOSITORY_TOKEN" }],
-  "tools": ["task@3.46.1"]
+  "git_credentials": [{ "host": "github.com", "username": "x-access-token", "password_env": "GH_TOKEN" }],
+  "tools": ["task@3.46.1", "aqua:cli/cli@2.83.0"]
 }
 ```
 
-`internal/gateway/testdata/run-bundle.json` is a real one; the Go and the Vitest tests both read it. Then, in order:
+`git_credentials` are the git logins of the repository's connection and of the agent's own connections (one per host, user and variable); `tools` are the definition's `runtime.tools`, then the CLI tools of the agent's connections. `internal/gateway/testdata/run-bundle.json` is a real one; the Go and the Vitest tests both read it. Then, in order:
 
 1. Each file under `/goal` at its path (relative, no `.` or `..`), and `spec.json` with `gateway_url` set to `GOAL_GATEWAY_URL`.
-2. Per git credential, a helper for `https://<host>` in the global git config that answers git's `get` with the user name and the value of `password_env`, read when git asks: the password is only ever in the environment of the exec that runs git.
+2. Per git credential, a helper for `https://<host>` added to the global git config (`--add`: git asks each helper of a host in turn) that answers git's `get` with the user name and the value of `password_env`, read when git asks: the password is only ever in the environment of the exec that runs git, so prepare clones with the repository connection's and the agent pushes with one of its own.
 3. With a repository: `git clone` into `/workspace` and the item's branch checked out, the remote one when earlier runs pushed it, otherwise new from the default branch; then `mise install` there for the repository's own tools (`mise.toml`, `.tool-versions`, …).
-4. `mise use --global` for `tools`, the definition's `runtime.tools`, so they are on `PATH` wherever the agent works (absent until the definition schema has the field, 4-10).
+4. `mise use --global` for `tools`, so they are on `PATH` wherever the agent works.
 5. One line on stdout: `{"type":"prepared","at":…,"seconds":5.4,"tools":1,"branch":"goal/7-…","branch_existed":true}` (`branch` and `branch_existed` only with a repository).
 
 ### spec.json
@@ -79,16 +79,25 @@ goald creates one sandbox per run (`ports.Sandboxes`) and execs, in order:
   "brief": "title and body of the item",
   "inputs": { "spec": { "…": "outputs of earlier stations" } },
   "output": "change",
-  "max_turns": 120, "max_usd": 6
+  "max_turns": 120, "max_usd": 6,
+  "connections": [
+    { "name": "github", "kind": "github", "title": "GitHub", "env": ["GH_HOST", "GH_TOKEN"],
+      "mcp": { "url": "https://api.githubcopilot.com/mcp/", "headers": { "Authorization": "Bearer ${GH_TOKEN}" } },
+      "docs": "Use gh and git; GH_TOKEN is set." },
+    { "name": "playwright", "kind": "mcp-server", "title": "MCP server", "env": [],
+      "mcp": { "command": ["sh", "-c", "npx -y @playwright/mcp@0.0.41"] } }
+  ]
 }
 ```
 
+`connections` are the agent's organization connections its token grants (the model and repository connections are not among them unless the agent names them): the names of the variables each sets in `goal-agent run`'s env, never a value, its MCP server and its kind's docs.
+
 ## How the agent runs
 
-- Working directory `/workspace`; Claude Code's system prompt with, appended, `## This factory` and the `purpose` (when set), then `prompt.md`; the brief, earlier outputs and the finishing instruction as the user prompt.
-- Tools: the built-in tools named by `tools_allow` (Claude Code permission rules such as `Bash(npm test*)`) are the only ones available, and those rules are pre-approved. `tools_deny` rules are disallowed. Permission mode `dontAsk`: anything not pre-approved is denied, since nobody is there to ask. An agent that allows no tools gets `Read`, `Grep` and `Glob`.
+- Working directory `/workspace`; Claude Code's system prompt with, appended, `## This factory` and the `purpose` (when set), then `prompt.md`, then `## Connections`: each connection's name and kind title, the names of its variables, its MCP server (`mcp__<name>__*`) and its kind's docs, never a value; the brief, earlier outputs and the finishing instruction as the user prompt.
+- Tools: the built-in tools named by `tools_allow` (Claude Code permission rules such as `Bash(npm test*)`) are the only ones available, and those rules are pre-approved. `tools_deny` rules are disallowed. An agent that allows no tools gets `Read`, `Grep` and `Glob`. Permission mode `default` with a permission check (`canUseTool`) for every call nothing pre-approved: a tool of a connection's MCP server is allowed by the agent's `<connection>__<pattern>` rules (patterns as Go's `path.Match`; deny wins, a malformed deny pattern denies the connection's every tool, and a connection with allow rules allows only the tools they match), and every other call is denied, since nobody is there to ask (`dontAsk` would deny those calls before the check sees them). Denied calls are the result's `permission_denials`.
 - Skills: copied from `/goal/agent/skills` to `$CLAUDE_CONFIG_DIR/skills`; only the listed names are enabled (the SDK's `skills` option): they are the only skills listed to the model and the only ones the Skill tool accepts, and the only ones the `started` event reports. Claude Code would otherwise also discover the skills bundled with it (loop, schedule, claude-api, …), skills and plugins synced from the claude.ai account behind the token, and the checkout's `.claude/skills`; the worker turns the first two off (`settings`: `disableBundledSkills`, `syncClaudeAiSkills: false`, `syncClaudeAiPlugins: false`, `disableClaudeAiConnectors`) and the filter hides the rest. No plugins are loaded. Settings sources are `user` (those skills) and `project` (the checkout's `CLAUDE.md` and `.claude/`).
-- MCP: exactly one server, `goal`, at `gateway_url` over streamable HTTP with `Authorization: Bearer $GOAL_GATEWAY_TOKEN` (`strictMcpConfig`, so `.mcp.json` and other configs are ignored). Its tools are pre-approved and always loaded (`alwaysLoad`): Claude Code would otherwise defer them behind tool search, and agents called them by name and failed. The gateway serves only the agent's allowed tools, which keeps the list short.
+- MCP (`strictMcpConfig`, so `.mcp.json` and other configs are ignored): `goal`, goald's gateway, at `gateway_url` over streamable HTTP with `Authorization: Bearer $GOAL_GATEWAY_TOKEN`, its tools pre-approved (the gateway serves only the agent's allowed tools); and one server per connection with an MCP server, named after the connection and reached from the box like any API: a remote one at its `url` with its `headers`, whose `${NAME}` references Claude Code expands from its env (nothing on disk holds a value), or a stdio one started in the box by its `command`, which inherits the agent's env. A connection with both is reached at its URL; one named `goal` is refused. Every server's tools are always loaded (`alwaysLoad`): Claude Code would otherwise defer them behind tool search, and agents called them by name and failed.
 - Limits: `max_turns` and `max_usd` become the SDK's `maxTurns` and `maxBudgetUsd`; goald also kills the container when the task's timeout passes.
 - Output: with `output.schema.json` the SDK's `json_schema` output format; without it the final reply is read as JSON (whole reply, a fenced block or the outermost object), or passed on as a JSON string. goald validates it against the contract either way.
 - `SIGTERM` (docker stop) aborts the session.

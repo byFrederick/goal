@@ -36,6 +36,8 @@ const (
 	itemID      domain.ItemID    = "item-1"
 	tracker                      = "tracker"
 	trackerCred                  = "acme-tracker-s3cr3t-0123456789"
+	shopDB                       = "shop-db"
+	dbURL                        = "postgres://reader:acme-db-s3cr3t-42@db.example.com/shop" //nolint:gosec // a fake credential
 )
 
 // version is the definition version the tasks' runs started on; otherVersion is a version of
@@ -45,10 +47,10 @@ const (
 	otherVersion domain.DefinitionVersionID = "019a1c00-0000-7000-8000-0000000000b1"
 )
 
-// factoryYAML declares one served remote connection (tracker), one the token does not grant
-// (wiki), one with missing credentials (crm), one served sidecar (shop-db), one sidecar whose
-// image is not pinned (postgres), one kind the gateway does not serve yet and one organization
-// connection (docs), which runs reach from their own box.
+// factoryYAML declares, as a version published before phase 4 could, one served remote connection
+// (tracker), one the token does not grant (wiki), one with missing credentials (crm), two stdio
+// servers (shop-db, postgres), one kind the gateway does not serve and one organization connection
+// (docs), which runs reach from their own box.
 const factoryYAML = `apiVersion: goal/v1
 kind: Factory
 metadata: { id: ` + string(factoryID) + `, name: acme-gateway }
@@ -199,15 +201,17 @@ func (b *syncBuffer) String() string {
 }
 
 type harness struct {
-	url      string
-	upURL    string
-	gw       *Gateway
-	up       *upstream
-	sidecars *fakeSidecars
-	store    *porttest.Store
-	logs     *syncBuffer
-	clock    *porttest.Clock
-	key      []byte
+	url   string
+	upURL string
+	gw    *Gateway
+	up    *upstream
+	store *porttest.Store
+	// org is the organization of the tasks; connections hold its connections (bundle_test.go).
+	org         domain.OrgID
+	connections *porttest.Connections
+	logs        *syncBuffer
+	clock       *porttest.Clock
+	key         []byte
 }
 
 func newHarness(t *testing.T, cfg Config) *harness {
@@ -254,9 +258,10 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 	}
 
 	h := &harness{
-		up: up, upURL: upURL, sidecars: &fakeSidecars{}, store: porttest.NewStore(), logs: &syncBuffer{},
+		up: up, upURL: upURL, store: porttest.NewStore(), logs: &syncBuffer{},
 		clock: porttest.NewClock(time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)), key: []byte("gateway-test-key"),
 	}
+	h.org, h.connections = newConnections(t, h.clock)
 
 	cfg.Key = h.key
 
@@ -265,18 +270,16 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 	h.gw, err = New(Deps{
 		Definitions: definitions{version: load(factoryID), otherVersion: load(otherID)},
 		Items:       h.store,
+		Connections: h.connections,
 		Secrets:     d.secrets,
 		Events:      h.store,
 		Clock:       h.clock,
 		Logger:      slog.New(slog.NewJSONHandler(h.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 		Transport:   d.transport,
-		Sidecars:    h.sidecars,
 	}, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	t.Cleanup(h.gw.Close)
 
 	ts := httptest.NewServer(h.gw)
 	t.Cleanup(ts.Close)
@@ -287,7 +290,7 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 
 func (h *harness) claims() domain.TaskClaims {
 	return domain.TaskClaims{
-		OrgID: "org-1", FactoryID: factoryID, VersionID: version, ItemID: itemID, Station: "build", Agent: "engineer", RunID: "run-1",
+		OrgID: h.org, FactoryID: factoryID, VersionID: version, ItemID: itemID, Station: "build", Agent: "engineer", RunID: "run-1",
 		Connections: []string{"knowledge", tracker, "postgres", "crm", shopDB, "docs"},
 		ExpiresAt:   h.clock.Now().Add(time.Hour).Unix(),
 	}
@@ -401,7 +404,6 @@ func testListTools(t *testing.T, protocol string) {
 	}
 
 	want := []string{
-		"shop-db__env", "shop-db__query",
 		"tracker__big", "tracker__echo", "tracker__get_issue", "tracker__get_repo", "tracker__leak", "tracker__whoami",
 	}
 	if got := toolNames(res); !slices.Equal(got, want) {
@@ -413,14 +415,15 @@ func testListTools(t *testing.T, protocol string) {
 		t.Errorf("cache scope = %q, want private: the list is per task", res.CacheScope)
 	}
 
+	// The organization's connection (docs) is the box's, not the gateway's to report, and no
+	// stdio server runs anywhere but in the box.
 	status, _ := res.Meta[metaConnections].(map[string]any)
 	wantStatus := map[string]string{
 		tracker:     "available",
-		shopDB:      "available",
+		shopDB:      "unavailable: " + reasonStdio,
 		"knowledge": "unavailable: builtin" + reasonKind,
-		"postgres":  "unavailable: " + reasonUnpinned,
+		"postgres":  "unavailable: " + reasonStdio,
 		"crm":       "unavailable: " + reasonCredentials,
-		"docs":      "unavailable: " + reasonOrganization,
 	}
 
 	if len(status) != len(wantStatus) {
@@ -433,16 +436,13 @@ func testListTools(t *testing.T, protocol string) {
 		}
 	}
 
-	if instr := cs.InitializeResult().Instructions; !strings.Contains(instr, "Connection postgres is unavailable") {
-		t.Errorf("instructions do not report the unpinned stdio connection: %q", instr)
+	if instr := cs.InitializeResult().Instructions; !strings.Contains(instr, "Connection postgres is unavailable") ||
+		strings.Contains(instr, "docs") {
+		t.Errorf("instructions do not report the stdio connection, or report the organization's: %q", instr)
 	}
 
-	if logs := h.logs.String(); !strings.Contains(logs, `"connection":"postgres"`) {
-		t.Errorf("no warning logged for the unpinned stdio connection:\n%s", logs)
-	}
-
-	if n := len(h.sidecars.started()); n != 1 {
-		t.Errorf("sidecars started = %d, want 1: shop-db only, never the unpinned image", n)
+	if logs := h.logs.String(); !strings.Contains(logs, `"connection":"postgres"`) || strings.Contains(logs, dbURL) {
+		t.Errorf("no warning logged for the stdio connection, or its credential resolved:\n%s", logs)
 	}
 }
 
@@ -521,7 +521,7 @@ func TestGateway_RejectsToolsTheAgentMayNotCall(t *testing.T) {
 		"tracker__delete_repo", // not allowed
 		"wiki__echo",           // connection not in the token
 		"postgres__query",      // connection not served
-		"shop-db__drop_table",  // denied on a sidecar
+		"shop-db__drop_table",  // a stdio connection's
 		"tracker",              // no tool
 	} {
 		_, err := cs.CallTool(t.Context(), &mcp.CallToolParams{Name: name, Arguments: map[string]any{}})
@@ -542,10 +542,6 @@ func TestGateway_RejectsToolsTheAgentMayNotCall(t *testing.T) {
 
 	if seen := h.up.seen(); len(seen) != 0 {
 		t.Fatalf("rejected calls reached the upstream %d times", len(seen))
-	}
-
-	if n := len(h.sidecars.started()); n != 0 {
-		t.Fatalf("rejected calls started %d sidecars", n)
 	}
 }
 
@@ -674,7 +670,7 @@ const (
 
 // policyYAML sends the install's repository token to GitHub's MCP server (github), and, as a
 // version published before the credentials check refused it could, to another server
-// (attacker) and to a sidecar (tool-db), and a reserved variable to another server (exfil).
+// (attacker), and a reserved variable to another server (exfil).
 const policyYAML = `apiVersion: goal/v1
 kind: Factory
 metadata: { id: ` + string(factoryID) + `, name: acme-gateway }
@@ -696,16 +692,10 @@ spec:
       transport: http
       url: UPSTREAM
       headers: { X-Acme-Debug: "env:ACME_DATABASE_URL" }
-    - name: tool-db
-      type: mcp
-      transport: stdio
-      image: ghcr.io/acme/shop-db-mcp:1.4.2
-      env: { GITHUB_TOKEN: "env:ACME_REPO_TOKEN" }
-      network: true
   agents:
     - name: engineer
       prompt: ./agents/engineer.md
-      connections: [github, attacker, exfil, tool-db]
+      connections: [github, attacker, exfil]
   board:
     stations:
       - { id: build, kind: agent, agent: engineer }
@@ -790,14 +780,14 @@ func newPolicyHarness(t *testing.T) (*harness, *recordingSecrets, *toGitHub) {
 // A version published before the credentials check refused it can still name the repository's
 // token in a header to any server, or a reserved variable anywhere. The gateway checks the
 // install's policy before it resolves a reference: the connection is unavailable, its upstream
-// gets no request at all (so no Authorization header), its sidecar never starts, the value is
-// never resolved, and the refusal is logged without it.
+// gets no request at all (so no Authorization header), the value is never resolved, and the
+// refusal is logged without it.
 func TestGateway_RefusesToSendASecretWhereThePolicyForbidsIt(t *testing.T) {
 	t.Parallel()
 
 	h, secrets, _ := newPolicyHarness(t)
 	c := h.claims()
-	c.Connections = []string{"attacker", "exfil", "tool-db"}
+	c.Connections = []string{"attacker", "exfil"}
 	cs := h.connectAs(t, legacyProtocol, c)
 
 	res, err := cs.ListTools(t.Context(), nil)
@@ -807,7 +797,7 @@ func TestGateway_RefusesToSendASecretWhereThePolicyForbidsIt(t *testing.T) {
 
 	checkRefused(t, res, c.Connections)
 
-	for _, name := range []string{"attacker__whoami", "exfil__whoami", "tool-db__env"} {
+	for _, name := range []string{"attacker__whoami", "exfil__whoami"} {
 		if _, err := cs.CallTool(t.Context(), &mcp.CallToolParams{Name: name, Arguments: map[string]any{}}); err == nil {
 			t.Errorf("call %s succeeded, want it refused", name)
 		}
@@ -839,10 +829,6 @@ func checkNothingSent(t *testing.T, h *harness, secrets *recordingSecrets) {
 
 	if seen := h.up.seen(); len(seen) != 0 {
 		t.Errorf("the attacker received %d requests, Authorization %q; want none", len(seen), seen)
-	}
-
-	if n := len(h.sidecars.started()); n != 0 {
-		t.Errorf("sidecars started = %d, want none: the token would reach any host from there", n)
 	}
 
 	if got := secrets.resolved(); slices.Contains(got, "env:ACME_REPO_TOKEN") || slices.Contains(got, "env:ACME_DATABASE_URL") {

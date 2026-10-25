@@ -16,9 +16,6 @@ const (
 	boxGateway = "http://goal-egress:3128/mcp"
 )
 
-// unitRoute is the agents' network of the default configuration.
-func unitRoute() route { return agentsRoute(Config{}.withDefaults().Network) }
-
 // A container is given the egress proxy's address for goald's gateway, at the gateway's path,
 // wherever goald listens: the proxy alone knows the way to goald.
 func TestBoxGatewayURL_IsTheProxyAtTheGatewaysPath(t *testing.T) {

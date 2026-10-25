@@ -33,25 +33,7 @@ const egressTestImage = "goal-egress:test"
 var (
 	egressImageOnce sync.Once
 	errEgressImage  error
-
-	// sharedNet serves the tests that only need their containers' network to exist; TestMain
-	// removes it. Every test that checks reachability has a network of its own.
-	sharedNetOnce sync.Once
-	sharedNet     *testNetwork
-	errSharedNet  error
 )
-
-func TestMain(m *testing.M) {
-	code := m.Run()
-
-	if sharedNet != nil {
-		if err := sharedNet.remove(context.Background()); err != nil {
-			fmt.Fprintln(os.Stderr, "remove the shared test network:", err)
-		}
-	}
-
-	os.Exit(code)
-}
 
 // testNetwork is compose.yaml's agents network and goal-egress service, made for a test: an
 // internal network without a bridge address, and the proxy on it under the service's name and
@@ -175,19 +157,6 @@ func buildEgressImage(docker *client.Client) error {
 func egressImage(docker *client.Client) error {
 	egressImageOnce.Do(func() { errEgressImage = buildEgressImage(docker) })
 	return errEgressImage
-}
-
-// testNet is the shared network, for tests whose containers need one and reach nothing.
-func testNet(t *testing.T, docker *client.Client) string {
-	t.Helper()
-
-	sharedNetOnce.Do(func() { sharedNet, errSharedNet = newTestNetwork(context.Background(), docker, "") })
-
-	if errSharedNet != nil {
-		t.Fatalf("shared test network: %v", errSharedNet)
-	}
-
-	return sharedNet.name
 }
 
 // ownNet is a network of the test's own whose proxy serves gateway, removed when the test ends
