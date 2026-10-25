@@ -415,6 +415,17 @@
                 "leadTimeHours": { "type": "number", "exclusiveMinimum": 0, "description": "p85 lead time, created to done, in hours." },
                 "expediteLeadTimeMinutes": { "type": "integer", "minimum": 1, "description": "Lead time of each expedite item, in minutes." }
               }
+            },
+            "assemblies": {
+              "type": "object",
+              "description": "How the parts of assemblies, and any items of the line, are built together.",
+              "additionalProperties": false,
+              "properties": {
+                "overlap": {
+                  "enum": ["serialize", "allow"],
+                  "description": "serialize (the default): an item whose files overlap those of an item in flight waits for it; allow: build them in parallel."
+                }
+              }
             }
           }
         }

@@ -22,8 +22,9 @@ func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 	l := f.Line()
 	want := domain.FlowPolicy{
 		Release: domain.ReleaseDBR, Constraint: "respond", ExpediteWIP: 1,
-		Andon:   &domain.AndonPolicy{ReworkRate: 0.5, Window: 10},
-		Targets: domain.Targets{ThroughputPerDay: 8, LeadTime: 6 * time.Hour, ExpediteLeadTime: time.Hour},
+		Andon:      &domain.AndonPolicy{ReworkRate: 0.5, Window: 10},
+		Targets:    domain.Targets{ThroughputPerDay: 8, LeadTime: 6 * time.Hour, ExpediteLeadTime: time.Hour},
+		Assemblies: domain.AssembliesPolicy{Overlap: domain.OverlapSerialize},
 	}
 
 	if !reflect.DeepEqual(l.Flow, want) {
@@ -103,6 +104,42 @@ func TestLine_WeeklyBudgetMapsToTheRuntime(t *testing.T) {
 }
 
 // A target is a positive number; zero or less is no target and is refused.
+// board.flow.assemblies.overlap says whether goald holds items whose files overlap; it
+// serializes them unless a factory allows it.
+func TestLine_CarriesAssembliesOverlapPolicy(t *testing.T) {
+	t.Parallel()
+
+	for doc, want := range map[string]domain.OverlapPolicy{
+		baseFactory: domain.OverlapSerialize,
+		baseFactory + "    flow:\n      release: push\n":                      domain.OverlapSerialize,
+		baseFactory + "    flow:\n      assemblies: {}\n":                     domain.OverlapSerialize,
+		baseFactory + "    flow:\n      assemblies: { overlap: serialize }\n": domain.OverlapSerialize,
+		baseFactory + "    flow:\n      assemblies: { overlap: allow }\n":     domain.OverlapAllow,
+	} {
+		f, err := Load(checkTree(doc, nil))
+		if err != nil {
+			t.Fatalf("load %q: %v", doc, err)
+		}
+
+		if got := f.Line().Flow.Assemblies.Overlap; got != want {
+			t.Errorf("overlap of %q = %q, want %q", doc, got, want)
+		}
+	}
+}
+
+func TestLoad_RefusesUnknownOverlapPolicy(t *testing.T) {
+	t.Parallel()
+
+	for _, assemblies := range []string{"{ overlap: parallel }", "{ overlap: '' }", "{ overlap: 1 }", "{ wip: 2 }", "allow"} {
+		doc := baseFactory + "    flow:\n      assemblies: " + assemblies + "\n"
+
+		_, problems := Check(checkTree(doc, nil))
+		if !slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool { return p.Check == checkSchema && p.Blocking() }) {
+			t.Errorf("assemblies %s: problems %+v, want a schema problem", assemblies, problems)
+		}
+	}
+}
+
 func TestLoad_RefusesTargetsThatAreNotPositive(t *testing.T) {
 	t.Parallel()
 
