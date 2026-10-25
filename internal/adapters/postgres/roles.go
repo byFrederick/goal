@@ -50,8 +50,9 @@ type Roles struct {
 
 // InitRoles prepares the database pool connects to for goald (`goal db init`). pool must connect
 // as the bootstrap user that owns the database's objects today (compose.yaml's superuser
-// locally). In one transaction it creates goal_owner, goal_app and goal_auth when missing, lets
-// them log in with the given passwords, grants goal_owner the database and the current schema and
+// locally; a managed PostgreSQL's administrator, which is no superuser, works too). In one
+// transaction it creates goal_owner, goal_app and goal_auth when missing, grants an administrator
+// that is no superuser goal_owner with INHERIT and SET (adoptOwnerRole), lets them log in with the given passwords, grants goal_owner the database and the current schema and
 // goal_app and goal_auth their use (revoking PUBLIC's CONNECT and TEMPORARY on the database), and
 // hands every table, view, sequence and function of the current schema that the bootstrap user
 // owns to goal_owner (goose_db_version included), so the next migration runs as goal_owner, and
@@ -65,6 +66,10 @@ func InitRoles(ctx context.Context, pool *pgxpool.Pool, r Roles) (moved int, err
 
 	err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
 		if err := createRoles(ctx, tx); err != nil {
+			return err
+		}
+
+		if err := adoptOwnerRole(ctx, tx); err != nil {
 			return err
 		}
 
@@ -107,6 +112,29 @@ func createExtensions(ctx context.Context, tx pgx.Tx) error {
 
 	if _, err := tx.Exec(ctx, "CREATE EXTENSION IF NOT EXISTS vector"); err != nil {
 		return fmt.Errorf("create extension vector: %w", err)
+	}
+
+	return nil
+}
+
+// adoptOwnerRole lets an administrator that is no superuser act as goal_owner. With CREATEROLE,
+// PostgreSQL 16 and later give it the roles it creates with ADMIN OPTION only, without INHERIT
+// and SET (PlanetScale's pscale_api_<id>, spec 4 §5.12): it could neither hand the objects it
+// owns to goal_owner nor run goal db recover-admin or recover-owner, which use goal_owner's
+// functions. A superuser has both already and is left as it is.
+func adoptOwnerRole(ctx context.Context, tx pgx.Tx) error {
+	var may bool
+	if err := tx.QueryRow(ctx, "SELECT pg_has_role(current_user, 'goal_owner', 'SET') "+
+		"AND pg_has_role(current_user, 'goal_owner', 'USAGE')").Scan(&may); err != nil {
+		return fmt.Errorf("adopt goal_owner: %w", err)
+	}
+
+	if may {
+		return nil
+	}
+
+	if _, err := tx.Exec(ctx, "GRANT goal_owner TO CURRENT_USER WITH INHERIT TRUE, SET TRUE"); err != nil {
+		return fmt.Errorf("adopt goal_owner: %w", err)
 	}
 
 	return nil

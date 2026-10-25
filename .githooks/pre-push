@@ -1,7 +1,7 @@
 #!/bin/sh
 # Local gate for every push (install once: `task hooks:install`). CI on GitHub is disabled for
 # lack of Actions minutes, so this hook is what keeps main green:
-#   - always: task check (lint, race tests, factory validation, terraform fmt/validate)
+#   - always: task check (lint, race tests, factory validation, task tf:check)
 #   - when the pushed commits touch migrations/ or auth/: task migrate-check as well (with the
 #     Better Auth schema drift check, task auth:schema-check)
 # It checks the working tree you push from; commit or stash unrelated edits first.

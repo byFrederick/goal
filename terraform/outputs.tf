@@ -1,17 +1,62 @@
-output "knowledge_bucket" {
-  description = "Bucket holding every factory's documents under its own prefix."
-  value       = aws_s3_bucket.knowledge.bucket
+# What the control Worker's wrangler config (deploy/cloudflare) and the operator need. Names and
+# ids only: no output holds a secret.
+
+# Cloudflare: account
+output "account_id" {
+  description = "The Cloudflare account that holds the zone, the bucket, the Secrets Store and the Worker."
+  value       = local.account_id
 }
 
-output "factories" {
-  description = "Per-factory knowledge base wiring, consumed by goald (goal.lock.json)."
-  value = {
-    for id, kb in module.factory_kb : id => {
-      name              = local.factories[id].metadata.name
-      prefix            = kb.prefix
-      knowledge_base_id = kb.knowledge_base_id
-      data_source_id    = kb.data_source_id
-      agent_role_arn    = kb.agent_role_arn
-    }
-  }
+# Cloudflare: routing
+output "public_url" {
+  description = "The one origin people open Goal at (GOAL_PUBLIC_URL of goald and the auth service)."
+  value       = local.public_url
+}
+
+output "worker_name" {
+  description = "The Worker the route sends every public path to: the name in deploy/cloudflare's wrangler config."
+  value       = local.settings.worker
+}
+
+output "worker_route" {
+  description = "The Workers route this stack owns; the wrangler config declares none."
+  value       = cloudflare_workers_route.goal.pattern
+}
+
+# Cloudflare: storage
+output "bucket" {
+  description = "The R2 bucket goald uses through s3store (GOAL_S3_BUCKET)."
+  value       = cloudflare_r2_bucket.main.name
+}
+
+output "s3_endpoint" {
+  description = "The bucket's S3 API endpoint (GOAL_S3_ENDPOINT); R2's region is auto."
+  value       = "https://${local.account_id}.r2.cloudflarestorage.com"
+}
+
+# Cloudflare: secrets
+output "secrets_store_id" {
+  description = "The account's Secrets Store: the store_id of every wrangler secrets_store_secrets binding."
+  value       = data.cloudflare_secrets_store.main.id
+}
+
+output "secret_names" {
+  description = "Each platform secret's name in the store, by the environment variable its consumers read."
+  value       = module.secrets.names
+}
+
+output "secret_consumers" {
+  description = "Which environment variables each consumer (goald, auth, worker) gets from the store."
+  value       = local.secret_consumers
+}
+
+# Google: sign-in
+output "google_project_id" {
+  description = "The Google Cloud project of the sign-in OAuth client (console steps in the runbook)."
+  value       = google_project.sign_in.project_id
+}
+
+output "google_redirect_uri" {
+  description = "The authorized redirect URI of the OAuth web client."
+  value       = "${local.public_url}/api/auth/callback/google"
 }

@@ -1,8 +1,15 @@
 .terraform/
 *.tfstate
 *.tfstate.*
-terraform/backend.hcl
-terraform/terraform.tfvars
+# terraform/: never commit state, plans, variable files, overrides or decrypted secrets
+*.tfvars
+*.tfplan
+override.tf
+*_override.tf
+crash.log
+terraform/modules/**/.terraform.lock.hcl
+terraform/secrets/*.decrypted.yaml
+terraform/secrets/.*.sops.*
 .env
 /bin/
 # binaries built with a plain `go build ./cmd/goal` at the repo root

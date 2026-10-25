@@ -20,7 +20,7 @@ queries/               SQL for sqlc (pgx/v5)
 compose.yaml           local PostgreSQL 18 with pgvector, RustFS (S3-compatible object storage) and Mailpit (the dev inbox)
 worker/                agent container images (TypeScript, Claude Agent SDK): runtime and dev (Go, task, Terraform, PostgreSQL)
 web/                   UI (React)
-terraform/             AWS infrastructure: bucket, KMS, S3 Vectors, one Bedrock KB per factory (later, unscheduled)
+terraform/             the platform's own Cloudflare infrastructure: R2 bucket, DNS, Worker route, Secrets Store secrets
 design-system/         UI rules generated with ui-ux-pro-max, plus the user's overrides (MASTER.md)
 docs/adr/              decisions (0001 stack, 0002 Jonah evals, 0003 hexagonal architecture, 0004 frontend, 0005 definitions in object storage, 0006 workspaces and command checks)
 docs/engineering/      architecture and testing rules
@@ -34,7 +34,7 @@ Taskfile.yml           task check = everything the pre-push hook and CI run
 
 ## Quick start
 
-Tools: Go, [Task](https://taskfile.dev), Docker, Terraform and golangci-lint v2 (`mise install` reads `.mise.toml`).
+Tools: Go, [Task](https://taskfile.dev), Docker, Terraform, tflint, sops and golangci-lint v2 (`mise install` reads `.mise.toml`).
 
 ```bash
 task hooks:install         # once per clone: pushes run task check first
@@ -109,9 +109,9 @@ contracts/*.schema.json
 evals/          evals.yaml, cases/, judges/, fixtures/
 ```
 
-goald stores each file once per organization as a content-addressed blob in the bucket (`orgs/<org-id>/blobs/<sha256>`), and PostgreSQL holds every draft and published version as a manifest (path → sha256) with a pointer to the version each factory runs. Each factory has one shared draft (the builder and the CLI both write it); publishing makes it the next version, every goald reloads within a second, and `goal factory restore` points the factory back at an older version. The bucket is one, versioned: locally `goal-local` on RustFS (`compose.yaml`), on AWS `goal-<account>-<region>`. Files written to the bucket directly change nothing goald runs.
+goald stores each file once per organization as a content-addressed blob in the bucket (`orgs/<org-id>/blobs/<sha256>`), and PostgreSQL holds every draft and published version as a manifest (path → sha256) with a pointer to the version each factory runs. Each factory has one shared draft (the builder and the CLI both write it); publishing makes it the next version, every goald reloads within a second, and `goal factory restore` points the factory back at an older version. The bucket is one, versioned: locally `goal-local` on RustFS (`compose.yaml`), on Cloudflare the R2 bucket `goal-production` (`terraform/`). Files written to the bucket directly change nothing goald runs.
 
-The CLI reaches definitions through goald's API (`GOAL_API_URL`, default `http://127.0.0.1:8080`). Only the operator commands `goal storage init` and `goal catalog skills|templates` use the bucket directly, configured from the environment (`.env.example`): `GOAL_S3_BUCKET`, plus `GOAL_S3_ENDPOINT`, `GOAL_S3_ACCESS_KEY` and `GOAL_S3_SECRET_KEY` for a local S3-compatible server. On AWS leave those three empty; the standard AWS credential chain applies.
+The CLI reaches definitions through goald's API (`GOAL_API_URL`, default `http://127.0.0.1:8080`). Only the operator commands `goal storage init` and `goal catalog skills|templates` use the bucket directly, configured from the environment (`.env.example`): `GOAL_S3_BUCKET`, plus `GOAL_S3_ENDPOINT`, `GOAL_S3_ACCESS_KEY` and `GOAL_S3_SECRET_KEY` for a local S3-compatible server or R2 (its account endpoint and an R2 API token's keys).
 
 ## Edit a factory
 
@@ -130,7 +130,7 @@ bin/goal factory publish sre --message "Triage by severity"   # validate and pub
 
 ## Factories are keyed by UUID
 
-Every factory has an immutable `metadata.id`. Its database rows and every AWS resource use it, so you can rename a factory or its folder at any time. When you copy a factory, give the copy a new id (`uuidgen | tr A-Z a-z`); `goal factory validate` rejects duplicates among the folders it checks.
+Every factory has an immutable `metadata.id`. Its database rows and bucket prefixes use it, so you can rename a factory or its folder at any time. When you copy a factory, give the copy a new id (`uuidgen | tr A-Z a-z`); `goal factory validate` rejects duplicates among the folders it checks.
 
 ## Add a factory
 
@@ -146,19 +146,15 @@ PostgreSQL 18 is the only database: work items, the event log, leases (`FOR UPDA
 
 ## Infrastructure
 
-`terraform/` holds the AWS knowledge layer; knowledge-base provisioning is later work, not yet scheduled.
+`terraform/` holds the platform's own infrastructure on Cloudflare and nothing per organization: the R2 bucket, the DNS record and Workers route of `goal.byfrederick.work`, the Secrets Store secrets (from the age-encrypted `terraform/secrets/production.sops.yaml`) and the Google Cloud project of the sign-in OAuth client. One root module, one Terraform workspace, `production`; state in an R2 bucket. wrangler deploys the control Worker and the containers (`deploy/cloudflare/`).
 
 ```bash
-cd terraform
-cp backend.hcl.example backend.hcl        # set your state bucket
-cp terraform.tfvars.example terraform.tfvars
-terraform init -backend-config=backend.hcl
-terraform plan
+task tf:check                 # fmt, validate, tflint, terraform test: offline, part of task check
+task secrets:edit             # the production secrets, decrypted in memory only
+task tf:plan                  # needs the operator's credentials (task tf:credentials lists them)
 ```
 
-Creates: a versioned, KMS-encrypted bucket `goal-kb-<account>-<region>` with one prefix per factory id; an S3 Vectors bucket; per factory a vector index, a Bedrock Knowledge Base and S3 data source scoped to the prefix, an agent role limited to that prefix and KB, and an optional ingestion schedule.
-
-Roles that agents use to investigate other AWS accounts (for example `goal-sre-readonly`) belong in those accounts' own Terraform, not here.
+Bootstrap, deploys, master key escrow and rotation, and restores: [docs/engineering/cloudflare-operations.md](docs/engineering/cloudflare-operations.md). Agents format, check and plan; only the owner, or the coordinator the owner authorizes, applies.
 
 ## Connections and the model
 

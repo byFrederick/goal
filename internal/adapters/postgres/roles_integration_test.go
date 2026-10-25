@@ -4,6 +4,8 @@ package postgres
 
 import (
 	"errors"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -110,6 +112,83 @@ func TestInitRoles_UpgradesADatabaseFromBeforeTheRoles(t *testing.T) {
 		Class: domain.ClassStandard, CreatedAt: time.Now(),
 	}); err != nil {
 		t.Errorf("CreateItem as goal_app = %v", err)
+	}
+}
+
+// A managed PostgreSQL's administrator is no superuser (PlanetScale's pscale_api_<id>, spec 4
+// §5.12): with CREATEROLE, PostgreSQL 16 and later give it the roles it creates with ADMIN OPTION
+// only, without INHERIT and SET, so it can neither hand its objects to goal_owner nor use
+// goal_owner's. goal db init grants it both, once.
+func TestInitRoles_AdminWithoutSuperuserMaySetGoalOwner(t *testing.T) {
+	t.Parallel()
+
+	db := newTestDB(t, "")
+	admin := "goal_test_admin_" + randomHex(t)
+
+	u, err := url.Parse(db.admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	database := strings.TrimPrefix(u.Path, "/")
+
+	// As PostgreSQL 16+ records the roles a CREATEROLE administrator created (ADMIN only), on a
+	// database the administrator owns, as PlanetScale's inherits postgres, the owner of goal's.
+	execSQL(t, db.admin, "CREATE ROLE "+admin+" NOLOGIN NOSUPERUSER CREATEROLE; "+
+		"GRANT goal_owner TO "+admin+" WITH ADMIN TRUE, INHERIT FALSE, SET FALSE; "+
+		"ALTER DATABASE "+database+" OWNER TO "+admin)
+	t.Cleanup(func() {
+		execSQL(t, db.admin, "ALTER DATABASE "+database+" OWNER TO CURRENT_USER; DROP OWNED BY "+admin+"; DROP ROLE "+admin)
+	})
+
+	q := u.Query()
+	q.Set("role", admin)
+	u.RawQuery = q.Encode()
+
+	pool := openPool(t, u.String())
+
+	may := func() (set, usage bool) {
+		t.Helper()
+
+		if err := pool.QueryRow(t.Context(), "SELECT pg_has_role(current_user, 'goal_owner', 'SET'), "+
+			"pg_has_role(current_user, 'goal_owner', 'USAGE')").Scan(&set, &usage); err != nil {
+			t.Fatal(err)
+		}
+
+		return set, usage
+	}
+
+	if set, usage := may(); set || usage {
+		t.Fatalf("before: SET %v, USAGE %v on goal_owner; want neither (the test's premise)", set, usage)
+	}
+
+	if _, err := pool.Exec(t.Context(), "CREATE TABLE restored (id int)"); err != nil {
+		t.Fatal(err)
+	}
+
+	for range 2 { // idempotent: the second run finds the grant and leaves it
+		err := pgx.BeginFunc(t.Context(), pool, func(tx pgx.Tx) error {
+			if err := adoptOwnerRole(t.Context(), tx); err != nil {
+				return err
+			}
+
+			_, err := grantAndTransfer(t.Context(), tx)
+
+			return err
+		})
+		if err != nil {
+			t.Fatalf("as an administrator without superuser: %v", err)
+		}
+	}
+
+	if set, usage := may(); !set || !usage {
+		t.Errorf("after: SET %v, USAGE %v on goal_owner; want both", set, usage)
+	}
+
+	var owner string
+	if err := pool.QueryRow(t.Context(), "SELECT tableowner FROM pg_tables WHERE tablename = 'restored'").Scan(&owner); err != nil ||
+		owner != OwnerRole {
+		t.Errorf("the administrator's table is owned by %q, %v; want goal_owner", owner, err)
 	}
 }
 
