@@ -316,7 +316,7 @@ test.describe('New source', () => {
     await fits(page);
     await page.getByRole('button', { name: 'Add source' }).click();
 
-    await expect(page).toHaveURL(/\/o\/acme\/knowledge\/infra-docs\?created=true$/);
+    await expect(page).toHaveURL(/\/o\/acme\/knowledge\/infra-docs$/);
     await expect(page.getByRole('status').filter({ hasText: 'is added' })).toHaveText(
       'Infra docs is added. Its first sync starts now; this page updates when it ends.',
     );
@@ -339,7 +339,7 @@ test.describe('New source', () => {
     await expect(page.getByRole('list', { name: 'Files' })).toContainText('Ready to upload');
     await fits(page);
     await page.getByRole('button', { name: 'Add source' }).click();
-    await expect(page).toHaveURL(/\/o\/acme\/knowledge\/team-notes\?created=true$/);
+    await expect(page).toHaveURL(/\/o\/acme\/knowledge\/team-notes$/);
     await expect(
       page.getByRole('list', { name: 'Documents of Handbook' }).getByRole('link', { name: 'notes.md' }),
     ).toBeVisible();
@@ -354,7 +354,7 @@ test.describe('New source', () => {
     await page.getByRole('combobox', { name: 'Connection' }).selectOption('playwright');
     await page.getByRole('textbox', { name: 'Title' }).fill('Browser');
     await page.getByRole('button', { name: 'Add source' }).click();
-    await expect(page).toHaveURL(/\/o\/acme\/knowledge\/browser\?created=true$/);
+    await expect(page).toHaveURL(/\/o\/acme\/knowledge\/browser$/);
     await expect(page.getByText('A live source stores nothing.', { exact: false })).toBeVisible();
     await expect(page.getByRole('button', { name: /Sync now/ })).toHaveCount(0);
   });

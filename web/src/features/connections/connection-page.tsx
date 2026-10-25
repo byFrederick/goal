@@ -14,7 +14,7 @@ import { deleteConnection, updateConnection } from '../../api/connections';
 import { connectionActivityQuery, connectionKindsQuery, connectionQuery, keys } from '../../api/queries';
 import type { Connection, ConnectionKind, ConnectionKindField } from '../../api/types';
 import { connectionName, modeLabels, namesText, statusLine, testedText } from '../../shared/connections';
-import { formatDay } from '../../shared/format';
+import { useCreatedOnce } from '../../shared/created';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { reasons } from '../../shared/permissions';
 import { useEdits } from '../../shared/use-edits';
@@ -34,7 +34,8 @@ import { activityText, activityWhen, modeSentence, refusalText } from './words';
 export function ConnectionPage() {
   const org = useOrg();
   const params = useParams({ from: '/o/$org/_org/connections/$connection' });
-  const { created } = useSearch({ from: '/o/$org/_org/connections/$connection' });
+  const { created: justCreated } = useSearch({ from: '/o/$org/_org/connections/$connection' });
+  const created = useCreatedOnce(justCreated);
   const { data: connection } = useSuspenseQuery(connectionQuery(org.id, params.connection));
   const { data: kinds } = useSuspenseQuery(connectionKindsQuery(org.id));
   const kind = kinds.find((k) => k.name === connection.kind);
@@ -273,7 +274,7 @@ function FieldsCard({
                   className={cn('inline-flex items-center gap-2 text-[15px]', set ? 'text-ink' : 'text-rework-ink')}
                 >
                   {set ? <Check size={16} strokeWidth={1.75} aria-hidden="true" className="text-ok" /> : null}
-                  {set ? `Set, ${changedLine(c)}` : f.required ? 'Not set: runs that get it fail' : 'Not set'}
+                  {set ? 'Set' : f.required ? 'Not set: runs that get it fail' : 'Not set'}
                 </span>
                 {manage ? (
                   <Button variant="white" className="h-10 md:h-9" onClick={() => onReplace(f)}>
@@ -312,13 +313,6 @@ function FieldsCard({
     </form>
   );
   return manage ? form : <ReadOnly>{form}</ReadOnly>;
-}
-
-/** "replaced Oct 2 by F. Cruz" from the connection's last change, as near as the contract says it. */
-function changedLine(c: Connection): string {
-  return c.updated_at === c.created_at
-    ? `since ${formatDay(c.created_at)}`
-    : `last changed ${formatDay(c.updated_at)} by ${c.updated_by.name}`;
 }
 
 function UsedByCard({ connection: c }: { connection: Connection }) {

@@ -11,6 +11,7 @@ import { deleteKnowledgeSource, updateKnowledgeSource } from '../../api/knowledg
 import { connectionKindsQuery, connectionsQuery, keys, knowledgeSourceQuery } from '../../api/queries';
 import type { KnowledgeSource } from '../../api/types';
 import { namesText } from '../../shared/connections';
+import { useCreatedOnce } from '../../shared/created';
 import { plural } from '../../shared/format';
 import { sourceKinds, sourceSummary } from '../../shared/knowledge';
 import { useOrg, useOrgHolds } from '../../shared/org';
@@ -34,7 +35,8 @@ const card = 'flex min-w-0 flex-col gap-3 rounded-card border border-line bg-car
 export function SourcePage() {
   const org = useOrg();
   const params = useParams({ from: '/o/$org/_org/knowledge/$source' });
-  const { created, document } = useSearch({ from: '/o/$org/_org/knowledge/$source' });
+  const { created: justCreated, document } = useSearch({ from: '/o/$org/_org/knowledge/$source' });
+  const created = useCreatedOnce(justCreated);
   const { data: source } = useSuspenseQuery(knowledgeSourceQuery(org.id, params.source));
   const manage = useOrgHolds('knowledge:manage');
   const sync = useSyncSource(org.id);

@@ -138,9 +138,12 @@ test.describe('New connection', () => {
     await fits(page);
     await form.getByRole('button', { name: 'Create connection' }).click();
 
-    await expect(page).toHaveURL(/\/o\/acme\/connections\/github-infra\?created=true$/);
+    await expect(page).toHaveURL(/\/o\/acme\/connections\/github-infra$/);
     await expect(page.getByText('github-infra is created. Test it to check what you entered works.')).toBeVisible();
-    await expect(page.getByText('Set, since')).toBeVisible();
+    // The callout is for the create: a reload or a shared link of the page does not say it again.
+    await page.reload();
+    await expect(page.getByText('github-infra is created.')).toHaveCount(0);
+    await expect(page.getByText('Set', { exact: true })).toBeVisible();
     await expect(page.getByText(secretValue)).toHaveCount(0);
     await page.getByRole('button', { name: 'Test' }).click();
     await expectToast(page, 'github-infra passed its test');
@@ -159,7 +162,7 @@ test.describe('New connection', () => {
     );
     await form.getByLabel('API URL (optional)').fill('https://ghe.example.com/api/v3');
     await form.getByRole('button', { name: 'Create connection' }).click();
-    await expect(page).toHaveURL(/\/o\/acme\/connections\/github-ghe\?created=true$/);
+    await expect(page).toHaveURL(/\/o\/acme\/connections\/github-ghe$/);
   });
 
   test('a required field is asked for before anything is sent', async ({ page }) => {
@@ -194,7 +197,7 @@ test.describe('New connection', () => {
     await reauth.getByRole('button', { name: 'Email me a code' }).click();
     await reauth.getByLabel('Code').fill('000000');
     await expect(reauth).toBeHidden();
-    await expect(page).toHaveURL(/\/o\/acme\/connections\/pagerduty-2\?created=true$/);
+    await expect(page).toHaveURL(/\/o\/acme\/connections\/pagerduty-2$/);
   });
 
   test('define an organization kind and make a connection of it', async ({ page }) => {
@@ -253,7 +256,7 @@ test.describe('a connection’s page', () => {
     await dialog.getByLabel('API key').fill('a-fresh-pagerduty-key');
     await dialog.getByRole('button', { name: 'Replace api key' }).click();
     await expectToast(page, 'API key replaced on pagerduty');
-    await expect(page.getByText(/^Set, last changed/)).toBeVisible();
+    await expect(page.getByText('Set', { exact: true })).toBeVisible();
     await expect(page.getByLabel('Description')).toHaveValue('Paging for the on-call');
     await page.getByRole('button', { name: 'Save changes' }).click();
     await expectToast(page, 'Saved pagerduty');
