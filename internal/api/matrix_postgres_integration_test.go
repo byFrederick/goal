@@ -84,7 +84,7 @@ func newMXDatabase(t *testing.T) mxDatabase {
 
 	exec(as(""), "REVOKE TEMPORARY, CONNECT ON DATABASE "+name+" FROM PUBLIC; GRANT CONNECT, CREATE ON DATABASE "+name+" TO goal_owner; "+
 		"GRANT CONNECT ON DATABASE "+name+" TO goal_app, goal_auth; GRANT USAGE, CREATE ON SCHEMA public TO goal_owner; "+
-		"GRANT USAGE ON SCHEMA public TO goal_app, goal_auth")
+		"GRANT USAGE ON SCHEMA public TO goal_app, goal_auth; CREATE EXTENSION IF NOT EXISTS vector")
 
 	pool := func(role string) *pgxpool.Pool {
 		p, err := postgres.Open(t.Context(), as(role))

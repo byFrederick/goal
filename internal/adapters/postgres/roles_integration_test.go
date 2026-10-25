@@ -55,9 +55,12 @@ func TestInitRoles_UpgradesADatabaseFromBeforeTheRoles(t *testing.T) {
 
 		var err error
 
-		moved, err = grantAndTransfer(t.Context(), tx)
+		if moved, err = grantAndTransfer(t.Context(), tx); err != nil {
+			return err
+		}
 
-		return err
+		// The extension 00054 needs, which only the administrator creates.
+		return createExtensions(t.Context(), tx)
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -69,12 +72,15 @@ func TestInitRoles_UpgradesADatabaseFromBeforeTheRoles(t *testing.T) {
 		t.Errorf("moved %d objects to goal_owner; want 9", moved)
 	}
 
+	// The extension's own objects (pgvector's types and functions) stay the administrator's.
 	var left int
 	if err := admin.QueryRow(t.Context(), `
-		SELECT (SELECT count(*) FROM pg_class
-		        WHERE relnamespace = current_schema()::text::regnamespace AND relowner = current_user::text::regrole)
-		     + (SELECT count(*) FROM pg_proc
-		        WHERE pronamespace = current_schema()::text::regnamespace AND proowner = current_user::text::regrole)`).
+		SELECT (SELECT count(*) FROM pg_class c
+		        WHERE relnamespace = current_schema()::text::regnamespace AND relowner = current_user::text::regrole
+		          AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid AND d.deptype = 'e'))
+		     + (SELECT count(*) FROM pg_proc p
+		        WHERE pronamespace = current_schema()::text::regnamespace AND proowner = current_user::text::regrole
+		          AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e'))`).
 		Scan(&left); err != nil {
 		t.Fatal(err)
 	}

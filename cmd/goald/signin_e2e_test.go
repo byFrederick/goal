@@ -694,7 +694,7 @@ func e2eDatabase(t *testing.T, name string) string {
 	u.Path = "/" + name
 	execSQL(u.String(), "REVOKE TEMPORARY, CONNECT ON DATABASE "+name+" FROM PUBLIC; GRANT CONNECT, CREATE ON DATABASE "+name+" TO goal_owner; "+
 		"GRANT CONNECT ON DATABASE "+name+" TO goal_app, goal_auth; GRANT USAGE, CREATE ON SCHEMA public TO goal_owner; "+
-		"GRANT USAGE ON SCHEMA public TO goal_app, goal_auth")
+		"GRANT USAGE ON SCHEMA public TO goal_app, goal_auth; CREATE EXTENSION IF NOT EXISTS vector")
 
 	return name
 }

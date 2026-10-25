@@ -215,6 +215,8 @@ linters:
               desc: container access belongs in internal/adapters/docker
             - pkg: github.com/byFrederick/goal/internal/connkind
               desc: handlers reach connection kinds through an interface declared in internal/api; cmd/goald wires connkind
+            - pkg: github.com/byFrederick/goal/internal/knowledge
+              desc: handlers reach uploads and search through interfaces declared in internal/api; cmd/goald wires knowledge
         connkind:
           files: ["**/internal/connkind/**"]
           deny:
@@ -224,6 +226,16 @@ linters:
               desc: the engine receives domain kinds; connkind never calls it
             - pkg: github.com/byFrederick/goal/internal/api
               desc: the HTTP API calls connkind, never the reverse
+        knowledge:
+          # Indexing and search reach the database, the bucket, the embedding model and the sources
+          # through ports only (spec 4 §5.11).
+          list-mode: strict
+          files: ["**/internal/knowledge/**", "!$test"]
+          allow:
+            - $gostd
+            - github.com/byFrederick/goal/internal/domain
+            - github.com/byFrederick/goal/internal/ports
+            - golang.org/x/net/html
         builder:
           files: ["**/internal/builder/**"]
           deny:

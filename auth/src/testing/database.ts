@@ -43,7 +43,8 @@ export async function createTestDatabase(upTo?: string): Promise<TestDatabase> {
       GRANT CONNECT, CREATE ON DATABASE ${name} TO goal_owner;
       GRANT CONNECT ON DATABASE ${name} TO goal_app, goal_auth;
       GRANT USAGE, CREATE ON SCHEMA public TO goal_owner;
-      GRANT USAGE ON SCHEMA public TO goal_app, goal_auth`);
+      GRANT USAGE ON SCHEMA public TO goal_app, goal_auth;
+      CREATE EXTENSION IF NOT EXISTS vector`);
     for (const f of files) {
       // A goose file is plain SQL whose annotations are comments; each runs in one transaction.
       const sql = await readFile(`${repo}migrations/${f}`, 'utf8');

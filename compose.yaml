@@ -5,8 +5,13 @@
 # stack profile (goal up --compose).
 # Ports bind to 127.0.0.1 only. Credentials come from .env (see .env.example) with dev-only defaults.
 services:
+  # PostgreSQL 18 with pgvector for the knowledge base (spec 4 §4.8): the official postgres:18
+  # image on Debian trixie plus the extension, so the data directory on goal-pg (PostgreSQL 18,
+  # trixie's glibc collations) is the same and an install that ran postgres:18 keeps its data. The
+  # first goal up after the change recreates this container once on the same volume; goal db
+  # init then creates the extension.
   postgres:
-    image: postgres:18
+    image: pgvector/pgvector:0.8.7-pg18-trixie
     environment:
       POSTGRES_DB: goal
       POSTGRES_USER: goal

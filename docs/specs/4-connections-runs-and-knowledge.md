@@ -1,6 +1,6 @@
 # Phase 4 — Connections, runs and knowledge
 
-Status: owner-approved design (2026-10-24), not built · follows phase 3 · migrations `00050–00059` (`00050–00053` built, `00054` planned) · OpenAPI tags `connections` and `knowledge` (touch metrics under `work`) · PRs `4-1…4-25` · decision records [ADR 0008](../adr/0008-portable-runs-connections-and-knowledge.md), [ADR 0009](../adr/0009-agent-network-isolation.md) (amended), [ADR 0005](../adr/0005-factory-definitions-in-object-storage.md) (amended)
+Status: owner-approved design (2026-10-24), not built · follows phase 3 · migrations `00050–00059` (`00050–00054` built) · OpenAPI tags `connections` and `knowledge` (touch metrics under `work`) · PRs `4-1…4-25` · decision records [ADR 0008](../adr/0008-portable-runs-connections-and-knowledge.md), [ADR 0009](../adr/0009-agent-network-isolation.md) (amended), [ADR 0005](../adr/0005-factory-definitions-in-object-storage.md) (amended)
 
 (phase 4 redesign) This file was `4-credentials-and-connectors.md` (parts 4.1 vault and credentials, 4.2 connectors and MCP gateway, PRs `4.1-n`/`4.2-n`). The design pass replaced it. Kept, simplified: credentials encrypted in PostgreSQL, write-only values, RLS, audit, AWS STS, the merge station. Cut: remote MCP through the gateway (connections go direct from the box), the Credentials page, credential grants, the connector catalog and `kind: Connector` files, scopes, CLI exec sidecars, stdio sidecar containers, `ModelAuth`, `CredentialProbe`, per-org data keys, vault settings, the MCP Registry import, multi-instance forwarding. Deferred: approval-gated tool calls, OAuth connections, the GitHub App. References to "4.1 §x" or "4.2 §x" in older text point at retired parts.
 
@@ -180,11 +180,11 @@ One knowledge base per organization, made of **sources**:
 
 - A factory lists the sources it may search (`spec.knowledge.sources`); `knowledge__search` filters by that list inside the one query, from the run's definition version, whatever the agent asks.
 - Admins choose what is indexed. A synced source is read with the connection's own access, so every factory that lists it sees everything that access sees: per-user permissions at the source are flattened, by design (§11.3).
-- **Ingestion** is one goald background loop (`internal/knowledge.Ingestor`, `GOAL_KB_WORKERS` workers per goald, default 2), not an agent run. Each tick it goes through the active organizations and claims a due source with a lease: `UPDATE knowledge_sources SET lease_until = now() + interval '10 minutes', status = 'syncing' WHERE id = (SELECT id FROM knowledge_sources WHERE kind <> 'live' AND next_sync_at <= now() AND (lease_until IS NULL OR lease_until < now()) ORDER BY next_sync_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *`, renewed while it works, so any goald may run any source and a dead one's lease expires.
-- **Pipeline**: `SourceReader.List` (every document with a version: git blob id, page version, upload sha256) → for each new or changed version `Fetch` → extract (text, Markdown, HTML to text with headings; JSON and YAML as text) → `knowledge.Chunk` (heading-aware, about 512 tokens with 64 overlap, pure) → `Embedder.Embed` in batches of at most 64 → replace that document's chunks in one transaction. Documents not listed any more are deleted (`seen_at` before the pass). Unchanged versions cost nothing but the listing; that is the incremental sync.
+- **Ingestion** is one goald background loop (`internal/knowledge.Ingestor`, `GOAL_KB_WORKERS` workers per goald, default 2), not an agent run. Each tick it goes through the active organizations and claims a due source with a lease: `UPDATE knowledge_sources SET lease_until = now() + interval '10 minutes', status = 'syncing' WHERE id = (SELECT id FROM knowledge_sources WHERE kind <> 'live' AND next_sync_at <= now() AND (lease_until IS NULL OR lease_until < now()) ORDER BY next_sync_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *`, renewed while it works, so any goald may run any source and a dead one's lease expires. (As built in 4-16: the claim takes `now` and the lease's end from goald's clock, as item claims do, and also claims a source whose chunks are of another model unless its last sync failed; a sync cut short, by goald stopping or its lease lost, records nothing, so the next claim after the lease takes the source over; documents listed unchanged are marked seen.)
+- **Pipeline**: `SourceReader.List` (every document with a version: git blob id, page version, upload sha256) → for each new or changed version `Fetch` → extract (text, Markdown, HTML to text with headings; JSON and YAML as text) → `knowledge.Chunk` (heading-aware, about 512 tokens with 64 overlap, pure; as built about 2,048 characters a piece, the pieces joining back into the document, the overlap only in the text the embedding reads) → `Embedder.Embed` in batches of at most 64 (as built also at most about 40,000 tokens padded to the longest text: Workers AI refuses a request over 60,000) → replace that document's chunks in one transaction. Documents not listed any more are deleted (`seen_at` before the pass). Unchanged versions cost nothing but the listing; that is the incremental sync.
 - **Schedule**: `sync_every` (default 1 hour, at least 15 minutes); "Sync now" sets `next_sync_at = now()`; an upload marks its document `pending` and makes its source due.
-- **Search**: one SQL statement with two candidate lists, the 50 nearest chunks by cosine distance (`SET LOCAL hnsw.iterative_scan = relaxed_order`) and the 50 best by `ts_rank` on a `simple` `tsvector`, fused by reciprocal rank (k = 60), both filtered by `source_id = ANY($sources)` under RLS. Without an embedder (`GOAL_EMBED_URL` unset) it is keyword search only. Results: snippet, title, source, score and `url` (synced) or the document id (uploads, which `knowledge__read` returns whole, at most 200 KiB).
-- **Embedding space**: one model per install (`GOAL_EMBED_MODEL`), 1024 dimensions stored as `halfvec(1024)`; chunks record their model, search uses only chunks of the current model, and changing the model makes every source due for a full re-embed.
+- **Search**: one SQL statement with two candidate lists, the 50 nearest chunks by cosine distance (`SET LOCAL hnsw.iterative_scan = relaxed_order`) and the 50 best by `ts_rank` on a `simple` `tsvector` (as built: any of the query's words, normalization 1, the rank over 1 + the log of the chunk's length, which the recall check below found worth 0.73 MRR against 0.57 without), fused by reciprocal rank (k = 60), both filtered by `source_id = ANY($sources)` under RLS. Without an embedder (`GOAL_EMBED_URL` unset) it is keyword search only. Results: snippet, title, source, score and `url` (synced) or the document id (uploads, which `knowledge__read` returns whole, at most 200 KiB).
+- **Embedding space**: one model per install (`GOAL_EMBED_MODEL`, default Workers AI's `@cf/baai/bge-m3`, §17 q2), 1024 dimensions stored as `halfvec(1024)`; chunks record their model, search uses only chunks of the current model, and changing the model makes every source due for a full re-embed.
 
 ### 4.9 Human touches per item
 
@@ -343,28 +343,32 @@ The credential comes from the connection instead of `Secrets` (the host and the 
 
 ### 5.6 `ports.Knowledge`, `ports.Embedder`, `ports.SourceReader` (new)
 
+As built in 4-16 (`internal/ports/knowledge.go` is the source of truth):
+
 ```go
 type Knowledge interface {
 	Sources(ctx context.Context) ([]domain.KnowledgeSource, error)
 	Source(ctx context.Context, name string) (domain.KnowledgeSource, error)
 	CreateSource(ctx context.Context, s domain.NewKnowledgeSource, by domain.Actor) (domain.KnowledgeSource, error)
 	UpdateSource(ctx context.Context, name string, p domain.KnowledgeSourcePatch, by domain.Actor) (domain.KnowledgeSource, error)
-	DeleteSource(ctx context.Context, name string, by domain.Actor) error // documents, chunks; returns orphaned blob keys
+	DeleteSource(ctx context.Context, name string, by domain.Actor) (orphans []domain.BlobHash, err error) // documents, chunks
 	SyncNow(ctx context.Context, name string) error
 
-	ClaimSource(ctx context.Context, lease time.Duration) (*domain.KnowledgeSource, error) // nil when none is due
-	RenewSource(ctx context.Context, id domain.KnowledgeSourceID, lease time.Duration) error
-	FinishSync(ctx context.Context, id domain.KnowledgeSourceID, r domain.SyncResult) error
+	// now and until from goald's clock, as item claims; model "" without an embedder
+	ClaimSource(ctx context.Context, now, until time.Time, model string) (*domain.KnowledgeSource, error) // nil when none is due
+	RenewSource(ctx context.Context, id domain.KnowledgeSourceID, now, until time.Time) error            // ErrLeaseLost
+	FinishSync(ctx context.Context, id domain.KnowledgeSourceID, r domain.SyncResult) error             // r.Due: Sync now since the claim stands
 
-	Versions(ctx context.Context, source domain.KnowledgeSourceID) (map[string]string, error) // external id → version
+	Versions(ctx context.Context, source domain.KnowledgeSourceID) (map[string]string, error) // external id → version, pending excluded
 	PutDocument(ctx context.Context, d domain.KnowledgeDocument, chunks []domain.Chunk) error  // replaces its chunks
+	MarkSeen(ctx context.Context, source domain.KnowledgeSourceID, externalIDs []string, at time.Time) error
 	DeleteUnseen(ctx context.Context, source domain.KnowledgeSourceID, before time.Time) (int, error)
-	AddUpload(ctx context.Context, source string, d domain.KnowledgeDocument, by domain.Actor) (domain.KnowledgeDocument, error)
-	DeleteDocument(ctx context.Context, id domain.KnowledgeDocumentID, by domain.Actor) (orphanedBlob string, err error)
-	Documents(ctx context.Context, source string, after string, limit int) ([]domain.KnowledgeDocument, error)
+	AddUpload(ctx context.Context, source string, d domain.KnowledgeDocument, by domain.Actor) (domain.KnowledgeDocument, error) // d.Blob is id and version
+	DeleteDocument(ctx context.Context, id domain.KnowledgeDocumentID, by domain.Actor) (orphan domain.BlobHash, err error)
+	Documents(ctx context.Context, source string, after domain.KnowledgeDocumentID, limit int) ([]domain.KnowledgeDocument, error)
 	Document(ctx context.Context, id domain.KnowledgeDocumentID) (domain.KnowledgeDocument, string, error) // with its text
 
-	// Search ranks chunks of q.Sources only; there is no unfiltered variant.
+	// Search ranks chunks of q.Sources (names) only; there is no unfiltered variant.
 	Search(ctx context.Context, q domain.KnowledgeQuery) ([]domain.KnowledgeHit, error)
 }
 
@@ -374,10 +378,12 @@ type Embedder interface {
 }
 
 type SourceReader interface {
-	List(ctx context.Context, s domain.SyncSpec) iter.Seq2[domain.SourceItem, error] // id, version, title, url
+	List(ctx context.Context, s domain.SyncSpec) iter.Seq2[domain.SourceItem, error] // id, version, title, url, mime
 	Fetch(ctx context.Context, s domain.SyncSpec, id string) (domain.SourceDoc, error)
 }
 ```
+
+Refusals: `ErrNameTaken`, `ErrNotFound`, `domain.ErrInvalid`, `domain.ErrConnectionCannotSync` (400 `connection-cannot-sync`), `domain.ErrNotUploadSource` (409 `not-an-upload-source`), `domain.ErrUnsupportedDocument` (415) and `ports.ErrTooLarge` (413) from `knowledge.Uploads`; a connection a source reads is not deleted (`Connections.Delete`: `ErrConflict`). `internal/knowledge` gives 4-17 `Uploads` (`Upload`, `DeleteDocument`, `DeleteSource`, which also delete the objects no document holds) and `Searcher` (`Search(ctx, text, sources, limit)`: the query embedded, keywords alone without a model or when it fails); a synced source's connection is opened with `Connections.Resolve` and the run id `""` (the audit entry `connection.used` has no run).
 
 Adapters: `postgres` (Knowledge, pgvector), `openaiembed` (`POST <GOAL_EMBED_URL>/embeddings` with `model`, `input`, `dimensions: 1024`; bearer `GOAL_EMBED_KEY`; Workers AI's OpenAI-compatible endpoint on Cloudflare, Ollama or any compatible server locally), `gitdocs` (go-git, pure Go: a depth-1 fetch of the branch into a temporary directory removed after the pass, blob ids as versions; https with the connection's git credentials; any git host), `confluence` (REST v2: pages of a space with their version numbers, body as storage format → text). `domain.SyncSpec` carries the source's config and the resolved connection. Chunking, extraction, fusion and the ingestion loop are in `internal/knowledge` (domain, ports, standard library, `golang.org/x/net/html`).
 
@@ -431,7 +437,7 @@ Deleted: `internal/factorystore`, `internal/adapters/gitworkspace`, the docker a
 
 ### 5.12 Topology
 
-**Local (Docker Compose).** `compose.yaml` gains `goald` (image built by `task goald:image`, the Docker socket mounted read-write: acceptable on one's own machine, §11.3), `auth` (from `auth/Dockerfile`), `goal-egress` and the network `agents` (`internal: true`, no host-side address, ADR 0009). goald, the auth service and the data services are on the default network; `goal-egress` joins both networks; boxes are only on `agents`. `postgres` moves to a pinned pgvector image of PostgreSQL 18 (`pgvector/pgvector:0.8.1-pg18`, same data directory format). Every service keeps a healthcheck and `depends_on: condition: service_healthy`; ports stay on 127.0.0.1. `goal up --compose` (`task up:compose`) brings the whole stack up (as built in 4-6: goald and auth are in the `stack` profile, goald reads `.env` with compose's addresses on top and the auth service's secrets blanked, the auth service shares goald's network namespace so both keep their loopback rules and mails compose's Mailpit, which has no TLS, with `GOAL_SMTP_PLAINTEXT=on`, refused for any host but loopback or a name without dots, GOAL_AUTH must be session); plain `goal up` (`task up`) keeps running goald as a host binary, as installs do today: the same adapter talks to the same Docker socket, and `goal up` starts `goal-egress` with `GOAL_EGRESS_GATEWAY` derived from goald's gateway listener (`host.docker.internal`). The agents network's name is `GOAL_SANDBOX_NETWORK` (default `goal_agents`) for compose and goald alike. As built in 4-7, nothing is mounted into goald's container but the Docker socket: runs get everything from the gateway's `/run`.
+**Local (Docker Compose).** `compose.yaml` gains `goald` (image built by `task goald:image`, the Docker socket mounted read-write: acceptable on one's own machine, §11.3), `auth` (from `auth/Dockerfile`), `goal-egress` and the network `agents` (`internal: true`, no host-side address, ADR 0009). goald, the auth service and the data services are on the default network; `goal-egress` joins both networks; boxes are only on `agents`. `postgres` moves to a pinned pgvector image of PostgreSQL 18 (as built in 4-16: `pgvector/pgvector:0.8.7-pg18-trixie`, the official image's PostgreSQL 18.6 on Debian trixie with pgvector 0.8.7, so an existing `postgres:18` data directory, its glibc 2.41 collations included, starts unchanged; PlanetScale has pgvector 0.8.5, the same halfvec, HNSW and iterative scan). Every service keeps a healthcheck and `depends_on: condition: service_healthy`; ports stay on 127.0.0.1. `goal up --compose` (`task up:compose`) brings the whole stack up (as built in 4-6: goald and auth are in the `stack` profile, goald reads `.env` with compose's addresses on top and the auth service's secrets blanked, the auth service shares goald's network namespace so both keep their loopback rules and mails compose's Mailpit, which has no TLS, with `GOAL_SMTP_PLAINTEXT=on`, refused for any host but loopback or a name without dots, GOAL_AUTH must be session); plain `goal up` (`task up`) keeps running goald as a host binary, as installs do today: the same adapter talks to the same Docker socket, and `goal up` starts `goal-egress` with `GOAL_EGRESS_GATEWAY` derived from goald's gateway listener (`host.docker.internal`). The agents network's name is `GOAL_SANDBOX_NETWORK` (default `goal_agents`) for compose and goald alike. As built in 4-7, nothing is mounted into goald's container but the Docker socket: runs get everything from the gateway's `/run`.
 
 **Cloudflare.** One control Worker (TypeScript, `deploy/cloudflare/`, the only Cloudflare-specific code besides `internal/adapters/cloudflare`):
 
@@ -529,7 +535,7 @@ CREATE TABLE knowledge_sources (
   embed_model    text,                                    -- the model its chunks were embedded with
   created_by text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
   CHECK ((kind = 'upload') = (connection_id IS NULL)),
-  FOREIGN KEY (org_id, connection_id) REFERENCES connections (org_id, id) ON DELETE RESTRICT,
+  FOREIGN KEY (org_id, connection_id) REFERENCES connections (org_id, id),   -- as built: NO ACTION, so an org's purge cascades in any order
   UNIQUE (org_id, name),
   UNIQUE (org_id, id)
 );
@@ -714,7 +720,7 @@ On `/v1/orgs/{org}/stream`, through `goal_org_events`: `connection` (`{connectio
 | 5 | An agent reaches the host or a private address | egress policy (local), Cloudflare networking (prototype) | `egress` table tests; `sandboxtest` "no private address"; 4-1 report |
 | 6 | An agent forges a passing check | runtime exit codes | `TestEngine_CheckResultFromExitStatus` |
 | 7 | Stored AWS keys reach a box | minting | `TestEngine_AWSStoredKeysNeverInEnv` |
-| 8 | A search returns sources the factory does not list | filter in the one query | `TestKnowledge_SearchOnlyListedSources` |
+| 8 | A search returns sources the factory does not list | filter in the one query | `TestKnowledge_Conformance/SearchOnlyListedSources` (fake and PostgreSQL) |
 | 9 | Secrets in events or logs | scrubbing | `TestEngine_RelayScrubsConnectionValues`, log capture test |
 | 10 | The master key on Cloudflare leaks into a box | Worker env allow-list | Worker test `box start carries only goald's env` |
 | 11 | Uploaded content served as active HTML | attachment + nosniff | `TestAPI_DocumentContentIsAttachment` |
@@ -764,7 +770,7 @@ From today (goald on the host, `env:GOAL_GITHUB_TOKEN` and `runtime.image` in pu
 3. **Sandboxes** (4-4 to 4-7): published versions keep working. In the interim `runtime.image` is ignored (the base image runs every factory; `field-removed` warns), the clone uses the repository token as before but inside the box, and `GOAL_TASK_ENV`'s model token reaches the agent exec. Pause factories, upgrade, resume: runs in flight on the old runner finish or are requeued.
 4. **Connections** (4-8 to 4-13): create connections (`goal connection import-env` or the UI), then publish each factory once with the builder's quick fixes (`runtime.modelConnection`, `runtime.repository.connection`, org connections instead of inline ones and `env:` references).
 5. **Cutover** (4-14): goald refuses to run a version that still has `env:` references or no model connection, with the block reason "publish a version with connections (spec 4 §4.4)"; the interim rule in the specs README ends; `GOAL_TASK_ENV`, `GOAL_GITHUB_TOKEN` and `GOAL_AGENT_EGRESS` are ignored with a warning.
-6. **Knowledge** (4-16): switch `compose.yaml`'s PostgreSQL image to pgvector (same major, same volume), `goal db init`, migrate.
+6. **Knowledge** (4-16): switch `compose.yaml`'s PostgreSQL image to pgvector (same major, same volume), `goal db init`, migrate. As built: the first `goal up` (`task up`) after it recreates the `postgres` container once on the new image and the same `goal-pg` volume (compose sees the image change; the data is kept: verified on a `pg_basebackup` copy of an install's 18.6 data directory), then `goal db init` creates the extension and goald migrates `00054`. Stop goald first, as for any upgrade. `task test-integration` keeps the running container (`--no-recreate`), so it needs pgvector in it: recreate it once (`docker compose up -d postgres`). A PostgreSQL without pgvector fails `goal db init` naming what to do, and `00054` with "extension vector is missing: run goal db init".
 7. **Cloudflare** (4-21, 4-22): a fresh install; moving a local install's data is `pg_dump`/`pg_restore` plus a bucket copy, with the same master key.
 
 8. **Touches** (4-23) are computed from the history already recorded, so existing items count from the first release; the trigger adds labels for new events only (older touches have no reason, and older approvals and merges count as planned).
@@ -823,6 +829,6 @@ Migration numbers rise with landing order (4-3 → `00050`, 4-8 → `00051`, 4-2
 ## 17. Open questions
 
 1. **PostgreSQL provider for Cloudflare** (PlanetScale Postgres or Neon): decided by the owner after prototype 4-2, which needs the owner's accounts.
-2. **Default embedding model** (Workers AI `bge-m3` or `qwen3-embedding-0.6b`, 1024 dimensions): decided in 4-16 by a recall check on the goal factory's docs; both fit the schema.
+2. **Default embedding model** (Workers AI `bge-m3` or `qwen3-embedding-0.6b`, 1024 dimensions): decided in 4-16 by a recall check on the goal factory's docs; both fit the schema. **Decided: `@cf/baai/bge-m3`.** The check: this repository's 26 Markdown files (839 chunks), 30 paraphrased questions each with the files that answer it, through the real pipeline and the one search query on PostgreSQL with pgvector, document-level ranks. bge-m3 hybrid: hit@1 0.77, hit@5 1.00, MRR 0.868 (vector alone 0.854); qwen3-embedding-0.6b hybrid: 0.67, 1.00, 0.814 (vector alone 0.672, without the query instruction it is trained with); keywords alone: 0.57, 0.87, 0.726. bge-m3 also embedded the corpus in 26 s against 2 min 10 s. `GOAL_EMBED_MODEL` names another.
 
 Unscheduled, not blocking: per-organization quotas (concurrent runs, knowledge bytes and embedding tokens), PDF and Office extraction in a box, per-factory restriction of a connection, approvals, OAuth connections, the GitHub App, a read-only tool cache.

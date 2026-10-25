@@ -17,11 +17,13 @@ import (
 
 	"github.com/byFrederick/goal/internal/adapters/docker"
 	"github.com/byFrederick/goal/internal/adapters/masterkey"
+	"github.com/byFrederick/goal/internal/adapters/openaiembed"
 	"github.com/byFrederick/goal/internal/adapters/postgres"
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/knowledge"
 	"github.com/byFrederick/goal/internal/ports"
 )
 
@@ -119,6 +121,13 @@ type settings struct {
 	// loopback and link-local addresses too (GOAL_ALLOW_PRIVATE_UPSTREAMS: true or false, default
 	// false): for a laptop's own test servers, and refused when goald listens off loopback.
 	AllowPrivateUpstreams bool
+	// Embed is the knowledge base's embedding model (GOAL_EMBED_URL, an OpenAI-compatible API
+	// root; GOAL_EMBED_MODEL, default defaultEmbedModel; GOAL_EMBED_KEY, its bearer key). Without
+	// GOAL_EMBED_URL the knowledge base is searched by keywords only.
+	Embed openaiembed.Config
+	// KBWorkers is how many knowledge sources this goald syncs at once (GOAL_KB_WORKERS, default
+	// 2; 0 syncs none here).
+	KBWorkers int
 }
 
 const (
@@ -140,6 +149,15 @@ const (
 	taskEnvEnv     = "GOAL_TASK_ENV"
 	// sandboxNetworkEnv names the agents' network (compose.yaml's agents).
 	sandboxNetworkEnv = "GOAL_SANDBOX_NETWORK"
+
+	embedURLEnv   = "GOAL_EMBED_URL"
+	embedModelEnv = "GOAL_EMBED_MODEL"
+	embedKeyEnv   = "GOAL_EMBED_KEY"
+	kbWorkersEnv  = "GOAL_KB_WORKERS"
+	// defaultEmbedModel is Workers AI's bge-m3 (1024 dimensions), the default by spec 4's recall
+	// check on this repository's docs (§17 q2); on another API name its id of a 1024-dimension
+	// model (Ollama's bge-m3, OpenAI's text-embedding-3-small with dimensions).
+	defaultEmbedModel = "@cf/baai/bge-m3"
 	// authProxySecretEnv is the secret goald's /api/auth proxy sends the identity service, which
 	// refuses requests without it (GOAL_AUTH=session only; goal up generates one for both).
 	authProxySecretEnv = "GOAL_AUTH_PROXY_SECRET" //nolint:gosec // a variable name, not a credential
@@ -176,7 +194,7 @@ var ownVariables = []string{
 	authEnv, upstreamEnv, proxiesEnv, googleEnv, authProxySecretEnv,
 	"GOAL_TICK_EVERY", "GOAL_REFRESH_EVERY", "GOAL_MAX_RUNS",
 	"GOAL_GITHUB_API_URL", githubWebEnv, "GOAL_LOG_LEVEL", "GOAL_LOG_FORMAT", agentImageEnv, "GOAL_ORG_RETENTION", "GOAL_MODELS",
-	"GOAL_DEFINITION_CACHE_BYTES", sandboxNetworkEnv,
+	"GOAL_DEFINITION_CACHE_BYTES", sandboxNetworkEnv, embedURLEnv, embedModelEnv, embedKeyEnv, kbWorkersEnv,
 	"GOAL_S3_BUCKET", "GOAL_S3_ENDPOINT", "GOAL_S3_ACCESS_KEY", "GOAL_S3_SECRET_KEY",
 	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", masterkey.KeysEnv, masterkey.FileEnv, allowPrivateEnv,
 }
@@ -291,6 +309,7 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 
 	errs = append(errs, definitionSettings(&s, or)...)
 	errs = append(errs, upstreamSettings(&s, or)...)
+	errs = append(errs, knowledgeSettings(&s, or)...)
 
 	if s.MaxRuns, err = strconv.Atoi(or("GOAL_MAX_RUNS", "0")); err != nil || s.MaxRuns < 0 {
 		errs = append(errs, fmt.Errorf("GOAL_MAX_RUNS %q is not a count of runs (0 for no cap)", getenv("GOAL_MAX_RUNS")))
@@ -316,6 +335,27 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 	s.Models, err = models(or(modelsEnv, defaultModels))
 
 	return s, errors.Join(append(errs, err)...)
+}
+
+// knowledgeSettings reads the embedding model and GOAL_KB_WORKERS.
+func knowledgeSettings(s *settings, or func(name, def string) string) []error {
+	var errs []error
+
+	if url := or(embedURLEnv, ""); url != "" {
+		s.Embed = openaiembed.Config{URL: url, Model: or(embedModelEnv, defaultEmbedModel), Key: or(embedKeyEnv, "")}
+		if _, err := openaiembed.New(s.Embed); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", embedURLEnv, err))
+		}
+	}
+
+	workers, err := strconv.Atoi(or(kbWorkersEnv, strconv.Itoa(knowledge.DefaultWorkers)))
+	if err != nil || workers < 0 {
+		errs = append(errs, fmt.Errorf("%s %q is not a number of workers (0 for none)", kbWorkersEnv, or(kbWorkersEnv, "")))
+	}
+
+	s.KBWorkers = workers
+
+	return errs
 }
 
 // sandboxSettings reads GOAL_SANDBOX_NETWORK, checks GOAL_GATEWAY_URL as containers are given

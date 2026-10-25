@@ -1,0 +1,198 @@
+//go:build integration
+
+package postgres
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/ports/porttest/knowledgetest"
+)
+
+func TestKnowledge_Conformance(t *testing.T) {
+	t.Parallel()
+
+	knowledgetest.Run(t, func(t *testing.T) knowledgetest.Harness {
+		t.Helper()
+
+		d := newConnectionsDB(t)
+
+		return knowledgetest.Harness{
+			Knowledge: NewKnowledge(d.store), Connections: NewConnections(d.store, testKey(t, "k1")), Audit: d.store,
+			NewOrg: func(t *testing.T) domain.OrgID { t.Helper(); return newOrgID(t, d.store) },
+		}
+	})
+}
+
+// knowledgeDoc gives org a synced source "runbooks" (on a connection "docs" of a kind that
+// syncs) with one document of one chunk embedded along dimension dim.
+func knowledgeDoc(t *testing.T, d connectionsDB, org domain.OrgID, text string, dim int) {
+	t.Helper()
+
+	ctx := domain.WithOrg(t.Context(), org)
+	c := NewConnections(d.store, testKey(t, "k1"))
+	k := NewKnowledge(d.store)
+
+	if _, err := c.Create(ctx, domain.NewConnection{Name: "docs", Kind: "kb-docs", Fields: map[string]string{}}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	src, err := k.CreateSource(ctx, domain.NewKnowledgeSource{Name: "runbooks", Title: "Runbooks", Kind: domain.SourceSynced, Connection: "docs"}, domain.LocalUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vec := make([]float32, domain.EmbeddingDimensions)
+	vec[dim] = 1
+
+	if err := k.PutDocument(ctx, domain.KnowledgeDocument{
+		Source: src.ID, ExternalID: "docs/a.md", Version: "v1", Title: "A", MIME: "text/markdown", Status: domain.DocumentIndexed,
+		SeenAt: time.Now(), CreatedBy: domain.EngineActor, EmbedModel: "acme-embed-1",
+	}, []domain.Chunk{{Text: text, Embedding: vec}}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func syncingKind(t *testing.T, d connectionsDB) {
+	t.Helper()
+
+	if err := NewConnections(d.store, testKey(t, "k1")).SyncPlatformKinds(t.Context(), []domain.ConnectionKind{{
+		Name: "kb-docs", Title: "Docs", Platform: true, Spec: domain.KindSpec{Sync: "gitdocs"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Spec 4 §11.2 row 1: as goal_app, organization B never reads A's chunks, even when the
+// nearest-neighbour scan walks the HNSW index past them; nor does it see A's sources or
+// documents, or write into them.
+func TestKnowledge_RLSAcrossOrgsWithVectorScan(t *testing.T) {
+	t.Parallel()
+
+	d := newConnectionsDB(t)
+	syncingKind(t, d)
+
+	acme, labs := newOrgID(t, d.store), newOrgID(t, d.store)
+	knowledgeDoc(t, d, acme, "acme's secret runbook", 0)
+	knowledgeDoc(t, d, labs, "labs' own runbook", 7)
+
+	along := make([]float32, domain.EmbeddingDimensions)
+	along[0] = 1 // acme's chunk is the nearest there is
+
+	query, err := vectorText(along)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := inOrgTx(t, d.store.pool, labs, func(tx pgx.Tx) error { return seesOnlyItsKnowledge(t, tx, acme, query) }); err != nil {
+		t.Fatal(err)
+	}
+
+	// Nor writes into them: a source claiming acme's organization is refused by the policy.
+	err = inOrgTx(t, d.store.pool, labs, func(tx pgx.Tx) error {
+		_, err := tx.Exec(t.Context(), `INSERT INTO knowledge_sources (id, org_id, name, title, kind, next_sync_at, created_by)
+			VALUES (gen_random_uuid(), '`+string(acme)+`', 'forged', 'x', 'upload', now(), 'user:x')`)
+
+		return err
+	})
+	if err == nil {
+		t.Error("labs wrote a source into acme's knowledge base")
+	}
+}
+
+// seesOnlyItsKnowledge checks, in a transaction of another organization than acme, that the HNSW
+// scan nearest to query returns that organization's chunk only, and that no row of acme's
+// knowledge base is visible.
+func seesOnlyItsKnowledge(t *testing.T, tx pgx.Tx, acme domain.OrgID, query string) error {
+	t.Helper()
+
+	// The HNSW index, not a scan of the table or of the org index and a sort, so the test sees
+	// what HNSW returns under the policy.
+	if _, err := tx.Exec(t.Context(), "SET LOCAL enable_seqscan = off; SET LOCAL enable_bitmapscan = off; SET LOCAL enable_sort = off; "+
+		"SET LOCAL hnsw.iterative_scan = relaxed_order"); err != nil {
+		return err
+	}
+
+	const nearest = `SELECT text FROM knowledge_chunks ORDER BY embedding <=> $1::halfvec(1024) LIMIT 5`
+
+	rows, err := tx.Query(t.Context(), "EXPLAIN "+nearest, query)
+	if err != nil {
+		return err
+	}
+
+	plan, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return err
+	}
+
+	if !strings.Contains(strings.Join(plan, "\n"), "knowledge_chunks_embedding_idx") {
+		t.Errorf("the nearest-neighbour query does not use the HNSW index:\n%s", strings.Join(plan, "\n"))
+	}
+
+	rows, err = tx.Query(t.Context(), nearest, query)
+	if err != nil {
+		return err
+	}
+
+	texts, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return err
+	}
+
+	if len(texts) != 1 || texts[0] != "labs' own runbook" {
+		t.Errorf("labs' nearest chunks = %q, want its own only", texts)
+	}
+
+	for _, table := range []string{"knowledge_sources", "knowledge_documents", "knowledge_chunks"} {
+		var n int
+		if err := tx.QueryRow(t.Context(), "SELECT count(*) FROM "+table+" WHERE org_id = $1", string(acme)).Scan(&n); err != nil || n != 0 {
+			t.Errorf("labs sees %d rows of acme's %s, %v", n, table, err)
+		}
+	}
+
+	return nil
+}
+
+// An organization's purge removes its knowledge base with its connections, whichever the cascade
+// reaches first (the sources' foreign key to connections is checked at the statement's end).
+func TestPurgeOrg_RemovesKnowledge(t *testing.T) {
+	t.Parallel()
+
+	d := newConnectionsDB(t)
+	syncingKind(t, d)
+
+	deleted := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
+	org := newOrgID(t, d.store)
+	knowledgeDoc(t, d, org, "a runbook", 0)
+
+	if err := d.store.DeleteOrg(domain.WithOrg(t.Context(), org), domain.LocalUser, deleted); err != nil {
+		t.Fatal(err)
+	}
+
+	if ok, err := d.store.PurgeOrg(t.Context(), org, deleted.Add(time.Second), nil); !ok || err != nil {
+		t.Fatalf("PurgeOrg = %v, %v", ok, err)
+	}
+
+	var n int
+	if err := d.admin.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM knowledge_sources) + (SELECT count(*) FROM knowledge_documents)
+		+ (SELECT count(*) FROM knowledge_chunks) + (SELECT count(*) FROM connections)`).Scan(&n); err != nil || n != 0 {
+		t.Errorf("%d knowledge and connection rows left, %v; want none", n, err)
+	}
+}
+
+// Without pgvector's extension the knowledge migration stops, saying what to run.
+func TestMigrate_KnowledgeNeedsTheVectorExtension(t *testing.T) {
+	t.Parallel()
+
+	db := newTestDB(t, OwnerRole)
+	execSQL(t, db.admin, "DROP EXTENSION vector")
+
+	err := Migrate(t.Context(), openPool(t, db.owner))
+	if err == nil || !strings.Contains(err.Error(), "extension vector is missing: run goal db init") {
+		t.Fatalf("Migrate = %v, want the missing extension named", err)
+	}
+}

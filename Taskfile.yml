@@ -7,7 +7,8 @@ dotenv: [".env"]
 
 vars:
   GOLANGCI: '{{.GOLANGCI | default "golangci-lint"}}'
-  PG_IMAGE: postgres:18
+  # compose.yaml's PostgreSQL: 18 with pgvector (the knowledge base, 00054).
+  PG_IMAGE: pgvector/pgvector:0.8.7-pg18-trixie
   OAPI_CODEGEN_VERSION: v2.8.0
   # Working copy of the factory definitions: outside this repository, never committed.
   FACTORIES_DIR: '{{.GOAL_FACTORIES_DIR | default "../goal-factories"}}'
@@ -21,11 +22,12 @@ vars:
   # no Docker (the dev agent image, in which station checks run, ships the server).
   MIGRATE_WITH:
     sh: command -v docker >/dev/null 2>&1 && echo docker || echo local
-  # What goal db init grants before goald migrates (postgres.InitRoles), for migrate-check.
+  # What goal db init grants and creates before goald migrates (postgres.InitRoles), for migrate-check.
   MIGRATE_GRANTS: >-
     REVOKE TEMPORARY, CONNECT ON DATABASE goal FROM PUBLIC;
     GRANT CONNECT, CREATE ON DATABASE goal TO goal_owner; GRANT CONNECT ON DATABASE goal TO goal_app, goal_auth;
-    GRANT USAGE, CREATE ON SCHEMA public TO goal_owner; GRANT USAGE ON SCHEMA public TO goal_app, goal_auth
+    GRANT USAGE, CREATE ON SCHEMA public TO goal_owner; GRANT USAGE ON SCHEMA public TO goal_app, goal_auth;
+    CREATE EXTENSION IF NOT EXISTS vector
   # The auth service's own variables (spec 3 §5.6): task auth:dev passes it these and nothing of
   # goald's, as goal up does.
   AUTH_VARIABLES: >-
@@ -166,7 +168,7 @@ tasks:
       - terraform validate
 
   migrate-check:
-    desc: Apply all migrations to a throwaway PostgreSQL 18 (in Docker, or a local cluster without Docker)
+    desc: Apply all migrations to a throwaway PostgreSQL 18 with pgvector (in Docker, or a local cluster without Docker)
     cmds:
       - task: migrate-check:{{.MIGRATE_WITH}}
 

@@ -109,6 +109,9 @@ type connectionData struct {
 	platform map[string]domain.ConnectionKind
 	orgKinds map[domain.OrgID]map[string]domain.ConnectionKind
 	conns    map[domain.OrgID]map[string]*connectionRow
+	// readBy reports whether a knowledge source reads a connection (NewKnowledge sets it), which
+	// then cannot be deleted, as the database's foreign key refuses.
+	readBy func(domain.OrgID, domain.ConnectionID) bool
 }
 
 type connectionRow struct {
@@ -531,6 +534,10 @@ func (c *Connections) Delete(ctx context.Context, name string, by domain.Actor) 
 	r, ok := c.d.conns[org][name]
 	if !ok {
 		return fmt.Errorf("connection %q: %w", name, ports.ErrNotFound)
+	}
+
+	if c.d.readBy != nil && c.d.readBy(org, r.conn.ID) {
+		return fmt.Errorf("knowledge sources use it: %w", ports.ErrConflict)
 	}
 
 	err := c.appendAudit(ctx, by, domain.AuditConnectionDeleted, domain.AuditTargetConnection, string(r.conn.ID),

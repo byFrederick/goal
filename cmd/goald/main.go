@@ -33,6 +33,7 @@ import (
 	"github.com/byFrederick/goal/internal/adapters/docker"
 	"github.com/byFrederick/goal/internal/adapters/envsecrets"
 	"github.com/byFrederick/goal/internal/adapters/masterkey"
+	"github.com/byFrederick/goal/internal/adapters/openaiembed"
 	"github.com/byFrederick/goal/internal/adapters/postgres"
 	"github.com/byFrederick/goal/internal/adapters/s3store"
 	"github.com/byFrederick/goal/internal/adapters/sysclock"
@@ -45,6 +46,7 @@ import (
 	"github.com/byFrederick/goal/internal/egress"
 	"github.com/byFrederick/goal/internal/engine"
 	"github.com/byFrederick/goal/internal/gateway"
+	"github.com/byFrederick/goal/internal/knowledge"
 	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/retention"
 	"github.com/byFrederick/goal/web"
@@ -139,6 +141,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}
 
 	definitionStore := postgres.NewDefinitions(pool, objects, log)
+	ingestor := knowledgeIngestor(s, store, connections, objects, clock, log)
 
 	// Definition authoring writes versions to PostgreSQL and file content to the bucket. A
 	// definition's connections are checked against the organization's, and until the cutover the
@@ -232,7 +235,40 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	purger := retention.New(store, objects, clock, s.OrgRetention, log)
 
 	return serve(ctx, log, s, servers, eng, defs, definitionNotices, feed,
-		jobs{purger: purger, platform: platform, clock: clock, identity: newIdentityWatch(s, store)})
+		jobs{purger: purger, platform: platform, clock: clock, identity: newIdentityWatch(s, store), ingestor: ingestor})
+}
+
+// knowledgeIngestor is the knowledge base's ingestion loop (spec 4 §4.8): GOAL_KB_WORKERS
+// workers syncing due sources, uploads read from the bucket, embeddings from GOAL_EMBED_URL's
+// model or, without one, keyword search only. The readers of synced connections (gitdocs,
+// confluence) join it in 4-18 and 4-19; until then such a source fails saying so.
+func knowledgeIngestor(s settings, store *postgres.Store, connections *postgres.Connections, objects ports.ObjectStore,
+	clock ports.Clock, log *slog.Logger,
+) *knowledge.Ingestor {
+	kb := postgres.NewKnowledge(store)
+
+	var embedder ports.Embedder
+
+	if s.Embed.URL == "" {
+		log.Info("knowledge base: keyword search only; set " + embedURLEnv + " (and " + embedModelEnv + ", " + embedKeyEnv +
+			") for an embedding model")
+	} else {
+		cfg := s.Embed
+		cfg.Transport = connectionTransport(s.AllowPrivateUpstreams)
+
+		client, err := openaiembed.New(cfg) // settingsFrom checked it
+		if err != nil {
+			log.Error("knowledge base: keyword search only", slog.Any("error", err))
+		} else {
+			embedder = client
+			log.Info("knowledge base: hybrid search", slog.String("embed_model", client.Model()))
+		}
+	}
+
+	return knowledge.NewIngestor(knowledge.IngestorConfig{
+		Knowledge: kb, Orgs: store, Connections: connections, Uploads: knowledge.NewUploads(kb, objects, 0),
+		Embedder: embedder, Clock: clock, Log: log, Workers: s.KBWorkers,
+	})
 }
 
 // openConnections loads the platform's master keys (GOAL_MASTER_KEYS or GOAL_MASTER_KEY_FILE),
@@ -365,13 +401,14 @@ func gatewayHandler(gw *gateway.Gateway) http.Handler {
 	return mux
 }
 
-// jobs are goald's scheduled jobs: the purge of deleted organizations and the sign-in clean-up,
-// and under GOAL_AUTH=session the startup watch of the identity service.
+// jobs are goald's scheduled jobs: the purge of deleted organizations, the sign-in clean-up, the
+// knowledge base's ingestion and under GOAL_AUTH=session the startup watch of the identity service.
 type jobs struct {
 	purger   *retention.Purger
 	platform ports.Platform
 	clock    ports.Clock
 	identity *identityWatch
+	ingestor *knowledge.Ingestor
 }
 
 // serve runs the HTTP servers, the engine, the stream feed, the definitions reloads and the
@@ -420,6 +457,10 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 	wg.Go(func() { refresh(ctx, log, defs, s.RefreshEvery) })
 	wg.Go(func() { j.purger.Run(ctx, purgeEvery) })
 	wg.Go(func() { cleanUpAuth(ctx, log, j.platform, j.clock, authCleanUpEvery) })
+
+	if s.KBWorkers > 0 {
+		wg.Go(func() { j.ingestor.Run(ctx) })
+	}
 
 	if j.identity != nil {
 		wg.Go(func() { j.identity.run(ctx, log) })

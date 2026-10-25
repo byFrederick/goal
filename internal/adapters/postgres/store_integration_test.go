@@ -176,7 +176,7 @@ func newTestDB(t *testing.T, schemaOwner string) testDB {
 		execSQL(t, db.admin, "REVOKE TEMPORARY, CONNECT ON DATABASE "+name+" FROM PUBLIC; "+
 			"GRANT CONNECT, CREATE ON DATABASE "+name+" TO "+schemaOwner+"; "+
 			"GRANT CONNECT ON DATABASE "+name+" TO goal_app, goal_auth; "+
-			"GRANT USAGE, CREATE ON SCHEMA public TO "+schemaOwner+"; GRANT USAGE ON SCHEMA public TO goal_app, goal_auth")
+			"GRANT USAGE, CREATE ON SCHEMA public TO "+schemaOwner+"; GRANT USAGE ON SCHEMA public TO goal_app, goal_auth; CREATE EXTENSION IF NOT EXISTS vector")
 	}
 
 	return db

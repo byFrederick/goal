@@ -90,7 +90,7 @@ func newDatabase(t *testing.T) database {
 	db := openPool(t, withParams(t, base, name, ""))
 	exec(t, db, "REVOKE TEMPORARY, CONNECT ON DATABASE "+name+" FROM PUBLIC; "+
 		"GRANT CONNECT, CREATE ON DATABASE "+name+" TO goal_owner; GRANT CONNECT ON DATABASE "+name+" TO goal_app, goal_auth; "+
-		"GRANT USAGE, CREATE ON SCHEMA public TO goal_owner; GRANT USAGE ON SCHEMA public TO goal_app, goal_auth")
+		"GRANT USAGE, CREATE ON SCHEMA public TO goal_owner; GRANT USAGE ON SCHEMA public TO goal_app, goal_auth; CREATE EXTENSION IF NOT EXISTS vector")
 
 	if err := postgres.Migrate(t.Context(), openPool(t, withParams(t, base, name, postgres.OwnerRole))); err != nil {
 		t.Fatal(err)

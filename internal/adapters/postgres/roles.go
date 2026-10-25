@@ -54,9 +54,10 @@ type Roles struct {
 // them log in with the given passwords, grants goal_owner the database and the current schema and
 // goal_app and goal_auth their use (revoking PUBLIC's CONNECT and TEMPORARY on the database), and
 // hands every table, view, sequence and function of the current schema that the bootstrap user
-// owns to goal_owner (goose_db_version included), so the next migration runs as goal_owner. It
-// returns how many objects changed owner. It is idempotent; passwords are never logged or put
-// into errors.
+// owns to goal_owner (goose_db_version included), so the next migration runs as goal_owner, and
+// creates the extensions the migrations need (pgvector's vector, 00054), which only an
+// administrator can. It returns how many objects changed owner. It is idempotent; passwords are
+// never logged or put into errors.
 func InitRoles(ctx context.Context, pool *pgxpool.Pool, r Roles) (moved int, err error) {
 	if r.OwnerPassword == "" || r.AppPassword == "" || r.AuthPassword == "" {
 		return 0, errors.New("postgres: init roles: every role password is required")
@@ -75,15 +76,40 @@ func InitRoles(ctx context.Context, pool *pgxpool.Pool, r Roles) (moved int, err
 			}
 		}
 
-		moved, err = grantAndTransfer(ctx, tx)
+		if moved, err = grantAndTransfer(ctx, tx); err != nil {
+			return err
+		}
 
-		return err
+		return createExtensions(ctx, tx)
 	})
 	if err != nil {
 		return 0, fmt.Errorf("postgres: init roles: %w", err)
 	}
 
 	return moved, nil
+}
+
+// ErrNoPgvector is InitRoles' answer on a PostgreSQL server without pgvector.
+var ErrNoPgvector = errors.New("PostgreSQL has no pgvector extension, which the knowledge base needs: run compose.yaml's " +
+	"PostgreSQL image (docker compose up -d postgres recreates its container on the same volume, data kept) or install " +
+	"pgvector for PostgreSQL 18 on the server")
+
+// createExtensions creates pgvector's extension in the current schema when it is missing.
+func createExtensions(ctx context.Context, tx pgx.Tx) error {
+	var available bool
+	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'vector')").Scan(&available); err != nil {
+		return fmt.Errorf("extensions: %w", err)
+	}
+
+	if !available {
+		return ErrNoPgvector
+	}
+
+	if _, err := tx.Exec(ctx, "CREATE EXTENSION IF NOT EXISTS vector"); err != nil {
+		return fmt.Errorf("create extension vector: %w", err)
+	}
+
+	return nil
 }
 
 // createRoles runs roles.sql under a lock, so concurrent callers on one database take turns.

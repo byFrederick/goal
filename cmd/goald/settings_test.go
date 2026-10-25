@@ -62,6 +62,24 @@ func TestSettings_Defaults(t *testing.T) {
 	}
 }
 
+// Without GOAL_EMBED_URL the knowledge base searches by keywords; with it the model defaults to
+// Workers AI's bge-m3, and two workers sync.
+func TestSettings_Knowledge(t *testing.T) {
+	t.Parallel()
+
+	s, err := settingsFrom(envOf(nil))
+	if err != nil || s.Embed.URL != "" || s.KBWorkers != 2 {
+		t.Fatalf("defaults = %+v, %d, %v", s.Embed, s.KBWorkers, err)
+	}
+
+	s, err = settingsFrom(envOf(map[string]string{
+		embedURLEnv: "https://api.cloudflare.com/client/v4/accounts/acme/ai/v1", embedKeyEnv: "k", kbWorkersEnv: "0",
+	}))
+	if err != nil || s.Embed.Model != "@cf/baai/bge-m3" || s.Embed.Key != "k" || s.KBWorkers != 0 {
+		t.Errorf("with an embedding API = %+v, %d, %v", s.Embed, s.KBWorkers, err)
+	}
+}
+
 // Containers run on compose.yaml's agents network unless GOAL_SANDBOX_NETWORK names another;
 // the egress and run folder settings of earlier releases are ignored, and listed for goald's
 // warning.
@@ -205,6 +223,8 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 		{name: "public URL in clear text ending like localhost", env: map[string]string{publicURLEnv: "http://evillocalhost"}, want: publicURLEnv},
 		{name: "public URL without a scheme", env: map[string]string{publicURLEnv: "goal.example.com"}, want: publicURLEnv},
 		{name: "public URL with a path", env: map[string]string{publicURLEnv: "https://example.com/goal"}, want: publicURLEnv},
+		{name: "embeddings in clear text", env: map[string]string{embedURLEnv: "http://embeddings.example.com/v1"}, want: embedURLEnv},
+		{name: "negative knowledge workers", env: map[string]string{kbWorkersEnv: "-1"}, want: kbWorkersEnv},
 		{name: "gateway listener on the main one", env: map[string]string{gatewayEnv: defaultListen}, want: "another address"},
 		{name: "gateway listener on the main one by name", env: map[string]string{gatewayEnv: "localhost:8080"}, want: "another address"},
 		{name: "gateway listener on every interface's main port", env: map[string]string{gatewayEnv: ":8080"}, want: "another address"},
