@@ -389,6 +389,23 @@ func TestIngestor_FailuresAreRecorded(t *testing.T) {
 	}
 }
 
+// Review 4 SQL L4: a document whose id at its source is longer than the knowledge base keeps
+// (domain.MaxExternalID bytes) is left out; the sync indexes the others and goes through.
+func TestIngestor_ATooLongIDIsLeftOut(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	long := "docs/" + strings.Repeat("日", 700) + ".md"
+	w.docs.set(map[string]string{deployMD: "# Deploy\n\nShip on Tuesdays.", long: "# Long\n\nA page."})
+
+	w.syncDue(w.ingestor(w.embed, nil))
+
+	src := w.source("runbooks")
+	w.want("runbooks", src, src.Status == domain.SyncIdle, src.Documents == 1)
+	fetched := w.docs.fetches()
+	w.want("fetched (not the long one)", fetched, slices.Equal(fetched, []string{deployMD}))
+}
+
 func TestIngestor_UnknownSyncKindFailsTheSource(t *testing.T) {
 	t.Parallel()
 

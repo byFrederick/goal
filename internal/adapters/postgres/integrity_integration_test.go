@@ -3,12 +3,14 @@
 package postgres
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/byFrederick/goal/internal/domain"
@@ -62,6 +64,59 @@ func TestWorkItems_ParentFromAnotherOrgIsRefused(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "foreign key") {
 		t.Errorf("an acme item whose parent is a labs item = %v; want a foreign key violation", err)
+	}
+}
+
+// A touch label is its event's, of the event's item and organization (review 4 SQL L2): the
+// event_id key ignores row-level security, so an organization could take another's event id for
+// a label of its own, and that organization's own label of the event then failed.
+func TestTouchLabels_AnotherOrgsEventIsRefused(t *testing.T) {
+	t.Parallel()
+
+	pool := newTestPool(t)
+	s := New(pool)
+	acme, labs := newOrgID(t, s), newOrgID(t, s)
+	item := func(org domain.OrgID) domain.ItemID {
+		ctx := domain.WithOrg(t.Context(), org)
+
+		it, err := s.CreateItem(ctx, domain.NewItem{
+			FactoryID: saveFactory(ctx, t, s), Type: typeTask, Title: "an item", Station: stWork, State: domain.StateQueued,
+			Class: domain.ClassStandard, CreatedAt: time.Now(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return it.ID
+	}
+	acmeItem, labsItem := item(acme), item(labs)
+
+	var event int64
+
+	if err := inOrgTx(t, pool, acme, func(tx pgx.Tx) error {
+		return tx.QueryRow(t.Context(), "SELECT id FROM item_events WHERE item_id = $1 ORDER BY id LIMIT 1", string(acmeItem)).Scan(&event)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := inOrgTx(t, pool, labs, func(tx pgx.Tx) error {
+		_, err := tx.Exec(t.Context(), "INSERT INTO item_touch_labels (event_id, org_id, item_id) VALUES ($1, $2, $3)",
+			event, string(labs), string(labsItem))
+
+		return err
+	})
+	if pgErr := (*pgconn.PgError)(nil); !errors.As(err, &pgErr) || pgErr.ConstraintName != "item_touch_labels_event_of_item" {
+		t.Errorf("a labs label of an acme event = %v; want refused", err)
+	}
+
+	// acme labels its own event.
+	if err := inOrgTx(t, pool, acme, func(tx pgx.Tx) error {
+		_, err := tx.Exec(t.Context(), "INSERT INTO item_touch_labels (event_id, org_id, item_id) VALUES ($1, $2, $3)",
+			event, string(acme), string(acmeItem))
+
+		return err
+	}); err != nil {
+		t.Errorf("acme's label of its own event = %v", err)
 	}
 }
 

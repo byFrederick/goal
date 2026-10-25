@@ -259,12 +259,9 @@ func (in *Ingestor) pass(ctx context.Context, c domain.SourceClaim, started time
 		return stats, err
 	}
 
-	versions := map[string]string{}
-
-	if model := in.model(); model == "" || src.EmbedModel == model {
-		if versions, err = in.cfg.Knowledge.Versions(ctx, src.ID); err != nil {
-			return stats, err
-		}
+	versions, err := in.versions(ctx, src)
+	if err != nil {
+		return stats, err
 	}
 
 	var unchanged []string
@@ -275,6 +272,13 @@ func (in *Ingestor) pass(ctx context.Context, c domain.SourceClaim, started time
 		}
 
 		stats.listed++
+
+		if len(item.ID) > domain.MaxExternalID {
+			in.cfg.Log.WarnContext(ctx, "knowledge document left out: its id is too long", slog.String("source", src.Name),
+				slog.Int("bytes", len(item.ID)))
+
+			continue
+		}
 
 		if v, ok := versions[item.ID]; ok && v == item.Version {
 			unchanged = append(unchanged, item.ID)
@@ -302,6 +306,16 @@ func (in *Ingestor) pass(ctx context.Context, c domain.SourceClaim, started time
 	}
 
 	return stats, nil
+}
+
+// versions are the versions of src's documents a sync need not fetch again: none when its
+// chunks are of another model than the embedder's.
+func (in *Ingestor) versions(ctx context.Context, src domain.KnowledgeSource) (map[string]string, error) {
+	if model := in.model(); model != "" && src.EmbedModel != model {
+		return map[string]string{}, nil
+	}
+
+	return in.cfg.Knowledge.Versions(ctx, src.ID)
 }
 
 // reader is what reads src: the uploads, or its connection's kind's reader with the connection

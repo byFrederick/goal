@@ -11,6 +11,7 @@ import (
 	"math"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -643,8 +644,20 @@ func testDocuments(f *fixture) {
 	f.must(err)
 	f.want("DeleteUnseen (b.md)", n, n == 1)
 
+	// An external id is bounded in bytes, as its unique index's entry is (review 4 SQL L4):
+	// 1,000 characters of three bytes each are too long.
+	long := domain.KnowledgeDocument{
+		Source: src.ID, ExternalID: "docs/" + strings.Repeat("日", 1000) + ".md", Version: "v1", Title: "x", MIME: plainText,
+		Status: domain.DocumentIndexed, SeenAt: time.Now(), CreatedBy: domain.EngineActor,
+	}
+	f.refused("PutDocument with an external id over MaxExternalID bytes", f.Knowledge.PutDocument(ctx, long, nil), domain.ErrInvalid)
+
+	long.ExternalID = "docs/" + strings.Repeat("日", 600) + ".md"
+	f.must(f.Knowledge.PutDocument(ctx, long, nil))
+	f.must(f.Knowledge.MarkSeen(ctx, sync.Lease, []string{long.ExternalID}, pass))
+
 	s := f.get(f.org, runbooks)
-	f.want("Documents", s.Documents, s.Documents == 1)
+	f.want("Documents", s.Documents, s.Documents == 2)
 
 	_, err = f.Knowledge.Documents(ctx, "nope", "", 10)
 	f.refused("Documents of an unknown source", err, ports.ErrNotFound)

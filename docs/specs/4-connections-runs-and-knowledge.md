@@ -1,6 +1,6 @@
 # Phase 4 — Connections, runs and knowledge
 
-Status: owner-approved design (2026-10-24), not built · follows phase 3 · migrations `00050–00059` (`00050–00055` built) · OpenAPI tags `connections` and `knowledge` (touch metrics under `work`) · PRs `4-1…4-25` · decision records [ADR 0008](../adr/0008-portable-runs-connections-and-knowledge.md), [ADR 0009](../adr/0009-agent-network-isolation.md) (amended), [ADR 0005](../adr/0005-factory-definitions-in-object-storage.md) (amended)
+Status: owner-approved design (2026-10-24), not built · follows phase 3 · migrations `00050–00059` (`00050–00056` built) · OpenAPI tags `connections` and `knowledge` (touch metrics under `work`) · PRs `4-1…4-25` · decision records [ADR 0008](../adr/0008-portable-runs-connections-and-knowledge.md), [ADR 0009](../adr/0009-agent-network-isolation.md) (amended), [ADR 0005](../adr/0005-factory-definitions-in-object-storage.md) (amended)
 
 (phase 4 redesign) This file was `4-credentials-and-connectors.md` (parts 4.1 vault and credentials, 4.2 connectors and MCP gateway, PRs `4.1-n`/`4.2-n`). The design pass replaced it. Kept, simplified: credentials encrypted in PostgreSQL, write-only values, RLS, audit, AWS STS, the merge station. Cut: remote MCP through the gateway (connections go direct from the box), the Credentials page, credential grants, the connector catalog and `kind: Connector` files, scopes, CLI exec sidecars, stdio sidecar containers, `ModelAuth`, `CredentialProbe`, per-org data keys, vault settings, the MCP Registry import, multi-instance forwarding. Deferred: approval-gated tool calls, OAuth connections, the GitHub App. References to "4.1 §x" or "4.2 §x" in older text point at retired parts.
 
@@ -512,6 +512,7 @@ Every org table: `org_id uuid NOT NULL DEFAULT goal_org()` referencing `organiza
 | `00053_connection_rename.sql` | 4-9 | `GRANT UPDATE (name) ON connections TO goal_app`: a rename (§8.2), which 00051's column grants left out (4-9 landed after 4-23, so it took `00053`) |
 | `00054_knowledge.sql` | 4-16 | `knowledge_sources`, `knowledge_documents`, `knowledge_chunks`; requires the `vector` extension |
 | `00055_knowledge_lease_fencing.sql` | review 4 | `knowledge_sources.lease_token` (fences a sync's renewals, seen marks, deletions and end), `goal_claim_knowledge_source` (one claim across organizations, due first first) and its index `knowledge_sources_next_sync_idx`, replacing `knowledge_sources_due_idx` |
+| `00056_knowledge_touch_review_fixes.sql` | review 4 | trigger `item_touch_labels_event_of_item` (a label is its event's item and organization's); `goal_label_touch_event`'s `search_path` pinned; the duplicate `knowledge_documents_org_source_idx` dropped; `external_id` bounded to 2,000 bytes (`domain.MaxExternalID`; the ingestor leaves a longer one out) |
 
 ```sql
 -- 00051_connections.sql

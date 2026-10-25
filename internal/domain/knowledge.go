@@ -66,8 +66,9 @@ const (
 	MaxSourceConfig = 8192
 	// MaxChunkText is a chunk's text in characters.
 	MaxChunkText = 8000
-	// MaxExternalID is a document's id at its source in characters.
-	MaxExternalID = 1024
+	// MaxExternalID is a document's id at its source in bytes: an entry of its unique index
+	// must fit a btree page's third (00056).
+	MaxExternalID = 2000
 	// MaxKnowledgeError is a stored error message in characters.
 	MaxKnowledgeError = 500
 	// EmbeddingDimensions is every embedding's size: one embedding space per install.

@@ -471,6 +471,10 @@ func (k *Knowledge) Versions(ctx context.Context, source domain.KnowledgeSourceI
 
 // PutDocument implements ports.Knowledge.
 func (k *Knowledge) PutDocument(ctx context.Context, d domain.KnowledgeDocument, chunks []domain.Chunk) error {
+	if d.ExternalID == "" || len(d.ExternalID) > domain.MaxExternalID {
+		return fmt.Errorf("put knowledge document: its external id has %d bytes: %w", len(d.ExternalID), domain.ErrInvalid)
+	}
+
 	for _, c := range chunks {
 		if c.Embedding != nil && (d.EmbedModel == "" || len(c.Embedding) != domain.EmbeddingDimensions) {
 			return fmt.Errorf("put knowledge document %q: chunk %d's embedding: %w", d.ExternalID, c.Ord, domain.ErrInvalid)
