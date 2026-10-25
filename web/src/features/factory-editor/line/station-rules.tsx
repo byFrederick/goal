@@ -1,6 +1,6 @@
 // A station's detail strip (D §10.6), under its row: an agent station's checks and lanes, the
-// rework rule of agent and human stations, a human station's merge step, a queue's buffer
-// sentence, and every station's note.
+// rework rule of agent and human stations, the merge step of a human station and of an agent
+// station with a gate, a queue's buffer sentence, and every station's note.
 import { Link, useParams } from '@tanstack/react-router';
 import { Plus, X } from 'lucide-react';
 import { type RefObject, useId, useRef, useState } from 'react';
@@ -129,8 +129,14 @@ export function StationRules({
           describedBy={describedBy('gate')}
         />
       ) : null}
-      {kind === 'human' ? (
-        <MergeStep station={station} invalid={invalid('action')} describedBy={describedBy('action')} at={at} />
+      {kind === 'human' || (kind === 'agent' && station.gate) ? (
+        <MergeStep
+          station={station}
+          gated={kind === 'agent'}
+          invalid={invalid('action')}
+          describedBy={describedBy('action')}
+          at={at}
+        />
       ) : null}
       {station.description !== undefined || noting ? (
         <Note station={station} label={label} at={at} input={noteInput} onDone={() => setNoting(false)} />
@@ -384,11 +390,14 @@ function GateRule({
 
 function MergeStep({
   station,
+  gated,
   invalid,
   describedBy,
   at,
 }: {
   station: ModelStation;
+  /** An agent station with a gate: approving the gate merges, with no person. */
+  gated: boolean;
   invalid: boolean;
   describedBy: string | undefined;
   at: string;
@@ -399,10 +408,14 @@ function MergeStep({
   // Turning it off is always possible, so a merge step left without a repository can be undone.
   const blocked = !editor.hasRepository && !on;
   const what = on
-    ? 'Approving merges the pull request (action: merge)'
+    ? gated
+      ? 'Approving the gate merges the pull request (no person)'
+      : 'A person merges the pull request'
     : blocked
       ? 'Set a repository in Basics first'
-      : 'People approve here; nothing is merged';
+      : gated
+        ? 'Approving the gate leaves the pull request open'
+        : 'People approve here; nothing is merged';
 
   return (
     <div className={rule}>

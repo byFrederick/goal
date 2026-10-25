@@ -215,7 +215,21 @@ export function setStationName(
 /** The fields each kind of station keeps. */
 const kindFields: Record<StationKind, readonly (keyof ModelStation)[]> = {
   queue: ['id', 'name', 'description', 'kind'],
-  agent: ['id', 'name', 'description', 'kind', 'agent', 'route', 'agents', 'wip', 'buffer', 'output', 'checks', 'gate'],
+  agent: [
+    'id',
+    'name',
+    'description',
+    'kind',
+    'agent',
+    'route',
+    'agents',
+    'wip',
+    'buffer',
+    'output',
+    'checks',
+    'gate',
+    'action',
+  ],
   human: ['id', 'name', 'description', 'kind', 'wip', 'gate', 'action'],
   done: ['id', 'name', 'description', 'kind'],
 };
@@ -233,6 +247,11 @@ export function setStationKind(
     for (const [k, v] of Object.entries({ ...s, kind })) {
       if (keep.includes(k as keyof ModelStation)) next[k] = v;
       else dropped.push(k);
+    }
+    // An agent's merge step needs its gate (the schema): an agent without one keeps no action.
+    if (kind === 'agent' && next.gate === undefined && 'action' in next) {
+      delete next.action;
+      dropped.push('action');
     }
     return next as unknown as ModelStation;
   });
@@ -256,9 +275,16 @@ export function removeCheck(line: LineSection, id: string, index: number): Edit<
   });
 }
 
-/** Sets the rework rule ("send back to … at most n times"), or removes it with null. */
+/**
+ * Sets the rework rule ("send back to … at most n times"), or removes it with null. An agent's
+ * merge step goes with its gate (the schema allows action on an agent only with one).
+ */
 export function setGate(line: LineSection, id: string, gate: Gate | null): Edit<'line'> {
-  return setStationField(line, id, 'gate', gate ?? undefined);
+  return mapStation(line, id, (s) => {
+    const { gate: _old, action, ...rest } = s;
+    const keepAction = action !== undefined && (s.kind === 'human' || gate !== null);
+    return { ...rest, ...(gate ? { gate } : {}), ...(keepAction ? { action } : {}) };
+  });
 }
 
 /** Routes a station by lane (lane → agent), or removes the routing with null. */

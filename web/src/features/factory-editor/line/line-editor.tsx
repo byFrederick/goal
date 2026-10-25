@@ -55,7 +55,7 @@ export interface LineEditor {
   lastFocused: React.RefObject<string | undefined>;
 }
 
-const LineEditorContext = createContext<LineEditor | null>(null);
+export const LineEditorContext = createContext<LineEditor | null>(null);
 
 export function useLineEditor(): LineEditor {
   const ctx = use(LineEditorContext);

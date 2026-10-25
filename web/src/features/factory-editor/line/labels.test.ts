@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { LineSection } from '../../../shared/definition/model';
-import { bufferSentence, checkLabel, intakeSummary, previewDetail, reworkSentence, upstreamOf } from './labels';
+import {
+  bufferSentence,
+  checkLabel,
+  intakeSummary,
+  noMergeHint,
+  previewDetail,
+  reworkSentence,
+  upstreamOf,
+} from './labels';
 
 const line: LineSection = {
   stations: [
@@ -27,6 +35,7 @@ describe('line labels', () => {
     expect(previewDetail(at('spec'), line)).toBe('architect × 2');
     expect(previewDetail(at('build'), line)).toBe('3 by lane');
     expect(previewDetail(at('review'), line)).toBe('reviewer, gate');
+    expect(previewDetail({ ...at('review'), action: 'merge' }, line)).toBe('reviewer, gate, merge');
     expect(previewDetail(at('merge'), line)).toBe('you, merge');
     expect(previewDetail(at('done'), line)).toBe('librarian');
     expect(previewDetail(at('done'), { ...line, librarian: null })).toBe('items close');
@@ -47,6 +56,13 @@ describe('line labels', () => {
   it('names a schema check by its contract and a command by itself', () => {
     expect(checkLabel({ kind: 'schema' }, 'spec')).toBe('spec contract');
     expect(checkLabel('pnpm test', undefined)).toBe('pnpm test');
+  });
+
+  it('hints that pull requests stay open when a factory with a repository merges nothing', () => {
+    const open = { ...line, stations: (line.stations ?? []).filter((s) => s.action !== 'merge') };
+    expect(noMergeHint(open, true)).toMatch(/pull requests stay open/);
+    expect(noMergeHint(open, false)).toBeUndefined();
+    expect(noMergeHint(line, true)).toBeUndefined();
   });
 
   it('offers only stations before a gate as where rework goes', () => {

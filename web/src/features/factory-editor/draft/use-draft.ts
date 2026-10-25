@@ -24,7 +24,7 @@ import type { Factory } from '../../../api/types';
 import type { Model, Section, SectionValues } from '../../../shared/definition/model';
 import { DraftSession, type SessionState } from './session';
 
-const DraftSessionContext = createContext<DraftSession | null>(null);
+export const DraftSessionContext = createContext<DraftSession | null>(null);
 
 export interface DraftSessionProviderProps {
   org: string;
