@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"io"
 	"time"
 
@@ -22,6 +23,12 @@ type Sandboxes interface {
 	// not an error.
 	Delete(ctx context.Context, run domain.RunID) error
 }
+
+// ErrSandboxLost means the sandbox or the way to it failed, not the command: the backend could
+// not be reached or failed (a redeploy, a network blip), the box is gone, or a command's stream
+// broke before its outcome. Create, Exec and Process.Wait wrap it; the engine runs the item
+// again in a new sandbox (a command's own exit, a refusal or a broken protocol never wrap it).
+var ErrSandboxLost = errors.New("the sandbox or the connection to it was lost")
 
 // Leftover is a sandbox as Sandboxes.List reports it: the run it was created for and the
 // organization it is labelled with, whose store knows the run.
