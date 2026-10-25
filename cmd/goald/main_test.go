@@ -8,12 +8,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
 
+	"github.com/byFrederick/goal/internal/api"
+	"github.com/byFrederick/goal/internal/egress"
 	"github.com/byFrederick/goal/web"
 )
 
@@ -64,6 +67,16 @@ func TestRoutes_TheGatewayListenerServesOnlyTheGateway(t *testing.T) {
 				t.Errorf("%s: %s served by %s, want %s", tt.name, path, got, tt.want[i])
 			}
 		}
+	}
+}
+
+// The egress proxy forwards to goald exactly the paths goald serves the gateway at: one more on
+// either side would leave boxes without it, or reach what is not the gateway.
+func TestEgress_ForwardsTheGatewaysPaths(t *testing.T) {
+	t.Parallel()
+
+	if got, want := egress.GatewayPaths(), []string{api.GatewayPath, api.RunPath}; !slices.Equal(got, want) {
+		t.Errorf("egress forwards %v, goald serves the gateway at %v", got, want)
 	}
 }
 

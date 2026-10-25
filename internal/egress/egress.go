@@ -37,9 +37,13 @@ var ErrNotPublic = errors.New("destination is not a public address")
 // DialTimeout bounds resolving and connecting to one destination.
 const DialTimeout = 10 * time.Second
 
-// GatewayPaths are goald's paths a box reaches through the proxy, exactly: the MCP gateway and
+// gatewayPaths are goald's paths a box reaches through the proxy, exactly: the MCP gateway and
 // the run's bundle. Any other path, an encoded one included, is 404.
-var GatewayPaths = []string{"/mcp", "/run"}
+var gatewayPaths = []string{"/mcp", "/run"}
+
+// GatewayPaths are the paths the proxy forwards to goald's gateway (goald's api.GatewayPath and
+// api.RunPath, which cmd/goald's test holds it to).
+func GatewayPaths() []string { return slices.Clone(gatewayPaths) }
 
 // Config is the proxy's setup.
 type Config struct {
@@ -111,7 +115,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p.tunnel(w, r)
 	case r.URL.IsAbs():
 		p.forwardHTTP(w, r)
-	case p.gateway != nil && r.URL.RawPath == "" && slices.Contains(GatewayPaths, r.URL.Path):
+	case p.gateway != nil && r.URL.RawPath == "" && slices.Contains(gatewayPaths, r.URL.Path):
 		p.gateway.ServeHTTP(w, r)
 	default:
 		http.NotFound(w, r)
