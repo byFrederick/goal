@@ -406,7 +406,7 @@ tasks:
       - docker compose up -d --wait rustfs
 
   storage:init:
-    desc: Create the bucket if missing and enable versioning
+    desc: Create the bucket if missing (it needs no versioning)
     deps: [build]
     cmds:
       - bin/goal storage init

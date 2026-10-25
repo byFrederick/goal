@@ -36,10 +36,6 @@ func TestDefinitions_Conformance(t *testing.T) {
 
 				return o.ID
 			},
-			LegacyFactory: func(_ *testing.T, org domain.OrgID, id domain.FactoryID, name string) {
-				defs.AddLegacyFactory(org, id, name, "")
-			},
-			LegacyOrg: func(_ *testing.T, org domain.OrgID) { defs.PendLegacyImport(org) },
 		}
 	})
 }

@@ -47,6 +47,19 @@ func Open(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
+// ErrLegacyImportPending is Migrate's refusal of a database where a live organization still has
+// the legacy import of its factory definitions to do: this release no longer has the import
+// (ADR 0005 amendment), the previous one runs it at its start.
+var ErrLegacyImportPending = errors.New("a legacy import of factory definitions is pending: " +
+	"start the previous release of goald once, which imports them, then this one")
+
+// The migrations of the legacy import's record: 00039 made every organization's import pending,
+// 00050 drops the record with the import.
+const (
+	legacyImportPended  = 39
+	legacyImportDropped = 50
+)
+
 // migrationRoles are the roles the migrations grant to. They are cluster-wide, so goal db init
 // creates them (roles.sql), not a migration.
 var migrationRoles = []string{AppRole, AuthRole}
@@ -56,7 +69,9 @@ var migrationRoles = []string{AppRole, AuthRole}
 // one applies each migration and the lock is freed even if the process dies.
 // The lock is held on one pool connection while goose migrates on others, so the pool needs at
 // least two. It applies nothing while a role the migrations grant to is missing (an install
-// from before goal_auth that was not started with goal up); the error wraps ErrRoleMissing.
+// from before goal_auth that was not started with goal up); the error wraps ErrRoleMissing. Nor
+// while a live organization still has a legacy import to do; the error wraps
+// ErrLegacyImportPending.
 func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 	return migrateRequiring(ctx, pool, migrationRoles)
 }
@@ -78,7 +93,16 @@ func migrateRequiring(ctx context.Context, pool *pgxpool.Pool, roles []string) e
 			return fmt.Errorf("lock: %w", err)
 		}
 
-		_, err := p.Up(ctx)
+		version, err := p.GetDBVersion(ctx)
+		if err != nil {
+			return fmt.Errorf("read the version: %w", err)
+		}
+
+		if err := refuseLegacyImport(ctx, pool, version); err != nil {
+			return err
+		}
+
+		_, err = p.Up(ctx)
 
 		return err
 	})
@@ -87,6 +111,35 @@ func migrateRequiring(ctx context.Context, pool *pgxpool.Pool, roles []string) e
 	}
 
 	return errors.Join(err, sqlDB.Close())
+}
+
+// refuseLegacyImport fails with ErrLegacyImportPending when the database, at migration version,
+// still has a legacy import to do: a live organization 00039 recorded pending, or any database
+// from before 00039, which would record every organization pending. A new database (version 0)
+// and one past 00050 have none. It reads on a connection of its own, outside the lock's
+// transaction, which would otherwise keep a lock on the table 00050 drops.
+func refuseLegacyImport(ctx context.Context, pool *pgxpool.Pool, version int64) error {
+	switch {
+	case version == 0 || version >= legacyImportDropped:
+		return nil
+	case version < legacyImportPended:
+		return fmt.Errorf("the database is at migration %d, before the legacy import ran: %w", version, ErrLegacyImportPending)
+	}
+
+	var pending []string
+
+	err := pool.QueryRow(ctx, `
+		SELECT coalesce(array_agg(o.slug ORDER BY o.slug), '{}') FROM legacy_import_pending p
+		JOIN organizations o ON o.id = p.org_id WHERE o.deleted_at IS NULL`).Scan(&pending)
+	if err != nil {
+		return fmt.Errorf("read the legacy import: %w", err)
+	}
+
+	if len(pending) > 0 {
+		return fmt.Errorf("organization %s: %w", strings.Join(pending, ", "), ErrLegacyImportPending)
+	}
+
+	return nil
 }
 
 // requireRoles fails with ErrRoleMissing naming every role of roles the cluster lacks.

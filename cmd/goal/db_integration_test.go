@@ -198,6 +198,12 @@ func TestDB_MigrateUpgradesTheSchemaBeforeTheAuthService(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// That release's goald imported the legacy definitions at its start, which ends the import
+	// 00039 records; a database still pending is not migrated (postgres.ErrLegacyImportPending).
+	if _, err := owner.Exec(t.Context(), `DELETE FROM legacy_import_pending`); err != nil {
+		t.Fatal(err)
+	}
+
 	var before bool
 	if err := d.admin.QueryRow(t.Context(), `SELECT to_regclass('auth."user"') IS NULL`).Scan(&before); err != nil || !before {
 		t.Fatalf("at migration 39 the auth schema exists (%v, %v); the test needs the upgrade's database", before, err)

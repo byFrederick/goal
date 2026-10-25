@@ -34,7 +34,6 @@ func timeless(v domain.DefinitionVersion) domain.DefinitionVersion {
 	v.CreatedAt, v.UpdatedAt, v.PublishedAt = time.Time{}, time.Time{}, time.Time{}
 	v.Manifest = orNil(v.Manifest)
 	v.Source.Manifest = orNil(v.Source.Manifest)
-	v.Source.LegacyVersions = orNil(v.Source.LegacyVersions)
 
 	return v
 }

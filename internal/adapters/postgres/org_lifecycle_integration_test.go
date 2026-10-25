@@ -419,7 +419,7 @@ func TestMigrate_BackfillsAuthOrganizations(t *testing.T) {
 		}
 	}
 
-	migrate(t, db.owner)
+	upgrade(t, db.owner)
 
 	missing := queryStrings(t, owner, `SELECT o.slug FROM organizations o
 		LEFT JOIN auth.organization a ON a.id = o.id AND a.slug = o.slug AND a.name = o.name AND a."createdAt" = o.created_at

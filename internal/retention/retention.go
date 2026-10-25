@@ -13,8 +13,9 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/factorystore"
 	"github.com/byFrederick/goal/internal/ports"
 )
 
@@ -86,14 +87,21 @@ func (p *Purger) Purge(ctx context.Context) ([]domain.OrgID, error) {
 	return purged, errors.Join(errs...)
 }
 
-// deleteObjects removes every version of an organization's objects from the bucket.
+// deleteObjects removes every object under the organization's prefix (domain.OrgPrefix) from the
+// bucket. Only an organization id (a UUID) names a prefix, so it never reaches above or beside
+// that organization's folder. An organization with nothing left deletes nothing, so it is safe
+// to repeat.
 func (p *Purger) deleteObjects(ctx context.Context, org domain.OrgID) error {
-	n, err := factorystore.DeleteOrg(ctx, p.objects, org)
-	if err != nil {
-		return err
+	if err := uuid.Validate(string(org)); err != nil {
+		return fmt.Errorf("delete objects of org %q: not an organization id: %w", org, err)
 	}
 
-	p.log.DebugContext(ctx, "organization objects deleted", slog.String("org_id", string(org)), slog.Int("versions", n))
+	n, err := p.objects.DeletePrefix(ctx, domain.OrgPrefix(org))
+	if err != nil {
+		return fmt.Errorf("delete objects of org %s: %w", org, err)
+	}
+
+	p.log.DebugContext(ctx, "organization objects deleted", slog.String("org_id", string(org)), slog.Int("objects", n))
 
 	return nil
 }

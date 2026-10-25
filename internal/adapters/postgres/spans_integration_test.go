@@ -31,7 +31,7 @@ func TestMigrate_BackfillMatchesTheTrigger(t *testing.T) {
 	before := newTestDB(t, OwnerRole)
 	migrateTo(t, openPool(t, before.owner), 11)
 	copyHistory(t, before, now)
-	migrate(t, before.owner)
+	upgrade(t, before.owner)
 	backfilled := New(openPool(t, before.app))
 
 	ctx := domain.WithOrg(t.Context(), DefaultOrgID)

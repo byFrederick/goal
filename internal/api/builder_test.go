@@ -33,12 +33,12 @@ func (f *flakyObjects) List(ctx context.Context, prefix string) ([]ports.ObjectI
 	return f.ObjectStore.List(ctx, prefix)
 }
 
-func (f *flakyObjects) Get(ctx context.Context, key, version string) (ports.Object, error) {
+func (f *flakyObjects) Get(ctx context.Context, key string) (ports.Object, error) {
 	if f.down.Load() {
 		return ports.Object{}, errBucketDown
 	}
 
-	return f.ObjectStore.Get(ctx, key, version)
+	return f.ObjectStore.Get(ctx, key)
 }
 
 var skillCommit = strings.Repeat("c", 40)

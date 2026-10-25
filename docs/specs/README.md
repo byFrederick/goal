@@ -89,7 +89,7 @@ These keep the specs from colliding. A spec that needs to break one says so in i
 ### New packages and their depguard rules (review)
 | Package | Phase | May import | Rule |
 | --- | --- | --- | --- |
-| `internal/retention` | A (A6) | `domain`, `ports`, `factorystore` (until phase 4 deletes it, PR 4-3) | `retention` rule: no adapters, engine, `api`, AWS or pgx |
+| `internal/retention` | A (A6) | `domain`, `ports` (`factorystore` until PR 4-3 deleted it) | `retention` rule: no adapters, engine, `api`, AWS or pgx |
 | `internal/factorymodel`, `internal/authoring` | B | `domain`, `ports`, `config`, yaml | `definitions` rule + `authoring` rule (B §5.4) |
 | `internal/builder` | D | `domain`, `ports`, `config` | `builder` rule (D §5.2) |
 | `internal/adapters/skillssh` | D | own deps | adapters rule |

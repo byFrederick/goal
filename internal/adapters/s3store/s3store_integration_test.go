@@ -6,19 +6,22 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	"github.com/byFrederick/goal/internal/ports"
 )
 
-// newTestStore returns a store on a fresh, versioned bucket on the S3-compatible server at
-// GOAL_TEST_S3_ENDPOINT (RustFS from compose.yaml; `task test-integration` sets it up) and
-// removes the bucket, every version included, when the test ends.
+// newTestStore returns a store on a fresh bucket, created by EnsureBucket and so without
+// versioning (as on R2), on the S3-compatible server at GOAL_TEST_S3_ENDPOINT (RustFS from
+// compose.yaml; `task test-integration` sets it up), and removes the bucket when the test ends.
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
 
@@ -48,6 +51,8 @@ func newTestStore(t *testing.T) *Store {
 	return s
 }
 
+// removeBucket deletes every object version and delete marker in the bucket, so it also removes
+// the bucket of the test that turns versioning on, and then the bucket.
 func removeBucket(t *testing.T, s *Store) {
 	t.Helper()
 
@@ -85,7 +90,20 @@ func (s *Store) deleteVersion(ctx context.Context, t *testing.T, key, version *s
 	}
 }
 
-func TestEnsureBucket_IsIdempotent(t *testing.T) {
+// versioning is the bucket's versioning status: empty when it was never turned on.
+func versioning(t *testing.T, s *Store) types.BucketVersioningStatus {
+	t.Helper()
+
+	out, err := s.client.GetBucketVersioning(t.Context(), &s3.GetBucketVersioningInput{Bucket: aws.String(s.bucket)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return out.Status
+}
+
+// The bucket needs no versioning (R2 has none): EnsureBucket never turns it on.
+func TestEnsureBucket_IsIdempotentAndLeavesVersioningOff(t *testing.T) {
 	t.Parallel()
 
 	s := newTestStore(t)
@@ -94,127 +112,128 @@ func TestEnsureBucket_IsIdempotent(t *testing.T) {
 	if err != nil || created {
 		t.Fatalf("second EnsureBucket = %v, %v; want existing bucket, no error", created, err)
 	}
+
+	if status := versioning(t, s); status != "" {
+		t.Errorf("versioning = %q; want never enabled", status)
+	}
 }
 
-// Rollback depends on this: every write keeps the earlier content readable by version id.
-func TestPut_KeepsEveryVersionReadable(t *testing.T) {
+// A write replaces the object, and its ETag says which content is there.
+func TestPut_ReplacesTheObject(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	s := newTestStore(t)
-	key := "factories/acme/agents/writer.md"
+	key := "catalog/skills/index.json"
 
-	v1, err := s.Put(ctx, key, []byte("# writer v1\n"))
+	v1, err := s.Put(ctx, key, []byte("[1]"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	v2, err := s.Put(ctx, key, []byte("# writer v2\n"))
+	v2, err := s.Put(ctx, key, []byte("[1,2]"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if v1.Version == "" || v1.Version == v2.Version {
-		t.Fatalf("versions %q and %q: want two distinct ids", v1.Version, v2.Version)
+	if v1.ETag == "" || v1.ETag == v2.ETag || v2.Size != int64(len("[1,2]")) {
+		t.Fatalf("Put = %+v then %+v; want two distinct ETags and the size", v1, v2)
 	}
 
-	for _, tc := range []struct{ version, want string }{{"", "# writer v2\n"}, {v1.Version, "# writer v1\n"}} {
-		got, err := s.Get(ctx, key, tc.version)
-		if err != nil || string(got.Body) != tc.want {
-			t.Errorf("Get(%q) = %q, %v; want %q", tc.version, got.Body, err, tc.want)
+	got, err := s.Get(ctx, key)
+	if err != nil || string(got.Body) != "[1,2]" || got.ObjectInfo != v2 {
+		t.Errorf("Get = %+v %q, %v; want the second write %+v", got.ObjectInfo, got.Body, err, v2)
+	}
+}
+
+// Delete removes an object for good; deleting a missing key is not an error.
+func TestDelete_RemovesTheObject(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	s := newTestStore(t)
+	key := "orgs/acme/knowledge/0123"
+
+	if _, err := s.Put(ctx, key, []byte("doc")); err != nil {
+		t.Fatal(err)
+	}
+
+	for range 2 {
+		if err := s.Delete(ctx, key); err != nil {
+			t.Fatalf("Delete = %v", err)
 		}
 	}
 
-	if err := s.Delete(ctx, key); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := s.Get(ctx, key, ""); !errors.Is(err, ports.ErrNotFound) {
+	if _, err := s.Get(ctx, key); !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("Get after Delete: %v, want ErrNotFound", err)
 	}
 
-	if got, err := s.Get(ctx, key, v2.Version); err != nil || string(got.Body) != "# writer v2\n" {
-		t.Errorf("Get(v2) after Delete = %q, %v; want the deleted content restorable", got.Body, err)
+	if got, err := s.List(ctx, "orgs/"); err != nil || len(got) != 0 {
+		t.Errorf("List after Delete = %+v, %v; want nothing", got, err)
 	}
 }
 
-func TestList_ReturnsCurrentObjectsUnderThePrefix(t *testing.T) {
+func TestList_ReturnsObjectsUnderThePrefix(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	s := newTestStore(t)
 
-	for _, key := range []string{"factories/b/factory.yaml", "factories/a/factory.yaml", "factories/a/gone.md", "other/x.md"} {
+	for _, key := range []string{"catalog/b/x.md", "catalog/a/x.md", "catalog/a/gone.md", "other/x.md"} {
 		if _, err := s.Put(ctx, key, []byte(key)); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	latest, err := s.Put(ctx, "factories/a/factory.yaml", []byte("changed"))
+	latest, err := s.Put(ctx, "catalog/a/x.md", []byte("changed"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := s.Delete(ctx, "factories/a/gone.md"); err != nil {
+	if err := s.Delete(ctx, "catalog/a/gone.md"); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := s.List(ctx, "factories/")
+	got, err := s.List(ctx, "catalog/")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(got) != 2 || got[0].Key != "factories/a/factory.yaml" || got[1].Key != "factories/b/factory.yaml" {
-		t.Fatalf("List = %+v, want factories/a/factory.yaml and factories/b/factory.yaml", got)
-	}
-
-	if got[0].Version != latest.Version || got[0].Size != int64(len("changed")) {
-		t.Errorf("List entry %+v, want the current version %s", got[0], latest.Version)
+	if len(got) != 2 || got[0] != latest || got[1].Key != "catalog/b/x.md" {
+		t.Fatalf("List = %+v, want %+v and catalog/b/x.md", got, latest)
 	}
 }
 
-// A purge leaves nothing under the prefix, no old version and no delete marker, and nothing
-// outside it is touched; an empty prefix, which would name the whole bucket, is refused.
-func TestDeletePrefix_RemovesEveryVersionUnderThePrefixOnly(t *testing.T) {
+// A purge leaves nothing under the prefix, across list pages (at most 1000 keys each), and
+// touches nothing outside it; an empty prefix, which would name the whole bucket, is refused.
+func TestDeletePrefix_RemovesEveryObjectUnderThePrefixOnly(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	s := newTestStore(t)
 
-	var under []ports.ObjectInfo
+	const under = 1003
 
-	for _, key := range []string{"orgs/a/x.yaml", "orgs/a/x.yaml", "orgs/a/blobs/y", "orgs/ab/z.yaml"} {
-		info, err := s.Put(ctx, key, []byte(key))
-		if err != nil {
-			t.Fatal(err)
-		}
+	putMany(t, s, "orgs/a/blobs/", under)
 
-		if strings.HasPrefix(key, "orgs/a/") {
-			under = append(under, info)
-		}
-	}
-
-	if err := s.Delete(ctx, "orgs/a/blobs/y"); err != nil {
+	if _, err := s.Put(ctx, "orgs/ab/z.yaml", []byte("z")); err != nil {
 		t.Fatal(err)
 	}
 
-	if n, err := s.DeletePrefix(ctx, "orgs/a/"); err != nil || n != 4 {
-		t.Fatalf("DeletePrefix = %d, %v; want 3 versions and 1 delete marker", n, err)
+	if n, err := s.DeletePrefix(ctx, "orgs/a/"); err != nil || n != under {
+		t.Fatalf("DeletePrefix = %d, %v; want %d objects removed", n, err, under)
 	}
 
-	page, err := s.client.ListObjectVersions(ctx, &s3.ListObjectVersionsInput{Bucket: aws.String(s.bucket), Prefix: aws.String("orgs/a/")})
-	if err != nil || len(page.Versions)+len(page.DeleteMarkers) != 0 {
-		t.Errorf("versions left under orgs/a/: %d and %d markers, %v; want none", len(page.Versions), len(page.DeleteMarkers), err)
+	if got, err := s.List(ctx, "orgs/a/"); err != nil || len(got) != 0 {
+		t.Errorf("List after the purge = %d objects, %v; want none", len(got), err)
 	}
 
-	for _, v := range under {
-		if _, err := s.Get(ctx, v.Key, v.Version); !errors.Is(err, ports.ErrNotFound) {
-			t.Errorf("Get(%s, %s) after the purge = %v; want ErrNotFound", v.Key, v.Version, err)
-		}
-	}
-
-	if _, err := s.Get(ctx, "orgs/ab/z.yaml", ""); err != nil {
+	if _, err := s.Get(ctx, "orgs/ab/z.yaml"); err != nil {
 		t.Errorf("an object outside the prefix = %v; want it untouched", err)
+	}
+
+	if n, err := s.DeletePrefix(ctx, "orgs/a/"); err != nil || n != 0 {
+		t.Errorf("DeletePrefix again = %d, %v; want nothing left to remove", n, err)
 	}
 
 	if _, err := s.DeletePrefix(ctx, ""); err == nil {
@@ -222,28 +241,43 @@ func TestDeletePrefix_RemovesEveryVersionUnderThePrefixOnly(t *testing.T) {
 	}
 }
 
-func TestGet_MissingKeyOrVersionIsNotFound(t *testing.T) {
-	t.Parallel()
+// putMany writes n small objects under prefix, a few at a time.
+func putMany(t *testing.T, s *Store, prefix string, n int) {
+	t.Helper()
 
-	ctx := t.Context()
-	s := newTestStore(t)
+	var (
+		wg   sync.WaitGroup
+		errs = make([]error, n)
+		sem  = make(chan struct{}, 32)
+	)
 
-	if _, err := s.Get(ctx, "factories/none/factory.yaml", ""); !errors.Is(err, ports.ErrNotFound) {
-		t.Errorf("missing key: %v, want ErrNotFound", err)
+	for i := range n {
+		wg.Go(func() {
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			_, errs[i] = s.Put(t.Context(), fmt.Sprintf("%s%04d", prefix, i), []byte("x"))
+		})
 	}
 
-	if _, err := s.Put(ctx, "k", []byte("v")); err != nil {
+	wg.Wait()
+
+	if err := errors.Join(errs...); err != nil {
 		t.Fatal(err)
 	}
+}
 
-	if _, err := s.Get(ctx, "k", "00000000-0000-0000-0000-000000000000"); !errors.Is(err, ports.ErrNotFound) {
-		t.Errorf("missing version: %v, want ErrNotFound", err)
+func TestGet_MissingKeyIsNotFound(t *testing.T) {
+	t.Parallel()
+
+	if _, err := newTestStore(t).Get(t.Context(), "orgs/none/blobs/0123"); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("missing key: %v, want ErrNotFound", err)
 	}
 }
 
 // Definition blobs are written once: a second write of a key keeps the first object, on the
-// server's conditional write and on the fallback for servers without one. A key whose current
-// version is a delete marker is absent.
+// server's conditional write and on the fallback for servers without one. A deleted key is
+// absent and written again.
 func TestPutIfAbsent_WritesOnce(t *testing.T) {
 	t.Parallel()
 
@@ -276,7 +310,7 @@ func checkWritesOnce(t *testing.T, s *Store) {
 	const key = "orgs/acme/blobs/0123"
 
 	first, created, err := s.PutIfAbsent(ctx, key, []byte("first"))
-	if err != nil || !created || first.Version == "" || first.Size != int64(len("first")) {
+	if err != nil || !created || first.ETag == "" || first.Size != int64(len("first")) {
 		t.Fatalf("first PutIfAbsent = %+v, %v, %v; want it created", first, created, err)
 	}
 
@@ -285,26 +319,67 @@ func checkWritesOnce(t *testing.T, s *Store) {
 		t.Errorf("second PutIfAbsent = %+v, %v, %v; want %+v, not created", again, created, err, first)
 	}
 
-	if got, err := s.Get(ctx, key, ""); err != nil || string(got.Body) != "first" || got.Version != first.Version {
-		t.Errorf("Get = %q %s, %v; want the first content, version %s", got.Body, got.Version, err, first.Version)
+	if got, err := s.Get(ctx, key); err != nil || string(got.Body) != "first" || got.ObjectInfo != first {
+		t.Errorf("Get = %+v %q, %v; want the first content %+v", got.ObjectInfo, got.Body, err, first)
 	}
 
 	checkAbsentAfterDelete(t, s, first)
 }
 
-// checkAbsentAfterDelete deletes first's key: a key whose current version is a delete marker
-// is written again.
+// checkAbsentAfterDelete deletes first's key: a deleted key is written again.
 func checkAbsentAfterDelete(t *testing.T, s *Store, first ports.ObjectInfo) {
 	t.Helper()
 
-	ctx, key := t.Context(), first.Key
-
-	if err := s.Delete(ctx, key); err != nil {
+	if err := s.Delete(t.Context(), first.Key); err != nil {
 		t.Fatal(err)
 	}
 
-	after, created, err := s.PutIfAbsent(ctx, key, []byte("after delete"))
-	if err != nil || !created || after.Version == first.Version {
-		t.Errorf("PutIfAbsent after Delete = %+v, %v, %v; want a new version", after, created, err)
+	after, created, err := s.PutIfAbsent(t.Context(), first.Key, []byte("after delete"))
+	if err != nil || !created || after.ETag == first.ETag {
+		t.Errorf("PutIfAbsent after Delete = %+v, %v, %v; want it written again", after, created, err)
+	}
+}
+
+// A bucket from before phase 4 still has versioning on: it keeps working, and nothing the store
+// lists or reads is an older version or a deleted key.
+func TestStore_WorksOnABucketWithVersioning(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	s := newTestStore(t)
+
+	_, err := s.client.PutBucketVersioning(ctx, &s3.PutBucketVersioningInput{
+		Bucket:                  aws.String(s.bucket),
+		VersioningConfiguration: &types.VersioningConfiguration{Status: types.BucketVersioningStatusEnabled},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.Put(ctx, "orgs/a/x.md", []byte("v1")); err != nil {
+		t.Fatal(err)
+	}
+
+	latest, err := s.Put(ctx, "orgs/a/x.md", []byte("v2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, err := s.List(ctx, "orgs/"); err != nil || len(got) != 1 || got[0] != latest {
+		t.Errorf("List = %+v, %v; want only the current %+v", got, err, latest)
+	}
+
+	checkAbsentAfterDelete(t, s, latest)
+
+	if _, err := s.Get(ctx, "orgs/b/none.md"); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("Get of a missing key = %v; want ErrNotFound", err)
+	}
+
+	if n, err := s.DeletePrefix(ctx, "orgs/"); err != nil || n != 1 {
+		t.Errorf("DeletePrefix = %d, %v; want the one current object", n, err)
+	}
+
+	if got, err := s.List(ctx, "orgs/"); err != nil || len(got) != 0 {
+		t.Errorf("List after DeletePrefix = %+v, %v; want nothing", got, err)
 	}
 }

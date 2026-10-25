@@ -17,6 +17,7 @@ import (
 
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/ports/porttest"
 )
 
 // Harness is one definition store under test and the ports of the same database it is checked
@@ -25,20 +26,15 @@ type Harness struct {
 	Definitions ports.DefinitionStore
 	// Notices announces Definitions' commits.
 	Notices ports.DefinitionNotices
-	// Objects is the bucket Definitions keeps blobs in (at domain.BlobKey).
-	Objects ports.ObjectStore
+	// Objects is the bucket Definitions keeps blobs in (at domain.BlobKey); the in-memory one
+	// counts writes, so the suite sees that a blob is written once.
+	Objects *porttest.ObjectStore
 	// Items is the item store of the same database: publish and restore move its items.
 	Items ports.Store
 	// Audit reads the audit log Definitions appends to.
 	Audit ports.Audit
 	// NewOrg returns a new organization.
 	NewOrg func(t *testing.T) domain.OrgID
-	// LegacyFactory registers a factory with no version in org, as goald did before versions
-	// existed (SaveFactory).
-	LegacyFactory func(t *testing.T, org domain.OrgID, id domain.FactoryID, name string)
-	// LegacyOrg makes org's legacy import pending, as migration 00039 did for every
-	// organization that existed before versions.
-	LegacyOrg func(t *testing.T, org domain.OrgID)
 }
 
 // Run runs the suite. Tests run in parallel and call newHarness once each; each test works in
@@ -73,9 +69,6 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Restore_Guards", testRestoreGuards},
 		{"SetPaused_PausesAndResumes", testSetPaused},
 		{"DeleteUnpublished_RefusesAPublishedFactory", testDeleteUnpublished},
-		{"ImportLegacy_PublishesVersionOneOnce", testImportLegacy},
-		{"ImportLegacy_InvalidBecomesADraft", testImportLegacyDraft},
-		{"LegacyImportPending_UntilEnded", testLegacyImportPending},
 		{"Notices_AfterEveryCommit", testNotices},
 		{"Tenancy_NoOrgIsAnError", testNoOrg},
 		{"Tenancy_OtherOrgSeesNothing", testOtherOrg},
@@ -105,11 +98,10 @@ const (
 )
 
 var (
-	t0       = time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
-	local    = domain.LocalUser
-	agent    = domain.Actor{Kind: domain.ActorAgent, ID: "investigator", Name: "investigator"}
-	importer = domain.Actor{Kind: domain.ActorSystem, ID: "legacy-import", Name: "legacy-import"}
-	blank    = domain.VersionSource{Kind: domain.SourceBlank}
+	t0    = time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
+	local = domain.LocalUser
+	agent = domain.Actor{Kind: domain.ActorAgent, ID: "investigator", Name: "investigator"}
+	blank = domain.VersionSource{Kind: domain.SourceBlank}
 )
 
 // fixture is one test's harness and organization. It holds the test's T so the test bodies

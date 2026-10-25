@@ -146,12 +146,10 @@ linters:
               desc: adapters implement ports; they never call the engine
             - pkg: github.com/byFrederick/goal/internal/config
               desc: adapters move bytes; loading and validating factories is internal/config's job
-            - pkg: github.com/byFrederick/goal/internal/factorystore
-              desc: adapters implement ports; the factory layout in the bucket is factorystore's job
             - pkg: github.com/byFrederick/goal/internal/api
               desc: adapters implement ports; the HTTP API calls them, never the reverse
         definitions:
-          files: ["**/internal/config/**", "**/internal/factorystore/**", "**/internal/definitions/**", "**/internal/factorymodel/**", "**/internal/authoring/**"]
+          files: ["**/internal/config/**", "**/internal/definitions/**", "**/internal/factorymodel/**", "**/internal/authoring/**"]
           deny:
             - pkg: github.com/byFrederick/goal/internal/adapters
               desc: factory definitions reach storage only through ports.ObjectStore
@@ -179,8 +177,6 @@ linters:
           deny:
             - pkg: github.com/byFrederick/goal/internal/definitions
               desc: authoring writes definitions through ports.DefinitionStore; goald's read cache is a sibling
-            - pkg: github.com/byFrederick/goal/internal/factorystore
-              desc: the legacy bucket layout is read once by the import, never by authoring
             - pkg: github.com/byFrederick/goal/internal/api
               desc: the HTTP API calls authoring through api.Definitions, never the reverse
             - pkg: github.com/byFrederick/goal/internal/gateway
@@ -194,8 +190,6 @@ linters:
               desc: the gateway reaches secrets and events through ports and its own interfaces
             - pkg: github.com/byFrederick/goal/internal/engine
               desc: the gateway serves tools; it never drives the engine
-            - pkg: github.com/byFrederick/goal/internal/factorystore
-              desc: definitions arrive through gateway.Definitions; cmd/goald wires the bucket
             - pkg: github.com/aws
               desc: AWS access belongs in internal/adapters
             - pkg: github.com/jackc/pgx
@@ -205,8 +199,6 @@ linters:
           deny:
             - pkg: github.com/byFrederick/goal/internal/adapters
               desc: the API reaches the store and the engine through its own interfaces; cmd/goald wires adapters
-            - pkg: github.com/byFrederick/goal/internal/factorystore
-              desc: factory definitions arrive through api.Factories
             - pkg: github.com/byFrederick/goal/internal/definitions
               desc: factory definitions arrive through api.Factories; cmd/goald wires the cache
             - pkg: github.com/byFrederick/goal/internal/factorymodel
@@ -236,8 +228,6 @@ linters:
               desc: the factory model is authoring's
             - pkg: github.com/byFrederick/goal/internal/definitions
               desc: goald's definitions cache is a sibling
-            - pkg: github.com/byFrederick/goal/internal/factorystore
-              desc: the legacy bucket layout is read once by the import, never by the builder
             - pkg: github.com/byFrederick/goal/internal/gateway
               desc: the gateway is a sibling HTTP component
             - pkg: github.com/aws

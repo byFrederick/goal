@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/factorystore"
 	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/ports/porttest"
 	"github.com/byFrederick/goal/internal/retention"
@@ -53,7 +52,7 @@ func newFixture(t *testing.T) *fixture {
 		factory := factories[i]
 		f.store.AddFactory(o.ID, factory)
 
-		if _, err := f.objects.Put(t.Context(), factorystore.Prefix(o.ID, string(factory))+"factory.yaml", []byte("x")); err != nil {
+		if _, err := f.objects.Put(t.Context(), domain.BlobKey(o.ID, domain.HashBlob([]byte("x"))), []byte("x")); err != nil {
 			t.Fatal(err)
 		}
 
@@ -81,7 +80,7 @@ func (f *fixture) purger(t *testing.T, objects ports.ObjectStore) *retention.Pur
 func (f *fixture) objectsOf(t *testing.T, o domain.Org) int {
 	t.Helper()
 
-	got, err := f.objects.List(t.Context(), factorystore.OrgPrefix(o.ID))
+	got, err := f.objects.List(t.Context(), domain.OrgPrefix(o.ID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +144,7 @@ type failingFor struct {
 }
 
 func (b failingFor) DeletePrefix(ctx context.Context, prefix string) (int, error) {
-	if prefix == factorystore.OrgPrefix(b.org) {
+	if prefix == domain.OrgPrefix(b.org) {
 		return 0, errors.New("bucket unavailable")
 	}
 

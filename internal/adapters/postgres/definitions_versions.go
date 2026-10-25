@@ -309,140 +309,6 @@ func (d *Definitions) restore(ctx context.Context, q *db.Queries, f db.LockFacto
 		map[string]any{"from": deref32(from.Number), "to": v.Number}))
 }
 
-// ImportLegacy implements ports.DefinitionStore. A factory row of another organization makes
-// the insert fail on its primary key: ErrConflict.
-func (d *Definitions) ImportLegacy(ctx context.Context, i ports.LegacyImport) (domain.DefinitionVersion, bool, error) {
-	id, err := uuid.Parse(string(i.ID))
-	if err != nil {
-		return domain.DefinitionVersion{}, false, orgFirst(ctx, fmt.Errorf("import legacy: id %q: %w", i.ID, domain.ErrInvalid))
-	}
-
-	p, err := importedVersion(i, id)
-	if err != nil {
-		return domain.DefinitionVersion{}, false, fmt.Errorf("import legacy %s: %w", i.ID, err)
-	}
-
-	var v domain.DefinitionVersion
-
-	err = d.store.inTx(ctx, func(q *db.Queries) error {
-		f, err := q.LockFactory(ctx, id)
-		exists := err == nil
-
-		switch {
-		case err != nil && !notFound(err):
-			return fmt.Errorf("lock factory: %w", err)
-		case exists:
-			if has, err := q.HasVersions(ctx, id); err != nil || has {
-				return err
-			}
-		}
-
-		v, err = importLegacy(ctx, q, i, p, exists, f)
-
-		return err
-	})
-	if err != nil {
-		return domain.DefinitionVersion{}, false, fmt.Errorf("import legacy %s: %w", i.ID, err)
-	}
-
-	return v, v.ID != "", nil
-}
-
-// LegacyImportPending implements ports.DefinitionStore: the organization has a row in
-// legacy_import_pending (migration 00039).
-func (d *Definitions) LegacyImportPending(ctx context.Context) (bool, error) {
-	var pending bool
-
-	err := d.store.inTx(ctx, func(q *db.Queries) error {
-		var err error
-
-		pending, err = q.LegacyImportPending(ctx)
-
-		return err
-	})
-	if err != nil {
-		return false, fmt.Errorf("read the legacy import: %w", err)
-	}
-
-	return pending, nil
-}
-
-// EndLegacyImport implements ports.DefinitionStore.
-func (d *Definitions) EndLegacyImport(ctx context.Context) error {
-	if err := d.store.inTx(ctx, func(q *db.Queries) error { return q.EndLegacyImport(ctx) }); err != nil {
-		return fmt.Errorf("end the legacy import: %w", err)
-	}
-
-	return nil
-}
-
-// importLegacy imports i, as p, into a factory that has no version yet.
-func importLegacy(ctx context.Context, q *db.Queries, i ports.LegacyImport, p db.InsertVersionParams, exists bool,
-	f db.LockFactoryRow,
-) (domain.DefinitionVersion, error) {
-	if err := nameFree(ctx, q, p.FactoryID, i.Name); err != nil {
-		return domain.DefinitionVersion{}, err
-	}
-
-	if err := knownBlobs(ctx, q, i.Manifest); err != nil {
-		return domain.DefinitionVersion{}, err
-	}
-
-	if err := importFactory(ctx, q, i, p.FactoryID, exists, f); err != nil {
-		return domain.DefinitionVersion{}, err
-	}
-
-	v, err := insertVersion(ctx, q, p)
-	if err != nil || !i.Publish {
-		return v, err
-	}
-
-	err = pointFactory(ctx, q, db.PointFactoryParams{ID: p.FactoryID, VersionID: &p.ID, Number: 1, Name: i.Name, Title: optional(i.Title)})
-	if err != nil {
-		return domain.DefinitionVersion{}, err
-	}
-
-	return v, appendAudit(ctx, q, versionEntry(i.By, domain.AuditDefinitionPublished, v,
-		map[string]any{"number": 1, "message": i.Message, "moved": 0}))
-}
-
-// importedVersion is the insert of an import: version 1, or a draft when it does not publish.
-func importedVersion(i ports.LegacyImport, id uuid.UUID) (db.InsertVersionParams, error) {
-	p, err := newDraft(i.Manifest, i.Source, i.By)
-	if err != nil {
-		return db.InsertVersionParams{}, err
-	}
-
-	p.FactoryID = id
-
-	if i.Publish {
-		by := i.By.Ref()
-		p.State, p.Number, p.Message, p.PublishedBy = string(domain.VersionPublished), int32ptr(1), i.Message, &by
-	}
-
-	return p, nil
-}
-
-// importFactory creates the imported factory's row, or gives the row goald registered before
-// versions existed the import's name and title (it keeps no creator: nobody recorded one).
-func importFactory(ctx context.Context, q *db.Queries, i ports.LegacyImport, id uuid.UUID, exists bool, f db.LockFactoryRow) error {
-	if exists {
-		// A draft import points nowhere yet; PointFactory with no version only renames.
-		return pointFactory(ctx, q, db.PointFactoryParams{
-			ID: id, VersionID: f.CurrentVersionID, Number: f.LastVersionNumber, Name: i.Name, Title: optional(i.Title),
-		})
-	}
-
-	by := i.By.Ref()
-
-	if err := q.InsertFactory(ctx, db.InsertFactoryParams{ID: id, Name: i.Name, Title: optional(i.Title), CreatedBy: &by}); err != nil {
-		return factoryRuleError(err, i.ID, i.Name)
-	}
-
-	return appendAudit(ctx, q, factoryEntry(i.By, domain.AuditFactoryCreated, i.ID,
-		map[string]any{auditName: i.Name, "source": string(i.Source.Kind)}))
-}
-
 // lockDraft locks f's open draft and checks it is at revision. No draft is noDraft, another
 // revision ErrConflict.
 func lockDraft(ctx context.Context, q *db.Queries, f db.LockFactoryRow, revision int64, noDraft error) (db.DefinitionVersion, error) {
@@ -570,7 +436,7 @@ func newDraft(m domain.Manifest, src domain.VersionSource, by domain.Actor) (db.
 
 	source, err := json.Marshal(sourceDoc{
 		Kind: src.Kind, Template: src.Template, Factory: src.Factory, Version: string(src.Version),
-		Manifest: src.Manifest, LegacyVersions: src.LegacyVersions,
+		Manifest: src.Manifest,
 	})
 	if err != nil {
 		return db.InsertVersionParams{}, fmt.Errorf("source: %w", err)

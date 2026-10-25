@@ -90,7 +90,7 @@ const usage = `usage:
                                                   --expires 1d to 90d, default 90d). The secret is printed
                                                   once, alone on stdout: store it as GOAL_API_KEY
   goal key revoke <name|id>                       revoke a key: anything using it stops working at once
-  goal storage init                               create the bucket if missing and enable versioning
+  goal storage init                               create the bucket if missing
   goal catalog skills sync --file <sources.yaml> [--search <q>]... [--top <n>]
                                                   fetch skills.sh skills (a YAML list of
                                                   owner/repo@skill[#commit], plus the top n of each
@@ -268,7 +268,7 @@ func storageInit(ctx context.Context, out *printer, getenv func(string) string) 
 		state = "created"
 	}
 
-	out.printf("✓ bucket %s %s, versioning enabled\n", store.Bucket(), state)
+	out.printf("✓ bucket %s %s\n", store.Bucket(), state)
 
 	return nil
 }

@@ -266,7 +266,7 @@ func (d *Definitions) PutBlobs(ctx context.Context, files map[string][]byte) (do
 func (d *Definitions) upload(ctx context.Context, org domain.OrgID, h domain.BlobHash, body []byte) error {
 	key := domain.BlobKey(org, h)
 
-	info, created, err := d.objects.PutIfAbsent(ctx, key, body)
+	_, created, err := d.objects.PutIfAbsent(ctx, key, body)
 	if err != nil {
 		return fmt.Errorf("blob %s: %w", h, err)
 	}
@@ -275,7 +275,7 @@ func (d *Definitions) upload(ctx context.Context, org domain.OrgID, h domain.Blo
 		return nil
 	}
 
-	if obj, err := d.objects.Get(ctx, key, info.Version); err == nil && domain.HashBlob(obj.Body) == h {
+	if obj, err := d.objects.Get(ctx, key); err == nil && domain.HashBlob(obj.Body) == h {
 		return nil
 	} else if err != nil && !errors.Is(err, ports.ErrNotFound) {
 		return fmt.Errorf("blob %s: read the object there: %w", h, err)
@@ -308,7 +308,7 @@ func (d *Definitions) Blob(ctx context.Context, h domain.BlobHash) ([]byte, erro
 		return nil, fmt.Errorf("blob %s: %w", h, ports.ErrNotFound)
 	}
 
-	obj, err := d.objects.Get(ctx, domain.BlobKey(org, h), "")
+	obj, err := d.objects.Get(ctx, domain.BlobKey(org, h))
 	if err != nil {
 		return nil, fmt.Errorf("blob %s: %w", h, err)
 	}
@@ -601,12 +601,11 @@ func actorOrZero(ref *string) (domain.Actor, error) {
 
 // sourceDoc is definition_versions.source.
 type sourceDoc struct {
-	Kind           domain.SourceKind `json:"kind,omitempty"`
-	Template       string            `json:"template,omitempty"`
-	Factory        domain.FactoryID  `json:"factory,omitempty"`
-	Version        string            `json:"version,omitempty"`
-	Manifest       domain.Manifest   `json:"manifest,omitempty"`
-	LegacyVersions map[string]string `json:"legacy_versions,omitempty"`
+	Kind     domain.SourceKind `json:"kind,omitempty"`
+	Template string            `json:"template,omitempty"`
+	Factory  domain.FactoryID  `json:"factory,omitempty"`
+	Version  string            `json:"version,omitempty"`
+	Manifest domain.Manifest   `json:"manifest,omitempty"`
 }
 
 func versionFrom(r db.DefinitionVersion) (domain.DefinitionVersion, error) {
@@ -637,7 +636,7 @@ func versionFrom(r db.DefinitionVersion) (domain.DefinitionVersion, error) {
 
 	v.Source = domain.VersionSource{
 		Kind: src.Kind, Template: src.Template, Factory: src.Factory, Version: domain.DefinitionVersionID(src.Version),
-		Manifest: src.Manifest, LegacyVersions: src.LegacyVersions,
+		Manifest: src.Manifest,
 	}
 
 	var errs [3]error

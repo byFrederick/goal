@@ -2,7 +2,6 @@ package definitionstest
 
 import (
 	"bytes"
-	"context"
 	"maps"
 	"slices"
 	"strings"
@@ -109,15 +108,14 @@ func testPutBlobs(f *fixture) {
 
 	key := domain.BlobKey(f.org, m["a.md"])
 
-	first, err := f.Objects.Get(ctx, key, "")
-	if err != nil || string(first.Body) != same {
-		t.Fatalf("object %s = %+v, %v; want the blob's content", key, first, err)
+	if got, err := f.Objects.Get(ctx, key); err != nil || string(got.Body) != same {
+		t.Fatalf("object %s = %+v, %v; want the blob's content", key, got, err)
 	}
 
 	f.blobs(t, map[string]string{"c.md": same})
 
-	if after, err := f.Objects.Get(ctx, key, ""); err != nil || after.Version != first.Version {
-		t.Errorf("object %s after a second put = %+v, %v; want version %s untouched", key, after, err, first.Version)
+	if n := f.Objects.Writes(key); n != 1 {
+		t.Errorf("object %s written %d times after a second put; want once", key, n)
 	}
 
 	for path, content := range files {
@@ -261,131 +259,4 @@ func testDeleteUnpublished(f *fixture) {
 	}
 
 	expect(t, "DeleteUnpublished of an unknown factory", f.Definitions.DeleteUnpublished(ctx, newFactoryID(), local), ports.ErrNotFound)
-}
-
-func testImportLegacy(f *fixture) {
-	t := f.t
-	ctx := f.ctx(t)
-	id := newFactoryID()
-	f.LegacyFactory(t, f.org, id, "legacy-name")
-
-	imp := ports.LegacyImport{
-		ID: id, Name: acme, Title: acmeTitle, Manifest: f.blobs(t, tree(acme)), Publish: true, By: importer,
-		Source:  domain.VersionSource{Kind: domain.SourceLegacy, LegacyVersions: map[string]string{factoryYAML: "v1", promptPath: "v7"}},
-		Message: "Imported from orgs/" + string(f.org) + "/factories/" + string(id) + "/",
-	}
-
-	v, imported, err := f.Definitions.ImportLegacy(ctx, imp)
-	if err != nil || !imported {
-		t.Fatalf("ImportLegacy = %v, %v; want imported", imported, err)
-	}
-
-	checkVersion(t, "imported version", v, domain.DefinitionVersion{
-		OrgID: f.org, FactoryID: id, State: domain.VersionPublished, Number: 1, Revision: 1, Manifest: imp.Manifest,
-		Message: imp.Message, Source: imp.Source, CreatedBy: importer, UpdatedBy: importer, PublishedBy: importer,
-	})
-
-	// The adopted row keeps who created it: nobody recorded that before versions.
-	checkRecord(t, "adopted factory", f.record(t, id), ports.FactoryRecord{
-		ID: id, OrgID: f.org, Name: acme, Title: acmeTitle, Current: ref(v), LastVersionNumber: 1,
-	})
-
-	again, imported, err := f.Definitions.ImportLegacy(ctx, imp)
-	if err != nil || imported || again.ID != "" {
-		t.Errorf("ImportLegacy again = %+v, %v, %v; want a no-op", again, imported, err)
-	}
-
-	if vs, err := f.Definitions.Versions(ctx, id, 0, 10); err != nil || len(vs) != 1 {
-		t.Errorf("Versions = %+v, %v; want only v1", vs, err)
-	}
-
-	checkEntry(t, f.audited(t, id, domain.AuditDefinitionPublished), importer, domain.AuditTargetVersion, string(v.ID),
-		map[string]any{"number": 1})
-
-	// A factory with no row yet gets one.
-	imp.ID, imp.Name = newFactoryID(), "fresh"
-
-	fresh, imported, err := f.Definitions.ImportLegacy(ctx, imp)
-	if err != nil || !imported {
-		t.Fatalf("ImportLegacy of a factory with no row = %v, %v; want imported", imported, err)
-	}
-
-	checkRecord(t, "new factory", f.record(t, imp.ID), ports.FactoryRecord{
-		ID: imp.ID, OrgID: f.org, Name: "fresh", Title: acmeTitle, Current: ref(fresh), LastVersionNumber: 1, CreatedBy: importer,
-	})
-	checkEntry(t, f.audited(t, imp.ID, domain.AuditFactoryCreated), importer, domain.AuditTargetFactory, string(imp.ID),
-		map[string]any{"source": "legacy"})
-}
-
-func testImportLegacyDraft(f *fixture) {
-	t := f.t
-	ctx := f.ctx(t)
-	id := newFactoryID()
-	f.LegacyFactory(t, f.org, id, acme)
-	imp := ports.LegacyImport{
-		ID: id, Name: acme, Manifest: f.blobs(t, map[string]string{factoryYAML: "not: [valid\n"}),
-		Source: domain.VersionSource{Kind: domain.SourceLegacy}, By: importer,
-	}
-
-	v, imported, err := f.Definitions.ImportLegacy(ctx, imp)
-	if err != nil || !imported {
-		t.Fatalf("ImportLegacy = %v, %v; want imported", imported, err)
-	}
-
-	checkVersion(t, "imported draft", v, domain.DefinitionVersion{
-		OrgID: f.org, FactoryID: id, State: domain.VersionDraft, Revision: 1, Manifest: imp.Manifest, Source: imp.Source,
-		CreatedBy: importer, UpdatedBy: importer,
-	})
-	checkRecord(t, "factory", f.record(t, id), ports.FactoryRecord{ID: id, OrgID: f.org, Name: acme, Draft: ref(v)})
-
-	imp.Publish = true
-
-	if _, imported, err := f.Definitions.ImportLegacy(ctx, imp); err != nil || imported {
-		t.Errorf("ImportLegacy of a factory with a draft = %v, %v; want a no-op", imported, err)
-	}
-
-	other := f.other(t)
-	imp.Manifest = other.blobs(t, tree(acme))
-
-	_, _, err = other.Definitions.ImportLegacy(other.ctx(t), imp)
-	expect(t, "ImportLegacy of another org's factory", err, ports.ErrConflict)
-}
-
-// Only an organization from before versions has a legacy import to do, until it ends; a new one
-// never has, and one organization's import is not another's.
-func testLegacyImportPending(f *fixture) {
-	t := f.t
-	ctx := f.ctx(t)
-
-	pending := func(what string, ctx context.Context, want bool) {
-		t.Helper()
-
-		if got, err := f.Definitions.LegacyImportPending(ctx); err != nil || got != want {
-			t.Errorf("%s: LegacyImportPending = %v, %v; want %v", what, got, err, want)
-		}
-	}
-
-	pending("a new organization", ctx, false)
-
-	f.LegacyOrg(t, f.org)
-
-	other := f.NewOrg(t)
-	otherCtx := domain.WithOrg(t.Context(), other)
-
-	pending("an organization from before versions", ctx, true)
-	pending("another new organization", otherCtx, false)
-
-	if err := f.Definitions.EndLegacyImport(otherCtx); err != nil {
-		t.Fatal(err)
-	}
-
-	pending("after another organization's end", ctx, true)
-
-	for range 2 {
-		if err := f.Definitions.EndLegacyImport(ctx); err != nil {
-			t.Fatal(err)
-		}
-
-		pending("after its end", ctx, false)
-	}
 }

@@ -4,7 +4,9 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,52 +38,80 @@ func TestDefinitions_Conformance(t *testing.T) {
 			Items:       s,
 			Audit:       s,
 			NewOrg:      func(t *testing.T) domain.OrgID { t.Helper(); return newOrgID(t, s) },
-			LegacyFactory: func(t *testing.T, org domain.OrgID, id domain.FactoryID, name string) {
-				t.Helper()
-
-				legacyFactory(t, pool, org, id, name)
-			},
-			LegacyOrg: func(t *testing.T, org domain.OrgID) { t.Helper(); legacyOrg(t, pool, org) },
 		}
 	})
 }
 
-// legacyOrg makes org's legacy import pending, as migration 00039 did for the organizations it
-// found; goal_app may only read and end it, so the row is written as goal_owner.
-func legacyOrg(t *testing.T, pool *pgxpool.Pool, org domain.OrgID) {
-	t.Helper()
+// A database where a live organization still has a legacy import to do is not migrated: one at
+// 00039 or later that records it pending (00039 made every organization's pending, the previous
+// release's goald ends each when it imported), or one from before 00039, which would make them
+// pending. Nothing is applied, and the error says to start the previous release once.
+func TestMigrate_RefusesAPendingLegacyImport(t *testing.T) {
+	t.Parallel()
 
-	err := pgx.BeginFunc(t.Context(), pool, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(t.Context(), "SET LOCAL ROLE "+OwnerRole); err != nil {
-			return err
-		}
+	for _, tc := range []struct {
+		name    string
+		version int64
+	}{
+		{name: "the default organization pending", version: legacyImportDropped - 1},
+		{name: "a database from before 00039", version: legacyImportPended - 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-		_, err := tx.Exec(t.Context(), "INSERT INTO legacy_import_pending (org_id) VALUES ($1)", string(org))
+			db := newTestDB(t, OwnerRole)
+			owner := openPool(t, db.owner)
+			migrateTo(t, owner, tc.version)
 
-		return err
-	})
-	if err != nil {
-		t.Fatal(err)
+			err := Migrate(t.Context(), owner)
+			if !errors.Is(err, ErrLegacyImportPending) || !strings.Contains(err.Error(), "previous release") {
+				t.Errorf("Migrate = %v; want ErrLegacyImportPending naming the previous release", err)
+			}
+
+			if v := migrationVersion(t, owner); v != tc.version {
+				t.Errorf("migrated to %d; want nothing applied past %d", v, tc.version)
+			}
+		})
 	}
 }
 
-// Migration 00039 makes the legacy import pending for every organization that existed then
-// (here the default one, from 00005) and for none created later.
-func TestMigration_LegacyImportPendsOnlyTheOrganizationsFromBefore(t *testing.T) {
+// Once every live organization's import ended, the database migrates and 00050 drops the
+// record; a deleted organization, which no goald imports, does not hold the upgrade back.
+func TestMigrate_DropsTheEndedLegacyImport(t *testing.T) {
 	t.Parallel()
 
 	db := newTestDB(t, OwnerRole)
-	migrateTo(t, openPool(t, db.owner), 38)
-	migrate(t, db.owner)
+	owner := openPool(t, db.owner)
+	migrateTo(t, owner, legacyImportDropped-1)
+	endLegacyImports(t, owner)
 
-	pool := openPool(t, db.app)
-	defs := NewDefinitions(pool, porttest.NewObjectStore(), nil)
-
-	for org, want := range map[domain.OrgID]bool{DefaultOrgID: true, newOrgID(t, New(pool)): false} {
-		if got, err := defs.LegacyImportPending(domain.WithOrg(t.Context(), org)); err != nil || got != want {
-			t.Errorf("organization %s: LegacyImportPending = %v, %v; want %v", org, got, err, want)
+	for _, stmt := range []string{
+		`INSERT INTO organizations (id, slug, name, mark, deleted_at) VALUES ('0190a3f0-0000-7000-8000-00000000d00d', 'gone', 'Gone', 'Go', now())`,
+		`INSERT INTO legacy_import_pending (org_id) VALUES ('0190a3f0-0000-7000-8000-00000000d00d')`,
+	} {
+		if _, err := owner.Exec(t.Context(), stmt); err != nil {
+			t.Fatal(err)
 		}
 	}
+
+	migrate(t, db.owner)
+
+	var exists bool
+	if err := owner.QueryRow(t.Context(), `SELECT to_regclass('legacy_import_pending') IS NOT NULL`).Scan(&exists); err != nil || exists {
+		t.Errorf("legacy_import_pending after the migration: exists %v, %v; want it dropped", exists, err)
+	}
+}
+
+// migrationVersion is the last migration applied to the database pool reaches.
+func migrationVersion(t *testing.T, pool *pgxpool.Pool) int64 {
+	t.Helper()
+
+	var v int64
+	if err := pool.QueryRow(t.Context(), `SELECT max(version_id) FROM goose_db_version`).Scan(&v); err != nil {
+		t.Fatal(err)
+	}
+
+	return v
 }
 
 // definitionsFixture is a definition store on a fresh schema with one published factory in org.

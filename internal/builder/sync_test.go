@@ -125,8 +125,8 @@ func TestSyncSkills_WritesOnce(t *testing.T) {
 		t.Errorf("second sync = %s, want unchanged", statuses(r))
 	}
 
-	if f.objects.Versions(file) != 1 || f.objects.Versions(indexKey) != 1 {
-		t.Errorf("versions: file %d, index %d; want one each", f.objects.Versions(file), f.objects.Versions(indexKey))
+	if f.objects.Writes(file) != 1 || f.objects.Writes(indexKey) != 1 {
+		t.Errorf("writes: file %d, index %d; want one each", f.objects.Writes(file), f.objects.Writes(indexKey))
 	}
 
 	skills, err := f.svc.ListSkills(t.Context(), "")
@@ -149,7 +149,7 @@ func TestSyncSkills_NeverDeletes(t *testing.T) {
 		t.Errorf("sync of a new head = %s, want added", statuses(r))
 	}
 
-	if _, err := f.objects.Get(t.Context(), "catalog/skills/acme/skills/lint/"+commit('a')+"/SKILL.md", ""); err != nil {
+	if _, err := f.objects.Get(t.Context(), "catalog/skills/acme/skills/lint/"+commit('a')+"/SKILL.md"); err != nil {
 		t.Errorf("the old commit's folder is gone: %v", err)
 	}
 
@@ -215,8 +215,8 @@ func TestSyncSkills_RefusesAFolderThatDiffers(t *testing.T) {
 	}
 
 	r := f.sync(t, ref("acme", "skills", "lint", ""))
-	if statuses(r) != "acme/skills/lint:failed" || f.objects.Versions(tampered) != 1 {
-		t.Errorf("report %s, %d versions; want failed and the object untouched", statuses(r), f.objects.Versions(tampered))
+	if statuses(r) != "acme/skills/lint:failed" || f.objects.Writes(tampered) != 1 {
+		t.Errorf("report %s, %d writes; want failed and the object untouched", statuses(r), f.objects.Writes(tampered))
 	}
 }
 
@@ -273,7 +273,7 @@ func TestSyncSkills_RefusesAMalformedIndex(t *testing.T) {
 		t.Error("sync over a malformed index succeeded")
 	}
 
-	if f.objects.Versions(indexKey) != 1 {
+	if f.objects.Writes(indexKey) != 1 {
 		t.Error("the malformed index was replaced")
 	}
 

@@ -778,44 +778,43 @@ type Contracts interface {
 	Validate(ctx context.Context, version domain.DefinitionVersionID, contract string, output json.RawMessage) error
 }
 
-// ObjectStore keeps objects in one versioned bucket: S3 on AWS, an S3-compatible server
-// (RustFS) on a laptop. Factory definitions and knowledge documents live there; every write
-// creates a new object version, so earlier content stays readable by its version id.
+// ObjectStore keeps objects in one bucket: an S3-compatible server (RustFS) locally, R2 on
+// Cloudflare. Definition files and uploaded knowledge documents live there as immutable,
+// content-addressed objects. Nothing relies on object versions (R2 has none): a write replaces
+// the object at its key and a delete removes it for good. A bucket that still has versioning on
+// works the same.
 type ObjectStore interface {
-	// Get returns the object at key. An empty version means the current one. It returns an
-	// error wrapping ErrNotFound when the key or version does not exist or was deleted.
-	Get(ctx context.Context, key, version string) (Object, error)
+	// Get returns the object at key, or an error wrapping ErrNotFound when there is none.
+	Get(ctx context.Context, key string) (Object, error)
 
-	// Put stores body at key as a new current version and returns it.
+	// Put stores body at key, replacing what was there, and returns it.
 	Put(ctx context.Context, key string, body []byte) (ObjectInfo, error)
 
-	// PutIfAbsent stores body at key unless a current object is there (a key whose current
-	// version is a delete marker counts as absent); created reports which, and info is the
-	// object now at key. Content-addressed writes (definition blobs, domain.BlobKey) use it, so
-	// an object is written once and never rewritten.
+	// PutIfAbsent stores body at key unless an object is there; created reports which, and info
+	// is the object now at key. Content-addressed writes (definition blobs, domain.BlobKey) use
+	// it, so an object is written once and never rewritten.
 	PutIfAbsent(ctx context.Context, key string, body []byte) (info ObjectInfo, created bool, err error)
 
-	// List returns every current object whose key starts with prefix, ordered by key.
+	// List returns every object whose key starts with prefix, ordered by key.
 	List(ctx context.Context, prefix string) ([]ObjectInfo, error)
 
-	// Delete makes key absent. Earlier versions stay readable by version id; deleting a missing
-	// key is not an error.
+	// Delete removes key for good; deleting a missing key is not an error.
 	Delete(ctx context.Context, key string) error
 
-	// DeletePrefix removes, for good, every version and delete marker of every key that starts
-	// with prefix, and returns how many it removed. Nothing under the prefix stays readable. It
-	// refuses an empty prefix. The purge of a deleted organization uses it.
+	// DeletePrefix removes every object whose key starts with prefix and returns how many it
+	// removed. It refuses an empty prefix. The purge of a deleted organization uses it.
 	DeletePrefix(ctx context.Context, prefix string) (int, error)
 }
 
-// ObjectInfo identifies one version of an object.
+// ObjectInfo identifies an object's content: its ETag changes whenever the content does, so a
+// reader can cache what it parsed from an object until the ETag moves.
 type ObjectInfo struct {
-	Key     string
-	Version string
-	Size    int64
+	Key  string
+	ETag string
+	Size int64
 }
 
-// Object is one version of an object with its content.
+// Object is an object with its content.
 type Object struct {
 	ObjectInfo
 

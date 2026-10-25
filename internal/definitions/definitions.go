@@ -19,8 +19,7 @@
 // domain.ErrNoOrg.
 //
 // The cache is a convenience, not state: every goald instance rebuilds it from the store, and
-// a current version that fails to load in this goald keeps the previous one in use. ImportLegacy
-// turns the factories of the bucket layout before versions into versions, once.
+// a current version that fails to load in this goald keeps the previous one in use.
 package definitions
 
 import (

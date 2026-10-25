@@ -88,10 +88,6 @@ type settings struct {
 	// DefinitionCacheBytes bounds the files of the definition versions kept for runs that started
 	// on a version no longer current (GOAL_DEFINITION_CACHE_BYTES, default 64 MiB).
 	DefinitionCacheBytes int64
-	// LegacyImport imports, at startup, the factories of the bucket layout before versions that
-	// have no version yet (GOAL_LEGACY_IMPORT, default true for this release). It is a no-op once
-	// every organization's import ran: each organization from before versions imports once.
-	LegacyImport bool
 	// MaxRuns caps the agent runs this goald has in flight at once (GOAL_MAX_RUNS, default 0:
 	// no cap). With a cap, claims are shared out fairly across organizations.
 	MaxRuns int
@@ -182,7 +178,7 @@ var ownVariables = []string{
 	authEnv, upstreamEnv, proxiesEnv, googleEnv, authProxySecretEnv,
 	"GOAL_WORKSPACE_ROOT", "GOAL_RUN_DIR", "GOAL_TICK_EVERY", "GOAL_REFRESH_EVERY", "GOAL_MAX_RUNS",
 	"GOAL_GITHUB_API_URL", githubWebEnv, "GOAL_LOG_LEVEL", "GOAL_LOG_FORMAT", "GOAL_DEFAULT_AGENT_IMAGE", "GOAL_ORG_RETENTION", "GOAL_MODELS",
-	"GOAL_DEFINITION_CACHE_BYTES", "GOAL_LEGACY_IMPORT", egressNameEnv, egressImageEnv, agentEgressEnv,
+	"GOAL_DEFINITION_CACHE_BYTES", egressNameEnv, egressImageEnv, agentEgressEnv,
 	"GOAL_S3_BUCKET", "GOAL_S3_ENDPOINT", "GOAL_S3_ACCESS_KEY", "GOAL_S3_SECRET_KEY",
 	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
 }
@@ -337,7 +333,7 @@ func egressSettings(s *settings, or func(name, def string) string) []error {
 	return nil
 }
 
-// definitionSettings reads the settings of the definitions cache and the legacy import.
+// definitionSettings reads the settings of the definitions cache.
 func definitionSettings(s *settings, or func(name, def string) string) []error {
 	var (
 		errs []error
@@ -347,11 +343,6 @@ func definitionSettings(s *settings, or func(name, def string) string) []error {
 	cacheBytes := or("GOAL_DEFINITION_CACHE_BYTES", strconv.Itoa(definitions.DefaultCacheBytes))
 	if s.DefinitionCacheBytes, err = strconv.ParseInt(cacheBytes, 10, 64); err != nil || s.DefinitionCacheBytes <= 0 {
 		errs = append(errs, fmt.Errorf("GOAL_DEFINITION_CACHE_BYTES %q is not a positive number of bytes", cacheBytes))
-	}
-
-	legacy := or("GOAL_LEGACY_IMPORT", "true")
-	if s.LegacyImport, err = strconv.ParseBool(legacy); err != nil {
-		errs = append(errs, fmt.Errorf("GOAL_LEGACY_IMPORT %q is not true or false", legacy))
 	}
 
 	return errs

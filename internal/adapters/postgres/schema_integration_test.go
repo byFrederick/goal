@@ -218,7 +218,7 @@ func TestMigrate_BackfillsDefaultOrg(t *testing.T) {
 	owner := openPool(t, db.owner)
 	migrateTo(t, owner, 3)
 	before := insertRowsFromBefore(t, owner)
-	migrate(t, db.owner)
+	upgrade(t, db.owner)
 	expectBackfilled(t, owner)
 
 	s := New(openPool(t, db.app))
@@ -275,7 +275,7 @@ func TestRLS_RawSQLWithoutOrgFails(t *testing.T) {
 	owner := openPool(t, db.owner)
 	migrateTo(t, owner, 3)
 	before := insertRowsFromBefore(t, owner) // one row in every table of 00001, in the default organization
-	migrate(t, db.owner)
+	upgrade(t, db.owner)
 
 	pool := openPool(t, db.app)
 	ctx := domain.WithOrg(t.Context(), DefaultOrgID)

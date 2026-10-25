@@ -32,8 +32,11 @@ func (h BlobHash) Valid() bool { return blobHashPattern.MatchString(string(h)) }
 // MaxBlobSize is the largest definition file, in bytes (1 MiB).
 const MaxBlobSize = 1 << 20
 
+// OrgPrefix is the bucket prefix of everything an organization owns: orgs/<org-id>/.
+func OrgPrefix(org OrgID) string { return "orgs/" + string(org) + "/" }
+
 // BlobKey is the bucket key of an organization's blob: orgs/<org-id>/blobs/<sha256>.
-func BlobKey(org OrgID, h BlobHash) string { return "orgs/" + string(org) + "/blobs/" + string(h) }
+func BlobKey(org OrgID, h BlobHash) string { return OrgPrefix(org) + "blobs/" + string(h) }
 
 // Manifest is a definition's file tree: each slash path relative to the factory's root
 // ("factory.yaml", "agents/engineer.md") and the hash of its content.
@@ -88,7 +91,8 @@ const (
 	SourceClone    SourceKind = "clone"
 	SourceImport   SourceKind = "import"
 	SourceCLI      SourceKind = "cli"
-	// SourceLegacy is a factory imported from the bucket's per-factory prefix of before 2.2.
+	// SourceLegacy is a factory imported from the bucket's per-factory prefix of before 2.2, by
+	// the legacy import of releases before phase 4; versions it made keep it.
 	SourceLegacy SourceKind = "legacy"
 	// SourceEdit is a draft opened on a published version, its base.
 	SourceEdit SourceKind = "edit"
@@ -105,8 +109,6 @@ type VersionSource struct {
 	Version DefinitionVersionID
 	// Manifest is the starting tree when no version holds it (template, import).
 	Manifest Manifest
-	// LegacyVersions are the bucket object versions a legacy import read, by path.
-	LegacyVersions map[string]string
 }
 
 // Audit actions of factories and their definitions. Their target is the factory (factory.*)

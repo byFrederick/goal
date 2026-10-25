@@ -85,7 +85,7 @@ func TestInitRoles_UpgradesADatabaseFromBeforeTheRoles(t *testing.T) {
 
 	checkDatabasePrivileges(t, admin)
 
-	migrate(t, db.owner)
+	upgrade(t, db.owner)
 
 	app := openPool(t, db.app)
 	if err := CheckAppRole(t.Context(), app); err != nil {

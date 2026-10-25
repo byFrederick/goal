@@ -273,7 +273,7 @@ func (s *Service) readFolder(ctx context.Context, sk CatalogSkill) (map[string][
 	files := make(map[string][]byte, len(infos))
 
 	for _, info := range infos {
-		obj, err := s.objects.Get(ctx, info.Key, info.Version)
+		obj, err := s.objects.Get(ctx, info.Key)
 		if err != nil {
 			return nil, err
 		}
@@ -293,8 +293,8 @@ func (s *Service) readFolder(ctx context.Context, sk CatalogSkill) (map[string][
 }
 
 // index returns the catalog's skills from the cached index, confirming at most every indexTTL
-// that the bucket's index.json is still the version parsed. When the bucket cannot be read, a
-// parsed index keeps serving (its content is immutable) and the error is logged.
+// that the bucket's index.json still has the ETag of the content parsed. When the bucket cannot
+// be read, a parsed index keeps serving and the error is logged.
 func (s *Service) index(ctx context.Context) ([]CatalogSkill, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -305,11 +305,14 @@ func (s *Service) index(ctx context.Context) ([]CatalogSkill, error) {
 	}
 
 	info, found, err := s.indexInfo(ctx)
-	if err == nil && found && (!s.cache.loaded || info.Version != s.cache.version) {
-		var skills []CatalogSkill
+	if err == nil && found && (!s.cache.loaded || info.ETag != s.cache.etag) {
+		var (
+			skills []CatalogSkill
+			etag   string
+		)
 
-		if skills, err = s.loadIndex(ctx, info); err == nil {
-			s.cache = indexCache{loaded: true, version: info.Version, skills: skills}
+		if skills, etag, err = s.loadIndex(ctx, info); err == nil {
+			s.cache = indexCache{loaded: true, etag: etag, skills: skills}
 		}
 	}
 
@@ -347,40 +350,41 @@ func (s *Service) indexInfo(ctx context.Context) (ports.ObjectInfo, bool, error)
 	return infos[i], true, nil
 }
 
-// loadIndex reads and parses one version of index.json. A malformed index is logged and reads
-// as an empty catalog; only a failing bucket is an error.
-func (s *Service) loadIndex(ctx context.Context, info ports.ObjectInfo) ([]CatalogSkill, error) {
+// loadIndex reads and parses index.json, listed as info, and returns the ETag of the content it
+// parsed (another writer may have replaced the object since it was listed). A malformed index is
+// logged and reads as an empty catalog; only a failing bucket is an error.
+func (s *Service) loadIndex(ctx context.Context, info ports.ObjectInfo) ([]CatalogSkill, string, error) {
 	if info.Size > maxIndexBytes {
-		s.log.ErrorContext(ctx, "builder.skills_index_invalid", slog.String("version", info.Version),
+		s.log.ErrorContext(ctx, "builder.skills_index_invalid", slog.String("etag", info.ETag),
 			slog.String("error", fmt.Sprintf("%d bytes, at most %d", info.Size, maxIndexBytes)))
 
-		return nil, nil
+		return nil, info.ETag, nil
 	}
 
-	obj, err := s.objects.Get(ctx, indexKey, info.Version)
+	obj, err := s.objects.Get(ctx, indexKey)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	skills, err := parseIndex(obj.Body)
 	if err != nil {
-		s.log.ErrorContext(ctx, "builder.skills_index_invalid", slog.String("version", info.Version), slog.Any("error", err))
+		s.log.ErrorContext(ctx, "builder.skills_index_invalid", slog.String("etag", obj.ETag), slog.Any("error", err))
 
-		return nil, nil
+		return nil, obj.ETag, nil
 	}
 
-	return skills, nil
+	return skills, obj.ETag, nil
 }
 
 // readIndexForWrite reads the current index for a sync, which rewrites it: missing is empty,
 // and a malformed one is an error, so a sync never replaces skills it could not read.
 func (s *Service) readIndexForWrite(ctx context.Context) (map[string]CatalogSkill, []byte, error) {
-	info, found, err := s.indexInfo(ctx)
+	_, found, err := s.indexInfo(ctx)
 	if err != nil || !found {
 		return map[string]CatalogSkill{}, nil, err
 	}
 
-	obj, err := s.objects.Get(ctx, indexKey, info.Version)
+	obj, err := s.objects.Get(ctx, indexKey)
 	if err != nil {
 		return nil, nil, err
 	}

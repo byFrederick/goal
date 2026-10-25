@@ -755,7 +755,7 @@ func removeBucket(t *testing.T, cfg s3store.Config) {
 	}
 
 	client := s3.NewFromConfig(ac, func(o *s3.Options) { o.BaseEndpoint, o.UsePathStyle = aws.String(cfg.Endpoint), true })
-	pages := s3.NewListObjectVersionsPaginator(client, &s3.ListObjectVersionsInput{Bucket: aws.String(cfg.Bucket)})
+	pages := s3.NewListObjectsV2Paginator(client, &s3.ListObjectsV2Input{Bucket: aws.String(cfg.Bucket)})
 
 	for pages.HasMorePages() {
 		page, err := pages.NextPage(ctx)
@@ -765,12 +765,8 @@ func removeBucket(t *testing.T, cfg s3store.Config) {
 			return
 		}
 
-		for _, v := range page.Versions {
-			_, _ = client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(cfg.Bucket), Key: v.Key, VersionId: v.VersionId})
-		}
-
-		for _, m := range page.DeleteMarkers {
-			_, _ = client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(cfg.Bucket), Key: m.Key, VersionId: m.VersionId})
+		for _, o := range page.Contents {
+			_, _ = client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(cfg.Bucket), Key: o.Key})
 		}
 	}
 

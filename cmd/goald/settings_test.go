@@ -52,8 +52,8 @@ func TestSettings_Defaults(t *testing.T) {
 		t.Errorf("org retention = %s, want 7 days", s.OrgRetention)
 	}
 
-	if s.DefinitionCacheBytes != 64<<20 || !s.LegacyImport {
-		t.Errorf("definition cache %d bytes, legacy import %v; want 64 MiB and on", s.DefinitionCacheBytes, s.LegacyImport)
+	if s.DefinitionCacheBytes != 64<<20 {
+		t.Errorf("definition cache %d bytes; want 64 MiB", s.DefinitionCacheBytes)
 	}
 
 	want := map[string]string{"CLAUDE_CODE_OAUTH_TOKEN": "env:CLAUDE_CODE_OAUTH_TOKEN"} //nolint:gosec // a reference, not a secret
@@ -188,7 +188,6 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 		{name: "negative run cap", env: map[string]string{"GOAL_MAX_RUNS": "-2"}, want: "GOAL_MAX_RUNS"},
 		{name: "no retention", env: map[string]string{"GOAL_ORG_RETENTION": "0d"}, want: "GOAL_ORG_RETENTION"},
 		{name: "empty definition cache", env: map[string]string{"GOAL_DEFINITION_CACHE_BYTES": "0"}, want: "GOAL_DEFINITION_CACHE_BYTES"},
-		{name: "unclear legacy import", env: map[string]string{"GOAL_LEGACY_IMPORT": "maybe"}, want: "GOAL_LEGACY_IMPORT"},
 		{name: "GitHub API in clear text", env: map[string]string{"GOAL_GITHUB_API_URL": "http://api.example.com"}, want: "must be https"},
 		{name: "GitHub web in clear text", env: map[string]string{githubWebEnv: "http://ghe.example.com"}, want: githubWebEnv},
 		{name: "GitHub web with a path", env: map[string]string{githubWebEnv: "https://ghe.example.com/acme"}, want: githubWebEnv},

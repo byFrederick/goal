@@ -259,7 +259,7 @@ func (s *Service) storeFolder(ctx context.Context, prefix string, files map[stri
 			}
 		}
 
-		obj, err := s.objects.Get(ctx, info.Key, info.Version)
+		obj, err := s.objects.Get(ctx, info.Key)
 		if err != nil {
 			return written, fmt.Errorf("%w: %w", domain.ErrCatalogUnavailable, err)
 		}

@@ -1,5 +1,5 @@
 # Local dependencies. PostgreSQL is Goal's only database; RustFS stands in for S3 and holds the
-# factory definitions and knowledge documents (one versioned bucket, as on AWS).
+# factory definitions and knowledge documents (one bucket without versioning, as R2 on Cloudflare).
 # Ports bind to 127.0.0.1 only. Credentials come from .env (see .env.example) with dev-only defaults.
 services:
   postgres:

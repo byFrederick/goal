@@ -39,8 +39,6 @@ type Definitions struct {
 	versions  map[domain.DefinitionVersionID]*domain.DefinitionVersion
 	blobs     map[domain.OrgID]map[domain.BlobHash]int64
 	ids       int
-	// legacyPending are the organizations whose legacy import is still to do (PendLegacyImport).
-	legacyPending map[domain.OrgID]bool
 }
 
 // DefinitionsDeps is what Definitions works with. Only Objects is required.
@@ -82,58 +80,6 @@ func NewDefinitions(d DefinitionsDeps) *Definitions {
 		factories: map[domain.FactoryID]*factoryRow{},
 		versions:  map[domain.DefinitionVersionID]*domain.DefinitionVersion{},
 		blobs:     map[domain.OrgID]map[domain.BlobHash]int64{},
-
-		legacyPending: map[domain.OrgID]bool{},
-	}
-}
-
-// PendLegacyImport makes org's legacy import pending, as migration 00039 does for every
-// organization that existed before versions.
-func (d *Definitions) PendLegacyImport(org domain.OrgID) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	d.legacyPending[org] = true
-}
-
-// LegacyImportPending implements ports.DefinitionStore.
-func (d *Definitions) LegacyImportPending(ctx context.Context) (bool, error) {
-	org, err := orgOf(ctx)
-	if err != nil {
-		return false, err
-	}
-
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	return d.legacyPending[org], nil
-}
-
-// EndLegacyImport implements ports.DefinitionStore.
-func (d *Definitions) EndLegacyImport(ctx context.Context) error {
-	org, err := orgOf(ctx)
-	if err != nil {
-		return err
-	}
-
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	delete(d.legacyPending, org)
-
-	return nil
-}
-
-// AddLegacyFactory registers a factory with no version in org, as goald's SaveFactory did
-// before versions existed; ImportLegacy adopts it.
-func (d *Definitions) AddLegacyFactory(org domain.OrgID, id domain.FactoryID, name, title string) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	d.factories[id] = &factoryRow{org: org, id: id, name: name, title: title, createdAt: d.stamp()}
-
-	if d.items != nil {
-		d.items.AddFactory(org, id)
 	}
 }
 
@@ -340,13 +286,13 @@ func (d *Definitions) PutBlobs(ctx context.Context, files map[string][]byte) (do
 
 		key := domain.BlobKey(org, h)
 
-		info, created, err := d.objects.PutIfAbsent(ctx, key, files[path])
+		_, created, err := d.objects.PutIfAbsent(ctx, key, files[path])
 		if err != nil {
 			return nil, fmt.Errorf("put blob %s: %w", h, err)
 		}
 
 		// An object already there that does not hold the blob is replaced, as the adapter does.
-		if obj, gerr := d.objects.Get(ctx, key, info.Version); !created && (gerr != nil || domain.HashBlob(obj.Body) != h) {
+		if obj, gerr := d.objects.Get(ctx, key); !created && (gerr != nil || domain.HashBlob(obj.Body) != h) {
 			if _, err := d.objects.Put(ctx, key, files[path]); err != nil {
 				return nil, fmt.Errorf("repair blob %s: %w", h, err)
 			}
@@ -377,7 +323,7 @@ func (d *Definitions) Blob(ctx context.Context, h domain.BlobHash) ([]byte, erro
 		return nil, fmt.Errorf("blob %s: %w", h, ports.ErrNotFound)
 	}
 
-	obj, err := d.objects.Get(ctx, domain.BlobKey(org, h), "")
+	obj, err := d.objects.Get(ctx, domain.BlobKey(org, h))
 	if err != nil {
 		return nil, fmt.Errorf("blob %s: %w", h, err)
 	}
@@ -729,102 +675,6 @@ func (d *Definitions) Restore(ctx context.Context, r ports.Restore) (ports.Facto
 	})
 }
 
-// ImportLegacy implements ports.DefinitionStore.
-func (d *Definitions) ImportLegacy(ctx context.Context, i ports.LegacyImport) (domain.DefinitionVersion, bool, error) {
-	org, err := orgOf(ctx)
-	if err != nil {
-		return domain.DefinitionVersion{}, false, err
-	}
-
-	type result struct {
-		v        domain.DefinitionVersion
-		imported bool
-	}
-
-	out, err := change(d, func() (result, []ports.DefinitionNotice, error) {
-		f, exists := d.factories[i.ID]
-		if exists && f.org != org {
-			return result{}, nil, fmt.Errorf("factory %s exists: %w", i.ID, ports.ErrConflict)
-		}
-
-		if exists && d.hasVersionsLocked(i.ID) {
-			return result{}, nil, nil
-		}
-
-		if err := d.checkLocked(org, i.ID, i.Name, i.Manifest); err != nil {
-			return result{}, nil, err
-		}
-
-		id := domain.DefinitionVersionID(d.newIDLocked())
-		if err := d.auditImportLocked(ctx, i, id, !exists); err != nil {
-			return result{}, nil, err
-		}
-
-		var notices []ports.DefinitionNotice
-
-		if !exists {
-			f = &factoryRow{org: org, id: i.ID, createdAt: d.stamp(), createdBy: stored(i.By)}
-			d.factories[i.ID] = f
-			notices = append(notices, factoryNotice(f))
-
-			if d.items != nil {
-				d.items.AddFactory(org, i.ID)
-			}
-		}
-
-		f.name, f.title = i.Name, i.Title
-		v := d.importVersionLocked(f, id, i)
-		notices = append(notices, draftNotice(v))
-
-		if i.Publish {
-			notices = append(notices, d.currentNoticeLocked(f))
-		}
-
-		return result{cloneVersion(v), true}, notices, nil
-	})
-
-	return out.v, out.imported, err
-}
-
-func (d *Definitions) auditImportLocked(ctx context.Context, i ports.LegacyImport, id domain.DefinitionVersionID, created bool) error {
-	if created {
-		err := d.auditLocked(ctx, i.By, domain.AuditFactoryCreated, domain.AuditTargetFactory, string(i.ID), i.ID,
-			map[string]any{auditName: i.Name, "source": string(i.Source.Kind)})
-		if err != nil {
-			return err
-		}
-	}
-
-	if !i.Publish {
-		return nil
-	}
-
-	return d.auditLocked(ctx, i.By, domain.AuditDefinitionPublished, domain.AuditTargetVersion, string(id), i.ID,
-		map[string]any{"number": 1, "message": i.Message, "moved": 0})
-}
-
-// importVersionLocked stores the import as f's draft, or publishes it as version 1.
-func (d *Definitions) importVersionLocked(f *factoryRow, id domain.DefinitionVersionID, i ports.LegacyImport) *domain.DefinitionVersion {
-	now, by := d.stamp(), stored(i.By)
-	v := &domain.DefinitionVersion{
-		ID: id, OrgID: f.org, FactoryID: f.id, State: domain.VersionDraft, Revision: 1,
-		Manifest: maps.Clone(i.Manifest), Source: cloneSource(i.Source),
-		CreatedBy: by, UpdatedBy: by, CreatedAt: now, UpdatedAt: now,
-	}
-	d.versions[id] = v
-
-	if !i.Publish {
-		f.draft = id
-
-		return v
-	}
-
-	v.State, v.Number, v.Message, v.PublishedBy, v.PublishedAt = domain.VersionPublished, 1, i.Message, by, now
-	f.current, f.last = id, 1
-
-	return v
-}
-
 // factoryLocked returns org's factory id, or ErrNotFound.
 func (d *Definitions) factoryLocked(org domain.OrgID, id domain.FactoryID) (*factoryRow, error) {
 	f, ok := d.factories[id]
@@ -948,16 +798,6 @@ func (d *Definitions) publishedLocked(org domain.OrgID, factory domain.FactoryID
 	return out
 }
 
-func (d *Definitions) hasVersionsLocked(factory domain.FactoryID) bool {
-	for _, v := range d.versions {
-		if v.FactoryID == factory {
-			return true
-		}
-	}
-
-	return false
-}
-
 // moveItems moves the open items of removed stations as moves say, for version number, at the
 // time given (now when zero).
 func (d *Definitions) moveItems(org domain.OrgID, factory domain.FactoryID, removed []string, moves map[string]ports.StationMove,
@@ -1058,7 +898,6 @@ func cloneVersion(v *domain.DefinitionVersion) domain.DefinitionVersion {
 
 func cloneSource(s domain.VersionSource) domain.VersionSource {
 	s.Manifest = maps.Clone(s.Manifest)
-	s.LegacyVersions = maps.Clone(s.LegacyVersions)
 
 	return s
 }

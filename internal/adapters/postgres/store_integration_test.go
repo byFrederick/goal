@@ -222,6 +222,28 @@ func migrate(t *testing.T, ownerURL string) {
 	}
 }
 
+// upgrade migrates a database from an older migration the way an install upgrades: the previous
+// release migrates it up to 00049 and its goald ends every legacy import, then this release
+// migrates the rest.
+func upgrade(t *testing.T, ownerURL string) {
+	t.Helper()
+
+	owner := openPool(t, ownerURL)
+	migrateTo(t, owner, legacyImportDropped-1)
+	endLegacyImports(t, owner)
+	migrate(t, ownerURL)
+}
+
+// endLegacyImports ends every organization's legacy import, as the previous release's goald did
+// at its start.
+func endLegacyImports(t *testing.T, owner *pgxpool.Pool) {
+	t.Helper()
+
+	if _, err := owner.Exec(t.Context(), `DELETE FROM legacy_import_pending`); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // execSQL runs one statement on its own connection, which outlives the test's context. Its two
 // minutes are for DROP DATABASE … WITH (FORCE), which ends the connections still open and, with a
 // busy server, takes a while to remove the files (task test-integration sweeps what a killed run

@@ -450,7 +450,7 @@ Every org table: `org_id uuid NOT NULL DEFAULT goal_org()` referencing `organiza
 
 | Migration | PR | Content |
 | --- | --- | --- |
-| `00050_drop_legacy_import.sql` | 4-3 | drops 00039's `legacy_import_pending` and the functions only the legacy import used |
+| `00050_drop_legacy_import.sql` | 4-3 | drops 00039's `legacy_import_pending` (no SQL function used it; its queries `LegacyImportPending`, `EndLegacyImport` and `HasVersions` go with the import). `postgres.Migrate` refuses, before applying it, a database where a live organization's import is still pending or that is from before 00039 (`ErrLegacyImportPending`) |
 | `00051_connections.sql` | 4-8 | `connection_kinds`, `connections`, `goal_sync_platform_kinds(jsonb)` |
 | `00052_knowledge.sql` | 4-16 | `knowledge_sources`, `knowledge_documents`, `knowledge_chunks`; requires the `vector` extension |
 | `00053_touches.sql` | 4-23 | the partial index on person events; `item_touch_labels` and the trigger that adds a row per person event |

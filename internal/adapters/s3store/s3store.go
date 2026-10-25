@@ -1,5 +1,6 @@
-// Package s3store implements ports.ObjectStore on Amazon S3 or any S3-compatible server
-// (RustFS on a laptop) with the AWS SDK for Go v2.
+// Package s3store implements ports.ObjectStore on any S3-compatible server (RustFS on a laptop,
+// R2 on Cloudflare, Amazon S3) with the AWS SDK for Go v2. It uses no object versioning API, so
+// a server without versioning (R2) behaves as one with it.
 //
 // Credentials come from the standard AWS chain (environment, SSO profile, ECS task role). A
 // local S3-compatible server instead takes the static keys in Config, which are never used
@@ -109,26 +110,10 @@ func New(ctx context.Context, cfg Config) (*Store, error) {
 // Bucket returns the bucket's name.
 func (s *Store) Bucket() string { return s.bucket }
 
-// EnsureBucket creates the bucket when it is missing and turns versioning on. It reports
-// whether it created the bucket. Safe to run any number of times.
+// EnsureBucket creates the bucket when it is missing and reports whether it did. It calls no
+// versioning API: the bucket needs none (R2 has none), and one that has it on keeps working.
+// Safe to run any number of times.
 func (s *Store) EnsureBucket(ctx context.Context) (bool, error) {
-	created, err := s.createIfMissing(ctx)
-	if err != nil {
-		return false, err
-	}
-
-	_, err = s.client.PutBucketVersioning(ctx, &s3.PutBucketVersioningInput{
-		Bucket:                  aws.String(s.bucket),
-		VersioningConfiguration: &types.VersioningConfiguration{Status: types.BucketVersioningStatusEnabled},
-	})
-	if err != nil {
-		return created, fmt.Errorf("enable versioning on %s: %w", s.bucket, err)
-	}
-
-	return created, nil
-}
-
-func (s *Store) createIfMissing(ctx context.Context) (bool, error) {
 	_, err := s.client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(s.bucket)})
 	if err == nil {
 		return false, nil
@@ -157,19 +142,14 @@ func (s *Store) createIfMissing(ctx context.Context) (bool, error) {
 }
 
 // Get implements ports.ObjectStore.
-func (s *Store) Get(ctx context.Context, key, version string) (ports.Object, error) {
-	in := &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)}
-	if version != "" {
-		in.VersionId = aws.String(version)
-	}
-
-	out, err := s.client.GetObject(ctx, in)
+func (s *Store) Get(ctx context.Context, key string) (ports.Object, error) {
+	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
 	if err != nil {
-		if isNotFound(err) || (version != "" && isBadVersion(err)) {
-			return ports.Object{}, fmt.Errorf("get s3://%s/%s %s: %w", s.bucket, key, version, ports.ErrNotFound)
+		if isNotFound(err) {
+			return ports.Object{}, fmt.Errorf("get s3://%s/%s: %w", s.bucket, key, ports.ErrNotFound)
 		}
 
-		return ports.Object{}, fmt.Errorf("get s3://%s/%s %s: %w", s.bucket, key, version, err)
+		return ports.Object{}, fmt.Errorf("get s3://%s/%s: %w", s.bucket, key, err)
 	}
 	defer func() { _ = out.Body.Close() }() // a read-only body: nothing to flush
 
@@ -179,7 +159,7 @@ func (s *Store) Get(ctx context.Context, key, version string) (ports.Object, err
 	}
 
 	return ports.Object{
-		ObjectInfo: ports.ObjectInfo{Key: key, Version: aws.ToString(out.VersionId), Size: int64(len(body))},
+		ObjectInfo: ports.ObjectInfo{Key: key, ETag: aws.ToString(out.ETag), Size: int64(len(body))},
 		Body:       body,
 	}, nil
 }
@@ -237,7 +217,7 @@ func (s *Store) existing(ctx context.Context, key string) (ports.ObjectInfo, boo
 		return ports.ObjectInfo{}, false, fmt.Errorf("head s3://%s/%s: %w", s.bucket, key, err)
 	}
 
-	return ports.ObjectInfo{Key: key, Version: aws.ToString(out.VersionId), Size: aws.ToInt64(out.ContentLength)}, false, nil
+	return ports.ObjectInfo{Key: key, ETag: aws.ToString(out.ETag), Size: aws.ToInt64(out.ContentLength)}, false, nil
 }
 
 func (s *Store) put(ctx context.Context, key string, body []byte, ifNoneMatch *string) (ports.ObjectInfo, error) {
@@ -253,7 +233,7 @@ func (s *Store) put(ctx context.Context, key string, body []byte, ifNoneMatch *s
 		return ports.ObjectInfo{}, err
 	}
 
-	return ports.ObjectInfo{Key: key, Version: aws.ToString(out.VersionId), Size: int64(len(body))}, nil
+	return ports.ObjectInfo{Key: key, ETag: aws.ToString(out.ETag), Size: int64(len(body))}, nil
 }
 
 // httpStatus is the HTTP status of a failed S3 call, or 0.
@@ -265,28 +245,20 @@ func httpStatus(err error) int {
 	return 0
 }
 
-// List implements ports.ObjectStore. It lists versions so each result carries the id of the
-// current one; keys whose current version is a delete marker are absent.
+// List implements ports.ObjectStore with ListObjectsV2, which lists current objects only, so a
+// bucket that still has versioning on lists the same.
 func (s *Store) List(ctx context.Context, prefix string) ([]ports.ObjectInfo, error) {
 	var out []ports.ObjectInfo
 
-	pages := s3.NewListObjectVersionsPaginator(s.client, &s3.ListObjectVersionsInput{
-		Bucket: aws.String(s.bucket),
-		Prefix: aws.String(prefix),
-	})
-	for pages.HasMorePages() {
-		page, err := pages.NextPage(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("list s3://%s/%s: %w", s.bucket, prefix, err)
+	err := s.pages(ctx, prefix, func(objects []types.Object) error {
+		for _, o := range objects {
+			out = append(out, ports.ObjectInfo{Key: aws.ToString(o.Key), ETag: aws.ToString(o.ETag), Size: aws.ToInt64(o.Size)})
 		}
 
-		for _, v := range page.Versions {
-			if aws.ToBool(v.IsLatest) {
-				out = append(out, ports.ObjectInfo{
-					Key: aws.ToString(v.Key), Version: aws.ToString(v.VersionId), Size: aws.ToInt64(v.Size),
-				})
-			}
-		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	slices.SortFunc(out, func(a, b ports.ObjectInfo) int { return cmp.Compare(a.Key, b.Key) })
@@ -294,7 +266,7 @@ func (s *Store) List(ctx context.Context, prefix string) ([]ports.ObjectInfo, er
 	return out, nil
 }
 
-// Delete implements ports.ObjectStore. On a versioned bucket it adds a delete marker.
+// Delete implements ports.ObjectStore.
 func (s *Store) Delete(ctx context.Context, key string) error {
 	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
 	if err != nil {
@@ -304,9 +276,8 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
-// DeletePrefix implements ports.ObjectStore: it lists every version and delete marker under
-// prefix and deletes each by its version id, which removes it for good on a versioned bucket. A
-// failure stops it; what is left is removed by the next call.
+// DeletePrefix implements ports.ObjectStore: each list page (at most 1000 keys) is removed with
+// one DeleteObjects call. A failure stops it; what is left is removed by the next call.
 func (s *Store) DeletePrefix(ctx context.Context, prefix string) (int, error) {
 	if prefix == "" {
 		return 0, fmt.Errorf("delete s3://%s/: an empty prefix names the whole bucket", s.bucket)
@@ -314,36 +285,57 @@ func (s *Store) DeletePrefix(ctx context.Context, prefix string) (int, error) {
 
 	n := 0
 
-	pages := s3.NewListObjectVersionsPaginator(s.client, &s3.ListObjectVersionsInput{
+	err := s.pages(ctx, prefix, func(objects []types.Object) error {
+		if len(objects) == 0 {
+			return nil
+		}
+
+		keys := make([]types.ObjectIdentifier, 0, len(objects))
+		for _, o := range objects {
+			keys = append(keys, types.ObjectIdentifier{Key: o.Key})
+		}
+
+		out, err := s.client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+			Bucket: aws.String(s.bucket),
+			Delete: &types.Delete{Objects: keys, Quiet: aws.Bool(true)},
+		})
+		if err != nil {
+			return fmt.Errorf("delete s3://%s/%s: %w", s.bucket, prefix, err)
+		}
+
+		if len(out.Errors) > 0 {
+			e := out.Errors[0]
+
+			return fmt.Errorf("delete s3://%s/%s: %d of %d keys failed, first %s: %s %s", s.bucket, prefix,
+				len(out.Errors), len(keys), aws.ToString(e.Key), aws.ToString(e.Code), aws.ToString(e.Message))
+		}
+
+		n += len(keys)
+
+		return nil
+	})
+
+	return n, err
+}
+
+// pages calls fn with each page of the objects under prefix.
+func (s *Store) pages(ctx context.Context, prefix string, fn func([]types.Object) error) error {
+	pages := s3.NewListObjectsV2Paginator(s.client, &s3.ListObjectsV2Input{
 		Bucket: aws.String(s.bucket),
 		Prefix: aws.String(prefix),
 	})
 	for pages.HasMorePages() {
 		page, err := pages.NextPage(ctx)
 		if err != nil {
-			return n, fmt.Errorf("list s3://%s/%s: %w", s.bucket, prefix, err)
+			return fmt.Errorf("list s3://%s/%s: %w", s.bucket, prefix, err)
 		}
 
-		keys := make([]types.ObjectIdentifier, 0, len(page.Versions)+len(page.DeleteMarkers))
-		for _, v := range page.Versions {
-			keys = append(keys, types.ObjectIdentifier{Key: v.Key, VersionId: v.VersionId})
-		}
-
-		for _, m := range page.DeleteMarkers {
-			keys = append(keys, types.ObjectIdentifier{Key: m.Key, VersionId: m.VersionId})
-		}
-
-		for _, k := range keys {
-			_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(s.bucket), Key: k.Key, VersionId: k.VersionId})
-			if err != nil {
-				return n, fmt.Errorf("delete s3://%s/%s version %s: %w", s.bucket, aws.ToString(k.Key), aws.ToString(k.VersionId), err)
-			}
-
-			n++
+		if err := fn(page.Contents); err != nil {
+			return err
 		}
 	}
 
-	return n, nil
+	return nil
 }
 
 // contentType labels text files as text, so S3 consoles and tools (and readers that only
@@ -365,8 +357,8 @@ func contentType(key string) string {
 	}
 }
 
-// isNotFound matches a missing bucket, key or version, and a key whose current version is a
-// delete marker (S3 answers both with 404).
+// isNotFound matches a missing bucket or key, and, on a bucket that has versioning on, a key
+// whose current version is a delete marker (S3 answers both with 404).
 func isNotFound(err error) bool {
 	if _, ok := errors.AsType[*types.NoSuchKey](err); ok {
 		return true
@@ -382,13 +374,5 @@ func isNotFound(err error) bool {
 
 	api, ok := errors.AsType[smithy.APIError](err)
 
-	return ok && slices.Contains([]string{"NoSuchKey", "NotFound", "NoSuchBucket", "NoSuchVersion"}, api.ErrorCode())
-}
-
-// isBadVersion matches the errors S3 returns for a version id that does not exist (400
-// InvalidArgument) or that is a delete marker (405 MethodNotAllowed).
-func isBadVersion(err error) bool {
-	api, ok := errors.AsType[smithy.APIError](err)
-
-	return ok && slices.Contains([]string{"InvalidArgument", "MethodNotAllowed"}, api.ErrorCode())
+	return ok && slices.Contains([]string{"NoSuchKey", "NotFound", "NoSuchBucket"}, api.ErrorCode())
 }

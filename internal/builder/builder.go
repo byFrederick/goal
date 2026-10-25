@@ -58,8 +58,8 @@ const (
 )
 
 // Service serves the editor's metadata and the skills catalog. It is safe for concurrent use;
-// the only thing it keeps is the parsed index of one bucket object version, a cache of
-// immutable content.
+// the only thing it keeps is the parsed index of one content of the bucket's index.json, keyed
+// by its ETag.
 type Service struct {
 	objects ports.ObjectStore
 	clock   ports.Clock
@@ -70,11 +70,11 @@ type Service struct {
 	cache indexCache
 }
 
-// indexCache is the parsed index.json of one object version and when that version was last
-// confirmed current.
+// indexCache is the parsed index.json of the content with ETag etag and when that content was
+// last confirmed current.
 type indexCache struct {
 	loaded  bool
-	version string
+	etag    string
 	skills  []CatalogSkill // installs desc, then key
 	checked time.Time
 }

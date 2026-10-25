@@ -185,7 +185,7 @@ func (x *TemplateCatalog) template(ctx context.Context, name string, version int
 	files := map[string][]byte{}
 
 	for _, key := range x.keys[k] {
-		obj, err := x.objects.Get(ctx, key, "")
+		obj, err := x.objects.Get(ctx, key)
 		if err != nil {
 			return Template{}, nil, fmt.Errorf("read template %s: %w", k, err)
 		}

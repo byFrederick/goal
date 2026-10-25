@@ -125,11 +125,6 @@ func testNoOrg(f *fixture) {
 	expect(t, "Publish", err, domain.ErrNoOrg)
 	_, err = s.Restore(ctx, ports.Restore{Factory: r.ID, Version: d.ID, By: local})
 	expect(t, "Restore", err, domain.ErrNoOrg)
-	_, _, err = s.ImportLegacy(ctx, ports.LegacyImport{ID: newFactoryID(), Name: "y", Manifest: m, Publish: true, By: importer})
-	expect(t, "ImportLegacy", err, domain.ErrNoOrg)
-	_, err = s.LegacyImportPending(ctx)
-	expect(t, "LegacyImportPending", err, domain.ErrNoOrg)
-	expect(t, "EndLegacyImport", s.EndLegacyImport(ctx), domain.ErrNoOrg)
 
 	if got := f.draft(t, r.ID); got.Revision != 1 || got.State != domain.VersionDraft {
 		t.Errorf("draft = %+v; want it untouched", got)

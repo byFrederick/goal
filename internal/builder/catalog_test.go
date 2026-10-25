@@ -73,8 +73,8 @@ func TestSearchSkills_OrderPagingAndMatch(t *testing.T) {
 }
 
 // The parsed index is reused for five minutes, then re-read only when the bucket's object
-// changed version.
-func TestSearchSkills_IndexCachedPerVersion(t *testing.T) {
+// changed (its ETag moved).
+func TestSearchSkills_IndexCachedByETag(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -101,11 +101,12 @@ func TestSearchSkills_IndexCachedPerVersion(t *testing.T) {
 	f.clock.Advance(2 * time.Minute)
 
 	if p, _ := f.svc.SearchSkills(t.Context(), "", 0, ""); keys(p) != "d,b,c,a,e" {
-		t.Errorf("after five minutes search = %s, want the new version", keys(p))
+		t.Errorf("after five minutes search = %s, want the new index", keys(p))
 	}
 }
 
-// A malformed index is logged once per version and reads as an empty catalog.
+// A malformed index is logged once per content (rewriting the same bytes keeps its ETag) and
+// reads as an empty catalog.
 func TestSearchSkills_MalformedIndexIsEmpty(t *testing.T) {
 	t.Parallel()
 
@@ -125,6 +126,10 @@ func TestSearchSkills_MalformedIndexIsEmpty(t *testing.T) {
 
 			for range 2 {
 				f.clock.Advance(10 * time.Minute)
+
+				if _, err := f.objects.Put(t.Context(), indexKey, []byte(body)); err != nil {
+					t.Fatal(err)
+				}
 
 				if p, err := f.svc.SearchSkills(t.Context(), "", 0, ""); err != nil || len(p.Skills) != 0 {
 					t.Errorf("search = %+v, %v; want an empty page", p, err)

@@ -3,15 +3,11 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"errors"
-	"log/slog"
-	"maps"
 	"net/url"
 	"os"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -19,13 +15,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/byFrederick/goal/internal/adapters/envsecrets"
 	"github.com/byFrederick/goal/internal/adapters/postgres"
-	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/factorystore"
-	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/ports/porttest"
 )
 
@@ -146,125 +138,6 @@ func exec(t *testing.T, pool *pgxpool.Pool, sql string, args ...any) {
 	if _, err := pool.Exec(t.Context(), sql, args...); err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
-}
-
-// An install from before versions: the factory's files under the bucket's oldest layout, its
-// row as goald registered it, and an item on its line. Startup imports it as version 1, once;
-// the item stays and runs on that version.
-func TestStartup_ImportsALegacyFactoryOnce(t *testing.T) {
-	t.Parallel()
-
-	db := newDatabase(t)
-	objects := porttest.NewObjectStore()
-	files := acme("# writer\r\nkept byte for byte  \n")
-
-	for p, body := range files {
-		if _, err := objects.Put(t.Context(), factorystore.LegacyRoot+string(acmeID)+"/"+p, body); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	exec(t, db.admin, `INSERT INTO factories (id, org_id, name, definition, definition_sha256) VALUES ($1, $2, 'acme-notes', '{}', $3)`,
-		string(acmeID), string(postgres.DefaultOrgID), strings.Repeat("0", 64))
-
-	store := postgres.New(db.pool)
-	defs := postgres.NewDefinitions(db.pool, objects, nil)
-	ctx := domain.WithOrg(t.Context(), postgres.DefaultOrgID)
-
-	it, err := store.CreateItem(ctx, domain.NewItem{
-		FactoryID: acmeID, Type: "task", Title: "Write the notes", Station: "write", State: domain.StateQueued,
-		Class: domain.ClassStandard, CreatedAt: time.Now(),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	s, err := settingsFrom(envOf(nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	authors := authoring.New(authoring.Deps{
-		Store: defs, Loads: store, Templates: objects, Credentials: s.credentials(envsecrets.New(os.LookupEnv)),
-	})
-
-	startup := func() string {
-		t.Helper()
-
-		var logs bytes.Buffer
-		if err := importLegacy(t.Context(), s, objects, defs, store, publishProblems(authors), slog.New(slog.NewTextHandler(&logs, nil))); err != nil {
-			t.Fatal(err)
-		}
-
-		return logs.String()
-	}
-
-	if logs := startup(); !strings.Contains(logs, `msg="legacy definitions imported" factories=1 versions=1 drafts=0 present=0 problems=0`) ||
-		!strings.Contains(logs, `msg="legacy bucket layout migrated" copied=2`) {
-		t.Errorf("startup log does not report the move and one version:\n%s", logs)
-	}
-
-	v1 := importedV1(ctx, t, defs, files)
-
-	// The default organization's import ended: the next start reads no legacy prefix.
-	if logs := startup(); strings.Contains(logs, "layout migrated") || !strings.Contains(logs, "factories=0 versions=0") {
-		t.Errorf("second startup read the legacy layout again:\n%s", logs)
-	}
-
-	if vs, err := defs.Versions(ctx, acmeID, 0, 10); err != nil || len(vs) != 1 {
-		t.Errorf("versions after a second startup = %d (%v), want 1", len(vs), err)
-	}
-
-	runsOn(ctx, t, store, defs, it, v1)
-}
-
-// runsOn checks that the item's factory runs v1 and the item, still where it was, starts a
-// run on it.
-func runsOn(ctx context.Context, t *testing.T, store *postgres.Store, defs ports.DefinitionStore, it domain.Item, v1 domain.DefinitionVersion) {
-	t.Helper()
-
-	lines, err := definitions.New(defs, store, nil, definitions.Config{}, nil).Refresh(t.Context())
-	if err != nil || len(lines) != 1 || lines[0].VersionID != v1.ID {
-		t.Fatalf("lines = %+v (%v), want the imported v1", lines, err)
-	}
-
-	if got, err := store.Item(ctx, it.ID); err != nil || got.Position() != it.Position() {
-		t.Errorf("item = %+v (%v), want it where it was", got, err)
-	}
-
-	if _, err := store.StartRun(ctx, ports.NewRun{
-		FactoryID: it.FactoryID, DefinitionVersionID: v1.ID, ItemID: it.ID, Station: it.Station, Agent: "writer", StartedAt: time.Now(),
-	}); err != nil {
-		t.Errorf("a run of the item on v1: %v", err)
-	}
-}
-
-// importedV1 checks that acme runs version 1 holding exactly files, byte for byte, and
-// returns it.
-func importedV1(ctx context.Context, t *testing.T, defs ports.DefinitionStore, files map[string][]byte) domain.DefinitionVersion {
-	t.Helper()
-
-	rec, err := defs.FactoryRecord(ctx, acmeID)
-	if err != nil || rec.Current == nil || rec.Current.Number != 1 {
-		t.Fatalf("factory = %+v (%v), want the adopted row on v1", rec, err)
-	}
-
-	v1, err := defs.Version(ctx, rec.Current.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if got, want := slices.Sorted(maps.Keys(v1.Manifest)), slices.Sorted(maps.Keys(files)); !slices.Equal(got, want) {
-		t.Errorf("manifest = %v, want %v", got, want)
-	}
-
-	for p, body := range files {
-		if got, err := defs.Blob(ctx, v1.Manifest[p]); err != nil || !bytes.Equal(got, body) {
-			t.Errorf("%s = %q (%v), want the legacy bytes %q", p, got, err, body)
-		}
-	}
-
-	return v1
 }
 
 // One goald publishes; another, listening, runs the new version within a second.

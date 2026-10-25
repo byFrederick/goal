@@ -54,9 +54,6 @@ UPDATE factories SET
   updated_at = now()
 WHERE id = sqlc.arg(id);
 
--- name: HasVersions :one
-SELECT EXISTS (SELECT 1 FROM definition_versions WHERE factory_id = $1);
-
 -- name: InsertVersion :one
 INSERT INTO definition_versions (
   id, factory_id, state, number, base_version_id, manifest, message, source, created_by, updated_by,
@@ -134,10 +131,3 @@ UPDATE work_items SET
 WHERE factory_id = sqlc.arg(factory_id) AND station = sqlc.arg(from_station)
   AND state NOT IN ('done', 'cancelled', 'in_progress')
 RETURNING id, number, updated_at;
-
--- name: LegacyImportPending :one
--- Whether the transaction's organization has yet to import its legacy factories (00039).
-SELECT EXISTS (SELECT 1 FROM legacy_import_pending WHERE org_id = goal_org());
-
--- name: EndLegacyImport :exec
-DELETE FROM legacy_import_pending WHERE org_id = goal_org();

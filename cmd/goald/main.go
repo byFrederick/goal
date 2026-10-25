@@ -42,7 +42,6 @@ import (
 	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/engine"
-	"github.com/byFrederick/goal/internal/factorystore"
 	"github.com/byFrederick/goal/internal/gateway"
 	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/retention"
@@ -129,17 +128,12 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	definitionStore := postgres.NewDefinitions(pool, objects, log)
 
 	// Definition authoring writes versions to PostgreSQL and file content to the bucket; until
-	// phase 4 a definition's secret references are checked against goald's environment. The
-	// legacy import validates through it too.
+	// phase 4 a definition's secret references are checked against goald's environment.
 	authors := authoring.New(authoring.Deps{
 		Store: definitionStore, Loads: store, Templates: objects,
 		Credentials: s.credentials(secrets),
 		Clock:       clock, DefaultImage: s.DefaultAgentImage,
 	})
-
-	if err := importLegacy(ctx, s, objects, definitionStore, store, publishProblems(authors), log); err != nil {
-		return err
-	}
 
 	dockerClient, egress, err := containers(ctx, s, log)
 	if err != nil {
@@ -406,47 +400,6 @@ func openDatabase(ctx context.Context, s settings, log *slog.Logger) (*pgxpool.P
 	return pool, nil
 }
 
-// importLegacy brings the bucket's older layouts up to date before anything reads definitions,
-// for the organizations whose legacy import is pending (those from before versions, until it
-// ends): factories stored before organizations move into the default one (which holds the rows
-// from before organizations too), then every factory with no version yet becomes version 1 of
-// itself, or a draft when validate finds a blocking problem (GOAL_LEGACY_IMPORT). Once an
-// organization's import ran it is never read again, so the step is a no-op on every later start.
-func importLegacy(ctx context.Context, s settings, objects ports.ObjectStore, defs ports.DefinitionStore, orgs definitions.Orgs,
-	validate definitions.LegacyValidator, log *slog.Logger,
-) error {
-	pending, err := defs.LegacyImportPending(domain.WithOrg(ctx, postgres.DefaultOrgID))
-	if err != nil {
-		return fmt.Errorf("legacy import of the default organization: %w", err)
-	}
-
-	if pending {
-		moved, err := factorystore.MigrateLegacy(ctx, objects, postgres.DefaultOrgID)
-		if err != nil {
-			return fmt.Errorf("move legacy factory definitions into the default organization: %w", err)
-		}
-
-		log.InfoContext(ctx, "legacy bucket layout migrated", slog.Int("copied", moved.Copied), slog.Int("present", moved.Present),
-			slog.Int("gone", moved.Gone), slog.Int("deleted", moved.Deleted))
-	}
-
-	if !s.LegacyImport {
-		return nil
-	}
-
-	res, err := definitions.ImportLegacy(ctx, definitions.Legacy{
-		Catalog: factorystore.New(objects), Store: defs, Orgs: orgs, Validate: validate, Log: log,
-	})
-	if err != nil {
-		return fmt.Errorf("import legacy factory definitions: %w", err)
-	}
-
-	log.InfoContext(ctx, "legacy definitions imported", slog.Int("factories", res.Factories), slog.Int("versions", res.Published),
-		slog.Int("drafts", res.Drafts), slog.Int("present", res.Present), slog.Int("problems", res.Problems))
-
-	return nil
-}
-
 // HTTP server bounds: a client has readHeaderTimeout to send its headers and readTimeout for the
 // whole request (a definition tree is at most 24 MiB), and an idle keep-alive connection is
 // closed after idleTimeout. There is no write timeout: the realtime stream is one response that
@@ -461,19 +414,6 @@ const (
 func httpServer(addr string, h http.Handler) *http.Server {
 	return &http.Server{
 		Addr: addr, Handler: h, ReadHeaderTimeout: readHeaderTimeout, ReadTimeout: readTimeout, IdleTimeout: idleTimeout,
-	}
-}
-
-// publishProblems is the legacy import's validation: authoring's, as a publish of the files
-// would run it.
-func publishProblems(authors *authoring.Service) definitions.LegacyValidator {
-	return func(ctx context.Context, files map[string][]byte) ([]domain.DefinitionProblem, error) {
-		v, err := authors.ValidateFiles(ctx, files)
-		if err != nil {
-			return nil, err
-		}
-
-		return v.Problems, nil
 	}
 }
 

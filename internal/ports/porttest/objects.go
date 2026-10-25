@@ -2,10 +2,11 @@ package porttest
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -14,48 +15,31 @@ import (
 
 var _ ports.ObjectStore = (*ObjectStore)(nil)
 
-// ObjectStore is a versioned bucket in memory. Like S3 with versioning on, every Put adds a
-// version and Delete adds a delete marker, so old versions stay readable.
+// ObjectStore is a bucket in memory without versioning, as R2: a Put replaces the object and a
+// Delete removes it for good. An object's ETag is derived from its content, as S3's is for a
+// single-part upload.
 type ObjectStore struct {
-	mu       sync.Mutex
-	versions map[string][]objectVersion // key → versions, oldest first
-	next     int
-}
-
-type objectVersion struct {
-	id      string
-	body    []byte
-	deleted bool
+	mu      sync.Mutex
+	objects map[string][]byte
+	writes  map[string]int
 }
 
 // NewObjectStore returns an empty bucket.
 func NewObjectStore() *ObjectStore {
-	return &ObjectStore{versions: map[string][]objectVersion{}}
+	return &ObjectStore{objects: map[string][]byte{}, writes: map[string]int{}}
 }
 
 // Get implements ports.ObjectStore.
-func (s *ObjectStore) Get(_ context.Context, key, version string) (ports.Object, error) {
+func (s *ObjectStore) Get(_ context.Context, key string) (ports.Object, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	vs := s.versions[key]
-	if version == "" {
-		if len(vs) == 0 || vs[len(vs)-1].deleted {
-			return ports.Object{}, fmt.Errorf("get %s: %w", key, ports.ErrNotFound)
-		}
-
-		v := vs[len(vs)-1]
-
-		return object(key, v), nil
+	body, ok := s.objects[key]
+	if !ok {
+		return ports.Object{}, fmt.Errorf("get %s: %w", key, ports.ErrNotFound)
 	}
 
-	for _, v := range vs {
-		if v.id == version && !v.deleted {
-			return object(key, v), nil
-		}
-	}
-
-	return ports.Object{}, fmt.Errorf("get %s version %s: %w", key, version, ports.ErrNotFound)
+	return ports.Object{ObjectInfo: objectInfo(key, body), Body: slices.Clone(body)}, nil
 }
 
 // Put implements ports.ObjectStore.
@@ -63,27 +47,19 @@ func (s *ObjectStore) Put(_ context.Context, key string, body []byte) (ports.Obj
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	v := objectVersion{id: s.newVersion(), body: slices.Clone(body)}
-	s.versions[key] = append(s.versions[key], v)
-
-	return object(key, v).ObjectInfo, nil
+	return s.write(key, body), nil
 }
 
-// PutIfAbsent stores body at key unless a current object exists there; created reports which,
-// and info is the object now at key. Definitions writes blobs with it, so a blob is never
-// rewritten.
+// PutIfAbsent implements ports.ObjectStore.
 func (s *ObjectStore) PutIfAbsent(_ context.Context, key string, body []byte) (ports.ObjectInfo, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if vs := s.versions[key]; len(vs) > 0 && !vs[len(vs)-1].deleted {
-		return object(key, vs[len(vs)-1]).ObjectInfo, false, nil
+	if there, ok := s.objects[key]; ok {
+		return objectInfo(key, there), false, nil
 	}
 
-	v := objectVersion{id: s.newVersion(), body: slices.Clone(body)}
-	s.versions[key] = append(s.versions[key], v)
-
-	return object(key, v).ObjectInfo, true, nil
+	return s.write(key, body), true, nil
 }
 
 // List implements ports.ObjectStore.
@@ -93,9 +69,9 @@ func (s *ObjectStore) List(_ context.Context, prefix string) ([]ports.ObjectInfo
 
 	var out []ports.ObjectInfo
 
-	for key, vs := range s.versions {
-		if v := vs[len(vs)-1]; strings.HasPrefix(key, prefix) && !v.deleted {
-			out = append(out, object(key, v).ObjectInfo)
+	for key, body := range s.objects {
+		if strings.HasPrefix(key, prefix) {
+			out = append(out, objectInfo(key, body))
 		}
 	}
 
@@ -109,9 +85,7 @@ func (s *ObjectStore) Delete(_ context.Context, key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if vs := s.versions[key]; len(vs) > 0 && !vs[len(vs)-1].deleted {
-		s.versions[key] = append(vs, objectVersion{id: s.newVersion(), deleted: true})
-	}
+	delete(s.objects, key)
 
 	return nil
 }
@@ -127,34 +101,35 @@ func (s *ObjectStore) DeletePrefix(_ context.Context, prefix string) (int, error
 
 	n := 0
 
-	for key, vs := range s.versions {
+	for key := range s.objects {
 		if strings.HasPrefix(key, prefix) {
-			n += len(vs)
+			n++
 
-			delete(s.versions, key)
+			delete(s.objects, key)
 		}
 	}
 
 	return n, nil
 }
 
-// Versions returns how many versions, delete markers included, key has.
-func (s *ObjectStore) Versions(key string) int {
+// Writes returns how many times key was written, so a test can tell a write-once object was
+// never rewritten.
+func (s *ObjectStore) Writes(key string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return len(s.versions[key])
+	return s.writes[key]
 }
 
-func (s *ObjectStore) newVersion() string {
-	s.next++
+func (s *ObjectStore) write(key string, body []byte) ports.ObjectInfo {
+	s.objects[key] = slices.Clone(body)
+	s.writes[key]++
 
-	return "v" + strconv.Itoa(s.next)
+	return objectInfo(key, body)
 }
 
-func object(key string, v objectVersion) ports.Object {
-	return ports.Object{
-		ObjectInfo: ports.ObjectInfo{Key: key, Version: v.id, Size: int64(len(v.body))},
-		Body:       slices.Clone(v.body),
-	}
+func objectInfo(key string, body []byte) ports.ObjectInfo {
+	sum := sha256.Sum256(body)
+
+	return ports.ObjectInfo{Key: key, ETag: `"` + hex.EncodeToString(sum[:16]) + `"`, Size: int64(len(body))}
 }

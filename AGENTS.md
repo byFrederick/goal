@@ -28,14 +28,13 @@ internal/adapters/   s3store/ postgres/ docker/ gitworkspace/ github/ envsecrets
 internal/api/        HTTP API handlers for api/openapi.yaml (generated types in internal/api/gen); no adapter imports
 internal/gateway/    MCP gateway inside goald: task-token auth, per-agent tools, credentials added on the host (phase 4: Goal's MCP server for runs, its own tools and `/run` only; connections go direct from the box)
 internal/egress/     the egress proxy's policy: agents to the model API and the gateway's path, tools to public hosts, nothing private (phase 4: public hosts for every box, and the public-only dialer goald uses for connections). Standard library only
-internal/definitions/ goald's cache of published definition versions (current and pinned by runs): lines, contracts, agent files, gateway lookups, legacy import
+internal/definitions/ goald's cache of published definition versions (current and pinned by runs): lines, contracts, agent files, gateway lookups
 internal/config/     loads and validates one factory definition from an fs.FS (bucket prefix or local folder)
 internal/factorymodel/ the Visual editor's model of factory.yaml: read, apply section edits keeping comments, format
 internal/authoring/  definition authoring: create, the shared draft (sections, files, CAS), validation, publish, restore, templates
 internal/retention/  purges deleted organizations after GOAL_ORG_RETENTION: their rows and bucket objects
 internal/builder/    the factory editor's metadata and the skills.sh skills catalog in the bucket (catalog/skills/)
 internal/jonah/      phase 5: Jonah, the continuous-learning loop in goald (retros, proposals, eval runs of a draft against the current version). Imports domain + ports only
-internal/factorystore/ legacy per-factory bucket prefixes, read once by the import into versions (2.2-B). Imports config + ports only. Deleted in phase 4 with the legacy import
 migrations/          forward-only SQL (goose); never edit an applied file
 queries/             SQL for sqlc
 api/                 openapi.yaml + events.schema.json: the only contract between goald and TypeScript; permissions.yaml (phase 3): every permission, generating goald's table and auth/'s roles

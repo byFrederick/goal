@@ -93,23 +93,6 @@ type DefinitionStore interface {
 	// Restore points the factory at an older published version (see Restore); numbers are not
 	// reused and an open draft stays open. Audit: definition.restored.
 	Restore(ctx context.Context, r Restore) (FactoryRecord, error)
-
-	// ImportLegacy turns a factory of the bucket's pre-2.2 layout into versions, once: when
-	// the factory has no version yet it creates the factory row (or adopts the row goald
-	// registered before versions existed, taking i's name and title) and either publishes i as
-	// version 1 and points the factory at it, or, when i.Publish is false (the definition does
-	// not validate), opens it as a draft. A factory that has any version is left alone and
-	// imported is false. Audit: factory.created for a new row, definition.published when it
-	// publishes.
-	ImportLegacy(ctx context.Context, i LegacyImport) (v domain.DefinitionVersion, imported bool, err error)
-	// LegacyImportPending reports whether the organization in ctx has yet to import the
-	// factories of the bucket's pre-2.2 layout: true for each organization that existed when
-	// versions arrived (migration 00039) until EndLegacyImport, never for a newer one, so files
-	// written under a legacy prefix later are never read.
-	LegacyImportPending(ctx context.Context) (bool, error)
-	// EndLegacyImport records that the organization in ctx imported its legacy factories. Ending
-	// an import that ended is a no-op.
-	EndLegacyImport(ctx context.Context) error
 }
 
 // NewFactory is a factory to create with its first draft.
@@ -234,19 +217,6 @@ type StationMove struct {
 	State domain.ItemState
 }
 
-// LegacyImport is one factory of the pre-2.2 bucket layout to import.
-type LegacyImport struct {
-	ID          domain.FactoryID
-	Name, Title string
-	Manifest    domain.Manifest
-	// Source is kind legacy, with the object versions read.
-	Source domain.VersionSource
-	// Publish publishes the import as version 1; false opens it as a draft.
-	Publish bool
-	Message string
-	By      domain.Actor
-}
-
 // ItemsAtRemovedStationError lists the items that keep a publish or restore from dropping
 // stations: items in progress there, which must finish or be stopped first, and open items
 // no StationMove maps.
@@ -285,7 +255,7 @@ type DefinitionNotices interface {
 const (
 	// NoticeFactory: a factory was created or deleted.
 	NoticeFactory = "factory"
-	// NoticeCurrent: the factory's current version moved (publish, restore, legacy import) or
+	// NoticeCurrent: the factory's current version moved (publish, restore) or
 	// it was paused or resumed. VersionID and Number are the current version's.
 	NoticeCurrent = "current"
 	// NoticeDraft: a version row changed: a draft opened, saved, discarded or published.
