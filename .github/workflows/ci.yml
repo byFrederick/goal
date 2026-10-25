@@ -1,9 +1,11 @@
-# Runs exactly what the local pre-push hook runs: `task check`, `task migrate-check` and
-# `task test-integration`. GitHub Actions minutes are not available for this private repository
-# yet, so the hook (.githooks/pre-push, `task hooks:install`) is the gate today; this workflow
-# is kept ready for when they are.
-# Hardening (github-actions-hardening skill): least-privilege token, actions pinned to commit SHAs,
-# no untrusted ${{ }} expressions in run steps, no secrets needed.
+# The same gate as the local pre-push hook (.githooks/pre-push), on every pull request and every
+# push to main: `task check`, and `task migrate-check` when migrations/ or auth/ changed (on a pull
+# request, against its base; on main, always); plus `task test-integration` on PostgreSQL 18,
+# RustFS and Mailpit from compose.yaml. The tools come from .mise.toml, as on a laptop.
+# If the workflow shows as disabled on GitHub, a person re-enables it: `gh workflow enable ci.yml`.
+# Hardening (github-actions-hardening skill): a read-only token no job widens, actions pinned to
+# commit SHAs, only the pull_request trigger for pull requests, no secrets (pull requests from
+# forks get none, and none are needed), no ${{ }} expressions inside run scripts, superseded runs cancelled.
 name: ci
 
 on:
@@ -15,54 +17,57 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   check:
+    name: task check
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+          fetch-depth: 0 # the pull request's base commit, for the migrations diff
+      # Go, Node, pnpm, terraform, tflint, sops, golangci-lint and sqlc at .mise.toml's versions.
+      # The default cache key includes the hash of .mise.toml, so a version bump misses the cache.
+      - uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
         with:
-          go-version-file: go.mod
+          version: 2026.10.3
       - uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
         with:
           version: 3.46.1
           checksum: 8220f1b4563a5bed932348b7350aafba66e1100e90bd411e4bcda4fe80de08f1 # task_linux_amd64.tar.gz
-      - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        with:
-          version: v2.15.0
-          install-only: true
-      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        with:
-          terraform_version: "1.15.7" # .mise.toml
-          terraform_wrapper: false
-      - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
-        with:
-          tflint_version: v0.64.0 # .mise.toml
-      - name: Lint, race tests, factory validation, terraform
+      - name: Lint, race tests, worker, auth, web, control Worker, factory validation, terraform
         run: task check
-      - name: Migrations apply from zero
+      - name: Did migrations/ or auth/ change
+        id: migrations
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" != pull_request ] || [ -n "$(git diff --name-only "$BASE_SHA"...HEAD -- migrations/ auth/)" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Migrations apply from zero, Better Auth schema drift
+        if: steps.migrations.outputs.run == 'true'
         run: task migrate-check
 
   integration:
+    name: task test-integration
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
         with:
-          go-version-file: go.mod
+          version: 2026.10.3
       - uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
         with:
           version: 3.46.1
           checksum: 8220f1b4563a5bed932348b7350aafba66e1100e90bd411e4bcda4fe80de08f1 # task_linux_amd64.tar.gz
-      - name: Integration tests on PostgreSQL 18 and RustFS (compose.yaml)
+      - name: Integration tests on PostgreSQL 18, RustFS and Mailpit (compose.yaml)
         run: task test-integration
