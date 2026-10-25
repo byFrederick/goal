@@ -19,6 +19,9 @@ import (
 const (
 	// CodeConnectionUnknown: the organization has no connection of a name the definition uses.
 	CodeConnectionUnknown = "connection-unknown"
+	// CodeModelConnectionMissing: the definition has agents but no runtime.modelConnection, so
+	// none of its runs could get a model.
+	CodeModelConnectionMissing = "model-connection-missing"
 	// CodeConnectionNotModel: runtime.modelConnection is of a kind that gives no model access.
 	CodeConnectionNotModel = "connection-not-model"
 	// CodeRepositoryHostMismatch: runtime.repository.connection does not sign git in to the
@@ -40,8 +43,9 @@ type KnowledgeSources interface {
 }
 
 // ConnectionsCheck is the credentials check from phase 4 on (spec 4 §4.4): every organization
-// connection the definition names exists (connection-unknown); its model connection gives model
-// access (connection-not-model); its repository's connection signs git in to the repository's
+// connection the definition names exists (connection-unknown); a definition with agents names a
+// model connection (model-connection-missing), which gives model access (connection-not-model);
+// its repository's connection signs git in to the repository's
 // host (repository-host-mismatch); no two connections an agent's runs get set the same variable
 // (connection-env-conflict); every knowledge source it may search exists
 // (knowledge-source-unknown); and a merge station has a connection of a kind with a code host to
@@ -158,10 +162,11 @@ func (r *connectionsRun) exists(name string) bool {
 	return ok
 }
 
-// model checks runtime.modelConnection; the fixes offer each connection with model access.
+// model checks runtime.modelConnection, which a definition with agents must name (it is how
+// every run gets its model); the fixes offer each connection with model access.
 func (r *connectionsRun) model() {
 	name := r.f.Spec.Runtime.ModelConnection
-	if name == "" {
+	if name == "" && len(r.f.Spec.Agents) == 0 {
 		return
 	}
 
@@ -189,6 +194,10 @@ func (r *connectionsRun) model() {
 	cn, k, ok := r.kind(name)
 
 	switch {
+	case name == "":
+		r.add(p, CodeModelConnectionMissing, fmt.Sprintf(
+			"runtime.modelConnection: the factory has agents but names no model connection, which gives every run its model; name a connection of a kind with model access (%s)",
+			strings.Join(titles, ", ")), fixes...)
 	case !ok && !r.exists(name):
 		r.add(p, CodeConnectionUnknown, "runtime.modelConnection: the organization has no connection named "+name, fixes...)
 	case !ok || !k.Spec.Model:

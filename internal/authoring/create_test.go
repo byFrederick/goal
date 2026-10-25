@@ -3,6 +3,8 @@ package authoring_test
 import (
 	"encoding/json"
 	"errors"
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 
@@ -123,9 +125,10 @@ func TestCreateFactory_BlankSkeletonNamesNoStationOrAgent(t *testing.T) {
 	}
 }
 
-// A blank start is publishable with what the wizard's Visual sections write (a line and an agent):
-// nothing it needs is YAML-only, so the skeleton's missing knowledge base is not an error.
-func TestCreateFactory_BlankSkeletonPublishesWithALineAndAnAgent(t *testing.T) {
+// A blank start is publishable with what the wizard's Visual sections write (a line, an agent and
+// the model connection its runs get, which publish refuses without): nothing it needs is
+// YAML-only, so the skeleton's missing knowledge base is not an error.
+func TestCreateFactory_BlankSkeletonPublishesWithALineAnAgentAndAModel(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
@@ -156,6 +159,23 @@ func TestCreateFactory_BlankSkeletonPublishesWithALineAndAnAgent(t *testing.T) {
 			`{"id":"done","kind":"done"}`),
 	}); err != nil {
 		t.Fatalf("add the line: %v", err)
+	}
+
+	_, err = h.svc.Publish(h.ctx, f, h.publishRequest(t, f))
+	if invalid, ok := errors.AsType[*authoring.InvalidError](err); !ok || !slices.Contains(codes(invalid.Problems), authoring.CodeModelConnectionMissing) {
+		t.Fatalf("publish without a model connection = %v; want refused with %s", err, authoring.CodeModelConnectionMissing)
+	}
+
+	basics := maps.Clone(m.Model.Basics)
+	basics["model_connection"] = "claude"
+
+	value, err := json.Marshal(basics)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.svc.SaveSection(h.ctx, f, authoring.SectionSave{Section: authoring.Basics, IfMatch: m.ETags[authoring.Basics], Value: value}); err != nil {
+		t.Fatalf("name the model connection: %v", err)
 	}
 
 	v, err := h.svc.Publish(h.ctx, f, h.publishRequest(t, f))

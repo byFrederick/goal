@@ -14,6 +14,9 @@ import (
 	"github.com/byFrederick/goal/internal/ports"
 )
 
+// useClaude is the fix that names the model connection claude.
+const useClaude = "Use claude"
+
 // awsSecret is a secret value the connections check must never repeat.
 const awsSecret = "aws-secret-value"
 
@@ -55,11 +58,16 @@ func TestConnectionsCheck_ReportsEachProblemWithItsFixes(t *testing.T) {
 		},
 		{
 			name: "an unknown model connection", edits: []string{"modelConnection: claude", "modelConnection: ghost"},
-			code: "connection-unknown", pointer: "/basics/model_connection", fixes: []string{"Use claude"}, inPlaces: []string{"ghost"},
+			code: "connection-unknown", pointer: "/basics/model_connection", fixes: []string{useClaude}, inPlaces: []string{"ghost"},
+		},
+		{
+			name: "agents without a model connection", edits: []string{"    modelConnection: claude\n", ""},
+			code: "model-connection-missing", pointer: "/basics/model_connection", fixes: []string{useClaude},
+			inPlaces: []string{"runtime.modelConnection"},
 		},
 		{
 			name: "a model connection without model access", edits: []string{"modelConnection: claude", "modelConnection: code"},
-			code: "connection-not-model", pointer: "/basics/model_connection", fixes: []string{"Use claude"},
+			code: "connection-not-model", pointer: "/basics/model_connection", fixes: []string{useClaude},
 			inPlaces: []string{"code is a GitHub"},
 		},
 		{
@@ -206,7 +214,7 @@ func TestConnectionsCheck_FixesPatchTheirSection(t *testing.T) {
 	conflict, _ := problem(v.Problems, "connection-env-conflict")
 
 	want := []domain.ProblemFix{
-		{Label: "Use claude", Section: domain.SectionBasics, Patch: []domain.PatchOp{{Op: "replace", Path: "/model_connection", Value: json.RawMessage(`"claude"`)}}},
+		{Label: useClaude, Section: domain.SectionBasics, Patch: []domain.PatchOp{{Op: "replace", Path: "/model_connection", Value: json.RawMessage(`"claude"`)}}},
 		{Label: "Keep aws-dev", Section: domain.SectionAgents, Patch: []domain.PatchOp{{Op: "remove", Path: "/agents/0/connections/1"}}},
 		{Label: "Keep aws-prod", Section: domain.SectionAgents, Patch: []domain.PatchOp{{Op: "remove", Path: "/agents/0/connections/0"}}},
 	}
