@@ -680,6 +680,53 @@ func (k ConnectionKind) expand(s string, values, minted map[string]string) (out 
 	return out, ok, err
 }
 
+// ConnectionOutline is what a run's box gets from a connection, without any value: the names of
+// its env variables, sorted, and the host of its git login ("" without one).
+type ConnectionOutline struct {
+	Env     []string
+	GitHost string
+}
+
+// outlinePlaceholder stands in for the secret and minted values Outline never sees.
+const outlinePlaceholder = "set"
+
+// Outline renders k for c from what members may see of it, its non-secret fields and which secret
+// fields are set, with a placeholder for every secret and minted value, so a definition's checks
+// know which variables and git host a run would get (spec 4 §4.4). A connection its kind cannot
+// render outlines as nothing.
+func (k ConnectionKind) Outline(c Connection) ConnectionOutline {
+	values := maps.Clone(c.Fields)
+	if values == nil {
+		values = map[string]string{}
+	}
+
+	for _, name := range c.SecretFields {
+		values[name] = outlinePlaceholder
+	}
+
+	minted := map[string]string{}
+
+	for _, t := range k.templates() {
+		for _, r := range mustRefs(t.s) {
+			if r.minted {
+				minted[r.name] = outlinePlaceholder
+			}
+		}
+	}
+
+	rc, err := k.Render(values, minted)
+	if err != nil {
+		return ConnectionOutline{}
+	}
+
+	out := ConnectionOutline{Env: slices.Sorted(maps.Keys(rc.Env))}
+	if rc.Git != nil {
+		out.GitHost = rc.Git.Host
+	}
+
+	return out
+}
+
 // EngineActor is who uses a connection for a run in the audit log (connection.used names the run).
 var EngineActor = Actor{Kind: ActorSystem, ID: "engine", Name: "engine"}
 

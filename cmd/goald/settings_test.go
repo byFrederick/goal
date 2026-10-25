@@ -560,7 +560,7 @@ func TestSettings_CredentialsRefuseGoaldsOwnVariables(t *testing.T) {
 
 	lookup := func(k string) (string, bool) { v, ok := env[k]; return v, ok }
 
-	findings, err := s.credentials(envsecrets.New(lookup)).Check(t.Context(), "", []config.SecretUse{
+	findings, err := s.credentials(envsecrets.New(lookup)).Findings(t.Context(), []config.SecretUse{
 		{Path: "runtime.repository.token", Ref: "env:GOAL_DATABASE_URL"},
 		{Path: "spec.connections[0].headers.Authorization", Ref: "env:ACME_GIT_TOKEN"},
 	})

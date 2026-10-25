@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://goal.local/schema/factory.schema.json",
   "title": "Goal factory",
-  "description": "One file defines a factory: its runtime, knowledge base, connections, skills, agents, board and learning loop.",
+  "description": "One file defines a factory: its runtime, the organization connections and knowledge sources it uses, skills, agents, board and learning loop.",
   "type": "object",
   "required": ["apiVersion", "kind", "metadata", "spec"],
   "additionalProperties": false,
@@ -17,7 +17,7 @@
         "id": {
           "type": "string",
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-          "description": "Immutable UUID. Keys the database rows, the knowledge base prefix (<id>/) and every AWS resource, so the name and folder can change freely."
+          "description": "Immutable UUID. Keys the database rows and bucket prefixes, so the name and folder can change freely."
         },
         "name": { "$ref": "#/$defs/slug", "description": "Human-friendly slug shown in the UI and CLI. Safe to rename." },
         "title": { "type": "string" },
@@ -32,17 +32,33 @@
       "additionalProperties": false,
       "properties": {
         "runtime": { "$ref": "#/$defs/runtime" },
+        "connections": {
+          "type": "array",
+          "description": "The organization's connections the factory uses, by name. Each agent's connections name entries of this list; runtime.modelConnection and runtime.repository.connection go to every run without being listed.",
+          "items": { "$ref": "#/$defs/connection" }
+        },
+        "knowledge": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sources": {
+              "type": "array",
+              "description": "The organization's knowledge sources the factory's agents may search, by name.",
+              "items": { "$ref": "#/$defs/slug" }
+            }
+          }
+        },
         "knowledgeBase": { "$ref": "#/$defs/knowledgeBase" },
         "secrets": {
           "type": "object",
+          "description": "Removed in phase 4 (field-removed): connections hold credentials. Accepted so versions published before still load.",
           "required": ["provider"],
           "additionalProperties": false,
           "properties": {
-            "provider": { "enum": ["env", "aws-secrets-manager", "1password"], "description": "env now (goald resolves env:NAME from its environment or a local .env); aws-secrets-manager in the cloud; 1password in the last phase." },
+            "provider": { "enum": ["env", "aws-secrets-manager", "1password"] },
             "vault": { "type": "string" }
           }
         },
-        "connections": { "type": "array", "items": { "$ref": "#/$defs/connection" } },
         "skills": { "type": "array", "items": { "$ref": "#/$defs/skill" } },
         "contracts": {
           "type": "object",
@@ -60,38 +76,35 @@
     "model": { "type": "string", "pattern": "^claude-[a-z0-9-]+$" },
     "secretRef": {
       "type": "string",
-      "description": "A literal, an environment reference (env:NAME), or later an AWS Secrets Manager ARN or 1Password reference (op://vault/item/field). goald resolves references on the host; they never reach the agent container."
+      "description": "A value of a removed form: a literal or an environment reference (env:NAME) that goald resolves, for the repository token only into the sandbox's prepare, until the cutover to connections."
     },
     "runtime": {
       "type": "object",
-      "required": ["runner", "image", "auth"],
       "additionalProperties": false,
       "properties": {
-        "runner": { "enum": ["docker", "ecs"] },
-        "image": { "type": "string" },
-        "auth": { "enum": ["claude-subscription", "anthropic-api-key", "bedrock"] },
         "model": { "$ref": "#/$defs/model" },
+        "modelConnection": { "$ref": "#/$defs/slug", "description": "The organization connection that gives every run its model: one of a kind with model access (anthropic, claude-subscription, bedrock)." },
+        "size": { "enum": ["small", "medium", "large"], "description": "How much CPU and memory each run's box gets; medium when omitted." },
+        "tools": {
+          "type": "array",
+          "maxItems": 50,
+          "description": "mise tool specs (go@1.26.10, npm:@acme/cli@2) every run installs after the repository's own mise.toml or .tool-versions.",
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        },
         "repository": {
           "type": "object",
-          "description": "The git repository agent tasks work on. goald clones it on the host for every run, on the item's branch (goal/<number>-<slug>); the clone credential never reaches the agent container. Either an https URL with a token reference, or (from phase 4) a code-host connection and the repository's owner/name.",
-          "if": { "required": ["connection"] },
-          "then": {
-            "required": ["connection", "repo"],
-            "additionalProperties": false,
-            "properties": {
-              "connection": { "$ref": "#/$defs/slug", "description": "A connection of this factory whose connector is a code host; its credential clones and merges (phase 4)." },
-              "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "description": "owner/name on the connection's code host" }
-            }
-          },
-          "else": {
-            "required": ["url"],
-            "additionalProperties": false,
-            "properties": {
-              "url": { "type": "string", "pattern": "^https://[^/@]+/.+", "description": "https clone URL without credentials, on the install's GitHub host (GOAL_GITHUB_WEB_URL, default github.com): goald clones from no other host, since the token is the install's" },
-              "token": { "$ref": "#/$defs/secretRef", "description": "Token for cloning a private repository (GitHub: a fine-grained PAT)" }
-            }
+          "description": "The git repository cloned into each run's box before the agent starts, on the item's branch (goal/<number>-<slug>).",
+          "required": ["url"],
+          "additionalProperties": false,
+          "properties": {
+            "url": { "type": "string", "pattern": "^https://[^/@]+/.+", "description": "https clone URL without credentials" },
+            "connection": { "$ref": "#/$defs/slug", "description": "The organization connection that clones and merges: one whose kind logs git in to the URL's host. Omit it for a public repository." },
+            "token": { "$ref": "#/$defs/secretRef", "description": "Removed in phase 4 (env-reference-removed): set connection. Accepted so versions published before still load." }
           }
         },
+        "runner": { "enum": ["docker", "ecs"], "description": "Removed in phase 4 (field-removed): the platform chooses the sandbox backend." },
+        "image": { "type": "string", "description": "Removed in phase 4 (field-removed): every run uses the platform's agent image." },
+        "auth": { "enum": ["claude-subscription", "anthropic-api-key", "bedrock"], "description": "Removed in phase 4 (field-removed): set modelConnection." },
         "budget": {
           "type": "object",
           "additionalProperties": false,
@@ -109,7 +122,7 @@
       "type": "object",
       "required": ["collections"],
       "additionalProperties": false,
-      "description": "Optional until the knowledge base ships (later): documents will live under s3://<knowledge bucket>/<metadata.id>/<collection>/.",
+      "description": "Removed in phase 4 (field-removed): set knowledge.sources. Accepted so versions published before still load.",
       "properties": {
         "collections": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/slug" } },
         "retrieval": {
@@ -125,21 +138,25 @@
       }
     },
     "connection": {
-      "type": "object",
-      "description": "A tool source agents reach through the gateway: the inline form (type and transport, served today) or the connector form (a catalog connector, phase 4).",
-      "if": { "required": ["connector"] },
-      "then": { "$ref": "#/$defs/connectorConnection" },
-      "else": { "$ref": "#/$defs/typedConnection" }
+      "description": "An organization connection, by name. The inline form (type) and the connector form (connector) are removed in phase 4 (connection-inline-removed) and accepted so versions published before still load.",
+      "if": { "type": "string" },
+      "then": { "$ref": "#/$defs/slug" },
+      "else": {
+        "type": "object",
+        "if": { "required": ["connector"] },
+        "then": { "$ref": "#/$defs/connectorConnection" },
+        "else": { "$ref": "#/$defs/typedConnection" }
+      }
     },
     "connectorConnection": {
       "type": "object",
-      "description": "A connection from the connector catalog. Any key not listed here is a setting of the connector, validated against the connector's settings schema in phase 4.",
+      "description": "Removed: a connection from the connector catalog, which never shipped. Any key not listed here was a setting of the connector.",
       "required": ["connector"],
       "not": { "required": ["type"] },
       "properties": {
         "connector": { "type": "string", "pattern": "^[a-z][a-z0-9-]*[a-z0-9](@[A-Za-z0-9._-]+)?$", "description": "A catalog connector, curated or org-private: name, or name@version." },
         "name": { "$ref": "#/$defs/slug", "description": "Unique in the factory; defaults to the connector's name." },
-        "credential": { "$ref": "#/$defs/slug", "description": "The organization credential the connection signs in with (phase 4); omitted when it needs none." },
+        "credential": { "$ref": "#/$defs/slug" },
         "agents": { "type": "array", "items": { "type": "string" }, "description": "Agents that may use the connection; tools may narrow it further." },
         "tools": {
           "type": "object",
@@ -320,7 +337,7 @@
         },
         "action": {
           "enum": ["merge"],
-          "description": "On a human station: what goald does when the human approves. merge merges the item's pull request (the pull_request field of its latest output) on runtime.repository first."
+          "description": "On a human station: what goald does when the human approves. merge merges the item's pull request (the pull_request field of its latest output) first."
         },
         "gate": {
           "type": "object",

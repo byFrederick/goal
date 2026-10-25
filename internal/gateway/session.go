@@ -22,14 +22,16 @@ import (
 // Reasons a granted connection is not served. They reach the agent and the logs, so they
 // never carry a value.
 const (
-	reasonStdio       = "stdio (container) MCP servers are not served by this goald"
-	reasonHost        = "a stdio server without an image would run on the host, which the gateway never does"
-	reasonUnpinned    = "its image is not pinned to a version tag or a digest"
-	reasonKind        = " connections are not served yet"
-	reasonURL         = "its url is not https (plain http is allowed to loopback only)"
-	reasonCredentials = "its credentials are not configured"
-	reasonRefused     = "it references a secret this install does not send there"
-	reasonUpstream    = "the upstream server did not answer"
+	reasonStdio    = "stdio (container) MCP servers are not served by this goald"
+	reasonHost     = "a stdio server without an image would run on the host, which the gateway never does"
+	reasonUnpinned = "its image is not pinned to a version tag or a digest"
+	reasonKind     = " connections are not served yet"
+	// reasonOrganization: an organization connection (spec 4 §4.4), which the gateway never serves.
+	reasonOrganization = "runs reach the organization's connections from their own box, not through the gateway"
+	reasonURL          = "its url is not https (plain http is allowed to loopback only)"
+	reasonCredentials  = "its credentials are not configured"
+	reasonRefused      = "it references a secret this install does not send there"
+	reasonUpstream     = "the upstream server did not answer"
 )
 
 // metaConnections is the tools/list _meta key that reports each granted connection's status.
@@ -74,6 +76,10 @@ func (s *session) prepare(ctx context.Context, c config.Connection) *connection 
 	conn := &connection{name: c.Name, url: c.URL}
 
 	switch {
+	case !c.Inline():
+		conn.unavailable = reasonOrganization
+
+		return conn
 	case c.Type == "mcp" && c.Transport == "http":
 	case c.Type == "mcp":
 		s.prepareSidecar(ctx, c, conn)

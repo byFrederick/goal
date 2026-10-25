@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"strconv"
 
 	"github.com/google/uuid"
 
@@ -57,12 +56,8 @@ type Created struct {
 	Draft   domain.DefinitionVersion
 }
 
-// Defaults of the blank skeleton: the runner and model auth of a laptop install.
-const (
-	skeletonRunner = "docker"
-	skeletonAuth   = "claude-subscription"
-	nilFactoryID   = "00000000-0000-0000-0000-000000000000"
-)
+// nilFactoryID is the metadata.id of templates and the blank skeleton; each factory gets its own.
+const nilFactoryID = "00000000-0000-0000-0000-000000000000"
 
 // CreateFactory creates a factory with its first draft (B §8.1): from the blank template (or,
 // when the catalog has none, a skeleton naming no station or agent), a catalog template, a
@@ -136,7 +131,7 @@ func (s *Service) start(ctx context.Context, st Start) (starting, error) {
 
 		switch {
 		case errors.Is(err, ErrTemplateNotFound):
-			return s.stored(ctx, map[string][]byte{config.FileName: s.skeleton()}, domain.VersionSource{Kind: domain.SourceBlank})
+			return s.stored(ctx, map[string][]byte{config.FileName: skeleton()}, domain.VersionSource{Kind: domain.SourceBlank})
 		case err != nil:
 			return starting{}, err
 		}
@@ -219,12 +214,11 @@ func (s *Service) cloneStart(ctx context.Context, st Start) (starting, error) {
 }
 
 // skeleton is the blank definition when the catalog has no blank template: apiVersion, kind,
-// metadata and the runtime only, since a station or agent name in Go would make the code
-// define factories. The Line section starts empty.
-func (s *Service) skeleton() []byte {
+// metadata and the runtime's size only, since a station, agent or connection name in Go would
+// make the code define factories. The Line section starts empty.
+func skeleton() []byte {
 	return []byte("apiVersion: goal/v1\nkind: Factory\nmetadata:\n  id: " + nilFactoryID + "\n  name: new-factory\n" +
-		"spec:\n  runtime:\n    runner: " + skeletonRunner + "\n    image: " + strconv.Quote(s.image) +
-		"\n    auth: " + skeletonAuth + "\n")
+		"spec:\n  runtime:\n    size: " + string(domain.SandboxMedium) + "\n")
 }
 
 // startingModel reads the starting tree's factory.yaml; one that is missing or does not parse

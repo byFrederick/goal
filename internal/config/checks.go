@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,6 +21,8 @@ const (
 	checkSchema     = "schema"     // factory.yaml satisfies factory.schema.json
 	checkLine       = "line"       // the line is well formed
 	checkReferences = "references" // every name and path points at something that exists
+	checkTools      = "tools"      // runtime.tools are mise tool specs
+	checkRemoved    = "removed"    // no form phase 4 removed is left
 	checkImages     = "images"     // connection images are pinned
 	checkSecrets    = "secrets"    // secrets are references, not values
 	// checkAvailability: what the definition declares that this install cannot serve yet.
@@ -51,18 +54,27 @@ const (
 	codeUnknownContract   = "unknown-contract"
 	codeUnknownStation    = "unknown-station"
 	codeUnknownCollection = "unknown-collection"
-	codeToolAgent         = "tool-agent-not-on-connection"
 	codePromptNotFound    = "prompt-not-found"
 	codeSkillNotFound     = "skill-not-found"
 	codeContractNotFound  = "contract-not-found"
 
+	codeToolSpecInvalid = "tool-spec-invalid"
+
+	// The forms phase 4 removed (spec 4 §4.4): warnings until the cutover makes goald refuse to
+	// run a version that has them, each with a quick fix.
+	codeFieldRemoved        = "field-removed"
+	codeEnvReferenceRemoved = "env-reference-removed"
+	codeInlineRemoved       = "connection-inline-removed"
+
 	codeImageUnpinned = "image-unpinned"
 	codeLiteralSecret = "literal-secret"
 
-	codeBuiltinAsk         = "builtin-ask-unavailable"
-	codeConnectorLater     = "connector-unavailable"
-	codeRepoConnectionTodo = "repository-connection-unavailable"
+	codeBuiltinAsk = "builtin-ask-unavailable"
 )
+
+// toolSpec is a mise tool spec: an optional backend ("aqua:", "npm:"), a tool name (a path for
+// some backends, a scope for npm) and an optional @version. Nothing a shell would read.
+var toolSpec = regexp.MustCompile(`^(?:[a-z][a-z0-9-]*:)?@?[A-Za-z0-9][A-Za-z0-9._/+-]*(?:@[A-Za-z0-9][A-Za-z0-9._+:-]*)?$`)
 
 // checker runs the checks that need a decoded factory and collects their problems.
 type checker struct {
@@ -86,7 +98,8 @@ func (c *checker) run() []domain.DefinitionProblem {
 	c.agentRefs()
 	c.line()
 	c.flowAndLearning()
-	c.connections()
+	c.tools()
+	c.removedForms()
 	c.images()
 	c.secrets()
 
@@ -119,14 +132,17 @@ func (c *checker) duplicates() {
 	dup(c, "skill", names(s.Skills, func(sk Skill) string { return sk.Name }), "skills", "", keyName)
 
 	for i, conn := range s.Connections {
-		key := keyName
-		if conn.Connector != "" && !c.f.hasKey(at("spec", "connections", i, keyName)) {
-			key = "connector"
+		p := at("spec", "connections", i)
+
+		switch {
+		case conn.Connector != "" && !c.f.hasKey(append(slices.Clone(p), keyName)):
+			p = append(p, "connector")
+		case conn.Inline():
+			p = append(p, keyName)
 		}
 
 		if slices.IndexFunc(s.Connections[:i], func(o Connection) bool { return o.Name == conn.Name }) >= 0 {
-			c.errorf(checkReferences, codeDuplicateName, at("spec", "connections", i, key),
-				"connection %s: the name is used by another connection", conn.Name)
+			c.errorf(checkReferences, codeDuplicateName, p, "connection %s: the name is used by another connection", conn.Name)
 		}
 	}
 }
@@ -275,12 +291,9 @@ func (c *checker) action(i int, s Station) {
 		return
 	}
 
-	p := c.errorf(checkLine, codeMergeNeedsRepo, at("spec", "board", "stations", i, "action"),
-		"station %s: action merge needs runtime.repository, whose pull requests it merges", s.ID)
-	p.Fixes = []domain.ProblemFix{{
-		Label: "Remove the merge step", Section: domain.SectionLine,
-		Patch: []domain.PatchOp{{Op: domain.PatchRemove, Path: sectionPath(at("spec", "board", "stations", i, "action"))}},
-	}}
+	p := at("spec", "board", "stations", i, "action")
+	c.errorf(checkLine, codeMergeNeedsRepo, p, "station %s: action merge needs runtime.repository, whose pull requests it merges", s.ID).
+		Fixes = []domain.ProblemFix{RemoveFix("Remove the merge step", p)}
 }
 
 // capacity reports agents beyond the station's WIP: they would idle. The fixes raise WIP to the
@@ -294,8 +307,8 @@ func (c *checker) capacity(i int, s Station) {
 	p := c.errorf(checkLine, codeAgentsOverWIP, append(base, keyAgents),
 		"station %s: %d agents exceed wip %d; extra agents would idle", s.ID, s.Agents, s.WIP)
 	p.Fixes = []domain.ProblemFix{
-		replaceFix(fmt.Sprintf("Set WIP to %d", s.Agents), append(slices.Clone(base), "wip"), s.Agents),
-		replaceFix(fmt.Sprintf("Set agents to %d", s.WIP), append(slices.Clone(base), keyAgents), s.WIP),
+		ReplaceFix(fmt.Sprintf("Set WIP to %d", s.Agents), append(slices.Clone(base), "wip"), s.Agents),
+		ReplaceFix(fmt.Sprintf("Set agents to %d", s.WIP), append(slices.Clone(base), keyAgents), s.WIP),
 	}
 }
 
@@ -312,8 +325,13 @@ func (c *checker) flowAndLearning() {
 			"learning.librarian: unknown agent %q", l.Librarian.Agent)
 	}
 
+	var collections []string
+	if kb := c.f.Spec.KnowledgeBase; kb != nil {
+		collections = kb.Collections
+	}
+
 	for j, w := range l.Librarian.Writes {
-		if !slices.Contains(c.f.Spec.KnowledgeBase.Collections, w) {
+		if !slices.Contains(collections, w) {
 			c.errorf(checkReferences, codeUnknownCollection, at("spec", "learning", "librarian", "writes", j),
 				"learning.librarian writes %q, which is not a knowledge base collection", w)
 		}
@@ -344,47 +362,64 @@ func (c *checker) constraint() {
 	}
 }
 
-// connections checks the connector form's references and what of it this install can serve,
-// and a repository reached through a connection.
-func (c *checker) connections() {
-	for i, conn := range c.f.Spec.Connections {
-		if conn.Connector == "" {
+// tools refuses a runtime.tools entry that is not a mise tool spec: the box installs each one.
+func (c *checker) tools() {
+	for i, t := range c.f.Spec.Runtime.Tools {
+		if toolSpec.MatchString(t) {
 			continue
 		}
 
-		base := at("spec", "connections", i)
-		c.warnf(checkAvailability, codeConnectorLater, append(base, "connector"),
-			"connection %s: connectors arrive with phase 4; until then its tools are not served", conn.Name)
+		p := at("spec", "runtime", "tools", i)
+		c.errorf(checkTools, codeToolSpecInvalid, p,
+			"runtime.tools: %q is not a mise tool spec, such as go, go@1.26.10 or npm:@acme/cli@2", t).
+			Fixes = []domain.ProblemFix{RemoveFix("Remove "+t, p)}
+	}
+}
 
-		for j, a := range conn.Agents {
-			if !slices.Contains(c.agents, a) {
-				c.errorf(checkReferences, codeUnknownAgent, append(slices.Clone(base), keyAgents, strconv.Itoa(j)),
-					"connection %s: unknown agent %q", conn.Name, a)
-			}
+// removedKeys are the keys phase 4 removed (field-removed), with what replaces each.
+var removedKeys = []struct {
+	path []string
+	why  string
+}{
+	{at("spec", "runtime", "runner"), "the platform chooses where runs start"},
+	{at("spec", "runtime", "image"), "every run starts from the platform's agent image and installs the repository's tools and runtime.tools"},
+	{at("spec", "runtime", "auth"), "set runtime.modelConnection to an organization connection with model access"},
+	{at("spec", "knowledgeBase"), "list the organization's knowledge sources the factory may search in knowledge.sources"},
+	{at("spec", "secrets"), "the organization's connections hold its credentials"},
+}
+
+// removedForms names each form phase 4 removed that the definition still has, with a fix that
+// takes it out (spec 4 §4.4). They are warnings: versions published before still run until the
+// cutover to connections.
+func (c *checker) removedForms() {
+	for _, k := range removedKeys {
+		if !c.f.hasKey(k.path) {
+			continue
 		}
 
-		for _, tool := range sortedKeys(conn.Tools) {
-			for j, a := range conn.Tools[tool].Agents {
-				if !slices.Contains(conn.Agents, a) {
-					c.errorf(checkReferences, codeToolAgent, append(slices.Clone(base), "tools", tool, keyAgents, strconv.Itoa(j)),
-						"connection %s: tool %s names agent %q, who is not one of the connection's agents", conn.Name, tool, a)
-				}
-			}
+		name := strings.Join(k.path[1:], ".")
+		c.add(checkRemoved, codeFieldRemoved, domain.SeverityWarning, k.path, "%s is removed: %s", name, k.why).
+			Fixes = []domain.ProblemFix{RemoveFix("Remove "+name, k.path)}
+	}
+
+	if r := c.f.Spec.Runtime.Repository; r != nil && r.Token != "" {
+		p := at("spec", "runtime", "repository", "token")
+		c.add(checkRemoved, codeEnvReferenceRemoved, domain.SeverityWarning, p,
+			"runtime.repository.token is removed: set runtime.repository.connection to an organization connection that signs git in to the repository's host").
+			Fixes = []domain.ProblemFix{RemoveFix("Remove the token", p)}
+	}
+
+	for i, conn := range c.f.Spec.Connections {
+		if !conn.Inline() {
+			continue
 		}
-	}
 
-	r := c.f.Spec.Runtime.Repository
-	if r == nil || r.Connection == "" {
-		return
+		p := at("spec", "connections", i)
+		c.add(checkRemoved, codeInlineRemoved, domain.SeverityWarning, p,
+			"connection %s: inline connections are removed; create an organization connection named %s (for example of kind mcp-server) "+
+				"and list it here by name, with its credentials in the connection", conn.Name, conn.Name).
+			Fixes = []domain.ProblemFix{ReplaceFix("Use the organization's connection "+conn.Name, p, map[string]string{keyName: conn.Name})}
 	}
-
-	p := at("spec", "runtime", "repository", "connection")
-	if !slices.ContainsFunc(c.f.Spec.Connections, func(cn Connection) bool { return cn.Name == r.Connection }) {
-		c.errorf(checkReferences, codeUnknownConnection, p, "runtime.repository: unknown connection %q", r.Connection)
-	}
-
-	c.errorf(checkAvailability, codeRepoConnectionTodo, p,
-		"runtime.repository: a repository through a connection arrives with connectors (phase 4); use url and token until then")
 }
 
 func (c *checker) images() {
@@ -408,8 +443,9 @@ func (c *checker) secrets() {
 	}
 }
 
-// replaceFix replaces the value at path (a factory.yaml path) with v in its section.
-func replaceFix(label string, path []string, v any) domain.ProblemFix {
+// ReplaceFix is a fix that replaces the value at path (a factory.yaml path) with v, as a patch
+// on the model section the path is in.
+func ReplaceFix(label string, path []string, v any) domain.ProblemFix {
 	section, _ := ModelPointer(path)
 	value, _ := json.Marshal(v)
 
@@ -417,6 +453,14 @@ func replaceFix(label string, path []string, v any) domain.ProblemFix {
 		Label: label, Section: section,
 		Patch: []domain.PatchOp{{Op: domain.PatchReplace, Path: sectionPath(path), Value: value}},
 	}
+}
+
+// RemoveFix is a fix that removes the value at path (a factory.yaml path), as a patch on the model
+// section the path is in.
+func RemoveFix(label string, path []string) domain.ProblemFix {
+	section, _ := ModelPointer(path)
+
+	return domain.ProblemFix{Label: label, Section: section, Patch: []domain.PatchOp{{Op: domain.PatchRemove, Path: sectionPath(path)}}}
 }
 
 // sectionPath is the pointer of a factory.yaml path relative to its model section, the form a

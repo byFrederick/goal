@@ -16,12 +16,12 @@ import (
 	"github.com/byFrederick/goal/internal/ports"
 )
 
-// Credentials checks a definition's secret references (the credentials check). B ships the
-// interim EnvReferences; phase 4.1 adds VaultCredentials over its vault and goald wires that
-// instead. Uses are config.Factory.SecretUses(); literals among them are left to config's
-// literal-secret warning.
+// Credentials checks what a definition signs in with, in the organization of ctx: the connections
+// check (CheckConnections). B shipped the interim EnvReferences; from phase 4 goald wires
+// ConnectionsCheck, which runs EnvReferences too until the cutover. Its problems carry Check =
+// CheckConnections; an error is a failure to check, never a finding.
 type Credentials interface {
-	Check(ctx context.Context, f domain.FactoryID, uses []config.SecretUse) ([]CredentialFinding, error)
+	Check(ctx context.Context, f *config.Factory) ([]domain.DefinitionProblem, error)
 }
 
 // CredentialFinding is one secret reference that does not resolve for the factory.
@@ -40,8 +40,8 @@ const (
 	CodeSecretEnvUnset = "secret-env-unset" //nolint:gosec // a problem code, not a credential
 	// CodeEnvReserved: an env:NAME reference to one of goald's own settings.
 	CodeEnvReserved = "env-reserved"
-	// CodeCredentialsUnavailable: a credential: reference (or a reference of another secrets
-	// provider) this install cannot resolve yet.
+	// CodeCredentialsUnavailable: a reference of another secrets provider (op://, arn:) this
+	// install cannot resolve.
 	CodeCredentialsUnavailable = "credentials-unavailable"
 	// CodeRepositoryHostNotAllowed: a runtime.repository token for a url on a host the install
 	// does not clone from (EnvReferences.RepositoryHosts).
@@ -55,10 +55,10 @@ var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 // env:NAME reference must name a variable that is set and non-empty in goald's environment
 // (resolved through Secrets, the value discarded) and is not one of goald's own settings
 // (Policy.Reserved, such as GOAL_DATABASE_URL and GOAL_GATEWAY_KEY), and the repository's token is
-// refused for a repository on a host the install does not clone from (RepositoryHosts); a
-// credential: reference is an
-// error until credentials arrive with phase 4. There is nothing to grant before phase 4, so
-// there are no grant, expiry or purpose checks.
+// refused for a repository on a host the install does not clone from (RepositoryHosts). There
+// is nothing to grant, so there are no grant, expiry or purpose checks. From phase 4 it checks
+// the env: references of the removed forms, which the engine and the MCP gateway still resolve,
+// until the cutover (spec 4, 4-14) removes them.
 type EnvReferences struct {
 	Secrets ports.Secrets
 	// Policy names the variables definitions may not read (Reserved) and those holding the
@@ -80,8 +80,25 @@ var _ Credentials = EnvReferences{}
 // foreignPrefixes start references of secrets providers this install does not have.
 var foreignPrefixes = []string{"op://", "arn:"}
 
-// Check implements Credentials. Each reference is resolved once, however many places use it.
-func (e EnvReferences) Check(ctx context.Context, _ domain.FactoryID, uses []config.SecretUse) ([]CredentialFinding, error) {
+// Check implements Credentials over the definition's secret references (config.Factory
+// .SecretUses); literals among them are left to config's literal-secret warning.
+func (e EnvReferences) Check(ctx context.Context, f *config.Factory) ([]domain.DefinitionProblem, error) {
+	findings, err := e.Findings(ctx, f.SecretUses())
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]domain.DefinitionProblem, 0, len(findings))
+	for _, fd := range findings {
+		out = append(out, f.Locate(fd.Use.Doc).Problem(CheckConnections, fd.Code, fd.Severity, fd.Message))
+	}
+
+	return out, nil
+}
+
+// Findings checks secret references. Each reference is resolved once, however many places use
+// it.
+func (e EnvReferences) Findings(ctx context.Context, uses []config.SecretUse) ([]CredentialFinding, error) {
 	resolved := map[string]*CredentialFinding{}
 
 	var out []CredentialFinding
@@ -172,10 +189,6 @@ func (e EnvReferences) misplaced(u config.SecretUse) *CredentialFinding {
 func (e EnvReferences) check(ctx context.Context, ref string) (*CredentialFinding, error) {
 	finding := func(code, format string, a ...any) *CredentialFinding {
 		return &CredentialFinding{Code: code, Severity: domain.SeverityError, Message: fmt.Sprintf(format, a...)}
-	}
-
-	if name, ok := strings.CutPrefix(ref, config.CredentialPrefix); ok {
-		return finding(CodeCredentialsUnavailable, "credential %q cannot be used yet: credentials arrive with phase 4", name), nil
 	}
 
 	for _, p := range foreignPrefixes {

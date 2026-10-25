@@ -12,8 +12,9 @@ import (
 // internal/factorymodel): /spec/board/stations/3/gate/onReject is ("line",
 // "/line/stations/3/gate/on_reject"). Model keys are the YAML keys in snake_case; keys that
 // are data (route lanes, tool names, header and env names, connector settings) are kept as
-// written. A path the model does not show (runtime.image, knowledgeBase, contracts, ...) is
-// (SectionFiles, ""), edited in YAML mode only.
+// written. A path the model does not show (contracts, metadata.owner, ...) is (SectionFiles, ""),
+// edited in YAML mode only. The keys phase 4 removed (runtime.runner, image and auth, secrets,
+// knowledgeBase) are in Basics, so their quick fixes can take them out.
 func ModelPointer(path []string) (section, pointer string) {
 	sec, toks := modelPath(path)
 	if sec == domain.SectionFiles {
@@ -52,10 +53,25 @@ func specPath(key string, rest []string) (string, []string) {
 		return domain.SectionAgents, append([]string{domain.SectionAgents, "skills"}, rest...)
 	case "connections":
 		return domain.SectionConnections, append([]string{domain.SectionConnections}, connectionPath(rest)...)
+	case "knowledge", "secrets", "knowledgeBase":
+		return knowledgePath(key, rest)
 	case "learning":
 		if len(rest) >= 2 && rest[0] == "librarian" && rest[1] == "agent" {
 			return domain.SectionLine, []string{domain.SectionLine, "librarian"}
 		}
+	}
+
+	return domain.SectionFiles, nil
+}
+
+// knowledgePath maps knowledge.sources, and the removed secrets and knowledgeBase, which are in
+// Basics so their quick fix can take them out.
+func knowledgePath(key string, rest []string) (string, []string) {
+	switch {
+	case key != "knowledge":
+		return domain.SectionBasics, append([]string{domain.SectionBasics, snake(key)}, snakeAll(rest)...)
+	case len(rest) >= 1 && rest[0] == "sources":
+		return domain.SectionBasics, append([]string{domain.SectionBasics, "knowledge_sources"}, rest[1:]...)
 	}
 
 	return domain.SectionFiles, nil
@@ -82,8 +98,10 @@ func runtimePath(rest []string) (string, []string) {
 	}
 
 	switch rest[0] {
-	case "repository":
-		return domain.SectionBasics, append([]string{domain.SectionBasics, "repository"}, rest[1:]...)
+	case "repository", "tools":
+		return domain.SectionBasics, append([]string{domain.SectionBasics, rest[0]}, rest[1:]...)
+	case "modelConnection", "size", "runner", "image", "auth": // the last three are removed
+		return domain.SectionBasics, []string{domain.SectionBasics, snake(rest[0])}
 	case "model":
 		return domain.SectionAgents, []string{domain.SectionAgents, "default_model"}
 	case "budget":

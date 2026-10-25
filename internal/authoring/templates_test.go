@@ -111,7 +111,6 @@ func TestTemplateCatalog_PushRefusesInvalidTemplates(t *testing.T) {
 	t.Parallel()
 
 	meta := "title: Acme review\n"
-	credential := strings.Replace(credentialYAML, "0b6f1c9e-5d0a-4c39-9a51-6f1f3f0e2a20", "00000000-0000-0000-0000-000000000000", 1)
 
 	tests := []struct {
 		name  string
@@ -119,11 +118,10 @@ func TestTemplateCatalog_PushRefusesInvalidTemplates(t *testing.T) {
 		files map[string][]byte
 		want  []string // code@file:line
 	}{
-		{name: "credential", meta: meta, files: acmeFiles(credential), want: []string{"template-credential@factory/factory.yaml:13"}},
 		{name: "real-id", meta: meta, files: acmeFiles(acmeYAML), want: []string{"template-id@factory/factory.yaml:5"}},
 		{name: "no-title", meta: "summary: x\n", files: acmeFiles(nilIDYAML), want: []string{"template-meta-invalid@template.yaml:0"}},
 		{name: "unknown-key", meta: "title: x\nauthor: y\n", files: acmeFiles(nilIDYAML), want: []string{"template-meta-invalid@template.yaml:0"}},
-		{name: "broken", meta: meta, files: map[string][]byte{yamlFile: []byte(nilIDYAML)}, want: []string{"prompt-not-found@factory/factory.yaml:18"}},
+		{name: "broken", meta: meta, files: map[string][]byte{yamlFile: []byte(nilIDYAML)}, want: []string{"prompt-not-found@factory/factory.yaml:15"}},
 	}
 
 	for _, tt := range tests {

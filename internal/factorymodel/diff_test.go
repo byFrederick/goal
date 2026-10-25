@@ -150,7 +150,7 @@ func TestDiff_FilesMapToTheirTargets(t *testing.T) {
 	t.Parallel()
 
 	withContract := strings.Replace(v8, "  agents:\n", "  contracts: { spec: ./contracts/spec.json }\n  agents:\n", 1)
-	newer := strings.Replace(withContract, "ghcr.io/acme/agent:1.0.0", "ghcr.io/acme/agent:1.1.0", 1)
+	newer := strings.Replace(withContract, "name: acme-web }", "name: acme-web, owner: web@example.com }", 1)
 
 	from := with(withContract, map[string]string{"contracts/spec.json": `{"type": "object"}`})
 	to := with(newer, map[string]string{
@@ -161,7 +161,7 @@ func TestDiff_FilesMapToTheirTargets(t *testing.T) {
 
 	want := []string{
 		"agents: Prompt of reviewer changed",
-		"files: Settings edited in YAML change: spec.runtime.image",
+		"files: Settings edited in YAML change: metadata.owner",
 		"line: Contract spec changed",
 		"files: evals/cases/one.yaml added",
 	}

@@ -20,11 +20,7 @@ metadata:
   name: acme-check
 spec:
   runtime:
-    runner: docker
-    image: ghcr.io/acme/agent:1.0.0
-    auth: claude-subscription
-  knowledgeBase:
-    collections: [notes]
+    modelConnection: claude
   agents:
     - name: worker
       prompt: ./agents/worker.md
@@ -43,7 +39,7 @@ const (
 	workAgentLine = "        agent: worker\n"
 	doneStation   = "      - id: done\n"
 	agentPrompt   = "      prompt: ./agents/worker.md\n"
-	runtimeAuth   = "    auth: claude-subscription\n"
+	runtimeModel  = "    modelConnection: claude\n"
 	specAgents    = "  agents:\n"
 )
 
@@ -125,8 +121,8 @@ var locatedCases = []struct {
 		code: "schema-invalid", section: domain.SectionLine, pointer: "/line/stations/1",
 	},
 	{
-		name: "outside the model", doc: edited(runtimeAuth, "    auth: password #here\n"),
-		code: "schema-enum", section: domain.SectionFiles,
+		name: "outside the model", doc: edited(specAgents, "  contracts:\n    answer: 3 #here\n"+specAgents),
+		code: "schema-type", section: domain.SectionFiles,
 	},
 	{
 		name: "last station not done", doc: edited("        kind: done\n", "        kind: human #here\n"),
@@ -210,20 +206,40 @@ var locatedCases = []struct {
 		code: "builtin-ask-unavailable", severity: domain.SeverityWarning, section: domain.SectionAgents, pointer: "/agents/agents/0/builtins/read",
 	},
 	{
+		name: "removed runtime key", doc: edited(runtimeModel, runtimeModel+"    image: ghcr.io/acme/agent:1.0.0 #here\n"),
+		code: codeFieldRemoved, severity: domain.SeverityWarning, section: domain.SectionBasics, pointer: "/basics/image", wantFixes: 1,
+	},
+	{
+		name: "removed runner", doc: edited(runtimeModel, runtimeModel+"    runner: docker #here\n"),
+		code: codeFieldRemoved, severity: domain.SeverityWarning, section: domain.SectionBasics, pointer: "/basics/runner", wantFixes: 1,
+	},
+	{
+		name: "removed model auth", doc: edited(runtimeModel, runtimeModel+"    auth: claude-subscription #here\n"),
+		code: codeFieldRemoved, severity: domain.SeverityWarning, section: domain.SectionBasics, pointer: "/basics/auth", wantFixes: 1,
+	},
+	{
+		name: "removed secrets provider", doc: edited(specAgents, "  secrets: { provider: env } #here\n"+specAgents),
+		code: codeFieldRemoved, severity: domain.SeverityWarning, section: domain.SectionBasics, pointer: "/basics/secrets", wantFixes: 1,
+	},
+	{
+		name: "removed knowledge base", doc: edited(specAgents, "  knowledgeBase: { collections: [notes] } #here\n"+specAgents),
+		code: codeFieldRemoved, severity: domain.SeverityWarning, section: domain.SectionBasics, pointer: "/basics/knowledge_base", wantFixes: 1,
+	},
+	{
+		name: "repository token", doc: edited(runtimeModel, runtimeModel+"    repository: { url: \"https://github.com/acme/app\", token: env:ACME_TOKEN } #here\n"),
+		code: codeEnvReferenceRemoved, severity: domain.SeverityWarning, section: domain.SectionBasics, pointer: "/basics/repository/token", wantFixes: 1,
+	},
+	{
+		name: "inline connection", doc: edited(specAgents, "  connections:\n    - { name: tickets, type: mcp, transport: http, url: \"https://tickets.example.com/mcp\" } #here\n"+specAgents),
+		code: codeInlineRemoved, severity: domain.SeverityWarning, section: domain.SectionConnections, pointer: "/connections/0", wantFixes: 1,
+	},
+	{
 		name: "connector form", doc: edited(specAgents, "  connections:\n    - { connector: playwright, name: browser } #here\n"+specAgents),
-		code: "connector-unavailable", severity: domain.SeverityWarning, section: domain.SectionConnections, pointer: "/connections/0/connector",
+		code: codeInlineRemoved, severity: domain.SeverityWarning, section: domain.SectionConnections, pointer: "/connections/0", wantFixes: 1,
 	},
 	{
-		name: "connector agent unknown", doc: edited(specAgents, "  connections:\n    - { connector: playwright, agents: [ghost] } #here\n"+specAgents),
-		code: "unknown-agent", section: domain.SectionConnections, pointer: "/connections/0/agents/0",
-	},
-	{
-		name: "tool agent not on the connection", doc: edited(specAgents, "  connections:\n    - connector: playwright\n      agents: [worker]\n      tools:\n        playwright__click: { agents: [worker, ghost] } #here\n"+specAgents),
-		code: "tool-agent-not-on-connection", section: domain.SectionConnections, pointer: "/connections/0/tools/playwright__click/agents/1",
-	},
-	{
-		name: "repository through a connection", doc: edited(runtimeAuth, runtimeAuth+"    repository: { connection: github, repo: acme/app } #here\n", specAgents, "  connections:\n    - { connector: github }\n"+specAgents),
-		code: "repository-connection-unavailable", section: domain.SectionBasics, pointer: "/basics/repository/connection",
+		name: "tool spec", doc: edited(runtimeModel, runtimeModel+"    tools: [\"go@1.26.10\", \"go 1.26; rm -rf /\"] #here\n"),
+		code: codeToolSpecInvalid, section: domain.SectionBasics, pointer: "/basics/tools/1", wantFixes: 1,
 	},
 }
 
@@ -284,6 +300,86 @@ func TestCheck_FixesPatchTheirSection(t *testing.T) {
 	}
 }
 
+// Each removed form's fix takes it out of the definition, or puts an organization connection of
+// the same name in an inline connection's place, so the agents that name it keep it.
+func TestCheck_RemovedFormsAreFixed(t *testing.T) {
+	t.Parallel()
+
+	remove := func(label, path string) domain.ProblemFix {
+		return domain.ProblemFix{Label: label, Section: domain.SectionBasics, Patch: []domain.PatchOp{{Op: "remove", Path: path}}}
+	}
+
+	tests := []struct {
+		name, doc, code string
+		want            domain.ProblemFix
+	}{
+		{
+			name: "runtime image", doc: edited(runtimeModel, runtimeModel+"    image: ghcr.io/acme/agent:1.0.0\n"), code: codeFieldRemoved,
+			want: remove("Remove runtime.image", "/image"),
+		},
+		{
+			name: "knowledge base", doc: edited(specAgents, "  knowledgeBase: { collections: [notes] }\n"+specAgents), code: codeFieldRemoved,
+			want: remove("Remove knowledgeBase", "/knowledge_base"),
+		},
+		{
+			name: "repository token", code: codeEnvReferenceRemoved,
+			doc:  edited(runtimeModel, runtimeModel+"    repository: { url: \"https://github.com/acme/app\", token: env:ACME_TOKEN }\n"),
+			want: remove("Remove the token", "/repository/token"),
+		},
+		{
+			name: "tool spec", doc: edited(runtimeModel, runtimeModel+"    tools: [\"go 1.26\"]\n"), code: codeToolSpecInvalid,
+			want: remove("Remove go 1.26", "/tools/0"),
+		},
+		{
+			name: "inline connection", code: codeInlineRemoved,
+			doc: edited(specAgents, "  connections:\n    - { name: tickets, type: mcp, transport: http, url: \"https://tickets.example.com/mcp\" }\n"+
+				specAgents, agentPrompt, agentPrompt+"      connections: [tickets]\n"),
+			want: domain.ProblemFix{
+				Label: "Use the organization's connection tickets", Section: domain.SectionConnections,
+				Patch: []domain.PatchOp{{Op: "replace", Path: "/0", Value: json.RawMessage(`{"name":"tickets"}`)}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, problems := Check(checkTree(tt.doc, nil))
+
+			i := indexOf(problems, tt.code)
+			if i < 0 {
+				t.Fatalf("no %s problem in %+v", tt.code, problems)
+			}
+
+			if got := problems[i].Fixes; !reflect.DeepEqual(got, []domain.ProblemFix{tt.want}) {
+				t.Errorf("fixes =\n%+v\nwant\n%+v", got, tt.want)
+			}
+		})
+	}
+}
+
+// A definition in the new form names organization connections, which agents list like any
+// connection; it has no removed form to warn about.
+func TestCheck_OrganizationConnectionsAreNames(t *testing.T) {
+	t.Parallel()
+
+	f, problems := Check(checkTree(edited(
+		runtimeModel, runtimeModel+"    size: large\n    tools: [\"go@1.26.10\", \"npm:@acme/cli@2\", \"aqua:cli/cli\", task]\n"+
+			"    repository: { url: \"https://github.com/acme/app\", connection: github }\n",
+		specAgents, "  connections: [github, datadog]\n  knowledge:\n    sources: [handbook]\n"+specAgents,
+		agentPrompt, agentPrompt+"      connections: [datadog]\n",
+	), nil))
+	if len(problems) > 0 {
+		t.Fatalf("problems = %+v, want none", problems)
+	}
+
+	if names := []string{f.Spec.Connections[0].Name, f.Spec.Connections[1].Name}; !reflect.DeepEqual(names, []string{"github", "datadog"}) ||
+		f.Spec.Connections[0].Inline() {
+		t.Errorf("connections = %+v, want the organization's github and datadog", f.Spec.Connections)
+	}
+}
+
 // Warnings do not stop a factory from loading; errors do, each with its place and code.
 func TestLoad_FailsOnErrorsOnly(t *testing.T) {
 	t.Parallel()
@@ -298,7 +394,7 @@ func TestLoad_FailsOnErrorsOnly(t *testing.T) {
 	}
 
 	_, err = Load(checkTree(edited(workAgentLine, "        agent: ghost\n"), nil))
-	if err == nil || !strings.Contains(err.Error(), `factory.yaml:22:16: station work: unknown agent "ghost" (unknown-agent)`) {
+	if err == nil || !strings.Contains(err.Error(), `factory.yaml:18:16: station work: unknown agent "ghost" (unknown-agent)`) {
 		t.Errorf("err = %v, want the located unknown agent", err)
 	}
 }
@@ -312,8 +408,8 @@ func TestLocate_PlacesAPathOrItsNearestParent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if l := f.Locate("/spec/board/stations/1/agent"); l.Line != 22 || l.Column != 16 || l.EndColumn != 22 || l.Pointer != "/line/stations/1/agent" {
-		t.Errorf("existing path = %+v, want line 22, columns 16-22", l)
+	if l := f.Locate("/spec/board/stations/1/agent"); l.Line != 18 || l.Column != 16 || l.EndColumn != 22 || l.Pointer != "/line/stations/1/agent" {
+		t.Errorf("existing path = %+v, want line 18, columns 16-22", l)
 	}
 
 	if l := f.Locate("/spec/runtime/repository/token"); l.Line != 7 || l.Section != domain.SectionBasics || l.Pointer != "/basics/repository/token" {

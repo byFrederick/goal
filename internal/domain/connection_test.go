@@ -19,6 +19,13 @@ const (
 	fieldKey            = "key"
 	tmplToken           = "{{token}}"
 	docsURL             = "https://docs.example.com/mcp"
+	hostGitHub          = "github.com"
+	fieldHost           = "host"
+	envGHHost           = "GH_HOST"
+	kindAWS             = "aws"
+	mintAWSSTS          = "aws-sts"
+	apiExampleURL       = "https://api.example.com"
+	envAWSRegion        = "AWS_REGION"
 )
 
 // githubKind is spec 4 §4.2's example kind.
@@ -26,9 +33,9 @@ func githubKind() ConnectionKind {
 	return ConnectionKind{Name: "github", Title: "GitHub", Spec: KindSpec{
 		Fields: []KindField{
 			{Name: fieldToken, Title: "Token", Secret: true, Required: true},
-			{Name: "host", Title: "Host", Default: "github.com"},
+			{Name: fieldHost, Title: "Host", Default: hostGitHub},
 		},
-		Env: map[string]string{envGHToken: tmplToken, "GH_HOST": "{{host}}"},
+		Env: map[string]string{envGHToken: tmplToken, envGHHost: "{{host}}"},
 		Git: &KindGit{Host: "{{host}}", Username: "x-access-token", PasswordEnv: envGHToken},
 		MCP: &KindMCP{URL: "https://api.githubcopilot.com/mcp/", Headers: map[string]string{headerAuthorization: "Bearer ${GH_TOKEN}"}},
 		CLI: &KindCLI{Tool: "gh"}, CodeHost: "github",
@@ -76,8 +83,8 @@ func TestConnectionKind_Check(t *testing.T) {
 		{name: "the spec's example", kind: githubKind()},
 		{name: "env names from a field", kind: apiKeyKind()},
 		{name: "optional mcp url and command", kind: mcpKind()},
-		{name: "minted values with mint", kind: ConnectionKind{Name: "aws", Spec: KindSpec{
-			Fields: []KindField{{Name: fieldKey, Secret: true}}, Mint: "aws-sts",
+		{name: "minted values with mint", kind: ConnectionKind{Name: kindAWS, Spec: KindSpec{
+			Fields: []KindField{{Name: fieldKey, Secret: true}}, Mint: mintAWSSTS,
 			Env: map[string]string{envAWSSession: "{{minted.session_token}}"},
 		}}},
 		{name: "bad name", kind: with(func(k *ConnectionKind) { k.Name = "GitHub" }), want: "name"},
@@ -125,12 +132,12 @@ func TestConnectionKind_CheckValues(t *testing.T) {
 		want    string
 	}{
 		{name: "secret set, default host", kind: githubKind(), secrets: []string{fieldToken}},
-		{name: "own host", kind: githubKind(), fields: map[string]string{"host": "git.example.com"}, secrets: []string{fieldToken}},
+		{name: "own host", kind: githubKind(), fields: map[string]string{fieldHost: "git.example.com"}, secrets: []string{fieldToken}},
 		{name: "required secret missing", kind: githubKind(), want: `"token" is required`},
 		{name: "secret as a field", kind: githubKind(), fields: map[string]string{fieldToken: "x"}, secrets: []string{fieldToken}, want: "is secret"},
 		{name: "unknown field", kind: githubKind(), fields: map[string]string{"org": "example"}, secrets: []string{fieldToken}, want: `no field "org"`},
-		{name: "unknown secret", kind: githubKind(), secrets: []string{fieldToken, "host"}, want: `no secret field "host"`},
-		{name: "env names from a prefix", kind: apiKeyKind(), fields: map[string]string{fieldPrefix: "ACME", fieldBaseURL: "https://api.example.com"}, secrets: []string{fieldKey}},
+		{name: "unknown secret", kind: githubKind(), secrets: []string{fieldToken, fieldHost}, want: `no secret field "host"`},
+		{name: "env names from a prefix", kind: apiKeyKind(), fields: map[string]string{fieldPrefix: "ACME", fieldBaseURL: apiExampleURL}, secrets: []string{fieldKey}},
 		{name: "prefix makes a bad name", kind: apiKeyKind(), fields: map[string]string{fieldPrefix: "acme api", fieldBaseURL: "u"}, secrets: []string{fieldKey}, want: "not a variable name"},
 		{name: "prefix makes a reserved name", kind: apiKeyKind(), fields: map[string]string{fieldPrefix: "GOAL", fieldBaseURL: "u"}, secrets: []string{fieldKey}, want: "reserved"},
 		{name: "nothing required", kind: mcpKind()},
@@ -166,17 +173,17 @@ func TestConnectionKind_Render(t *testing.T) {
 		{
 			name: "defaults fill empty fields", kind: githubKind(), values: map[string]string{fieldToken: token},
 			want: RunConnection{
-				Env: map[string]string{envGHToken: token, "GH_HOST": "github.com"},
-				Git: &KindGit{Host: "github.com", Username: "x-access-token", PasswordEnv: envGHToken},
+				Env: map[string]string{envGHToken: token, envGHHost: hostGitHub},
+				Git: &KindGit{Host: hostGitHub, Username: "x-access-token", PasswordEnv: envGHToken},
 				MCP: &KindMCP{URL: "https://api.githubcopilot.com/mcp/", Headers: map[string]string{headerAuthorization: "Bearer ${GH_TOKEN}"}},
 				CLI: "gh", Docs: "Use gh and git; GH_TOKEN is set.",
 			},
 		},
 		{
 			name: "env names from a field", kind: apiKeyKind(),
-			values: map[string]string{fieldPrefix: "ACME", fieldBaseURL: "https://api.example.com", fieldKey: "k"},
+			values: map[string]string{fieldPrefix: "ACME", fieldBaseURL: apiExampleURL, fieldKey: "k"},
 			want: RunConnection{Env: map[string]string{
-				"ACME_URL": "https://api.example.com", "ACME_KEY": "k", "ACME_HEADER": headerAuthorization,
+				"ACME_URL": apiExampleURL, "ACME_KEY": "k", "ACME_HEADER": headerAuthorization,
 			}},
 		},
 		{
@@ -199,11 +206,11 @@ func TestConnectionKind_Render(t *testing.T) {
 		},
 		{
 			name: "minted values", minted: map[string]string{"session_token": "st"},
-			kind: ConnectionKind{Name: "aws", Spec: KindSpec{
-				Fields: []KindField{{Name: "region", Default: "us-east-1"}}, Mint: "aws-sts",
-				Env: map[string]string{envAWSSession: "{{minted.session_token}}", "AWS_REGION": "{{region}}"},
+			kind: ConnectionKind{Name: kindAWS, Spec: KindSpec{
+				Fields: []KindField{{Name: "region", Default: "us-east-1"}}, Mint: mintAWSSTS,
+				Env: map[string]string{envAWSSession: "{{minted.session_token}}", envAWSRegion: "{{region}}"},
 			}},
-			want: RunConnection{Env: map[string]string{envAWSSession: "st", "AWS_REGION": "us-east-1"}},
+			want: RunConnection{Env: map[string]string{envAWSSession: "st", envAWSRegion: "us-east-1"}},
 		},
 	}
 
@@ -229,8 +236,8 @@ func TestConnectionKind_RenderErrorsHoldNoValue(t *testing.T) {
 
 	const secret = "s3cr3t-value-that-must-not-leak"
 
-	aws := ConnectionKind{Name: "aws", Spec: KindSpec{
-		Fields: []KindField{{Name: fieldKey, Secret: true}}, Mint: "aws-sts",
+	aws := ConnectionKind{Name: kindAWS, Spec: KindSpec{
+		Fields: []KindField{{Name: fieldKey, Secret: true}}, Mint: mintAWSSTS,
 		Env: map[string]string{"AWS_KEY": "{{key}}", envAWSSession: "{{minted.session_token}}"},
 	}}
 	if _, err := aws.Render(map[string]string{fieldKey: secret}, nil); err == nil || strings.Contains(err.Error(), secret) {
@@ -248,6 +255,60 @@ func TestConnectionKind_RenderErrorsHoldNoValue(t *testing.T) {
 	url.Spec.MCP.URL = "{{url}}"
 	if _, err := url.Render(map[string]string{"url": "file:///" + secret}, nil); err == nil || strings.Contains(err.Error(), secret) {
 		t.Errorf("Render of a non-http url = %v; want an error without the value", err)
+	}
+}
+
+// Outline says which variables and git host a connection gives a run from what anyone may see
+// of it: its non-secret fields and which secret fields are set.
+func TestConnectionKind_Outline(t *testing.T) {
+	t.Parallel()
+
+	aws := ConnectionKind{Name: kindAWS, Spec: KindSpec{
+		Fields: []KindField{{Name: fieldKey, Secret: true, Required: true}, {Name: "region", Default: "us-east-1"}},
+		Mint:   mintAWSSTS,
+		Env:    map[string]string{"AWS_ACCESS_KEY_ID": "{{minted.access_key_id}}", envAWSRegion: "{{region}}"},
+	}}
+
+	tests := []struct {
+		name    string
+		kind    ConnectionKind
+		conn    Connection
+		env     []string
+		gitHost string
+	}{
+		{
+			name: "the default host", kind: githubKind(), conn: Connection{SecretFields: []string{fieldToken}},
+			env: []string{envGHHost, envGHToken}, gitHost: hostGitHub,
+		},
+		{
+			name: "a host of its own", kind: githubKind(),
+			conn: Connection{Fields: map[string]string{fieldHost: "git.example.com"}, SecretFields: []string{fieldToken}},
+			env:  []string{envGHHost, envGHToken}, gitHost: "git.example.com",
+		},
+		{
+			name: "no token, no git login", kind: githubKind(),
+			env: []string{envGHHost},
+		},
+		{
+			name: "env names from a field", kind: apiKeyKind(),
+			conn: Connection{Fields: map[string]string{fieldPrefix: "ACME", fieldBaseURL: apiExampleURL}, SecretFields: []string{fieldKey}},
+			env:  []string{"ACME_HEADER", "ACME_KEY", "ACME_URL"},
+		},
+		{
+			name: "minted values", kind: aws, conn: Connection{SecretFields: []string{fieldKey}},
+			env: []string{"AWS_ACCESS_KEY_ID", envAWSRegion},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := tt.kind.Outline(tt.conn)
+			if !reflect.DeepEqual(got, ConnectionOutline{Env: tt.env, GitHost: tt.gitHost}) {
+				t.Errorf("Outline = %+v; want env %v and git host %q", got, tt.env, tt.gitHost)
+			}
+		})
 	}
 }
 

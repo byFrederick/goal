@@ -126,7 +126,7 @@ export function ConnectionDetail({ connection, index }: { connection: ModelConne
           <p className="m-0 text-sm text-muted">This factory has no agents yet.</p>
         )}
         <p className="m-0 text-[13px] leading-snug text-muted">
-          {connection.legacy ? 'Saved in each agent’s connections.' : 'Saved in the connection’s agents.'}
+          {connection.connector ? 'Saved in the connection’s agents.' : 'Saved in each agent’s connections.'}
         </p>
       </fieldset>
 

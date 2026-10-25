@@ -32,11 +32,13 @@ import (
 // Section is one tab of the Visual editor and the part of factory.yaml it owns.
 type Section string
 
-// The sections. Everything else in factory.yaml (apiVersion, metadata.owner,
-// runtime.runner/image/auth, knowledgeBase, secrets, contracts, learning other than the
-// librarian's agent, unknown keys) is edited in YAML mode only.
+// The sections. Everything else in factory.yaml (apiVersion, metadata.owner, contracts,
+// learning other than the librarian's agent, unknown keys) is edited in YAML mode only.
 const (
-	Basics      Section = "basics"      // metadata.id/name/title/purpose, board.workTypes, runtime.repository
+	// Basics: metadata.id/name/title/purpose, board.workTypes, runtime.modelConnection/size/tools/
+	// repository, knowledge.sources, and the removed runtime.runner/image/auth, secrets and
+	// knowledgeBase.
+	Basics      Section = "basics"
 	Line        Section = "line"        // board.stations/intake/flow, learning.librarian.agent
 	Agents      Section = "agents"      // agents, skills, runtime.model
 	Connections Section = "connections" // connections
@@ -130,7 +132,17 @@ var sections = map[Section][]binding{
 		{"title", []string{keyMetadata, "title"}, renamedShape},
 		{keyPurpose, []string{keyMetadata, keyPurpose}, renamedShape}, // or its alias description: see purposePath
 		{"work_types", []string{keySpec, keyBoard, "workTypes"}, verbatimShape},
+		{"model_connection", []string{keySpec, keyRuntime, "modelConnection"}, renamedShape},
+		{"size", []string{keySpec, keyRuntime, "size"}, renamedShape},
+		{keyTools, []string{keySpec, keyRuntime, keyTools}, verbatimShape},
 		{"repository", []string{keySpec, keyRuntime, "repository"}, repositoryShape},
+		{"knowledge_sources", []string{keySpec, keyKnowledge, "sources"}, verbatimShape},
+		// Removed in phase 4 (field-removed): here so their quick fixes can take them out.
+		{"runner", []string{keySpec, keyRuntime, "runner"}, renamedShape},
+		{keyImage, []string{keySpec, keyRuntime, keyImage}, renamedShape},
+		{"auth", []string{keySpec, keyRuntime, "auth"}, renamedShape},
+		{"secrets", []string{keySpec, "secrets"}, renamedShape},
+		{"knowledge_base", []string{keySpec, "knowledgeBase"}, renamedShape},
 	},
 	Line: {
 		{keyStations, []string{keySpec, keyBoard, keyStations}, stationsShape},
@@ -231,7 +243,11 @@ func read(n *yaml.Node, s *shape, files fs.FS) any {
 		if n.Kind == yaml.ScalarNode {
 			return map[string]any{"mode": scalar(n)}
 		}
-	case generic, agentItem, connectItem:
+	case connectItem:
+		if n.Kind == yaml.ScalarNode && n.ShortTag() == tagStr {
+			return map[string]any{keyName: n.Value}
+		}
+	case generic, agentItem:
 	}
 
 	switch n.Kind {

@@ -302,10 +302,9 @@ var ErrTemplateExists = errors.New("template version exists")
 
 // Problems of a template Push refuses.
 const (
-	CheckTemplate          = "template"
-	CodeTemplateMeta       = "template-meta-invalid"
-	CodeTemplateID         = "template-id"
-	CodeTemplateCredential = "template-credential" //nolint:gosec // a problem code, not a credential
+	CheckTemplate    = "template"
+	CodeTemplateMeta = "template-meta-invalid"
+	CodeTemplateID   = "template-id"
 )
 
 // TemplateInvalidError is a template Push refuses. Problems are located in the template's
@@ -411,13 +410,6 @@ func templateProblems(t TemplateUpload) []domain.DefinitionProblem {
 	if f.Metadata.ID != nilFactoryID {
 		out = append(out, inFactoryDir(f.Locate("/metadata/id").Problem(CheckTemplate, CodeTemplateID, domain.SeverityError,
 			"a template's metadata.id is "+nilFactoryID+"; each factory made from it gets its own")))
-	}
-
-	for _, u := range f.SecretUses() {
-		if strings.HasPrefix(u.Ref, config.CredentialPrefix) {
-			out = append(out, inFactoryDir(f.Locate(u.Doc).Problem(CheckTemplate, CodeTemplateCredential, domain.SeverityError,
-				fmt.Sprintf("%s names %s; templates never include credentials, people choose theirs", u.Path, u.Ref))))
-		}
 	}
 
 	return out

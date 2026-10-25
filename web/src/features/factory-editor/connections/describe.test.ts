@@ -38,6 +38,7 @@ describe('connections', () => {
     expect(connectionKind({ name: 'b', type: 'builtin', legacy: true })).toBe('Built-in');
     expect(connectionKind({ name: 'a', type: 'aws', legacy: true })).toBe('AWS role');
     expect(connectionKind(jira)).toBe('jira connector');
+    expect(connectionKind({ name: 'github' })).toBe('Organization connection');
   });
 
   it('says how a connection signs in: env references, a credential, or nothing', () => {
@@ -46,6 +47,7 @@ describe('connections', () => {
     expect(signIn(local)).toBe('Uses env:TOOL_TOKEN');
     expect(signIn(jira)).toBe('Uses the credential acme-jira');
     expect(signIn({ name: 'b', type: 'builtin', legacy: true })).toBe('No sign-in');
+    expect(signIn({ name: 'github' })).toBe('Uses the organization’s connection');
   });
 
   it('knows what the gateway serves before phase 4', () => {
@@ -85,5 +87,6 @@ describe('connections', () => {
     } as unknown as Model;
     expect(agentsWithAccess(model, github)).toEqual(['reviewer']);
     expect(agentsWithAccess(model, jira)).toEqual(['triager']);
+    expect(agentsWithAccess(model, { name: 'github' })).toEqual(['reviewer']);
   });
 });

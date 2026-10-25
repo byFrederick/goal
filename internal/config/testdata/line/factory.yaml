@@ -7,15 +7,15 @@ metadata:
   name: acme-line
 spec:
   runtime:
-    runner: docker
-    image: ghcr.io/acme/agent:1.0.0
-    auth: anthropic-api-key
     model: claude-sonnet-5-5
-    repository: { url: "https://git.example.com/acme/line.git", token: env:ACME_GIT_TOKEN }
+    modelConnection: claude
+    size: large
+    tools: ["go@1.26.10", "task@3.46.1"]
+    repository: { url: "https://git.example.com/acme/line.git", connection: code }
     budget: { perItemUsd: 2.5, maxTurnsPerTask: 50 }
-  knowledgeBase: { collections: [notes] }
-  connections:
-    - { name: knowledge, type: builtin }
+  connections: [code, docs]
+  knowledge:
+    sources: [notes]
   skills:
     - { name: acme-conventions, source: ./skills/acme-conventions }
     - { name: golang-testing, source: "skills.sh:samber/cc-skills-golang@golang-testing" }
@@ -26,7 +26,7 @@ spec:
       prompt: ./agents/architect.md
       model: claude-opus-5-5
       skills: [acme-conventions]
-      connections: [knowledge]
+      connections: [docs]
       tools: { allow: [Read, Grep] }
     - name: engineer
       prompt: ./agents/engineer.md

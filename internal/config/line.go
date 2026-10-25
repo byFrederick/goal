@@ -16,13 +16,26 @@ func (f *Factory) Line() domain.Line {
 	l := domain.Line{
 		FactoryID: domain.FactoryID(f.Metadata.ID),
 		Purpose:   f.Purpose(),
-		Runtime:   domain.Runtime{Model: s.Runtime.Model},
-		Stations:  make([]domain.Station, 0, len(s.Board.Stations)),
-		Agents:    make([]domain.AgentSpec, 0, len(s.Agents)),
+		Runtime: domain.Runtime{
+			Model: s.Runtime.Model, ModelConnection: s.Runtime.ModelConnection,
+			Size: domain.SandboxSize(s.Runtime.Size), Tools: slices.Clone(s.Runtime.Tools),
+		},
+		Stations: make([]domain.Station, 0, len(s.Board.Stations)),
+		Agents:   make([]domain.AgentSpec, 0, len(s.Agents)),
 	}
 
 	if r := s.Runtime.Repository; r != nil {
-		l.Runtime.Repository = domain.Repository{URL: r.URL, AuthRef: r.Token}
+		l.Runtime.Repository = domain.Repository{URL: r.URL, Connection: r.Connection, AuthRef: r.Token}
+	}
+
+	for _, c := range s.Connections {
+		if !c.Inline() {
+			l.Connections = append(l.Connections, c.Name)
+		}
+	}
+
+	if s.Knowledge != nil {
+		l.KnowledgeSources = slices.Clone(s.Knowledge.Sources)
 	}
 
 	if b := s.Runtime.Budget; b != nil {

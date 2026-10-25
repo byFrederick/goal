@@ -1,0 +1,89 @@
+# Test fixture for a version published before phase 4: every removed form (runner, image and
+# auth, a repository token, a secrets provider, the knowledge base, inline connections) still
+# loads, each with a warning. Self-contained: tests never read factory definitions from outside testdata.
+apiVersion: goal/v1
+kind: Factory
+metadata:
+  id: 6d1e8b63-9c2f-4a54-8e4b-3f7c8d9e0b12
+  name: acme-legacy
+  title: Acme Legacy
+  description: Triages and answers support requests for the acme example shop.
+  owner: support@example.com
+spec:
+  runtime:
+    runner: docker
+    image: ghcr.io/acme/agent:1.0.0
+    auth: bedrock
+    model: claude-sonnet-5-5
+    repository: { url: "https://github.com/acme/shop", token: env:ACME_GIT_TOKEN }
+    budget: { dailyUsd: 10, perItemUsd: 1, maxTurnsPerTask: 40 }
+  knowledgeBase:
+    collections: [runbooks, answers]
+    retrieval: { topK: 5 }
+    ingestion: { schedule: "rate(1 hour)" }
+  secrets:
+    provider: env
+  connections:
+    - { name: knowledge, type: builtin }
+    - name: tickets
+      type: mcp
+      transport: http
+      url: https://tickets.example.com/mcp
+      headers: { Authorization: "Bearer env:ACME_TICKETS_TOKEN" }
+    - name: shop-db
+      type: mcp
+      transport: stdio
+      image: ghcr.io/acme/shop-db-mcp:1.0.0
+      env: { DATABASE_URL: env:ACME_SHOP_DATABASE_URL }
+  skills:
+    - { name: acme-runbooks, source: ./skills/acme-runbooks }
+    - { name: incident-triage, source: "skills.sh:acme/skills@incident-triage" }
+  contracts:
+    answer: ./contracts/answer.schema.json
+  agents:
+    - name: triager
+      prompt: ./agents/triager.md
+      model: claude-haiku-5-5
+      skills: [incident-triage]
+      connections: [knowledge, tickets]
+      tools: { allow: [Read, Grep] }
+    - name: responder
+      prompt: ./agents/responder.md
+      skills: [acme-runbooks, incident-triage]
+      connections: [knowledge, tickets, shop-db]
+      tools: { allow: [Read, Grep, Bash], deny: ["Bash(aws * delete*)"] }
+    - name: librarian
+      prompt: ./agents/librarian.md
+      connections: [knowledge]
+  board:
+    workTypes: [question, incident]
+    intake:
+      - { source: manual }
+      - { source: github-issues, repo: acme/shop, labels: [support] }
+      - { source: schedule, cron: "0 8 * * MON-FRI", template: inbox-sweep, type: question }
+    stations:
+      - { id: inbox, kind: queue }
+      - { id: triage, kind: agent, agent: triager, agents: 1, wip: 4 }
+      - id: respond
+        kind: agent
+        agent: responder
+        agents: 2
+        wip: 2
+        buffer: 2
+        output: answer
+        checks:
+          - { kind: schema }
+          - { kind: evidence-links, min: 1 }
+          - { kind: command, run: "true" }
+        gate: { onReject: triage, maxRework: 1 }
+      - { id: approve, kind: human, wip: 5 }
+      - { id: done, kind: done }
+    flow:
+      expedite: { types: [incident], wip: 1 }
+      constraint: respond
+      release: drum-buffer-rope
+      andon: { reworkRate: 0.5, window: 10 }
+      targets: { throughputPerDay: 8, leadTimeHours: 6, expediteLeadTimeMinutes: 60 }
+  learning:
+    librarian: { agent: librarian, after: [done], writes: [answers] }
+    kaizen: { schedule: "0 17 * * FRI" }

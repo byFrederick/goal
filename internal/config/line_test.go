@@ -89,7 +89,7 @@ func TestLine_WeeklyBudgetMapsToTheRuntime(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			f, err := Load(checkTree(edited(runtimeAuth, runtimeAuth+"    budget: "+tc.budget+"\n"), nil))
+			f, err := Load(checkTree(edited(runtimeModel, runtimeModel+"    budget: "+tc.budget+"\n"), nil))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -139,11 +139,16 @@ func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 	}
 
 	wantRuntime := domain.Runtime{
-		Model: "claude-sonnet-5-5", MaxTurnsPerTask: 50, PerItemUSD: 2.5,
-		Repository: domain.Repository{URL: "https://git.example.com/acme/line.git", AuthRef: "env:ACME_GIT_TOKEN"},
+		Model: "claude-sonnet-5-5", ModelConnection: "claude", Size: domain.SandboxLarge, Tools: []string{"go@1.26.10", "task@3.46.1"},
+		MaxTurnsPerTask: 50, PerItemUSD: 2.5,
+		Repository: domain.Repository{URL: "https://git.example.com/acme/line.git", Connection: "code"},
 	}
-	if l.Runtime != wantRuntime {
+	if !reflect.DeepEqual(l.Runtime, wantRuntime) {
 		t.Errorf("runtime = %+v, want %+v", l.Runtime, wantRuntime)
+	}
+
+	if !slices.Equal(l.Connections, []string{"code", "docs"}) || !slices.Equal(l.KnowledgeSources, []string{"notes"}) {
+		t.Errorf("connections %v, knowledge sources %v; want [code docs] and [notes]", l.Connections, l.KnowledgeSources)
 	}
 
 	wantStations := []domain.Station{
@@ -163,7 +168,7 @@ func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 		{
 			Name: "architect", PromptPath: "./agents/architect.md", Model: "claude-opus-5-5",
 			Skills:      []domain.SkillRef{{Name: "acme-conventions", Source: "./skills/acme-conventions"}},
-			Connections: []string{"knowledge"}, ToolsAllow: []string{"Read", "Grep"},
+			Connections: []string{"docs"}, ToolsAllow: []string{"Read", "Grep"},
 		},
 		{
 			Name: "engineer", PromptPath: "./agents/engineer.md",
@@ -181,6 +186,27 @@ func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 
 	if !reflect.DeepEqual(l.ExpediteTypes, []string{"incident"}) {
 		t.Errorf("expedite types = %v, want [incident]", l.ExpediteTypes)
+	}
+}
+
+// A version published before phase 4 runs as before until the cutover: the engine still reads
+// its repository token, its runs take the default size, and its inline connections are not the
+// organization's.
+func TestLine_KeepsWhatPublishedVersionsRunOn(t *testing.T) {
+	t.Parallel()
+
+	f, err := LoadDir("testdata/legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	l := f.Line()
+	if r := l.Runtime; r.Repository.AuthRef != "env:ACME_GIT_TOKEN" || r.Size != "" {
+		t.Errorf("runtime = %+v, want the token and no size (medium)", r)
+	}
+
+	if len(l.Connections) != 0 {
+		t.Errorf("connections = %v, want none of the organization's", l.Connections)
 	}
 }
 

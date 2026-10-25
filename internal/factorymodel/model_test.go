@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"maps"
 	"os"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -132,6 +133,35 @@ func sha(s string) string {
 	sum := sha256.Sum256([]byte(s))
 
 	return hex.EncodeToString(sum[:])
+}
+
+// The runtime a run gets and the knowledge it may search are Basics; an organization connection,
+// written as its name, is {name} like any connection.
+func TestFromYAML_ReadsConnectionsByName(t *testing.T) {
+	t.Parallel()
+
+	m, _, err := FromYAML([]byte(`apiVersion: goal/v1
+spec:
+  runtime: { modelConnection: claude, size: large, tools: [go@1.26.10], repository: { url: "https://code.example.com/acme/app", connection: code } }
+  connections: [code, docs]
+  knowledge: { sources: [handbook] }
+`), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := map[string]any{
+		"model_connection": "claude", "size": "large", "tools": []any{"go@1.26.10"},
+		"repository":        map[string]any{"url": "https://code.example.com/acme/app", "connection": "code"},
+		"knowledge_sources": []any{"handbook"},
+	}
+	if !reflect.DeepEqual(m.Basics, want) {
+		t.Errorf("basics = %v\nwant %v", m.Basics, want)
+	}
+
+	if want := []any{map[string]any{"name": "code"}, map[string]any{"name": "docs"}}; !reflect.DeepEqual(m.Connections, want) {
+		t.Errorf("connections = %v, want %v", m.Connections, want)
+	}
 }
 
 func TestFromYAML_DocumentThatDoesNotParse(t *testing.T) {

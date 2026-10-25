@@ -30,8 +30,9 @@ func normalizeSection(s Section, v any) any {
 
 // normalize is a model value at a position of shape s as compared: nulls and empty lists are
 // absent; read-only parts (a prompt's sha256 and words, an agent's custom_tools, a connection's
-// legacy) are left out; a prompt or run mode written as a string is its object form; a
-// connection's empty settings are absent and its name defaults to its connector's.
+// legacy) are left out; a prompt, run mode or organization connection written as a string is
+// its object form; a connection's empty settings are absent and its name defaults to its
+// connector's.
 func normalize(v any, s *shape) any {
 	if str, ok := v.(string); ok {
 		switch s.kind {
@@ -39,7 +40,9 @@ func normalize(v any, s *shape) any {
 			v = map[string]any{"path": str}
 		case runMode:
 			v = map[string]any{"mode": str}
-		case generic, agentItem, connectItem:
+		case connectItem:
+			v = map[string]any{keyName: str}
+		case generic, agentItem:
 		}
 	}
 

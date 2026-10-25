@@ -35,8 +35,7 @@ const factoryYAML = `apiVersion: goal/v1
 kind: Factory
 metadata: { id: ` + factoryID + `, name: acme, title: Acme }
 spec:
-  runtime: { runner: docker, image: ghcr.io/acme/agent:1.0.0, auth: anthropic-api-key }
-  knowledgeBase: { collections: [notes] }
+  runtime: { modelConnection: claude }
   agents:
     - { name: writer, prompt: ./agents/writer.md }
   board:
@@ -453,7 +452,7 @@ func TestFactoryPublish_PrintsWhatBlocksIt(t *testing.T) {
 		t.Fatalf("publish of a broken draft = %v\n%s", err, out)
 	}
 
-	if want := filepath.Join(dir, yamlPath) + ":13:"; !strings.Contains(out, want) || !strings.Contains(out, "error") {
+	if want := filepath.Join(dir, yamlPath) + ":12:"; !strings.Contains(out, want) || !strings.Contains(out, "error") {
 		t.Errorf("problems are not located in the folder (%s):\n%s", want, out)
 	}
 
@@ -462,7 +461,7 @@ func TestFactoryPublish_PrintsWhatBlocksIt(t *testing.T) {
 		t.Errorf("pulled.json = %+v, want the draft's revision", rec)
 	}
 
-	if out, err := g.goal(t, "factory", "publish", "acme"); err == nil || !strings.Contains(out, "factory.yaml:13:") {
+	if out, err := g.goal(t, "factory", "publish", "acme"); err == nil || !strings.Contains(out, "factory.yaml:12:") {
 		t.Errorf("goal factory publish of the broken draft = %v\n%s", err, out)
 	}
 }
@@ -488,7 +487,7 @@ func TestFactoryValidate_OnlineAndOffline(t *testing.T) {
 		}
 
 		if !strings.Contains(out, "✓ acme (0b6f1c9e) — 1 agents, 3 stations") || !strings.Contains(out, "✗ "+broken) ||
-			!strings.Contains(out, filepath.Join(broken, yamlPath)+":8:") || !strings.Contains(out, "error prompt-not-found") {
+			!strings.Contains(out, filepath.Join(broken, yamlPath)+":7:") || !strings.Contains(out, "error prompt-not-found") {
 			t.Errorf("goal %v printed:\n%s", args, out)
 		}
 	}
@@ -510,6 +509,24 @@ func TestFactoryValidate_OnlineAndOffline(t *testing.T) {
 
 	if out := g.mustGoal(t, "factory", "list", "--validate"); !strings.Contains(out, "✓ acme") || !strings.Contains(out, "v1") {
 		t.Errorf("list --validate = %s", out)
+	}
+}
+
+// A problem with a quick fix names it under the problem, online and offline, so the YAML can be
+// fixed by hand the way the builder would.
+func TestFactoryValidate_PrintsQuickFixes(t *testing.T) {
+	t.Parallel()
+
+	g := newDefGoald(t)
+	dir := newCopy(t, map[string]string{yamlPath: strings.Replace(factoryYAML, "modelConnection: claude", "modelConnection: claude, image: ghcr.io/acme/agent:1.0.0", 1)})
+
+	online := g.mustGoal(t, "factory", "validate", dir)
+	offline := g.mustGoal(t, validateAlias, dir)
+
+	for _, out := range []string{online, offline} {
+		if !strings.Contains(out, "warning field-removed runtime.image is removed") || !strings.Contains(out, "\n      fix: Remove runtime.image\n") {
+			t.Errorf("goal factory validate printed:\n%s", out)
+		}
 	}
 }
 

@@ -169,6 +169,10 @@ func validate(out *printer, dirs []string) error {
 
 		for _, p := range problems {
 			out.printf("%s", problemLine(dir, p.File, p.Line, p.Column, string(p.Severity), p.Code, p.Message))
+
+			for _, f := range p.Fixes {
+				out.printf("%s", fixLine(f.Label))
+			}
 		}
 	}
 
@@ -1124,11 +1128,21 @@ func printChanges(out *printer, before, after map[string]string) {
 	}
 }
 
-// printProblems prints validation problems, their paths in root.
+// printProblems prints validation problems, their paths in root, each with its quick fixes.
 func printProblems(out *printer, root string, problems []gen.DefinitionProblem) {
 	for _, p := range problems {
 		out.printf("%s", problemLine(root, deref(p.File), p.Line, p.Column, string(p.Severity), p.Code, p.Message))
+
+		for _, f := range p.Fixes {
+			out.printf("%s", fixLine(f.Label))
+		}
 	}
+}
+
+// fixLine is a problem's quick fix as the factory commands print it, under the problem: what the
+// builder's fix button does, for whoever edits the YAML.
+func fixLine(label string) string {
+	return "      fix: " + label + "\n"
 }
 
 // problemLine is one problem as the factory commands print it: path:line:col severity code

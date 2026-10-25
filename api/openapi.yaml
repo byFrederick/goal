@@ -4352,7 +4352,7 @@ components:
         or of phases not wired yet) are absent, never passed
       required: [id, section, status, summary]
       properties:
-        id: { type: string, description: yaml, schema, line, references, images, secrets, availability, name, items, credentials, ... }
+        id: { type: string, description: "yaml, schema, line, references, tools, removed, images, secrets, availability, name, items, connections, ..." }
         section: { type: string }
         status: { type: string, enum: [passed, failed, warning] }
         summary: { type: string }
@@ -4580,11 +4580,26 @@ components:
             work_types:
               type: array
               items: { type: string }
+            model_connection: { type: string, description: "runtime.modelConnection: the organization connection that gives every run its model" }
+            size: { type: string, enum: [small, medium, large], description: "runtime.size: each run's box; medium when absent" }
+            tools:
+              type: array
+              description: runtime.tools, mise tool specs every run installs
+              items: { type: string }
             repository:
               type: object
               nullable: true
-              description: "{url, token} (token an env: reference until phase 4) or {connection, repo}"
+              description: "{url, connection} (connection absent for a public repository); token, removed in phase 4, while a version still has it"
               additionalProperties: {}
+            knowledge_sources:
+              type: array
+              description: knowledge.sources, the organization's knowledge sources the factory may search
+              items: { type: string }
+            runner: { type: string, description: "Removed in phase 4 (field-removed); present while factory.yaml has it, so its quick fix can remove it" }
+            image: { type: string, description: Removed in phase 4 (field-removed), as runner }
+            auth: { type: string, description: Removed in phase 4 (field-removed), as runner }
+            secrets: { type: object, additionalProperties: {}, description: Removed in phase 4 (field-removed), as runner }
+            knowledge_base: { type: object, additionalProperties: {}, description: Removed in phase 4 (field-removed), as runner }
         line:
           type: object
           properties:
@@ -4630,7 +4645,11 @@ components:
           type: array
           items:
             type: object
-            description: name, connector, type, credential, agents, tools, settings, legacy
+            description: >-
+              An organization connection the factory uses, {name} (written as the name in
+              factory.yaml); or, removed in phase 4 (connection-inline-removed) while a version
+              still has one, an inline connection: name, connector, type, credential, agents,
+              tools, settings, legacy
             additionalProperties: {}
         review:
           type: object

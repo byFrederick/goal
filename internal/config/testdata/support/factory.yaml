@@ -1,5 +1,5 @@
 # Test fixture for config.Load: a small support factory that uses every part of the schema
-# (secrets, each connection type, intake sources, checks, buffer, flow policy and targets, learning).
+# (connections and knowledge sources, intake sources, checks, buffer, flow policy and targets, learning).
 # Self-contained: tests never read factory definitions from outside testdata.
 apiVersion: goal/v1
 kind: Factory
@@ -11,30 +11,13 @@ metadata:
   owner: support@example.com
 spec:
   runtime:
-    runner: docker
-    image: ghcr.io/acme/agent:1.0.0
-    auth: bedrock
     model: claude-sonnet-5-5
+    modelConnection: bedrock
+    size: small
     budget: { dailyUsd: 10, perItemUsd: 1, maxTurnsPerTask: 40 }
-  knowledgeBase:
-    collections: [runbooks, answers]
-    retrieval: { topK: 5 }
-    ingestion: { schedule: "rate(1 hour)" }
-  secrets:
-    provider: env
-  connections:
-    - { name: knowledge, type: builtin }
-    - name: tickets
-      type: mcp
-      transport: http
-      url: https://tickets.example.com/mcp
-      headers: { Authorization: "Bearer env:ACME_TICKETS_TOKEN" }
-    - name: shop-db
-      type: mcp
-      transport: stdio
-      image: ghcr.io/acme/shop-db-mcp:1.0.0
-      env: { DATABASE_URL: env:ACME_SHOP_DATABASE_URL }
-    - { name: aws-readonly, type: aws, roleArn: "arn:aws:iam::111111111111:role/acme-readonly", region: us-east-1 }
+  connections: [tickets, shop-db, aws-readonly]
+  knowledge:
+    sources: [runbooks, answers]
   skills:
     - { name: acme-runbooks, source: ./skills/acme-runbooks }
     - { name: incident-triage, source: "skills.sh:acme/skills@incident-triage" }
@@ -45,16 +28,15 @@ spec:
       prompt: ./agents/triager.md
       model: claude-haiku-5-5
       skills: [incident-triage]
-      connections: [knowledge, tickets]
+      connections: [tickets]
       tools: { allow: [Read, Grep] }
     - name: responder
       prompt: ./agents/responder.md
       skills: [acme-runbooks, incident-triage]
-      connections: [knowledge, tickets, shop-db, aws-readonly]
+      connections: [tickets, shop-db, aws-readonly]
       tools: { allow: [Read, Grep, Bash], deny: ["Bash(aws * delete*)"] }
     - name: librarian
       prompt: ./agents/librarian.md
-      connections: [knowledge]
   board:
     workTypes: [question, incident]
     intake:
@@ -85,5 +67,5 @@ spec:
       andon: { reworkRate: 0.5, window: 10 }
       targets: { throughputPerDay: 8, leadTimeHours: 6, expediteLeadTimeMinutes: 60 }
   learning:
-    librarian: { agent: librarian, after: [done], writes: [answers] }
+    librarian: { agent: librarian, after: [done] }
     kaizen: { schedule: "0 17 * * FRI" }

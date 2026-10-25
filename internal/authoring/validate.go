@@ -56,9 +56,11 @@ type Validation struct {
 // Checks of this package, besides config's (yaml, schema, line, references, images, secrets,
 // availability).
 const (
-	CheckName        = "name"
-	CheckItems       = "items"
-	CheckCredentials = "credentials"
+	CheckName  = "name"
+	CheckItems = "items"
+	// CheckConnections is the Credentials check: what a definition signs in with exists in the
+	// organization and fits (spec 4 §4.4).
+	CheckConnections = "connections"
 )
 
 // Problem codes of this package's checks.
@@ -83,13 +85,14 @@ const (
 	checkSchema = "schema"
 )
 
-var configChecks = []string{"line", "references", "images", "secrets", "availability"}
+var configChecks = []string{"line", "references", "tools", "removed", "images", "secrets", "availability"}
 
 var checkSections = map[string]string{
 	checkYAML: domain.SectionFiles, checkSchema: domain.SectionFiles, "line": domain.SectionLine,
 	"references": domain.SectionAgents, CheckName: domain.SectionBasics, CheckItems: domain.SectionLine,
+	"tools": domain.SectionBasics, "removed": domain.SectionBasics,
 	"images": domain.SectionConnections, "secrets": domain.SectionConnections,
-	"availability": domain.SectionConnections, CheckCredentials: domain.SectionConnections,
+	"availability": domain.SectionConnections, CheckConnections: domain.SectionConnections,
 }
 
 // candidate is a definition to validate and what it is validated against.
@@ -236,12 +239,12 @@ func (s *Service) ownChecks(ctx context.Context, c candidate, f *config.Factory,
 	}
 
 	if s.credentials != nil {
-		p, err := s.credentialProblems(ctx, c.factory, f)
+		p, err := s.credentials.Check(ctx, f)
 		if err != nil {
-			return ownResult{}, err
+			return ownResult{}, fmt.Errorf("check connections: %w", err)
 		}
 
-		out.problems, out.ran = append(out.problems, p...), append(out.ran, CheckCredentials)
+		out.problems, out.ran = append(out.problems, p...), append(out.ran, CheckConnections)
 	}
 
 	return out, nil
@@ -333,32 +336,6 @@ func moveFixes(from string, to []string) []domain.ProblemFix {
 	}
 
 	return fixes
-}
-
-// credentialProblems runs the Credentials check on every secret reference, located in
-// factory.yaml.
-func (s *Service) credentialProblems(ctx context.Context, factory domain.FactoryID, f *config.Factory) ([]domain.DefinitionProblem, error) {
-	uses := f.SecretUses()
-	if len(uses) == 0 {
-		return nil, nil
-	}
-
-	id := factory
-	if id == "" {
-		id = domain.FactoryID(f.Metadata.ID)
-	}
-
-	findings, err := s.credentials.Check(ctx, id, uses)
-	if err != nil {
-		return nil, fmt.Errorf("check credentials: %w", err)
-	}
-
-	out := make([]domain.DefinitionProblem, 0, len(findings))
-	for _, fd := range findings {
-		out = append(out, f.Locate(fd.Use.Doc).Problem(CheckCredentials, fd.Code, fd.Severity, fd.Message))
-	}
-
-	return out, nil
 }
 
 // removedStations lists the stations of the running version that m no longer has.
@@ -478,6 +455,8 @@ var staticSummaries = map[string]string{ //nolint:gosec // check summaries, not 
 	checkYAML:      "Every file parses",
 	checkSchema:    "factory.yaml matches the schema",
 	"references":   "Every agent, skill, contract, connection and prompt it names exists",
+	"tools":        "Every tool is a mise tool spec",
+	"removed":      "Uses none of the removed forms",
 	CheckItems:     "No open items at a removed station",
 	"images":       "Every connection image is pinned",
 	"secrets":      "Secrets are references, not values",
@@ -501,19 +480,56 @@ func passedSummary(id string, f *config.Factory, m Model) string {
 			plural(len(ids), "station", "stations"), ids[len(ids)-1])
 	case CheckName:
 		return fmt.Sprintf("The name %s is free", f.Metadata.Name)
-	case CheckCredentials:
-		refs := 0
-
-		for _, u := range f.SecretUses() {
-			if !u.Literal() {
-				refs++
-			}
-		}
-
-		return plural(refs, "secret reference resolves", "secret references resolve")
+	case CheckConnections:
+		return connectionsSummary(f)
 	}
 
 	return "Passed"
+}
+
+// connectionsSummary counts what the connections check found: the organization's connections
+// and knowledge sources the definition names, and the secret references of removed forms.
+func connectionsSummary(f *config.Factory) string {
+	names := []string{f.Spec.Runtime.ModelConnection}
+	if r := f.Spec.Runtime.Repository; r != nil {
+		names = append(names, r.Connection)
+	}
+
+	for _, c := range f.Spec.Connections {
+		if !c.Inline() {
+			names = append(names, c.Name)
+		}
+	}
+
+	slices.Sort(names)
+	names = slices.DeleteFunc(slices.Compact(names), func(n string) bool { return n == "" })
+
+	var parts []string
+	if len(names) > 0 {
+		parts = append(parts, plural(len(names), "connection exists", "connections exist"))
+	}
+
+	if k := f.Spec.Knowledge; k != nil && len(k.Sources) > 0 {
+		parts = append(parts, plural(len(k.Sources), "knowledge source exists", "knowledge sources exist"))
+	}
+
+	refs := 0
+
+	for _, u := range f.SecretUses() {
+		if !u.Literal() {
+			refs++
+		}
+	}
+
+	if refs > 0 {
+		parts = append(parts, plural(refs, "secret reference resolves", "secret references resolve"))
+	}
+
+	if len(parts) == 0 {
+		return "Names no connection"
+	}
+
+	return strings.Join(parts, ", ")
 }
 
 func plural(n int, one, many string) string {

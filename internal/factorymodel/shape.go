@@ -25,6 +25,8 @@ const (
 	keyStations    = "stations"
 	keyFlow        = "flow"
 	keyConnections = "connections"
+	keyKnowledge   = "knowledge"
+	keyImage       = "image"
 	keySettings    = "settings" // model only: a connection's connector settings
 	keyLegacy      = "legacy"   // model only: a connection in the inline type form
 
@@ -177,7 +179,7 @@ var (
 		kind:     connectItem,
 		verbatim: true,
 		order: []string{
-			keyConnector, keyName, "type", "credential", keyAgents, keyTools, "transport", "url", "image", "command",
+			keyConnector, keyName, "type", "credential", keyAgents, keyTools, "transport", "url", keyImage, "command",
 			"headers", "env", "network", "roleArn", "region",
 		},
 		fields: map[string]*shape{"tools": {verbatim: true, elem: toolRuleShape}},
@@ -186,12 +188,16 @@ var (
 	connectionsShape = &shape{elem: connectionShape, identity: connectionIdentity, identityOf: agentIdentityOf}
 
 	budgetShape     = &shape{order: []string{"dailyUsd", "weeklyUsd", "onExhausted", "perItemUsd", "maxTurnsPerTask"}}
-	repositoryShape = &shape{verbatim: true, order: []string{"url", "token", "connection", "repo"}}
+	repositoryShape = &shape{verbatim: true, order: []string{"url", "connection", "token"}}
 )
 
-// connectionIdentity is a connection's name, which in the connector form defaults to the
-// connector's name.
+// connectionIdentity is a connection's name: an organization connection's is the item itself,
+// and in the connector form it defaults to the connector's name.
 func connectionIdentity(n *yaml.Node) string {
+	if d := deref(n); d != nil && d.Kind == yaml.ScalarNode {
+		return d.Value
+	}
+
 	if v := mapValue(n, keyName); v != nil {
 		return v.Value
 	}
@@ -213,10 +219,13 @@ func connectorName(n *yaml.Node) string {
 // containerOrder is the canonical key order of the mappings that hold the sections' values,
 // used when an edit creates a key there.
 var containerOrder = map[string][]string{
-	"":                        {"apiVersion", "kind", keyMetadata, keySpec},
-	keyMetadata:               {"id", keyName, "title", keyPurpose, keyDescription, "owner"},
-	"spec":                    {keyRuntime, "knowledgeBase", "secrets", keyConnections, keySkills, "contracts", keyAgents, keyBoard, keyLearning},
-	"spec.runtime":            {"runner", "image", "auth", "model", "repository", "budget"},
+	"":          {"apiVersion", "kind", keyMetadata, keySpec},
+	keyMetadata: {"id", keyName, "title", keyPurpose, keyDescription, "owner"},
+	"spec": {
+		keyRuntime, "knowledgeBase", "secrets", keyConnections, keyKnowledge, keySkills, "contracts", keyAgents, keyBoard, keyLearning,
+	},
+	"spec.runtime":            {"runner", keyImage, "auth", "model", "modelConnection", "size", keyTools, "repository", "budget"},
+	"spec.knowledge":          {"sources"},
 	"spec.board":              {"workTypes", "intake", keyStations, keyFlow},
 	"spec.learning":           {keyLibrarian, "kaizen"},
 	"spec.learning.librarian": {"agent", "after", "writes"},

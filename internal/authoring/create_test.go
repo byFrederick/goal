@@ -114,8 +114,8 @@ func TestCreateFactory_BlankSkeletonNamesNoStationOrAgent(t *testing.T) {
 		t.Errorf("blank model = %+v", m.Model)
 	}
 
-	if !strings.Contains(h.draftFile(t, c.Factory.ID, yamlFile), `image: "ghcr.io/acme/agent:1.0.0"`) {
-		t.Errorf("skeleton lacks the default image")
+	if m.Model.Basics["size"] != "medium" || m.Model.Basics["image"] != nil || m.Model.Basics["auth"] != nil {
+		t.Errorf("skeleton basics = %v, want size medium and none of the removed runtime keys", m.Model.Basics)
 	}
 
 	if c.Draft.Source.Kind != domain.SourceBlank || c.Draft.Source.Template != "" {

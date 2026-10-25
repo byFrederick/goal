@@ -27,15 +27,24 @@ func mergeNode(n *yaml.Node, s *shape, v any, flow bool) *yaml.Node {
 		return withComments(build(v, s, flow || deref(n).Style&yaml.FlowStyle != 0), n)
 	}
 
-	if mergeSpecial(n, s, v) || mergeSameKind(n, s, v) {
+	if mergeSpecial(n, s, v) {
+		return n
+	}
+
+	// An inline connection replaced by the organization's connection of its name becomes the name.
+	if _, ok := orgConnection(v); ok && s.kind == connectItem {
+		return withComments(build(v, s, flow || n.Style&yaml.FlowStyle != 0), n)
+	}
+
+	if mergeSameKind(n, s, v) {
 		return n
 	}
 
 	return withComments(build(v, s, flow || n.Style&yaml.FlowStyle != 0), n)
 }
 
-// mergeSpecial writes a prompt's path, or a run mode without commands, into the scalar that
-// holds it, keeping the scalar form.
+// mergeSpecial writes a prompt's path, a run mode without commands, or an organization
+// connection's name into the scalar that holds it, keeping the scalar form.
 func mergeSpecial(n *yaml.Node, s *shape, v any) bool {
 	if n.Kind != yaml.ScalarNode {
 		return false
@@ -54,7 +63,13 @@ func mergeSpecial(n *yaml.Node, s *shape, v any) bool {
 
 			return true
 		}
-	case generic, agentItem, connectItem:
+	case connectItem:
+		if name, ok := orgConnection(v); ok {
+			setScalar(n, name)
+
+			return true
+		}
+	case generic, agentItem:
 	}
 
 	return false
@@ -367,7 +382,8 @@ func build(v any, s *shape, flow bool) *yaml.Node {
 	return scalarNode(v)
 }
 
-// buildSpecial writes a prompt as its path and a run mode without commands as the mode alone.
+// buildSpecial writes a prompt as its path, a run mode without commands as the mode alone and an
+// organization connection as its name.
 func buildSpecial(v any, s *shape) *yaml.Node {
 	switch s.kind {
 	case promptRef:
@@ -378,10 +394,35 @@ func buildSpecial(v any, s *shape) *yaml.Node {
 		if m, ok := v.(map[string]any); ok && empty(m["commands"]) {
 			return scalarNode(m["mode"])
 		}
-	case generic, agentItem, connectItem:
+	case connectItem:
+		if name, ok := orgConnection(v); ok {
+			return scalarNode(name)
+		}
+	case generic, agentItem:
 	}
 
 	return nil
+}
+
+// orgConnection is the name of a connections item that names an organization connection: {name}
+// alone (the model's form, which may carry legacy false) or the name itself.
+func orgConnection(v any) (string, bool) {
+	switch x := v.(type) {
+	case string:
+		return x, true
+	case map[string]any:
+		name, ok := x[keyName].(string)
+
+		for k, val := range x {
+			if k != keyName && (k != keyLegacy || val != false) {
+				return "", false
+			}
+		}
+
+		return name, ok
+	}
+
+	return "", false
 }
 
 func isCollection(v any) bool {

@@ -218,7 +218,7 @@ type Deps struct {
 	Loads Loads
 	// Templates is the bucket the template catalog (catalog/templates/) is read from.
 	Templates ports.ObjectStore
-	// Credentials checks secret references: EnvReferences until phase 4.1 wires the vault.
+	// Credentials is the connections check: ConnectionsCheck; nil skips it.
 	// Nil leaves the credentials check out.
 	Credentials Credentials
 	// Checks are validation steps of later phases (phase 4's connector checker).
@@ -228,8 +228,6 @@ type Deps struct {
 	Clock    ports.Clock
 	// NewID returns a new factory id (a UUIDv7); uuid.NewV7 when nil.
 	NewID func() string
-	// DefaultImage is the agent image of the blank skeleton (GOAL_AGENT_IMAGE).
-	DefaultImage string
 }
 
 // Service implements definition authoring over a DefinitionStore. It is safe for concurrent
@@ -242,7 +240,6 @@ type Service struct {
 	resolver    Resolver
 	clock       ports.Clock
 	newID       func() string
-	image       string
 	templates   *TemplateCatalog
 }
 
@@ -255,7 +252,7 @@ func New(d Deps) *Service {
 
 	return &Service{
 		store: d.Store, loads: d.Loads, credentials: d.Credentials, checks: d.Checks, resolver: d.Resolver,
-		clock: d.Clock, newID: newID, image: d.DefaultImage,
+		clock: d.Clock, newID: newID,
 		templates: NewTemplateCatalog(d.Templates, d.Clock),
 	}
 }

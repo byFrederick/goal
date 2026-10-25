@@ -583,12 +583,12 @@ export function useBuiltins(agents: AgentsSection, agent: string): Edit<'agents'
 // Connections.
 
 /**
- * Sets which agents may use a connection: a connector-form entry's own `agents`; for a legacy
- * entry, each agent's `connections` (an agents save).
+ * Sets which agents may use a connection: a connector-form entry's own `agents`; for any other
+ * (an organization connection, an inline one), each agent's `connections` (an agents save).
  */
 export function setConnectionAgents(model: Model, name: string, allowed: string[]): AnyEdit {
   const connection = model.connections.find((c) => c.name === name);
-  if (!connection?.legacy) {
+  if (connection?.connector) {
     return edit(
       'connections',
       model.connections.map((c) => (c.name === name ? { ...c, agents: allowed } : c)),

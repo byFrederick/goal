@@ -3636,7 +3636,7 @@ export interface components {
         };
         /** @description One line of Review & publish's checks; checks that did not run (after a schema failure, or of phases not wired yet) are absent, never passed */
         CheckResult: {
-            /** @description yaml */
+            /** @description yaml, schema, line, references, tools, removed, images, secrets, availability, name, items, connections, ... */
             id: string;
             section: string;
             /** @enum {string} */
@@ -3818,10 +3818,35 @@ export interface components {
                 title?: string;
                 purpose?: string;
                 work_types?: string[];
-                /** @description {url, token} (token an env: reference until phase 4) or {connection, repo} */
+                /** @description runtime.modelConnection: the organization connection that gives every run its model */
+                model_connection?: string;
+                /**
+                 * @description runtime.size: each run's box; medium when absent
+                 * @enum {string}
+                 */
+                size?: "small" | "medium" | "large";
+                /** @description runtime.tools, mise tool specs every run installs */
+                tools?: string[];
+                /** @description {url, connection} (connection absent for a public repository); token, removed in phase 4, while a version still has it */
                 repository?: {
                     [key: string]: unknown;
                 } | null;
+                /** @description knowledge.sources, the organization's knowledge sources the factory may search */
+                knowledge_sources?: string[];
+                /** @description Removed in phase 4 (field-removed); present while factory.yaml has it, so its quick fix can remove it */
+                runner?: string;
+                /** @description Removed in phase 4 (field-removed) */
+                image?: string;
+                /** @description Removed in phase 4 (field-removed) */
+                auth?: string;
+                /** @description Removed in phase 4 (field-removed) */
+                secrets?: {
+                    [key: string]: unknown;
+                };
+                /** @description Removed in phase 4 (field-removed) */
+                knowledge_base?: {
+                    [key: string]: unknown;
+                };
             };
             line: {
                 stations?: {

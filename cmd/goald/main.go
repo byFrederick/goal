@@ -121,8 +121,10 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	// Connections and their kinds (spec 4); the API and the runs use them from 4-9 and 4-11 on.
-	if _, err := openConnections(ctx, store, os.Getenv, log); err != nil {
+	// Connections and their kinds (spec 4): definitions are validated against them; the API and
+	// the runs use them from 4-9 and 4-11 on.
+	connections, err := openConnections(ctx, store, os.Getenv, log)
+	if err != nil {
 		return err
 	}
 
@@ -138,12 +140,14 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	definitionStore := postgres.NewDefinitions(pool, objects, log)
 
-	// Definition authoring writes versions to PostgreSQL and file content to the bucket; until
-	// phase 4 a definition's secret references are checked against goald's environment.
+	// Definition authoring writes versions to PostgreSQL and file content to the bucket. A
+	// definition's connections are checked against the organization's, and until the cutover the
+	// env: references of the removed forms against goald's environment.
+	envReferences := s.credentials(secrets)
 	authors := authoring.New(authoring.Deps{
 		Store: definitionStore, Loads: store, Templates: objects,
-		Credentials: s.credentials(secrets),
-		Clock:       clock, DefaultImage: s.AgentImage,
+		Credentials: authoring.ConnectionsCheck{Connections: connections, Env: &envReferences},
+		Clock:       clock,
 	})
 
 	dockerClient, err := containers(ctx)

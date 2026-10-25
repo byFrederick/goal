@@ -1,7 +1,6 @@
 package config
 
 import (
-	"slices"
 	"strconv"
 	"strings"
 )
@@ -12,17 +11,16 @@ type SecretPurpose string
 // Secret purposes.
 const (
 	PurposeRepository SecretPurpose = "repository" // clones and merges runtime.repository
-	PurposeConnection SecretPurpose = "connection" // a connection's headers, env, command or credential
+	PurposeConnection SecretPurpose = "connection" // an inline connection's headers, env or command
 )
 
-// CredentialPrefix starts a reference to an organization credential (phase 4).
-const CredentialPrefix = "credential:" //nolint:gosec // a reference prefix, not a credential
+// refPrefixes start a secret reference: env:NAME, and the references of other secrets providers.
+// Anything else is a literal value.
+var refPrefixes = []string{"env:", "op://", "arn:"}
 
-// refPrefixes start a secret reference: env:NAME today, a vault credential from phase 4, and
-// the references of other secrets providers. Anything else is a literal value.
-var refPrefixes = []string{"env:", CredentialPrefix, "op://", "arn:"}
-
-// SecretUse is one place a definition needs a secret.
+// SecretUse is one place a definition of a removed form needs a secret: the repository's token
+// or an inline connection's value, which the engine and the MCP gateway resolve until the
+// cutover to connections.
 type SecretUse struct {
 	// Path names the place for people: spec.connections[1].headers.Authorization.
 	Path string
@@ -33,8 +31,7 @@ type SecretUse struct {
 	// URL is where the secret is sent: the connection's url for a header value, the repository's
 	// url for its token.
 	URL string
-	// Ref is the reference as written: "env:GOAL_GITHUB_TOKEN", "credential:acme-github",
-	// "op://…", "arn:…". It is empty for a literal value, which is never copied here.
+	// Ref is the reference as written: "env:GOAL_GITHUB_TOKEN", "op://…", "arn:…". It is empty for a literal value, which is never copied here.
 	Ref string
 }
 
@@ -44,8 +41,7 @@ func (u SecretUse) Literal() bool { return u.Ref == "" }
 // SecretUses lists every secret reference in the definition, and every literal where a
 // secret belongs, in file order: the repository token; each connection's header and env
 // values (each reference word of a value such as "Bearer env:TOKEN", or the value as a
-// literal when it has none), its command words that are references, and the connector form's
-// credential.
+// literal when it has none) and its command words that are references.
 func (f *Factory) SecretUses() []SecretUse {
 	var uses []SecretUse
 
@@ -77,14 +73,6 @@ func (f *Factory) SecretUses() []SecretUse {
 					Purpose: PurposeConnection, Connection: c.Name, Ref: w,
 				})
 			}
-		}
-
-		if c.Credential != "" {
-			p := slices.Concat(base, []string{"credential"})
-			uses = append(uses, SecretUse{
-				Path: displayPath(p), Doc: joinPointer(p), Purpose: PurposeConnection, Connection: c.Name,
-				Ref: CredentialPrefix + c.Credential,
-			})
 		}
 	}
 

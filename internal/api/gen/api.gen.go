@@ -1265,7 +1265,7 @@ type ChangeTargetKind string
 
 // CheckResult One line of Review & publish's checks; checks that did not run (after a schema failure, or of phases not wired yet) are absent, never passed
 type CheckResult struct {
-	// Id yaml
+	// Id yaml, schema, line, references, tools, removed, images, secrets, availability, name, items, connections, ...
 	Id      string            `json:"id"`
 	Section string            `json:"section"`
 	Status  CheckResultStatus `json:"status"`

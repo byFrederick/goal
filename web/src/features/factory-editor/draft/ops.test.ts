@@ -269,6 +269,13 @@ describe('connections', () => {
     expect(agents?.map((a) => a.connections)).toEqual([[], ['docs']]);
   });
 
+  it("grants an organization connection through each agent's list", () => {
+    const m = { ...model(), connections: [...model().connections, { name: 'jira' }] };
+    const grant = setConnectionAgents(m, 'jira', ['web']);
+    expect(grant.section).toBe('agents');
+    expect((grant.value as Model['agents']).agents?.map((a) => a.connections)).toEqual([['docs'], ['jira']]);
+  });
+
   it('removes a connection with every reference to it', () => {
     const edits = removeConnection(model(), 'docs');
     expect(sectionValue(edits, 'connections').map((c) => c.name)).toEqual(['github']);

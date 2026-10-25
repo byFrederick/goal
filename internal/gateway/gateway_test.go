@@ -47,7 +47,8 @@ const (
 
 // factoryYAML declares one served remote connection (tracker), one the token does not grant
 // (wiki), one with missing credentials (crm), one served sidecar (shop-db), one sidecar whose
-// image is not pinned (postgres) and one kind the gateway does not serve yet.
+// image is not pinned (postgres), one kind the gateway does not serve yet and one organization
+// connection (docs), which runs reach from their own box.
 const factoryYAML = `apiVersion: goal/v1
 kind: Factory
 metadata: { id: ` + string(factoryID) + `, name: acme-gateway }
@@ -56,6 +57,7 @@ spec:
   knowledgeBase: { collections: [notes] }
   connections:
     - { name: knowledge, type: builtin }
+    - docs
     - name: tracker
       type: mcp
       transport: http
@@ -78,7 +80,7 @@ spec:
   agents:
     - name: engineer
       prompt: ./agents/engineer.md
-      connections: [knowledge, tracker, wiki, postgres, crm, shop-db]
+      connections: [knowledge, tracker, wiki, postgres, crm, shop-db, docs]
       tools:
         allow: [Read, Bash, "tracker__get_*", tracker__echo, tracker__whoami, tracker__leak, tracker__big]
         deny: ["Bash(git push*)", tracker__get_secret, "shop-db__drop_*"]
@@ -286,7 +288,7 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 func (h *harness) claims() domain.TaskClaims {
 	return domain.TaskClaims{
 		OrgID: "org-1", FactoryID: factoryID, VersionID: version, ItemID: itemID, Station: "build", Agent: "engineer", RunID: "run-1",
-		Connections: []string{"knowledge", tracker, "postgres", "crm", shopDB},
+		Connections: []string{"knowledge", tracker, "postgres", "crm", shopDB, "docs"},
 		ExpiresAt:   h.clock.Now().Add(time.Hour).Unix(),
 	}
 }
@@ -418,6 +420,7 @@ func testListTools(t *testing.T, protocol string) {
 		"knowledge": "unavailable: builtin" + reasonKind,
 		"postgres":  "unavailable: " + reasonUnpinned,
 		"crm":       "unavailable: " + reasonCredentials,
+		"docs":      "unavailable: " + reasonOrganization,
 	}
 
 	if len(status) != len(wantStatus) {

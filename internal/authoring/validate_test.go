@@ -32,6 +32,10 @@ func checkResult(v authoring.Validation, id string) (authoring.CheckResult, bool
 	return authoring.CheckResult{}, false
 }
 
+// legacyYAML is acmeYAML as published before phase 4: its repository signs in with an env:
+// reference, which the interim rule checks until the cutover to connections.
+var legacyYAML = strings.Replace(acmeYAML, "connection: code }", "token: env:ACME_GIT_TOKEN }", 1)
+
 func TestValidate_InterimCredentialsCheck(t *testing.T) {
 	t.Parallel()
 
@@ -42,7 +46,6 @@ func TestValidate_InterimCredentialsCheck(t *testing.T) {
 		{name: "an unset variable", ref: "env:ACME_MISSING", code: authoring.CodeSecretEnvUnset},
 		{name: "an empty variable", ref: "env:ACME_EMPTY", code: authoring.CodeSecretEnvUnset},
 		{name: "a goald setting", ref: "env:GOAL_DATABASE_URL", code: authoring.CodeEnvReserved},
-		{name: "a credential reference", ref: "credential:acme-github", code: authoring.CodeCredentialsUnavailable},
 		{name: "another provider's reference", ref: "\"op://acme/github/token\"", code: authoring.CodeCredentialsUnavailable},
 	}
 
@@ -52,20 +55,20 @@ func TestValidate_InterimCredentialsCheck(t *testing.T) {
 
 			h := newHarness(t)
 
-			v, err := h.svc.ValidateFiles(h.ctx, acmeFiles(strings.Replace(acmeYAML, "token: env:ACME_GIT_TOKEN", "token: "+c.ref, 1)))
+			v, err := h.svc.ValidateFiles(h.ctx, acmeFiles(strings.Replace(legacyYAML, "token: env:ACME_GIT_TOKEN", "token: "+c.ref, 1)))
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			res, ran := checkResult(v, authoring.CheckCredentials)
+			res, ran := checkResult(v, authoring.CheckConnections)
 			if !ran {
-				t.Fatalf("credentials check did not run: %v", checkIDs(v))
+				t.Fatalf("connections check did not run: %v", checkIDs(v))
 			}
 
 			if c.code == "" {
 				want := authoring.CheckResult{
-					ID: authoring.CheckCredentials, Section: domain.SectionConnections, Status: authoring.CheckPassed,
-					Summary: "1 secret reference resolves",
+					ID: authoring.CheckConnections, Section: domain.SectionConnections, Status: authoring.CheckPassed,
+					Summary: "1 connection exists, 1 secret reference resolves",
 				}
 				if !v.OK || res != want {
 					t.Errorf("validation = ok %v, %+v, problems %v", v.OK, res, codes(v.Problems))
@@ -87,7 +90,7 @@ func TestValidate_RefusesARepositoryOnAnotherHost(t *testing.T) {
 
 	h := newHarness(t)
 
-	v, err := h.svc.ValidateFiles(h.ctx, acmeFiles(strings.Replace(acmeYAML,
+	v, err := h.svc.ValidateFiles(h.ctx, acmeFiles(strings.Replace(legacyYAML,
 		"https://git.example.com/acme/review.git", "https://attacker.example/x.git", 1)))
 	if err != nil {
 		t.Fatal(err)
@@ -100,7 +103,7 @@ func TestValidate_RefusesARepositoryOnAnotherHost(t *testing.T) {
 	}
 }
 
-// assertTokenProblem requires an error problem of code from the credentials check, located on
+// assertTokenProblem requires an error problem of code from the connections check, located on
 // the repository token, naming no value.
 func assertTokenProblem(t *testing.T, v authoring.Validation, code string) {
 	t.Helper()
@@ -110,8 +113,8 @@ func assertTokenProblem(t *testing.T, v authoring.Validation, code string) {
 		t.Fatalf("validation = ok %v, problems %v; want %s", v.OK, codes(v.Problems), code)
 	}
 
-	if res, _ := checkResult(v, authoring.CheckCredentials); res.Status != authoring.CheckFailed {
-		t.Errorf("credentials check = %+v", res)
+	if res, _ := checkResult(v, authoring.CheckConnections); res.Status != authoring.CheckFailed {
+		t.Errorf("connections check = %+v", res)
 	}
 
 	type place struct {
@@ -121,7 +124,7 @@ func assertTokenProblem(t *testing.T, v authoring.Validation, code string) {
 	}
 
 	got := place{p.Severity, p.Check, p.Section, p.Pointer, p.Line}
-	want := place{domain.SeverityError, authoring.CheckCredentials, domain.SectionBasics, "/basics/repository/token", 13}
+	want := place{domain.SeverityError, authoring.CheckConnections, domain.SectionBasics, "/basics/repository/token", 11}
 
 	if got != want {
 		t.Errorf("problem at %+v, want %+v", got, want)
@@ -141,7 +144,7 @@ func TestEnvReferences_ResolvesEachReferenceOnce(t *testing.T) {
 		{Path: "a", Ref: "env:ACME_A"}, {Path: "b", Ref: "env:ACME_A"}, {Path: "c"}, {Path: "d", Ref: "env:1BAD"},
 	}
 
-	findings, err := e.Check(t.Context(), "", uses)
+	findings, err := e.Findings(t.Context(), uses)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +168,7 @@ func TestEnvReferences_RepositoryTokenServesOnlyTheRepositoryAndItsHosts(t *test
 		Policy: domain.SecretPolicy{
 			Reserved: []string{"ACME_MODEL_TOKEN"}, RepositoryOnly: []string{"ACME_REPO_TOKEN"}, ConnectionHosts: []string{"code.example.com"},
 		},
-		RepositoryHosts: []string{"git.example.com"},
+		RepositoryHosts: []string{gitHost},
 	}
 	header := func(url, ref string) config.SecretUse {
 		return config.SecretUse{Path: "header " + url, Purpose: config.PurposeConnection, Connection: "c", URL: url, Ref: ref}
@@ -209,7 +212,7 @@ func TestEnvReferences_RepositoryTokenServesOnlyTheRepositoryAndItsHosts(t *test
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			findings, err := e.Check(t.Context(), "", []config.SecretUse{tt.use})
+			findings, err := e.Findings(t.Context(), []config.SecretUse{tt.use})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -236,7 +239,7 @@ func TestEnvReferences_FailsOnASecretsError(t *testing.T) {
 	t.Parallel()
 
 	e := authoring.EnvReferences{Secrets: failingSecrets{}}
-	if _, err := e.Check(t.Context(), "", []config.SecretUse{{Ref: "env:ACME_A"}}); err == nil {
+	if _, err := e.Findings(t.Context(), []config.SecretUse{{Ref: "env:ACME_A"}}); err == nil {
 		t.Error("a failing Secrets port was taken as an unset variable")
 	}
 }
@@ -247,19 +250,19 @@ func (failingSecrets) Resolve(context.Context, string) (string, error) {
 	return "", errors.New("secrets backend unreachable")
 }
 
-// connectorCheck stands in for phase 4's connector checker.
-type connectorCheck struct{}
+// laterCheck stands in for a check a later phase registers.
+type laterCheck struct{}
 
-func (connectorCheck) ID() string { return "connections" }
+func (laterCheck) ID() string { return "acme-check" }
 
-func (connectorCheck) Check(_ context.Context, in authoring.CheckInput) []domain.DefinitionProblem {
+func (laterCheck) Check(_ context.Context, in authoring.CheckInput) []domain.DefinitionProblem {
 	if in.Factory == nil {
 		return nil
 	}
 
 	return []domain.DefinitionProblem{{
-		Code: "connection-blocked", Severity: domain.SeverityWarning, Check: "connections",
-		Section: domain.SectionConnections, Message: "the connection has no credential",
+		Code: "acme-warning", Severity: domain.SeverityWarning, Check: "acme-check",
+		Section: domain.SectionConnections, Message: "something to look at",
 	}}
 }
 
@@ -273,7 +276,9 @@ func TestValidate_ChecksOfLaterPhasesAreOmittedUntilRegistered(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := []string{"yaml", "schema", "line", "references", "images", "secrets", "availability", "name", "credentials"}
+	want := []string{
+		"yaml", "schema", "line", "references", "tools", "removed", "images", "secrets", "availability", "name", "connections",
+	}
 	if !slices.Equal(checkIDs(v), want) || !v.OK {
 		t.Errorf("checks = %v (ok %v, problems %v), want %v", checkIDs(v), v.OK, codes(v.Problems), want)
 	}
@@ -296,15 +301,15 @@ func TestValidate_ChecksOfLaterPhasesAreOmittedUntilRegistered(t *testing.T) {
 func TestValidate_RegisteredChecksRun(t *testing.T) {
 	t.Parallel()
 
-	h := newHarness(t, withChecks(connectorCheck{}))
+	h := newHarness(t, withChecks(laterCheck{}))
 
 	v, err := h.svc.ValidateFiles(h.ctx, acmeFiles(acmeYAML))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	res, ran := checkResult(v, "connections")
-	want := authoring.CheckResult{ID: "connections", Section: domain.SectionConnections, Status: authoring.CheckWarning, Summary: "1 warning"}
+	res, ran := checkResult(v, "acme-check")
+	want := authoring.CheckResult{ID: "acme-check", Section: domain.SectionConnections, Status: authoring.CheckWarning, Summary: "1 warning"}
 
 	if !ran || res != want || !v.OK {
 		t.Errorf("registered check = %+v (ran %v, ok %v), want %+v", res, ran, v.OK, want)

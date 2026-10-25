@@ -6,8 +6,15 @@ import type { Model, ModelConnection } from '../../../shared/definition/model';
 
 const setting = (c: ModelConnection, key: string): unknown => c.settings?.[key];
 
-/** "Remote MCP server", "MCP server image", "Command", "Built-in", "AWS role" or "<connector> connector". */
+/** An entry naming one of the organization's connections (spec 4 §4.4), not an inline form. */
+const isOrgConnection = (c: ModelConnection): boolean => !c.connector && !c.type;
+
+/**
+ * "Organization connection", or for the removed inline forms "Remote MCP server", "MCP server
+ * image", "Command", "Built-in", "AWS role" or "<connector> connector".
+ */
 export function connectionKind(c: ModelConnection): string {
+  if (isOrgConnection(c)) return 'Organization connection';
   if (c.connector) return `${c.connector.split('@')[0]} connector`;
   if (c.type === 'builtin') return 'Built-in';
   if (c.type === 'aws') return 'AWS role';
@@ -31,6 +38,7 @@ function envRefs(c: ModelConnection): string[] {
 
 /** How the entry signs in: "Uses env:NAME" (a platform secret), its credential, or "No sign-in". */
 export function signIn(c: ModelConnection): string {
+  if (isOrgConnection(c)) return 'Uses the organization’s connection';
   if (c.credential) return `Uses the credential ${c.credential}`;
   const refs = envRefs(c);
   return refs.length > 0 ? `Uses ${refs.join(', ')}` : 'No sign-in';
@@ -76,8 +84,8 @@ export function connectionStatus(
   return { tone: 'ok', text: 'No problems' };
 }
 
-/** Who may use the connection: a connector-form entry's `agents`; for a legacy one, each agent's list. */
+/** Who may use the connection: a connector-form entry's `agents`; for any other, each agent's list. */
 export function agentsWithAccess(model: Model, c: ModelConnection): string[] {
-  if (!c.legacy) return c.agents ?? [];
+  if (c.connector) return c.agents ?? [];
   return (model.agents.agents ?? []).filter((a) => a.connections?.includes(c.name)).map((a) => a.name);
 }

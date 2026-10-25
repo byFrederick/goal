@@ -34,8 +34,7 @@ apiVersion: goal/v1
 kind: Factory
 metadata: { id: 00000000-0000-4000-8000-000000000000, name: broken }
 spec:
-  runtime: { runner: docker, image: x, auth: claude-subscription }
-  knowledgeBase: { collections: [notes] }
+  runtime: { modelConnection: claude }
   agents:
     - { name: worker, prompt: ./missing.md, skills: [nope] }
   board:
@@ -71,8 +70,7 @@ apiVersion: goal/v1
 kind: Factory
 metadata: { id: 00000000-0000-4000-8000-000000000002, name: merger }
 spec:
-  runtime: { runner: docker, image: x, auth: claude-subscription` + repository + ` }
-  knowledgeBase: { collections: [notes] }
+  runtime: { modelConnection: claude` + repository + ` }
   agents:
     - { name: worker, prompt: ./worker.md }
   board:
@@ -118,8 +116,7 @@ apiVersion: goal/v1
 kind: Factory
 metadata: { id: 00000000-0000-4000-8000-000000000001, name: escape }
 spec:
-  runtime: { runner: docker, image: x, auth: claude-subscription }
-  knowledgeBase: { collections: [notes] }
+  runtime: { modelConnection: claude }
   agents:
     - { name: worker, prompt: ../outside.md }
   board:
@@ -167,8 +164,7 @@ apiVersion: goal/v1
 kind: Factory
 metadata: { id: 00000000-0000-4000-8000-000000000002, name: unpinned }
 spec:
-  runtime: { runner: docker, image: x, auth: claude-subscription }
-  knowledgeBase: { collections: [notes] }
+  runtime: { modelConnection: claude }
   connections:
     - { name: shop-db, type: mcp, transport: stdio, image: "ghcr.io/acme/db-mcp:latest", network: true }
     - { name: wiki, type: mcp, transport: stdio, image: "ghcr.io/acme/docs-mcp:2.0.1" }
@@ -184,8 +180,16 @@ spec:
 		t.Fatal(err)
 	}
 
-	if w := f.Warnings(); len(w) != 1 || !strings.Contains(w[0], "connection shop-db: image ghcr.io/acme/db-mcp:latest is not pinned") {
-		t.Fatalf("warnings = %q, want one for the shop-db connection", w)
+	var unpinned []string
+
+	for _, w := range f.Warnings() {
+		if strings.Contains(w, "not pinned") {
+			unpinned = append(unpinned, w)
+		}
+	}
+
+	if len(unpinned) != 1 || !strings.Contains(unpinned[0], "connection shop-db: image ghcr.io/acme/db-mcp:latest is not pinned") {
+		t.Fatalf("unpinned image warnings = %q, want one for the shop-db connection", unpinned)
 	}
 
 	if !f.Spec.Connections[0].Network || f.Spec.Connections[1].Network {
@@ -193,35 +197,62 @@ spec:
 	}
 }
 
-// The keys the builder writes are optional additions: a definition using all of them loads,
-// and the connector form keeps its connector settings and takes its name from the connector.
+// The keys the builder writes are optional additions: a definition using all of them loads.
 func TestLoad_AcceptsTheBuilderKeys(t *testing.T) {
 	t.Parallel()
 
 	f, err := Load(checkTree(edited(
 		"  name: acme-check\n", "  name: acme-check\n  purpose: Answers acme's support questions.\n",
-		runtimeAuth, runtimeAuth+"    budget: { weeklyUsd: 50, onExhausted: stop, perItemUsd: 2 }\n",
-		specAgents, `  connections:
-    - connector: playwright@2
-      agents: [worker]
-      origins: [https://preview.example.com]
-      tools:
-        playwright__click: { agents: [worker], scope: preview, approval: required, enabled: true }
-`+specAgents,
-		agentPrompt, agentPrompt+"      maxTurns: 30\n      builtins: { read: allowed, run: allowed, subagents: off }\n",
+		runtimeModel, runtimeModel+"    size: small\n    tools: [\"go@1.26.10\"]\n"+
+			"    repository: { url: \"https://github.com/acme/app\", connection: github }\n"+
+			"    budget: { weeklyUsd: 50, onExhausted: stop, perItemUsd: 2 }\n",
+		specAgents, "  connections: [github, playwright]\n  knowledge: { sources: [handbook] }\n"+specAgents,
+		agentPrompt, agentPrompt+"      maxTurns: 30\n      connections: [playwright]\n      builtins: { read: allowed, run: allowed, subagents: off }\n",
 		"      - id: work\n", "      - id: work\n        name: Work\n        description: Where the worker answers.\n        checks: [schema, make test]\n",
 	), nil))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	c := f.Spec.Connections[0]
-	if c.Name != "playwright" || string(c.Settings["origins"]) != `["https://preview.example.com"]` || len(c.Settings) != 1 {
-		t.Errorf("connection = %+v, want name playwright and one setting, origins", c)
+	r := f.Spec.Runtime
+	if r.ModelConnection != "claude" || r.Size != "small" || !slices.Equal(r.Tools, []string{"go@1.26.10"}) ||
+		*r.Repository != (Repository{URL: "https://github.com/acme/app", Connection: "github"}) {
+		t.Errorf("runtime = %+v, want its model connection, size, tools and repository", r)
+	}
+
+	if f.Spec.Knowledge == nil || !slices.Equal(f.Spec.Knowledge.Sources, []string{"handbook"}) {
+		t.Errorf("knowledge = %+v, want the handbook source", f.Spec.Knowledge)
 	}
 
 	if b := f.Spec.Runtime.Budget; b.WeeklyUSD != 50 || b.OnExhausted != "stop" || f.Metadata.Purpose == "" {
 		t.Errorf("budget = %+v, purpose %q", b, f.Metadata.Purpose)
+	}
+}
+
+// A version published before phase 4 still loads: each removed form is a warning with its code,
+// so the engine runs it until the cutover.
+func TestLoad_PublishedVersionsWithRemovedFormsLoad(t *testing.T) {
+	t.Parallel()
+
+	f, problems := Check(os.DirFS("testdata/legacy"))
+	if f == nil || slices.ContainsFunc(problems, domain.DefinitionProblem.Blocking) {
+		t.Fatalf("problems = %+v, want warnings only", problems)
+	}
+
+	counts := map[string]int{}
+	for _, p := range problems {
+		counts[p.Code]++
+	}
+
+	want := map[string]int{codeFieldRemoved: 5, codeEnvReferenceRemoved: 1, codeInlineRemoved: 3}
+	for code, n := range want {
+		if counts[code] != n {
+			t.Errorf("%d %s problems, want %d (all: %v)", counts[code], code, n, counts)
+		}
+	}
+
+	if f.Spec.Runtime.Repository.Token != "env:ACME_GIT_TOKEN" {
+		t.Errorf("runtime = %+v, want the token the engine still reads", f.Spec.Runtime)
 	}
 }
 

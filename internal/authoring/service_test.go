@@ -10,14 +10,14 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/authoring"
+	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/ports/porttest"
 )
 
-const org domain.OrgID = "0b6f1c9e-0000-4000-8000-00000000a0a0"
-
-// acmeYAML is a small valid definition: a queue, an agent station, a human station and done.
+// acmeYAML is a small valid definition: a queue, an agent station, a human station and done,
+// on the organization's connections claude and code.
 const acmeYAML = `# Acme review line: a fixture for authoring tests.
 apiVersion: goal/v1
 kind: Factory
@@ -27,11 +27,8 @@ metadata:
   title: Acme review
 spec:
   runtime:
-    runner: docker
-    image: ghcr.io/acme/agent:1.0.0
-    auth: anthropic-api-key
-    repository: { url: "https://git.example.com/acme/review.git", token: env:ACME_GIT_TOKEN }
-  knowledgeBase: { collections: [notes] }
+    modelConnection: claude
+    repository: { url: "https://git.example.com/acme/review.git", connection: code }
   agents:
     # The one engineer.
     - name: engineer
@@ -45,6 +42,12 @@ spec:
 `
 
 const enginePrompt = "You build what the item asks for.\n"
+
+// The platform's GitHub kind, and the host of the acme repository the connection code signs in to.
+const (
+	kindGitHub = "github"
+	gitHost    = "git.example.com"
+)
 
 // Paths of the fixture's files.
 const (
@@ -62,6 +65,7 @@ type harness struct {
 	items   *porttest.Store
 	objects *porttest.ObjectStore
 	clock   *porttest.Clock
+	conns   *porttest.Connections
 	ctx     context.Context //nolint:containedctx // the test's request context, built once per harness
 }
 
@@ -73,28 +77,75 @@ func withStore(wrap func(ports.DefinitionStore) ports.DefinitionStore) option {
 	return func(d *authoring.Deps) { d.Store = wrap(d.Store) }
 }
 
+// withConnectionsCheck changes the harness's connections check.
+func withConnectionsCheck(change func(*authoring.ConnectionsCheck)) option {
+	return func(d *authoring.Deps) {
+		if c, ok := d.Credentials.(authoring.ConnectionsCheck); ok {
+			change(&c)
+			d.Credentials = c
+		}
+	}
+}
+
+// withKnowledge gives the organization knowledge sources.
+func withKnowledge(k authoring.KnowledgeSources) option {
+	return withConnectionsCheck(func(c *authoring.ConnectionsCheck) { c.Knowledge = k })
+}
+
+// newHarness is authoring in one organization with the platform's connection kinds and the
+// connections claude (a model), code (git on git.example.com), github (git on github.com) and
+// docs (an MCP server), whose definitions may still hold the env: references of the interim
+// rule.
 func newHarness(t *testing.T, opts ...option) *harness {
 	t.Helper()
+
+	tenancy := porttest.NewTenancy(time.Now)
+
+	o, err := tenancy.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: "acme", Name: "Acme"})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	h := &harness{
 		items:   porttest.NewStore(),
 		objects: porttest.NewObjectStore(),
 		clock:   porttest.NewClock(time.Date(2026, 10, 9, 14, 32, 0, 0, time.UTC)),
-		ctx:     domain.WithActor(domain.WithOrg(t.Context(), org), domain.LocalUser),
+		conns:   porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy),
+		ctx:     domain.WithActor(domain.WithOrg(t.Context(), o.ID), domain.LocalUser),
 	}
 	h.store = porttest.NewDefinitions(porttest.DefinitionsDeps{Objects: h.objects, Items: h.items, Now: h.clock.Now})
+
+	kinds, err := connkind.Platform()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.conns.SyncPlatformKinds(h.ctx, kinds); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range []domain.NewConnection{
+		{Name: "claude", Kind: "anthropic", Secrets: map[string]string{"key": "sk-ant-secret"}},
+		{Name: "code", Kind: kindGitHub, Fields: map[string]string{"host": gitHost}, Secrets: map[string]string{"token": "a-token"}},
+		{Name: kindGitHub, Kind: kindGitHub, Secrets: map[string]string{"token": "a-token"}},
+		{Name: "docs", Kind: "mcp-server", Fields: map[string]string{"url": "https://docs.example.com/mcp"}},
+	} {
+		h.connection(t, c)
+	}
 
 	var ids atomic.Int64
 
 	d := authoring.Deps{
 		Store: h.store, Loads: h.items, Templates: h.objects, Clock: h.clock,
-		Credentials: authoring.EnvReferences{
-			Secrets:         porttest.Secrets{"ACME_GIT_TOKEN": "a-token", "ACME_EMPTY": ""},
-			Policy:          domain.SecretPolicy{Reserved: []string{"GOAL_DATABASE_URL", "GOAL_GATEWAY_KEY"}},
-			RepositoryHosts: []string{"git.example.com"},
+		Credentials: authoring.ConnectionsCheck{
+			Connections: h.conns,
+			Env: &authoring.EnvReferences{
+				Secrets:         porttest.Secrets{"ACME_GIT_TOKEN": "a-token", "ACME_EMPTY": ""},
+				Policy:          domain.SecretPolicy{Reserved: []string{"GOAL_DATABASE_URL", "GOAL_GATEWAY_KEY"}},
+				RepositoryHosts: []string{gitHost},
+			},
 		},
-		NewID:        func() string { return fmt.Sprintf("0b6f1c9e-0000-7000-8000-%012d", ids.Add(1)) },
-		DefaultImage: "ghcr.io/acme/agent:1.0.0",
+		NewID: func() string { return fmt.Sprintf("0b6f1c9e-0000-7000-8000-%012d", ids.Add(1)) },
 	}
 	for _, o := range opts {
 		o(&d)
@@ -117,6 +168,15 @@ func (h *harness) imported(t *testing.T, files map[string][]byte) domain.Factory
 	}
 
 	return c.Factory.ID
+}
+
+// connection creates one of the organization's connections.
+func (h *harness) connection(t *testing.T, c domain.NewConnection) {
+	t.Helper()
+
+	if _, err := h.conns.Create(h.ctx, c, domain.LocalUser); err != nil {
+		t.Fatalf("create connection %s: %v", c.Name, err)
+	}
 }
 
 // published creates the acme factory and publishes it as v1.

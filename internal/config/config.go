@@ -6,8 +6,10 @@
 // (a stable code, a severity, the Visual section and model pointer, the file, line and
 // column): every file parses, factory.yaml satisfies the JSON Schema, and then what a schema
 // cannot say: every reference (agent, skill, connection, station, contract, file) points at
-// something that exists, the line is well formed, images are pinned and secrets are
-// references. Load is Check for callers that only need a valid factory.
+// something that exists, the line is well formed, tool specs are mise's, images are pinned,
+// secrets are references, and the forms phase 4 removed are named with a quick fix. Whether the
+// organization connections and knowledge sources it names exist is authoring's connections
+// check. Load is Check for callers that only need a valid factory.
 package config
 
 import (
@@ -51,38 +53,40 @@ type Metadata struct {
 
 // Spec is everything a factory declares.
 type Spec struct {
-	Runtime       Runtime           `json:"runtime"`
-	KnowledgeBase KnowledgeBase     `json:"knowledgeBase"`
-	Secrets       *Secrets          `json:"secrets,omitempty"`
-	Connections   []Connection      `json:"connections,omitempty"`
-	Skills        []Skill           `json:"skills,omitempty"`
-	Contracts     map[string]string `json:"contracts,omitempty"`
-	Agents        []Agent           `json:"agents"`
-	Board         Board             `json:"board"`
-	Learning      *Learning         `json:"learning,omitempty"`
+	Runtime Runtime `json:"runtime"`
+	// Connections are the organization's connections the factory uses, and the inline ones of
+	// versions published before phase 4.
+	Connections []Connection      `json:"connections,omitempty"`
+	Knowledge   *Knowledge        `json:"knowledge,omitempty"`
+	Skills      []Skill           `json:"skills,omitempty"`
+	Contracts   map[string]string `json:"contracts,omitempty"`
+	Agents      []Agent           `json:"agents"`
+	Board       Board             `json:"board"`
+	Learning    *Learning         `json:"learning,omitempty"`
+	// KnowledgeBase is removed (field-removed); the librarian's writes still name its collections.
+	KnowledgeBase *KnowledgeBase `json:"knowledgeBase,omitempty"`
 }
 
-// Runtime says where agents run and how they authenticate to the model.
+// Runtime says what every run of the factory gets: its model and the connection that gives it,
+// the size of its box, the tools it installs and the repository it works on.
 type Runtime struct {
-	Runner string `json:"runner"`
-	Image  string `json:"image"`
-	Auth   string `json:"auth"`
-	Model  string `json:"model,omitempty"`
-	// Repository is the git repository agent tasks work on; nil means an empty workspace.
+	Model           string   `json:"model,omitempty"`
+	ModelConnection string   `json:"modelConnection,omitempty"`
+	Size            string   `json:"size,omitempty"`
+	Tools           []string `json:"tools,omitempty"`
+	// Repository is the git repository runs work on; nil means an empty workspace.
 	Repository *Repository `json:"repository,omitempty"`
 	Budget     *Budget     `json:"budget,omitempty"`
 }
 
-// Repository is the git repository goald clones into every task's workspace: a URL and a token
-// reference, or a code-host connection and the repository's owner/name (phase 4).
+// Repository is the git repository cloned into every run: a URL and the organization connection
+// that clones and merges it (none for a public repository).
 type Repository struct {
-	URL string `json:"url,omitempty"`
-	// Token is a secret reference used for the clone on the host only.
-	Token string `json:"token,omitempty"`
-	// Connection names a connection of the factory whose connector is a code host.
+	URL        string `json:"url"`
 	Connection string `json:"connection,omitempty"`
-	// Repo is owner/name on that connection's code host.
-	Repo string `json:"repo,omitempty"`
+	// Token is removed (env-reference-removed): a secret reference the engine clones and merges
+	// with, on the host only, until the cutover to connections.
+	Token string `json:"token,omitempty"`
 }
 
 // Budget caps spend and agent turns.
@@ -95,26 +99,20 @@ type Budget struct {
 	MaxTurnsPerTask int     `json:"maxTurnsPerTask,omitempty"`
 }
 
-// KnowledgeBase lists the factory's knowledge base collections.
+// Knowledge lists the organization's knowledge sources the factory's agents may search.
+type Knowledge struct {
+	Sources []string `json:"sources,omitempty"`
+}
+
+// KnowledgeBase is the removed knowledge base's collections.
 type KnowledgeBase struct {
 	Collections []string `json:"collections"`
-	Retrieval   *struct {
-		TopK int `json:"topK,omitempty"`
-	} `json:"retrieval,omitempty"`
-	Ingestion *struct {
-		Schedule string `json:"schedule,omitempty"`
-	} `json:"ingestion,omitempty"`
 }
 
-// Secrets names where the factory's credentials are resolved.
-type Secrets struct {
-	Provider string `json:"provider"`
-	Vault    string `json:"vault,omitempty"`
-}
-
-// Connection is a tool source served to agents through the gateway, in one of two forms: the
-// inline form (Type and its transport fields, served today) or the connector form (Connector
-// from the catalog, with Credential, Agents, Tools and connector Settings; phase 4).
+// Connection is an entry of spec.connections: the name of an organization connection, written
+// as a plain string, or a removed inline form (connection-inline-removed) that versions published
+// before phase 4 still have: a type with its transport fields, which the MCP gateway serves
+// until the cutover, or a connector, which was never served.
 type Connection struct {
 	// Name is unique in the factory. In the connector form it defaults to the connector's name,
 	// which Check fills in, so Name is always the name agents and tokens use.
@@ -130,69 +128,24 @@ type Connection struct {
 	Network bool   `json:"network,omitempty"`
 	RoleARN string `json:"roleArn,omitempty"`
 	Region  string `json:"region,omitempty"`
-
-	// Connector is the catalog connector of the connector form: name or name@version.
+	// Connector is the connector form's catalog connector: name or name@version.
 	Connector string `json:"connector,omitempty"`
-	// Credential is the organization credential the connection signs in with (phase 4).
-	Credential string              `json:"credential,omitempty"`
-	Agents     []string            `json:"agents,omitempty"`
-	Tools      map[string]ToolRule `json:"tools,omitempty"`
-	// Settings are the connector form's other keys, the connector's own settings.
-	Settings map[string]json.RawMessage `json:"-"`
 }
 
-// connectionKeys are the keys of Connection itself; any other key of a connector-form
-// connection is a setting.
-var connectionKeys = []string{
-	keyName, "type", "transport", "url", "image", "command", "headers", "env", "network", "roleArn", "region",
-	"connector", "credential", keyAgents, "tools",
-}
-
-// UnmarshalJSON decodes a connection and keeps a connector-form entry's settings.
+// UnmarshalJSON reads an organization connection's name, or an inline connection.
 func (c *Connection) UnmarshalJSON(data []byte) error {
-	type plain Connection
-
-	if err := json.Unmarshal(data, (*plain)(c)); err != nil {
-		return err
-	}
-
-	if c.Connector == "" {
+	if err := json.Unmarshal(data, &c.Name); err == nil {
 		return nil
 	}
 
-	var all map[string]json.RawMessage
-	if err := json.Unmarshal(data, &all); err != nil {
-		return err
-	}
+	type plain Connection
 
-	for _, k := range connectionKeys {
-		delete(all, k)
-	}
-
-	if len(all) > 0 {
-		c.Settings = all
-	}
-
-	return nil
+	return json.Unmarshal(data, (*plain)(c))
 }
 
-// ConnectorName is the connector's name without its version: "playwright" for
-// "playwright@2"; empty for an inline connection.
-func (c Connection) ConnectorName() string {
-	name, _, _ := strings.Cut(c.Connector, "@")
-
-	return name
-}
-
-// ToolRule overrides a catalog default for one tool of a connector-form connection.
-type ToolRule struct {
-	// Enabled false means the tool is never served; nil keeps the catalog's default.
-	Enabled  *bool    `json:"enabled,omitempty"`
-	Agents   []string `json:"agents,omitempty"`
-	Approval string   `json:"approval,omitempty"` // required | none
-	Scope    string   `json:"scope,omitempty"`
-	Access   string   `json:"access,omitempty"`
-}
+// Inline reports whether the entry is a removed inline form rather than an organization
+// connection's name.
+func (c Connection) Inline() bool { return c.Type != "" || c.Connector != "" }
 
 // Pinned reports whether a container image reference names one version: it has a digest
 // (name@sha256:...) or a tag other than latest.
@@ -474,17 +427,18 @@ func Check(files fs.FS) (*Factory, []domain.DefinitionProblem) {
 }
 
 // defaultConnectionNames names each connector-form connection without a name after its
-// connector, as the schema documents.
+// connector (name@version), as the schema documented for that removed form.
 func (f *Factory) defaultConnectionNames() {
 	for i, c := range f.Spec.Connections {
 		if c.Name == "" {
-			f.Spec.Connections[i].Name = c.ConnectorName()
+			f.Spec.Connections[i].Name, _, _ = strings.Cut(c.Connector, "@")
 		}
 	}
 }
 
-// Warnings lists the messages of what loads but should be fixed: unpinned connection images
-// (the gateway does not start them), literal secrets, and what this install cannot serve yet.
+// Warnings lists the messages of what loads but should be fixed: removed forms, unpinned
+// connection images (the gateway does not start them), literal secrets, and what this install
+// cannot serve yet.
 func (f *Factory) Warnings() []string {
 	w := make([]string, 0, len(f.warnings))
 	for _, p := range f.warnings {

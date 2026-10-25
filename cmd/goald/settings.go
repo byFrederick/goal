@@ -106,9 +106,8 @@ type settings struct {
 	LogLevel  slog.Level
 	LogFormat string
 	// AgentImage is the image every run's sandbox starts from (GOAL_AGENT_IMAGE, default the
-	// agent image this repository builds, task worker:image); a definition's runtime.image is
-	// ignored. A blank factory's skeleton names it too, until the definition schema drops the
-	// field (spec 4 PR 4-10).
+	// agent image this repository builds, task worker:image); a definition's runtime.image, a
+	// removed key (field-removed), is ignored.
 	AgentImage string
 	// SandboxNetwork is the Docker network sandboxes and sidecars run on (GOAL_SANDBOX_NETWORK,
 	// default goal_agents): compose.yaml's agents network, whose goal-egress service is their
@@ -232,9 +231,10 @@ func (s settings) secretPolicy() domain.SecretPolicy {
 	}
 }
 
-// credentials is the check of a definition's secret references until phase 4: env:NAME
-// references resolve through secrets, they follow secretPolicy (env-reserved), and a repository
-// must be on the install's GitHub host (GOAL_GITHUB_WEB_URL), the only one clones reach.
+// credentials is the check of the env:NAME references versions published before phase 4 still
+// hold, until the cutover: they resolve through secrets, they follow secretPolicy (env-reserved),
+// and a repository must be on the install's GitHub host (GOAL_GITHUB_WEB_URL), the only one
+// clones reach. The connections check runs it beside its own.
 func (s settings) credentials(secrets ports.Secrets) authoring.EnvReferences {
 	return authoring.EnvReferences{Secrets: secrets, Policy: s.secretPolicy(), RepositoryHosts: []string{s.GitHubWebHost}}
 }

@@ -51,13 +51,25 @@ type Line struct {
 	// Paused lines take no work: the engine claims and releases nothing at the factory, and
 	// runs in progress finish.
 	Paused bool
+	// Connections are the organization's connections the factory uses, by name (spec 4 §4.4);
+	// an agent's runs get the ones its AgentSpec.Connections names, besides the runtime's model
+	// and repository connections. Inline connections of versions published before phase 4 are
+	// not among them.
+	Connections []string
+	// KnowledgeSources are the organization's knowledge sources the factory's agents may search.
+	KnowledgeSources []string
 }
 
 // Runtime is what every agent task of the factory shares.
 type Runtime struct {
 	Model string // default model; an agent's own Model wins
+	// ModelConnection is the organization connection, of a kind with model access, that gives
+	// every run its model.
+	ModelConnection string
 	// Size is how much CPU and memory each run's sandbox gets; empty is medium.
 	Size SandboxSize
+	// Tools are mise tool specs every run installs after the repository's own.
+	Tools []string
 	// MaxTurnsPerTask and PerItemUSD are passed to the runner as limits; zero means unset.
 	MaxTurnsPerTask int
 	PerItemUSD      float64
@@ -74,8 +86,13 @@ type Runtime struct {
 type Repository struct {
 	// URL is an https clone URL without credentials.
 	URL string
-	// AuthRef is a secret reference to the repository's token, which only the sandbox's prepare
-	// gets (RunEnvRepositoryToken), to clone; the agent never does. Empty for a public repository.
+	// Connection is the organization connection that clones and merges it; empty for a public
+	// repository.
+	Connection string
+	// AuthRef is the env: reference of a version published before phase 4 (runtime.repository
+	// .token, removed from definitions) to the repository's token, which only the sandbox's
+	// prepare gets (RunEnvRepositoryToken), to clone; the agent never does. Empty for a public
+	// repository. The cutover (spec 4, 4-14) removes it.
 	AuthRef string
 }
 
