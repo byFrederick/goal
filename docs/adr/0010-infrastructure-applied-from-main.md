@@ -1,6 +1,6 @@
 # ADR 0010 — Infrastructure applied from main by CI
 
-Status: accepted · 2026-10-25 · Amended 2026-10-25: one GitHub environment, `production`, for both jobs; it replaces the planned `production-plan` environment and its viewer-only `terraform-plan` service account, which were never set up · Builds on [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (the Cloudflare install and `terraform/`) · Changes AGENTS.md rule 8 when the apply workflow lands (below)
+Status: accepted · 2026-10-25 · Amended 2026-10-25: one GitHub environment, `production`, for both jobs; it replaces the planned `production-plan` environment and its viewer-only `terraform-plan` service account, which were never set up · Builds on [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (the Cloudflare install and `terraform/`) · Changed AGENTS.md rule 8 on 2026-10-25, when the apply workflow landed (Rollout step 3): the apply-on-merge workflow applies, agents never run `tf:apply`
 
 ## Context
 
@@ -15,7 +15,7 @@ What the credentials can reach decides the design. The state holds every platfor
 1. **The apply-on-merge workflow applies production from main.** On a push to main that touches `terraform/`, one job in the GitHub environment `production`, one run at a time (a concurrency group that never cancels a run in flight), plans to a saved file and applies that file, non-interactively. It applies what the merged commit planned, nothing newer. Then a `-detailed-exitcode` plan fails the job if anything is left: drift or an error fails loudly, never silently.
 2. **Pull requests get a plan.** On a pull request that touches `terraform/`, from this repository only (never a fork), one job in the GitHub environment `production` runs `task tf:check` and `task tf:plan -- -lock=false` (by choice: a pull request's plan never holds the state lock against an apply). It posts the plan as one comment, updated on each push, with sensitive values masked as Terraform masks them.
 3. **Agents never run `tf:apply` themselves.** They `fmt`, check, test and plan. A change reaches production by a pull request that a person merges.
-4. **One environment holds the credentials.** `production` holds the operator's existing credentials (the Cloudflare, PlanetScale and R2 state tokens and the age key, as the runbook lists them) and is the only environment Google's `terraform-apply` service account trusts. Its deployment branches cannot be limited to `main`, because pull request plans run from other branches. The owner may require reviewers on it. Revoking one of these credentials breaks the laptop too, so a rotation renews it in both places.
+4. **One environment holds the credentials.** `production` holds the operator's existing credentials (the Cloudflare, PlanetScale and R2 state tokens and the age key, as the runbook lists them) and is the only environment Google's `terraform-apply` service account trusts. Its deployment branches cannot be limited to `main`, because pull request plans run from other branches; the apply workflow runs only on a push to `main`, so that trigger and the review of any workflow change, not the environment, keep another branch from applying. The owner may require reviewers on it. Revoking one of these credentials breaks the laptop too, so a rotation renews it in both places.
 5. **Google without a key.** Workload Identity Federation in the sign-in project (`terraform/ci.tf`) trusts GitHub's OIDC tokens only from `byFrederick/goal`, matched by repository id and owner id so that a renamed or recreated namesake gets nothing, and only from the environment `production`, which alone can impersonate `terraform-apply`. `terraform-apply` gets a custom role with exactly what `terraform/` manages in that project, never a basic role. The workflow exchanges its OIDC token for an access token, and the `tf:*` tasks take it as `GOOGLE_OAUTH_ACCESS_TOKEN` when `GITHUB_ACTIONS=true`. On a laptop nothing changes: gcloud's `goal` configuration, and any token left in the shell is overwritten.
 6. **The bootstrap stays manual.** The owner applies the federation resources once from a laptop with `-target` (runbook, bootstrap step 13), because no workflow can plan before they exist.
 
@@ -32,11 +32,11 @@ Any branch pushed to this repository can rewrite the plan workflow and get `prod
 
 Three changes, in order:
 
-1. The federation, the CI credential path of the `tf:*` tasks, the runbook's list of GitHub environment secrets, and this ADR. AGENTS.md rule 8 still says only the owner applies, and the owner applies the federation resources.
+1. *Done 2026-10-25 (PR #9).* The federation, the CI credential path of the `tf:*` tasks, the runbook's list of GitHub environment secrets, and this ADR. AGENTS.md rule 8 still says only the owner applies, and the owner applies the federation resources.
 2. The plan workflow ([`.github/workflows/terraform-plan.yml`](../../.github/workflows/terraform-plan.yml)). *Done:* it runs on pull requests that touch `terraform/` or the workflow, from this repository only, in `production`, and keeps one plan comment per pull request up to date. Its first run needs bootstrap step 13.
-3. The apply workflow (`.github/workflows/terraform-apply.yml`). In the same pull request, AGENTS.md rule 8, the runbook's Deploys section and the `tf:apply` comments in `Taskfile.yml` change to say that the apply-on-merge workflow applies and that agents never run `tf:apply`.
+3. *Done 2026-10-25.* The apply workflow ([`.github/workflows/terraform-apply.yml`](../../.github/workflows/terraform-apply.yml)). In the same pull request, AGENTS.md rule 8, the runbook's Deploys section and the `tf:apply` comments in `Taskfile.yml` change to say that the apply-on-merge workflow applies and that agents never run `tf:apply`.
 
-Until step 3 merges, the rule in force is today's: only the owner applies, or the coordinating agent the owner authorizes for that change.
+Until step 3 merged, the rule in force was the old one: only the owner applied, or the coordinating agent the owner authorized for that change. A pull request's plan is the terraform-plan workflow's comment; the merge's apply is the terraform-apply workflow's run.
 
 ## Rejected
 

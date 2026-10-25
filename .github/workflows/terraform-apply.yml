@@ -1,0 +1,117 @@
+# Applies terraform/ to production on every push to main that changes it (ADR 0010, runbook:
+# docs/engineering/cloudflare-operations.md, Deploys). One job in the GitHub environment
+# `production` (write credentials; shared with the plan workflow, so it has no deployment-branch
+# rule: what keeps a non-main run from applying is this file's push-to-main trigger and the review
+# of any change to a workflow), one run at a time: a run in flight is never cancelled, and a newer
+# push waits for it. It plans to a saved file, applies that
+# file (what the merged commit planned, nothing newer), then plans again with -detailed-exitcode
+# and fails if anything is left: drift or an error fails loudly, never silently. A failed apply
+# is fixed by a new pull request, never by a manual apply.
+# Only terraform/** triggers it: a change to this file alone applies nothing.
+# Hardening (github-actions-hardening skill): no permissions but the job's contents: read and
+# id-token: write (Google through Workload Identity Federation, terraform/ci.tf; no key), actions
+# pinned to commit SHAs, secrets only through step env: and only to the steps that run Terraform,
+# no ${{ }} expressions inside run scripts, the age key in a mode-0600 file under $RUNNER_TEMP,
+# never echoed, and it and the saved plan deleted at the end (the plan is never uploaded). No step
+# prints outputs, decrypts the SOPS file or dumps the environment: GitHub masks the secrets, and
+# the plans show sensitive values as such.
+name: terraform-apply
+
+on:
+  push:
+    branches: [main]
+    paths: ['terraform/**']
+
+permissions: {}
+
+concurrency:
+  group: terraform-apply-production
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: terraform apply (production)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45 # under the Google access token's one hour
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # terraform, tflint and sops at .mise.toml's versions, as on a laptop.
+      - uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+        with:
+          version: 2026.10.3
+      - uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
+        with:
+          version: 3.46.1
+          checksum: 8220f1b4563a5bed932348b7350aafba66e1100e90bd411e4bcda4fe80de08f1 # task_linux_amd64.tar.gz
+      # The job's OIDC token for terraform-apply's access token (step output, masked).
+      - name: Google access token (Workload Identity Federation)
+        id: google
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GOAL_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GOAL_GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+      - name: Age key for terraform/secrets/
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          umask 077
+          key_file="$RUNNER_TEMP/sops-age-key.txt"
+          printf '%s\n' "$SOPS_AGE_KEY" > "$key_file"
+          echo "SOPS_AGE_KEY_FILE=$key_file" >> "$GITHUB_ENV"
+      - name: Plan to a saved file
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GOAL_TF_STATE_ACCESS_KEY: ${{ secrets.GOAL_TF_STATE_ACCESS_KEY }}
+          GOAL_TF_STATE_SECRET_KEY: ${{ secrets.GOAL_TF_STATE_SECRET_KEY }}
+          PLANETSCALE_SERVICE_TOKEN_ID: ${{ secrets.PLANETSCALE_SERVICE_TOKEN_ID }}
+          PLANETSCALE_SERVICE_TOKEN: ${{ secrets.PLANETSCALE_SERVICE_TOKEN }}
+          GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.google.outputs.access_token }}
+        run: task -x tf:plan -- -input=false -out=tfplan
+      # A saved plan never prompts: it applies exactly what the step above planned.
+      - name: Apply the saved plan
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GOAL_TF_STATE_ACCESS_KEY: ${{ secrets.GOAL_TF_STATE_ACCESS_KEY }}
+          GOAL_TF_STATE_SECRET_KEY: ${{ secrets.GOAL_TF_STATE_SECRET_KEY }}
+          PLANETSCALE_SERVICE_TOKEN_ID: ${{ secrets.PLANETSCALE_SERVICE_TOKEN_ID }}
+          PLANETSCALE_SERVICE_TOKEN: ${{ secrets.PLANETSCALE_SERVICE_TOKEN }}
+          GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.google.outputs.access_token }}
+        run: task -x tf:apply -- -input=false tfplan
+      # task -x passes terraform's exit code through: 0 no changes, 2 changes left, else an error.
+      - name: Nothing left to apply
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GOAL_TF_STATE_ACCESS_KEY: ${{ secrets.GOAL_TF_STATE_ACCESS_KEY }}
+          GOAL_TF_STATE_SECRET_KEY: ${{ secrets.GOAL_TF_STATE_SECRET_KEY }}
+          PLANETSCALE_SERVICE_TOKEN_ID: ${{ secrets.PLANETSCALE_SERVICE_TOKEN_ID }}
+          PLANETSCALE_SERVICE_TOKEN: ${{ secrets.PLANETSCALE_SERVICE_TOKEN }}
+          GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.google.outputs.access_token }}
+        run: |
+          set +e
+          task -x tf:plan -- -input=false -detailed-exitcode
+          code=$?
+          set -e
+          case "$code" in
+            0) echo "Production matches main: no changes left." ;;
+            2)
+              echo "::error title=Changes left after apply::The plan after the apply still shows changes (drift, or a resource the apply could not converge): the plan above lists them. Fix it with a new pull request, never a manual apply."
+              exit 1
+              ;;
+            *)
+              echo "::error title=Plan after apply failed::terraform plan exited $code after the apply: the output above says why. Fix it with a new pull request, never a manual apply."
+              exit "$code"
+              ;;
+          esac
+      - name: Delete the saved plan and the age key
+        if: always()
+        run: rm -f terraform/tfplan "$RUNNER_TEMP/sops-age-key.txt"
