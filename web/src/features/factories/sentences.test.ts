@@ -7,6 +7,7 @@ import {
   headerSentence,
   spendNote,
   throughputDelta,
+  touchesTrend,
   waitingBreakdown,
 } from './sentences';
 
@@ -124,5 +125,25 @@ describe('budgetLine', () => {
   it('ends the phone page with the weekly spend', () => {
     expect(budgetLine('Acme', 71.6, 250)).toBe('$71.60 of Acme’s $250 weekly budget spent');
     expect(budgetLine('Acme', 1.06, null)).toBe('$1.06 spent this week, no budget set');
+  });
+});
+
+describe('touchesTrend', () => {
+  const week = (finished: number, per_item_mean: number) => ({
+    finished,
+    per_item_mean,
+    per_item_median: per_item_mean,
+    touchless_rate: 0.3,
+  });
+
+  it('is worse when people touch each finished item more than last week', () => {
+    expect(touchesTrend({ current: week(12, 1.6), previous: week(9, 1.3) })).toEqual({ text: '+0.3', tone: 'worse' });
+    expect(touchesTrend({ current: week(40, 1.4), previous: week(38, 1.7) })).toEqual({ text: '−0.3', tone: 'better' });
+    expect(touchesTrend({ current: week(4, 1.02), previous: week(5, 1) })).toEqual({ text: 'Same', tone: 'flat' });
+  });
+
+  it('compares nothing when a week finished no item', () => {
+    expect(touchesTrend({ current: week(0, 0), previous: week(5, 1) })).toBeNull();
+    expect(touchesTrend({ current: week(3, 1), previous: week(0, 0) })).toBeNull();
   });
 });

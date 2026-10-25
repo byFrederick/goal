@@ -1,18 +1,27 @@
 // One factory on the Factories home (C §10.7, canvas "Factories" and "Mobile-Factories"). From
-// 768 px: name, health, purpose, the 2×2 stats (throughput with a 7-day sparkline and its delta,
-// the constraint, what waits on you, the week's spend against the budget) and Open/Definition.
-// On a phone the card is compact (three stats) and is one link to the factory's floor. A factory
+// 768 px: name, health, purpose, its human touches per finished item this week (spec 4 §4.9), the
+// 2×2 stats (throughput with a 7-day sparkline and its delta, the constraint, what waits on you,
+// the week's spend against the budget) and Open/Definition. On a phone the card is compact (three
+// stats, then the touches in a line) and is one link to the factory's floor. A factory
 // never published is a draft: its card resumes the New factory wizard instead (D13).
 import { Link } from '@tanstack/react-router';
 import type { FactoryOverview } from '../../api/types';
 import { factoryScreens } from '../../app/screens';
-import { formatDay, formatUsd, humanize } from '../../shared/format';
+import { formatDay, formatPercent, formatUsd, humanize } from '../../shared/format';
+import { perItem } from '../../shared/touches';
 import { Button } from '../../ui/button';
 import { Stat, StatGrid } from '../../ui/card';
 import { Chip, Dot } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { HatchBars, Meter } from '../../ui/hatch';
-import { constraintNote, spendNote, throughputDelta, waitingBreakdown } from './sentences';
+import {
+  constraintNote,
+  spendNote,
+  type TouchesTrend,
+  throughputDelta,
+  touchesTrend,
+  waitingBreakdown,
+} from './sentences';
 
 // Numbers are tabular (MASTER.md); the words around them stay proportional.
 const numeral = 'm-0 text-[30px] leading-none font-normal tracking-numeral tabular-nums';
@@ -70,8 +79,10 @@ export function FactoryCard({ org, overview, mark }: { org: string; overview: Fa
         </p>
       ) : (
         <>
+          <WeekTouches overview={overview} />
           <WeekStats overview={overview} />
           <PhoneStats overview={overview} />
+          <PhoneTouches overview={overview} />
         </>
       )}
 
@@ -124,6 +135,67 @@ function Health({ overview }: { overview: FactoryOverview }) {
         </span>
       );
   }
+}
+
+const trendTone = { better: 'text-ok-ink', worse: 'text-rework-ink', flat: 'text-muted' } as const;
+
+/** "+0.3 vs last week" in rust when worse, green when better; screen readers hear which. */
+function Trend({ trend, long }: { trend: TouchesTrend; long: boolean }) {
+  return (
+    <span className={cn('whitespace-nowrap tabular-nums', trendTone[trend.tone])}>
+      {trend.tone === 'flat' && long ? 'Same as last week' : trend.text}
+      {trend.tone === 'flat' || !long ? null : ' vs last week'}
+      <span className="sr-only">
+        {long ? '' : ' vs last week'}
+        {trend.tone === 'flat' ? '' : `, ${trend.tone}`}
+      </span>
+    </span>
+  );
+}
+
+/** From 768 px: the week's touches per finished item, touchless share and change from last week. */
+function WeekTouches({ overview }: { overview: FactoryOverview }) {
+  const { current } = overview.touches;
+  const trend = touchesTrend(overview.touches);
+  return (
+    <div className="hidden rounded-control border border-line bg-surface px-3.5 py-3 md:block">
+      {current.finished === 0 ? (
+        <p className="m-0 text-sm text-muted">No items finished this week, so no human touches to count.</p>
+      ) : (
+        <>
+          <p className="m-0 text-[15px]">
+            <span className="text-[22px] leading-none tracking-numeral tabular-nums">
+              {perItem(current.per_item_mean)}
+            </span>{' '}
+            human touches per item
+          </p>
+          <p className="m-0 mt-0.5 flex flex-wrap gap-x-3 text-sm text-muted">
+            <span className="tabular-nums">{formatPercent(current.touchless_rate)} touchless</span>
+            {trend ? <Trend trend={trend} long /> : null}
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** On a phone: the same in one line under the stats. */
+function PhoneTouches({ overview }: { overview: FactoryOverview }) {
+  const { current } = overview.touches;
+  const trend = touchesTrend(overview.touches);
+  if (current.finished === 0) return <p className="m-0 text-sm text-muted md:hidden">No items finished this week</p>;
+  return (
+    <p className="m-0 text-sm md:hidden">
+      <strong className="font-medium tabular-nums">{perItem(current.per_item_mean)}</strong> human touches per item,{' '}
+      {formatPercent(current.touchless_rate)} touchless
+      {trend ? (
+        <>
+          {' '}
+          <Trend trend={trend} long={false} />
+        </>
+      ) : null}
+    </p>
+  );
 }
 
 function ConstraintChip({ station }: { station: string }) {

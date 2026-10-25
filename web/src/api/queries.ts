@@ -27,6 +27,7 @@ import {
   getMetrics,
   getOrg,
   getOrgSettings,
+  getTouchMetrics,
   getWeekly,
   type ItemFilter,
   listFactories,
@@ -134,6 +135,9 @@ export const keys = {
     ['org', org, 'factory', factory, 'constraint', from ?? 'week', to ?? 'today'] as const,
   leadTime: (org: string, factory: string, range: FlowRange) =>
     ['org', org, 'factory', factory, 'lead-time', range] as const,
+  /** Human touches of the items finished over a range (spec 4 §10); item events refresh them. */
+  touches: (org: string, factory: string, range: FlowRange) =>
+    ['org', org, 'factory', factory, 'touches', range] as const,
   /** One agent's statistics over a range (E12); the stream refreshes the factory's 'agent' keys. */
   agentStats: (org: string, factory: string, agent: string, from: string | undefined, to: string | undefined) =>
     ['org', org, 'factory', factory, 'agent', agent, from ?? 'default', to ?? 'today'] as const,
@@ -283,6 +287,14 @@ export const constraintQuery = (org: string, factory: string, { from, to }: Flow
   });
 
 /** The lead-time bridge over a range. */
+/** Human touches over a range: the Floor's panel and, over the last 7 days, the board and the item. */
+export const touchesQuery = (org: string, factory: string, range: FlowRange = {}) =>
+  queryOptions({
+    queryKey: keys.touches(org, factory, range),
+    queryFn: ({ signal }) => getTouchMetrics(org, factory, range, signal),
+    staleTime: 30_000,
+  });
+
 export const leadTimeQuery = (org: string, factory: string, range: FlowRange = {}) =>
   queryOptions({
     queryKey: keys.leadTime(org, factory, range),

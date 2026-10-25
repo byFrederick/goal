@@ -28,6 +28,18 @@ export function throughputDelta(perDay: number, previous: number): Delta {
   return delta(perDay - previous, 1, (n) => n.toFixed(1), true);
 }
 
+/**
+ * Touches per finished item against the previous range, to one decimal: more is worse. None when
+ * either range finished nothing, as there is no per item to compare.
+ */
+export function touchesDelta(
+  current: { finished: number; per_item_mean: number },
+  previous: { finished: number; per_item_mean: number } | undefined,
+): Delta | null {
+  if (!previous || current.finished === 0 || previous.finished === 0) return null;
+  return delta(current.per_item_mean - previous.per_item_mean, 1, (n) => n.toFixed(1), false);
+}
+
 /** Lead time p85 against the previous range (hours), to the second: longer is worse. */
 export function leadTimeDelta(hours: number | null | undefined, previous: number | null | undefined): Delta | null {
   if (hours == null || previous == null) return null;

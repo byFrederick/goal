@@ -38,7 +38,8 @@ const usage = `usage:
                                                   (--type: one of the factory's work types; default its
                                                   first, none when it declares none)
   goal follow <item>                              follow an item's events again
-  goal item <item>                                show an item with its outputs
+  goal item <item>                                show an item with its outputs as JSON, and its human
+                                                  touches (who acted, where, planned or not, why) on stderr
   goal approve <item>                             approve an item waiting at a human station
   goal reject <item> --reason "..."               send it back for rework
   goal retry <item>                               send a blocked item back to its station's queue
@@ -51,6 +52,11 @@ const usage = `usage:
                                                   progress is stopped
   goal pause <item> [--reason "..."]              stop the item where it is (goal retry resumes it);
                                                   a run in progress is stopped
+  goal status [--factory F] [--window 7d]         per factory over the last days (1d to 90d): work in
+                                                  progress, items done, lead time p85, human touches per
+                                                  finished item, the touchless share and the station with
+                                                  the most unplanned touches; without --factory, every
+                                                  factory and the organization's total
   goal andon <factory>                            whether the line runs, its gates' rework tallies and
                                                   the recent andon pulls
   goal andon pull <factory> --reason "..."        pull the andon cord: the line releases and claims
@@ -135,7 +141,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, move, pause, the decisions, andon, factory) acts in one
+Every command that talks to goald (run, follow, item, note, move, pause, the decisions, status, andon, factory) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or
@@ -199,7 +205,7 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 	// The commands on one item, and the command groups, by name.
 	if handler, ok := map[string]command{
 		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbMove: moveItem, verbPause: pauseItem,
-		"factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
+		"status": status, "factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
 	}[cmd]; ok {
 		return handler(ctx, out, getenv, rest)
 	}

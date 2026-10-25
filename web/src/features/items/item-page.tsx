@@ -5,7 +5,7 @@ import { type ReactNode, useMemo, useState } from 'react';
 import { eventsQuery, itemQuery, runsQuery } from '../../api/queries';
 import type { Item, Station } from '../../api/types';
 import { factoryTitle, itemKey, useFactory, useFactoryParams } from '../../shared/factory';
-import { humanize } from '../../shared/format';
+import { humanize, plural } from '../../shared/format';
 import { type ItemControls, ItemDecisions } from '../../shared/item-actions';
 import { describeState, pausedNow, pullRequestOf, type Tone } from '../../shared/item-state';
 import { useOrg } from '../../shared/org';
@@ -18,6 +18,7 @@ import { PathCard, TimeCard } from './flow-cards';
 import { NoteComposer } from './note-composer';
 import { OutputsCard } from './outputs';
 import { activeRun, buildTrace, latestToolCalls, noteRecipient, runLabel, type Trace } from './timeline';
+import { TouchesCard } from './touches-card';
 import { ToolRow, TraceList } from './trace-view';
 
 /** The agent copy working the item now, as the trace names it. */
@@ -157,6 +158,11 @@ export function ItemPage() {
             {item.lane ? <Chip tone="plain">{item.lane}</Chip> : null}
             <Chip tone="plain">At {humanize(item.station)}</Chip>
             <Chip tone={chipTone[state.tone]}>{state.text}</Chip>
+            {item.touches && item.touches.count > 0 ? (
+              <Chip tone="you" className="max-md:hidden">
+                {plural(item.touches.count, 'human touch', 'human touches')}
+              </Chip>
+            ) : null}
             <Chip tone="plain" className="md:hidden">
               {item.ref}
             </Chip>
@@ -186,6 +192,13 @@ export function ItemPage() {
             className={deciding || item.state === 'blocked' ? 'order-1' : 'order-9'}
           />
           <TimeCard item={item} factory={factory} trace={trace} className="order-2 @[720px]:order-none" />
+          <TouchesCard
+            item={item}
+            itemKey={key}
+            factory={factory}
+            events={events}
+            className="order-2 @[720px]:order-none"
+          />
           <PathCard item={item} factory={factory} className="order-7 @[720px]:order-none" />
         </div>
         <div className="contents @[720px]:col-span-2 @[720px]:flex @[720px]:flex-col @[720px]:gap-4">

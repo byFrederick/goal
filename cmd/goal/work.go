@@ -369,7 +369,8 @@ func str(e gen.Event, key string) string {
 	return s
 }
 
-// showItem prints an item: goal item <item> [--factory F].
+// showItem prints an item: goal item <item> [--factory F]. Its JSON goes to stdout, its human
+// touches, for the person reading it, to stderr.
 func showItem(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs := newFlags("item")
 	factory := fs.String("factory", "", "the factory of a bare item number")
@@ -405,6 +406,7 @@ func showItem(ctx context.Context, out *printer, getenv func(string) string, arg
 	}
 
 	out.printf("%s\n", b)
+	printTouches(out, res.JSON200.Touches)
 
 	return nil
 }

@@ -349,7 +349,13 @@ test('send an item back with a reason', async ({ page }) => {
   await expectToast(page, 'Sent goal#12 back. It is now at Spec.');
   await expect(page.getByText('At Spec', { exact: true })).toBeVisible();
   await showTrace(page);
-  await expect(page.getByText('Cover the empty-bucket case with a test.')).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Trace' }).getByText('Cover the empty-bucket case with a test.'),
+  ).toBeVisible();
+  // The send-back is a person's touch: the Human touches card says it with its reason too.
+  await expect(
+    page.getByRole('region', { name: 'Human touches' }).getByText(/sent it back: “Cover the empty-bucket case/),
+  ).toBeVisible();
 });
 
 test('merge a pull request at the merge station', async ({ page }) => {

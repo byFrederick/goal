@@ -1,9 +1,9 @@
 import { Link } from '@tanstack/react-router';
-import { ExternalLink, Zap } from 'lucide-react';
+import { ExternalLink, Users, Zap } from 'lucide-react';
 import type { CSSProperties, KeyboardEvent, PointerEvent, Ref } from 'react';
 import type { ItemCard } from '../../api/types';
 import { refParam, useFactory, useFactoryParams } from '../../shared/factory';
-import { formatAge, formatUsd, humanize } from '../../shared/format';
+import { formatAge, formatUsd, humanize, plural } from '../../shared/format';
 import { pullRequestLabel, toneText } from '../../shared/item-state';
 import { isMoveShortcut, MoveButton, moveShortcut } from '../../shared/move-menu';
 import { holds } from '../../shared/permissions';
@@ -59,6 +59,14 @@ export function BoardCard({
   const age = formatAge(item.age_seconds);
 
   const stateLine = <span className={cn(compact ? 'text-[13px]' : 'text-xs', toneText[state.tone])}>{state.text}</span>;
+  // People who had to act on it so far (spec 4 §4.9); a card nobody touched says nothing.
+  const touches =
+    item.touch_count > 0 ? (
+      <span className="inline-flex basis-full items-center gap-1 text-xs text-you-ink tabular-nums">
+        <Users size={12} strokeWidth={1.75} aria-hidden="true" />
+        {plural(item.touch_count, 'touch', 'touches')}
+      </span>
+    ) : null;
   const prLink = item.pr_url ? (
     <a
       href={item.pr_url}
@@ -103,6 +111,7 @@ export function BoardCard({
             <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
               {stateLine}
               {prLink}
+              {touches}
             </div>
           </div>
           {onMove ? <MoveButton item={item} onMove={onMove} size="lg" /> : null}
@@ -122,6 +131,7 @@ export function BoardCard({
             <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-2 gap-y-1">
               {stateLine}
               {prLink}
+              {touches}
             </div>
             {onMove ? <MoveButton item={item} onMove={onMove} className="-mr-1 -mb-1" /> : null}
           </div>

@@ -37,6 +37,7 @@ function cache() {
     client.setQueryData(keys.overview(org, '7d'), {});
     client.setQueryData(keys.board(org, goal), {});
     client.setQueryData(keys.metrics(org, goal, {}), {});
+    client.setQueryData(keys.touches(org, goal, {}), {});
     client.setQueryData(keys.items(org, goal, { state: 'waiting_human' }), {});
     client.setQueryData([...keys.factory(org, goal), 'draft'], {});
     client.setQueryData(keys.board(org, sre), {});
@@ -81,6 +82,7 @@ describe('invalidationsFor an item event', () => {
         keys.overview(acme, '7d'),
         keys.board(acme, goal),
         keys.metrics(acme, goal, {}),
+        keys.touches(acme, goal, {}),
         keys.items(acme, goal, { state: 'waiting_human' }),
         keys.item(acme, 'goal#12'),
         keys.item(acme, item12),
@@ -105,6 +107,7 @@ describe('invalidationsFor an item event', () => {
     expect(stale).toContainEqual(keys.board(acme, goal));
     expect(stale).toContainEqual(keys.item(acme, 'goal#12'));
     expect(stale).not.toContainEqual(keys.metrics(acme, goal, {}));
+    expect(stale).not.toContainEqual(keys.touches(acme, goal, {}));
     expect(stale).not.toContainEqual(keys.items(acme, goal, { state: 'waiting_human' }));
   });
 
@@ -141,7 +144,7 @@ describe('resyncInvalidations', () => {
   test('re-reads everything of the organization and nothing of another', async () => {
     const stale = await staleAfter(cache(), resyncInvalidations(acme));
 
-    expect(stale).toHaveLength(14);
+    expect(stale).toHaveLength(15);
     expect(stale.every((k) => k[0] === 'org' && k[1] === acme)).toBe(true);
   });
 });

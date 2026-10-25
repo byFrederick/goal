@@ -1,7 +1,7 @@
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { ChevronDown, ListFilter } from 'lucide-react';
-import { boardQuery, constraintQuery, leadTimeQuery, metricsQuery, weeklyQuery } from '../../api/queries';
+import { boardQuery, constraintQuery, leadTimeQuery, metricsQuery, touchesQuery, weeklyQuery } from '../../api/queries';
 import type { Metrics } from '../../api/types';
 import { factoryTitle, useFactory } from '../../shared/factory';
 import { NewItemButton } from '../../shared/new-item';
@@ -13,13 +13,25 @@ import { Menu, MenuChoice, MenuContent, MenuRadioGroup, MenuTrigger } from '../.
 import { ConstraintCard } from './constraint-card';
 import { LeadTimeCard } from './lead-time-card';
 import { NeedsYouCard } from './needs-you';
-import { lastDaysSearch, presetOf, presets, previousName, rangeLabel, todayUtc } from './range';
+import {
+  type FloorSearch,
+  lastDaysSearch,
+  presetOf,
+  presets,
+  previousName,
+  previousRange,
+  rangeLabel,
+  rangeOf,
+  todayUtc,
+} from './range';
 import { ThroughputCard } from './throughput-card';
+import { TouchesPanel, TouchesSummary } from './touches-card';
 import { WeeklyCard } from './weekly-card';
 
 // The approved design's grid (Main and Mobile-Floor boards), laid out by the room beside the
 // sidebar (container queries on main): one column with the constraint after throughput, two
-// from 720 px, the three columns of the approved design from 960 px.
+// from 720 px, the three columns of the approved design from 960 px. The human touches panel
+// runs across the top from 768 px; on a phone their card follows Throughput, in its cell.
 const grid = cn(
   'grid gap-3 md:gap-4',
   "[grid-template-areas:'tp'_'hero'_'needs'_'flow'_'wk']",
@@ -34,13 +46,16 @@ export function FloorPage() {
   const factory = useFactory();
   const org = useOrg();
   const search = useSearch({ from: floorRoute });
+  const range = rangeOf(search);
   const { data: board } = useSuspenseQuery(boardQuery(org.id, factory.id));
-  const { data: metrics } = useSuspenseQuery(metricsQuery(org.id, factory.id, search));
-  const { data: weekly } = useSuspenseQuery(weeklyQuery(org.id, factory.id, search));
-  const { data: bridge } = useSuspenseQuery(leadTimeQuery(org.id, factory.id, search));
-  const { data: constraint } = useSuspenseQuery(constraintQuery(org.id, factory.id, search));
+  const { data: metrics } = useSuspenseQuery(metricsQuery(org.id, factory.id, range));
+  const { data: weekly } = useSuspenseQuery(weeklyQuery(org.id, factory.id, range));
+  const { data: bridge } = useSuspenseQuery(leadTimeQuery(org.id, factory.id, range));
+  const { data: constraint } = useSuspenseQuery(constraintQuery(org.id, factory.id, range));
+  const { data: touches } = useSuspenseQuery(touchesQuery(org.id, factory.id, range));
+  const { data: touchesBefore } = useSuspenseQuery(touchesQuery(org.id, factory.id, previousRange(range)));
   const title = `${factoryTitle(factory)} floor`;
-  const range = rangeLabel(metrics.from, metrics.to);
+  const label = rangeLabel(metrics.from, metrics.to);
   const before = metrics.previous ? rangeLabel(metrics.previous.from, metrics.previous.to) : null;
 
   return (
@@ -51,14 +66,19 @@ export function FloorPage() {
           <p className="m-0 mt-1 text-sm text-muted md:hidden">{phoneCaption(metrics)}</p>
         </div>
         <div className="hidden flex-wrap items-center gap-2 md:flex">
-          <RangeControl metrics={metrics} before={before} label={range} />
+          <RangeControl metrics={metrics} before={before} label={label} />
           <WorkTypeFilter types={factory.work_types} value={search.type} />
           <NewItemButton factory={factory} />
         </div>
       </header>
 
+      <TouchesPanel touches={touches} previous={touchesBefore} grouping={search.touches ?? 'station'} />
+
       <div className={grid}>
-        <ThroughputCard metrics={metrics} className="[grid-area:tp]" />
+        <div className="flex flex-col gap-3 [grid-area:tp]">
+          <ThroughputCard metrics={metrics} className="md:flex-1" />
+          <TouchesSummary touches={touches} previous={touchesBefore} />
+        </div>
         <ConstraintCard report={constraint} board={board} className="[grid-area:hero]" />
         <NeedsYouCard factory={factory} className="[grid-area:needs]" />
         <LeadTimeCard bridge={bridge} factory={factory} className="[grid-area:flow]" />
@@ -75,6 +95,9 @@ function phoneCaption(m: Metrics): string {
   return `${rangeLabel(m.from, m.to)}, vs ${vs}${m.type ? `, ${m.type} only` : ''}`;
 }
 
+/** The touches grouping of the search, kept when the range changes. */
+const keepGrouping = ({ touches }: FloorSearch) => (touches ? { touches } : {});
+
 /** The range toggle and the range it is compared with, writing ?from&to (the type is kept). */
 function RangeControl({ metrics, before, label }: { metrics: Metrics; before: string | null; label: string }) {
   const navigate = useNavigate({ from: floorRoute });
@@ -89,8 +112,15 @@ function RangeControl({ metrics, before, label }: { metrics: Metrics; before: st
         presets={presets}
         active={presetOf(metrics.from, metrics.to)}
         maxDays={maxRangeDays}
-        onPreset={(days) => navigate({ search: lastDaysSearch(days, type), resetScroll: false })}
-        onRange={(from, to) => navigate({ search: { from, to, ...(type ? { type } : {}) }, resetScroll: false })}
+        onPreset={(days) =>
+          navigate({ search: (prev) => ({ ...lastDaysSearch(days, type), ...keepGrouping(prev) }), resetScroll: false })
+        }
+        onRange={(from, to) =>
+          navigate({
+            search: (prev) => ({ from, to, ...(type ? { type } : {}), ...keepGrouping(prev) }),
+            resetScroll: false,
+          })
+        }
       />
       {before ? <span className="px-2.5 text-sm text-muted tabular-nums">vs {before}</span> : null}
     </div>

@@ -1,10 +1,17 @@
 // The Floor's range of UTC days and work type, kept in the URL (?from&to&type): absent `to` is
-// today, absent `from` six days before it, absent `type` every type, as goald reads them.
+// today, absent `from` six days before it, absent `type` every type, as goald reads them. The
+// Touches panel's grouping is there too (?touches, absent: by station).
+import { isTouchGrouping, type TouchGrouping } from '../../shared/touches';
 
-export interface FloorSearch {
+/** The range and work type the Floor's statistics are read over. */
+export interface FloorRange {
   from?: string;
   to?: string;
   type?: string;
+}
+
+export interface FloorSearch extends FloorRange {
+  touches?: Exclude<TouchGrouping, 'station'>;
 }
 
 const isDay = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
@@ -15,7 +22,21 @@ export function floorSearch(search: Record<string, unknown>): FloorSearch {
     ...(isDay(search.from) ? { from: search.from } : {}),
     ...(isDay(search.to) ? { to: search.to } : {}),
     ...(typeof search.type === 'string' && search.type !== '' ? { type: search.type } : {}),
+    ...(isTouchGrouping(search.touches) && search.touches !== 'station' ? { touches: search.touches } : {}),
   };
+}
+
+/** The range of the search, without what only arranges the page: the statistics' query keys. */
+export function rangeOf({ from, to, type }: FloorSearch): FloorRange {
+  return { ...(from ? { from } : {}), ...(to ? { to } : {}), ...(type ? { type } : {}) };
+}
+
+/** The range of the same length just before, as goald compares the metrics with. */
+export function previousRange(range: FloorRange, now = Date.now()): FloorRange {
+  const to = range.to ?? todayUtc(now);
+  const from = range.from ?? addDays(to, -6);
+  const days = daysIn(from, to);
+  return { from: addDays(from, -days), to: addDays(from, -1), ...(range.type ? { type: range.type } : {}) };
 }
 
 const dayMs = 86_400_000;

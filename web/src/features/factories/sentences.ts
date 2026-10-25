@@ -61,6 +61,24 @@ export function throughputDelta(perDay: number, previousPerDay: number): Delta {
   return { text: `${sign}${Math.abs(delta).toFixed(1)} vs last week`, trend: delta > 0 ? 'up' : 'down' };
 }
 
+/** A change in touches per finished item: fewer is better. Signed, so it never rests on colour. */
+export interface TouchesTrend {
+  /** "+0.3", "−0.1", or "Same". */
+  text: string;
+  tone: 'better' | 'worse' | 'flat';
+}
+
+/**
+ * Touches per finished item this week against last week, to one decimal; null when either week
+ * finished nothing, as there is no per item to compare.
+ */
+export function touchesTrend({ current, previous }: FactoryOverview['touches']): TouchesTrend | null {
+  if (current.finished === 0 || previous.finished === 0) return null;
+  const delta = Math.round((current.per_item_mean - previous.per_item_mean) * 10) / 10;
+  if (delta === 0) return { text: 'Same', tone: 'flat' };
+  return { text: `${delta > 0 ? '+' : '−'}${Math.abs(delta).toFixed(1)}`, tone: delta > 0 ? 'worse' : 'better' };
+}
+
 /** The line under the constraint's chip. */
 export function constraintNote(constraint: FactoryOverview['constraint']): string {
   if (!constraint) return 'None right now';

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { leadTimeDelta, longWaitSentence, reworkDelta, targetSentence, throughputDelta } from './deltas';
+import { leadTimeDelta, longWaitSentence, reworkDelta, targetSentence, throughputDelta, touchesDelta } from './deltas';
+import { previousRange } from './range';
 
 describe('throughputDelta', () => {
   it('is signed to one decimal, worse when fewer items finish', () => {
@@ -57,5 +58,33 @@ describe('longWaitSentence', () => {
   it('says nothing when none did or there is no constraint', () => {
     expect(longWaitSentence({ station: 'build', items: 0, threshold_hours: 24 })).toBeNull();
     expect(longWaitSentence(null)).toBeNull();
+  });
+});
+
+describe('touchesDelta', () => {
+  const week = (finished: number, per_item_mean: number) => ({ finished, per_item_mean });
+
+  it('is better when people touch each finished item less', () => {
+    expect(touchesDelta(week(45, 1.4), week(40, 1.7))).toEqual({ text: '−0.3', direction: 'down', tone: 'better' });
+    expect(touchesDelta(week(12, 1.6), week(10, 1.3))).toEqual({ text: '+0.3', direction: 'up', tone: 'worse' });
+  });
+
+  it('has none when a range finished nothing', () => {
+    expect(touchesDelta(week(0, 0), week(10, 1.3))).toBeNull();
+    expect(touchesDelta(week(4, 1), week(0, 0))).toBeNull();
+    expect(touchesDelta(week(4, 1), undefined)).toBeNull();
+  });
+});
+
+describe('previousRange', () => {
+  const now = Date.parse('2026-10-23T15:00:00Z');
+
+  it('is the range of the same length just before, as goald compares with', () => {
+    expect(previousRange({}, now)).toEqual({ from: '2026-10-10', to: '2026-10-16' });
+    expect(previousRange({ from: '2026-10-01', to: '2026-10-30', type: 'toil' }, now)).toEqual({
+      from: '2026-09-01',
+      to: '2026-09-30',
+      type: 'toil',
+    });
   });
 });

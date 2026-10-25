@@ -44,6 +44,8 @@ import type {
   OrgSettingsPatch,
   OrgSummary,
   RunList,
+  TouchMetrics,
+  TouchReason,
   WeeklyThroughput,
 } from './types';
 
@@ -255,6 +257,25 @@ export function getWeekly(
   );
 }
 
+/**
+ * Human touches of the items finished over a range (spec 4 §4.9): per item, touchless, planned and
+ * unplanned, by station, kind, reason and definition version. No screen shows the weekly trend, so
+ * this asks for one week of it.
+ */
+export function getTouchMetrics(
+  org: string,
+  factory: string,
+  range: FlowRange,
+  signal?: AbortSignal,
+): Promise<TouchMetrics> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/metrics/touches'), {
+      params: { path: { org, factory }, query: { ...rangeQuery(range), weeks: 1 } },
+      ...cancel(signal),
+    }),
+  );
+}
+
 /** Pulls the andon cord: the line releases and claims nothing until it is cleared. */
 export function pullAndon(org: string, factory: string, reason: string): Promise<AndonPull> {
   return unwrap(
@@ -381,6 +402,16 @@ export function moveItem(org: string, item: string, to: string, reason?: string)
 export function pauseItem(org: string, item: string, reason?: string): Promise<Item> {
   return unwrap(
     goal.POST(orgPath('/items/{item}/pause'), { params: { path: { org, item } }, body: reason ? { reason } : {} }),
+  );
+}
+
+/** Says why a person had to act on an item: one of its touches, named by its event id. */
+export async function setTouchReason(org: string, item: string, event: number, reason: TouchReason): Promise<void> {
+  await unwrap(
+    goal.PUT(orgPath('/items/{item}/touches/{event}/reason'), {
+      params: { path: { org, item, event } },
+      body: { reason },
+    }),
   );
 }
 

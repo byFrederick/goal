@@ -1,17 +1,19 @@
 import { useSuspenseQuery } from '@tanstack/react-query';
-import { useNavigate, useSearch } from '@tanstack/react-router';
+import { Link, useNavigate, useSearch } from '@tanstack/react-router';
+import { Users } from 'lucide-react';
 import { Tabs } from 'radix-ui';
 import { useEffect, useRef, useState } from 'react';
-import { boardQuery } from '../../api/queries';
-import type { Board, ItemCard } from '../../api/types';
+import { boardQuery, touchesQuery } from '../../api/queries';
+import type { Board, BoardStation, ItemCard, TouchHeadline } from '../../api/types';
 import { AndonButton, LineStatus } from '../../shared/andon';
-import { factoryTitle, itemKey, useFactory } from '../../shared/factory';
-import { humanize } from '../../shared/format';
+import { factoryTitle, itemKey, useFactory, useFactoryParams } from '../../shared/factory';
+import { formatPercent, humanize } from '../../shared/format';
 import { waitingOnYou } from '../../shared/item-state';
 import { MoveDialog } from '../../shared/move-menu';
 import { NewItemButton } from '../../shared/new-item';
 import { useOrg } from '../../shared/org';
 import { factoryRoleNote, holds, reasons } from '../../shared/permissions';
+import { perItem, stationRates } from '../../shared/touches';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
@@ -42,7 +44,16 @@ const isExpedite = (it: ItemCard) => it.class_of_service === 'expedite' && live(
 
 const constraintRing = 'border-amber shadow-[inset_0_3px_0_var(--color-amber)]';
 
-function LineCard({ board, decides }: { board: Board; decides: boolean }) {
+/** A station's touches per finished item over the board's week; null when no item finished. */
+type RateOf = (station: BoardStation) => number | null;
+
+/** "0.38 touches per item" for a station, or nothing when no item finished. */
+function stationTouches(rateOf: RateOf, s: BoardStation): string | null {
+  const rate = rateOf(s);
+  return rate === null ? null : `${perItem(rate, 2)} touches per item`;
+}
+
+function LineCard({ board, decides, rateOf }: { board: Board; decides: boolean; rateOf: RateOf }) {
   const sentence = lineSentence(board.line);
   const budget = budgetNote(board.line);
 
@@ -59,6 +70,9 @@ function LineCard({ board, decides }: { board: Board; decides: boolean }) {
                 Not enforced yet
               </Chip>
             </>
+          ) : null}
+          {board.line.touches.finished > 0 ? (
+            <span className="block">Touches per finished item show where people step in.</span>
           ) : null}
         </>
       }
@@ -88,12 +102,71 @@ function LineCard({ board, decides }: { board: Board; decides: boolean }) {
                 <Meter className="bg-shell" {...stationMeter(s)} />
                 <span className={cn('text-sm', decides && waitingOnYou(s) > 0 && 'text-you')}>{stationStat(s)}</span>
                 <span className="text-[13px] leading-snug text-muted">{stationNote(s, decides)}</span>
+                <StationTouches rateOf={rateOf} station={s} />
               </li>
             );
           })}
         </ol>
       </section>
     </SectionCard>
+  );
+}
+
+function StationTouches({ rateOf, station }: { rateOf: RateOf; station: BoardStation }) {
+  const rate = rateOf(station);
+  if (rate === null) return null;
+  return (
+    <span className="mt-auto border-t border-line pt-1.5 text-[13px] tabular-nums">
+      <strong className="font-medium">{perItem(rate, 2)}</strong> touches per item
+    </span>
+  );
+}
+
+/** From 768 px, in the header: the week's touches per finished item, linking to the Floor's panel. */
+function TouchesChip({ touches }: { touches: TouchHeadline }) {
+  const params = useFactoryParams();
+  return (
+    <Link
+      to="/o/$org/f/$factory"
+      params={params}
+      hash="touches"
+      className="hidden h-10 items-center gap-2 rounded-control bg-surface px-3.5 text-sm text-ink no-underline shadow-raise transition-shadow duration-200 hover:shadow-lift md:inline-flex"
+    >
+      <Users size={16} strokeWidth={1.5} aria-hidden="true" />
+      {touches.finished === 0 ? (
+        <span>No items finished this week</span>
+      ) : (
+        <>
+          <span className="tabular-nums">
+            <strong className="font-medium">{perItem(touches.per_item_mean)}</strong> touches per item
+            <span className="sr-only">, </span>
+          </span>
+          <span className="text-muted tabular-nums">{formatPercent(touches.touchless_rate)} touchless</span>
+        </>
+      )}
+    </Link>
+  );
+}
+
+/** Phones, above the picked station: the same figures and a link to where they happen. */
+function PhoneTouches({ touches }: { touches: TouchHeadline }) {
+  const params = useFactoryParams();
+  if (touches.finished === 0) return null;
+  return (
+    <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-soft tabular-nums">
+      <span>
+        <strong className="font-medium">{perItem(touches.per_item_mean)}</strong> touches per item
+      </span>
+      <span>{formatPercent(touches.touchless_rate)} touchless</span>
+      <Link
+        to="/o/$org/f/$factory"
+        params={params}
+        hash="touches-summary"
+        className="inline-flex min-h-11 items-center text-ink underline underline-offset-2 transition-colors duration-200 hover:text-run"
+      >
+        By station
+      </Link>
+    </p>
   );
 }
 
@@ -186,11 +259,13 @@ function StationTabs({
   selected,
   expedite,
   onMove,
+  rateOf,
 }: {
   board: Board;
   selected: string;
   expedite: ItemCard[];
   onMove: OnMove;
+  rateOf: RateOf;
 }) {
   const navigate = useNavigate({ from: '/o/$org/f/$factory/board' });
   const list = useRef<HTMLDivElement>(null);
@@ -231,6 +306,7 @@ function StationTabs({
       {expedite.map((it) => (
         <ExpediteRow key={it.id} item={it} onMove={moveOf(onMove, it)} />
       ))}
+      <PhoneTouches touches={board.line.touches} />
       {board.stations.map((s) => {
         const drum = s.id === board.constraint;
         const items = s.items.filter((it) => !isExpedite(it));
@@ -249,7 +325,7 @@ function StationTabs({
                 </h2>
                 <span className="text-[13px] text-muted">{stationStat(s)}</span>
               </div>
-              {drum ? <p className="m-0 mb-1 text-[13px] text-ink-soft">{constraintNote(s)}</p> : null}
+              <StationNote station={s} drum={drum} rateOf={rateOf} />
               {items.length === 0 ? <p className="m-0 text-sm text-muted">Nothing here right now.</p> : null}
               {items.map((it) => (
                 <BoardCard key={it.id} item={it} onMove={moveOf(onMove, it)} compact />
@@ -260,6 +336,14 @@ function StationTabs({
       })}
     </Tabs.Root>
   );
+}
+
+/** On a phone, under the station's name: the constraint's load, then its touches per item. */
+function StationNote({ station, drum, rateOf }: { station: BoardStation; drum: boolean; rateOf: RateOf }) {
+  const touches = stationTouches(rateOf, station);
+  const parts = [drum ? `${constraintNote(station)}.` : null, touches ? `${touches}.` : null].filter(Boolean);
+  if (parts.length === 0) return null;
+  return <p className="m-0 mb-1 text-[13px] text-ink-soft">{parts.join(' ')}</p>;
 }
 
 /** Puts focus back on a card after it moved (it is rendered in its new column by then). */
@@ -275,6 +359,10 @@ export function BoardPage() {
   const factory = useFactory();
   const org = useOrg();
   const { data: board } = useSuspenseQuery(boardQuery(org.id, factory.id));
+  // The board's window is the last 7 days, as the touch metrics' default range.
+  const { data: touches } = useSuspenseQuery(touchesQuery(org.id, factory.id));
+  const rates = stationRates(touches.stats);
+  const rateOf: RateOf = (s) => (touches.stats.finished === 0 ? null : (rates.get(s.id) ?? 0));
   const search = useSearch({ from: '/o/$org/f/$factory/board' });
   const expedite = board.stations.flatMap((s) => s.items.filter(isExpedite));
   const selected = board.stations.find((s) => s.id === search.station)?.id ?? firstStation(board);
@@ -292,6 +380,7 @@ export function BoardPage() {
           {role ? <Chip tone="plain">{role}</Chip> : null}
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <TouchesChip touches={board.line.touches} />
           <span className="hidden h-10 max-w-[360px] items-center rounded-control bg-surface px-3.5 shadow-raise md:inline-flex">
             <LineStatus andon={board.line.andon} className="text-sm text-ink" />
           </span>
@@ -319,11 +408,11 @@ export function BoardPage() {
       </div>
 
       <div className="hidden md:block">
-        <LineCard board={board} decides={holds(factory, 'item:decide')} />
+        <LineCard board={board} decides={holds(factory, 'item:decide')} rateOf={rateOf} />
       </div>
       <ExpediteLane line={board.line} items={expedite} onMove={onMove} />
       <Columns board={board} onMove={onMove} />
-      <StationTabs board={board} selected={selected} expedite={expedite} onMove={onMove} />
+      <StationTabs board={board} selected={selected} expedite={expedite} onMove={onMove} rateOf={rateOf} />
       {onMove ? (
         <>
           <p className="m-0 hidden text-[13px] text-muted md:block">

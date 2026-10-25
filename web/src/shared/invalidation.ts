@@ -10,7 +10,17 @@ import type { DefinitionEvent, FactoryEvent, StreamEvent } from '../api/types';
  * prefix, under which later phases keep a definition draft, versions and credentials that must not
  * refetch while agents work. E's keys (weekly … agent) are named here before their queries exist.
  */
-const workKeys = ['board', 'metrics', 'items', 'weekly', 'lead-time', 'constraint', 'andon', 'agent'] as const;
+const workKeys = [
+  'board',
+  'metrics',
+  'items',
+  'weekly',
+  'lead-time',
+  'constraint',
+  'touches',
+  'andon',
+  'agent',
+] as const;
 
 /** Run progress: it changes a card on the board, not where work is or what waits on people. */
 const runProgress = new Set(['tool_call', 'tool_result', 'agent_message']);
