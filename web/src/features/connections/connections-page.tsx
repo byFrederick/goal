@@ -406,6 +406,7 @@ function UsedBy({ connection: c }: { connection: Connection }) {
       ))}
       {c.used_by.knowledge_sources.map((s) => (
         <Chip key={s} className="border-dashed font-normal">
+          <span className="sr-only">knowledge source </span>
           {s}
         </Chip>
       ))}

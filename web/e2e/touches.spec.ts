@@ -29,6 +29,9 @@ test('the floor says touches per finished item and where they happen', async ({ 
     await expect(card.getByText(/^\d+\.\d touches per item$/)).toBeVisible();
     await expect(card.getByText(/^vs last week\. \d+ touches on \d+ finished items$/)).toBeVisible();
     await expect(card.getByText(/^Touchless: \d+ of \d+ items finished with no human touch$/)).toBeVisible();
+    // Each figure is a term (what it counts) with its value as the definition.
+    await expect(card.getByRole('term').filter({ hasText: /^Touchless: / })).toBeVisible();
+    await expect(card.getByRole('definition').filter({ hasText: /^\d+%$/ })).toBeVisible();
     await expect(card.getByText(/^per item, plus \d+\.\d planned/)).toBeVisible();
 
     const where = card.getByRole('region', { name: 'Where touches happen' });

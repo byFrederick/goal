@@ -110,15 +110,18 @@ export function TouchesPanel({ touches, previous, grouping, className }: Props &
   );
 }
 
-/** One figure of the panel's middle column: a large value with its words under it. */
+/**
+ * One figure of the panel's middle column: a large value with its words under it. The words are
+ * the term and the value its definition; only the drawing puts the value first.
+ */
 function Figure({ value, unit, children }: { value: string; unit?: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-0.5 border-t border-line py-3 first:border-t-0 first:pt-0 last:pb-0">
-      <dt className="text-[28px] leading-[1.1] tracking-display tabular-nums">
+    <div className="flex flex-col-reverse gap-0.5 border-t border-line py-3 first:border-t-0 first:pt-0 last:pb-0">
+      <dt className="text-sm leading-[1.4] text-muted">{children}</dt>
+      <dd className="m-0 text-[28px] leading-[1.1] tracking-display tabular-nums">
         {value}
         {unit ? <span className="ml-1 text-[15px] tracking-normal text-muted"> {unit}</span> : null}
-      </dt>
-      <dd className="m-0 text-sm leading-[1.4] text-muted">{children}</dd>
+      </dd>
     </div>
   );
 }

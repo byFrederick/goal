@@ -147,7 +147,7 @@ test.describe('a source', () => {
     await expect(page).toHaveTitle('Handbook · Knowledge · Acme · Goal');
     const upload = page.getByRole('region', { name: 'Upload' });
     await expect(upload.getByRole('button', { name: /Drop files here/ })).toHaveAccessibleDescription(
-      'Text, Markdown, HTML, JSON, YAML. Up to 25 MiB each. PDF and Office files come later.',
+      'Text, Markdown, HTML, JSON, YAML, each up to goald’s upload limit (25 MiB by default). PDF and Office files come later.',
     );
     const chooser = page.waitForEvent('filechooser');
     await upload.getByRole('button', { name: /Drop files here/ }).click();

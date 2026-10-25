@@ -27,7 +27,7 @@ const card = 'flex min-w-0 flex-col gap-4 rounded-card border border-line bg-car
 
 const kindText: Record<KnowledgeSourceKind, (org: string) => string> = {
   upload: (org) =>
-    `Drop files. Text, Markdown, HTML, JSON or YAML, up to 25 MiB each. Stored in ${org}’s bucket and indexed.`,
+    `Drop files. Text, Markdown, HTML, JSON or YAML, each up to goald’s upload limit (25 MiB by default). Stored in ${org}’s bucket and indexed.`,
   synced: () =>
     'A connection that can sync: a repository’s docs, or a Confluence space. Goal copies the text on a schedule, indexes it and links back.',
   live: () =>
