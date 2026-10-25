@@ -355,6 +355,26 @@ func TestMigrate_KnowledgeNeedsTheVectorExtension(t *testing.T) {
 	}
 }
 
+// Review 4 SQL L7: a provider that put pgvector in a schema of its own (an extensions schema is
+// common) failed 00054 with "type halfvec does not exist"; goal db init says what to do instead.
+func TestInitRoles_PgvectorInAnotherSchemaIsNamed(t *testing.T) {
+	t.Parallel()
+
+	db := newTestDB(t, OwnerRole)
+	execSQL(t, db.admin, "DROP EXTENSION vector; CREATE SCHEMA extensions; CREATE EXTENSION vector SCHEMA extensions")
+
+	err := pgx.BeginFunc(t.Context(), openPool(t, db.admin), func(tx pgx.Tx) error { return createExtensions(t.Context(), tx) })
+	if err == nil || !strings.Contains(err.Error(), `ALTER EXTENSION vector SET SCHEMA public`) {
+		t.Fatalf("createExtensions = %v, want the move to Goal's schema named", err)
+	}
+
+	execSQL(t, db.admin, "ALTER EXTENSION vector SET SCHEMA public")
+
+	if err := pgx.BeginFunc(t.Context(), openPool(t, db.admin), func(tx pgx.Tx) error { return createExtensions(t.Context(), tx) }); err != nil {
+		t.Fatalf("createExtensions after the move = %v", err)
+	}
+}
+
 // Spec 4 §8.3: a sync's start and end notify the organization's event knowledge, read back from
 // the source's row, so a forged one, or one naming another organization's source, is dropped.
 func TestNotices_SyncStartAndEndAreKnowledgeEvents(t *testing.T) {

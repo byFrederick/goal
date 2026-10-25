@@ -114,6 +114,19 @@ func createExtensions(ctx context.Context, tx pgx.Tx) error {
 		return fmt.Errorf("create extension vector: %w", err)
 	}
 
+	// The migrations and goal_app resolve halfvec through Goal's schema only, so an extension a
+	// provider installed elsewhere (an extensions schema) is not found.
+	var in, goal string
+	if err := tx.QueryRow(ctx, `SELECT n.nspname::text, current_schema()::text FROM pg_extension e
+		JOIN pg_namespace n ON n.oid = e.extnamespace WHERE e.extname = 'vector'`).Scan(&in, &goal); err != nil {
+		return fmt.Errorf("extension vector: %w", err)
+	}
+
+	if in != goal {
+		return fmt.Errorf("pgvector's extension is in schema %s, not %s with Goal's tables: run ALTER EXTENSION vector SET SCHEMA %s "+
+			"as the database's administrator, then goal db init again", in, goal, goal)
+	}
+
 	return nil
 }
 
