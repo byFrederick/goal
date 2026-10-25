@@ -1,5 +1,6 @@
-# What the control Worker's wrangler config (deploy/cloudflare) and the operator need. Names and
-# ids only: no output holds a secret.
+# What the control Worker's wrangler config (deploy/cloudflare) and the operator need: names and
+# ids, plus the sensitive values task db:production hands goal db (shown only by
+# `terraform output -raw <name>`, never by plan or apply).
 
 # Cloudflare: account
 output "account_id" {
@@ -48,6 +49,43 @@ output "secret_names" {
 output "secret_consumers" {
   description = "Which environment variables each consumer (goald, auth, worker) gets from the store."
   value       = local.secret_consumers
+}
+
+# PlanetScale
+output "database_admin_role" {
+  description = "goal db init's administrator role on the branch (its base user name, without the branch suffix)."
+  value       = planetscale_postgres_branch_role.admin.base_username
+}
+
+# Operator: what task db:production hands goal db (sensitive; terraform output -raw <name>)
+output "goal_database_admin_url" {
+  description = "GOAL_DATABASE_ADMIN_URL: the administrator on Goal's database."
+  value       = module.database_urls.admin_url
+  sensitive   = true
+}
+
+output "goal_migrate_database_url" {
+  description = "GOAL_MIGRATE_DATABASE_URL: goal_owner on Goal's database."
+  value       = module.database_urls.migrate_url
+  sensitive   = true
+}
+
+output "goal_pg_owner_password" {
+  description = "GOAL_PG_OWNER_PASSWORD, which goal db init gives goal_owner."
+  value       = random_password.generated["goal_owner"].result
+  sensitive   = true
+}
+
+output "goal_pg_app_password" {
+  description = "GOAL_PG_APP_PASSWORD, which goal db init gives goal_app."
+  value       = random_password.generated["goal_app"].result
+  sensitive   = true
+}
+
+output "goal_pg_auth_password" {
+  description = "GOAL_PG_AUTH_PASSWORD, which goal db init gives goal_auth."
+  value       = random_password.generated["goal_auth"].result
+  sensitive   = true
 }
 
 # Google: sign-in

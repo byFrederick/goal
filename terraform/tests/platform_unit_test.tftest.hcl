@@ -1,5 +1,6 @@
-# The production stack planned against mock providers: no Cloudflare, Google or age key needed
-# (task tf:test runs it in the production workspace). The SOPS file is replaced by test values.
+# The production stack planned against mock providers: no Cloudflare, PlanetScale or Google
+# credentials and no age key needed (task tf:test runs it in the production workspace). The SOPS
+# file, the generated passwords, the PlanetScale role and the tokens get test values.
 
 mock_provider "cloudflare" {
   override_data {
@@ -18,6 +19,34 @@ mock_provider "cloudflare" {
 
 mock_provider "google" {}
 
+mock_provider "random" {
+  override_resource {
+    target          = random_password.generated
+    override_during = plan
+    values          = { result = "generated0000000000000000000000000000000000000000" }
+  }
+}
+
+mock_provider "planetscale" {
+  # The import block adopts the branch; a mock can only stand in for what it would read.
+  override_resource {
+    target          = planetscale_postgres_branch.main
+    override_during = plan
+    values          = { id = "br4nch", organization = "freddycruz5227", database = "goal", name = "main" }
+  }
+
+  override_resource {
+    target          = planetscale_postgres_branch_role.admin
+    override_during = plan
+    values = {
+      username        = "pscale_api_test.br4nch"
+      base_username   = "pscale_api_test"
+      password        = "pscale_pw_test+/="
+      access_host_url = "db.example.com"
+    }
+  }
+}
+
 mock_provider "sops" {
   override_data {
     target = data.sops_file.secrets
@@ -25,38 +54,32 @@ mock_provider "sops" {
       raw = <<-EOT
         master_key:
           GOAL_MASTER_KEYS: k1:test-master-key
-        internal:
-          GOAL_GATEWAY_KEY: test-gateway-key
-          GOAL_SANDBOX_KEY: test-sandbox-key
-          GOAL_AUTH_PROXY_SECRET: test-proxy-secret
-        better_auth:
-          BETTER_AUTH_SECRETS: 1:test-better-auth-secret
         google:
           GOOGLE_CLIENT_ID: test-client.apps.googleusercontent.com
           GOOGLE_CLIENT_SECRET: test-client-secret
         smtp:
           GOAL_SMTP_URL: smtps://goal:test-smtp@smtp.example.com:465
-        database:
-          GOAL_DATABASE_ADMIN_URL: postgres://pscale_api_test.br4nch:test-admin@db.example.com:5432/goal?sslmode=verify-full
-          GOAL_PG_OWNER_PASSWORD: owner0000000000000000000000000000000
-          GOAL_PG_APP_PASSWORD: app00000000000000000000000000000000
-          GOAL_PG_AUTH_PASSWORD: auth0000000000000000000000000000000
-        r2:
-          GOAL_S3_ACCESS_KEY: test-access-key
-          GOAL_S3_SECRET_KEY: test-secret-key
-        embedding:
-          GOAL_EMBED_KEY: test-embed-key
       EOT
     }
   }
+}
+
+override_module {
+  target  = module.r2_token
+  outputs = { id = "r2-token-id", value = "r2-token-value" }
+}
+
+override_module {
+  target  = module.workers_ai_token
+  outputs = { id = "ai-token-id", value = "ai-token-value" }
 }
 
 run "every_secret_reaches_the_store_under_its_env_name" {
   command = plan
 
   assert {
-    condition     = length(module.secrets.names) == 14
-    error_message = "Want 14 store secrets, got ${length(module.secrets.names)}."
+    condition     = length(module.secrets.names) == 18
+    error_message = "Want 18 store secrets, got ${length(module.secrets.names)}."
   }
 
   assert {
@@ -68,27 +91,19 @@ run "every_secret_reaches_the_store_under_its_env_name" {
     condition     = output.secrets_store_id == "5ec7e75000000000000000000000000e"
     error_message = "The account's one store holds the secrets."
   }
-
-  # Neither the admin URL nor the bare passwords leave the SOPS file.
-  assert {
-    condition = length(setintersection(keys(module.secrets.names), [
-      "GOAL_DATABASE_ADMIN_URL", "GOAL_PG_OWNER_PASSWORD", "GOAL_PG_APP_PASSWORD", "GOAL_PG_AUTH_PASSWORD",
-    ])) == 0
-    error_message = "The operator's database values must not become store secrets."
-  }
 }
 
 run "each_container_gets_only_its_own_secrets" {
   command = plan
 
   assert {
-    condition     = !contains(output.secret_consumers.goald, "BETTER_AUTH_SECRETS") && !contains(output.secret_consumers.goald, "GOOGLE_CLIENT_SECRET")
-    error_message = "goald must never hold the auth service's secrets."
+    condition     = length(setintersection(output.secret_consumers.goald, ["BETTER_AUTH_SECRET", "GOOGLE_CLIENT_SECRET", "GOAL_DATABASE_ADMIN_URL"])) == 0
+    error_message = "goald must never hold the auth service's secrets or the database administrator."
   }
 
   assert {
-    condition     = !contains(output.secret_consumers.auth, "GOAL_MASTER_KEYS") && !contains(output.secret_consumers.auth, "GOAL_DATABASE_URL")
-    error_message = "The auth service must never hold goald's secrets."
+    condition     = length(setintersection(output.secret_consumers.auth, ["GOAL_MASTER_KEYS", "GOAL_DATABASE_URL", "GOAL_DATABASE_ADMIN_URL"])) == 0
+    error_message = "The auth service must never hold goald's secrets or the database administrator."
   }
 
   assert {
@@ -101,18 +116,56 @@ run "the_database_urls_follow_the_planetscale_rules" {
   command = plan
 
   assert {
-    condition     = local.secret_values.GOAL_DATABASE_URL == "postgres://goal_app.br4nch:app00000000000000000000000000000000@db.example.com:5432/goal?sslmode=verify-full&sslrootcert=system&pool_max_conns=8"
+    condition     = local.secret_values.GOAL_DATABASE_ADMIN_URL == "postgres://pscale_api_test.br4nch:pscale_pw_test%2B%2F%3D@db.example.com:5432/goal?sslmode=verify-full&sslrootcert=system"
+    error_message = "The admin URL: the Terraform-managed role's own user and password (URL-encoded), port 5432, database goal, verify-full."
+  }
+
+  assert {
+    condition     = local.secret_values.GOAL_DATABASE_URL == "postgres://goal_app.br4nch:generated0000000000000000000000000000000000000000@db.example.com:5432/goal?sslmode=verify-full&sslrootcert=system&pool_max_conns=8"
     error_message = "goald's URL: goal_app.<branch>, port 5432, database goal, verify-full against the system CAs, pool capped at 8."
   }
 
   assert {
-    condition     = local.secret_values.GOAL_MIGRATE_DATABASE_URL == "postgres://goal_owner.br4nch:owner0000000000000000000000000000000@db.example.com:5432/goal?sslmode=verify-full&sslrootcert=system"
+    condition     = local.secret_values.GOAL_MIGRATE_DATABASE_URL == "postgres://goal_owner.br4nch:generated0000000000000000000000000000000000000000@db.example.com:5432/goal?sslmode=verify-full&sslrootcert=system"
     error_message = "The migrations' URL: goal_owner.<branch>, verify-full against the system CAs."
   }
 
   assert {
-    condition     = local.secret_values.GOAL_AUTH_DATABASE_URL == "postgres://goal_auth.br4nch:auth0000000000000000000000000000000@db.example.com:5432/goal?sslmode=verify-full"
+    condition     = local.secret_values.GOAL_AUTH_DATABASE_URL == "postgres://goal_auth.br4nch:generated0000000000000000000000000000000000000000@db.example.com:5432/goal?sslmode=verify-full"
     error_message = "The auth service's URL: goal_auth.<branch>, verify-full without sslrootcert (node-postgres reads it as a file)."
+  }
+
+  assert {
+    condition     = local.secret_values.GOAL_PG_APP_PASSWORD == random_password.generated["goal_app"].result
+    error_message = "goal db init sets the very password goald's URL carries."
+  }
+}
+
+run "the_existing_branch_is_adopted_and_the_admin_inherits_postgres" {
+  command = plan
+
+  assert {
+    condition     = planetscale_postgres_branch.main.organization == "freddycruz5227" && planetscale_postgres_branch.main.database == "goal" && planetscale_postgres_branch.main.name == "main"
+    error_message = "The branch is the existing goal database's main branch."
+  }
+
+  assert {
+    condition     = planetscale_postgres_branch_role.admin.inherited_roles == toset(["postgres"]) && planetscale_postgres_branch_role.admin.successor == "postgres"
+    error_message = "The administrator inherits postgres and hands what it owns to postgres when dropped."
+  }
+}
+
+run "r2_keys_come_from_the_bucket_scoped_token" {
+  command = plan
+
+  assert {
+    condition     = local.secret_values.GOAL_S3_ACCESS_KEY == "r2-token-id" && local.secret_values.GOAL_S3_SECRET_KEY == sha256("r2-token-value")
+    error_message = "R2's S3 access key id is the token id, its secret the SHA-256 of the token value."
+  }
+
+  assert {
+    condition     = local.secret_values.GOAL_EMBED_KEY == "ai-token-value"
+    error_message = "The embedder's key is the Workers AI token."
   }
 }
 

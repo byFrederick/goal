@@ -1,24 +1,36 @@
-# modules/database-urls refuses the admin URLs prototype 4-2 found broken (spec 4 §5.12).
+# modules/database-urls refuses the inputs that would build a URL prototype 4-2 found broken
+# (spec 4 §5.12).
 
 variables {
-  admin_url = "postgres://pscale_api_test.br4nch:test-admin@db.example.com:5432/goal?sslmode=verify-full"
+  host      = "db.example.com"
+  database  = "goal"
+  branch_id = "br4nch"
+  admin = {
+    username = "pscale_api_test.br4nch"
+    password = "test-admin"
+  }
   passwords = {
-    owner = "owner0000000000000000000000000000000"
-    app   = "app00000000000000000000000000000000"
-    auth  = "auth0000000000000000000000000000000"
+    owner = "owner"
+    app   = "app"
+    auth  = "auth"
   }
   goald_pool_max_conns = 8
 }
 
-run "a_direct_verified_url_on_goals_database_passes" {
+run "valid_inputs_pass" {
   command = plan
 
   module {
     source = "./modules/database-urls"
   }
+
+  assert {
+    condition     = output.auth_url == "postgres://goal_auth.br4nch:auth@db.example.com:5432/goal?sslmode=verify-full"
+    error_message = "The auth URL names port 5432, database goal and verify-full only."
+  }
 }
 
-run "pgbouncer_port_is_refused" {
+run "a_host_with_a_port_is_refused" {
   command = plan
 
   module {
@@ -26,10 +38,10 @@ run "pgbouncer_port_is_refused" {
   }
 
   variables {
-    admin_url = "postgres://pscale_api_test.br4nch:test-admin@db.example.com:6432/goal?sslmode=verify-full"
+    host = "db.example.com:6432"
   }
 
-  expect_failures = [var.admin_url]
+  expect_failures = [var.host]
 }
 
 run "the_providers_default_database_is_refused" {
@@ -40,13 +52,13 @@ run "the_providers_default_database_is_refused" {
   }
 
   variables {
-    admin_url = "postgres://pscale_api_test.br4nch:test-admin@db.example.com:5432/postgres?sslmode=verify-full"
+    database = "postgres"
   }
 
-  expect_failures = [var.admin_url]
+  expect_failures = [var.database]
 }
 
-run "a_user_without_the_branch_is_refused" {
+run "an_empty_branch_id_is_refused" {
   command = plan
 
   module {
@@ -54,40 +66,8 @@ run "a_user_without_the_branch_is_refused" {
   }
 
   variables {
-    admin_url = "postgres://pscale_api_test:test-admin@db.example.com:5432/goal?sslmode=verify-full"
+    branch_id = ""
   }
 
-  expect_failures = [var.admin_url]
-}
-
-run "an_unverified_connection_is_refused" {
-  command = plan
-
-  module {
-    source = "./modules/database-urls"
-  }
-
-  variables {
-    admin_url = "postgres://pscale_api_test.br4nch:test-admin@db.example.com:5432/goal?sslmode=require"
-  }
-
-  expect_failures = [var.admin_url]
-}
-
-run "a_password_that_needs_escaping_is_refused" {
-  command = plan
-
-  module {
-    source = "./modules/database-urls"
-  }
-
-  variables {
-    passwords = {
-      owner = "owner0000000000000000000000000000000"
-      app   = "p@ss/word:with#reserved?characters!!"
-      auth  = "auth0000000000000000000000000000000"
-    }
-  }
-
-  expect_failures = [var.passwords]
+  expect_failures = [var.branch_id]
 }

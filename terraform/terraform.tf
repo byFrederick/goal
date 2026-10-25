@@ -1,5 +1,5 @@
-# The platform's own infrastructure on Cloudflare (ADR 0008, spec 4 §5.12), plus the Google Cloud
-# project that holds the sign-in OAuth client. One root module, one Terraform CLI workspace per
+# The platform's own infrastructure on Cloudflare (ADR 0008, spec 4 §5.12), the PlanetScale
+# Postgres branch it runs on, and the Google Cloud project that holds the sign-in OAuth client. One root module, one Terraform CLI workspace per
 # environment: `production` is the only one (docs/engineering/cloudflare-operations.md).
 #
 # State lives in an R2 bucket through the s3 backend. That bucket is created once by hand, never by
@@ -36,6 +36,14 @@ terraform {
     google = {
       source  = "hashicorp/google"
       version = "~> 8.7.0"
+    }
+    planetscale = {
+      source  = "planetscale/planetscale"
+      version = "~> 1.15.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.9.1"
     }
     sops = {
       source  = "carlpett/sops"

@@ -1,13 +1,17 @@
-# Platform secrets: SOPS -> Cloudflare Secrets Store (spec 4 §5.12, §11.1).
+# Platform secrets -> Cloudflare Secrets Store (spec 4 §5.12, §11.1).
 #
-# secrets/<workspace>.sops.yaml is committed, encrypted with age (.sops.yaml). Its top-level keys
-# group values by what they belong to; the nested keys are the environment variable names their
-# consumers read. Provider tokens are never in it (providers.tf). Organization credentials are
-# never platform secrets: they are connections, sealed in PostgreSQL under GOAL_MASTER_KEYS.
-#
-# The Secrets Store holds only what a container needs at run time. The database section is the
-# operator's: goal db init's admin URL and the three role passwords, from which the database URLs
-# are built (database-urls); the admin URL and the passwords themselves never leave the SOPS file.
+# Every value comes from the one place that makes it, and nobody copies one by hand:
+# - Terraform makes what Goal generates for itself (random_password in database.tf), the
+#   PlanetScale administrator (database.tf), the database URLs (modules/database-urls) and the
+#   Cloudflare tokens (tokens.tf).
+# - secrets/<workspace>.sops.yaml, age-encrypted (.sops.yaml), holds only what comes from outside
+#   and the master keys: the Google OAuth client (made in Google's console), the mail provider's
+#   SMTP URL, and GOAL_MASTER_KEYS. The master keys stay in SOPS on purpose: they must be escrowed
+#   outside the state (a lost key loses every organization's credentials), they rotate as a list
+#   (k2:<new>,k1:<old>, then goal db rekey), and a generated one would be replaced, unrecoverably,
+#   by any -replace or recreation of its resource.
+# Provider tokens are never in either (providers.tf). Organization credentials are never platform
+# secrets: they are connections, sealed in PostgreSQL under GOAL_MASTER_KEYS.
 data "sops_file" "secrets" {
   source_file = "${path.module}/secrets/${local.environment}.sops.yaml"
 }
@@ -15,27 +19,32 @@ data "sops_file" "secrets" {
 locals {
   sops = yamldecode(data.sops_file.secrets.raw)
 
-  # The one place that knows the SOPS file's shape. Every key here becomes a store secret.
+  # Every key becomes one store secret, named by the environment variable its consumers read.
   secret_values = {
     GOAL_MASTER_KEYS          = local.sops.master_key.GOAL_MASTER_KEYS
-    GOAL_GATEWAY_KEY          = local.sops.internal.GOAL_GATEWAY_KEY
-    GOAL_SANDBOX_KEY          = local.sops.internal.GOAL_SANDBOX_KEY
-    GOAL_AUTH_PROXY_SECRET    = local.sops.internal.GOAL_AUTH_PROXY_SECRET
-    BETTER_AUTH_SECRETS       = local.sops.better_auth.BETTER_AUTH_SECRETS
     GOOGLE_CLIENT_ID          = local.sops.google.GOOGLE_CLIENT_ID
     GOOGLE_CLIENT_SECRET      = local.sops.google.GOOGLE_CLIENT_SECRET
     GOAL_SMTP_URL             = local.sops.smtp.GOAL_SMTP_URL
-    GOAL_S3_ACCESS_KEY        = local.sops.r2.GOAL_S3_ACCESS_KEY
-    GOAL_S3_SECRET_KEY        = local.sops.r2.GOAL_S3_SECRET_KEY
-    GOAL_EMBED_KEY            = local.sops.embedding.GOAL_EMBED_KEY
+    GOAL_GATEWAY_KEY          = random_password.generated["gateway_key"].result
+    GOAL_SANDBOX_KEY          = random_password.generated["sandbox_key"].result
+    GOAL_AUTH_PROXY_SECRET    = random_password.generated["auth_proxy_secret"].result
+    BETTER_AUTH_SECRET        = random_password.generated["better_auth_secret"].result
+    GOAL_S3_ACCESS_KEY        = module.r2_token.id
+    GOAL_S3_SECRET_KEY        = sha256(module.r2_token.value)
+    GOAL_EMBED_KEY            = module.workers_ai_token.value
     GOAL_DATABASE_URL         = module.database_urls.app_url
     GOAL_MIGRATE_DATABASE_URL = module.database_urls.migrate_url
     GOAL_AUTH_DATABASE_URL    = module.database_urls.auth_url
+    GOAL_DATABASE_ADMIN_URL   = module.database_urls.admin_url
+    GOAL_PG_OWNER_PASSWORD    = random_password.generated["goal_owner"].result
+    GOAL_PG_APP_PASSWORD      = random_password.generated["goal_app"].result
+    GOAL_PG_AUTH_PASSWORD     = random_password.generated["goal_auth"].result
   }
 
   # Who reads which secret, as environment variables: the control Worker passes each container
   # exactly its own (spec 4 §11.1) and uses GOAL_SANDBOX_KEY itself to check goald's sandbox calls.
-  # goald never gets the auth service's secrets, and no box gets any of them.
+  # db_init is whatever runs `goal db init` on Cloudflare (4-21): only it holds the administrator
+  # and the role passwords. goald never gets the auth service's secrets, and no box gets any.
   secret_consumers = {
     goald = [
       "GOAL_MASTER_KEYS", "GOAL_GATEWAY_KEY", "GOAL_SANDBOX_KEY", "GOAL_AUTH_PROXY_SECRET",
@@ -43,26 +52,17 @@ locals {
       "GOAL_EMBED_KEY",
     ]
     auth = [
-      "BETTER_AUTH_SECRETS", "GOAL_AUTH_PROXY_SECRET", "GOAL_AUTH_DATABASE_URL",
+      "BETTER_AUTH_SECRET", "GOAL_AUTH_PROXY_SECRET", "GOAL_AUTH_DATABASE_URL",
       "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOAL_SMTP_URL",
+    ]
+    db_init = [
+      "GOAL_DATABASE_ADMIN_URL", "GOAL_PG_OWNER_PASSWORD", "GOAL_PG_APP_PASSWORD", "GOAL_PG_AUTH_PASSWORD",
     ]
     worker = ["GOAL_SANDBOX_KEY"]
   }
 
   secret_names   = toset(nonsensitive(keys(local.secret_values)))
   consumed_names = toset(flatten(values(local.secret_consumers)))
-}
-
-module "database_urls" {
-  source = "./modules/database-urls"
-
-  admin_url = local.sops.database.GOAL_DATABASE_ADMIN_URL
-  passwords = {
-    owner = local.sops.database.GOAL_PG_OWNER_PASSWORD
-    app   = local.sops.database.GOAL_PG_APP_PASSWORD
-    auth  = local.sops.database.GOAL_PG_AUTH_PASSWORD
-  }
-  goald_pool_max_conns = local.settings.goald_pool_max_conns
 }
 
 module "secrets" {
@@ -85,6 +85,6 @@ check "every_secret_has_a_consumer" {
 check "every_consumer_has_its_secrets" {
   assert {
     condition     = length(setsubtract(local.consumed_names, local.secret_names)) == 0
-    error_message = "Consumers name secrets that do not exist (add them to local.secret_values and the SOPS file): ${join(", ", sort(setsubtract(local.consumed_names, local.secret_names)))}."
+    error_message = "Consumers name secrets that do not exist (add them to local.secret_values): ${join(", ", sort(setsubtract(local.consumed_names, local.secret_names)))}."
   }
 }

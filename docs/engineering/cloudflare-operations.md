@@ -8,21 +8,27 @@ The runbook of Goal's Cloudflare install (ADR 0008, spec 4 §5.12, §14 step 7):
 | --- | --- | --- |
 | R2 bucket `goal-production` (definitions and knowledge blobs) | Terraform | `terraform/storage.tf` (`prevent_destroy`) |
 | DNS `goal.byfrederick.work` (proxied `AAAA 100::`) and the Workers route `goal.byfrederick.work/*` → Worker `goal` | Terraform | `terraform/routing.tf` |
-| Platform secrets in the account's Secrets Store, named `goal-production-<ENV NAME>` | Terraform, values from SOPS | `terraform/secrets.tf`, `modules/cloudflare-secrets-store` |
+| PlanetScale Postgres branch `main` of database `goal` (organization `freddycruz5227`, PS-5, us-east; made in the Cloudflare dashboard, billed through Cloudflare) | Terraform, adopted by an `import` block | `terraform/database.tf` (`prevent_destroy`) |
+| The database administrator `goal_db_admin` (inherits `postgres`; goal db init runs as it) | Terraform | `terraform/database.tf` |
+| Generated secrets: gateway, sandbox and auth proxy keys, the Better Auth secret, the goal_owner, goal_app and goal_auth passwords | Terraform (`random_password`) | `terraform/database.tf` |
+| Account tokens for R2 (bucket objects only) and Workers AI (read) | Terraform | `terraform/tokens.tf` |
+| Platform secrets in the account's Secrets Store, named `goal-production-<ENV NAME>` | Terraform | `terraform/secrets.tf`, `modules/cloudflare-secrets-store` |
+| Master keys, the Google OAuth client, the SMTP URL | the operator, in SOPS | `terraform/secrets/production.sops.yaml` |
 | Google Cloud project `goal-byfrederick` (sign-in) | Terraform | `terraform/google.tf` (`deletion_policy = PREVENT`) |
 | Zone `byfrederick.work`, the account's Secrets Store | the account; read as data | `terraform/data.tf` |
-| State bucket `goal-terraform-state` and its R2 token | made once by hand | below, bootstrap step 1 |
+| State bucket `goal-terraform-state` and its R2 token | made once by hand | bootstrap step 1 |
+| PostgreSQL database `goal` on the branch (`CREATE DATABASE goal OWNER postgres`) | made once by hand | bootstrap step 4 |
+| goal_owner, goal_app, goal_auth (PostgreSQL roles), their grants, `vector` | `goal db init` | `task db:production -- init` |
 | Control Worker, its Durable Objects, goald and auth container images, Worker vars | wrangler | `deploy/cloudflare/` (4-21) |
-| OAuth consent screen and web client | Google console | below, bootstrap step 4 |
-| PlanetScale database, its branch and admin credential | PlanetScale console | below, bootstrap step 5 |
+| OAuth consent screen and web client | Google console | bootstrap step 5 |
 | Organizations, connections, knowledge sources, factories | goald's API | never Terraform, never a deploy |
 
 ## Workspaces and state
 
 - One root module (`terraform/`), one Terraform CLI workspace: `production`. A workspace without a key in `local.environments` fails every plan, so nothing is created in `default` by mistake.
-- State: `s3://goal-terraform-state/env:/production/terraform.tfstate` in R2 (the s3 backend, `use_lockfile = true`). It holds every secret's value in plain text (Secrets Store values are write-only at Cloudflare, Terraform keeps what it sent): the state bucket and its token are the operator's alone.
+- State: `s3://goal-terraform-state/env:/production/terraform.tfstate` in R2 (the s3 backend, `use_lockfile = true`). It holds every secret in plain text, the generated ones only there (Secrets Store values are write-only at Cloudflare): the state bucket and its token are the operator's alone.
 - Before every plan, apply, import or state command: confirm the directory is `terraform/` and `terraform workspace show` says `production`. The `tf:*` tasks select and check it for you.
-- Never copy state between workspaces, never edit it by hand, never delete a workspace. Adopt an existing object with an `import {}` block, never by deleting and recreating it; delete the block after the apply that used it and note it in the commit.
+- Never copy state between workspaces, never edit it by hand, never delete a workspace. Adopt an existing object with an `import {}` block, never by deleting and recreating it; delete the block after the apply that used it and note it in the commit (the branch's block in `database.tf` goes after the first apply).
 - Never commit state, plans, `*.tfvars`, `override.tf` or a decrypted secrets file (`.gitignore` keeps them out). Commit `.terraform.lock.hcl` only when a provider change is intended (`terraform providers lock -platform=darwin_arm64 -platform=darwin_amd64 -platform=linux_amd64 -platform=linux_arm64`); the tasks init with `-lockfile=readonly`.
 
 ## Credentials
@@ -31,51 +37,55 @@ Nothing here is in the repository or in SOPS. Export them in the shell (or keep 
 
 | Variable | What |
 | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | A user API token: Account › Workers R2 Storage: Edit, Account › Secrets Store: Edit, Zone › Zone: Read, Zone › DNS: Edit, Zone › Workers Routes: Edit, for this account and the zone `byfrederick.work` only. A 403 is the token's scope, not the state. |
+| `CLOUDFLARE_API_TOKEN` | A user API token for this account and the zone `byfrederick.work` only: Account › Workers R2 Storage: Edit, Account › Secrets Store: Edit, Account › Account API Tokens: Edit (it makes the R2 and Workers AI tokens, so it can mint any account token: keep it in the password manager, never on a shared machine), Zone › Zone: Read, Zone › DNS: Edit, Zone › Workers Routes: Edit. A 403 is the token's scope, not the state. |
 | `CLOUDFLARE_ACCOUNT_ID` | The account id: the state bucket's endpoint `https://<id>.r2.cloudflarestorage.com`. |
 | `GOAL_TF_STATE_ACCESS_KEY`, `GOAL_TF_STATE_SECRET_KEY` | An R2 API token with Object Read & Write on `goal-terraform-state` only (its S3 access key id and secret). The task hands them to the backend as `AWS_*` and to nothing else. |
+| `PLANETSCALE_SERVICE_TOKEN_ID`, `PLANETSCALE_SERVICE_TOKEN` | A service token of the organization `freddycruz5227` with access to the database `goal`: read the database and its branches, manage the branch's roles (create, read, delete). |
 | `SOPS_AGE_KEY_FILE` | The age private key, default `~/.config/sops/age/keys.txt`. Never print it. |
 | gcloud configuration `goal` | `CLOUDSDK_ACTIVE_CONFIG_NAME=goal gcloud auth login` once. The tasks pass `GOOGLE_OAUTH_ACCESS_TOKEN=$(gcloud auth print-access-token)` from that configuration and unset every other Google credential variable: never the machine's application default credentials or another account. |
 
-## Secrets (SOPS)
+## Secrets
 
-`terraform/secrets/production.sops.yaml` is committed, encrypted with age to `age1kttpj5ev6g08st6s20nezlqjdaa75l30z08nxhudpe2eapcv7fwqsv47mz` (`.sops.yaml`). Keys stay readable; values are encrypted. `terraform/secrets.tf` is the only place that knows its shape: every value but the database section becomes one store secret, and `local.secret_consumers` says which container gets which (the plan fails when a secret has no consumer or a consumer names a missing one; `terraform test` checks both).
+Every secret comes from the one place that makes it, and nobody copies one by hand. `terraform/secrets.tf` maps each into one Secrets Store secret, named by the environment variable its consumers read, and `local.secret_consumers` says which container gets which; the plan fails when a secret has no consumer or a consumer names a missing one (`terraform test` checks both, and each container's set).
 
-| Section › key | Consumers | Make it with |
+| Secret | Made by | Consumers |
 | --- | --- | --- |
-| `master_key` › `GOAL_MASTER_KEYS` | goald | `k1:$(openssl rand -base64 32)`; escrow it first (below) |
-| `internal` › `GOAL_GATEWAY_KEY` | goald | `openssl rand -hex 32` |
-| `internal` › `GOAL_SANDBOX_KEY` | goald, the Worker | `openssl rand -hex 32` |
-| `internal` › `GOAL_AUTH_PROXY_SECRET` | goald, auth | `openssl rand -hex 32`, unlike every other secret |
-| `better_auth` › `BETTER_AUTH_SECRETS` | auth | `1:$(openssl rand -hex 32)` |
-| `google` › `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | auth | the OAuth web client (bootstrap step 4) |
-| `smtp` › `GOAL_SMTP_URL` | auth | the mail provider: `smtps://<user>:<password>@<host>:465` |
-| `r2` › `GOAL_S3_ACCESS_KEY`, `GOAL_S3_SECRET_KEY` | goald | an R2 API token, Object Read & Write on `goal-production` only |
-| `embedding` › `GOAL_EMBED_KEY` | goald | an API token with Workers AI Read |
-| `database` › `GOAL_DATABASE_ADMIN_URL` | the operator only | PlanetScale's credential on database `goal` (bootstrap step 5) |
-| `database` › `GOAL_PG_OWNER_PASSWORD`, `GOAL_PG_APP_PASSWORD`, `GOAL_PG_AUTH_PASSWORD` | the operator only | `openssl rand -hex 24` each |
+| `GOAL_MASTER_KEYS` | the operator, SOPS `master_key` (`k1:$(openssl rand -base64 32)`; escrow first, below) | goald |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google's console (bootstrap step 5), SOPS `google` | auth |
+| `GOAL_SMTP_URL` | the mail provider (`smtps://<user>:<password>@<host>:465`), SOPS `smtp` | auth |
+| `GOAL_GATEWAY_KEY`, `GOAL_SANDBOX_KEY`, `GOAL_AUTH_PROXY_SECRET`, `BETTER_AUTH_SECRET` | `random_password` | goald; goald and the Worker; goald and auth; auth |
+| `GOAL_S3_ACCESS_KEY`, `GOAL_S3_SECRET_KEY` | the R2 account token: its id, and the SHA-256 of its value | goald |
+| `GOAL_EMBED_KEY` | the Workers AI account token | goald |
+| `GOAL_DATABASE_URL`, `GOAL_MIGRATE_DATABASE_URL` | `modules/database-urls` | goald |
+| `GOAL_AUTH_DATABASE_URL` | `modules/database-urls` | auth |
+| `GOAL_DATABASE_ADMIN_URL`, `GOAL_PG_OWNER_PASSWORD`, `GOAL_PG_APP_PASSWORD`, `GOAL_PG_AUTH_PASSWORD` | the PlanetScale role and `random_password` | db_init: whatever runs `goal db init` on Cloudflare (4-21); `task db:production` reads the same from the state |
 
-The database section never reaches the store as it is: `modules/database-urls` builds the three URLs the containers get (`GOAL_DATABASE_URL`, `GOAL_MIGRATE_DATABASE_URL` for goald, `GOAL_AUTH_DATABASE_URL` for auth) from the admin URL's host and branch and the role passwords, following prototype 4-2: port 5432 (never PgBouncer's 6432, which drops notifications and session advisory locks), database `goal`, users `<role>.<branch-id>`, `sslmode=verify-full&sslrootcert=system` for goald (pgx; its image carries a CA bundle), `sslmode=verify-full` alone for the auth service (node-postgres reads `sslrootcert` as a file), and goald's pool capped at `pool_max_conns=8` (PS-5 leaves 22 connections: goald's pool and listeners, auth's pool of 10, migrations). The plan refuses an admin URL that breaks any of these, and any empty value.
+The master keys stay in SOPS, not `random_password`, on purpose: they must be escrowed outside the state (losing them loses every organization's credentials), they rotate as a list (`k2:<new>,k1:<old>`, then `goal db rekey`), and a generated one would be replaced, with no way back, by any `-replace` or recreation of its resource. Everything else Goal can make again: a lost generated secret is rotated, not recovered.
+
+The URLs follow prototype 4-2 (`modules/database-urls`): port 5432 (never PgBouncer's 6432, which drops notifications and session advisory locks), the PostgreSQL database `goal`, users `<role>.<branch-id>` with the branch id of the administrator's user name, `sslmode=verify-full&sslrootcert=system` for goald and goal db init (pgx; goald's image carries a CA bundle), `sslmode=verify-full` alone for the auth service (node-postgres reads `sslrootcert` as a file), goald's pool capped at `pool_max_conns=8` (PS-5 leaves 22 connections: goald's pool and listeners, auth's pool of 10, migrations), passwords URL-encoded.
+
+`terraform/secrets/production.sops.yaml` is committed, encrypted with age to `age1kttpj5ev6g08st6s20nezlqjdaa75l30z08nxhudpe2eapcv7fwqsv47mz` (`.sops.yaml`); keys stay readable, values are encrypted. The plan refuses any value still empty.
 
 | Task | What |
 | --- | --- |
 | `task secrets:edit` | `sops edit` in `$EDITOR`, decrypted in memory only. Preferred. |
 | `task secrets:decrypt` / `task secrets:encrypt` | For bulk edits: a mode-0600 `production.decrypted.yaml` (git-ignored), encrypted back over the SOPS file through a temporary file, then deleted. |
-| `task db:production -- <command>` | `goal db <command>` (init, migrate, rekey, recover-admin, recover-owner) on the install's database, with the values above in its environment only. |
+| `task db:production -- <command>` | `goal db <command>` (init, migrate, rekey, recover-admin, recover-owner) on the install's database: the administrator's URL, goal_owner's URL and the role passwords from the state (`terraform output -raw`), the master keys from SOPS, in its environment only. |
 
-Rules: never `sops decrypt` to the terminal; after every edit `git diff` the file and check only the keys you meant changed; a value that leaked is rotated at its source first, then here. To add a secret: a key in the SOPS file, a line in `local.secret_values`, its consumers in `local.secret_consumers`, the binding in the wrangler config.
+Rules: never `sops decrypt` or `terraform output -raw` to the terminal; after every SOPS edit `git diff` the file and check only the keys you meant changed; a value that leaked is rotated at its source first, then here. To add a secret: make it in Terraform when Goal can generate it, in SOPS only when it comes from outside; then a line in `local.secret_values`, its consumers in `local.secret_consumers`, the binding in the wrangler config.
 
 ## Bootstrap (first install)
 
-1. **State bucket.** In the Cloudflare dashboard (or `wrangler r2 bucket create goal-terraform-state --location enam`) create the bucket `goal-terraform-state`, then an R2 API token with Object Read & Write on that bucket only: `GOAL_TF_STATE_ACCESS_KEY`/`GOAL_TF_STATE_SECRET_KEY`. Create the Cloudflare API token of the table above. Terraform never creates or manages the state bucket.
+1. **Hand-made prerequisites.** The state bucket: dashboard › R2 (or `wrangler r2 bucket create goal-terraform-state --location enam`), then an R2 API token with Object Read & Write on that bucket only (`GOAL_TF_STATE_*`). The Cloudflare API token and the PlanetScale service token of the table above. Terraform never creates or manages the state bucket.
 2. **Secrets Store.** The account has exactly one store; if Secrets Store was never opened, create it once (dashboard › Secrets Store, or `wrangler secrets-store store create default --remote`). Terraform reads it and adds only Goal's secrets.
-3. **Bucket and Google project.** `task tf:apply -- -target=cloudflare_r2_bucket.main -target=google_project.sign_in`. Targeting skips the secrets, whose values do not exist yet. If `goal-byfrederick` is taken (project ids are global), change `google_project_id` in `terraform/locals.tf` first.
-4. **Google sign-in (console, project `goal-byfrederick`, Google Auth Platform).** Branding: app name Goal, the owner's support and developer contact address, authorized domain `byfrederick.work`. Audience: External, then Publish app (in production; openid, email and profile need no verification). Data access: `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile`. Clients › Create client › Web application, name `goal-production`, authorized JavaScript origin `https://goal.byfrederick.work`, authorized redirect URI `https://goal.byfrederick.work/api/auth/callback/google` (`terraform output google_redirect_uri`). Put the client id and secret into `google` (`task secrets:edit`); the auth service runs with `GOAL_AUTH_GOOGLE=on` (a Worker var).
-5. **Database (PlanetScale Postgres, us-east-1).** Connected as the console's credential to the default database: `CREATE DATABASE goal OWNER postgres;` (Goal's own database, owned by `postgres`, not by the credential's role, which can be deleted with its password). Put that credential's URL on database `goal` into `database` › `GOAL_DATABASE_ADMIN_URL` (`postgres://pscale_api_<id>.<branch-id>:<password>@<host>:5432/goal?sslmode=verify-full`) and three new role passwords beside it. Then `task db:production -- init`: it creates goal_owner, goal_app and goal_auth with those passwords, grants the database and schema, revokes PUBLIC's CONNECT and TEMPORARY, creates `vector`, and grants goal_owner to the admin `WITH INHERIT TRUE, SET TRUE` (a non-superuser administrator gets ADMIN only on the roles it creates; without it `recover-admin`, `recover-owner` and handing objects to goal_owner fail). goald migrates at its first start.
-6. **The other values.** R2 token for `goal-production`, the Workers AI token, the SMTP URL, and the generated ones of the table; escrow the master key and the age key (below) before anything uses them. `task tf:plan` must now pass with no empty-value error.
-7. **Secrets and DNS.** `task tf:apply -- -target=module.secrets -target=cloudflare_dns_record.goal`.
+3. **What needs no outside value.** `task tf:plan -- -target=cloudflare_r2_bucket.main -target=google_project.sign_in -target=planetscale_postgres_branch_role.admin -target=random_password.generated`: the branch shows as an import with no changes (if not, stop: the configuration differs from the live branch), the rest as creates. Then `task tf:apply` with the same targets. Targeting skips the store secrets, whose SOPS values do not exist yet. If `goal-byfrederick` is taken (project ids are global), change `google_project_id` in `terraform/locals.tf` first.
+4. **The database.** Connected as the new administrator to the branch's default database (`terraform output -raw goal_database_admin_url` with `/goal` changed to `/postgres`, into `psql` without echoing it): `CREATE DATABASE goal OWNER postgres;` unless prototype 4-2 left it there (Goal's own database, owned by `postgres`, not by a credential's role, which can be deleted with its password). If an earlier administrator created goal_owner, goal_app and goal_auth (the API-made `goal_admin`, user `pscale_api_…`, of prototype 4-2), hand them over first, connected as that one on `goal`: `GRANT goal_owner, goal_app, goal_auth TO <terraform output database_admin_role> WITH ADMIN OPTION;` (only the role that created them may alter them on PostgreSQL 16+). Then `task db:production -- init`: it creates the three roles if missing with the generated passwords (or sets them), grants the database and schema, revokes PUBLIC's CONNECT and TEMPORARY, creates `vector`, and grants goal_owner to the administrator `WITH INHERIT TRUE, SET TRUE`. goald migrates at its first start.
+5. **Google sign-in (console, project `goal-byfrederick`, Google Auth Platform).** Branding: app name Goal, the owner's support and developer contact address, authorized domain `byfrederick.work`. Audience: External, then Publish app (in production; openid, email and profile need no verification). Data access: `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile`. Clients › Create client › Web application, name `goal-production`, authorized JavaScript origin `https://goal.byfrederick.work`, authorized redirect URI `https://goal.byfrederick.work/api/auth/callback/google` (`terraform output google_redirect_uri`). Put the client id and secret into `google` (`task secrets:edit`); the auth service runs with `GOAL_AUTH_GOOGLE=on` (a Worker var).
+6. **The outside values.** `task secrets:edit`: the master key (escrow it and the age key first, below) and the SMTP URL. `task tf:plan` now passes with no empty-value error.
+7. **Secrets, tokens and DNS.** `task tf:apply -- -target=module.secrets -target=cloudflare_dns_record.goal`.
 8. **Worker.** Deploy `deploy/cloudflare` with wrangler (4-21): its `secrets_store_secrets` bindings take `store_id = terraform output secrets_store_id` and each `secret_name` from `terraform output secret_names`, passed to each container as `terraform output secret_consumers` says; its vars take `GOAL_PUBLIC_URL` (`public_url`), `GOAL_S3_BUCKET` (`bucket`) and `GOAL_S3_ENDPOINT` (`s3_endpoint`). The wrangler config declares no routes.
-9. **Route.** `task tf:apply`: Cloudflare refuses a route to a Worker that does not exist, so the route comes last; the plan shows only it. Then `task tf:plan` shows no changes.
+9. **Route.** `task tf:apply`: Cloudflare refuses a route to a Worker that does not exist, so the route comes last; the plan shows only it. Then delete the branch's `import` block, and `task tf:plan` shows no changes.
+10. **Retire the old administrator.** Once `task db:production -- init` has run as `goal_db_admin`, delete the API-made `goal_admin` role of prototype 4-2 (PlanetScale console › the branch › Roles, reassigning what it owns to `postgres`), and revoke its password wherever it was kept. Nothing of Goal's uses it any more.
 
 ## Deploys
 
@@ -94,14 +104,20 @@ Rules: never `sops decrypt` to the terminal; after every edit `git diff` the fil
   3. `task db:production -- rekey`: reseals every credential under `k2`.
   4. Remove `k1` from the value, `task tf:apply`, restart goald. Backups keep `k1`'s ciphertext until they expire; keep `k1` escrowed until then.
   5. If a key leaked, also revoke the credentials it protected at their providers: the ciphertext may have leaked with it.
-- **Other secrets:** `BETTER_AUTH_SECRETS` rotates like the master key (`2:<new>,1:<old>`, drop `1` later). `GOAL_GATEWAY_KEY` ends the task tokens in flight (their runs fail and are claimed again). `GOAL_SANDBOX_KEY` and `GOAL_AUTH_PROXY_SECRET` change for both consumers in one apply and one redeploy. A role password: change it in the SOPS file, `task db:production -- init` (sets it), `task tf:apply` (new URLs), redeploy. R2, Workers AI, SMTP and the Google client secret: make the new one at the provider, put it here, apply, redeploy, then revoke the old one.
+
+## Other rotations
+
+- **A generated secret:** `task tf:apply -- -replace='random_password.generated["<name>"]'`, then redeploy its consumers in one go. `gateway_key` ends the task tokens in flight (their runs fail and are claimed again); `better_auth_secret` signs everyone out; `sandbox_key` and `auth_proxy_secret` change for both consumers at once. A role password (`goal_owner`, `goal_app`, `goal_auth`): replace it, `task db:production -- init` (sets it), then redeploy goald and auth.
+- **The administrator:** only the role that created goal_owner, goal_app and goal_auth may alter them, so the old one hands them over before it goes: add a second role resource (`admin_next`, another `name`), apply it, connect as the old administrator and `GRANT goal_owner, goal_app, goal_auth TO <the new base user name> WITH ADMIN OPTION;`, point `module.database_urls` at `admin_next` and apply (the URLs change), `task db:production -- init`, then remove the old resource and apply (what it owns goes to `postgres`).
+- **A Cloudflare token:** `task tf:apply -- -replace='module.r2_token.cloudflare_account_token.this'` (or `module.workers_ai_token`), then restart goald.
+- **From outside:** SMTP and the Google client secret: make the new one at the provider, `task secrets:edit`, `task tf:apply`, redeploy auth, then revoke the old one.
 
 ## Restore
 
-- **Database.** PlanetScale's backups restore into a branch: point `GOAL_DATABASE_ADMIN_URL` at it (a new branch id changes every user name), `task tf:apply`, redeploy goald and auth. From a dump (including moving a local install, spec 4 §14 step 7): `task db:production -- init` on the empty `goal` database first, then `pg_restore --no-owner` connected as goal_owner (`postgres://goal_owner.<branch-id>:<password>@<host>:5432/goal?sslmode=verify-full`), then start goald with the same master keys the dump was sealed with.
+- **Database.** PlanetScale's backups restore into a new branch, which changes the branch id of every user name. Adopt it without touching the old one: set `planetscale.branch` in `terraform/locals.tf` to its name, `terraform state rm planetscale_postgres_branch.main planetscale_postgres_branch_role.admin` (forgets both, deletes nothing), put the `import` block back, `task tf:apply` (a new administrator on the new branch, new URLs), hand the three roles to it as in bootstrap step 4, `task db:production -- init`, redeploy goald and auth, then delete the old branch's administrator in the console. From a dump (including moving a local install, spec 4 §14 step 7): `task db:production -- init` on the empty `goal` database first, then `pg_restore --no-owner` connected as goal_owner (`GOAL_MIGRATE_DATABASE_URL`, `terraform output -raw goal_migrate_database_url`), then start goald with the same master keys the dump was sealed with.
 - **Bucket.** R2 keeps no object versions: a restore is a copy from a copy. Blobs are immutable and content-addressed, so `rclone sync` (or any S3 copy) from the backup or from a local install's RustFS into `goal-production` restores definitions and uploads; nothing else is needed.
-- **Terraform state** lost or damaged: recreate the workspace and adopt every object with `import {}` blocks (each resource's import id is in the provider's documentation: the bucket, the DNS record, the route, each store secret, the project), plan to no changes, then delete the blocks. Never `terraform destroy` to start over: the bucket and the project are protected for that reason.
-- **age key lost:** the deployed secrets keep working, but `production.sops.yaml` cannot be read: restore the key from escrow. If it is gone, make a new age key, a new SOPS file with every value made again, and keep the master keys from escrow; a lost master key means every organization re-enters its credentials.
+- **Terraform state** lost or damaged: recreate the workspace and adopt the bucket, the DNS record, the route, the branch and the project with `import {}` blocks (each resource's import id is in its provider's documentation), plan, then delete the blocks. The generated secrets, the administrator and the tokens existed only there: let the plan make new ones, then run `task db:production -- init` and redeploy every container, as for a rotation of all of them. The master keys are safe in SOPS, which is why they live there. Never `terraform destroy` to start over: the bucket, the branch and the project are protected for that reason.
+- **age key lost:** the deployed secrets keep working, but `production.sops.yaml` cannot be read: restore the key from escrow. If it is gone, make a new age key and a new SOPS file with every value made again, the master keys from escrow; a lost master key means every organization re-enters its credentials.
 
 ## Validation checklist
 

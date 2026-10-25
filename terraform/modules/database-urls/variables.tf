@@ -1,36 +1,48 @@
-variable "admin_url" {
-  description = <<-EOT
-    The database administrator's URL, as goal db init uses it (GOAL_DATABASE_ADMIN_URL): the
-    managed PostgreSQL's credential, on Goal's own database. On PlanetScale Postgres its user is
-    <role>.<branch-id>, and the other roles' users take the same branch id.
-  EOT
+variable "host" {
+  description = "The database's host name, without scheme or port (PlanetScale's access host)."
   type        = string
-  sensitive   = true
   nullable    = false
 
   validation {
-    condition     = can(regex("^postgres(ql)?://[^.:@/]+\\.[^:@/]+:[^@]+@", var.admin_url))
-    error_message = "The admin URL needs a user <role>.<branch-id> and its password: postgres://<role>.<branch-id>:<password>@<host>:5432/goal?sslmode=verify-full."
-  }
-
-  validation {
-    condition     = can(regex("@[^:/?]+:5432/", var.admin_url))
-    error_message = "The admin URL must name port 5432, the direct connection: PgBouncer's 6432 drops LISTEN notifications and session advisory locks (spec 4 §5.12)."
-  }
-
-  validation {
-    condition     = can(regex(":5432/goal(\\?|$)", var.admin_url))
-    error_message = "The admin URL must name the database goal, Goal's own, created as CREATE DATABASE goal OWNER postgres; never the provider's default database (spec 4 §5.12)."
-  }
-
-  validation {
-    condition     = can(regex("[?&]sslmode=verify-full(&|$)", var.admin_url))
-    error_message = "The admin URL must verify the server: sslmode=verify-full."
+    condition     = can(regex("^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$", var.host))
+    error_message = "host must be a bare host name: no scheme, port or path."
   }
 }
 
+variable "database" {
+  description = "Goal's own PostgreSQL database on the server (CREATE DATABASE goal OWNER postgres), never the provider's default."
+  type        = string
+  nullable    = false
+
+  validation {
+    condition     = can(regex("^[a-z_][a-z0-9_]*$", var.database)) && var.database != "postgres"
+    error_message = "database must be Goal's own database (such as goal), not postgres."
+  }
+}
+
+variable "branch_id" {
+  description = "The branch id every user name carries: <role>.<branch-id>."
+  type        = string
+  nullable    = false
+
+  validation {
+    condition     = can(regex("^[a-z0-9]+$", var.branch_id))
+    error_message = "branch_id must be the branch's id (lowercase letters and digits), as the admin's user name ends."
+  }
+}
+
+variable "admin" {
+  description = "The administrator goal db init connects as: its full user name (<role>.<branch-id>) and password."
+  type = object({
+    username = string
+    password = string
+  })
+  sensitive = true
+  nullable  = false
+}
+
 variable "passwords" {
-  description = "The login passwords goal db init gives goal_owner, goal_app and goal_auth (GOAL_PG_OWNER_PASSWORD, GOAL_PG_APP_PASSWORD, GOAL_PG_AUTH_PASSWORD)."
+  description = "The login passwords goal db init gives goal_owner, goal_app and goal_auth."
   type = object({
     owner = string
     app   = string
@@ -38,11 +50,6 @@ variable "passwords" {
   })
   sensitive = true
   nullable  = false
-
-  validation {
-    condition     = alltrue([for p in [var.passwords.owner, var.passwords.app, var.passwords.auth] : can(regex("^[A-Za-z0-9_-]{32,}$", p))])
-    error_message = "Every role password must be at least 32 URL-safe characters (letters, digits, _ and -), such as openssl rand -hex 24, so it goes into a URL unescaped."
-  }
 }
 
 variable "goald_pool_max_conns" {

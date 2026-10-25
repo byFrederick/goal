@@ -32,6 +32,21 @@ vars:
   TF_WORKSPACE_NAME: production
   SOPS_FILE: terraform/secrets/production.sops.yaml
   SOPS_DECRYPTED: terraform/secrets/production.decrypted.yaml
+  # The environment of every terraform command that reaches the state and the providers (run in
+  # terraform/). The state token goes to the s3 backend as AWS_* only here, so no other AWS setting
+  # of the shell or .env reaches it. Google gets an access token of the goal gcloud configuration
+  # and nothing else: no application default credentials, no key file, no other account.
+  TF_ONLINE: |
+    set -eu
+    export AWS_ACCESS_KEY_ID="$GOAL_TF_STATE_ACCESS_KEY" AWS_SECRET_ACCESS_KEY="$GOAL_TF_STATE_SECRET_KEY"
+    export AWS_ENDPOINT_URL_S3="https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com"
+    unset AWS_PROFILE AWS_SESSION_TOKEN AWS_ENDPOINT_URL TF_WORKSPACE
+    unset GOOGLE_CREDENTIALS GOOGLE_APPLICATION_CREDENTIALS GOOGLE_CLOUD_KEYFILE_JSON GCLOUD_KEYFILE_JSON
+    GOOGLE_OAUTH_ACCESS_TOKEN="$(CLOUDSDK_ACTIVE_CONFIG_NAME=goal gcloud auth print-access-token)"
+    export GOOGLE_OAUTH_ACCESS_TOKEN
+    terraform init -input=false -lockfile=readonly >/dev/null
+    terraform workspace select -or-create "production" >/dev/null
+    test "$(terraform workspace show)" = "production"
   # The auth service's own variables (spec 3 §5.6): task auth:dev passes it these and nothing of
   # goald's, as goal up does.
   AUTH_VARIABLES: >-
@@ -233,6 +248,8 @@ tasks:
         msg: "CLOUDFLARE_ACCOUNT_ID is not set: the account whose R2 holds the state bucket goal-terraform-state"
       - sh: test -n "${GOAL_TF_STATE_ACCESS_KEY:-}" && test -n "${GOAL_TF_STATE_SECRET_KEY:-}"
         msg: "GOAL_TF_STATE_ACCESS_KEY and GOAL_TF_STATE_SECRET_KEY are not set: the R2 API token (Object Read & Write) of the state bucket goal-terraform-state"
+      - sh: test -n "${PLANETSCALE_SERVICE_TOKEN_ID:-}" && test -n "${PLANETSCALE_SERVICE_TOKEN:-}"
+        msg: "PLANETSCALE_SERVICE_TOKEN_ID and PLANETSCALE_SERVICE_TOKEN are not set: the PlanetScale service token for terraform/ (access in docs/engineering/cloudflare-operations.md)"
       - sh: test -r "$SOPS_AGE_KEY_FILE"
         msg: "No age key at $SOPS_AGE_KEY_FILE (SOPS_AGE_KEY_FILE): the operator's key that decrypts terraform/secrets/"
       - sh: CLOUDSDK_ACTIVE_CONFIG_NAME=goal gcloud auth print-access-token >/dev/null 2>&1
@@ -243,20 +260,8 @@ tasks:
     deps: [tf:credentials]
     dir: terraform
     cmds:
-      # The state token goes to the s3 backend as AWS_* only here, so no other AWS setting of the
-      # shell or .env reaches it. Google gets an access token of the goal gcloud configuration and
-      # nothing else: no application default credentials, no key file, no other account.
       - |
-        set -eu
-        export AWS_ACCESS_KEY_ID="$GOAL_TF_STATE_ACCESS_KEY" AWS_SECRET_ACCESS_KEY="$GOAL_TF_STATE_SECRET_KEY"
-        export AWS_ENDPOINT_URL_S3="https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com"
-        unset AWS_PROFILE AWS_SESSION_TOKEN AWS_ENDPOINT_URL TF_WORKSPACE
-        unset GOOGLE_CREDENTIALS GOOGLE_APPLICATION_CREDENTIALS GOOGLE_CLOUD_KEYFILE_JSON GCLOUD_KEYFILE_JSON
-        GOOGLE_OAUTH_ACCESS_TOKEN="$(CLOUDSDK_ACTIVE_CONFIG_NAME=goal gcloud auth print-access-token)"
-        export GOOGLE_OAUTH_ACCESS_TOKEN
-        terraform init -input=false -lockfile=readonly >/dev/null
-        terraform workspace select -or-create "{{.TF_WORKSPACE_NAME}}"
-        test "$(terraform workspace show)" = "{{.TF_WORKSPACE_NAME}}"
+        {{.TF_ONLINE}}
         terraform {{.TF_COMMAND}} {{.CLI_ARGS}}
 
   secrets:edit:
@@ -284,21 +289,21 @@ tasks:
         rm -f {{.SOPS_DECRYPTED}}
 
   db:production:
-    desc: "goal db <command> on the Cloudflare install's database (task db:production -- init), with the admin URL and the role passwords from the SOPS file, never printed"
+    desc: "goal db <command> on the Cloudflare install's database (task db:production -- init): the administrator, goal_owner and the role passwords from the Terraform state, the master keys from the SOPS file, never printed"
+    deps: [tf:credentials]
     cmds:
-      # goal_owner's URL is built as terraform/modules/database-urls builds it, for the commands
-      # that connect as goal_owner (migrate, rekey, recover-admin, recover-owner).
       - |
-        set -eu
-        get() { sops decrypt --extract "[\"$1\"][\"$2\"]" {{.SOPS_FILE}}; }
-        GOAL_DATABASE_ADMIN_URL="$(get database GOAL_DATABASE_ADMIN_URL)"
-        GOAL_PG_OWNER_PASSWORD="$(get database GOAL_PG_OWNER_PASSWORD)"
-        GOAL_PG_APP_PASSWORD="$(get database GOAL_PG_APP_PASSWORD)"
-        GOAL_PG_AUTH_PASSWORD="$(get database GOAL_PG_AUTH_PASSWORD)"
-        GOAL_MASTER_KEYS="$(get master_key GOAL_MASTER_KEYS)" # goal db rekey
-        rest="${GOAL_DATABASE_ADMIN_URL#*://}"; user="${rest%%:*}"; at="${rest#*@}"
-        GOAL_MIGRATE_DATABASE_URL="postgres://goal_owner.${user#*.}:${GOAL_PG_OWNER_PASSWORD}@${at%%\?*}?sslmode=verify-full&sslrootcert=system"
-        export GOAL_DATABASE_ADMIN_URL GOAL_PG_OWNER_PASSWORD GOAL_PG_APP_PASSWORD GOAL_PG_AUTH_PASSWORD GOAL_MASTER_KEYS GOAL_MIGRATE_DATABASE_URL
+        cd terraform
+        {{.TF_ONLINE}}
+        out() { terraform output -raw "$1"; }
+        GOAL_DATABASE_ADMIN_URL="$(out goal_database_admin_url)"
+        GOAL_MIGRATE_DATABASE_URL="$(out goal_migrate_database_url)" # migrate, rekey, recover-admin, recover-owner
+        GOAL_PG_OWNER_PASSWORD="$(out goal_pg_owner_password)"
+        GOAL_PG_APP_PASSWORD="$(out goal_pg_app_password)"
+        GOAL_PG_AUTH_PASSWORD="$(out goal_pg_auth_password)"
+        GOAL_MASTER_KEYS="$(sops decrypt --extract '["master_key"]["GOAL_MASTER_KEYS"]' secrets/{{.TF_WORKSPACE_NAME}}.sops.yaml)" # rekey
+        export GOAL_DATABASE_ADMIN_URL GOAL_MIGRATE_DATABASE_URL GOAL_PG_OWNER_PASSWORD GOAL_PG_APP_PASSWORD GOAL_PG_AUTH_PASSWORD GOAL_MASTER_KEYS
+        cd ..
         go run ./cmd/goal db {{.CLI_ARGS}}
 
   migrate-check:

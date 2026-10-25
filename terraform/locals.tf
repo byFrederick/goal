@@ -21,6 +21,16 @@ locals {
       r2_location = "enam"
       # Google Cloud project of the sign-in OAuth client; project ids are global and permanent.
       google_project_id = "goal-byfrederick"
+      # The PlanetScale Postgres database (PS-5, one node, us-east), made in the Cloudflare
+      # dashboard and billed through Cloudflare: its production branch is adopted, never created.
+      # Goal's tables live in the PostgreSQL database `goal` on it (CREATE DATABASE goal OWNER
+      # postgres, runbook), not in the provider's default `postgres`.
+      planetscale = {
+        organization = "freddycruz5227"
+        database     = "goal"
+        branch       = "main"
+      }
+      postgres_database = "goal"
       # PS-5 allows 22 connections to Goal: goald's pool, its listeners, the auth service's pool
       # (10) and migrations share them (spec 4 §5.12).
       goald_pool_max_conns = 8

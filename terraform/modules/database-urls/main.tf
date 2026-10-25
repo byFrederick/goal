@@ -1,15 +1,21 @@
-# The URLs goald and the auth service connect with, built from the administrator's URL and the
-# role passwords so each password is written once (spec 4 §5.12, prototype 4-2):
-# - the direct port 5432 and Goal's own database `goal`, as the admin URL names them;
-# - users <role>.<branch-id>, the branch taken from the admin's user;
-# - goald (pgx) verifies the server against the system CA bundle: sslmode=verify-full&sslrootcert=system;
+# The four URLs Goal connects with, by prototype 4-2's rules (spec 4 §5.12):
+# - the direct port 5432, never PgBouncer's 6432 (no notifications, no session advisory locks);
+# - Goal's own database, never the provider's default;
+# - users <role>.<branch-id>;
+# - goald and goal db init (pgx) verify the server against the system CA bundle:
+#   sslmode=verify-full&sslrootcert=system;
 # - the auth service (node-postgres) takes sslmode=verify-full alone: it reads sslrootcert as a file
 #   path and verifies against Node's bundled CAs without one;
 # - goald's pool is capped (pool_max_conns, read by pgxpool only); its listeners reuse the pool's
 #   connection settings without the pool parameters, and migrations need no cap.
+# Passwords are URL-encoded, so whatever the provider generates goes in unchanged.
 locals {
-  admin = regex("^postgres(?:ql)?://[^.:@/]+\\.(?P<branch>[^:@/]+):[^@]+@(?P<host>[^:/?]+):5432/goal(?:\\?|$)", var.admin_url)
-
-  base   = "${local.admin.host}:5432/goal"
+  server = "${var.host}:5432/${var.database}"
   go_tls = "sslmode=verify-full&sslrootcert=system"
+
+  user = {
+    owner = "goal_owner.${var.branch_id}:${urlencode(var.passwords.owner)}"
+    app   = "goal_app.${var.branch_id}:${urlencode(var.passwords.app)}"
+    auth  = "goal_auth.${var.branch_id}:${urlencode(var.passwords.auth)}"
+  }
 }
