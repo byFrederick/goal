@@ -100,23 +100,25 @@ func TestChunk_LongSectionsSplitWithOverlap(t *testing.T) {
 }
 
 // Review 4 M4: cutting a long line was quadratic (a minified JSON upload of 25 MiB took minutes
-// of one worker's CPU while it held its source's lease); it is linear, so 8 MiB on one line, or
-// in tiny paragraphs, takes about a second (a few under -race and load; one line took 20 s before).
+// of one worker's CPU while it held its source's lease); it is linear. A time limit failed on busy
+// run boxes (7 MiB took 10 s under -race there), so the test compares sizes instead: four times the
+// text takes about four times as long when cutting is linear, sixteen when it is quadratic.
 func TestChunk_LongLineIsLinear(t *testing.T) {
 	t.Parallel()
 
 	squash := func(s string) string { return strings.Join(strings.Fields(s), "") }
 
-	for name, doc := range map[string]string{
-		"one line":         strings.Repeat(`{"key":"välue",`, 8<<20/16) + strings.Repeat("y", 3000),
-		"tiny paragraphs":  strings.Repeat("a\n\n", 8<<20/3),
-		"one line, spaces": strings.Repeat("wörd ", 8<<20/6),
+	for name, doc := range map[string]func(size int) string{
+		"one line":         func(size int) string { return strings.Repeat(`{"key":"välue",`, size/16) + strings.Repeat("y", 3000) },
+		"tiny paragraphs":  func(size int) string { return strings.Repeat("a\n\n", size/3) },
+		"one line, spaces": func(size int) string { return strings.Repeat("wörd ", size/6) },
 	} {
-		start := time.Now()
-		pieces := Chunk(doc)
+		small, big := doc(1<<20), doc(4<<20)
+		smallTook, _ := fastestChunk(small)
+		bigTook, pieces := fastestChunk(big)
 
-		if took := time.Since(start); took > 10*time.Second {
-			t.Errorf("%s: Chunk of %d MiB took %v", name, len(doc)>>20, took)
+		if growth := float64(bigTook) / float64(smallTook); growth > 8 {
+			t.Errorf("%s: Chunk took %v for 1 MiB and %v for 4 MiB, %.1f times as long", name, smallTook, bigTook, growth)
 		}
 
 		var b strings.Builder
@@ -129,8 +131,27 @@ func TestChunk_LongLineIsLinear(t *testing.T) {
 			b.WriteString(p.Text)
 		}
 
-		if squash(b.String()) != squash(doc) {
+		if squash(b.String()) != squash(big) {
 			t.Errorf("%s: the pieces do not join back into the document", name)
 		}
 	}
+}
+
+// fastestChunk cuts doc twice and returns the quicker time: a busy machine slows one cut, rarely both.
+func fastestChunk(doc string) (time.Duration, []Piece) {
+	var (
+		best   time.Duration
+		pieces []Piece
+	)
+
+	for i := range 2 {
+		start := time.Now()
+		pieces = Chunk(doc)
+
+		if took := time.Since(start); i == 0 || took < best {
+			best = took
+		}
+	}
+
+	return best, pieces
 }

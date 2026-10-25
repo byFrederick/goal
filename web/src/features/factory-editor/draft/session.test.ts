@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { ApiError } from '@goal/api-client';
-import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import type { Draft, DraftModel, FactoryModel, SaveResult, Section, SectionSave } from '../../../api/types';
 import type { LineSection, Model } from '../../../shared/definition/model';
 import { addAgent, renameAgent, setBasics, setStationField } from './ops';
@@ -96,6 +96,14 @@ function fakeApi() {
 
 const flushPromises = () => vi.advanceTimersByTimeAsync(0);
 
+/** sha256 as WebCrypto answers it, computed here instead of on Node's thread pool. */
+const nodeDigest = (data: BufferSource) =>
+  new Uint8Array(
+    createHash('sha256')
+      .update(data as Uint8Array)
+      .digest(),
+  ).buffer;
+
 const conflict = (section: Section, value: unknown, etag: string) =>
   new ApiError({ title: 'Precondition Failed', status: 412, code: 'draft-conflict', section, value, etag });
 
@@ -115,9 +123,13 @@ const wipOf = (l: LineSection, id: string) => l.stations?.find((s) => s.id === i
 let fake: ReturnType<typeof fakeApi>;
 let session: DraftSession;
 let refresh: ReturnType<typeof vi.fn<() => void>>;
+let digest: MockInstance<SubtleCrypto['digest']>;
 
 beforeEach(() => {
   vi.useFakeTimers();
+  // WebCrypto hashes on Node's thread pool, which the fake clock doesn't drive: on a busy machine a
+  // hash was still out when a test looked. Here it answers on the microtask queue flushPromises drains.
+  digest = vi.spyOn(crypto.subtle, 'digest').mockImplementation(async (_alg, data) => nodeDigest(data));
   fake = fakeApi();
   refresh = vi.fn<() => void>();
   session = new DraftSession({ org: 'acme', factory: 'f1', api: fake.api, refresh });
@@ -126,6 +138,7 @@ beforeEach(() => {
 
 afterEach(() => {
   session.dispose();
+  digest.mockRestore();
   vi.useRealTimers();
 });
 
@@ -684,20 +697,15 @@ describe('files', () => {
   });
 
   it('saves typing into a file an edit wrote over the text that edit saved, even before its sha256 is computed', async () => {
-    // WebCrypto answers off the microtask queue: the test decides when, so typing can come first.
+    // The test decides when the hash answers, so typing can come first.
     let release = () => {};
     const held = new Promise<void>((r) => {
       release = r;
     });
-    const digest = vi.spyOn(crypto.subtle, 'digest').mockImplementation(async (_alg, data) => {
+    digest.mockImplementation(async (_alg, data) => {
       await held;
-      return new Uint8Array(
-        createHash('sha256')
-          .update(data as Uint8Array)
-          .digest(),
-      ).buffer;
+      return nodeDigest(data);
     });
-    onTestFinished(() => digest.mockRestore());
 
     session.edit(addAgent(session.getSnapshot().sections.agents.local, 'reviewer'));
     void session.flush();
