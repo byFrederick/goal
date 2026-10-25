@@ -101,7 +101,7 @@ func TestChunk_LongSectionsSplitWithOverlap(t *testing.T) {
 
 // Review 4 M4: cutting a long line was quadratic (a minified JSON upload of 25 MiB took minutes
 // of one worker's CPU while it held its source's lease); it is linear, so 8 MiB on one line, or
-// in tiny paragraphs, takes well under a second.
+// in tiny paragraphs, takes about a second (a few under -race and load; one line took 20 s before).
 func TestChunk_LongLineIsLinear(t *testing.T) {
 	t.Parallel()
 
@@ -115,7 +115,7 @@ func TestChunk_LongLineIsLinear(t *testing.T) {
 		start := time.Now()
 		pieces := Chunk(doc)
 
-		if took := time.Since(start); took > 3*time.Second {
+		if took := time.Since(start); took > 10*time.Second {
 			t.Errorf("%s: Chunk of %d MiB took %v", name, len(doc)>>20, took)
 		}
 
