@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SkillFiles } from '../../../api/types';
-import type { Model, Section, SectionValues } from '../../../shared/definition/model';
+import type { LineSection, Model, Section, SectionValues } from '../../../shared/definition/model';
 import {
   AgentInUseError,
   type AnyEdit,
@@ -19,6 +19,7 @@ import {
   setAgentConnection,
   setBuiltin,
   setFactoryConnection,
+  setGate,
   setStationKind,
   setStationName,
 } from './ops';
@@ -123,7 +124,54 @@ describe('stations', () => {
     });
     expect(dropped).toEqual(['agent']);
   });
+
+  it('drops an agent merge step with its gate, and keeps a human one', () => {
+    const line = edited(model().line, 'review', (s) => ({ ...s, action: 'merge' }));
+    expect(setGate(line, 'review', null).value.stations?.find((s) => s.id === 'review')).toEqual({
+      id: 'review',
+      name: 'Review',
+      kind: 'agent',
+      agent: 'engineer',
+      wip: 1,
+    });
+    expect(setGate(model().line, 'merge', null).value.stations?.find((s) => s.id === 'merge')).toEqual({
+      id: 'merge',
+      name: 'Merge',
+      kind: 'human',
+      action: 'merge',
+    });
+  });
+
+  it('keeps an agent merge step when a gate is set on it', () => {
+    const line = edited(model().line, 'build', (s) => ({ ...s, action: 'merge' }));
+    const gated = setGate(line, 'build', { on_reject: 'inbox', max_rework: 1 });
+    expect(gated.value.stations?.find((s) => s.id === 'build')?.action).toBe('merge');
+  });
+
+  it('drops the merge step of an agent that keeps no gate, and keeps it where the gate stays', () => {
+    const dropped = setStationKind(model().line, 'merge', 'agent');
+    expect(dropped.edit.value.stations?.find((s) => s.id === 'merge')).toEqual({
+      id: 'merge',
+      name: 'Merge',
+      kind: 'agent',
+    });
+    expect(dropped.dropped).toEqual(['action']);
+
+    const gated = edited(model().line, 'merge', (s) => ({ ...s, gate: { on_reject: 'build' } }));
+    const kept = setStationKind(gated, 'merge', 'agent');
+    expect(kept.edit.value.stations?.find((s) => s.id === 'merge')?.action).toBe('merge');
+    expect(kept.dropped).toEqual([]);
+  });
 });
+
+/** The line with one station changed by `f`. */
+function edited(
+  line: LineSection,
+  id: string,
+  f: (s: NonNullable<LineSection['stations']>[number]) => NonNullable<LineSection['stations']>[number],
+): LineSection {
+  return { ...line, stations: (line.stations ?? []).map((s) => (s.id === id ? f(s) : s)) };
+}
 
 describe('agents', () => {
   it('adds an agent with its prompt file in the same save', () => {

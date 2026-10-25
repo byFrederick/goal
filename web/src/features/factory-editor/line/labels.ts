@@ -52,10 +52,11 @@ export function previewDetail(s: ModelStation, line: LineSection): string {
       return (line.intake ?? []).length > 0 ? intakeSummary(line.intake) : 'queue';
     case 'agent': {
       const lanes = Object.keys(s.route ?? {}).length;
-      if (lanes > 0) return `${lanes} by lane${gate ? ', gate' : ''}`;
+      const flags = `${gate ? ', gate' : ''}${s.action === 'merge' ? ', merge' : ''}`;
+      if (lanes > 0) return `${lanes} by lane${flags}`;
       if (!s.agent) return 'no agent yet';
       const n = s.agents ?? 1;
-      return `${s.agent}${n > 1 ? ` × ${n}` : ''}${gate ? ', gate' : ''}`;
+      return `${s.agent}${n > 1 ? ` × ${n}` : ''}${flags}`;
     }
     case 'human':
       return ['you', s.action === 'merge' ? 'merge' : '', gate ? 'gate' : ''].filter(Boolean).join(', ');
@@ -86,6 +87,12 @@ export function bufferSentence(line: LineSection, id: string): string | undefine
   const next = stations[at + 1];
   if (line.flow?.release !== 'drum-buffer-rope' || !next?.buffer) return undefined;
   return `New work enters when ${stationLabel(next)} has fewer than ${next.buffer} waiting`;
+}
+
+/** The hint when a factory with a repository has no merging station: its pull requests stay open. */
+export function noMergeHint(line: LineSection, hasRepository: boolean): string | undefined {
+  if (!hasRepository || (line.stations ?? []).some((s) => s.action === 'merge')) return undefined;
+  return 'No station merges, so pull requests stay open until someone merges them outside Goal.';
 }
 
 /** The stations a gate at index `at` may send work back to: those before it, but Done. */
