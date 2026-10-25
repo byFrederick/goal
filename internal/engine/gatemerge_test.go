@@ -60,26 +60,7 @@ func TestGateMerge_MergesOnApprovalAsTheEngine(t *testing.T) {
 		t.Errorf("gate_approved events %+v, want one by the reviewer", approved)
 	}
 
-	merged := h.eventsOf(it.ID, domain.EventMerged)
-	if len(merged) != 2 {
-		t.Fatalf("merged events %+v, want one per pull request", merged)
-	}
-
-	for _, e := range merged {
-		if e.Actor != domain.ActorEngine || e.Data["actor"] != domain.EngineActor.Ref() || e.Station != stReview {
-			t.Errorf("merged event %+v, want by the engine at the gate", e)
-		}
-	}
-
-	if touches := domain.TouchesOf(h.store.Events(it.ID)); len(touches) != 0 {
-		t.Errorf("touches %+v, want none: the engine merged", touches)
-	}
-
-	if used := h.mergesUsed(t, it.ID); len(used) != 1 || used[0].Data["name"] != connGitHub ||
-		used[0].Actor != domain.EngineActor || used[0].Data["run_id"] != nil {
-		t.Errorf("connection.used of the merge %+v; want github only, by the engine, naming no run", used)
-	}
-
+	h.expectEngineMerged(t, it.ID, 2)
 	h.expectOutcomes(t, it.ID, domain.LeaseAdvanced, domain.LeaseAdvanced)
 }
 
@@ -205,6 +186,32 @@ func TestGateMerge_RejectMergesNothing(t *testing.T) {
 
 	if len(h.codehost.Merges()) != 0 || len(h.eventsOf(it.ID, domain.EventMerged)) != 0 {
 		t.Errorf("merges %+v, merged events %v; want none", h.codehost.Merges(), h.kinds(it.ID))
+	}
+}
+
+// expectEngineMerged fails unless the engine merged n pull requests of item at the review gate,
+// opening only the github connection for it, and no person touched the item.
+func (h *harness) expectEngineMerged(t *testing.T, item domain.ItemID, n int) {
+	t.Helper()
+
+	merged := h.eventsOf(item, domain.EventMerged)
+	if len(merged) != n {
+		t.Errorf("merged events %+v, want %d", merged, n)
+	}
+
+	for _, e := range merged {
+		if e.Actor != domain.ActorEngine || e.Data["actor"] != domain.EngineActor.Ref() || e.Station != stReview {
+			t.Errorf("merged event %+v, want by the engine at the gate", e)
+		}
+	}
+
+	if touches := domain.TouchesOf(h.store.Events(item)); len(touches) != 0 {
+		t.Errorf("touches %+v, want none: the engine merged", touches)
+	}
+
+	if used := h.mergesUsed(t, item); len(used) != 1 || used[0].Data["name"] != connGitHub ||
+		used[0].Actor != domain.EngineActor || used[0].Data["run_id"] != nil {
+		t.Errorf("connection.used of the merge %+v; want github only, by the engine, naming no run", used)
 	}
 }
 

@@ -90,6 +90,7 @@ func (c *CodeHost) PullRequest(_ context.Context, conn domain.ResolvedConnection
 
 	if sha, ok := c.moves[url]; ok {
 		pr.HeadSHA = sha
+
 		delete(c.moves, url)
 	}
 

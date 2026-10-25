@@ -497,9 +497,7 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output
 		err = e.gateReject(c, next, *v, &t)
 	case v != nil:
 		t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
-		err = e.mergeOnApproval(ctx, c, next, &t)
-
-		if err == nil {
+		if err = e.mergeOnApproval(ctx, c, next, &t); err == nil {
 			err = e.advance(next, c.item, c.agent.Name, &t)
 		}
 	default:

@@ -90,11 +90,11 @@ spec:
 		{"human station with a repository", repo, "{ id: merge, kind: human, action: merge }", ""},
 		{"human station without a repository", "", "{ id: merge, kind: human, action: merge }", ""},
 		{"gate station", repo, "{ id: merge, kind: agent, agent: worker, gate: { onReject: work }, action: merge }", ""},
-		{"agent station without a gate", repo, "{ id: merge, kind: agent, agent: worker, action: merge }", "schema"},
-		{"queue station", repo, "{ id: merge, kind: queue, action: merge }", "schema"},
-		{"done station", repo, "{ id: merge, kind: done, action: merge }", "schema"},
-		{"unknown action on a gate station", repo, "{ id: merge, kind: agent, agent: worker, gate: { onReject: work }, action: deploy }", "schema"},
-		{"unknown action", repo, "{ id: merge, kind: human, action: deploy }", "schema"},
+		{"agent station without a gate", repo, "{ id: merge, kind: agent, agent: worker, action: merge }", checkSchema},
+		{"queue station", repo, "{ id: merge, kind: queue, action: merge }", checkSchema},
+		{"done station", repo, "{ id: merge, kind: done, action: merge }", checkSchema},
+		{"unknown action on a gate station", repo, "{ id: merge, kind: agent, agent: worker, gate: { onReject: work }, action: deploy }", checkSchema},
+		{"unknown action", repo, "{ id: merge, kind: human, action: deploy }", checkSchema},
 	}
 
 	for _, tt := range tests {

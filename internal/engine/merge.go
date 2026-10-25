@@ -111,7 +111,7 @@ func (e *Engine) mergeOnApproval(ctx context.Context, c claimed, l domain.Line, 
 
 // mergeAll merges every pull request the item's outputs name (domain.Item.PullRequests) through
 // the line's code host connections, opened for by's merge of it, and returns one merged event
-// by by per pull request. It stops at the first refusal; the ones merged before it stay merged
+// by that actor per pull request. It stops at the first refusal; the ones merged before it stay merged
 // and are skipped when asked again.
 func (e *Engine) mergeAll(ctx context.Context, l domain.Line, it domain.Item, by domain.Actor, method string, at time.Time) ([]domain.Event, error) {
 	urls := it.PullRequests(l)
