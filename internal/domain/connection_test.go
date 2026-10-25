@@ -164,6 +164,27 @@ func TestConnectionKind_CheckValues(t *testing.T) {
 	}
 }
 
+func TestConnectionKind_WithDefaults(t *testing.T) {
+	t.Parallel()
+
+	values := map[string]string{fieldToken: "t0ken", "unknown": "kept"}
+
+	got := githubKind().WithDefaults(values)
+	want := map[string]string{fieldToken: "t0ken", fieldHost: hostGitHub, "unknown": "kept"}
+
+	if !maps.Equal(got, want) {
+		t.Errorf("WithDefaults = %v, want %v", got, want)
+	}
+
+	if _, ok := values[fieldHost]; ok {
+		t.Error("WithDefaults changed its argument")
+	}
+
+	if got := githubKind().WithDefaults(map[string]string{fieldHost: "ghe.example.com"}); got[fieldHost] != "ghe.example.com" {
+		t.Errorf("host = %q, want the value set over the default", got[fieldHost])
+	}
+}
+
 func TestConnectionKind_Render(t *testing.T) {
 	t.Parallel()
 

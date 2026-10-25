@@ -72,8 +72,10 @@ type harness struct {
 	gitlab    *porttest.CodeHost // the gitlab code host
 	// connections hold the test organization's connections (connections_test.go).
 	connections *porttest.Connections
-	line        domain.Line
-	logs        *logBuffer // what every engine of the harness logs
+	// minter mints the credentials of connections whose kind mints with mintAWS.
+	minter *porttest.Minter
+	line   domain.Line
+	logs   *logBuffer // what every engine of the harness logs
 
 	mu sync.Mutex
 	// codeConns are the connections merges get (engine.MergeConnections): by default one of a
@@ -159,6 +161,7 @@ func newHarness(t *testing.T, line domain.Line, run porttest.AgentFunc) *harness
 	}
 
 	h.connections = newConnections(t, h.tenancy)
+	h.minter = porttest.NewMinter(clock.Now)
 	h.e = h.engine(t, h.store)
 
 	return h
@@ -192,6 +195,7 @@ func (h *harness) engineWith(t *testing.T, store ports.Store, maxRuns int, lines
 		Secrets:     porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y", "MODEL_ACCESS": modelToken, "GIT_TOKEN": gitToken, "REPO_TOKEN": gitToken},
 		Connections: h.connections, CodeHosts: map[string]ports.CodeHost{codeHostGitHub: h.codehost, codeHostGitLab: h.gitlab},
 		MergeConnections: h.mergeConnections,
+		Minters:          map[string]ports.Minter{mintAWS: h.minter},
 		Logger:           slog.New(slog.NewJSONHandler(h.logs, nil)),
 	}, engine.Config{
 		Lines:           lines,

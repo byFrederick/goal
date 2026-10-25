@@ -514,6 +514,23 @@ func (k ConnectionKind) checkValueNames(fields map[string]string, secrets []stri
 	return errs
 }
 
+// WithDefaults is a copy of values (fields and secrets by field name) with k's defaults filling
+// the empty ones: the values a connection of k has, as its templates and its minter see them.
+func (k ConnectionKind) WithDefaults(values map[string]string) map[string]string {
+	out := maps.Clone(values)
+	if out == nil {
+		out = map[string]string{}
+	}
+
+	for _, f := range k.Spec.Fields {
+		if out[f.Name] == "" && f.Default != "" {
+			out[f.Name] = f.Default
+		}
+	}
+
+	return out
+}
+
 // Render makes what a run's box gets from a connection of k with values (fields and secrets by
 // field name; a kind's defaults fill empty ones) and minted (the values a kind with Mint minted
 // for the run). Errors name fields and variables, never values.

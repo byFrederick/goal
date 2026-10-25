@@ -103,8 +103,11 @@ type Deps struct {
 	// and MergeConnections the connections merges reach them with.
 	CodeHosts        map[string]ports.CodeHost
 	MergeConnections MergeConnections
-	Clock            ports.Clock
-	Logger           *slog.Logger // nil discards logs
+	// Minters are the minters by the name a connection kind gives (KindSpec.Mint): a run of a
+	// connection whose kind names one gets credentials minted for it; without one it cannot run.
+	Minters map[string]ports.Minter
+	Clock   ports.Clock
+	Logger  *slog.Logger // nil discards logs
 }
 
 func (d Deps) complete() bool {
@@ -183,6 +186,7 @@ type Engine struct {
 	secrets     ports.Secrets
 	connections ports.Connections
 	codehosts   map[string]ports.CodeHost
+	minters     map[string]ports.Minter
 	mergeWith   MergeConnections
 	clock       ports.Clock
 	log         *slog.Logger
@@ -240,7 +244,7 @@ func New(d Deps, cfg Config) (*Engine, error) {
 
 	return &Engine{
 		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, connections: d.Connections,
-		codehosts: d.CodeHosts, mergeWith: d.MergeConnections, clock: d.Clock, log: log, cfg: cfg, lines: lines,
+		codehosts: d.CodeHosts, minters: d.Minters, mergeWith: d.MergeConnections, clock: d.Clock, log: log, cfg: cfg, lines: lines,
 		active: map[domain.ItemID]*activeRun{}, exhausted: map[domain.FactoryID]bool{},
 	}, nil
 }

@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/byFrederick/goal/internal/domain"
 )
@@ -161,13 +162,12 @@ func (e *Engine) resolve(ctx context.Context, names []string, run domain.RunID) 
 			}
 		}
 
-		// Minting per-run credentials comes with ports.Minter (spec 4 §5.4).
-		if r.Kind.Spec.Mint != "" {
-			return nil, fmt.Errorf("connection %s: its kind %s mints its credentials (%s), which this goald does not do",
-				rc.name, r.Kind.Name, r.Kind.Spec.Mint)
+		minted, err := e.mint(ctx, r, run, &rc)
+		if err != nil {
+			return nil, err
 		}
 
-		if rc.RunConnection, err = r.Kind.Render(r.Values, nil); err != nil {
+		if rc.RunConnection, err = r.Kind.Render(r.Values, minted); err != nil {
 			return nil, fmt.Errorf("connection %s: %w", rc.name, err)
 		}
 
@@ -175,6 +175,38 @@ func (e *Engine) resolve(ctx context.Context, names []string, run domain.RunID) 
 	}
 
 	return out, nil
+}
+
+// mintMargin is how much longer than a run's task timeout minted credentials live (spec 4 §4.5).
+const mintMargin = 15 * time.Minute
+
+// mint mints r's credentials for run when its kind names a minter (spec 4 §5.4), from its values
+// with its kind's defaults, to live the task timeout and mintMargin more; nil when the kind mints
+// nothing. The minted values join rc's secrets, so they are scrubbed like the stored ones, and the
+// error is scrubbed of the stored ones.
+func (e *Engine) mint(ctx context.Context, r domain.ResolvedConnection, run domain.RunID, rc *runConnection) (map[string]string, error) {
+	name := r.Kind.Spec.Mint
+	if name == "" {
+		return nil, nil
+	}
+
+	m, ok := e.minters[name]
+	if !ok {
+		return nil, fmt.Errorf("connection %s: its kind %s mints with %q, which this goald has no minter for", rc.name, r.Kind.Name, name)
+	}
+
+	minted, _, err := m.Mint(ctx, r.Kind.WithDefaults(r.Values), run, e.cfg.TaskTimeout+mintMargin)
+	if err != nil {
+		return nil, fmt.Errorf("connection %s: mint: %w", rc.name, newScrubber(rc.secrets...).err(err))
+	}
+
+	for _, v := range minted {
+		if v != "" {
+			rc.secrets = append(rc.secrets, v)
+		}
+	}
+
+	return minted, nil
 }
 
 // addEnv adds rc's env to env, refusing a variable another connection of the run sets.

@@ -3,6 +3,7 @@ package ports
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/byFrederick/goal/internal/domain"
 )
@@ -67,4 +68,14 @@ type Connections interface {
 	// Open opens one connection for its test, whose outcome RecordTest records: its values, secret
 	// ones included, with no use recorded. ErrNotFound when there is none.
 	Open(ctx context.Context, name string) (domain.ResolvedConnection, error)
+}
+
+// Minter mints short-lived credentials for one run from a connection's stored values (spec 4
+// §5.4), so the stored ones never reach a box. A kind's mint names its adapter (aws-sts); the
+// minted values fill the kind's {{minted.<name>}} templates.
+type Minter interface {
+	// Mint returns values that live for about ttl (capped by the provider) for run, made from
+	// values (the connection's fields and secrets, its kind's defaults applied), and when they
+	// expire. Errors never hold a value.
+	Mint(ctx context.Context, values map[string]string, run domain.RunID, ttl time.Duration) (minted map[string]string, expires time.Time, err error)
 }

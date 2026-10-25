@@ -29,6 +29,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/moby/moby/client"
 
+	"github.com/byFrederick/goal/internal/adapters/awssts"
 	"github.com/byFrederick/goal/internal/adapters/docker"
 	"github.com/byFrederick/goal/internal/adapters/envsecrets"
 	"github.com/byFrederick/goal/internal/adapters/masterkey"
@@ -190,7 +191,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: docker.NewSandboxes(dockerClient, s.SandboxNetwork, log),
 		Contracts: defs, Secrets: secrets, Connections: connections, CodeHosts: codeHosts(s), MergeConnections: mergeWith, Clock: clock,
-		Logger: log,
+		Minters: minters(s), Logger: log,
 	}, engine.Config{
 		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxGateway, GatewayKeyRef: s.GatewayKeyRef, TaskEnv: s.TaskEnv,
 		MaxRuns: s.MaxRuns, RepositoryHosts: []string{s.GitHubWebHost}, SecretPolicy: policy,
@@ -314,8 +315,16 @@ func openConnections(ctx context.Context, store *postgres.Store, getenv func(str
 	return connections, nil
 }
 
-// connectionTransport carries every request goald makes for a connection (its test; later sync,
-// STS and embeddings): to public addresses only (egress.PublicDialer, threat row 4), unless
+// minters are the minters by the name connection kinds give them (mint): AWS STS for the aws and
+// bedrock kinds, over the connection transport.
+func minters(s settings) map[string]ports.Minter {
+	return map[string]ports.Minter{
+		"aws-sts": awssts.New(awssts.Config{HTTPClient: &http.Client{Transport: connectionTransport(s.AllowPrivateUpstreams)}}),
+	}
+}
+
+// connectionTransport carries every request goald makes for a connection (its test, STS and
+// embeddings; later sync): to public addresses only (egress.PublicDialer, threat row 4), unless
 // GOAL_ALLOW_PRIVATE_UPSTREAMS lets a laptop reach its own test servers. It uses no proxy, so a
 // proxy variable cannot route around the address check.
 func connectionTransport(allowPrivate bool) *http.Transport {
