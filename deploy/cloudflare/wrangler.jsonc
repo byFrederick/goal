@@ -1,0 +1,106 @@
+// Goal's control Worker on Cloudflare (spec 4 §5.12). A person deploys it with `wrangler deploy`
+// on Workers Paid, after terraform/ has made the bucket, DNS, the PlanetScale branch and the
+// Secrets Store secrets (docs/engineering/cloudflare-operations.md, bootstrap step 8); Terraform
+// owns the Workers route, so none is declared here. It creates nothing per organization. Images
+// build for linux/amd64 from this repository.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "goal",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+  // Every minute: goald keeps running whether or not anyone is looking.
+  "triggers": { "crons": ["* * * * *"] },
+  "containers": [
+    {
+      // goald with the web UI; next to the database (PlanetScale, us-east).
+      "class_name": "Goald",
+      "image": "../../cmd/goald/Dockerfile",
+      "image_build_context": "../..",
+      "instance_type": "standard-1",
+      "max_instances": 1,
+      "constraints": { "regions": ["ENAM"] }
+    },
+    {
+      "class_name": "Auth",
+      "image": "../../auth/Dockerfile",
+      "image_build_context": "../..",
+      "instance_type": "basic",
+      "max_instances": 1,
+      "constraints": { "regions": ["ENAM"] }
+    },
+    {
+      // One box per run: the image and the size are chosen at start (GOAL_AGENT_IMAGE names the
+      // image, goal-agent). No max_instances: goald's slots and GOAL_MAX_RUNS are the cap.
+      "class_name": "RunBox",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "goal-agent": { "dockerfile": "../../worker/Dockerfile", "build_context": "../.." }
+      }
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "GOALD", "class_name": "Goald" },
+      { "name": "AUTH", "class_name": "Auth" },
+      { "name": "BOXES", "class_name": "RunBox" },
+      { "name": "BOX_INDEX", "class_name": "BoxIndex" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Goald", "Auth", "RunBox", "BoxIndex"] }],
+  // Settings that are not secrets; src/env.ts lists which reach goald and which the auth service.
+  // GOAL_S3_ENDPOINT is `terraform output s3_endpoint`. Add GOAL_BOOTSTRAP_OWNER_EMAIL, the one
+  // address that may sign in first, before the first deploy.
+  "vars": {
+    "GOAL_PUBLIC_URL": "https://goal.byfrederick.work",
+    "GOAL_AUTH": "session",
+    "GOAL_AUTH_GOOGLE": "on",
+    "GOAL_AGENT_IMAGE": "goal-agent",
+    "GOAL_S3_BUCKET": "goal-production",
+    "GOAL_S3_ENDPOINT": "https://<account-id>.r2.cloudflarestorage.com",
+    "AWS_REGION": "auto",
+    "GOAL_EMBED_URL": "https://api.cloudflare.com/client/v4/accounts/<account-id>/ai/v1",
+    "GOAL_SMTP_FROM": "Goal <goal@byfrederick.work>",
+    "GOAL_LOG_FORMAT": "json"
+  },
+  // Platform secrets only (AGENTS.md rule 7): Terraform's goal-production-<NAME>, in the store of
+  // `terraform output secrets_store_id`; each container gets those terraform/secrets.tf's
+  // secret_consumers give it (src/env.ts). The database URLs follow spec 4 §5.12: port 5432,
+  // verify-full (with sslrootcert=system and pool_max_conns=8 for goald).
+  "secrets_store_secrets": [
+    { "binding": "GOAL_MASTER_KEYS", "store_id": "<secrets-store-id>", "secret_name": "goal-production-GOAL_MASTER_KEYS" },
+    { "binding": "GOAL_GATEWAY_KEY", "store_id": "<secrets-store-id>", "secret_name": "goal-production-GOAL_GATEWAY_KEY" },
+    { "binding": "GOAL_SANDBOX_KEY", "store_id": "<secrets-store-id>", "secret_name": "goal-production-GOAL_SANDBOX_KEY" },
+    {
+      "binding": "GOAL_AUTH_PROXY_SECRET",
+      "store_id": "<secrets-store-id>",
+      "secret_name": "goal-production-GOAL_AUTH_PROXY_SECRET"
+    },
+    { "binding": "GOAL_DATABASE_URL", "store_id": "<secrets-store-id>", "secret_name": "goal-production-GOAL_DATABASE_URL" },
+    {
+      "binding": "GOAL_MIGRATE_DATABASE_URL",
+      "store_id": "<secrets-store-id>",
+      "secret_name": "goal-production-GOAL_MIGRATE_DATABASE_URL"
+    },
+    { "binding": "GOAL_S3_ACCESS_KEY", "store_id": "<secrets-store-id>", "secret_name": "goal-production-GOAL_S3_ACCESS_KEY" },
+    { "binding": "GOAL_S3_SECRET_KEY", "store_id": "<secrets-store-id>", "secret_name": "goal-production-GOAL_S3_SECRET_KEY" },
+    { "binding": "GOAL_EMBED_KEY", "store_id": "<secrets-store-id>", "secret_name": "goal-production-GOAL_EMBED_KEY" },
+    {
+      "binding": "BETTER_AUTH_SECRET",
+      "store_id": "<secrets-store-id>",
+      "secret_name": "goal-production-BETTER_AUTH_SECRET"
+    },
+    {
+      "binding": "GOAL_AUTH_DATABASE_URL",
+      "store_id": "<secrets-store-id>",
+      "secret_name": "goal-production-GOAL_AUTH_DATABASE_URL"
+    },
+    { "binding": "GOOGLE_CLIENT_ID", "store_id": "<secrets-store-id>", "secret_name": "goal-production-GOOGLE_CLIENT_ID" },
+    {
+      "binding": "GOOGLE_CLIENT_SECRET",
+      "store_id": "<secrets-store-id>",
+      "secret_name": "goal-production-GOOGLE_CLIENT_SECRET"
+    },
+    { "binding": "GOAL_SMTP_URL", "store_id": "<secrets-store-id>", "secret_name": "goal-production-GOAL_SMTP_URL" }
+  ]
+}

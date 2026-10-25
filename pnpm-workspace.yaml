@@ -2,7 +2,15 @@ packages:
   - auth
   - web
   - worker
+  - deploy/cloudflare
   - packages/*
+
+# The only dependencies whose install scripts run (deploy/cloudflare's wrangler and its test
+# plugin): each checks its platform binary from the optional dependency, or fetches that same
+# package from the npm registry.
+allowBuilds:
+  esbuild: true
+  workerd: true
 
 # Better Auth is pinned exactly, once, for the auth service and (from 3-10) the web client, whose
 # requests must match the server's (ADR 0007); auth is its CLI, which generates the schema.

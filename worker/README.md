@@ -21,6 +21,8 @@ Debian 13 (trixie, slim) with, every version pinned in `worker/Dockerfile` and e
 
 It runs as uid 1000 (`node`, `HOME=/home/node`), works in `/workspace` and idles (`sleep infinity`) until goald execs into it. The filesystem is writable: an agent installs what it needs with mise, npm, pip or `go install`; the sandbox is deleted after the run.
 
+On Cloudflare (`internal/adapters/cloudflare`, `deploy/cloudflare`) the same image runs with the `durable_object` scheduling policy, which needs it built for linux/amd64 (wrangler does) and takes about 1.5 GB of the instance's disk: `standard-2` for `small`, `standard-3` for `medium`, `standard-4` for `large`. The control Worker replaces its `CMD` with an entrypoint that records the image's environment and working directory, then sleeps until the run's deadline, and runs every command under GNU coreutils' `timeout`, which Debian's coreutils provides here: the runtime's exec inherits neither the image's environment nor the box's (only `PATH`), and its kill reaches only the process it started, so the Worker gives each command the image's environment, then the box's, then its own, and lets `timeout` end the whole process group. uid 1000 still owns what the agent creates, but under that policy every process holds root's capabilities: the microVM is the boundary (spec 4 §11.3).
+
 ## Sandbox contract
 
 goald creates one sandbox per run (`ports.Sandboxes`) and execs, in order:

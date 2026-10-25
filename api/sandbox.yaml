@@ -1,0 +1,221 @@
+openapi: 3.1.0
+info:
+  title: Goal sandbox API
+  version: 1.0.0
+  summary: The control Worker's sandboxes, one container per agent run (spec 4 §5.1, ADR 0008)
+  description: |
+    The Cloudflare adapter of `ports.Sandboxes` (`internal/adapters/cloudflare`) is this API's
+    only client, and the control Worker (`deploy/cloudflare/`) its only server. goald reaches it
+    at `GOAL_SANDBOX_URL` (`http://sandbox.internal` from goald's container, a name only goald's
+    container resolves: the Worker's outbound handler answers it), with `GOAL_SANDBOX_KEY` as a
+    bearer token. A run's boxes never reach it.
+
+    The Worker keeps one Durable Object per run. Creating a sandbox starts the run's container
+    from one of the Worker's named images, with the internet on, and arms an alarm at the
+    deadline that destroys it even if no goald is left. A command's environment is the image's,
+    then the sandbox's `env`, then the command's own: never one of the Worker's bindings.
+servers:
+  - url: http://sandbox.internal
+security:
+  - sandboxKey: []
+paths:
+  /v1/sandboxes:
+    get:
+      operationId: listSandboxes
+      summary: Every sandbox the Worker holds, for the reaper
+      responses:
+        "200":
+          description: The sandboxes, live ones included
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sandboxes]
+                properties:
+                  sandboxes:
+                    type: array
+                    items: { $ref: "#/components/schemas/SandboxEntry" }
+        "401": { $ref: "#/components/responses/Error" }
+  /v1/sandboxes/{run}:
+    parameters:
+      - $ref: "#/components/parameters/Run"
+    put:
+      operationId: createSandbox
+      summary: Start the run's sandbox; a second call for the run returns the one the first started
+      description: |
+        The answer comes once the container runs and its environment has been read, so the first
+        command can follow at once. A second call keeps the first's spec (its env included) and
+        starts the container again only when it is no longer running.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SandboxSpec" }
+      responses:
+        "201":
+          description: Started
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SandboxEntry" }
+        "200":
+          description: The run's sandbox already existed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SandboxEntry" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "502": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteSandbox
+      summary: Destroy the run's sandbox, ending its commands; one that is gone is not an error
+      responses:
+        "204": { description: Gone }
+        "401": { $ref: "#/components/responses/Error" }
+  /v1/sandboxes/{run}/execs:
+    parameters:
+      - $ref: "#/components/parameters/Run"
+    post:
+      operationId: execInSandbox
+      summary: Run one command in the sandbox and stream how it goes
+      description: |
+        The Worker runs `timeout --kill-after=10 <timeout_s> <argv…>` (GNU coreutils, which the
+        image carries), so a timeout or a kill ends the command and every process it started.
+        The answer streams one JSON object per line: `{"o": "…"}` for each piece of standard
+        output (UTF-8 text) as it is written, then exactly one last line, either
+        `{"exit": …, "timed_out": …, "stderr": "…"}` or `{"error": "…"}` when the command's
+        outcome is unknown (the sandbox was deleted under it). A stream that ends without one of
+        those lost its outcome too.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Exec" }
+      responses:
+        "200":
+          description: The command runs
+          content:
+            application/x-ndjson:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ExecOutput"
+                  - $ref: "#/components/schemas/ExecEnd"
+                  - $ref: "#/components/schemas/ExecError"
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "502": { $ref: "#/components/responses/Error" }
+  /v1/sandboxes/{run}/execs/{exec}:
+    parameters:
+      - $ref: "#/components/parameters/Run"
+      - name: exec
+        in: path
+        required: true
+        description: The command's id, as its exec request gave it
+        schema: { type: string, pattern: "^[0-9a-f]{1,64}$" }
+    delete:
+      operationId: killExec
+      summary: Kill a running command and the processes it started
+      description: |
+        SIGTERM to the command's process group, SIGKILL ten seconds later. The client calls it
+        when it gives up on a command: the Worker does not learn that the stream's reader left.
+        A command that ended, or an unknown id, is not an error.
+      responses:
+        "204": { description: Killed, or not running }
+        "401": { $ref: "#/components/responses/Error" }
+components:
+  securitySchemes:
+    sandboxKey:
+      type: http
+      scheme: bearer
+      description: GOAL_SANDBOX_KEY, which goald and the Worker share (a Secrets Store secret)
+  parameters:
+    Run:
+      name: run
+      in: path
+      required: true
+      description: The run's id
+      schema: { type: string, pattern: "^[A-Za-z0-9-]{1,64}$" }
+  responses:
+    Error:
+      description: Refused, with the reason
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: { type: string }
+  schemas:
+    SandboxSpec:
+      type: object
+      required: [org, factory, item, station, agent, image, size, env, deadline]
+      additionalProperties: false
+      properties:
+        org: { type: string, minLength: 1, maxLength: 64 }
+        factory: { type: string, maxLength: 64 }
+        item: { type: string, maxLength: 64 }
+        station: { type: string, maxLength: 128 }
+        agent: { type: string, maxLength: 128 }
+        image:
+          type: string
+          description: The name of one of the Worker's images (wrangler's `containers[].images`), such as goal-agent
+        size:
+          type: string
+          enum: [small, medium, large]
+          description: standard-2 (1 vCPU, 6 GiB), standard-3 (2 vCPU, 8 GiB) or standard-4 (4 vCPU, 12 GiB)
+        env:
+          $ref: "#/components/schemas/Env"
+        deadline:
+          type: string
+          format: date-time
+          description: When the Worker destroys the sandbox if nobody has; in the future
+    SandboxEntry:
+      type: object
+      required: [run, org, deadline]
+      properties:
+        run: { type: string }
+        org: { type: string }
+        deadline: { type: string, format: date-time }
+    Env:
+      type: object
+      description: Variable names are `[A-Za-z_][A-Za-z0-9_]*`; no value holds a NUL
+      additionalProperties: { type: string }
+    Exec:
+      type: object
+      required: [id, argv]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: "^[0-9a-f]{1,64}$"
+          description: Chosen by the client, random; the kill names it
+        argv:
+          type: array
+          minItems: 1
+          items: { type: string }
+        env: { $ref: "#/components/schemas/Env" }
+        dir:
+          type: string
+          description: The working directory; empty or absent is the image's
+        timeout_s:
+          type: integer
+          minimum: 0
+          description: Seconds after which the command is killed and reported as timed out; 0 or absent is none
+    ExecOutput:
+      type: object
+      required: [o]
+      properties:
+        o: { type: string, description: The next piece of standard output }
+    ExecEnd:
+      type: object
+      required: [exit, timed_out, stderr]
+      properties:
+        exit: { type: integer, description: The exit code; meaningless when timed_out }
+        timed_out: { type: boolean }
+        stderr: { type: string, description: The last 8 KiB of standard error }
+    ExecError:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }

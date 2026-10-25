@@ -107,7 +107,11 @@ describe('loadSettings', () => {
     ['a short versioned secret', { BETTER_AUTH_SECRETS: `2:short,1:${secret}` }, 'version 2 must be at least 32 bytes'],
     ['a malformed versioned secret', { BETTER_AUTH_SECRETS: secret }, 'BETTER_AUTH_SECRETS: expected'],
     ['a repeated version', { BETTER_AUTH_SECRETS: `1:${secret},1:${secret}` }, 'version 1 is listed twice'],
-    ['a public listen address', { ...base, GOAL_AUTH_LISTEN: '0.0.0.0:8081' }, 'GOAL_AUTH_LISTEN must be loopback'],
+    [
+      'a listen address on one interface',
+      { ...base, GOAL_AUTH_LISTEN: '10.0.0.5:8081' },
+      'GOAL_AUTH_LISTEN must be loopback',
+    ],
     ['a malformed listen address', { ...base, GOAL_AUTH_LISTEN: '127.0.0.1' }, 'GOAL_AUTH_LISTEN: expected host:port'],
     ['http off loopback', { ...base, GOAL_PUBLIC_URL: 'http://goal.example.com' }, 'must be https unless'],
     [
@@ -180,12 +184,19 @@ describe('loadSettings', () => {
     expect(s.listen).toEqual({ host: '::1', port: 9081 });
   });
 
+  // On Cloudflare the service is a container of its own that only goald reaches, through the
+  // control Worker: it listens on every interface there, and the proxy secret keeps all else out.
+  it('accepts every interface for a container of its own', () => {
+    expect(loadSettings({ ...base, GOAL_AUTH_LISTEN: '0.0.0.0:8081' }).listen).toEqual({ host: '0.0.0.0', port: 8081 });
+    expect(loadSettings({ ...base, GOAL_AUTH_LISTEN: '[::]:8081' }).listen).toEqual({ host: '::', port: 8081 });
+  });
+
   it('lists every problem at once and never a secret value', () => {
     const leaked = 'leaked-secret-value';
     const got = problems({
       BETTER_AUTH_SECRET: leaked,
       GOAL_AUTH_PROXY_SECRET: proxySecret,
-      GOAL_AUTH_LISTEN: '0.0.0.0:1',
+      GOAL_AUTH_LISTEN: '192.0.2.1:1',
       GOAL_AUTH_GOOGLE: 'on',
       GOOGLE_CLIENT_SECRET: leaked,
     });

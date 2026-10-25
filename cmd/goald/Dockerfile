@@ -34,10 +34,11 @@ COPY web/ web/
 COPY --from=web /src/web/dist/ web/dist/
 RUN CGO_ENABLED=0 go build -trimpath -tags webui -ldflags="-s -w" -o /out/goald ./cmd/goald
 
-# Alpine for git (the runs' checkouts until they clone inside their box, spec 4 PR 4-7) and wget
-# (the health check).
+# Alpine for wget (the health check) and the CA bundle, which Go's system pool reads: a managed
+# PostgreSQL's verify-full (sslrootcert=system), R2 and every connection over TLS need it (spec 4
+# §5.12). Runs clone in their own box, so goald needs no git.
 FROM ${RUNTIME_IMAGE} AS runtime
-RUN apk add --no-cache ca-certificates git
+RUN apk add --no-cache ca-certificates
 COPY --from=build /out/goald /usr/local/bin/goald
 USER 65532:65532
 EXPOSE 8080 8090

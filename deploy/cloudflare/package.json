@@ -1,0 +1,20 @@
+{
+  "name": "@goal/cloudflare",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Goal's control Worker on Cloudflare: routes to the goald and auth containers and runs one sandbox Durable Object per agent run (spec 4 §5.12, ADR 0008)",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.2",
+    "@cloudflare/vitest-plugin": "1.4.2",
+    "@cloudflare/workers-types": "5.20261014.1",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5",
+    "wrangler": "4.151.0"
+  }
+}

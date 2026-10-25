@@ -1,0 +1,35 @@
+// The control Worker itself (src/index.ts) with stand-ins for goald's and the auth service's
+// images, for the topology check (topology.sh, wrangler dev): public requests, auth.internal and
+// sandbox.internal from goald's container, gateway.internal from a box.
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "goal-topology",
+  "main": "../../src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "containers": [
+    { "class_name": "Goald", "image": "./echo.Dockerfile", "instance_type": "standard-1", "max_instances": 1 },
+    { "class_name": "Auth", "image": "./echo.Dockerfile", "instance_type": "basic", "max_instances": 1 },
+    {
+      "class_name": "RunBox",
+      "scheduling_policy": "durable_object",
+      "images": { "goal-agent": { "dockerfile": "../sandboxtest/box.Dockerfile" } }
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "GOALD", "class_name": "Goald" },
+      { "name": "AUTH", "class_name": "Auth" },
+      { "name": "BOXES", "class_name": "RunBox" },
+      { "name": "BOX_INDEX", "class_name": "BoxIndex" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Goald", "Auth", "RunBox", "BoxIndex"] }],
+  "vars": {
+    "GOAL_PUBLIC_URL": "https://goal.example.com",
+    "GOAL_MASTER_KEYS": "k1:topology-only",
+    "GOAL_DATABASE_URL": "postgres://goal_app:topology-only@db.example.com:5432/goal",
+    "BETTER_AUTH_SECRETS": "1:topology-only-better-auth-secret",
+    "GOAL_AUTH_PROXY_SECRET": "topology-only-proxy-secret",
+    "UNLISTED_SETTING": "never-in-a-container"
+  }
+}

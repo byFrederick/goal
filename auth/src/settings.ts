@@ -9,7 +9,10 @@ export interface VersionedSecret {
 }
 
 export interface Settings {
-  /** GOAL_AUTH_LISTEN: loopback only; goald's /api/auth proxy is the only way in. */
+  /**
+   * GOAL_AUTH_LISTEN: loopback beside goald, or every interface in a container of its own that
+   * only goald reaches (Cloudflare); goald's /api/auth proxy is the only way in.
+   */
   listen: { host: string; port: number };
   /** GOAL_PUBLIC_URL, Better Auth's baseURL and only trusted origin: the origin people open. */
   publicURL: string;
@@ -127,8 +130,13 @@ function parseListen(value: string, problems: string[]): Settings['listen'] | un
     return undefined;
   }
   const host = m[1].replace(/^\[(.*)\]$/, '$1');
-  if (!isLoopback(host)) {
-    problems.push('GOAL_AUTH_LISTEN must be loopback (127.0.0.1, [::1] or localhost): goald proxies to it');
+  // Every interface is for a container of the service's own that only goald reaches (on
+  // Cloudflare, through the control Worker); there the proxy secret is what keeps all else out.
+  if (!isLoopback(host) && host !== '0.0.0.0' && host !== '::') {
+    problems.push(
+      'GOAL_AUTH_LISTEN must be loopback (127.0.0.1, [::1] or localhost), or every interface (0.0.0.0, [::]) in a ' +
+        'container that only goald reaches: goald proxies to it',
+    );
     return undefined;
   }
   return { host, port };

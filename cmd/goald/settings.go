@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/byFrederick/goal/internal/adapters/cloudflare"
 	"github.com/byFrederick/goal/internal/adapters/docker"
 	"github.com/byFrederick/goal/internal/adapters/openaiembed"
 	"github.com/byFrederick/goal/internal/adapters/postgres"
@@ -95,6 +96,13 @@ type settings struct {
 	// agent image this repository builds, task worker:image); a definition's runtime.image, a
 	// removed key (field-removed), is ignored.
 	AgentImage string
+	// Sandbox is where runs' sandboxes run (GOAL_SANDBOX, default docker): docker, on this
+	// machine's Docker; cloudflare, through the control Worker's sandbox API at SandboxURL
+	// (GOAL_SANDBOX_URL, http://sandbox.internal from goald's container) with SandboxKey
+	// (GOAL_SANDBOX_KEY), both required then (spec 4 §5.12).
+	Sandbox    sandboxBackend
+	SandboxURL string
+	SandboxKey string
 	// SandboxNetwork is the Docker network sandboxes run on (GOAL_SANDBOX_NETWORK,
 	// default goal_agents): compose.yaml's agents network, whose goal-egress service is their
 	// only way out (ADR 0009 and its phase 4 amendment).
@@ -135,6 +143,9 @@ const (
 	schemeHTTPS    = "https"
 	// sandboxNetworkEnv names the agents' network (compose.yaml's agents).
 	sandboxNetworkEnv = "GOAL_SANDBOX_NETWORK"
+	sandboxEnv        = "GOAL_SANDBOX"
+	sandboxURLEnv     = "GOAL_SANDBOX_URL"
+	sandboxKeyEnv     = "GOAL_SANDBOX_KEY"
 
 	embedURLEnv   = "GOAL_EMBED_URL"
 	embedModelEnv = "GOAL_EMBED_MODEL"
@@ -280,10 +291,35 @@ func knowledgeSettings(s *settings, or func(name, def string) string) []error {
 	return errs
 }
 
-// sandboxSettings reads GOAL_SANDBOX_NETWORK, checks GOAL_GATEWAY_URL as containers are given
-// its path, and lists the removed settings still set.
+// sandboxBackend is where runs' sandboxes run (GOAL_SANDBOX).
+type sandboxBackend string
+
+const (
+	sandboxDocker     sandboxBackend = "docker"
+	sandboxCloudflare sandboxBackend = "cloudflare"
+)
+
+// sandboxSettings reads GOAL_SANDBOX with its settings, checks GOAL_GATEWAY_URL as containers are
+// given its path, and lists the removed settings still set.
 func sandboxSettings(s *settings, getenv func(string) string, or func(name, def string) string) []error {
+	var errs []error
+
 	s.SandboxNetwork = or(sandboxNetworkEnv, docker.DefaultNetwork)
+	s.SandboxURL, s.SandboxKey = or(sandboxURLEnv, ""), or(sandboxKeyEnv, "")
+
+	switch backend := sandboxBackend(or(sandboxEnv, string(sandboxDocker))); backend {
+	case sandboxDocker:
+		s.Sandbox = backend
+	case sandboxCloudflare:
+		s.Sandbox = backend
+
+		if _, err := cloudflare.New(cloudflare.Config{URL: s.SandboxURL, Key: s.SandboxKey}, slog.New(slog.DiscardHandler)); err != nil {
+			errs = append(errs, fmt.Errorf("GOAL_SANDBOX=cloudflare needs %s, the control Worker's sandbox API (http://sandbox.internal), and %s: %w",
+				sandboxURLEnv, sandboxKeyEnv, err))
+		}
+	default:
+		errs = append(errs, fmt.Errorf("%s %q is not docker or cloudflare", sandboxEnv, string(backend)))
+	}
 
 	for _, r := range removedSettings {
 		if strings.TrimSpace(getenv(r.name)) != "" {
@@ -292,10 +328,10 @@ func sandboxSettings(s *settings, getenv func(string) string, or func(name, def 
 	}
 
 	if u, err := url.Parse(s.GatewayURL); err != nil || (u.Scheme != schemeHTTP && u.Scheme != schemeHTTPS) || u.Host == "" || u.Path == "" || u.RawQuery != "" {
-		return []error{fmt.Errorf("%s %q is not an http(s) URL with a path and no query, such as http://127.0.0.1:8080/mcp", gatewayURLEnv, s.GatewayURL)}
+		errs = append(errs, fmt.Errorf("%s %q is not an http(s) URL with a path and no query, such as http://127.0.0.1:8080/mcp", gatewayURLEnv, s.GatewayURL))
 	}
 
-	return nil
+	return errs
 }
 
 // allowPrivateEnv lets connection requests reach private addresses (spec 4 §5.9).
@@ -379,13 +415,16 @@ func authSettings(s *settings, or func(name, def string) string) []error {
 	return errs
 }
 
-// authUpstream parses GOAL_AUTH_UPSTREAM: an http origin on a loopback address, since the
-// identity service listens on loopback only and the proxy hands it people's cookies.
+// authUpstream parses GOAL_AUTH_UPSTREAM: an http origin on a loopback address, since the proxy
+// hands the identity service people's cookies, or on a name under .internal, which never resolves
+// on the internet: on Cloudflare the control Worker answers auth.internal inside goald's container
+// and hands the request to the auth service's (spec 4 §5.12).
 func authUpstream(raw string) (*url.URL, error) {
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != schemeHTTP || u.Host == "" || !isLoopback(u.Hostname()) || strings.TrimSuffix(u.Path, "/") != "" ||
-		u.RawQuery != "" || u.Fragment != "" || u.User != nil {
-		return nil, fmt.Errorf("%s %q is not an http origin on a loopback address, such as %s", upstreamEnv, raw, defaultAuthURL)
+	local := err == nil && (isLoopback(u.Hostname()) || strings.HasSuffix(strings.ToLower(u.Hostname()), ".internal"))
+
+	if !local || u.Scheme != schemeHTTP || strings.TrimSuffix(u.Path, "/") != "" || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+		return nil, fmt.Errorf("%s %q is not an http origin on a loopback address or a .internal name, such as %s", upstreamEnv, raw, defaultAuthURL)
 	}
 
 	u.Path = ""

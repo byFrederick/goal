@@ -99,7 +99,7 @@ These keep the specs from colliding. A spec that needs to break one says so in i
 | `internal/knowledge` | 4 | `domain`, `ports`, `golang.org/x/net/html` | `knowledge` rule (spec 4 §5.11) |
 | `internal/adapters/masterkey`, `awssts`, `openaiembed`, `gitdocs`, `confluence`, `gitlab`, `cloudflare` | 4 | own deps | adapters rule |
 | `internal/jonah` | 5 | `domain`, `ports` | `jonah` rule: no adapters, engine, `api` (it reaches the engine and authoring through interfaces it declares) |
-| `deploy/cloudflare/` (control Worker, TypeScript) | 4 | Workers runtime, `@cloudflare/containers` | Biome; the only Cloudflare-specific code besides `internal/adapters/cloudflare` |
+| `deploy/cloudflare/` (control Worker, TypeScript; pnpm workspace package `@goal/cloudflare`) | 4 | the Workers runtime's own `ctx.container` (no `@cloudflare/containers`); wrangler, `@cloudflare/vitest-plugin` for tests | Biome; the only Cloudflare-specific code besides `internal/adapters/cloudflare`; its contract with the adapter is `api/sandbox.yaml` |
 
 A adds one package, `internal/retention` (A6: the purge job of deleted organizations; no-auth). Phase 3 adds no Go package under `internal/` (its code lives in `internal/api` and `internal/adapters/postgres`) and no `internal/adapters/oidc`. The `api` rule also denies `factorymodel` and `builder` in 2.2 (not `authoring`, whose request and result types `api.Definitions` names, B PR 9), and `connkind` and `knowledge` when phase 4 adds them (handlers reach them through interfaces declared in `internal/api`). The `engine` rule should become an allow-list (`domain`, `ports` only), since a deny-list misses the new core packages. Each new row goes into `docs/engineering/architecture.md`'s import table in the PR that adds the package.
 

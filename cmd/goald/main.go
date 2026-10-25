@@ -1,10 +1,11 @@
 // Command goald is Goal's daemon: it runs the current definition version of every factory on one
 // flow engine, serves the HTTP API (/v1/) and the gateway agents use (/mcp and /run, on a listener of
-// its own with GOAL_GATEWAY_LISTEN), and runs every agent run in a sandbox of its own in Docker.
+// its own with GOAL_GATEWAY_LISTEN), and runs every agent run in a sandbox of its own: in Docker,
+// or on Cloudflare Containers through the control Worker (GOAL_SANDBOX).
 //
 // All wiring happens here, by hand: PostgreSQL (store, definition versions, item and definition
 // notices, connections), the bucket (definition file content), environment secrets, GitHub and
-// GitLab (merges), Docker's sandboxes, the system clock, the engine, the gateway, definition
+// GitLab (merges), the sandboxes (docker or cloudflare), the system clock, the engine, the gateway, definition
 // authoring, the API and its stream feed. Configuration comes from the environment; settings.go
 // lists every variable. goald keeps nothing another instance would need: work state, connections
 // and definition versions are in PostgreSQL, file content is in the bucket, and its runs'
@@ -30,6 +31,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/byFrederick/goal/internal/adapters/awssts"
+	"github.com/byFrederick/goal/internal/adapters/cloudflare"
 	"github.com/byFrederick/goal/internal/adapters/confluence"
 	"github.com/byFrederick/goal/internal/adapters/docker"
 	"github.com/byFrederick/goal/internal/adapters/envsecrets"
@@ -154,11 +156,11 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Clock:       clock,
 	})
 
-	dockerClient, err := containers(ctx)
+	boxes, err := sandboxes(ctx, s, log)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = dockerClient.Close() }()
+	defer boxes.close()
 
 	// The engine is built after the definitions it reads; the load hook reaches it through eng.
 	var eng *engine.Engine
@@ -166,12 +168,6 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	defs := definitions.New(definitionStore, store, func(_ context.Context, lines []domain.Line) error {
 		return eng.SetLines(lines)
 	}, definitions.Config{CacheBytes: s.DefinitionCacheBytes}, log)
-
-	// Boxes reach goald's gateway through the egress proxy, at the gateway's paths.
-	boxGateway, err := docker.BoxGatewayURL(s.GatewayURL)
-	if err != nil {
-		return err
-	}
 
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Connections: connections, Events: store, Clock: clock, Logger: log,
@@ -183,13 +179,14 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	// The engine runs each claim in a sandbox with the run's connections, merges with the
 	// factory's code host connections and, at its start and every ReapEvery, deletes the
-	// sandboxes of runs that are over, whichever goald on this Docker host started them.
+	// sandboxes of runs that are over, whichever goald on this Docker host or this Worker
+	// started them.
 	eng, err = engine.New(engine.Deps{
-		Store: store, Orgs: store, Sandboxes: docker.NewSandboxes(dockerClient, s.SandboxNetwork, log),
+		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
 		Contracts: defs, Secrets: secrets, Connections: connections, CodeHosts: codeHosts(s.AllowPrivateUpstreams), Clock: clock,
 		Minters: minters(s), Logger: log,
 	}, engine.Config{
-		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxGateway, GatewayKeyRef: s.GatewayKeyRef, MaxRuns: s.MaxRuns,
+		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxes.gateway, GatewayKeyRef: s.GatewayKeyRef, MaxRuns: s.MaxRuns,
 	})
 	if err != nil {
 		return err
@@ -350,20 +347,47 @@ func connectionTransport(allowPrivate bool) *http.Transport {
 	}
 }
 
-// containers connects to Docker. The agents' network and its egress proxy are compose.yaml's
-// (ADR 0009 and its phase 4 amendment); a container that would run without them says so.
-func containers(ctx context.Context) (*client.Client, error) {
+// runBoxes are the runs' sandboxes as GOAL_SANDBOX says, with the gateway URL their boxes are
+// given and what closes them at the end.
+type runBoxes struct {
+	sandboxes ports.Sandboxes
+	gateway   string
+	close     func()
+}
+
+// sandboxes wires the runs' sandboxes (spec 4 §5.1). On Docker, boxes reach the gateway through
+// the egress proxy at its paths: the agents' network and the proxy are compose.yaml's (ADR 0009
+// and its phase 4 amendment), and a box that would run without them says so. On Cloudflare the
+// control Worker runs them, and they reach the gateway at GOAL_GATEWAY_URL as it is.
+func sandboxes(ctx context.Context, s settings, log *slog.Logger) (runBoxes, error) {
+	if s.Sandbox == sandboxCloudflare {
+		cf, err := cloudflare.New(cloudflare.Config{URL: s.SandboxURL, Key: s.SandboxKey}, log)
+		if err != nil {
+			return runBoxes{}, err
+		}
+
+		return runBoxes{sandboxes: cf, gateway: s.GatewayURL, close: func() {}}, nil
+	}
+
 	dockerClient, err := client.New(client.FromEnv)
 	if err != nil {
-		return nil, fmt.Errorf("docker: %w", err)
+		return runBoxes{}, fmt.Errorf("docker: %w", err)
 	}
 
 	if _, err := dockerClient.Ping(ctx, client.PingOptions{}); err != nil {
 		_ = dockerClient.Close()
-		return nil, fmt.Errorf("docker is not reachable: %w", err)
+		return runBoxes{}, fmt.Errorf("docker is not reachable: %w", err)
 	}
 
-	return dockerClient, nil
+	gw, err := docker.BoxGatewayURL(s.GatewayURL)
+	if err != nil {
+		_ = dockerClient.Close()
+		return runBoxes{}, err
+	}
+
+	return runBoxes{
+		sandboxes: docker.NewSandboxes(dockerClient, s.SandboxNetwork, log), gateway: gw, close: func() { _ = dockerClient.Close() },
+	}, nil
 }
 
 // httpServers are goald's HTTP servers: the main listener and, with GOAL_GATEWAY_LISTEN, the

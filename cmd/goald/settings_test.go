@@ -147,6 +147,33 @@ func TestSettings_TheCutoverIgnoresTheEnvironmentCredentials(t *testing.T) {
 	}
 }
 
+// On Cloudflare (spec 4 §5.12) runs go to the control Worker's sandbox API, and the auth service
+// is the Worker's auth.internal: a name under .internal, which only the Worker answers inside its
+// containers.
+func TestSettings_Cloudflare(t *testing.T) {
+	t.Parallel()
+
+	s, err := settingsFrom(envOf(map[string]string{
+		sandboxEnv: string(sandboxCloudflare), sandboxURLEnv: "http://sandbox.internal", sandboxKeyEnv: "sandbox-key", upstreamEnv: "http://auth.internal",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if s.Sandbox != sandboxCloudflare || s.SandboxURL != "http://sandbox.internal" || s.SandboxKey != "sandbox-key" {
+		t.Errorf("sandbox %q at %q (key set %v); want cloudflare at http://sandbox.internal", s.Sandbox, s.SandboxURL, s.SandboxKey != "")
+	}
+
+	if s.AuthUpstream.String() != "http://auth.internal" {
+		t.Errorf("upstream = %s, want http://auth.internal", s.AuthUpstream)
+	}
+
+	local, err := settingsFrom(envOf(nil))
+	if err != nil || local.Sandbox != sandboxDocker {
+		t.Errorf("default sandboxes = %q, %v; want docker", local.Sandbox, err)
+	}
+}
+
 // Sign-in by default (spec 3 §14, PR 3-16; GOAL_AUTH=none only when asked for), the identity
 // service beside goald on loopback, no proxy believed, and the public origin the listen address,
 // over http.
@@ -288,6 +315,14 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 		{name: "Google neither on nor off", env: map[string]string{googleEnv: "yes"}, want: googleEnv},
 		{name: "unknown auth mode", env: map[string]string{authEnv: "off"}, want: authEnv},
 		{name: "auth service off this machine", env: map[string]string{upstreamEnv: "http://auth.example.com:8081"}, want: upstreamEnv},
+		{name: "auth service on a name that only ends in internal", env: map[string]string{upstreamEnv: "http://authinternal"}, want: upstreamEnv},
+		{name: "an unknown sandbox backend", env: map[string]string{sandboxEnv: "kubernetes"}, want: sandboxEnv},
+		{name: "Cloudflare sandboxes without their API", env: map[string]string{sandboxEnv: string(sandboxCloudflare), sandboxKeyEnv: "k"}, want: sandboxURLEnv},
+		{name: "Cloudflare sandboxes without their key", env: map[string]string{sandboxEnv: string(sandboxCloudflare), sandboxURLEnv: "http://sandbox.internal"}, want: sandboxKeyEnv},
+		{
+			name: "a sandbox API that is not an origin", env: map[string]string{sandboxEnv: string(sandboxCloudflare), sandboxURLEnv: "sandbox.internal", sandboxKeyEnv: "k"},
+			want: sandboxURLEnv,
+		},
 		{name: "auth service over https", env: map[string]string{upstreamEnv: "https://127.0.0.1:8081"}, want: upstreamEnv},
 		{name: "auth service with a path", env: map[string]string{upstreamEnv: "http://127.0.0.1:8081/api/auth"}, want: upstreamEnv},
 		{name: "auth service with a user", env: map[string]string{upstreamEnv: "http://u:p@127.0.0.1:8081"}, want: upstreamEnv}, //nolint:gosec // a test URL

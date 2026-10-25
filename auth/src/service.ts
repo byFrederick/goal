@@ -18,7 +18,7 @@ export interface Service {
  * startService starts the auth service from env, refusing (with SettingsError, RoleError or
  * Better Auth's schema mismatch) before it serves anything: its settings must hold, it must
  * connect as a role that can do no more than Better Auth's DML, and the database must hold the
- * schema this Better Auth expects (goose migrations 00040 on). It then serves on loopback. Mail goes
+ * schema this Better Auth expects (goose migrations 00040 on). It then serves on GOAL_AUTH_LISTEN. Mail goes
  * through mailer, or else the SMTP server of GOAL_SMTP_URL.
  */
 export async function startService(env: Env, log: Logger, mailer?: Mailer): Promise<Service> {

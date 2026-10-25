@@ -1,0 +1,27 @@
+// The Worker as Vitest runs it (test/worker.ts): no containers, stand-ins instead, and settings
+// that stand for goald's and the auth service's, platform secrets among them.
+{
+  "name": "goal-test",
+  "main": "worker.ts",
+  "compatibility_date": "2026-10-01",
+  "durable_objects": {
+    "bindings": [
+      { "name": "GOALD", "class_name": "Goald" },
+      { "name": "AUTH", "class_name": "Auth" },
+      { "name": "BOXES", "class_name": "RunBox" },
+      { "name": "BOX_INDEX", "class_name": "BoxIndex" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Goald", "Auth", "RunBox", "BoxIndex"] }],
+  "vars": {
+    "GOAL_SANDBOX_KEY": "sandbox-key-for-tests-0123456789abcdef",
+    "GOAL_MASTER_KEYS": "k1:master-key-for-tests",
+    "GOAL_GATEWAY_KEY": "gateway-key-for-tests",
+    "GOAL_AUTH_PROXY_SECRET": "proxy-secret-for-tests",
+    "BETTER_AUTH_SECRETS": "1:better-auth-secret-for-tests",
+    "GOAL_DATABASE_URL": "postgres://goal_app:app-password-for-tests@db.example.com:5432/goal",
+    "GOAL_AUTH_DATABASE_URL": "postgres://goal_auth:auth-password-for-tests@db.example.com:5432/goal",
+    "GOAL_PUBLIC_URL": "https://goal.example.com",
+    "UNLISTED_SETTING": "never-in-a-container"
+  }
+}
