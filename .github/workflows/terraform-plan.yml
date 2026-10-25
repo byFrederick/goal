@@ -1,0 +1,153 @@
+# The plan of every pull request that changes terraform/ (ADR 0010, decision 2): task tf:check, then
+# task tf:plan against production's R2 state with the credentials of the GitHub environment
+# production (ADR 0010, amendment: one environment for plan and apply), posted as one pull request
+# comment that every push updates. It changes nothing: it only plans, and -lock=false keeps a pull
+# request's plan from holding the state lock against an apply.
+# Only branches of this repository get a plan, never a fork (ADR 0010 rejects the fork trigger).
+# Until the owner has done bootstrap step 13 (docs/engineering/cloudflare-operations.md), the job
+# fails at the Google step: the environment's variables and the federation do not exist yet.
+# Hardening (github-actions-hardening skill): actions pinned to commit SHAs, a read-only token that
+# the job widens only by id-token: write (the OIDC exchange with Google) and pull-requests: write
+# (the comment), no Google key or credentials file, secrets only through env:, the age key in a
+# mode-0600 file and never echoed, no ${{ }} expressions inside run scripts, superseded plans
+# cancelled. Nothing here prints outputs, decrypts the SOPS file or dumps the environment: the plan
+# shows sensitive values as (sensitive value), and GitHub masks every environment secret in the log.
+name: terraform-plan
+
+on:
+  pull_request:
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform-plan.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    name: terraform plan
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # the OIDC token google-github-actions/auth exchanges
+      pull-requests: write # the one plan comment
+    env:
+      TF_IN_AUTOMATION: "true"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+        with:
+          version: 2026.10.3
+      - uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
+        with:
+          version: 3.46.1
+          checksum: 8220f1b4563a5bed932348b7350aafba66e1100e90bd411e4bcda4fe80de08f1 # task_linux_amd64.tar.gz
+      - name: fmt, validate, tflint, terraform test (offline, no credentials)
+        id: check
+        run: task tf:check
+      # The job's OIDC token for the terraform-plan service account's access token (Workload
+      # Identity Federation, terraform/ci.tf): no key, no credentials file, no gcloud variables.
+      - name: Google access token through Workload Identity Federation
+        id: google
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GOAL_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GOAL_GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: The age key for terraform/secrets/, in a mode-0600 file
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          key_file="$RUNNER_TEMP/sops-age-key.txt"
+          umask 077
+          printf '%s\n' "$SOPS_AGE_KEY" > "$key_file"
+          chmod 600 "$key_file"
+          printf 'SOPS_AGE_KEY_FILE=%s\n' "$key_file" >> "$GITHUB_ENV"
+      - name: terraform plan of production (no lock)
+        id: plan
+        shell: bash
+        env:
+          GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.google.outputs.access_token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GOAL_TF_STATE_ACCESS_KEY: ${{ secrets.GOAL_TF_STATE_ACCESS_KEY }}
+          GOAL_TF_STATE_SECRET_KEY: ${{ secrets.GOAL_TF_STATE_SECRET_KEY }}
+          PLANETSCALE_SERVICE_TOKEN_ID: ${{ secrets.PLANETSCALE_SERVICE_TOKEN_ID }}
+          PLANETSCALE_SERVICE_TOKEN: ${{ secrets.PLANETSCALE_SERVICE_TOKEN }}
+        # --silent keeps task's own command echo out of the comment; terraform's output stays.
+        run: |
+          set +e -o pipefail
+          task --silent tf:plan -- -lock=false -input=false -no-color 2>&1 | tee "$RUNNER_TEMP/plan.txt"
+          exit "${PIPESTATUS[0]}"
+      # Runs whenever the job was not cancelled, so a failed check or plan replaces the last plan
+      # in the comment with what failed instead of leaving a stale one.
+      - name: Post the plan as the pull request's one plan comment
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+          PLAN_OUTCOME: ${{ steps.plan.outcome }}
+        run: |
+          marker='<!-- goal:terraform-plan -->'
+          plan_file="$RUNNER_TEMP/plan.txt"
+          body="$RUNNER_TEMP/plan-comment.md"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          # GitHub refuses a comment over 65,536 characters: keep the plan well under it.
+          max_bytes=60000
+
+          case "$PLAN_OUTCOME" in
+            success) status="succeeded" ;;
+            failure) status="failed" ;;
+            *) status="did not run (task tf:check: $CHECK_OUTCOME)" ;;
+          esac
+          summary=""
+          if [ -s "$plan_file" ]; then
+            summary="$(grep -m1 -E '^(Plan: |No changes\.|Error: |Changes to Outputs:)' "$plan_file" || true)"
+          fi
+
+          {
+            printf '%s\n' "$marker"
+            printf '### terraform plan of production %s\n\n' "$status"
+            printf 'Commit %s · [workflow run](%s)\n\n' "$HEAD_SHA" "$run_url"
+            if [ -n "$summary" ]; then
+              printf '**%s**\n\n' "$summary"
+            fi
+            if [ -s "$plan_file" ]; then
+              printf '<details><summary>Plan output</summary>\n\n````text\n'
+              if [ "$(wc -c < "$plan_file")" -gt "$max_bytes" ]; then
+                # Whole lines only, so no character is cut in half.
+                head -c "$max_bytes" "$plan_file" | sed '$d'
+                printf '````\n\n**Truncated:** the plan is longer than a comment can hold; the whole plan is in the [workflow run](%s).\n' "$run_url"
+              else
+                cat "$plan_file"
+                [ -z "$(tail -c 1 "$plan_file")" ] || printf '\n'
+                printf '````\n'
+              fi
+              printf '\n</details>\n'
+            else
+              printf 'No plan output: see the [workflow run](%s).\n' "$run_url"
+            fi
+          } > "$body"
+
+          comment_id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- goal:terraform-plan -->"))) | .id' \
+            | head -n 1)"
+          if [ -n "$comment_id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" -F "body=@$body" > /dev/null
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -F "body=@$body" > /dev/null
+          fi

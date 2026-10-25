@@ -33,7 +33,7 @@ Any branch pushed to this repository can rewrite the plan workflow and get `prod
 Three changes, in order:
 
 1. The federation, the CI credential path of the `tf:*` tasks, the runbook's list of GitHub environment secrets, and this ADR. AGENTS.md rule 8 still says only the owner applies, and the owner applies the federation resources.
-2. The plan workflow (`.github/workflows/terraform-plan.yml`).
+2. The plan workflow ([`.github/workflows/terraform-plan.yml`](../../.github/workflows/terraform-plan.yml)). *Done:* it runs on pull requests that touch `terraform/` or the workflow, from this repository only, in `production`, and keeps one plan comment per pull request up to date. Its first run needs bootstrap step 13.
 3. The apply workflow (`.github/workflows/terraform-apply.yml`). In the same pull request, AGENTS.md rule 8, the runbook's Deploys section and the `tf:apply` comments in `Taskfile.yml` change to say that the apply-on-merge workflow applies and that agents never run `tf:apply`.
 
 Until step 3 merges, the rule in force is today's: only the owner applies, or the coordinating agent the owner authorizes for that change.
@@ -41,6 +41,6 @@ Until step 3 merges, the rule in force is today's: only the owner applies, or th
 ## Rejected
 
 - **One environment with the write credentials for both jobs: accepted on 2026-10-25.** Rejected at first because a branch's plan job could then change production, not only read it. The owner accepted it (amendment above): only the owner and the factory push branches here.
-- **A Google service account key in a secret.** It is long-lived and can be copied. Federation issues short-lived tokens bound to this repository and its environments.
+- **A Google service account key in a secret.** It is long-lived and can be copied. Federation issues short-lived tokens bound to this repository and its `production` environment.
 - **Plans only after merge.** Reviewers need the plan before they merge, not after.
 - **`pull_request_target` for forks.** It would run untrusted code with the credentials. Forks get no plan; a maintainer pushes the change to a branch here.
