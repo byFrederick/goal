@@ -42,12 +42,25 @@ type Config struct {
 // killLimit bounds the kill a cancelled command's Process sends after its caller left.
 const killLimit = 30 * time.Second
 
+// An exec stream cut before the command's outcome is attached again from the output already read,
+// at most maxAttaches times, after attachWait (default) doubling each time: a long command must
+// survive a connection Cloudflare drops on the way (spec 4 §5.12 check 4).
+const (
+	maxAttaches       = 5
+	defaultAttachWait = time.Second
+)
+
+// errCut is a stream that ended before the command's outcome.
+var errCut = errors.New("the stream ended without the command's outcome")
+
 // Sandboxes is ports.Sandboxes on the control Worker. It is safe for concurrent use.
 type Sandboxes struct {
 	base   *url.URL
 	key    string
 	client *http.Client
 	log    *slog.Logger
+	// attachWait is the pause before the first attach of a cut exec stream; it doubles each time.
+	attachWait time.Duration
 }
 
 // New returns sandboxes on the Worker cfg names.
@@ -63,7 +76,7 @@ func New(cfg Config, log *slog.Logger) (*Sandboxes, error) {
 
 	u.Path = strings.TrimSuffix(u.Path, "/")
 
-	return &Sandboxes{base: u, key: cfg.Key, client: cmp.Or(cfg.Client, &http.Client{}), log: log}, nil
+	return &Sandboxes{base: u, key: cfg.Key, client: cmp.Or(cfg.Client, &http.Client{}), log: log, attachWait: defaultAttachWait}, nil
 }
 
 // spec is a sandbox as the API takes it.
@@ -244,7 +257,8 @@ type execRequest struct {
 }
 
 // Exec implements ports.Sandbox: the Worker runs the command and streams its output, then how it
-// ended. Cancelling ctx ends Stdout at once and asks the Worker to kill the command.
+// ended; a stream cut on the way is attached again where it stopped. Cancelling ctx ends Stdout at
+// once and asks the Worker to kill the command.
 func (b *box) Exec(ctx context.Context, e ports.Exec) (ports.Process, error) {
 	if len(e.Argv) == 0 {
 		return nil, errors.New("exec without a command")
@@ -282,6 +296,8 @@ type process struct {
 	b      *box
 	id     string
 	stdout *io.PipeReader
+	// offset is the bytes of output written to stdout so far: where an attach starts.
+	offset int64
 
 	done   chan struct{}
 	status ports.ExitStatus
@@ -308,10 +324,10 @@ type line struct {
 }
 
 // read copies the answer's output to stdout until its last line, then records how the command
-// ended. When ctx ends first, stdout ends at once and the Worker is asked to kill the command.
+// ended. A cut stream is attached again from the output already read. When ctx ends first, stdout
+// ends at once and the Worker is asked to kill the command.
 func (p *process) read(ctx context.Context, body io.ReadCloser, stdout *io.PipeWriter) {
 	defer close(p.done)
-	defer func() { _ = body.Close() }()
 
 	// A write waiting for the caller returns once ctx ends; so does the read of body, whose
 	// request has ctx.
@@ -319,6 +335,30 @@ func (p *process) read(ctx context.Context, body io.ReadCloser, stdout *io.PipeW
 	defer stop()
 
 	err := p.decode(body, stdout)
+	_ = body.Close()
+
+	for attach := 0; errors.Is(err, errCut) && ctx.Err() == nil && attach < maxAttaches; attach++ {
+		p.b.s.log.WarnContext(ctx, "sandbox exec stream cut", slog.String("run", string(p.b.run)),
+			slog.Int64("offset", p.offset), slog.Int("attach", attach+1))
+
+		select {
+		case <-ctx.Done():
+		case <-time.After(p.b.s.attachWait << attach):
+		}
+
+		if ctx.Err() != nil {
+			break
+		}
+
+		path := fmt.Sprintf("%s/execs/%s?offset=%d", p.b.s.boxPath(p.b.run), p.id, p.offset)
+
+		if body, err = p.b.s.call(ctx, http.MethodGet, path, nil); err != nil {
+			break
+		}
+
+		err = p.decode(body, stdout)
+		_ = body.Close()
+	}
 
 	if ctx.Err() != nil {
 		p.err = fmt.Errorf("exec in sandbox of run %s: %w", p.b.run, ctx.Err())
@@ -331,23 +371,35 @@ func (p *process) read(ctx context.Context, body io.ReadCloser, stdout *io.PipeW
 
 	if err != nil {
 		p.err = fmt.Errorf("exec in sandbox of run %s: %w", p.b.run, err)
+		// Its outcome is lost to goald: nobody waits for the command any longer.
+		p.kill(ctx)
 	}
 
 	_ = stdout.Close()
 }
 
-// decode reads the answer's lines into stdout and the status.
+// decode reads the answer's lines into stdout and the status. A stream that ends, or breaks,
+// before the outcome is errCut; one that is not the protocol is an error of its own.
 func (p *process) decode(body io.Reader, stdout io.Writer) error {
 	dec := json.NewDecoder(body)
 
 	for {
 		var l line
 		if err := dec.Decode(&l); err != nil {
-			if errors.Is(err, io.EOF) {
-				return errors.New("the stream ended without the command's outcome")
+			var (
+				syntax *json.SyntaxError
+				typ    *json.UnmarshalTypeError
+			)
+
+			if errors.As(err, &syntax) || errors.As(err, &typ) {
+				return err
 			}
 
-			return err
+			if errors.Is(err, io.EOF) {
+				return errCut
+			}
+
+			return fmt.Errorf("%w: %w", errCut, err)
 		}
 
 		switch {
@@ -355,6 +407,8 @@ func (p *process) decode(body io.Reader, stdout io.Writer) error {
 			if _, err := io.WriteString(stdout, *l.Out); err != nil {
 				return err
 			}
+
+			p.offset += int64(len(*l.Out))
 		case l.Exit != nil:
 			p.status = ports.ExitStatus{Code: *l.Exit, TimedOut: l.TimedOut, StderrTail: lastBytes(l.Stderr, ports.MaxStderrTail)}
 			return nil

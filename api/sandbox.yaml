@@ -84,7 +84,8 @@ paths:
         output (UTF-8 text) as it is written, then exactly one last line, either
         `{"exit": …, "timed_out": …, "stderr": "…"}` or `{"error": "…"}` when the command's
         outcome is unknown (the sandbox was deleted under it). A stream that ends without one of
-        those lost its outcome too.
+        those was cut on the way, not the command: the command keeps running, and the client
+        attaches again with attachExec from the bytes of output it read.
       requestBody:
         required: true
         content:
@@ -113,6 +114,34 @@ paths:
         required: true
         description: The command's id, as its exec request gave it
         schema: { type: string, pattern: "^[0-9a-f]{1,64}$" }
+    get:
+      operationId: attachExec
+      summary: Stream a command again from a byte offset of its output
+      description: |
+        The answer of execInSandbox again, from `offset`: the bytes of output (UTF-8) the client
+        has read, so nothing comes twice. The Worker keeps the last 4 MiB of each command's output
+        and its outcome for two minutes after it ended; one reader at a time, the newest. A long
+        command thus survives a stream Cloudflare cuts between goald and the box (spec 4 §5.12
+        check 4).
+      parameters:
+        - name: offset
+          in: query
+          required: true
+          schema: { type: integer, format: int64, minimum: 0 }
+      responses:
+        "200":
+          description: The command's output from offset, then how it ended
+          content:
+            application/x-ndjson:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ExecOutput"
+                  - $ref: "#/components/schemas/ExecEnd"
+                  - $ref: "#/components/schemas/ExecError"
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" } # no such command, or it ended over two minutes ago
+        "409": { $ref: "#/components/responses/Error" } # the output from offset is no longer kept
     delete:
       operationId: killExec
       summary: Kill a running command and the processes it started

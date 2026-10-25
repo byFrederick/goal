@@ -79,6 +79,25 @@ async function all(res: Response): Promise<Record<string, unknown>[]> {
   return out;
 }
 
+/** leaveAfterFirstLine reads an NDJSON body up to its first line, then goes away as a cut would. */
+async function leaveAfterFirstLine(res: Response): Promise<Record<string, unknown>> {
+  if (!res.body) throw new Error(`HTTP ${res.status} without a body`);
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffered = '';
+  while (!buffered.includes('\n')) {
+    const { done, value } = await reader.read();
+    if (done) throw new Error('the stream ended before its first line');
+    buffered += value;
+  }
+  await reader.cancel();
+  return JSON.parse(buffered.slice(0, buffered.indexOf('\n'))) as Record<string, unknown>;
+}
+
+/** soon is what pending gives within ms, or 'nothing yet' (pending stays the stream's next line). */
+function soon<T>(pending: Promise<T>, ms = 50): Promise<T | 'nothing yet'> {
+  return Promise.race([pending, new Promise<'nothing yet'>((resolve) => setTimeout(() => resolve('nothing yet'), ms))]);
+}
+
 describe('the sandbox API', () => {
   it('refuses a request without the sandbox key', async () => {
     expect((await call('GET', '', undefined, 'wrong')).status).toBe(401);
@@ -211,6 +230,35 @@ describe('the sandbox API', () => {
     expect(await next()).toBeUndefined();
 
     expect((await call('DELETE', `/${run}/execs/${id}`)).status).toBe(204); // ended: not an error
+  });
+
+  it('keeps a command running when its reader leaves, and an attach from an offset streams the rest and the outcome', async () => {
+    const run = newRun();
+    await create(run);
+    const id = execId();
+    expect(await leaveAfterFirstLine(await call('POST', `/${run}/execs`, { id, argv: ['long'] }))).toEqual({
+      o: 'first\n',
+    });
+
+    // From the start again: the output is replayed, and the command still runs.
+    const replay = lines(await call('GET', `/${run}/execs/${id}?offset=0`));
+    expect(await replay()).toEqual({ o: 'first\n' });
+    expect(await soon(replay())).toBe('nothing yet');
+
+    // From where the reader got to: nothing twice, then the outcome once it ends.
+    const rest = lines(await call('GET', `/${run}/execs/${id}?offset=6`));
+    const outcome = rest();
+    expect(await soon(outcome)).toBe('nothing yet');
+    expect((await call('DELETE', `/${run}/execs/${id}`)).status).toBe(204);
+    expect(await outcome).toEqual({ exit: 143, timed_out: false, stderr: '' });
+    expect(await rest()).toBeUndefined();
+
+    // Ended: an attach still gets the outcome (a cut may have lost it), with nothing twice.
+    expect(await all(await call('GET', `/${run}/execs/${id}?offset=6`))).toEqual([
+      { exit: 143, timed_out: false, stderr: '' },
+    ]);
+    expect((await call('GET', `/${run}/execs/${execId()}?offset=0`)).status).toBe(404);
+    expect((await call('GET', `/${run}/execs/${id}?offset=-1`)).status).toBe(400);
   });
 
   it('ends running commands on delete, forgets the box and deletes idempotently', async () => {

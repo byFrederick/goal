@@ -4,7 +4,7 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import { type Env, hosts, read } from './env.js';
-import { type Base, baseFile, entrypoint, messageOf, parseBase, type Running, stream, wrapped } from './exec.js';
+import { type Base, baseFile, Exec, entrypoint, Gone, keepOutcomeMs, messageOf, parseBase, wrapped } from './exec.js';
 import { outbound } from './services.js';
 
 /** The instance type of each size: the smallest workable is standard-1 (spec 4 §4.6). */
@@ -58,7 +58,7 @@ interface Box {
 /** RunBox is one run's box. */
 export class RunBox extends DurableObject<Env> {
   /** The commands running now, by the id their exec request gave. */
-  private readonly running = new Map<string, Running>();
+  private readonly running = new Map<string, Exec>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -81,6 +81,8 @@ export class RunBox extends DurableObject<Env> {
         case exec !== undefined && request.method === 'DELETE':
           this.running.get(exec)?.kill();
           return new Response(null, { status: 204 });
+        case exec !== undefined && request.method === 'GET':
+          return this.attach(exec, new URL(request.url).searchParams.get('offset'));
         case execs && request.method === 'POST':
           return await this.exec(await request.json());
         case !execs && exec === undefined && request.method === 'PUT':
@@ -174,9 +176,23 @@ export class RunBox extends DurableObject<Env> {
       env: { ...box.base.env, ...box.env, ...e.env },
       cwd: e.dir || box.base.dir,
     });
-    const { body: out, running } = stream(process, e.timeout, () => this.running.delete(e.id));
+    const running = new Exec(process, e.timeout, keepOutcomeMs, () => this.running.delete(e.id));
     this.running.set(e.id, running);
-    return new Response(out, { headers: { 'content-type': 'application/x-ndjson' } });
+    return ndjson(running.attach(0));
+  }
+
+  /** attach streams a running command again from a byte offset of its output (a cut stream). */
+  private attach(id: string, offset: string | null): Response {
+    const at = Number(offset ?? '0');
+    if (!Number.isSafeInteger(at) || at < 0) throw new Refused(400, 'offset is not a whole number of bytes');
+    const running = this.running.get(id);
+    if (!running) throw new Refused(404, `no such exec: ${id} ended over two minutes ago, or never ran here`);
+    try {
+      return ndjson(running.attach(at));
+    } catch (error) {
+      if (error instanceof Gone) throw new Refused(409, error.message);
+      throw error;
+    }
   }
 
   /** destroy ends the box and every command in it, and forgets it. */
@@ -337,6 +353,10 @@ async function bearerIs(request: Request, key: string): Promise<boolean> {
   if (given === undefined) return false;
   const digest = async (s: string) => crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
   return crypto.subtle.timingSafeEqual(await digest(given), await digest(key));
+}
+
+function ndjson(body: ReadableStream<Uint8Array>): Response {
+  return new Response(body, { headers: { 'content-type': 'application/x-ndjson' } });
 }
 
 function problem(status: number, error: string): Response {
