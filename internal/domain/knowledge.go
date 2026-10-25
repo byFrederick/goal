@@ -307,7 +307,6 @@ type SourceItem struct {
 type SourceDoc struct {
 	SourceItem
 
-	MIME string
 	Body []byte
 }
 

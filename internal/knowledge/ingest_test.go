@@ -149,7 +149,7 @@ func (r *reader) Fetch(ctx context.Context, _ domain.SyncSpec, id string) (domai
 		return domain.SourceDoc{}, errors.New("gone")
 	}
 
-	return domain.SourceDoc{SourceItem: domain.SourceItem{ID: id}, MIME: domain.MediaMarkdown, Body: []byte(body)}, nil
+	return domain.SourceDoc{SourceItem: domain.SourceItem{ID: id, MIME: domain.MediaMarkdown}, Body: []byte(body)}, nil
 }
 
 // world is one organization's knowledge base on the port fakes, with a synced source "runbooks"

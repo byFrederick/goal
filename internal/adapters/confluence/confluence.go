@@ -187,7 +187,7 @@ func (r *Reader) Fetch(ctx context.Context, s domain.SyncSpec, id string) (domai
 		return domain.SourceDoc{}, fmt.Errorf("page %s: %w", id, err)
 	}
 
-	return domain.SourceDoc{SourceItem: item, MIME: domain.MediaMarkdown, Body: []byte(text)}, nil
+	return domain.SourceDoc{SourceItem: item, Body: []byte(text)}, nil
 }
 
 // source is a confluence source opened: the connection's site and account, and the keys of the

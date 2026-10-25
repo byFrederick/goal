@@ -128,7 +128,7 @@ func (r *Reader) Fetch(ctx context.Context, s domain.SyncSpec, id string) (domai
 	// A type it cannot index stays "", which extraction refuses with the reason.
 	mime, _ := domain.DocumentType(id, body)
 
-	return domain.SourceDoc{SourceItem: domain.SourceItem{ID: id}, MIME: mime, Body: body}, nil
+	return domain.SourceDoc{SourceItem: domain.SourceItem{ID: id, MIME: mime}, Body: body}, nil
 }
 
 // source is a gitdocs source opened: its repository on its code host with the connection's token
