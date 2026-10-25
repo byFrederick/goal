@@ -67,7 +67,8 @@
   },
   "repository": {
     "url": "https://github.com/acme/api.git",
-    "branch": "goal/1-add-a-health-endpoint"
+    "branch": "goal/1-add-a-health-endpoint",
+    "fresh_base": "merge"
   },
   "git_credentials": [
     {

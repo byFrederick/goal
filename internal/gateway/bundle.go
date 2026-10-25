@@ -79,10 +79,12 @@ type bundleConnection struct {
 }
 
 // bundleRepository is the factory's repository and the item's branch, which prepare checks out:
-// the remote branch when it exists, otherwise a new one from the default branch.
+// the remote branch when it exists, otherwise a new one from the default branch. FreshBase is
+// how prepare brings an existing branch up to date with the default branch (rebase or merge).
 type bundleRepository struct {
-	URL    string `json:"url"`
-	Branch string `json:"branch"`
+	URL       string           `json:"url"`
+	Branch    string           `json:"branch"`
+	FreshBase domain.FreshBase `json:"fresh_base,omitempty"`
 }
 
 // gitCredential is a login git uses for https://<Host>: Username and the value of the variable
@@ -201,7 +203,7 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 		return runBundle{}, err
 	}
 
-	if err := g.addRepository(ctx, line.Runtime.Repository, it.Branch(), &b); err != nil {
+	if err := g.addRepository(ctx, line.Runtime.Repository, it.Branch(), line.Flow.Assemblies.FreshBase, &b); err != nil {
 		return runBundle{}, err
 	}
 
@@ -210,12 +212,14 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 
 // addRepository puts the repository in b with the git login of its connection, which clones it;
 // a public repository needs none.
-func (g *Gateway) addRepository(ctx context.Context, repo domain.Repository, branch string, b *runBundle) error {
+func (g *Gateway) addRepository(
+	ctx context.Context, repo domain.Repository, branch string, fresh domain.FreshBase, b *runBundle,
+) error {
 	if repo.URL == "" {
 		return nil
 	}
 
-	b.Repository = &bundleRepository{URL: repo.URL, Branch: branch}
+	b.Repository = &bundleRepository{URL: repo.URL, Branch: branch, FreshBase: fresh}
 
 	if repo.Connection == "" {
 		return nil
