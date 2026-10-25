@@ -139,6 +139,15 @@ linters:
               desc: AWS access belongs in internal/adapters
             - pkg: github.com/modelcontextprotocol
               desc: MCP belongs in internal/gateway
+        engine-only-ports:
+          # The engine imports the domain and the ports, nothing else of the module (spec 4 §5.11);
+          # its tests use the fakes in internal/ports/porttest under the rule above.
+          list-mode: strict
+          files: ["**/internal/engine/**", "!$test"]
+          allow:
+            - $gostd
+            - github.com/byFrederick/goal/internal/domain
+            - github.com/byFrederick/goal/internal/ports
         adapters:
           files: ["**/internal/adapters/**"]
           deny:
