@@ -51,6 +51,50 @@ func TestUp_AuthVariablesAreTheTaskfiles(t *testing.T) {
 	}
 }
 
+// The postmaster treats any child it did not start that exits non-zero as a crashed backend and
+// restarts the server. As a container's PID 1 it inherits every orphan in the container, such as
+// the pg_isready a shell healthcheck leaves behind when Docker kills the shell on a timeout. So
+// docker-init is PID 1 and reaps them, and the healthcheck runs pg_isready without a shell, within
+// a timeout longer than pg_isready's own.
+func TestUp_PostgresIsNotTheContainersInit(t *testing.T) {
+	t.Parallel()
+
+	raw, err := os.ReadFile("../../compose.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var compose struct {
+		Services struct {
+			Postgres struct {
+				Init        bool `yaml:"init"`
+				Healthcheck struct {
+					Test    []string `yaml:"test"`
+					Timeout string   `yaml:"timeout"`
+				} `yaml:"healthcheck"`
+			} `yaml:"postgres"`
+		} `yaml:"services"`
+	}
+
+	if err := yaml.Unmarshal(raw, &compose); err != nil {
+		t.Fatal(err)
+	}
+
+	postgres := compose.Services.Postgres
+	if !postgres.Init {
+		t.Error("compose.yaml postgres: init is not true, so the postmaster is PID 1 and reaps strays as crashed backends")
+	}
+
+	if test := postgres.Healthcheck.Test; len(test) < 2 || test[0] != "CMD" || test[1] != "pg_isready" {
+		t.Errorf("compose.yaml postgres healthcheck = %q, want [CMD pg_isready ...] (no shell to orphan it)", test)
+	}
+
+	// pg_isready gives up after 3 seconds by default; Docker must not kill it first.
+	if timeout, err := time.ParseDuration(postgres.Healthcheck.Timeout); err != nil || timeout <= 3*time.Second {
+		t.Errorf("compose.yaml postgres healthcheck timeout = %q, want longer than pg_isready's 3s", postgres.Healthcheck.Timeout)
+	}
+}
+
 // Spec 3 §5.6, threat model row 33: each process gets only its own variables. The auth service
 // sees its own and nothing of goald's (the gateway key, the bucket's or goald's database
 // credentials); goald sees nothing of the auth service's secrets, mail or Google client.

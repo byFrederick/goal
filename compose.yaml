@@ -10,8 +10,13 @@ services:
   # trixie's glibc collations) is the same and an install that ran postgres:18 keeps its data. The
   # first goal up after the change recreates this container once on the same volume; goal db
   # init then creates the extension.
+  # init: docker-init is PID 1 and reaps strays: the postmaster as PID 1 would inherit every orphan
+  # in the container and restart the server when one exits non-zero, as an untracked child. The
+  # healthcheck runs pg_isready without a shell to orphan it, and Docker waits past pg_isready's
+  # own 3-second limit before killing it.
   postgres:
     image: pgvector/pgvector:0.8.7-pg18-trixie
+    init: true
     environment:
       POSTGRES_DB: goal
       POSTGRES_USER: goal
@@ -21,9 +26,9 @@ services:
     volumes:
       - goal-pg:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U goal -d goal"]
+      test: ["CMD", "pg_isready", "-U", "goal", "-d", "goal"]
       interval: 5s
-      timeout: 3s
+      timeout: 5s
       retries: 10
 
   rustfs:
