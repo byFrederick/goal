@@ -18,7 +18,9 @@ export const Route = createFileRoute('/o/$org/_org/connections/')({
     const factory = deps.factory
       ? queryClient.getQueryData(factoriesQuery(org.id).queryKey)?.find((f) => f.name === deps.factory)
       : undefined;
-    void queryClient.prefetchQuery(connectionsQuery(org.id, factory ? { factory: factory.id } : {}));
+    if (!deps.factory || factory) {
+      void queryClient.prefetchQuery(connectionsQuery(org.id, factory ? { factory: factory.id } : {}));
+    }
     void queryClient.prefetchQuery(connectionKindsQuery(org.id));
     if (can?.includes('audit:read')) void queryClient.prefetchQuery(connectionActivityQuery(org.id));
   },

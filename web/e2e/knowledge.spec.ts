@@ -49,6 +49,30 @@ test.describe('the Knowledge page', () => {
     await fits(page);
   });
 
+  test('a factory the organization has no factory of is said, never the unfiltered list', async ({ page }) => {
+    await page.goto('/o/acme/knowledge?factory=nope');
+    await expect(page.getByText('Acme has no factory named nope.')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: '4 sources' })).toHaveCount(0);
+    await page.getByRole('link', { name: 'Show every source' }).click();
+    await expect(page.getByRole('heading', { level: 2, name: '4 sources' })).toBeVisible();
+    await fits(page);
+  });
+
+  test('a search as a factory waits for the sources, never saying the factory lists none', async ({
+    page,
+    request,
+  }) => {
+    await request.post('/__mock/fail', {
+      data: { path: '/knowledge/sources', method: 'GET', delay_ms: 2500, times: 0 },
+    });
+    await page.goto('/o/acme/knowledge?q=deploy&as=sre');
+    await expect(page.getByText('Loading the knowledge sources…')).toBeVisible();
+    await expect(page.getByText(/lists no knowledge source/)).toHaveCount(0);
+    await expect(page.getByRole('list', { name: 'Results' }).getByRole('listitem')).toHaveCount(1, {
+      timeout: 10_000,
+    });
+  });
+
   test('Sync now makes a source due, and the stream brings its new status', async ({ page }) => {
     await page.goto('/o/acme/knowledge');
     await expect(sourceRow(page, 'Runbooks')).toContainText('Sync failed');
@@ -334,6 +358,15 @@ test.describe('New source', () => {
     await expect(page.getByText('A live source stores nothing.', { exact: false })).toBeVisible();
     await expect(page.getByRole('button', { name: /Sync now/ })).toHaveCount(0);
   });
+});
+
+test('the builder says while the organization’s sources load, never that it has none', async ({ page, request }) => {
+  await request.post('/__mock/fail', { data: { path: '/knowledge/sources', method: 'GET', delay_ms: 2500, times: 0 } });
+  await page.goto('/o/acme/f/sre/definition/connections');
+  const knowledge = page.getByRole('region', { name: 'Knowledge sre may search' });
+  await expect(knowledge.getByText('Loading Acme’s knowledge sources…')).toBeVisible();
+  await expect(knowledge.getByText(/has no knowledge sources yet/)).toHaveCount(0);
+  await expect(knowledge.getByRole('checkbox', { name: /^Handbook/ })).toBeChecked({ timeout: 10_000 });
 });
 
 test('the builder lists the organization’s sources to tick for the factory', async ({ page }) => {

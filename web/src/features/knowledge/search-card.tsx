@@ -16,7 +16,16 @@ import { Field, Input, NativeSelect } from '../../ui/field';
 import { KindLabel } from './parts';
 import { excerpt, refusalText } from './words';
 
-export function SearchCard({ sources, factories }: { sources: KnowledgeSource[]; factories: Factory[] }) {
+export function SearchCard({
+  sources,
+  loading,
+  factories,
+}: {
+  sources: KnowledgeSource[];
+  /** The sources are still loading: nothing is said of what a factory lists yet. */
+  loading: boolean;
+  factories: Factory[];
+}) {
   const org = useOrg();
   const search = useSearch({ from: '/o/$org/_org/knowledge/' });
   const navigate = useNavigate({ from: '/o/$org/knowledge/' });
@@ -28,7 +37,7 @@ export function SearchCard({ sources, factories }: { sources: KnowledgeSource[];
   const listed = search.as ? sources.filter((s) => s.used_by.factories.some((f) => f.name === search.as)) : sources;
   const indexed = listed.filter((s) => s.kind !== 'live');
   const q = search.q ?? '';
-  const runs = q !== '' && (!search.as || listed.length > 0);
+  const runs = q !== '' && !loading && (!search.as || listed.length > 0);
   const hits = useQuery({
     ...knowledgeSearchQuery(org.id, { q, ...(search.as ? { sources: listed.map((s) => s.name) } : {}) }),
     enabled: runs,
@@ -100,7 +109,7 @@ export function SearchCard({ sources, factories }: { sources: KnowledgeSource[];
       </search>
 
       <p role="status" className="m-0 text-sm text-muted">
-        {resultLine({ q, as: search.as, listed, indexed, hits: hits.data, pending: runs && hits.isPending })}
+        {resultLine({ q, as: search.as, loading, listed, indexed, hits: hits.data, pending: runs && hits.isPending })}
       </p>
       {hits.isError ? (
         <p role="alert" className="m-0 text-sm text-rework-ink">
@@ -127,6 +136,7 @@ export function SearchCard({ sources, factories }: { sources: KnowledgeSource[];
 function resultLine({
   q,
   as,
+  loading,
   listed,
   indexed,
   hits,
@@ -134,12 +144,14 @@ function resultLine({
 }: {
   q: string;
   as: string | undefined;
+  loading: boolean;
   listed: KnowledgeSource[];
   indexed: KnowledgeSource[];
   hits: KnowledgeHit[] | undefined;
   pending: boolean;
 }): string {
   if (q === '') return 'Type what an agent would ask, then Search.';
+  if (loading) return 'Loading the knowledge sources…';
   if (as && listed.length === 0)
     return `${as}’s current version lists no knowledge source, so its agents find nothing.`;
   if (pending || !hits) return 'Searching…';

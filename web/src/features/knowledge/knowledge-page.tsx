@@ -29,16 +29,22 @@ export function KnowledgePage() {
   const org = useOrg();
   const search = useSearch({ from: '/o/$org/_org/knowledge/' });
   const manage = useOrgHolds('knowledge:manage');
-  const factories = useQuery(factoriesQuery(org.id)).data ?? [];
+  const listed = useQuery(factoriesQuery(org.id));
+  const factories = listed.data ?? [];
   const factory = search.factory ? factories.find((f) => f.name === search.factory) : undefined;
+  // A ?factory= the organization has no factory of (a typo, a renamed factory) is said, never unfiltered.
+  const missing = search.factory !== undefined && listed.isSuccess && !factory;
   // The search tries every source, and "as a factory" those it lists: it reads the whole list.
   const everything = useQuery(knowledgeSourcesQuery(org.id));
-  const list = useQuery(knowledgeSourcesQuery(org.id, factory ? { factory: factory.id } : {}));
+  const list = useQuery({
+    ...knowledgeSourcesQuery(org.id, factory ? { factory: factory.id } : {}),
+    enabled: !search.factory || factory !== undefined,
+  });
   const sync = useSyncSource(org.id);
   const [uploading, setUploading] = useState<KnowledgeSource | null>(null);
   const now = Date.now();
 
-  const sources = list.data ?? [];
+  const sources = missing ? [] : (list.data ?? []);
   const all = everything.data ?? [];
   const selected = pickSource(sources, search.source);
 
@@ -69,7 +75,7 @@ export function KnowledgePage() {
         actions={newSource}
       />
 
-      {list.isPending ? (
+      {list.isPending && !missing ? (
         <div aria-busy="true" className="rounded-card border border-line bg-card p-5">
           <span role="status" className="sr-only">
             Loading knowledge sources
@@ -108,6 +114,7 @@ export function KnowledgePage() {
         <SourcesCard
           sources={sources}
           factory={search.factory}
+          missing={missing}
           selected={selected?.name}
           manage={manage}
           sync={sync}
@@ -117,7 +124,7 @@ export function KnowledgePage() {
       )}
 
       <div className="grid items-start gap-4 @[960px]:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <SearchCard sources={all} factories={factories} />
+        <SearchCard sources={all} loading={everything.isPending} factories={factories} />
         <div className="flex min-w-0 flex-col gap-4">
           {selected ? <DocumentsCard source={selected} now={now} /> : null}
           <WhoFindsWhat />
@@ -146,6 +153,7 @@ function pickSource(sources: KnowledgeSource[], named: string | undefined): Know
 function SourcesCard({
   sources,
   factory,
+  missing,
   selected,
   manage,
   sync,
@@ -154,6 +162,8 @@ function SourcesCard({
 }: {
   sources: KnowledgeSource[];
   factory: string | undefined;
+  /** No factory of the organization is named `factory`. */
+  missing: boolean;
   selected: string | undefined;
   manage: boolean;
   sync: ReturnType<typeof useSyncSource>;
@@ -195,8 +205,9 @@ function SourcesCard({
 
       {sources.length === 0 ? (
         <p className="m-0 border-t border-line pt-4 text-[15px] text-muted">
-          {factory}’s current version lists no knowledge source. Its definition’s Connections and knowledge says which
-          sources its agents may search.
+          {missing
+            ? `${org.name} has no factory named ${factory}.`
+            : `${factory}’s current version lists no knowledge source. Its definition’s Connections and knowledge says which sources its agents may search.`}
         </p>
       ) : (
         <>

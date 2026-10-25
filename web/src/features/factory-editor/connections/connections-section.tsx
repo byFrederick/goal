@@ -63,6 +63,8 @@ export function ConnectionsSection(_: SectionViewProps) {
   );
 }
 
+const loadingConnections = (org: string) => `Loading ${org}’s connections…`;
+
 /** The current value of every section, as a fix or a multi-section edit reads it. */
 function useModel(): Model {
   return {
@@ -80,13 +82,13 @@ function FactoryConnections({ factory }: { factory: string }) {
   const viewOnly = useViewOnly();
   const manage = useOrgHolds('connection:manage');
   const model = useModel();
-  const { connections, kindOf } = useOrgConnections();
+  const { connections, kindOf, ready } = useOrgConnections();
   const named = new Set(model.connections.map((c) => c.name));
   const id = useId();
   // Entries that are not one of the organization's connections: a name it lacks, an inline form.
   const others = model.connections
     .map((c, index) => ({ c, index }))
-    .filter(({ c }) => c.type || c.connector || !connections.some((x) => x.name === c.name));
+    .filter(({ c }) => c.type || c.connector || (ready && !connections.some((x) => x.name === c.name)));
 
   return (
     <section aria-labelledby={id} className={card}>
@@ -104,7 +106,9 @@ function FactoryConnections({ factory }: { factory: string }) {
           </Link>
         ) : null}
       </div>
-      {connections.length === 0 ? (
+      {!ready ? (
+        <p className="m-0 text-sm text-muted">{loadingConnections(org.name)}</p>
+      ) : connections.length === 0 ? (
         <p className="m-0 text-sm text-muted">
           {org.name} has no connections yet.{' '}
           {manage ? 'Add one in Connections, then tick it here.' : 'Owners and admins add them in Connections.'}
@@ -225,7 +229,8 @@ function PerAgent() {
   const viewOnly = useViewOnly();
   const agentsSection = useSection('agents');
   const connections = useSection('connections');
-  const { connections: org } = useOrgConnections();
+  const { connections: org, ready } = useOrgConnections();
+  const { name: orgName } = useOrg();
   const id = useId();
   const agents = agentsSection.agents ?? [];
   // The factory's organization connections, in its order.
@@ -245,7 +250,11 @@ function PerAgent() {
       </div>
       {agents.length === 0 || names.length === 0 ? (
         <p className="m-0 text-sm text-muted">
-          {agents.length === 0 ? 'Add agents first.' : 'Tick connections above, then choose which agents get each.'}
+          {agents.length === 0
+            ? 'Add agents first.'
+            : ready
+              ? 'Tick connections above, then choose which agents get each.'
+              : loadingConnections(orgName)}
         </p>
       ) : (
         <>
@@ -352,9 +361,11 @@ function Knowledge({ factory }: { factory: string }) {
   const viewOnly = useViewOnly();
   const basics = useSection('basics');
   const read = useOrgHolds('knowledge:read');
-  const sources = useQuery({ ...knowledgeSourcesQuery(org.id), enabled: read }).data ?? [];
+  const list = useQuery({ ...knowledgeSourcesQuery(org.id), enabled: read });
+  const sources = list.data ?? [];
   const listed = basics.knowledge_sources ?? [];
-  const unknown = listed.filter((name) => !sources.some((s) => s.name === name));
+  // Until the list is here (or without knowledge:read) no listed name is called unknown.
+  const unknown = list.isSuccess ? listed.filter((name) => !sources.some((s) => s.name === name)) : [];
   const id = useId();
   const toggle = (name: string, on: boolean) =>
     session.edit(setBasics(basics, 'knowledge_sources', on ? [...listed, name] : listed.filter((x) => x !== name)));
@@ -377,7 +388,9 @@ function Knowledge({ factory }: { factory: string }) {
       <p className="m-0 -mt-1 text-sm text-muted">
         Agents search the ticked sources with <code className="font-mono">knowledge__search</code>.
       </p>
-      {sources.length === 0 && unknown.length === 0 ? (
+      {list.isPending && read ? (
+        <p className="m-0 text-sm text-muted">Loading {org.name}’s knowledge sources…</p>
+      ) : sources.length === 0 && unknown.length === 0 ? (
         <p className="m-0 rounded-control border border-dashed border-rule px-3 py-2.5 text-sm text-muted">
           {org.name} has no knowledge sources yet. Owners and admins add them in Knowledge.
         </p>

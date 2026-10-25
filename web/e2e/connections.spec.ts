@@ -64,6 +64,16 @@ test.describe('the Connections page', () => {
     await fits(page);
   });
 
+  test('a factory the organization has no factory of is said, never the unfiltered list', async ({ page }) => {
+    await page.goto('/o/acme/connections?factory=nope');
+    await expect(page.getByText('Acme has no factory named nope.')).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Factory' })).toHaveValue('nope');
+    await expect(page.getByRole('heading', { level: 2, name: /8 connections/ })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Show every connection' }).click();
+    await expect(page.getByRole('heading', { level: 2, name: '8 connections' })).toBeVisible();
+    await fits(page);
+  });
+
   test('replacing a revoked key makes its test pass', async ({ page }) => {
     await page.goto('/o/acme/connections');
     await page
@@ -313,6 +323,21 @@ test.describe('the builder', () => {
     // Unticking takes it from every agent too.
     await page.getByRole('checkbox', { name: /^datadog/ }).uncheck();
     await expect(page.getByRole('checkbox', { name: 'backend-engineer gets datadog' })).toHaveCount(0);
+  });
+
+  test('Connections: while the organization’s connections load it says so, never that it has none', async ({
+    page,
+    request,
+  }) => {
+    await request.post('/__mock/fail', { data: { path: '/connections', method: 'GET', delay_ms: 2500, times: 0 } });
+    await page.goto(connections);
+    const uses = page.getByRole('region', { name: 'Connections goal uses' });
+    await expect(uses.getByText('Loading Acme’s connections…')).toBeVisible();
+    await expect(page.getByText(/has no connections yet|not one of Acme’s connections/)).toHaveCount(0);
+    await expect(
+      page.getByRole('region', { name: 'Per agent' }).getByText('Loading Acme’s connections…'),
+    ).toBeVisible();
+    await expect(uses.getByRole('checkbox', { name: /^github/ })).toBeChecked({ timeout: 10_000 });
   });
 
   test('Connections: two connections setting one variable for an agent, and the fix that keeps one', async ({

@@ -33,9 +33,15 @@ export function ConnectionsPage() {
   const navigate = useNavigate({ from: '/o/$org/connections/' });
   const manage = useOrgHolds('connection:manage');
   const auditor = useOrgHolds('audit:read');
-  const factories = useQuery(factoriesQuery(org.id)).data ?? [];
+  const listed = useQuery(factoriesQuery(org.id));
+  const factories = listed.data ?? [];
   const factory = search.factory ? factories.find((f) => f.name === search.factory) : undefined;
-  const list = useQuery(connectionsQuery(org.id, factory ? { factory: factory.id } : {}));
+  // A ?factory= the organization has no factory of (a typo, a renamed factory) is said, never unfiltered.
+  const missing = search.factory !== undefined && listed.isSuccess && !factory;
+  const list = useQuery({
+    ...connectionsQuery(org.id, factory ? { factory: factory.id } : {}),
+    enabled: !search.factory || factory !== undefined,
+  });
   const kinds = useQuery(connectionKindsQuery(org.id)).data ?? [];
   const kindOf = (c: Connection) => kinds.find((k) => k.name === c.kind);
   const tester = useTestConnection(org.id);
@@ -44,7 +50,7 @@ export function ConnectionsPage() {
   const q = useDeferredValue(text.trim().toLowerCase());
   const now = Date.now();
 
-  const all = list.data ?? [];
+  const all = missing ? [] : (list.data ?? []);
   const shown = all.filter(
     (c) =>
       (!search.kind || c.kind === search.kind) &&
@@ -119,7 +125,7 @@ export function ConnectionsPage() {
         </section>
       ))}
 
-      {list.isPending ? (
+      {list.isPending && !missing ? (
         <div aria-busy="true" className="rounded-card border border-line bg-card p-5">
           <span role="status" className="sr-only">
             Loading connections
@@ -198,6 +204,7 @@ export function ConnectionsPage() {
                   onChange={(e) => setSearch({ factory: e.target.value || undefined })}
                 >
                   <option value="">All factories</option>
+                  {missing ? <option value={search.factory}>{search.factory}</option> : null}
                   {factories.map((f) => (
                     <option key={f.id} value={f.name}>
                       {f.name}
@@ -211,9 +218,11 @@ export function ConnectionsPage() {
           {shown.length === 0 ? (
             <div className="flex flex-col items-start gap-2 border-t border-line pt-4">
               <p className="m-0 text-[15px] text-muted">
-                {search.factory && all.length === 0
-                  ? `${search.factory}’s current version names no connection.`
-                  : 'No connection matches these filters.'}
+                {missing
+                  ? `${org.name} has no factory named ${search.factory}.`
+                  : search.factory && all.length === 0
+                    ? `${search.factory}’s current version names no connection.`
+                    : 'No connection matches these filters.'}
               </p>
               <Button
                 variant="white"

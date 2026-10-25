@@ -32,16 +32,24 @@ const sizes: { value: SandboxSize; label: string }[] = [
 /** The keys phase 4 removed from Basics, whose problems (field-removed) carry their fixes. */
 const removedKeys = ['runner', 'image', 'auth', 'secrets', 'knowledge_base'] as const;
 
-/** The organization's connections with their kinds: what the runtime's selects offer. */
+/**
+ * The organization's connections with their kinds: what the runtime's selects offer. Until
+ * `ready` (loading, or without connection:read) nothing may be called missing from them.
+ */
 export function useOrgConnections(): {
   connections: Connection[];
   kindOf: (c: Connection) => ConnectionKind | undefined;
+  ready: boolean;
 } {
   const org = useOrg();
   const read = useOrgHolds('connection:read');
-  const connections = useQuery({ ...connectionsQuery(org.id), enabled: read }).data ?? [];
-  const kinds = useQuery({ ...connectionKindsQuery(org.id), enabled: read }).data ?? [];
-  return { connections, kindOf: (c) => kinds.find((k) => k.name === c.kind) };
+  const connections = useQuery({ ...connectionsQuery(org.id), enabled: read });
+  const kinds = useQuery({ ...connectionKindsQuery(org.id), enabled: read });
+  return {
+    connections: connections.data ?? [],
+    kindOf: (c) => kinds.data?.find((k) => k.name === c.kind),
+    ready: connections.isSuccess && kinds.isSuccess,
+  };
 }
 
 export function RuntimeFields({ basics }: { basics: BasicsSection }) {
