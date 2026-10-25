@@ -1,7 +1,8 @@
 # The plan of every pull request that changes terraform/ (ADR 0010, decision 2): task tf:check, then
-# task tf:plan against production's R2 state with the read-only credentials of the GitHub
-# environment production-plan, posted as one pull request comment that every push updates.
-# It changes nothing: the tokens are read-only and the state token cannot take the lock (-lock=false).
+# task tf:plan against production's R2 state with the credentials of the GitHub environment
+# production (ADR 0010, amendment: one environment for plan and apply), posted as one pull request
+# comment that every push updates. It changes nothing: it only plans, and -lock=false keeps a pull
+# request's plan from holding the state lock against an apply.
 # Only branches of this repository get a plan, never a fork (ADR 0010 rejects the fork trigger).
 # Until the owner has done bootstrap step 13 (docs/engineering/cloudflare-operations.md), the job
 # fails at the Google step: the environment's variables and the federation do not exist yet.
@@ -32,7 +33,7 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: production-plan
+    environment: production
     permissions:
       contents: read
       id-token: write # the OIDC token google-github-actions/auth exchanges
@@ -73,7 +74,7 @@ jobs:
           printf '%s\n' "$SOPS_AGE_KEY" > "$key_file"
           chmod 600 "$key_file"
           printf 'SOPS_AGE_KEY_FILE=%s\n' "$key_file" >> "$GITHUB_ENV"
-      - name: terraform plan of production (read-only, no lock)
+      - name: terraform plan of production (no lock)
         id: plan
         shell: bash
         env:
