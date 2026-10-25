@@ -4522,11 +4522,9 @@ components:
         default: { type: boolean, description: The model a factory runs when it names none }
     BuilderCapabilities:
       type: object
-      description: Which later phases are wired; the editor hides or shows their controls read-only until then
-      required: [credentials, connectors, tool_approvals]
+      description: What this install enforces; the editor shows the controls for what it does not read-only
+      required: [tool_approvals]
       properties:
-        credentials: { type: boolean, description: "Phase 4.1: credential selects and factory credentials" }
-        connectors: { type: boolean, description: "Phase 4.2: the connector catalog and connector panel" }
         tool_approvals: { type: boolean, description: '"Ask me" on built-in tools is enforced' }
     BuilderLimits:
       type: object

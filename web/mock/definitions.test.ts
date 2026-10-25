@@ -328,7 +328,7 @@ describe('the builder', () => {
   it('lists the models and what is wired', async () => {
     const { body } = await call<BuilderMeta>('/v1/orgs/acme/builder/meta');
     expect(body.models.filter((m) => m.default)).toHaveLength(1);
-    expect(body.capabilities).toEqual({ credentials: false, connectors: false, tool_approvals: false });
+    expect(body.capabilities).toEqual({ tool_approvals: false });
   });
 
   it('searches the catalog, most installed first, a page at a time', async () => {

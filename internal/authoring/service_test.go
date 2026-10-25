@@ -71,8 +71,6 @@ type harness struct {
 
 type option func(*authoring.Deps)
 
-func withChecks(c ...authoring.Check) option { return func(d *authoring.Deps) { d.Checks = c } }
-
 func withStore(wrap func(ports.DefinitionStore) ports.DefinitionStore) option {
 	return func(d *authoring.Deps) { d.Store = wrap(d.Store) }
 }

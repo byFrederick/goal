@@ -110,12 +110,8 @@ type SkillPage struct {
 // Model is a model the editor offers: its id (runtime.model, agents[].model) and its label.
 type Model struct{ ID, Label string }
 
-// EditorCapabilities says which later phases are wired, so the editor shows their controls.
+// EditorCapabilities says what this install enforces, so the editor shows the controls for it.
 type EditorCapabilities struct {
-	// Credentials: phase 4.1's credential selects and factory credentials.
-	Credentials bool
-	// Connectors: phase 4.2's connector catalog and connector panel.
-	Connectors bool
 	// ToolApprovals: "Ask me" on built-in tools is enforced.
 	ToolApprovals bool
 }

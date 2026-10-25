@@ -1234,7 +1234,7 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
       { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', default: true },
       { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5', default: false },
     ],
-    capabilities: { credentials: false, connectors: false, tool_approvals: false },
+    capabilities: { tool_approvals: false },
     limits: { skill_bytes: 1 << 20, skill_files: 200 },
   };
 

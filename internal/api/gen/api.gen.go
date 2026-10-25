@@ -1349,14 +1349,8 @@ type BridgeStep struct {
 // BridgeStepComponent defines model for BridgeStep.Component.
 type BridgeStepComponent string
 
-// BuilderCapabilities Which later phases are wired; the editor hides or shows their controls read-only until then
+// BuilderCapabilities What this install enforces; the editor shows the controls for what it does not read-only
 type BuilderCapabilities struct {
-	// Connectors Phase 4.2: the connector catalog and connector panel
-	Connectors bool `json:"connectors"`
-
-	// Credentials Phase 4.1: credential selects and factory credentials
-	Credentials bool `json:"credentials"`
-
 	// ToolApprovals "Ask me" on built-in tools is enforced
 	ToolApprovals bool `json:"tool_approvals"`
 }
@@ -1372,7 +1366,7 @@ type BuilderLimits struct {
 
 // BuilderMeta defines model for BuilderMeta.
 type BuilderMeta struct {
-	// Capabilities Which later phases are wired; the editor hides or shows their controls read-only until then
+	// Capabilities What this install enforces; the editor shows the controls for what it does not read-only
 	Capabilities BuilderCapabilities `json:"capabilities"`
 	Limits       BuilderLimits       `json:"limits"`
 	Models       []BuilderModel      `json:"models"`

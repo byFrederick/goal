@@ -221,11 +221,7 @@ type Deps struct {
 	// Credentials is the connections check: ConnectionsCheck; nil skips it.
 	// Nil leaves the credentials check out.
 	Credentials Credentials
-	// Checks are validation steps of later phases (phase 4's connector checker).
-	Checks []Check
-	// Resolver is phase 4's connection resolution at publish; nil until then.
-	Resolver Resolver
-	Clock    ports.Clock
+	Clock       ports.Clock
 	// NewID returns a new factory id (a UUIDv7); uuid.NewV7 when nil.
 	NewID func() string
 }
@@ -236,8 +232,6 @@ type Service struct {
 	store       ports.DefinitionStore
 	loads       Loads
 	credentials Credentials
-	checks      []Check
-	resolver    Resolver
 	clock       ports.Clock
 	newID       func() string
 	templates   *TemplateCatalog
@@ -251,7 +245,7 @@ func New(d Deps) *Service {
 	}
 
 	return &Service{
-		store: d.Store, loads: d.Loads, credentials: d.Credentials, checks: d.Checks, resolver: d.Resolver,
+		store: d.Store, loads: d.Loads, credentials: d.Credentials,
 		clock: d.Clock, newID: newID,
 		templates: NewTemplateCatalog(d.Templates, d.Clock),
 	}

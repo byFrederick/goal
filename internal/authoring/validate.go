@@ -53,7 +53,7 @@ type Validation struct {
 	Problems []domain.DefinitionProblem
 }
 
-// Checks of this package, besides config's (yaml, schema, line, references, images, secrets,
+// Checks of this package, besides config's (yaml, schema, line, references, tools, removed,
 // availability).
 const (
 	CheckName  = "name"
@@ -118,8 +118,8 @@ type checked struct {
 	comparison Comparison
 }
 
-// validate runs every check, in order: config's (yaml, schema, line, references, images,
-// secrets, availability), name, items, credentials, then the registered checks.
+// validate runs every check, in order: config's (yaml, schema, line, references, tools,
+// removed, availability), name, items, then credentials (connections).
 func (s *Service) validate(ctx context.Context, c candidate) (checked, error) {
 	f, problems := config.Check(c.files)
 	if c.files.err != nil {
@@ -143,12 +143,6 @@ func (s *Service) validate(ctx context.Context, c candidate) (checked, error) {
 
 		problems = append(problems, more.problems...)
 		ran = append(ran, more.ran...)
-	}
-
-	in := CheckInput{Factory: f, Model: out.model, Ranges: out.ranges, Files: c.files}
-	for _, ch := range s.checks {
-		problems = append(problems, ch.Check(ctx, in)...)
-		ran = append(ran, ch.ID())
 	}
 
 	if c.files.err != nil {

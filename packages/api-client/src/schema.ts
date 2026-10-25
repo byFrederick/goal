@@ -3666,12 +3666,8 @@ export interface components {
             /** @description The model a factory runs when it names none */
             default: boolean;
         };
-        /** @description Which later phases are wired; the editor hides or shows their controls read-only until then */
+        /** @description What this install enforces; the editor shows the controls for what it does not read-only */
         BuilderCapabilities: {
-            /** @description Phase 4.1: credential selects and factory credentials */
-            credentials: boolean;
-            /** @description Phase 4.2: the connector catalog and connector panel */
-            connectors: boolean;
             /** @description "Ask me" on built-in tools is enforced */
             tool_approvals: boolean;
         };

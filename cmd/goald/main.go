@@ -203,7 +203,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	feed := newFeed(s, store, eng, log)
 
-	// Phase 4 sets the capabilities in its wiring PRs; until then the editor keeps their controls hidden.
+	// No tool approval is enforced yet, so the editor warns where an agent asks for one ("Ask me").
 	editor := builder.New(objects, clock, builder.Config{Models: s.Models, Capabilities: builder.Capabilities{}, Logger: log})
 
 	// Platform admins, the security log and the sign-in clean-up: install-level, in no organization.

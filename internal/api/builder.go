@@ -31,11 +31,9 @@ func (s *server) GetBuilderMeta(ctx context.Context, _ gen.GetBuilderMetaRequest
 	m := s.builder.Meta(ctx)
 
 	out := gen.GetBuilderMeta200JSONResponse{
-		Models: make([]gen.BuilderModel, 0, len(m.Models)),
-		Capabilities: gen.BuilderCapabilities{
-			Credentials: m.Capabilities.Credentials, Connectors: m.Capabilities.Connectors, ToolApprovals: m.Capabilities.ToolApprovals,
-		},
-		Limits: gen.BuilderLimits{SkillBytes: m.MaxSkillBytes, SkillFiles: m.MaxSkillFiles},
+		Models:       make([]gen.BuilderModel, 0, len(m.Models)),
+		Capabilities: gen.BuilderCapabilities{ToolApprovals: m.Capabilities.ToolApprovals},
+		Limits:       gen.BuilderLimits{SkillBytes: m.MaxSkillBytes, SkillFiles: m.MaxSkillFiles},
 	}
 
 	for i, model := range m.Models {

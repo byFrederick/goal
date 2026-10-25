@@ -29,7 +29,7 @@ import (
 type (
 	// Model is a model the editor offers.
 	Model = domain.Model
-	// Capabilities says which later phases are wired.
+	// Capabilities says what this install enforces.
 	Capabilities = domain.EditorCapabilities
 	// Meta is the editor's metadata.
 	Meta = domain.BuilderMeta
@@ -45,7 +45,7 @@ type (
 type Config struct {
 	// Models come from GOAL_MODELS; the first is the default.
 	Models []Model
-	// Capabilities are set in cmd/goald; phase 4 flips its flags in its wiring PRs.
+	// Capabilities are set in cmd/goald.
 	Capabilities Capabilities
 	// Logger may be nil.
 	Logger *slog.Logger

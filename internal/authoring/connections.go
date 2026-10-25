@@ -52,8 +52,8 @@ type KnowledgeSources interface {
 // merge with (merge-needs-code-host). It reads names, kinds and non-secret fields, never a secret.
 type ConnectionsCheck struct {
 	Connections ports.Connections
-	// Knowledge names the organization's knowledge sources; nil until the knowledge base ships
-	// (spec 4, 4-16), when an organization has none.
+	// Knowledge names the organization's knowledge sources (goald wires knowledge.Searcher); nil
+	// is an organization without any.
 	Knowledge KnowledgeSources
 }
 

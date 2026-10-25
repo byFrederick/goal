@@ -60,12 +60,6 @@ func (s *Service) Publish(ctx context.Context, f domain.FactoryID, r PublishRequ
 		return domain.DefinitionVersion{}, err
 	}
 
-	if s.resolver != nil {
-		if _, err := s.resolver.Resolve(ctx, c.factory); err != nil {
-			return domain.DefinitionVersion{}, fmt.Errorf("resolve connections: %w", err)
-		}
-	}
-
 	v, err := s.store.Publish(ctx, ports.Publish{
 		Factory: f, DraftRevision: r.Revision, ExpectedCurrent: r.ExpectedCurrent,
 		Name: c.factory.Metadata.Name, Title: c.factory.Metadata.Title, Message: r.Message,

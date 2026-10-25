@@ -1,7 +1,6 @@
 package authoring_test
 
 import (
-	"context"
 	"slices"
 	"strings"
 	"testing"
@@ -56,23 +55,7 @@ func TestValidate_RemovedFormsAreErrors(t *testing.T) {
 	}
 }
 
-// laterCheck stands in for a check a later phase registers.
-type laterCheck struct{}
-
-func (laterCheck) ID() string { return "acme-check" }
-
-func (laterCheck) Check(_ context.Context, in authoring.CheckInput) []domain.DefinitionProblem {
-	if in.Factory == nil {
-		return nil
-	}
-
-	return []domain.DefinitionProblem{{
-		Code: "acme-warning", Severity: domain.SeverityWarning, Check: "acme-check",
-		Section: domain.SectionConnections, Message: "something to look at",
-	}}
-}
-
-func TestValidate_ChecksOfLaterPhasesAreOmittedUntilRegistered(t *testing.T) {
+func TestValidate_ListsEveryCheckThatRan(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
@@ -101,24 +84,6 @@ func TestValidate_ChecksOfLaterPhasesAreOmittedUntilRegistered(t *testing.T) {
 
 	if v.Counts != (authoring.Counts{Stations: 4, Agents: 1}) {
 		t.Errorf("counts = %+v", v.Counts)
-	}
-}
-
-func TestValidate_RegisteredChecksRun(t *testing.T) {
-	t.Parallel()
-
-	h := newHarness(t, withChecks(laterCheck{}))
-
-	v, err := h.svc.ValidateFiles(h.ctx, acmeFiles(acmeYAML))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	res, ran := checkResult(v, "acme-check")
-	want := authoring.CheckResult{ID: "acme-check", Section: domain.SectionConnections, Status: authoring.CheckWarning, Summary: "1 warning"}
-
-	if !ran || res != want || !v.OK {
-		t.Errorf("registered check = %+v (ran %v, ok %v), want %+v", res, ran, v.OK, want)
 	}
 }
 
