@@ -65,6 +65,8 @@ type factoryRow struct {
 	last        int
 	pausedAt    time.Time
 	pausedBy    domain.Actor
+	archivedAt  time.Time
+	archivedBy  domain.Actor
 	createdAt   time.Time
 	createdBy   domain.Actor
 }
@@ -252,6 +254,61 @@ func (d *Definitions) SetPaused(ctx context.Context, id domain.FactoryID, paused
 		f.pausedAt, f.pausedBy = time.Time{}, domain.Actor{}
 		if paused {
 			f.pausedAt, f.pausedBy = d.stamp(), stored(by)
+		}
+
+		return d.recordLocked(f), []ports.DefinitionNotice{d.currentNoticeLocked(f)}, nil
+	})
+}
+
+// ArchiveFactory implements ports.DefinitionStore. Leases are checked in Items under this
+// store's mutex, as the adapter checks them under the factory's row lock.
+func (d *Definitions) ArchiveFactory(ctx context.Context, id domain.FactoryID, by domain.Actor) (ports.FactoryRecord, error) {
+	return d.setArchived(ctx, id, true, by)
+}
+
+// RestoreArchivedFactory implements ports.DefinitionStore.
+func (d *Definitions) RestoreArchivedFactory(ctx context.Context, id domain.FactoryID, by domain.Actor) (ports.FactoryRecord, error) {
+	return d.setArchived(ctx, id, false, by)
+}
+
+func (d *Definitions) setArchived(ctx context.Context, id domain.FactoryID, archive bool, by domain.Actor) (ports.FactoryRecord, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return ports.FactoryRecord{}, err
+	}
+
+	return change(d, func() (ports.FactoryRecord, []ports.DefinitionNotice, error) {
+		f, err := d.factoryLocked(org, id)
+		if err != nil {
+			return ports.FactoryRecord{}, nil, err
+		}
+
+		if archive == !f.archivedAt.IsZero() {
+			return d.recordLocked(f), nil, nil
+		}
+
+		action := domain.AuditFactoryRestored
+
+		if archive {
+			action = domain.AuditFactoryArchived
+
+			if f.pausedAt.IsZero() {
+				return ports.FactoryRecord{}, nil, fmt.Errorf("factory %s: %w", id, ports.ErrFactoryRunning)
+			}
+
+			if d.items != nil && d.items.leased(org, id) {
+				return ports.FactoryRecord{}, nil, fmt.Errorf("factory %s: %w", id, ports.ErrFactoryBusy)
+			}
+		}
+
+		err = d.auditLocked(ctx, by, action, domain.AuditTargetFactory, string(id), id, map[string]any{auditName: f.name})
+		if err != nil {
+			return ports.FactoryRecord{}, nil, err
+		}
+
+		f.archivedAt, f.archivedBy = time.Time{}, domain.Actor{}
+		if archive {
+			f.archivedAt, f.archivedBy = d.stamp(), stored(by)
 		}
 
 		return d.recordLocked(f), []ports.DefinitionNotice{d.currentNoticeLocked(f)}, nil
@@ -834,7 +891,8 @@ func (d *Definitions) auditLocked(ctx context.Context, by domain.Actor, action, 
 func (d *Definitions) recordLocked(f *factoryRow) ports.FactoryRecord {
 	r := ports.FactoryRecord{
 		ID: f.id, OrgID: f.org, Name: f.name, Title: f.title, LastVersionNumber: f.last,
-		PausedAt: f.pausedAt, PausedBy: f.pausedBy, CreatedAt: f.createdAt, CreatedBy: f.createdBy,
+		PausedAt: f.pausedAt, PausedBy: f.pausedBy, ArchivedAt: f.archivedAt, ArchivedBy: f.archivedBy,
+		CreatedAt: f.createdAt, CreatedBy: f.createdBy,
 	}
 
 	if v, ok := d.versions[f.current]; ok {
@@ -970,6 +1028,20 @@ func (s *Store) moveOffStations(org domain.OrgID, factory domain.FactoryID, m st
 	}
 
 	return len(move), nil
+}
+
+// leased reports whether one of org's items of factory holds a lease.
+func (s *Store) leased(org domain.OrgID, factory domain.FactoryID) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, l := range s.leases {
+		if _, ok := s.visible(l.ItemID, org); ok && l.FactoryID == factory {
+			return true
+		}
+	}
+
+	return false
 }
 
 // forgetFactory drops a deleted factory's registration.

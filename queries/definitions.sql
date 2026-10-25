@@ -24,7 +24,7 @@ SELECT * FROM factory_records WHERE id = $1;
 SELECT * FROM factory_records ORDER BY lower(name) COLLATE "C", id;
 
 -- name: LockFactory :one
-SELECT id, name, current_version_id, last_version_number, paused_at FROM factories WHERE id = $1 FOR NO KEY UPDATE;
+SELECT id, name, current_version_id, last_version_number, paused_at, archived_at FROM factories WHERE id = $1 FOR NO KEY UPDATE;
 
 -- name: NameTaken :one
 -- Whether another factory of the organization has name, compared without case.
@@ -39,6 +39,19 @@ UPDATE factories SET
   paused_by = CASE WHEN sqlc.arg(paused)::boolean THEN sqlc.arg(paused_by)::text END,
   updated_at = now()
 WHERE id = sqlc.arg(id);
+
+-- name: SetFactoryArchived :exec
+UPDATE factories SET
+  archived_at = CASE WHEN sqlc.arg(archived)::boolean THEN now() END,
+  archived_by = CASE WHEN sqlc.arg(archived)::boolean THEN sqlc.arg(archived_by)::text END,
+  updated_at = now()
+WHERE id = sqlc.arg(id);
+
+-- name: FactoryLeased :one
+-- Whether one of the factory's items holds a lease. Under the factory's row lock this sees every
+-- lease committed before it; a claim from a stale cache of a paused factory could still insert
+-- one after it (a lease's foreign key takes FOR KEY SHARE, which the lock does not block).
+SELECT EXISTS (SELECT 1 FROM leases WHERE factory_id = $1);
 
 -- name: PointFactory :exec
 -- Points a factory at a published version, with that version's name and title. A publish raises

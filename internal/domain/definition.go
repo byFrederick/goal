@@ -118,6 +118,8 @@ const (
 	AuditFactoryDeleted      = "factory.deleted"
 	AuditFactoryPaused       = "factory.paused"
 	AuditFactoryResumed      = "factory.resumed"
+	AuditFactoryArchived     = "factory.archived"
+	AuditFactoryRestored     = "factory.restored"
 	AuditDefinitionPublished = "definition.published"
 	AuditDefinitionRestored  = "definition.restored"
 	AuditDraftDiscarded      = "definition.draft_discarded"

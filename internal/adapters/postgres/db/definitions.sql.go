@@ -157,8 +157,22 @@ func (q *Queries) Draft(ctx context.Context, factoryID uuid.UUID) (DefinitionVer
 	return i, err
 }
 
+const factoryLeased = `-- name: FactoryLeased :one
+SELECT EXISTS (SELECT 1 FROM leases WHERE factory_id = $1)
+`
+
+// Whether one of the factory's items holds a lease. Under the factory's row lock this sees every
+// lease committed before it; a claim from a stale cache of a paused factory could still insert
+// one after it (a lease's foreign key takes FOR KEY SHARE, which the lock does not block).
+func (q *Queries) FactoryLeased(ctx context.Context, factoryID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, factoryLeased, factoryID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const factoryRecord = `-- name: FactoryRecord :one
-SELECT id, org_id, name, title, last_version_number, paused_at, paused_by, created_at, created_by, current_id, current_number, current_revision, current_at, current_by, draft_id, draft_revision, draft_at, draft_by FROM factory_records WHERE id = $1
+SELECT id, org_id, name, title, last_version_number, paused_at, paused_by, created_at, created_by, current_id, current_number, current_revision, current_at, current_by, draft_id, draft_revision, draft_at, draft_by, archived_at, archived_by FROM factory_records WHERE id = $1
 `
 
 func (q *Queries) FactoryRecord(ctx context.Context, id uuid.UUID) (FactoryRecord, error) {
@@ -183,12 +197,14 @@ func (q *Queries) FactoryRecord(ctx context.Context, id uuid.UUID) (FactoryRecor
 		&i.DraftRevision,
 		&i.DraftAt,
 		&i.DraftBy,
+		&i.ArchivedAt,
+		&i.ArchivedBy,
 	)
 	return i, err
 }
 
 const factoryRecords = `-- name: FactoryRecords :many
-SELECT id, org_id, name, title, last_version_number, paused_at, paused_by, created_at, created_by, current_id, current_number, current_revision, current_at, current_by, draft_id, draft_revision, draft_at, draft_by FROM factory_records ORDER BY lower(name) COLLATE "C", id
+SELECT id, org_id, name, title, last_version_number, paused_at, paused_by, created_at, created_by, current_id, current_number, current_revision, current_at, current_by, draft_id, draft_revision, draft_at, draft_by, archived_at, archived_by FROM factory_records ORDER BY lower(name) COLLATE "C", id
 `
 
 func (q *Queries) FactoryRecords(ctx context.Context) ([]FactoryRecord, error) {
@@ -219,6 +235,8 @@ func (q *Queries) FactoryRecords(ctx context.Context) ([]FactoryRecord, error) {
 			&i.DraftRevision,
 			&i.DraftAt,
 			&i.DraftBy,
+			&i.ArchivedAt,
+			&i.ArchivedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -449,7 +467,7 @@ func (q *Queries) LockDraft(ctx context.Context, factoryID uuid.UUID) (Definitio
 }
 
 const lockFactory = `-- name: LockFactory :one
-SELECT id, name, current_version_id, last_version_number, paused_at FROM factories WHERE id = $1 FOR NO KEY UPDATE
+SELECT id, name, current_version_id, last_version_number, paused_at, archived_at FROM factories WHERE id = $1 FOR NO KEY UPDATE
 `
 
 type LockFactoryRow struct {
@@ -458,6 +476,7 @@ type LockFactoryRow struct {
 	CurrentVersionID  *uuid.UUID
 	LastVersionNumber int32
 	PausedAt          *time.Time
+	ArchivedAt        *time.Time
 }
 
 func (q *Queries) LockFactory(ctx context.Context, id uuid.UUID) (LockFactoryRow, error) {
@@ -469,6 +488,7 @@ func (q *Queries) LockFactory(ctx context.Context, id uuid.UUID) (LockFactoryRow
 		&i.CurrentVersionID,
 		&i.LastVersionNumber,
 		&i.PausedAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
@@ -744,6 +764,25 @@ func (q *Queries) SaveDraft(ctx context.Context, arg SaveDraftParams) (Definitio
 		&i.PublishedAt,
 	)
 	return i, err
+}
+
+const setFactoryArchived = `-- name: SetFactoryArchived :exec
+UPDATE factories SET
+  archived_at = CASE WHEN $1::boolean THEN now() END,
+  archived_by = CASE WHEN $1::boolean THEN $2::text END,
+  updated_at = now()
+WHERE id = $3
+`
+
+type SetFactoryArchivedParams struct {
+	Archived   bool
+	ArchivedBy string
+	ID         uuid.UUID
+}
+
+func (q *Queries) SetFactoryArchived(ctx context.Context, arg SetFactoryArchivedParams) error {
+	_, err := q.db.Exec(ctx, setFactoryArchived, arg.Archived, arg.ArchivedBy, arg.ID)
+	return err
 }
 
 const setFactoryPaused = `-- name: SetFactoryPaused :exec

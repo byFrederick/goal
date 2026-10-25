@@ -99,6 +99,8 @@ type FactoryRecord struct {
 	DraftRevision     *int64
 	DraftAt           *time.Time
 	DraftBy           *string
+	ArchivedAt        *time.Time
+	ArchivedBy        *string
 }
 
 type ItemEvent struct {

@@ -39,13 +39,14 @@ func timeless(v domain.DefinitionVersion) domain.DefinitionVersion {
 }
 
 // checkRecord fails unless got is want apart from its times: CreatedAt and each version
-// reference's At must be set, and PausedAt set exactly when want's is.
+// reference's At must be set, and PausedAt and ArchivedAt set exactly when want's are.
 func checkRecord(t *testing.T, what string, got, want ports.FactoryRecord) {
 	t.Helper()
 
-	if got.CreatedAt.IsZero() || got.Paused() != want.Paused() || unstamped(got.Current) || unstamped(got.Draft) {
-		t.Errorf("%s times: created %v, paused %v, current %+v, draft %+v; want them set (paused: %v)",
-			what, got.CreatedAt, got.PausedAt, got.Current, got.Draft, want.Paused())
+	if got.CreatedAt.IsZero() || got.Paused() != want.Paused() || got.Archived() != want.Archived() ||
+		unstamped(got.Current) || unstamped(got.Draft) {
+		t.Errorf("%s times: created %v, paused %v, archived %v, current %+v, draft %+v; want them set (paused: %v, archived: %v)",
+			what, got.CreatedAt, got.PausedAt, got.ArchivedAt, got.Current, got.Draft, want.Paused(), want.Archived())
 	}
 
 	if g, w := untimed(got), untimed(want); !reflect.DeepEqual(g, w) {
@@ -63,12 +64,13 @@ type recordView struct {
 	Current, Draft    *ports.VersionRef
 	LastVersionNumber int
 	PausedBy, Creator domain.Actor
+	ArchivedBy        domain.Actor
 }
 
 func untimed(r ports.FactoryRecord) recordView {
 	return recordView{
 		ID: r.ID, OrgID: r.OrgID, Name: r.Name, Title: r.Title, Current: atless(r.Current), Draft: atless(r.Draft),
-		LastVersionNumber: r.LastVersionNumber, PausedBy: r.PausedBy, Creator: r.CreatedBy,
+		LastVersionNumber: r.LastVersionNumber, PausedBy: r.PausedBy, Creator: r.CreatedBy, ArchivedBy: r.ArchivedBy,
 	}
 }
 
@@ -84,8 +86,8 @@ func atless(r *ports.VersionRef) *ports.VersionRef {
 }
 
 func (v recordView) String() string {
-	return fmt.Sprintf("{%s org %s %q %q current %+v draft %+v last v%d paused by %+v created by %+v}",
-		v.ID, v.OrgID, v.Name, v.Title, v.Current, v.Draft, v.LastVersionNumber, v.PausedBy, v.Creator)
+	return fmt.Sprintf("{%s org %s %q %q current %+v draft %+v last v%d paused by %+v created by %+v archived by %+v}",
+		v.ID, v.OrgID, v.Name, v.Title, v.Current, v.Draft, v.LastVersionNumber, v.PausedBy, v.Creator, v.ArchivedBy)
 }
 
 func orNil[M ~map[K]V, K comparable, V any](m M) M {
@@ -96,11 +98,12 @@ func orNil[M ~map[K]V, K comparable, V any](m M) M {
 	return m
 }
 
-// paused and running are the PausedAt of a paused and a running factory in a want; any time
-// that is set will do for paused.
+// paused and running are the PausedAt of a paused and a running factory in a want, and
+// archivedSince the ArchivedAt of an archived one; any time that is set will do for them.
 var (
-	paused  = t0
-	running time.Time
+	paused        = t0
+	running       time.Time
+	archivedSince = t0
 )
 
 // records returns the organization's factories.
