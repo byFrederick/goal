@@ -1,18 +1,14 @@
-# One account-owned API token with the given permission groups on the given resources. The groups
-# are looked up by their names, as the API's permission-group list names them, so no opaque id is
-# written down here.
+# One account-owned API token with one permission group on the given resources. The group is
+# looked up by its name, as the dashboard shows it, so no opaque id is written down here.
 data "cloudflare_account_api_token_permission_groups_list" "all" {
   account_id = var.account_id
 }
 
 locals {
-  permission_group_ids = {
-    for name in var.permission_groups : name => one([
-      for group in data.cloudflare_account_api_token_permission_groups_list.all.result : group.id
-      if group.name == name
-    ])
-  }
-  unknown_permission_groups = sort([for name, id in local.permission_group_ids : name if id == null])
+  permission_group_id = one([
+    for group in data.cloudflare_account_api_token_permission_groups_list.all.result : group.id
+    if group.name == var.permission_group
+  ])
 }
 
 resource "cloudflare_account_token" "this" {
@@ -21,14 +17,14 @@ resource "cloudflare_account_token" "this" {
 
   policies = [{
     effect            = "allow"
-    permission_groups = [for name in sort(var.permission_groups) : { id = local.permission_group_ids[name] }]
+    permission_groups = [{ id = local.permission_group_id }]
     resources         = jsonencode(var.resources)
   }]
 
   lifecycle {
     precondition {
-      condition     = length(local.unknown_permission_groups) == 0
-      error_message = "No account token permission group is named ${join(", ", local.unknown_permission_groups)}."
+      condition     = local.permission_group_id != null
+      error_message = "No account token permission group is named ${var.permission_group}."
     }
   }
 }

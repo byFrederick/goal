@@ -88,13 +88,6 @@ output "goal_pg_auth_password" {
   sensitive   = true
 }
 
-# GitHub Actions: the deploy's credential (task deploy:token puts it into the production environment)
-output "deploy_api_token" {
-  description = "GOAL_DEPLOY_API_TOKEN: the account token wrangler deploy uses, nothing more (tokens.tf)."
-  value       = module.deploy_token.value
-  sensitive   = true
-}
-
 # Google: GitHub Actions (ci.tf); variables of the GitHub environments, not secrets
 output "ci_workload_identity_provider" {
   description = "workload_identity_provider of google-github-actions/auth in both GitHub environments."

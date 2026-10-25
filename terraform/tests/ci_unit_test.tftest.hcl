@@ -118,11 +118,6 @@ override_module {
   outputs = { id = "ai-token-id", value = "ai-token-value" }
 }
 
-override_module {
-  target  = module.deploy_token
-  outputs = { id = "deploy-token-id", value = "deploy-token-value" }
-}
-
 variables {
   pool = "projects/123456789012/locations/global/workloadIdentityPools/github-actions"
 }
