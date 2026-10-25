@@ -416,10 +416,8 @@ func noRedirects(*http.Request, []*http.Request) error { return http.ErrUseLastR
 // the database, which must never hold one (a kind puts no secret in a URL, but an answer might
 // echo it).
 func scrub(msg string, rc domain.ResolvedConnection) string {
-	for _, f := range rc.Kind.Spec.Fields {
-		if v := rc.Values[f.Name]; f.Secret && v != "" {
-			msg = strings.ReplaceAll(msg, v, "[secret]")
-		}
+	for _, v := range rc.SecretValues() {
+		msg = strings.ReplaceAll(msg, v, "[secret]")
 	}
 
 	return msg

@@ -658,6 +658,20 @@ func (rc ResolvedConnection) GitLogin() (host, password string, err error) {
 	return strings.ToLower(run.Git.Host), run.Env[run.Git.PasswordEnv], nil
 }
 
+// SecretValues are the values of rc's secret fields that are set, in its kind's order: what a
+// scrubber removes from whatever a use of rc reports.
+func (rc ResolvedConnection) SecretValues() []string {
+	var out []string
+
+	for _, f := range rc.Kind.Spec.Fields {
+		if v := rc.Values[f.Name]; f.Secret && v != "" {
+			out = append(out, v)
+		}
+	}
+
+	return out
+}
+
 func (k ConnectionKind) renderGit(values, minted, env map[string]string) (*KindGit, error) {
 	g := k.Spec.Git
 	if g == nil {

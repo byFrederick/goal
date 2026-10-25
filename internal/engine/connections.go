@@ -118,7 +118,7 @@ type runConnection struct {
 
 	name string
 	kind domain.ConnectionKind
-	// secrets are its secret field values.
+	// secrets are its secret field values and the values minted for the run.
 	secrets []string
 }
 
@@ -135,13 +135,7 @@ func (e *Engine) resolve(ctx context.Context, names []string, run domain.RunID) 
 	}
 
 	for _, r := range resolved {
-		rc := runConnection{name: r.Connection.Name, kind: r.Kind}
-
-		for _, f := range r.Kind.Spec.Fields {
-			if v := r.Values[f.Name]; f.Secret && v != "" {
-				rc.secrets = append(rc.secrets, v)
-			}
-		}
+		rc := runConnection{name: r.Connection.Name, kind: r.Kind, secrets: r.SecretValues()}
 
 		minted, err := e.mint(ctx, r, run, &rc)
 		if err != nil {
