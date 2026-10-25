@@ -1,5 +1,5 @@
 # GitHub Actions' keyless access to Google (ci.tf, ADR 0010) planned against mock providers: only
-# byFrederick/goal's two environments get in, and each impersonates only its own service account.
+# byFrederick/goal's one environment, production, gets in, and it impersonates only terraform-apply.
 
 mock_provider "cloudflare" {
   override_data {
@@ -17,7 +17,7 @@ mock_provider "cloudflare" {
 }
 
 mock_provider "google" {
-  # What Google would return for the pool and the service accounts, so the bindings are known at
+  # What Google would return for the pool and the service account, so the bindings are known at
   # plan time.
   override_resource {
     target          = google_iam_workload_identity_pool.github
@@ -33,16 +33,6 @@ mock_provider "google" {
     override_during = plan
     values = {
       name = "projects/123456789012/locations/global/workloadIdentityPools/github-actions/providers/goal-repository"
-    }
-  }
-
-  override_resource {
-    target          = google_service_account.terraform_plan
-    override_during = plan
-    values = {
-      name   = "projects/goal-byfrederick/serviceAccounts/terraform-plan@goal-byfrederick.iam.gserviceaccount.com"
-      email  = "terraform-plan@goal-byfrederick.iam.gserviceaccount.com"
-      member = "serviceAccount:terraform-plan@goal-byfrederick.iam.gserviceaccount.com"
     }
   }
 
@@ -122,16 +112,16 @@ variables {
   pool = "projects/123456789012/locations/global/workloadIdentityPools/github-actions"
 }
 
-run "only_this_repository_and_its_two_environments_get_a_token" {
+run "only_this_repository_and_its_one_environment_gets_a_token" {
   command = plan
 
   assert {
     condition = google_iam_workload_identity_pool_provider.github.attribute_condition == join(" && ", [
       "assertion.repository_id == '1431390907'",
       "assertion.repository_owner_id == '43914037'",
-      "assertion.environment in ['production-plan', 'production']",
+      "assertion.environment == 'production'",
     ])
-    error_message = "The provider must admit byFrederick/goal by repository and owner id, from production-plan and production only."
+    error_message = "The provider must admit byFrederick/goal by repository and owner id, from production only."
   }
 
   assert {
@@ -156,18 +146,8 @@ run "only_this_repository_and_its_two_environments_get_a_token" {
   }
 }
 
-run "each_environment_impersonates_only_its_own_service_account" {
+run "only_production_impersonates_terraform_apply_with_the_custom_role" {
   command = plan
-
-  assert {
-    condition     = google_service_account_iam_binding.terraform_plan.role == "roles/iam.workloadIdentityUser" && google_service_account_iam_binding.terraform_plan.members == toset(["principalSet://iam.googleapis.com/${var.pool}/attribute.environment/production-plan"])
-    error_message = "terraform-plan must be impersonable from production-plan and nothing else."
-  }
-
-  assert {
-    condition     = google_service_account_iam_binding.terraform_plan.service_account_id == google_service_account.terraform_plan.name
-    error_message = "The production-plan binding must be on terraform-plan."
-  }
 
   assert {
     condition     = google_service_account_iam_binding.terraform_apply.role == "roles/iam.workloadIdentityUser" && google_service_account_iam_binding.terraform_apply.members == toset(["principalSet://iam.googleapis.com/${var.pool}/attribute.environment/production"])
@@ -177,15 +157,6 @@ run "each_environment_impersonates_only_its_own_service_account" {
   assert {
     condition     = google_service_account_iam_binding.terraform_apply.service_account_id == google_service_account.terraform_apply.name
     error_message = "The production binding must be on terraform-apply."
-  }
-}
-
-run "plan_reads_and_apply_gets_only_the_custom_role" {
-  command = plan
-
-  assert {
-    condition     = google_project_iam_member.terraform_plan.role == "roles/viewer" && google_project_iam_member.terraform_plan.member == "serviceAccount:terraform-plan@goal-byfrederick.iam.gserviceaccount.com"
-    error_message = "terraform-plan must be a project viewer."
   }
 
   assert {
@@ -199,7 +170,7 @@ run "plan_reads_and_apply_gets_only_the_custom_role" {
   }
 }
 
-run "the_workflows_get_the_provider_and_both_accounts" {
+run "the_workflows_get_the_provider_and_the_apply_account" {
   command = plan
 
   assert {
@@ -208,7 +179,7 @@ run "the_workflows_get_the_provider_and_both_accounts" {
   }
 
   assert {
-    condition     = output.ci_plan_service_account == "terraform-plan@goal-byfrederick.iam.gserviceaccount.com" && output.ci_apply_service_account == "terraform-apply@goal-byfrederick.iam.gserviceaccount.com"
-    error_message = "The outputs must give both service accounts' emails."
+    condition     = output.ci_apply_service_account == "terraform-apply@goal-byfrederick.iam.gserviceaccount.com"
+    error_message = "ci_apply_service_account must be terraform-apply's email."
   }
 }

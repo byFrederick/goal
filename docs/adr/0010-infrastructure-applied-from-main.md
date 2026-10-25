@@ -1,6 +1,6 @@
 # ADR 0010 — Infrastructure applied from main by CI
 
-Status: accepted · 2026-10-25 · Builds on [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (the Cloudflare install and `terraform/`) · Changed AGENTS.md rule 8 on 2026-10-25, when the apply workflow landed (Rollout step 3): the apply-on-merge workflow applies, agents never run `tf:apply`
+Status: accepted · 2026-10-25 · Amended 2026-10-25: one GitHub environment, `production`, for both jobs; it replaces the planned `production-plan` environment and its viewer-only `terraform-plan` service account, which were never set up · Builds on [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (the Cloudflare install and `terraform/`) · Changed AGENTS.md rule 8 on 2026-10-25, when the apply workflow landed (Rollout step 3): the apply-on-merge workflow applies, agents never run `tf:apply`
 
 ## Context
 
@@ -13,42 +13,34 @@ What the credentials can reach decides the design. The state holds every platfor
 ## Decision
 
 1. **The apply-on-merge workflow applies production from main.** On a push to main that touches `terraform/`, one job in the GitHub environment `production`, one run at a time (a concurrency group that never cancels a run in flight), plans to a saved file and applies that file, non-interactively. It applies what the merged commit planned, nothing newer. Then a `-detailed-exitcode` plan fails the job if anything is left: drift or an error fails loudly, never silently.
-2. **Pull requests get a plan, from read-only credentials.** On a pull request that touches `terraform/`, from this repository only (never a fork), one job in the GitHub environment `production-plan` runs `task tf:check` and `task tf:plan -- -lock=false`. It posts the plan as one comment, updated on each push, with sensitive values masked as Terraform masks them.
+2. **Pull requests get a plan.** On a pull request that touches `terraform/`, from this repository only (never a fork), one job in the GitHub environment `production` runs `task tf:check` and `task tf:plan -- -lock=false` (by choice: a pull request's plan never holds the state lock against an apply). It posts the plan as one comment, updated on each push, with sensitive values masked as Terraform masks them.
 3. **Agents never run `tf:apply` themselves.** They `fmt`, check, test and plan. A change reaches production by a pull request that a person merges.
-4. **Two environments split the credentials.**
-   - `production-plan` holds read-only tokens wherever the provider has them: Cloudflare read scopes, a PlanetScale read token, an R2 Object Read token for the state (hence `-lock=false`), and Google's `terraform-plan` service account (project viewer).
-   - `production` holds the write tokens and Google's `terraform-apply` service account. Its deployment branches are `main` only, so only the apply job gets them.
-
-     *As built (2026-10-25):* the owner gave `production` no deployment-branch rule. The apply workflow runs only on a push to `main`, so that trigger and the review of any workflow change, not the environment, keep another branch from applying.
-
-   Every token is new and dedicated to CI, so revoking one breaks nothing else. The runbook lists each secret, its scopes and where its value comes from.
-5. **Google without a key.** Workload Identity Federation in the sign-in project (`terraform/ci.tf`) trusts GitHub's OIDC tokens only from `byFrederick/goal`, matched by repository id and owner id so that a renamed or recreated namesake gets nothing, and only from the environments `production-plan` and `production`. Each environment can impersonate only its own service account. `terraform-apply` gets a custom role with exactly what `terraform/` manages in that project, never a basic role. The workflow exchanges its OIDC token for an access token, and the `tf:*` tasks take it as `GOOGLE_OAUTH_ACCESS_TOKEN` when `GITHUB_ACTIONS=true`. On a laptop nothing changes: gcloud's `goal` configuration, and any token left in the shell is overwritten.
+4. **One environment holds the credentials.** `production` holds the operator's existing credentials (the Cloudflare, PlanetScale and R2 state tokens and the age key, as the runbook lists them) and is the only environment Google's `terraform-apply` service account trusts. Its deployment branches cannot be limited to `main`, because pull request plans run from other branches; the apply workflow runs only on a push to `main`, so that trigger and the review of any workflow change, not the environment, keep another branch from applying. The owner may require reviewers on it. Revoking one of these credentials breaks the laptop too, so a rotation renews it in both places.
+5. **Google without a key.** Workload Identity Federation in the sign-in project (`terraform/ci.tf`) trusts GitHub's OIDC tokens only from `byFrederick/goal`, matched by repository id and owner id so that a renamed or recreated namesake gets nothing, and only from the environment `production`, which alone can impersonate `terraform-apply`. `terraform-apply` gets a custom role with exactly what `terraform/` manages in that project, never a basic role. The workflow exchanges its OIDC token for an access token, and the `tf:*` tasks take it as `GOOGLE_OAUTH_ACCESS_TOKEN` when `GITHUB_ACTIONS=true`. On a laptop nothing changes: gcloud's `goal` configuration, and any token left in the shell is overwritten.
 6. **The bootstrap stays manual.** The owner applies the federation resources once from a laptop with `-target` (runbook, bootstrap step 13), because no workflow can plan before they exist.
 
 ## The risk we accept
 
-Read-only tokens limit what a leak can **change**, not what it can **read**. Any branch pushed to this repository can rewrite the plan workflow and read `production-plan`'s secrets: the state token reads every secret in the state, and the age key, which cannot be made read-only, opens the master keys. That is the same exposure as the operator's laptop, now extended to everyone who can push a branch here. The mitigations:
+Any branch pushed to this repository can rewrite the plan workflow and get `production`'s credentials. They read everything (the state token reads every secret in the state, and the age key opens the master keys) and they can change production: the Cloudflare, PlanetScale and state tokens are write tokens, and `terraform-apply` can change the sign-in project's IAM. That is the operator's laptop's power, extended to everyone who can push a branch here. The owner accepted this on 2026-10-25 because only the owner and the factory push branches to this repository. The mitigations:
 
-- only people and agents the owner trusts can push here;
+- only the owner and the factory can push here;
 - forks get nothing;
-- the owner may require reviewers on `production-plan`, so a person approves each plan job before it receives the credentials;
+- the owner may require reviewers on `production`, so a person approves each job before it receives the credentials;
 - every token expires and is rotated (runbook, Other rotations); a suspected leak is handled as one of the state token: revoke it, then rotate every secret and the master key.
-
-`production`'s write credentials are reachable only from main, so only from merged code.
 
 ## Rollout
 
 Three changes, in order:
 
 1. *Done 2026-10-25 (PR #9).* The federation, the CI credential path of the `tf:*` tasks, the runbook's list of GitHub environment secrets, and this ADR. AGENTS.md rule 8 still says only the owner applies, and the owner applies the federation resources.
-2. The plan workflow ([`.github/workflows/terraform-plan.yml`](../../.github/workflows/terraform-plan.yml)). *Done:* it runs on pull requests that touch `terraform/` or the workflow, from this repository only, in `production-plan`, and keeps one plan comment per pull request up to date. Its first run needs bootstrap step 13.
+2. The plan workflow ([`.github/workflows/terraform-plan.yml`](../../.github/workflows/terraform-plan.yml)). *Done:* it runs on pull requests that touch `terraform/` or the workflow, from this repository only, in `production`, and keeps one plan comment per pull request up to date. Its first run needs bootstrap step 13.
 3. *Done 2026-10-25.* The apply workflow ([`.github/workflows/terraform-apply.yml`](../../.github/workflows/terraform-apply.yml)). In the same pull request, AGENTS.md rule 8, the runbook's Deploys section and the `tf:apply` comments in `Taskfile.yml` change to say that the apply-on-merge workflow applies and that agents never run `tf:apply`.
 
 Until step 3 merged, the rule in force was the old one: only the owner applied, or the coordinating agent the owner authorized for that change. A pull request's plan is the terraform-plan workflow's comment; the merge's apply is the terraform-apply workflow's run.
 
 ## Rejected
 
-- **One environment with the write credentials for both jobs.** A branch's plan job could then change production, not only read it.
-- **A Google service account key in a secret.** It is long-lived and can be copied. Federation issues short-lived tokens bound to this repository and its environments.
+- **One environment with the write credentials for both jobs: accepted on 2026-10-25.** Rejected at first because a branch's plan job could then change production, not only read it. The owner accepted it (amendment above): only the owner and the factory push branches here.
+- **A Google service account key in a secret.** It is long-lived and can be copied. Federation issues short-lived tokens bound to this repository and its `production` environment.
 - **Plans only after merge.** Reviewers need the plan before they merge, not after.
 - **`pull_request_target` for forks.** It would run untrusted code with the credentials. Forks get no plan; a maintainer pushes the change to a branch here.

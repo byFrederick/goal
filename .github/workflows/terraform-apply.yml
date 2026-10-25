@@ -1,9 +1,9 @@
 # Applies terraform/ to production on every push to main that changes it (ADR 0010, runbook:
 # docs/engineering/cloudflare-operations.md, Deploys). One job in the GitHub environment
-# `production` (write credentials; no deployment-branch rule by the owner's choice, so what keeps
-# a non-main run from applying is this file's push-to-main trigger and the review of any change to
-# a workflow), one run at a time: a run in
-# flight is never cancelled, and a newer push waits for it. It plans to a saved file, applies that
+# `production` (write credentials; shared with the plan workflow, so it has no deployment-branch
+# rule: what keeps a non-main run from applying is this file's push-to-main trigger and the review
+# of any change to a workflow), one run at a time: a run in flight is never cancelled, and a newer
+# push waits for it. It plans to a saved file, applies that
 # file (what the merged commit planned, nothing newer), then plans again with -detailed-exitcode
 # and fails if anything is left: drift or an error fails loudly, never silently. A failed apply
 # is fixed by a new pull request, never by a manual apply.
