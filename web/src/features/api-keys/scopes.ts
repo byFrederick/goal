@@ -22,6 +22,7 @@ export const scopeGroups: readonly { id: 'read' | 'work' | 'build'; label: strin
       { id: 'factory:read', label: 'See factories', needs: 'viewer' },
       { id: 'audit:read', label: 'Read the audit log', needs: null },
       { id: 'connection:read', label: 'See connections', needs: null },
+      { id: 'knowledge:read', label: 'Search the knowledge base', needs: null },
     ],
   },
   {
@@ -42,6 +43,7 @@ export const scopeGroups: readonly { id: 'read' | 'work' | 'build'; label: strin
       { id: 'definition:publish', label: 'Publish versions', needs: 'editor' },
       { id: 'factory:manage', label: 'Pause factories', needs: 'editor' },
       { id: 'factory:create', label: 'Create factories', needs: null },
+      { id: 'knowledge:manage', label: 'Manage the knowledge base', needs: null },
     ],
   },
 ];

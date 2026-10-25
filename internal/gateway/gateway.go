@@ -26,6 +26,15 @@
 // see of them (domain.ConnectionKind.Outline): env names, MCP servers whose headers name env
 // variables (${NAME}, expanded by Claude Code in the box), git logins, CLI tools and docs. The
 // bundle holds no secret, and it proxies nothing: everything it describes is used from the box.
+// Its knowledge_sources name what Goal's knowledge tools search, which the worker's prompt
+// mentions.
+//
+// # Goal's tools
+//
+// A run whose definition version lists knowledge sources (spec.knowledge.sources) is served
+// knowledge__search and knowledge__read (knowledge.go) next to its connections' tools. They search
+// and read those sources only, in the token's organization only (row-level security), whatever
+// the agent asks: a document of another source answers as one that does not exist.
 //
 // # Inline connections and tools
 //
@@ -125,6 +134,9 @@ type Deps struct {
 	Logger      *slog.Logger
 	// Transport carries upstream requests.
 	Transport http.RoundTripper
+	// Knowledge serves Goal's knowledge tools to runs whose factory lists knowledge sources; nil
+	// serves none.
+	Knowledge Knowledge
 }
 
 // Config bounds the gateway. Zero values take the defaults below.
@@ -165,6 +177,7 @@ type Gateway struct {
 	clock       ports.Clock
 	log         *slog.Logger
 	transport   http.RoundTripper
+	knowledge   Knowledge // nil without Deps.Knowledge
 	cfg         Config
 	mcp         http.Handler
 }
@@ -186,7 +199,7 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 
 	g := &Gateway{
 		defs: d.Definitions, items: d.Items, connections: d.Connections, secrets: d.Secrets, events: d.Events, clock: d.Clock,
-		log: d.Logger, transport: d.Transport, cfg: cfg,
+		log: d.Logger, transport: d.Transport, knowledge: d.Knowledge, cfg: cfg,
 	}
 	if g.log == nil {
 		g.log = slog.New(slog.DiscardHandler)
@@ -288,7 +301,7 @@ func (g *Gateway) session(ctx context.Context, c domain.TaskClaims) (*session, e
 		return nil, fmt.Errorf("%w: agent %q is not in factory %s", errForbidden, c.Agent, c.FactoryID)
 	}
 
-	s := &session{g: g, claims: c, policy: newPolicy(f.Spec.Connections, agent)}
+	s := &session{g: g, claims: c, policy: newPolicy(f.Spec.Connections, agent), sources: g.searchable(f.Line())}
 	s.grant(ctx, f.Spec.Connections, agent.Connections)
 
 	return s, nil

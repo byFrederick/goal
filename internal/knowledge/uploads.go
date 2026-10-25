@@ -46,13 +46,9 @@ func (u *Uploads) Upload(ctx context.Context, source, name string, body []byte, 
 		return domain.KnowledgeDocument{}, domain.ErrNoOrg
 	}
 
-	if int64(len(body)) > u.max {
-		return domain.KnowledgeDocument{}, fmt.Errorf("upload %q has %d bytes, more than %d: %w", name, len(body), u.max, ports.ErrTooLarge)
-	}
-
-	mime, err := TypeOf(name, body)
+	mime, err := u.check(name, body)
 	if err != nil {
-		return domain.KnowledgeDocument{}, fmt.Errorf("upload: %w", err)
+		return domain.KnowledgeDocument{}, err
 	}
 
 	// Refused before the bucket is written, so a refusal leaves no object behind.
@@ -76,6 +72,50 @@ func (u *Uploads) Upload(ctx context.Context, source, name string, body []byte, 
 	}
 
 	return d, nil
+}
+
+// Check refuses a file Upload would refuse for itself, before anything is stored:
+// ports.ErrTooLarge over the size limit, domain.ErrUnsupportedDocument for a type the knowledge
+// base does not index.
+func (u *Uploads) Check(name string, body []byte) error {
+	_, err := u.check(name, body)
+
+	return err
+}
+
+// check is Check that also returns the file's type.
+func (u *Uploads) check(name string, body []byte) (string, error) {
+	if int64(len(body)) > u.max {
+		return "", fmt.Errorf("upload %q has %d bytes, more than %d: %w", name, len(body), u.max, ports.ErrTooLarge)
+	}
+
+	mime, err := TypeOf(name, body)
+	if err != nil {
+		return "", fmt.Errorf("upload: %w", err)
+	}
+
+	return mime, nil
+}
+
+// Original is an uploaded document with its file as it was uploaded. ports.ErrNotFound when
+// there is none, domain.ErrNotUploadSource for a synced document, whose original stays at its
+// source.
+func (u *Uploads) Original(ctx context.Context, id domain.KnowledgeDocumentID) (domain.KnowledgeDocument, []byte, error) {
+	d, _, err := u.kb.Document(ctx, id)
+	if err != nil {
+		return domain.KnowledgeDocument{}, nil, err
+	}
+
+	if d.Blob == "" {
+		return domain.KnowledgeDocument{}, nil, fmt.Errorf("knowledge document %s: %w", id, domain.ErrNotUploadSource)
+	}
+
+	doc, err := u.Fetch(ctx, domain.SyncSpec{}, string(d.Blob))
+	if err != nil {
+		return domain.KnowledgeDocument{}, nil, err
+	}
+
+	return d, doc.Body, nil
 }
 
 // DeleteDocument deletes an uploaded document and, when no other document holds its content,

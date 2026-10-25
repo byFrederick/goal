@@ -105,6 +105,23 @@ func (q *Queries) NoticeEvent(ctx context.Context, id int64) (NoticeEventRow, er
 	return i, err
 }
 
+const noticeKnowledgeSource = `-- name: NoticeKnowledgeSource :one
+SELECT name, status FROM knowledge_sources WHERE id = $1
+`
+
+type NoticeKnowledgeSourceRow struct {
+	Name   string
+	Status string
+}
+
+// A knowledge source's name and sync status: what a knowledge event is read back from.
+func (q *Queries) NoticeKnowledgeSource(ctx context.Context, id uuid.UUID) (NoticeKnowledgeSourceRow, error) {
+	row := q.db.QueryRow(ctx, noticeKnowledgeSource, id)
+	var i NoticeKnowledgeSourceRow
+	err := row.Scan(&i.Name, &i.Status)
+	return i, err
+}
+
 const noticeVersion = `-- name: NoticeVersion :one
 SELECT factory_id, state, number, revision FROM definition_versions WHERE id = $1
 `

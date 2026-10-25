@@ -166,4 +166,16 @@ describe('agentQuery', () => {
   it("refuses a connection named like goald's gateway", () => {
     expect(() => optionsOf({ connections: [{ ...issues, name: 'goal' }] })).toThrow(/goal/);
   });
+
+  it('names the knowledge tools and their sources after the prompt when the gateway serves them', () => {
+    const append = systemPromptOf({
+      gateway_url: 'http://gateway.internal/mcp',
+      knowledge_sources: ['handbook', 'runbooks'],
+    });
+    expect(append).toBe(
+      "You are the engineer.\n\n## Knowledge\nThe organization's knowledge sources handbook, runbooks are searchable with " +
+        'mcp__goal__knowledge__search; mcp__goal__knowledge__read returns a whole document by the id a search gave.',
+    );
+    expect(systemPromptOf({ knowledge_sources: ['handbook'] })).not.toContain('Knowledge');
+  });
 });

@@ -36,5 +36,5 @@ func (s *server) NoteItem(ctx context.Context, req gen.NoteItemRequestObject) (g
 		return nil, err
 	}
 
-	return gen.NoteItem202JSONResponse{EventId: ev.ID, Delivery: gen.NextRun}, nil
+	return gen.NoteItem202JSONResponse{EventId: ev.ID, Delivery: gen.NoteReceiptDeliveryNextRun}, nil
 }

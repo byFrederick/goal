@@ -22,6 +22,7 @@ import (
 	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/engine"
+	"github.com/byFrederick/goal/internal/knowledge"
 	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/ports/porttest"
 )
@@ -69,6 +70,9 @@ type defGoald struct {
 	keys *porttest.Identity
 	// conns holds the organization's connections, with goald's platform kinds.
 	conns *porttest.Connections
+	// kb is the organization's knowledge base; sync indexes what is due in it, as goald's loop.
+	kb   *porttest.Knowledge
+	sync func(t *testing.T)
 
 	mu sync.Mutex
 	// beforeTree runs once before the next PUT …/draft/tree is served.
@@ -120,18 +124,33 @@ func newDefGoald(t *testing.T) *defGoald {
 		t.Fatal(err)
 	}
 
+	kb := porttest.NewKnowledge(conns, tenancy)
+	uploads := knowledge.NewUploads(kb, porttest.NewObjectStore(), 0)
+
 	handler, err := api.New(api.Deps{
 		Engine: e, Items: store, Factories: cache, Definitions: authors, Versions: defs, Orgs: tenancy, Audit: tenancy,
 		Access: keys, OrgRetention: time.Hour, Authorizer: api.AllowAll{}, Auth: api.AuthConfig{Mode: api.AuthNone},
 		Platform: porttest.NewPlatform(porttest.NewIdentity(clock.Now)), Feed: api.NewFeed(porttest.NewItemNotices(), defNotices, nil),
 		Builder: builder.New(objects, clock, builder.Config{}), Connections: conns, ParseKind: connkind.Parse,
-		ConnectionTransport: http.DefaultTransport, Clock: clock,
+		ConnectionTransport: http.DefaultTransport, Knowledge: kb, KnowledgeUploads: uploads, KnowledgeSearch: knowledge.NewSearcher(kb, nil, nil),
+		UploadMaxBytes: knowledge.DefaultMaxUpload, Clock: clock,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	g := &defGoald{authors: authors, cache: cache, orgID: o.ID, keys: keys, conns: conns}
+	g := &defGoald{authors: authors, cache: cache, orgID: o.ID, keys: keys, conns: conns, kb: kb}
+	g.sync = func(t *testing.T) {
+		t.Helper()
+
+		// The knowledge fake dates sources by the time of day, so the loop's clock is too.
+		in := knowledge.NewIngestor(knowledge.IngestorConfig{
+			Knowledge: kb, Orgs: tenancy, Connections: conns, Uploads: uploads, Clock: porttest.NewClock(time.Now().Add(time.Second)),
+		})
+		if _, err := in.SyncDue(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
 	g.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPut && strings.HasSuffix(r.URL.Path, "/draft/tree") {
 			g.mu.Lock()

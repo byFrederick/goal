@@ -136,6 +136,8 @@ export interface MockConnections {
   reset: (now: number) => void;
   /** What a run gets from each of the organization's connections (the definitions' check). */
   outlines: (org: string) => ConnectionOutline[];
+  /** The sync hook of the kind of org's connection name ('' when it cannot sync); undefined for no connection. */
+  syncOf: (org: string, name: string) => string | undefined;
   /** Serves the organization's connection routes; false for any other. */
   handle: (
     org: Org,
@@ -164,6 +166,8 @@ interface Deps {
     at?: number,
   ) => void;
   broadcast: (org: string, event: string, data: unknown) => void;
+  /** The knowledge sources of org that read the connection named name. */
+  sources: (org: string, name: string) => string[];
   acme: string;
 }
 
@@ -313,6 +317,7 @@ export function createConnections({
   names,
   audit,
   broadcast,
+  sources,
   acme,
 }: Deps): MockConnections {
   const platform = platformKinds();
@@ -353,7 +358,7 @@ export function createConnections({
       status,
       used_by: {
         factories: usersOf(org, c.connection.name).map((f) => ({ id: f.id, name: f.name })),
-        knowledge_sources: [],
+        knowledge_sources: sources(org, c.connection.name),
       },
     };
     if (!detail) return base;
@@ -410,6 +415,19 @@ export function createConnections({
       res,
       409,
       `connection "${c.connection.name}" is used by ${users.map((u) => `${u}'s current version`).join(', ')}`,
+      'connection-in-use',
+    );
+    return true;
+  };
+
+  /** Answers 409 connection-in-use, and reports true, while knowledge sources read c. */
+  const readBy = (org: string, c: MockConnection, res: ServerResponse) => {
+    const readers = sources(org, c.connection.name);
+    if (readers.length === 0) return false;
+    refuse(
+      res,
+      409,
+      `connection "${c.connection.name}": knowledge sources read it: ${readers.join(', ')}`,
       'connection-in-use',
     );
     return true;
@@ -583,6 +601,10 @@ export function createConnections({
         const kind = kindNamed(org, c.connection.kind);
         return kind ? [outline(kind, c)] : [];
       }),
+    syncOf: (org, name) => {
+      const c = named(org, name);
+      return c ? (kindNamed(org, c.connection.kind)?.kind.sync ?? '') : undefined;
+    },
     async handle(org, rest, method, req, res, body) {
       if (rest === '/connection-kinds' && method === 'GET') {
         send(res, 200, { kinds: kinds(org.id).map((k) => k.kind) });
@@ -629,7 +651,7 @@ export function createConnections({
       if (m[2]) test(org, c, req, res);
       else if (method === 'GET') send(res, 200, out(org.id, c, true));
       else if (method === 'PATCH') update(org, c, req, res, await body());
-      else if (!inUse(org.id, c, res)) {
+      else if (!inUse(org.id, c, res) && !readBy(org.id, c, res)) {
         conns.set(
           org.id,
           list(org.id).filter((x) => x !== c),

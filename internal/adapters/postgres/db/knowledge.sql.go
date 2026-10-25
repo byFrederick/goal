@@ -523,6 +523,20 @@ func (q *Queries) MarkKnowledgeSeen(ctx context.Context, arg MarkKnowledgeSeenPa
 	return err
 }
 
+const notifyKnowledgeSync = `-- name: NotifyKnowledgeSync :exec
+SELECT pg_notify('goal_org_events', json_build_object(
+  'org_id', goal_org(), 'event', 'knowledge',
+  'data', json_build_object('source_id', id, 'name', name, 'status', status))::text)
+FROM knowledge_sources WHERE id = $1
+`
+
+// The organization's stream event knowledge on goal_org_events, sent when the claim's or the
+// finish's transaction commits; postgres.Notices reads it back from the source's row.
+func (q *Queries) NotifyKnowledgeSync(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, notifyKnowledgeSync, id)
+	return err
+}
+
 const renewKnowledgeSource = `-- name: RenewKnowledgeSource :execrows
 UPDATE knowledge_sources SET lease_until = $1::timestamptz
 WHERE id = $2 AND status = 'syncing' AND lease_until > $3::timestamptz

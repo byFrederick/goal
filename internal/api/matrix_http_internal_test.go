@@ -147,7 +147,14 @@ func mxRequestOf(method, path string, op mxOperation, params []mxParam, org stri
 	}
 
 	req.contentType, req.body = "application/json", "{}"
-	if _, ok := op.RequestBody.Content["application/json"]; !ok {
+
+	_, multi := op.RequestBody.Content["multipart/form-data"]
+	_, isJSON := op.RequestBody.Content["application/json"]
+
+	switch {
+	case multi:
+		req.contentType, req.body = "multipart/form-data; boundary=x", "--x--\r\n"
+	case !isJSON:
 		req.contentType, req.body = "application/octet-stream", "x"
 	}
 
@@ -281,7 +288,8 @@ func mxServer(t *testing.T, identity Identity) *httptest.Server {
 		Orgs: mxOrgs{}, Audit: mxAudit{}, Access: struct{ Access }{}, OrgRetention: time.Hour, Authorizer: NewPermissions(clock),
 		Auth: AuthConfig{Mode: AuthSession}, Identity: identity, Platform: mxPlatform{}, Feed: NewFeed(porttest.NewItemNotices(), porttest.NewDefinitionNotices(), nil),
 		Builder: struct{ Builder }{}, Connections: struct{ ports.Connections }{}, ParseKind: connkind.Parse,
-		ConnectionTransport: http.DefaultTransport, Clock: clock,
+		ConnectionTransport: http.DefaultTransport, Knowledge: struct{ ports.Knowledge }{}, KnowledgeUploads: struct{ KnowledgeUploads }{},
+		KnowledgeSearch: struct{ KnowledgeSearch }{}, UploadMaxBytes: 1 << 20, Clock: clock,
 	})
 	if err != nil {
 		t.Fatal(err)

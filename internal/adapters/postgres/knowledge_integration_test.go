@@ -3,6 +3,8 @@
 package postgres
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/ports/porttest/knowledgetest"
 )
 
@@ -195,4 +198,72 @@ func TestMigrate_KnowledgeNeedsTheVectorExtension(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "extension vector is missing: run goal db init") {
 		t.Fatalf("Migrate = %v, want the missing extension named", err)
 	}
+}
+
+// Spec 4 §8.3: a sync's start and end notify the organization's event knowledge, read back from
+// the source's row, so a forged one, or one naming another organization's source, is dropped.
+func TestNotices_SyncStartAndEndAreKnowledgeEvents(t *testing.T) {
+	t.Parallel()
+
+	d := newConnectionsDB(t)
+	k := NewKnowledge(d.store)
+	acme, labs := newOrgID(t, d.store), newOrgID(t, d.store)
+	ctx := domain.WithOrg(t.Context(), acme)
+	notices := listening(t, NewNotices(d.store, nil), "") // the database is this test's: only its events
+
+	if n := next(t, notices); !n.Resync {
+		t.Fatalf("first notice = %+v; want Resync", n)
+	}
+
+	src, err := k.CreateSource(ctx, domain.NewKnowledgeSource{Name: "handbook", Title: "Handbook", Kind: domain.SourceUpload}, domain.LocalUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now().Add(time.Second)
+
+	claimed, err := k.ClaimSource(ctx, now, now.Add(time.Minute), "")
+	if err != nil || claimed == nil || claimed.ID != src.ID {
+		t.Fatalf("claim = %+v, %v; want handbook", claimed, err)
+	}
+
+	forged := func(org domain.OrgID, id domain.KnowledgeSourceID) string {
+		return fmt.Sprintf(`{"org_id":%q,"event":"knowledge","data":{"source_id":%q,"name":"forged","status":"failed"}}`, org, id)
+	}
+
+	for _, payload := range []string{forged(labs, src.ID), forged(acme, "0b6f1c9e-0000-7000-8000-000000000999")} {
+		if _, err := d.admin.Exec(t.Context(), "SELECT pg_notify('goal_org_events', $1)", payload); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := k.FinishSync(ctx, src.ID, domain.SyncResult{At: now, Due: *claimed.NextSyncAt}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Read back from the row: by the time the start is read, the sync may have ended.
+	if start := nextKnowledgeEvent(t, notices, acme); start.SourceID != string(src.ID) || start.Name != "handbook" {
+		t.Errorf("the start's event = %+v; want handbook's", start)
+	}
+
+	if end := nextKnowledgeEvent(t, notices, acme); end != (knowledgeEvent{SourceID: string(src.ID), Name: "handbook", Status: "idle"}) {
+		t.Errorf("the end's event = %+v; want handbook idle", end)
+	}
+}
+
+// nextKnowledgeEvent is the next notice, which must be org's knowledge event.
+func nextKnowledgeEvent(t *testing.T, notices <-chan ports.ItemNotice, org domain.OrgID) knowledgeEvent {
+	t.Helper()
+
+	n := next(t, notices)
+	if n.OrgID != org || n.Org == nil || n.Org.Name != "knowledge" {
+		t.Fatalf("notice = %+v (org event %+v); want the organization's knowledge event", n, n.Org)
+	}
+
+	var got knowledgeEvent
+	if err := json.Unmarshal(n.Org.Data, &got); err != nil {
+		t.Fatal(err)
+	}
+
+	return got
 }

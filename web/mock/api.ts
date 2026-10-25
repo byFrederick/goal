@@ -14,7 +14,8 @@
 // allows (Org.can); the people routes (members, invitations, factory roles, transfer) answer as
 // goald does, a fresh-only change asking for a recent sign-in (the factory routes do not filter by
 // factory role under sign-in).
-// The organizations' API keys are keys.ts's; their connections and connection kinds connections.ts's.
+// The organizations' API keys are keys.ts's; their connections and connection kinds connections.ts's;
+// their knowledge bases knowledge.ts's.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
   Actor,
@@ -66,6 +67,7 @@ import {
 } from './fixtures.ts';
 import { constraintOf, type DayRange, type FlowInput, leadTimeOf, metricsOf, rangeOf, weeklyOf } from './flow.ts';
 import { createKeys } from './keys.ts';
+import { createKnowledge } from './knowledge.ts';
 import { membersFor, orgCanOf } from './people.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
@@ -182,6 +184,21 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     factories: (org) => state.factories.filter((f) => f.org_id === org),
     names: (factory) => definitions.connectionNames(factory),
     audit: (org, by, action, target, data, at) => auditAs(org, by, action, target, data, at),
+    broadcast: (org, event, data) => {
+      for (const sub of subscribers) {
+        if (sub.org === org) sub.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      }
+    },
+    sources: (org, name) => knowledge.readers(org, name),
+    acme: acmeOrg,
+  });
+
+  const knowledge = createKnowledge({
+    clock,
+    actor: (req) => auth.actor(req),
+    factories: (org) => state.factories.filter((f) => f.org_id === org),
+    connectionSync: (org, name) => connections.syncOf(org, name),
+    audit: (org, by, action, target, data) => auditAs(org, by, action, target, data),
     broadcast: (org, event, data) => {
       for (const sub of subscribers) {
         if (sub.org === org) sub.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -1134,6 +1151,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       if (grants) withRole(state, grants);
       apiKeys.reset(clock());
       connections.reset(clock());
+      knowledge.reset(clock());
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
       const cookie = auth.reset(authSettings(body.auth));
       if (cookie) res.setHeader('Set-Cookie', cookie);
@@ -1223,6 +1241,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await definitions.handle(org, rest, method, url, req, res)) return;
     if (await apiKeys.handle(forCaller(req, org), rest, method, req, res, () => readBody(req))) return;
     if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
+    if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
 
     if (rest === '' && method === 'GET') return json(res, 200, forCaller(req, withCount(org)));
     if (rest === '' && method === 'DELETE') {

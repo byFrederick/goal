@@ -252,6 +252,8 @@ export const orgCan = [
   'connection:read',
   'factory:create',
   'invitation:read',
+  'knowledge:manage',
+  'knowledge:read',
   'member:manage',
   'member:read',
   'org:delete',

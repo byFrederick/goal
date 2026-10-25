@@ -24,6 +24,10 @@ WHERE target_kind = 'connection' AND target_id = sqlc.arg(target_id)::text AND a
 ORDER BY id DESC
 LIMIT 1;
 
+-- name: NoticeKnowledgeSource :one
+-- A knowledge source's name and sync status: what a knowledge event is read back from.
+SELECT name, status FROM knowledge_sources WHERE id = sqlc.arg(id);
+
 -- name: NoticeAndon :one
 SELECT factory_id, pulled_at, cleared_at FROM andon_pulls WHERE id = sqlc.arg(id);
 

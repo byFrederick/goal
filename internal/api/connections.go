@@ -204,6 +204,11 @@ func (s *server) ListConnections(ctx context.Context, req gen.ListConnectionsReq
 		return nil, err
 	}
 
+	sources, err := s.connectionSources(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	users, kind := s.connectionUsers(ctx), deref(req.Params.Kind)
 	out := gen.ListConnections200JSONResponse{Connections: []gen.Connection{}}
 
@@ -212,7 +217,7 @@ func (s *server) ListConnections(ctx context.Context, req gen.ListConnectionsReq
 			continue
 		}
 
-		out.Connections = append(out.Connections, s.connectionOut(ctx, c, kinds[c.Kind], users[c.Name]))
+		out.Connections = append(out.Connections, s.connectionOut(ctx, c, kinds[c.Kind], users[c.Name], sources[c.Name]))
 	}
 
 	return out, nil
@@ -238,7 +243,7 @@ func (s *server) CreateConnection(ctx context.Context, req gen.CreateConnectionR
 		return nil, err
 	}
 
-	return gen.CreateConnection201JSONResponse(s.connectionOut(ctx, c, kind, nil)), nil
+	return gen.CreateConnection201JSONResponse(s.connectionOut(ctx, c, kind, nil, nil)), nil
 }
 
 // GetConnection is one connection with the env names a run gets from it and its kind's docs.
@@ -253,7 +258,12 @@ func (s *server) GetConnection(ctx context.Context, req gen.GetConnectionRequest
 		return nil, err
 	}
 
-	out := s.connectionOut(ctx, c, kind, s.connectionUsers(ctx)[c.Name])
+	sources, err := s.connectionSources(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := s.connectionOut(ctx, c, kind, s.connectionUsers(ctx)[c.Name], sources[c.Name])
 	env := append([]string{}, kind.Outline(c).Env...)
 	out.Env, out.Docs = &env, optional(kind.Spec.Docs)
 
@@ -295,7 +305,12 @@ func (s *server) UpdateConnection(ctx context.Context, req gen.UpdateConnectionR
 		return nil, err
 	}
 
-	return gen.UpdateConnection200JSONResponse(s.connectionOut(ctx, c, kind, users[c.Name])), nil
+	sources, err := s.connectionSources(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.UpdateConnection200JSONResponse(s.connectionOut(ctx, c, kind, users[c.Name], sources[c.Name])), nil
 }
 
 // DeleteConnection deletes a connection no current version names (and no knowledge source uses).
@@ -459,12 +474,12 @@ func (s *server) kindsByName(ctx context.Context) (map[string]domain.ConnectionK
 }
 
 // connectionOut is a connection as the contract has it, never a secret value: what uses it (the
-// factories the caller sees) and its status.
-func (s *server) connectionOut(ctx context.Context, c domain.Connection, kind domain.ConnectionKind, by []factoryUse) gen.Connection {
+// factories the caller sees among by, the knowledge sources that read it) and its status.
+func (s *server) connectionOut(ctx context.Context, c domain.Connection, kind domain.ConnectionKind, by []factoryUse, sources []string) gen.Connection {
 	out := gen.Connection{
 		Id: string(c.ID), Name: c.Name, Kind: c.Kind, Description: c.Description, Fields: map[string]string{},
 		SecretsSet: slices.Clone(c.SecretFields), Status: connectionStatus(c, kind), LastUsedAt: c.LastUsedAt,
-		UsedBy:    gen.ConnectionUsers{Factories: []gen.ConnectionFactory{}, KnowledgeSources: []string{}},
+		UsedBy:    gen.ConnectionUsers{Factories: []gen.ConnectionFactory{}, KnowledgeSources: append([]string{}, sources...)},
 		CreatedBy: s.actorOut(c.CreatedBy), CreatedAt: c.CreatedAt, UpdatedBy: s.actorOut(c.UpdatedBy), UpdatedAt: c.UpdatedAt,
 	}
 

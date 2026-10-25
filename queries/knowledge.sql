@@ -88,6 +88,14 @@ SET status = CASE WHEN sqlc.arg(error)::text = '' THEN 'idle' ELSE 'failed' END,
     updated_at = now()
 WHERE id = sqlc.arg(id) AND kind <> 'live';
 
+-- name: NotifyKnowledgeSync :exec
+-- The organization's stream event knowledge on goal_org_events, sent when the claim's or the
+-- finish's transaction commits; postgres.Notices reads it back from the source's row.
+SELECT pg_notify('goal_org_events', json_build_object(
+  'org_id', goal_org(), 'event', 'knowledge',
+  'data', json_build_object('source_id', id, 'name', name, 'status', status))::text)
+FROM knowledge_sources WHERE id = sqlc.arg(id);
+
 -- name: KnowledgeVersions :many
 SELECT external_id, version FROM knowledge_documents
 WHERE source_id = sqlc.arg(source_id) AND status <> 'pending';

@@ -56,6 +56,8 @@ export const TaskSpec = z.object({
   max_usd: z.number().positive().optional(),
   /** The agent's organization connections its token grants; absent from a goald before connections. */
   connections: z.array(Connection).default([]),
+  /** The knowledge sources the gateway's knowledge tools search for this run. */
+  knowledge_sources: z.array(z.string()).optional(),
 });
 export type TaskSpec = z.infer<typeof TaskSpec>;
 

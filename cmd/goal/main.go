@@ -115,6 +115,19 @@ const usage = `usage:
                                                   the organization's
   goal connection kind push <file.yaml>           create or replace an organization kind from its file
   goal connection kind delete <name>              delete an organization kind no connection is of
+  goal knowledge sources [--factory F]            the knowledge base's sources: kind, status, documents,
+                                                  last and next sync, the factories that search them
+  goal knowledge add <name> --kind upload|synced|live [--connection C] [--config k=v]... [--title T] [--every 1h]
+                                                  add a source (owners and admins); a synced or live one
+                                                  reads a connection, --config says what (space=ENG)
+  goal knowledge sync <source>                    sync it now
+  goal knowledge upload <source> <file>...        upload text, Markdown, HTML, JSON or YAML files to an
+                                                  upload source; indexed at its next sync
+  goal knowledge documents <source>               its documents: id, title, status, size
+  goal knowledge rm <document>                    delete an uploaded document
+  goal knowledge search "<query>" [--source S]... [--limit N]
+                                                  search as agents do: the best passages first, with
+                                                  their document ids or links
   goal storage init                               create the bucket if missing
   goal catalog skills sync --file <sources.yaml> [--search <q>]... [--top <n>]
                                                   fetch skills.sh skills (a YAML list of
@@ -158,7 +171,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, move, pause, the decisions, status, andon, factory, connection) acts in one
+Every command that talks to goald (run, follow, item, note, move, pause, the decisions, status, andon, factory, connection, knowledge) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or
@@ -223,7 +236,7 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 	if handler, ok := map[string]command{
 		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbMove: moveItem, verbPause: pauseItem,
 		"status": status, "factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
-		"connection": connectionCommand,
+		"connection": connectionCommand, "knowledge": knowledgeCommand,
 	}[cmd]; ok {
 		return handler(ctx, out, getenv, rest)
 	}

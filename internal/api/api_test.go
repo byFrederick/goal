@@ -24,6 +24,7 @@ import (
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/egress"
 	"github.com/byFrederick/goal/internal/engine"
+	"github.com/byFrederick/goal/internal/knowledge"
 	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/ports/porttest"
 )
@@ -141,6 +142,11 @@ type harness struct {
 	// servers) allowed unless publicOnly is set.
 	conns      *porttest.Connections
 	publicOnly atomic.Bool
+	// kb is the organizations' knowledge base, its uploads in kbObjects, at most testUploadMax
+	// bytes each; searches are by keywords.
+	kb        *porttest.Knowledge
+	kbObjects *porttest.ObjectStore
+	uploads   *knowledge.Uploads
 }
 
 // acme's one prompt and its path.
@@ -432,8 +438,8 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
 		Access: h.keys, OrgRetention: retention, Authorizer: h.seam, Auth: api.AuthConfig{Mode: api.AuthNone}, Platform: h.platform, Feed: feed,
-		Builder: h.builder, Connections: h.conns, ParseKind: connkind.Parse, ConnectionTransport: connections,
-		Clock: h.clock, Logger: jsonLog(logs),
+		Builder: h.builder, Connections: h.conns, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
+		Knowledge: h.kb, KnowledgeUploads: h.uploads, KnowledgeSearch: knowledge.NewSearcher(h.kb, nil, nil), UploadMaxBytes: testUploadMax, Clock: h.clock,
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity
@@ -460,12 +466,14 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
 	return h
 }
 
-// connections makes h's connections, with goald's platform kinds, and returns the transport their
-// tests dial through.
+// connections makes h's connections, with goald's platform kinds, and the knowledge base whose
+// sources read them, and returns the transport their tests dial through.
 func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
 	t.Helper()
 
 	h.conns = porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), audit)
+	h.kb, h.kbObjects = porttest.NewKnowledge(h.conns, audit), porttest.NewObjectStore()
+	h.uploads = knowledge.NewUploads(h.kb, h.kbObjects, testUploadMax)
 
 	kinds, err := connkind.Platform()
 	if err != nil {

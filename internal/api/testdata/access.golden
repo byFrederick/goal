@@ -182,6 +182,32 @@ createFactory        pat-demoted      403 forbidden            404 org-not-found
 createFactory        pat-removed      401 unauthenticated      401 unauthenticated
 createFactory        pat-platform     200                      404 org-not-found
 createFactory        pat-deleted-org  401 unauthenticated      401 unauthenticated
+createKnowledgeSource anonymous        401 unauthenticated      401 unauthenticated
+createKnowledgeSource owner            200                      404 org-not-found
+createKnowledgeSource admin            200                      404 org-not-found
+createKnowledgeSource viewer           403 forbidden            404 org-not-found
+createKnowledgeSource approver         403 forbidden            404 org-not-found
+createKnowledgeSource editor           403 forbidden            404 org-not-found
+createKnowledgeSource member-no-roles  403 forbidden            404 org-not-found
+createKnowledgeSource other-org-owner  404 org-not-found        200
+createKnowledgeSource platform-admin   404 org-not-found        404 org-not-found
+createKnowledgeSource stale-owner      200                      404 org-not-found
+createKnowledgeSource key-scoped       403 forbidden            404 org-not-found
+createKnowledgeSource key-restricted   200                      404 org-not-found
+createKnowledgeSource key-other-org    404 org-not-found        200
+createKnowledgeSource key-expired      401 unauthenticated      401 unauthenticated
+createKnowledgeSource key-revoked      401 unauthenticated      401 unauthenticated
+createKnowledgeSource bearer-owner     200                      404 org-not-found
+createKnowledgeSource pat-approver     403 forbidden            404 org-not-found
+createKnowledgeSource pat-owner        403 forbidden            404 org-not-found
+createKnowledgeSource pat-viewer       403 forbidden            404 org-not-found
+createKnowledgeSource pat-other-org    404 org-not-found        403 forbidden
+createKnowledgeSource pat-expired      401 unauthenticated      401 unauthenticated
+createKnowledgeSource pat-revoked      401 unauthenticated      401 unauthenticated
+createKnowledgeSource pat-demoted      403 forbidden            404 org-not-found
+createKnowledgeSource pat-removed      401 unauthenticated      401 unauthenticated
+createKnowledgeSource pat-platform     403 forbidden            404 org-not-found
+createKnowledgeSource pat-deleted-org  401 unauthenticated      401 unauthenticated
 createOrg            anonymous        install: 401 unauthenticated
 createOrg            owner            install: 403 forbidden
 createOrg            admin            install: 403 forbidden
@@ -338,6 +364,58 @@ deleteFactory        pat-demoted      404 factory-not-found    404 org-not-found
 deleteFactory        pat-removed      401 unauthenticated      401 unauthenticated
 deleteFactory        pat-platform     200                      404 org-not-found
 deleteFactory        pat-deleted-org  401 unauthenticated      401 unauthenticated
+deleteKnowledgeDocument anonymous        401 unauthenticated      401 unauthenticated
+deleteKnowledgeDocument owner            200                      404 org-not-found
+deleteKnowledgeDocument admin            200                      404 org-not-found
+deleteKnowledgeDocument viewer           403 forbidden            404 org-not-found
+deleteKnowledgeDocument approver         403 forbidden            404 org-not-found
+deleteKnowledgeDocument editor           403 forbidden            404 org-not-found
+deleteKnowledgeDocument member-no-roles  403 forbidden            404 org-not-found
+deleteKnowledgeDocument other-org-owner  404 org-not-found        200
+deleteKnowledgeDocument platform-admin   404 org-not-found        404 org-not-found
+deleteKnowledgeDocument stale-owner      200                      404 org-not-found
+deleteKnowledgeDocument key-scoped       403 forbidden            404 org-not-found
+deleteKnowledgeDocument key-restricted   200                      404 org-not-found
+deleteKnowledgeDocument key-other-org    404 org-not-found        200
+deleteKnowledgeDocument key-expired      401 unauthenticated      401 unauthenticated
+deleteKnowledgeDocument key-revoked      401 unauthenticated      401 unauthenticated
+deleteKnowledgeDocument bearer-owner     200                      404 org-not-found
+deleteKnowledgeDocument pat-approver     403 forbidden            404 org-not-found
+deleteKnowledgeDocument pat-owner        403 forbidden            404 org-not-found
+deleteKnowledgeDocument pat-viewer       403 forbidden            404 org-not-found
+deleteKnowledgeDocument pat-other-org    404 org-not-found        403 forbidden
+deleteKnowledgeDocument pat-expired      401 unauthenticated      401 unauthenticated
+deleteKnowledgeDocument pat-revoked      401 unauthenticated      401 unauthenticated
+deleteKnowledgeDocument pat-demoted      403 forbidden            404 org-not-found
+deleteKnowledgeDocument pat-removed      401 unauthenticated      401 unauthenticated
+deleteKnowledgeDocument pat-platform     403 forbidden            404 org-not-found
+deleteKnowledgeDocument pat-deleted-org  401 unauthenticated      401 unauthenticated
+deleteKnowledgeSource anonymous        401 unauthenticated      401 unauthenticated
+deleteKnowledgeSource owner            200                      404 org-not-found
+deleteKnowledgeSource admin            200                      404 org-not-found
+deleteKnowledgeSource viewer           403 forbidden            404 org-not-found
+deleteKnowledgeSource approver         403 forbidden            404 org-not-found
+deleteKnowledgeSource editor           403 forbidden            404 org-not-found
+deleteKnowledgeSource member-no-roles  403 forbidden            404 org-not-found
+deleteKnowledgeSource other-org-owner  404 org-not-found        200
+deleteKnowledgeSource platform-admin   404 org-not-found        404 org-not-found
+deleteKnowledgeSource stale-owner      200                      404 org-not-found
+deleteKnowledgeSource key-scoped       403 forbidden            404 org-not-found
+deleteKnowledgeSource key-restricted   200                      404 org-not-found
+deleteKnowledgeSource key-other-org    404 org-not-found        200
+deleteKnowledgeSource key-expired      401 unauthenticated      401 unauthenticated
+deleteKnowledgeSource key-revoked      401 unauthenticated      401 unauthenticated
+deleteKnowledgeSource bearer-owner     200                      404 org-not-found
+deleteKnowledgeSource pat-approver     403 forbidden            404 org-not-found
+deleteKnowledgeSource pat-owner        403 forbidden            404 org-not-found
+deleteKnowledgeSource pat-viewer       403 forbidden            404 org-not-found
+deleteKnowledgeSource pat-other-org    404 org-not-found        403 forbidden
+deleteKnowledgeSource pat-expired      401 unauthenticated      401 unauthenticated
+deleteKnowledgeSource pat-revoked      401 unauthenticated      401 unauthenticated
+deleteKnowledgeSource pat-demoted      403 forbidden            404 org-not-found
+deleteKnowledgeSource pat-removed      401 unauthenticated      401 unauthenticated
+deleteKnowledgeSource pat-platform     403 forbidden            404 org-not-found
+deleteKnowledgeSource pat-deleted-org  401 unauthenticated      401 unauthenticated
 deleteOrg            anonymous        401 unauthenticated      401 unauthenticated
 deleteOrg            owner            200                      404 org-not-found
 deleteOrg            admin            403 forbidden            404 org-not-found
@@ -832,6 +910,84 @@ getItem              pat-demoted      404 item-not-found       404 org-not-found
 getItem              pat-removed      401 unauthenticated      401 unauthenticated
 getItem              pat-platform     200                      404 org-not-found
 getItem              pat-deleted-org  401 unauthenticated      401 unauthenticated
+getKnowledgeDocument anonymous        401 unauthenticated      401 unauthenticated
+getKnowledgeDocument owner            200                      404 org-not-found
+getKnowledgeDocument admin            200                      404 org-not-found
+getKnowledgeDocument viewer           200                      404 org-not-found
+getKnowledgeDocument approver         200                      404 org-not-found
+getKnowledgeDocument editor           200                      404 org-not-found
+getKnowledgeDocument member-no-roles  200                      404 org-not-found
+getKnowledgeDocument other-org-owner  404 org-not-found        200
+getKnowledgeDocument platform-admin   404 org-not-found        404 org-not-found
+getKnowledgeDocument stale-owner      200                      404 org-not-found
+getKnowledgeDocument key-scoped       403 forbidden            404 org-not-found
+getKnowledgeDocument key-restricted   200                      404 org-not-found
+getKnowledgeDocument key-other-org    404 org-not-found        200
+getKnowledgeDocument key-expired      401 unauthenticated      401 unauthenticated
+getKnowledgeDocument key-revoked      401 unauthenticated      401 unauthenticated
+getKnowledgeDocument bearer-owner     200                      404 org-not-found
+getKnowledgeDocument pat-approver     403 forbidden            404 org-not-found
+getKnowledgeDocument pat-owner        200                      404 org-not-found
+getKnowledgeDocument pat-viewer       200                      404 org-not-found
+getKnowledgeDocument pat-other-org    404 org-not-found        200
+getKnowledgeDocument pat-expired      401 unauthenticated      401 unauthenticated
+getKnowledgeDocument pat-revoked      401 unauthenticated      401 unauthenticated
+getKnowledgeDocument pat-demoted      200                      404 org-not-found
+getKnowledgeDocument pat-removed      401 unauthenticated      401 unauthenticated
+getKnowledgeDocument pat-platform     200                      404 org-not-found
+getKnowledgeDocument pat-deleted-org  401 unauthenticated      401 unauthenticated
+getKnowledgeDocumentContent anonymous        401 unauthenticated      401 unauthenticated
+getKnowledgeDocumentContent owner            200                      404 org-not-found
+getKnowledgeDocumentContent admin            200                      404 org-not-found
+getKnowledgeDocumentContent viewer           200                      404 org-not-found
+getKnowledgeDocumentContent approver         200                      404 org-not-found
+getKnowledgeDocumentContent editor           200                      404 org-not-found
+getKnowledgeDocumentContent member-no-roles  200                      404 org-not-found
+getKnowledgeDocumentContent other-org-owner  404 org-not-found        200
+getKnowledgeDocumentContent platform-admin   404 org-not-found        404 org-not-found
+getKnowledgeDocumentContent stale-owner      200                      404 org-not-found
+getKnowledgeDocumentContent key-scoped       403 forbidden            404 org-not-found
+getKnowledgeDocumentContent key-restricted   200                      404 org-not-found
+getKnowledgeDocumentContent key-other-org    404 org-not-found        200
+getKnowledgeDocumentContent key-expired      401 unauthenticated      401 unauthenticated
+getKnowledgeDocumentContent key-revoked      401 unauthenticated      401 unauthenticated
+getKnowledgeDocumentContent bearer-owner     200                      404 org-not-found
+getKnowledgeDocumentContent pat-approver     403 forbidden            404 org-not-found
+getKnowledgeDocumentContent pat-owner        200                      404 org-not-found
+getKnowledgeDocumentContent pat-viewer       200                      404 org-not-found
+getKnowledgeDocumentContent pat-other-org    404 org-not-found        200
+getKnowledgeDocumentContent pat-expired      401 unauthenticated      401 unauthenticated
+getKnowledgeDocumentContent pat-revoked      401 unauthenticated      401 unauthenticated
+getKnowledgeDocumentContent pat-demoted      200                      404 org-not-found
+getKnowledgeDocumentContent pat-removed      401 unauthenticated      401 unauthenticated
+getKnowledgeDocumentContent pat-platform     200                      404 org-not-found
+getKnowledgeDocumentContent pat-deleted-org  401 unauthenticated      401 unauthenticated
+getKnowledgeSource   anonymous        401 unauthenticated      401 unauthenticated
+getKnowledgeSource   owner            200                      404 org-not-found
+getKnowledgeSource   admin            200                      404 org-not-found
+getKnowledgeSource   viewer           200                      404 org-not-found
+getKnowledgeSource   approver         200                      404 org-not-found
+getKnowledgeSource   editor           200                      404 org-not-found
+getKnowledgeSource   member-no-roles  200                      404 org-not-found
+getKnowledgeSource   other-org-owner  404 org-not-found        200
+getKnowledgeSource   platform-admin   404 org-not-found        404 org-not-found
+getKnowledgeSource   stale-owner      200                      404 org-not-found
+getKnowledgeSource   key-scoped       403 forbidden            404 org-not-found
+getKnowledgeSource   key-restricted   200                      404 org-not-found
+getKnowledgeSource   key-other-org    404 org-not-found        200
+getKnowledgeSource   key-expired      401 unauthenticated      401 unauthenticated
+getKnowledgeSource   key-revoked      401 unauthenticated      401 unauthenticated
+getKnowledgeSource   bearer-owner     200                      404 org-not-found
+getKnowledgeSource   pat-approver     403 forbidden            404 org-not-found
+getKnowledgeSource   pat-owner        200                      404 org-not-found
+getKnowledgeSource   pat-viewer       200                      404 org-not-found
+getKnowledgeSource   pat-other-org    404 org-not-found        200
+getKnowledgeSource   pat-expired      401 unauthenticated      401 unauthenticated
+getKnowledgeSource   pat-revoked      401 unauthenticated      401 unauthenticated
+getKnowledgeSource   pat-demoted      200                      404 org-not-found
+getKnowledgeSource   pat-removed      401 unauthenticated      401 unauthenticated
+getKnowledgeSource   pat-platform     200                      404 org-not-found
+getKnowledgeSource   pat-deleted-org  401 unauthenticated      401 unauthenticated
 getLeadTimeBridge    anonymous        401 unauthenticated      401 unauthenticated
 getLeadTimeBridge    owner            200                      404 org-not-found
 getLeadTimeBridge    admin            200                      404 org-not-found
@@ -1508,6 +1664,58 @@ listItems            pat-demoted      404 factory-not-found    404 org-not-found
 listItems            pat-removed      401 unauthenticated      401 unauthenticated
 listItems            pat-platform     200                      404 org-not-found
 listItems            pat-deleted-org  401 unauthenticated      401 unauthenticated
+listKnowledgeDocuments anonymous        401 unauthenticated      401 unauthenticated
+listKnowledgeDocuments owner            200                      404 org-not-found
+listKnowledgeDocuments admin            200                      404 org-not-found
+listKnowledgeDocuments viewer           200                      404 org-not-found
+listKnowledgeDocuments approver         200                      404 org-not-found
+listKnowledgeDocuments editor           200                      404 org-not-found
+listKnowledgeDocuments member-no-roles  200                      404 org-not-found
+listKnowledgeDocuments other-org-owner  404 org-not-found        200
+listKnowledgeDocuments platform-admin   404 org-not-found        404 org-not-found
+listKnowledgeDocuments stale-owner      200                      404 org-not-found
+listKnowledgeDocuments key-scoped       403 forbidden            404 org-not-found
+listKnowledgeDocuments key-restricted   200                      404 org-not-found
+listKnowledgeDocuments key-other-org    404 org-not-found        200
+listKnowledgeDocuments key-expired      401 unauthenticated      401 unauthenticated
+listKnowledgeDocuments key-revoked      401 unauthenticated      401 unauthenticated
+listKnowledgeDocuments bearer-owner     200                      404 org-not-found
+listKnowledgeDocuments pat-approver     403 forbidden            404 org-not-found
+listKnowledgeDocuments pat-owner        200                      404 org-not-found
+listKnowledgeDocuments pat-viewer       200                      404 org-not-found
+listKnowledgeDocuments pat-other-org    404 org-not-found        200
+listKnowledgeDocuments pat-expired      401 unauthenticated      401 unauthenticated
+listKnowledgeDocuments pat-revoked      401 unauthenticated      401 unauthenticated
+listKnowledgeDocuments pat-demoted      200                      404 org-not-found
+listKnowledgeDocuments pat-removed      401 unauthenticated      401 unauthenticated
+listKnowledgeDocuments pat-platform     200                      404 org-not-found
+listKnowledgeDocuments pat-deleted-org  401 unauthenticated      401 unauthenticated
+listKnowledgeSources anonymous        401 unauthenticated      401 unauthenticated
+listKnowledgeSources owner            200                      404 org-not-found
+listKnowledgeSources admin            200                      404 org-not-found
+listKnowledgeSources viewer           200                      404 org-not-found
+listKnowledgeSources approver         200                      404 org-not-found
+listKnowledgeSources editor           200                      404 org-not-found
+listKnowledgeSources member-no-roles  404 factory-not-found    404 org-not-found
+listKnowledgeSources other-org-owner  404 org-not-found        200
+listKnowledgeSources platform-admin   404 org-not-found        404 org-not-found
+listKnowledgeSources stale-owner      200                      404 org-not-found
+listKnowledgeSources key-scoped       403 forbidden            404 org-not-found
+listKnowledgeSources key-restricted   404 factory-not-found    404 org-not-found
+listKnowledgeSources key-other-org    404 org-not-found        200
+listKnowledgeSources key-expired      401 unauthenticated      401 unauthenticated
+listKnowledgeSources key-revoked      401 unauthenticated      401 unauthenticated
+listKnowledgeSources bearer-owner     200                      404 org-not-found
+listKnowledgeSources pat-approver     403 forbidden            404 org-not-found
+listKnowledgeSources pat-owner        200                      404 org-not-found
+listKnowledgeSources pat-viewer       200                      404 org-not-found
+listKnowledgeSources pat-other-org    404 org-not-found        200
+listKnowledgeSources pat-expired      401 unauthenticated      401 unauthenticated
+listKnowledgeSources pat-revoked      401 unauthenticated      401 unauthenticated
+listKnowledgeSources pat-demoted      404 factory-not-found    404 org-not-found
+listKnowledgeSources pat-removed      401 unauthenticated      401 unauthenticated
+listKnowledgeSources pat-platform     200                      404 org-not-found
+listKnowledgeSources pat-deleted-org  401 unauthenticated      401 unauthenticated
 listMemberTokens     anonymous        401 unauthenticated      401 unauthenticated
 listMemberTokens     owner            200                      404 org-not-found
 listMemberTokens     admin            200                      404 org-not-found
@@ -2262,6 +2470,32 @@ saveDraftSection     pat-demoted      404 factory-not-found    404 org-not-found
 saveDraftSection     pat-removed      401 unauthenticated      401 unauthenticated
 saveDraftSection     pat-platform     200                      404 org-not-found
 saveDraftSection     pat-deleted-org  401 unauthenticated      401 unauthenticated
+searchKnowledge      anonymous        401 unauthenticated      401 unauthenticated
+searchKnowledge      owner            200                      404 org-not-found
+searchKnowledge      admin            200                      404 org-not-found
+searchKnowledge      viewer           200                      404 org-not-found
+searchKnowledge      approver         200                      404 org-not-found
+searchKnowledge      editor           200                      404 org-not-found
+searchKnowledge      member-no-roles  200                      404 org-not-found
+searchKnowledge      other-org-owner  404 org-not-found        200
+searchKnowledge      platform-admin   404 org-not-found        404 org-not-found
+searchKnowledge      stale-owner      200                      404 org-not-found
+searchKnowledge      key-scoped       403 forbidden            404 org-not-found
+searchKnowledge      key-restricted   200                      404 org-not-found
+searchKnowledge      key-other-org    404 org-not-found        200
+searchKnowledge      key-expired      401 unauthenticated      401 unauthenticated
+searchKnowledge      key-revoked      401 unauthenticated      401 unauthenticated
+searchKnowledge      bearer-owner     200                      404 org-not-found
+searchKnowledge      pat-approver     403 forbidden            404 org-not-found
+searchKnowledge      pat-owner        200                      404 org-not-found
+searchKnowledge      pat-viewer       200                      404 org-not-found
+searchKnowledge      pat-other-org    404 org-not-found        200
+searchKnowledge      pat-expired      401 unauthenticated      401 unauthenticated
+searchKnowledge      pat-revoked      401 unauthenticated      401 unauthenticated
+searchKnowledge      pat-demoted      200                      404 org-not-found
+searchKnowledge      pat-removed      401 unauthenticated      401 unauthenticated
+searchKnowledge      pat-platform     200                      404 org-not-found
+searchKnowledge      pat-deleted-org  401 unauthenticated      401 unauthenticated
 searchSkills         anonymous        401 unauthenticated      401 unauthenticated
 searchSkills         owner            200                      404 org-not-found
 searchSkills         admin            200                      404 org-not-found
@@ -2392,6 +2626,32 @@ submitItem           pat-demoted      404 factory-not-found    404 org-not-found
 submitItem           pat-removed      401 unauthenticated      401 unauthenticated
 submitItem           pat-platform     200                      404 org-not-found
 submitItem           pat-deleted-org  401 unauthenticated      401 unauthenticated
+syncKnowledgeSource  anonymous        401 unauthenticated      401 unauthenticated
+syncKnowledgeSource  owner            200                      404 org-not-found
+syncKnowledgeSource  admin            200                      404 org-not-found
+syncKnowledgeSource  viewer           403 forbidden            404 org-not-found
+syncKnowledgeSource  approver         403 forbidden            404 org-not-found
+syncKnowledgeSource  editor           403 forbidden            404 org-not-found
+syncKnowledgeSource  member-no-roles  403 forbidden            404 org-not-found
+syncKnowledgeSource  other-org-owner  404 org-not-found        200
+syncKnowledgeSource  platform-admin   404 org-not-found        404 org-not-found
+syncKnowledgeSource  stale-owner      200                      404 org-not-found
+syncKnowledgeSource  key-scoped       403 forbidden            404 org-not-found
+syncKnowledgeSource  key-restricted   200                      404 org-not-found
+syncKnowledgeSource  key-other-org    404 org-not-found        200
+syncKnowledgeSource  key-expired      401 unauthenticated      401 unauthenticated
+syncKnowledgeSource  key-revoked      401 unauthenticated      401 unauthenticated
+syncKnowledgeSource  bearer-owner     200                      404 org-not-found
+syncKnowledgeSource  pat-approver     403 forbidden            404 org-not-found
+syncKnowledgeSource  pat-owner        403 forbidden            404 org-not-found
+syncKnowledgeSource  pat-viewer       403 forbidden            404 org-not-found
+syncKnowledgeSource  pat-other-org    404 org-not-found        403 forbidden
+syncKnowledgeSource  pat-expired      401 unauthenticated      401 unauthenticated
+syncKnowledgeSource  pat-revoked      401 unauthenticated      401 unauthenticated
+syncKnowledgeSource  pat-demoted      403 forbidden            404 org-not-found
+syncKnowledgeSource  pat-removed      401 unauthenticated      401 unauthenticated
+syncKnowledgeSource  pat-platform     403 forbidden            404 org-not-found
+syncKnowledgeSource  pat-deleted-org  401 unauthenticated      401 unauthenticated
 testConnection       anonymous        401 unauthenticated      401 unauthenticated
 testConnection       owner            200                      404 org-not-found
 testConnection       admin            200                      404 org-not-found
@@ -2470,6 +2730,32 @@ updateConnection     pat-demoted      403 forbidden            404 org-not-found
 updateConnection     pat-removed      401 unauthenticated      401 unauthenticated
 updateConnection     pat-platform     403 forbidden            404 org-not-found
 updateConnection     pat-deleted-org  401 unauthenticated      401 unauthenticated
+updateKnowledgeSource anonymous        401 unauthenticated      401 unauthenticated
+updateKnowledgeSource owner            200                      404 org-not-found
+updateKnowledgeSource admin            200                      404 org-not-found
+updateKnowledgeSource viewer           403 forbidden            404 org-not-found
+updateKnowledgeSource approver         403 forbidden            404 org-not-found
+updateKnowledgeSource editor           403 forbidden            404 org-not-found
+updateKnowledgeSource member-no-roles  403 forbidden            404 org-not-found
+updateKnowledgeSource other-org-owner  404 org-not-found        200
+updateKnowledgeSource platform-admin   404 org-not-found        404 org-not-found
+updateKnowledgeSource stale-owner      200                      404 org-not-found
+updateKnowledgeSource key-scoped       403 forbidden            404 org-not-found
+updateKnowledgeSource key-restricted   200                      404 org-not-found
+updateKnowledgeSource key-other-org    404 org-not-found        200
+updateKnowledgeSource key-expired      401 unauthenticated      401 unauthenticated
+updateKnowledgeSource key-revoked      401 unauthenticated      401 unauthenticated
+updateKnowledgeSource bearer-owner     200                      404 org-not-found
+updateKnowledgeSource pat-approver     403 forbidden            404 org-not-found
+updateKnowledgeSource pat-owner        403 forbidden            404 org-not-found
+updateKnowledgeSource pat-viewer       403 forbidden            404 org-not-found
+updateKnowledgeSource pat-other-org    404 org-not-found        403 forbidden
+updateKnowledgeSource pat-expired      401 unauthenticated      401 unauthenticated
+updateKnowledgeSource pat-revoked      401 unauthenticated      401 unauthenticated
+updateKnowledgeSource pat-demoted      403 forbidden            404 org-not-found
+updateKnowledgeSource pat-removed      401 unauthenticated      401 unauthenticated
+updateKnowledgeSource pat-platform     403 forbidden            404 org-not-found
+updateKnowledgeSource pat-deleted-org  401 unauthenticated      401 unauthenticated
 updateOrgSettings    anonymous        401 unauthenticated      401 unauthenticated
 updateOrgSettings    owner            200                      404 org-not-found
 updateOrgSettings    admin            200                      404 org-not-found
@@ -2496,6 +2782,32 @@ updateOrgSettings    pat-demoted      403 forbidden            404 org-not-found
 updateOrgSettings    pat-removed      401 unauthenticated      401 unauthenticated
 updateOrgSettings    pat-platform     403 forbidden            404 org-not-found
 updateOrgSettings    pat-deleted-org  401 unauthenticated      401 unauthenticated
+uploadKnowledgeDocuments anonymous        401 unauthenticated      401 unauthenticated
+uploadKnowledgeDocuments owner            200                      404 org-not-found
+uploadKnowledgeDocuments admin            200                      404 org-not-found
+uploadKnowledgeDocuments viewer           403 forbidden            404 org-not-found
+uploadKnowledgeDocuments approver         403 forbidden            404 org-not-found
+uploadKnowledgeDocuments editor           403 forbidden            404 org-not-found
+uploadKnowledgeDocuments member-no-roles  403 forbidden            404 org-not-found
+uploadKnowledgeDocuments other-org-owner  404 org-not-found        200
+uploadKnowledgeDocuments platform-admin   404 org-not-found        404 org-not-found
+uploadKnowledgeDocuments stale-owner      200                      404 org-not-found
+uploadKnowledgeDocuments key-scoped       403 forbidden            404 org-not-found
+uploadKnowledgeDocuments key-restricted   200                      404 org-not-found
+uploadKnowledgeDocuments key-other-org    404 org-not-found        200
+uploadKnowledgeDocuments key-expired      401 unauthenticated      401 unauthenticated
+uploadKnowledgeDocuments key-revoked      401 unauthenticated      401 unauthenticated
+uploadKnowledgeDocuments bearer-owner     200                      404 org-not-found
+uploadKnowledgeDocuments pat-approver     403 forbidden            404 org-not-found
+uploadKnowledgeDocuments pat-owner        403 forbidden            404 org-not-found
+uploadKnowledgeDocuments pat-viewer       403 forbidden            404 org-not-found
+uploadKnowledgeDocuments pat-other-org    404 org-not-found        403 forbidden
+uploadKnowledgeDocuments pat-expired      401 unauthenticated      401 unauthenticated
+uploadKnowledgeDocuments pat-revoked      401 unauthenticated      401 unauthenticated
+uploadKnowledgeDocuments pat-demoted      403 forbidden            404 org-not-found
+uploadKnowledgeDocuments pat-removed      401 unauthenticated      401 unauthenticated
+uploadKnowledgeDocuments pat-platform     403 forbidden            404 org-not-found
+uploadKnowledgeDocuments pat-deleted-org  401 unauthenticated      401 unauthenticated
 validateDefinition   anonymous        401 unauthenticated      401 unauthenticated
 validateDefinition   owner            200                      404 org-not-found
 validateDefinition   admin            200                      404 org-not-found

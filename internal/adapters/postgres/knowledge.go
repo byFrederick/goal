@@ -293,7 +293,7 @@ func (k *Knowledge) SyncNow(ctx context.Context, name string) error {
 	}
 }
 
-// ClaimSource implements ports.Knowledge.
+// ClaimSource implements ports.Knowledge; the claim notifies the stream event knowledge (syncing).
 func (k *Knowledge) ClaimSource(ctx context.Context, now, until time.Time, model string) (*domain.KnowledgeSource, error) {
 	var out *domain.KnowledgeSource
 
@@ -308,9 +308,13 @@ func (k *Knowledge) ClaimSource(ctx context.Context, now, until time.Time, model
 		}
 
 		s, err := oneSource(ctx, q, db.KnowledgeSourcesParams{ID: &id}, "knowledge source "+id.String())
+		if err != nil {
+			return err
+		}
+
 		out = &s
 
-		return err
+		return q.NotifyKnowledgeSync(ctx, id)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("claim knowledge source: %w", err)
@@ -340,7 +344,7 @@ func (k *Knowledge) RenewSource(ctx context.Context, id domain.KnowledgeSourceID
 	return nil
 }
 
-// FinishSync implements ports.Knowledge.
+// FinishSync implements ports.Knowledge; the end notifies the stream event knowledge (idle or failed).
 func (k *Knowledge) FinishSync(ctx context.Context, id domain.KnowledgeSourceID, r domain.SyncResult) error {
 	sid, err := parseID("knowledge source", string(id))
 	if err != nil {
@@ -348,9 +352,14 @@ func (k *Knowledge) FinishSync(ctx context.Context, id domain.KnowledgeSourceID,
 	}
 
 	n, err := fetch(ctx, k.s.inTx, func(q *db.Queries) (int64, error) {
-		return q.FinishKnowledgeSync(ctx, db.FinishKnowledgeSyncParams{
+		n, err := q.FinishKnowledgeSync(ctx, db.FinishKnowledgeSyncParams{
 			Error: truncate(r.Error, domain.MaxKnowledgeError), At: r.At, Model: r.EmbedModel, Due: r.Due, ID: sid,
 		})
+		if err != nil || n == 0 {
+			return n, err
+		}
+
+		return n, q.NotifyKnowledgeSync(ctx, sid)
 	})
 	if err != nil {
 		return fmt.Errorf("finish knowledge sync: %w", err)

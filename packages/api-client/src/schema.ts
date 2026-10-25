@@ -1433,7 +1433,7 @@ export interface paths {
         };
         /**
          * The organization's events as they happen (Server-Sent Events)
-         * @description A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, connection, and later knowledge) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent, no id) follows a change of a factory's line that is not an item's: its andon cord pulled or cleared. `event: connection` (data a ConnectionEvent, no id) follows a connection created, changed, tested or deleted. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
+         * @description A text/event-stream of one organization's events only. Each committed item event arrives as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names (definition, factory, connection, knowledge) carry their own data object; clients ignore the names they do not know. `event: definition` (data a DefinitionEvent, no id) follows every committed change of a factory's definition: a factory created or deleted, its current version moved (publish, restore, pause, resume), its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent, no id) follows a change of a factory's line that is not an item's: its andon cord pulled or cleared. `event: connection` (data a ConnectionEvent, no id) follows a connection created, changed, tested or deleted. `event: knowledge` (data a KnowledgeEvent, no id) follows a knowledge source's sync starting or ending. `event: resync` (data `{}`) means goald may have missed events (it reconnected to the database): re-read what you show. A comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of a client that falls too far behind.
          */
         get: operations["streamEvents"];
         put?: never;
@@ -1934,6 +1934,197 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/knowledge/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The sources of the organization's knowledge base
+         * @description By name, each with its kind, connection, status, document count, last and next sync and the factories whose current version may search it (those the caller sees).
+         */
+        get: operations["listKnowledgeSources"];
+        put?: never;
+        /**
+         * Add a source to the knowledge base
+         * @description An upload source holds files people upload; a synced source reads a connection whose kind syncs (its config names what: a repository, a branch and paths, a Confluence space); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a connection on an upload source or none on another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a connection whose kind cannot sync, 404 connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+         */
+        post: operations["createKnowledgeSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/knowledge/sources/{source}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge source's name */
+                source: components["parameters"]["SourceRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One knowledge source
+         * @description 404 knowledge-source-not-found.
+         */
+        get: operations["getKnowledgeSource"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a source with its documents
+         * @description Its documents, their chunks and the uploaded files no other document holds go with it. 409 knowledge-source-in-use, naming them, while a factory's current version may search it. Audited as knowledge_source.deleted.
+         */
+        delete: operations["deleteKnowledgeSource"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a source's title, config or schedule
+         * @description config, when present, replaces the source's config. The name, kind and connection never change. Audited as knowledge_source.updated.
+         */
+        patch: operations["updateKnowledgeSource"];
+        trace?: never;
+    };
+    "/v1/orgs/{org}/knowledge/sources/{source}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge source's name */
+                source: components["parameters"]["SourceRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync a source now
+         * @description The source is due at once; the next free goald syncs it, and `event: knowledge` on the stream says when that starts and ends. 409 for a live source, which never syncs.
+         */
+        post: operations["syncKnowledgeSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/knowledge/sources/{source}/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge source's name */
+                source: components["parameters"]["SourceRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One page of a source's documents
+         * @description In id order, after the document id after; next_after, when set, is the after of the next page. 404 knowledge-source-not-found.
+         */
+        get: operations["listKnowledgeDocuments"];
+        put?: never;
+        /**
+         * Upload files to an upload source
+         * @description Each part named files is one document, titled by its file name: text, Markdown, HTML, JSON or YAML of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at most that and 1 MiB more. They are pending until the next sync indexes them, which the upload makes due; the same content uploaded again is the document it already is. Every file is checked before any is stored: 413 upload-too-large, 415 unsupported-document-type, 409 not-an-upload-source. Audited as knowledge_document.uploaded.
+         */
+        post: operations["uploadKnowledgeDocuments"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/knowledge/documents/{document}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge document's id */
+                document: components["parameters"]["DocumentRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * A document with its indexed text
+         * @description The text is its chunks joined in order, empty until it is indexed. 404 knowledge-document-not-found.
+         */
+        get: operations["getKnowledgeDocument"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete an uploaded document
+         * @description With its chunks, and its file when no other document holds the same content. 409 not-an-upload-source for a synced document, which its next sync would bring back. Audited as knowledge_document.deleted.
+         */
+        delete: operations["deleteKnowledgeDocument"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/knowledge/documents/{document}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge document's id */
+                document: components["parameters"]["DocumentRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The uploaded original of a document
+         * @description As uploaded, as an attachment that browsers download and never render (threat row 11). 409 not-an-upload-source for a synced document, whose original stays at its source (url).
+         */
+        get: operations["getKnowledgeDocumentContent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/knowledge/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Search the knowledge base as agents do
+         * @description What the gateway's knowledge__search tool returns: chunks ranked by keywords and, with an embedding model, nearest neighbours too, fused by reciprocal rank; over every source, or the named ones (404 knowledge-source-not-found for a name the organization has not).
+         */
+        get: operations["searchKnowledge"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1946,7 +2137,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -4121,7 +4312,7 @@ export interface components {
         ConnectionUsers: {
             /** @description The factories whose current version names it (those the caller sees) */
             factories: components["schemas"]["ConnectionFactory"][];
-            /** @description The knowledge sources synced through it (phase 4 knowledge) */
+            /** @description The knowledge sources that read it, by name */
             knowledge_sources: string[];
         };
         ConnectionFactory: {
@@ -4170,6 +4361,132 @@ export interface components {
             /** @enum {string} */
             change: "created" | "updated" | "deleted" | "tested";
         };
+        /** @description 3 to 40 lowercase letters, digits and inner dashes, starting with a letter */
+        KnowledgeSourceName: string;
+        KnowledgeSourceList: {
+            sources: components["schemas"]["KnowledgeSource"][];
+        };
+        /** @description One source of the organization's knowledge base (spec 4 §4.8) */
+        KnowledgeSource: {
+            id: string;
+            name: components["schemas"]["KnowledgeSourceName"];
+            title: string;
+            kind: components["schemas"]["KnowledgeSourceKind"];
+            /** @description The connection a synced or live source reads; absent for an upload source */
+            connection?: string;
+            /** @description What its reader reads (a repository, a branch and path globs; a Confluence space) */
+            config: {
+                [key: string]: string;
+            };
+            /** @description How often it syncs */
+            sync_every_seconds: number;
+            /**
+             * @description syncing while a goald holds it; failed after a sync that stopped (last_error says why)
+             * @enum {string}
+             */
+            status: "idle" | "syncing" | "failed";
+            last_error?: string;
+            /** Format: date-time */
+            last_synced_at: string | null;
+            /**
+             * Format: date-time
+             * @description When it is due next; null for a live source
+             */
+            next_sync_at: string | null;
+            /** @description How many documents it has */
+            documents: number;
+            /** @description The model its chunks are embedded with; absent when they have no embeddings */
+            embed_model?: string;
+            used_by: components["schemas"]["KnowledgeSourceUsers"];
+            created_by: components["schemas"]["Actor"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @description What uses a source, so it cannot be deleted meanwhile */
+        KnowledgeSourceUsers: {
+            /** @description The factories whose current version may search it (those the caller sees) */
+            factories: components["schemas"]["ConnectionFactory"][];
+        };
+        /** @enum {string} */
+        KnowledgeSourceKind: "upload" | "synced" | "live";
+        NewKnowledgeSource: {
+            name: components["schemas"]["KnowledgeSourceName"];
+            title: string;
+            kind: components["schemas"]["KnowledgeSourceKind"];
+            /** @description The connection a synced or live source reads */
+            connection?: string;
+            config?: {
+                [key: string]: string;
+            };
+            /** @description How often it syncs (default 3600) */
+            sync_every_seconds?: number;
+        };
+        KnowledgeSourcePatch: {
+            title?: string;
+            /** @description Replaces the config */
+            config?: {
+                [key: string]: string;
+            };
+            sync_every_seconds?: number;
+        };
+        KnowledgeDocument: {
+            id: string;
+            /** @description Its source's name */
+            source: string;
+            title: string;
+            /** @description A synced document's link back to its source */
+            url?: string;
+            mime: string;
+            /** Format: int64 */
+            bytes: number;
+            /**
+             * @description pending until the next sync indexes it; failed with error; skipped when it has no text
+             * @enum {string}
+             */
+            status: "pending" | "indexed" | "failed" | "skipped";
+            error?: string;
+            /** Format: date-time */
+            indexed_at: string | null;
+        };
+        KnowledgeDocumentList: {
+            documents: components["schemas"]["KnowledgeDocument"][];
+        };
+        KnowledgeDocumentPage: {
+            documents: components["schemas"]["KnowledgeDocument"][];
+            /** @description The after of the next page; absent on the last */
+            next_after?: string;
+        };
+        KnowledgeDocumentText: {
+            document: components["schemas"]["KnowledgeDocument"];
+            /** @description Its indexed text: its chunks joined in order, empty until it is indexed */
+            text: string;
+        };
+        KnowledgeSearchResult: {
+            hits: components["schemas"]["KnowledgeHit"][];
+        };
+        KnowledgeHit: {
+            /** @description The document's id, which getKnowledgeDocument and knowledge__read take */
+            document: string;
+            source: string;
+            title: string;
+            /** @description A synced document's link back */
+            url?: string;
+            /** @description The headings the chunk is under ("Install > Docker") */
+            heading: string;
+            /** @description The chunk's text */
+            snippet: string;
+            /** Format: double */
+            score: number;
+        };
+        /** @description The data of one `event: knowledge` on /v1/orgs/{org}/stream: a source's sync started or ended */
+        KnowledgeEvent: {
+            source_id: string;
+            name: string;
+            /** @enum {string} */
+            status: "idle" | "syncing" | "failed";
+        };
     };
     responses: {
         /** @description An error (RFC 9457 problem details) */
@@ -4189,6 +4506,10 @@ export interface components {
         OrgRef: string;
         /** @description The connection's name */
         ConnectionRef: string;
+        /** @description The knowledge source's name */
+        SourceRef: string;
+        /** @description The knowledge document's id */
+        DocumentRef: string;
         /** @description The connection kind's name */
         KindRef: string;
         /** @description The factory's metadata.id or metadata.name */
@@ -6281,7 +6602,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/event-stream": components["schemas"]["StreamEvent"] | components["schemas"]["DefinitionEvent"] | components["schemas"]["FactoryEvent"] | components["schemas"]["ConnectionEvent"];
+                    "text/event-stream": components["schemas"]["StreamEvent"] | components["schemas"]["DefinitionEvent"] | components["schemas"]["FactoryEvent"] | components["schemas"]["ConnectionEvent"] | components["schemas"]["KnowledgeEvent"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -6943,6 +7264,334 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConnectionTestResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listKnowledgeSources: {
+        parameters: {
+            query?: {
+                /** @description Only the sources this factory's current version may search (its metadata.id or metadata.name) */
+                factory?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sources */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSourceList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createKnowledgeSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewKnowledgeSource"];
+            };
+        };
+        responses: {
+            /** @description The source */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSource"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getKnowledgeSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge source's name */
+                source: components["parameters"]["SourceRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The source */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSource"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteKnowledgeSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge source's name */
+                source: components["parameters"]["SourceRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateKnowledgeSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge source's name */
+                source: components["parameters"]["SourceRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KnowledgeSourcePatch"];
+            };
+        };
+        responses: {
+            /** @description The source */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSource"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    syncKnowledgeSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge source's name */
+                source: components["parameters"]["SourceRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The source is due */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listKnowledgeDocuments: {
+        parameters: {
+            query?: {
+                /** @description The last document id of the previous page */
+                after?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge source's name */
+                source: components["parameters"]["SourceRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocumentPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    uploadKnowledgeDocuments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge source's name */
+                source: components["parameters"]["SourceRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    files: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description The documents, pending */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocumentList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getKnowledgeDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge document's id */
+                document: components["parameters"]["DocumentRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The document */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocumentText"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteKnowledgeDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge document's id */
+                document: components["parameters"]["DocumentRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getKnowledgeDocumentContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge document's id */
+                document: components["parameters"]["DocumentRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file */
+            200: {
+                headers: {
+                    "Content-Disposition": string;
+                    "X-Content-Type-Options": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    searchKnowledge: {
+        parameters: {
+            query: {
+                q: string;
+                /** @description Only these sources (repeatable) */
+                source?: string[];
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The hits, best first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSearchResult"];
                 };
             };
             default: components["responses"]["Problem"];

@@ -143,15 +143,15 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}
 
 	definitionStore := postgres.NewDefinitions(pool, objects, log)
-	ingestor := knowledgeIngestor(s, store, connections, objects, clock, log)
+	kb := openKnowledge(s, store, connections, objects, clock, log)
 
 	// Definition authoring writes versions to PostgreSQL and file content to the bucket. A
-	// definition's connections are checked against the organization's, and until the cutover the
-	// env: references of the removed forms against goald's environment.
+	// definition's connections and knowledge sources are checked against the organization's, and
+	// until the cutover the env: references of the removed forms against goald's environment.
 	envReferences := s.credentials(secrets)
 	authors := authoring.New(authoring.Deps{
 		Store: definitionStore, Loads: store, Templates: objects,
-		Credentials: authoring.ConnectionsCheck{Connections: connections, Env: &envReferences},
+		Credentials: authoring.ConnectionsCheck{Connections: connections, Knowledge: kb.searcher, Env: &envReferences},
 		Clock:       clock,
 	})
 
@@ -179,6 +179,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Connections: connections, Secrets: secrets, Events: store, Clock: clock, Logger: log,
+		Knowledge: kb.searcher,
 	}, gateway.Config{Key: []byte(key), SecretPolicy: policy})
 	if err != nil {
 		return err
@@ -224,6 +225,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Authorizer: authorizer(s.Auth, clock), Auth: api.AuthConfig{Mode: api.AuthMode(s.Auth), Google: s.Google, SecureCookies: s.strictTransport()},
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
 		Connections: connections, ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams),
+		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
 		Clock: clock, Logger: log,
 	})
 	if err != nil {
@@ -236,17 +238,27 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	purger := retention.New(store, objects, clock, s.OrgRetention, log)
 
 	return serve(ctx, log, s, servers, eng, defs, definitionNotices, feed,
-		jobs{purger: purger, platform: platform, clock: clock, identity: newIdentityWatch(s, store), ingestor: ingestor})
+		jobs{purger: purger, platform: platform, clock: clock, identity: newIdentityWatch(s, store), ingestor: kb.ingestor})
 }
 
-// knowledgeIngestor is the knowledge base's ingestion loop (spec 4 §4.8): GOAL_KB_WORKERS
-// workers syncing due sources, uploads read from the bucket, embeddings from GOAL_EMBED_URL's
-// model or, without one, keyword search only. A synced source is read by its connection kind's
+// knowledgeBase is the knowledge base as goald wires it (spec 4 §4.8): its sources and documents
+// in PostgreSQL, uploads in the bucket, the search the API and the gateway's tools run, and the
+// ingestion loop.
+type knowledgeBase struct {
+	kb       *postgres.Knowledge
+	uploads  *knowledge.Uploads
+	searcher *knowledge.Searcher
+	ingestor *knowledge.Ingestor
+}
+
+// openKnowledge wires the knowledge base: uploads of at most GOAL_UPLOAD_MAX_BYTES each, read
+// from the bucket; embeddings from GOAL_EMBED_URL's model or, without one, keyword search only;
+// GOAL_KB_WORKERS workers syncing due sources. A synced source is read by its connection kind's
 // sync reader through the public-only transport: gitdocs (GitHub and GitLab repositories) or
 // confluence (the spaces of a Confluence Cloud site).
-func knowledgeIngestor(s settings, store *postgres.Store, connections *postgres.Connections, objects ports.ObjectStore,
+func openKnowledge(s settings, store *postgres.Store, connections *postgres.Connections, objects ports.ObjectStore,
 	clock ports.Clock, log *slog.Logger,
-) *knowledge.Ingestor {
+) knowledgeBase {
 	kb := postgres.NewKnowledge(store)
 
 	var embedder ports.Embedder
@@ -271,11 +283,15 @@ func knowledgeIngestor(s settings, store *postgres.Store, connections *postgres.
 		"gitdocs":    gitdocs.New(gitdocs.Config{Transport: connectionTransport(s.AllowPrivateUpstreams)}),
 		"confluence": confluence.New(confluence.Config{Transport: connectionTransport(s.AllowPrivateUpstreams)}),
 	}
+	uploads := knowledge.NewUploads(kb, objects, s.UploadMaxBytes)
 
-	return knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: kb, Orgs: store, Connections: connections, Uploads: knowledge.NewUploads(kb, objects, 0),
-		Readers: readers, Embedder: embedder, Clock: clock, Log: log, Workers: s.KBWorkers,
-	})
+	return knowledgeBase{
+		kb: kb, uploads: uploads, searcher: knowledge.NewSearcher(kb, embedder, log),
+		ingestor: knowledge.NewIngestor(knowledge.IngestorConfig{
+			Knowledge: kb, Orgs: store, Connections: connections, Uploads: uploads,
+			Readers: readers, Embedder: embedder, Clock: clock, Log: log, Workers: s.KBWorkers,
+		}),
+	}
 }
 
 // openConnections loads the platform's master keys (GOAL_MASTER_KEYS or GOAL_MASTER_KEY_FILE),

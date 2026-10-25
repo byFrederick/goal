@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/byFrederick/goal/internal/adapters/postgres/db"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
@@ -171,6 +173,41 @@ var errNothingToReadBack = errors.New("the notice names nothing")
 var orgEventReaders = map[string]func(context.Context, *db.Queries, ports.ItemNotice) (ports.ItemNotice, error){
 	"factory":    readFactoryEvent,
 	"connection": readConnectionEvent,
+	"knowledge":  readKnowledgeEvent,
+}
+
+// knowledgeEvent is a knowledge event's data (spec 4 §8.3): a source's sync started or ended.
+type knowledgeEvent struct {
+	SourceID string `json:"source_id"`
+	Name     string `json:"name"`
+	Status   string `json:"status"`
+}
+
+// readKnowledgeEvent reads a knowledge notice back from its source's row: the organization must
+// have the source, and the event carries the row's name and status (a later sync may have
+// changed it since).
+func readKnowledgeEvent(ctx context.Context, q *db.Queries, n ports.ItemNotice) (ports.ItemNotice, error) {
+	var claim knowledgeEvent
+	if err := json.Unmarshal(n.Org.Data, &claim); err != nil {
+		return ports.ItemNotice{}, errNothingToReadBack
+	}
+
+	id, err := uuid.Parse(claim.SourceID)
+	if err != nil {
+		return ports.ItemNotice{}, errNothingToReadBack
+	}
+
+	r, err := q.NoticeKnowledgeSource(ctx, id)
+	if err != nil {
+		return ports.ItemNotice{}, err
+	}
+
+	data, err := json.Marshal(knowledgeEvent{SourceID: claim.SourceID, Name: r.Name, Status: r.Status})
+	if err != nil {
+		return ports.ItemNotice{}, fmt.Errorf("encode knowledge event: %w", err)
+	}
+
+	return ports.ItemNotice{OrgID: n.OrgID, Org: &ports.OrgEvent{Name: n.Org.Name, Data: data}}, nil
 }
 
 // connectionEvent is a connection event's data (spec 4 §8.3).

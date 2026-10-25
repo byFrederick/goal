@@ -55,6 +55,12 @@ tags:
       each of a connection kind, with credentials sealed under the platform's master key and never
       readable back. Members read names, kinds and status; owners and admins create, test, change
       and delete them, after a recent sign-in.
+  - name: knowledge
+    description: >-
+      The organization's knowledge base (spec 4 §4.8): sources of uploaded files, of connections
+      synced into it and of connections searched live, their documents, and the search agents
+      run through the gateway's knowledge__search. Members and keys read and search it; owners,
+      admins and keys add, sync and delete sources and documents.
   - name: definitions
     description: >-
       Factory definitions: creating factories, the one shared draft per factory (Visual
@@ -1720,14 +1726,15 @@ paths:
       description: >-
         A text/event-stream of one organization's events only. Each committed item event arrives
         as `event: item` with `id:` the event id and `data:` a StreamEvent. Other event names
-        (definition, factory, connection, and later knowledge) carry their own data
+        (definition, factory, connection, knowledge) carry their own data
         object; clients ignore the names they do not know. `event: definition` (data a
         DefinitionEvent, no id) follows every committed change of a factory's definition: a
         factory created or deleted, its current version moved (publish, restore, pause, resume),
         its draft opened, saved, discarded or published. `event: factory` (data a FactoryEvent,
         no id) follows a change of a factory's line that is not an item's: its andon cord pulled
         or cleared. `event: connection` (data a ConnectionEvent, no id) follows a connection
-        created, changed, tested or deleted. `event: resync` (data `{}`) means
+        created, changed, tested or deleted. `event: knowledge` (data a KnowledgeEvent, no id)
+        follows a knowledge source's sync starting or ending. `event: resync` (data `{}`) means
         goald may have missed events (it reconnected to the database): re-read what you show. A
         comment line (`: heartbeat`) arrives every 15 seconds. There is no replay: Last-Event-ID
         is ignored, so a client that reconnects re-reads what it shows. goald ends the stream of
@@ -1743,12 +1750,13 @@ paths:
           content:
             text/event-stream:
               schema:
-                description: The data of each event, by its name (item, definition, factory, connection)
+                description: The data of each event, by its name (item, definition, factory, connection, knowledge)
                 oneOf:
                   - $ref: "#/components/schemas/StreamEvent"
                   - $ref: "#/components/schemas/DefinitionEvent"
                   - $ref: "#/components/schemas/FactoryEvent"
                   - $ref: "#/components/schemas/ConnectionEvent"
+                  - $ref: "#/components/schemas/KnowledgeEvent"
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}:
     parameters:
@@ -2282,6 +2290,267 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConnectionTestResult" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/knowledge/sources:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listKnowledgeSources
+      x-goal-scope: knowledge:read
+      tags: [knowledge]
+      summary: The sources of the organization's knowledge base
+      description: >-
+        By name, each with its kind, connection, status, document count, last and next sync and
+        the factories whose current version may search it (those the caller sees).
+      parameters:
+        - name: factory
+          in: query
+          description: Only the sources this factory's current version may search (its metadata.id or metadata.name)
+          schema: { type: string }
+      responses:
+        "200":
+          description: The sources
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeSourceList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createKnowledgeSource
+      x-goal-scope: knowledge:manage
+      tags: [knowledge]
+      summary: Add a source to the knowledge base
+      description: >-
+        An upload source holds files people upload; a synced source reads a connection whose kind
+        syncs (its config names what: a repository, a branch and paths, a Confluence space); a
+        live source is a connection whose own tools search, which nothing indexes. Due to sync at
+        once. 400 for a broken rule (a name, a title, a connection on an upload source or none on
+        another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a
+        connection whose kind cannot sync, 404 connection-not-found, 409
+        knowledge-source-name-taken. Audited as knowledge_source.created.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewKnowledgeSource" }
+      responses:
+        "201":
+          description: The source
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeSource" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/knowledge/sources/{source}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/SourceRef"
+    get:
+      operationId: getKnowledgeSource
+      x-goal-scope: knowledge:read
+      tags: [knowledge]
+      summary: One knowledge source
+      description: 404 knowledge-source-not-found.
+      responses:
+        "200":
+          description: The source
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeSource" }
+        default: { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: updateKnowledgeSource
+      x-goal-scope: knowledge:manage
+      tags: [knowledge]
+      summary: Change a source's title, config or schedule
+      description: >-
+        config, when present, replaces the source's config. The name, kind and connection never
+        change. Audited as knowledge_source.updated.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/KnowledgeSourcePatch" }
+      responses:
+        "200":
+          description: The source
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeSource" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteKnowledgeSource
+      x-goal-scope: knowledge:manage
+      tags: [knowledge]
+      summary: Delete a source with its documents
+      description: >-
+        Its documents, their chunks and the uploaded files no other document holds go with it. 409
+        knowledge-source-in-use, naming them, while a factory's current version may search it.
+        Audited as knowledge_source.deleted.
+      responses:
+        "204":
+          description: Deleted
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/knowledge/sources/{source}/sync:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/SourceRef"
+    post:
+      operationId: syncKnowledgeSource
+      x-goal-scope: knowledge:manage
+      tags: [knowledge]
+      summary: Sync a source now
+      description: >-
+        The source is due at once; the next free goald syncs it, and `event: knowledge` on the
+        stream says when that starts and ends. 409 for a live source, which never syncs.
+      responses:
+        "202":
+          description: The source is due
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/knowledge/sources/{source}/documents:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/SourceRef"
+    get:
+      operationId: listKnowledgeDocuments
+      x-goal-scope: knowledge:read
+      tags: [knowledge]
+      summary: One page of a source's documents
+      description: >-
+        In id order, after the document id after; next_after, when set, is the after of the next
+        page. 404 knowledge-source-not-found.
+      parameters:
+        - name: after
+          in: query
+          description: The last document id of the previous page
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        "200":
+          description: The page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeDocumentPage" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: uploadKnowledgeDocuments
+      x-goal-scope: knowledge:manage
+      tags: [knowledge]
+      summary: Upload files to an upload source
+      description: >-
+        Each part named files is one document, titled by its file name: text, Markdown, HTML, JSON
+        or YAML of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at most
+        that and 1 MiB more. They are pending until the next sync indexes them, which the upload
+        makes due; the same content uploaded again is the document it already is. Every file is
+        checked before any is stored: 413 upload-too-large, 415 unsupported-document-type, 409
+        not-an-upload-source. Audited as knowledge_document.uploaded.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [files]
+              properties:
+                files:
+                  type: array
+                  items: { type: string, format: binary }
+      responses:
+        "202":
+          description: The documents, pending
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeDocumentList" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/knowledge/documents/{document}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/DocumentRef"
+    get:
+      operationId: getKnowledgeDocument
+      x-goal-scope: knowledge:read
+      tags: [knowledge]
+      summary: A document with its indexed text
+      description: The text is its chunks joined in order, empty until it is indexed. 404 knowledge-document-not-found.
+      responses:
+        "200":
+          description: The document
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeDocumentText" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteKnowledgeDocument
+      x-goal-scope: knowledge:manage
+      tags: [knowledge]
+      summary: Delete an uploaded document
+      description: >-
+        With its chunks, and its file when no other document holds the same content. 409
+        not-an-upload-source for a synced document, which its next sync would bring back. Audited
+        as knowledge_document.deleted.
+      responses:
+        "204":
+          description: Deleted
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/knowledge/documents/{document}/content:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/DocumentRef"
+    get:
+      operationId: getKnowledgeDocumentContent
+      x-goal-scope: knowledge:read
+      tags: [knowledge]
+      summary: The uploaded original of a document
+      description: >-
+        As uploaded, as an attachment that browsers download and never render (threat row 11). 409
+        not-an-upload-source for a synced document, whose original stays at its source (url).
+      responses:
+        "200":
+          description: The file
+          headers:
+            Content-Disposition:
+              required: true
+              schema: { type: string }
+            X-Content-Type-Options:
+              required: true
+              schema: { type: string }
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/knowledge/search:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: searchKnowledge
+      x-goal-scope: knowledge:read
+      tags: [knowledge]
+      summary: Search the knowledge base as agents do
+      description: >-
+        What the gateway's knowledge__search tool returns: chunks ranked by keywords and, with an
+        embedding model, nearest neighbours too, fused by reciprocal rank; over every source, or
+        the named ones (404 knowledge-source-not-found for a name the organization has not).
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 1000 }
+        - name: source
+          in: query
+          description: Only these sources (repeatable)
+          explode: true
+          schema:
+            type: array
+            items: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 20, default: 8 }
+      responses:
+        "200":
+          description: The hits, best first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeSearchResult" }
+        default: { $ref: "#/components/responses/Problem" }
 components:
   parameters:
     UserRef:
@@ -2301,6 +2570,18 @@ components:
       in: path
       required: true
       description: The connection's name
+      schema: { type: string }
+    SourceRef:
+      name: source
+      in: path
+      required: true
+      description: The knowledge source's name
+      schema: { type: string }
+    DocumentRef:
+      name: document
+      in: path
+      required: true
+      description: The knowledge document's id
       schema: { type: string }
     KindRef:
       name: kind
@@ -2430,6 +2711,10 @@ components:
             connection-name-taken, connection-kind-name-taken, connection-in-use,
             connection-kind-in-use and connection-not-testable (409), connections-unavailable
             (503: goald has no master key, so no secret can be sealed or opened).
+            Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found
+            (404), connection-cannot-sync (400), knowledge-source-name-taken,
+            knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413),
+            unsupported-document-type (415).
         problems:
           type: array
           description: definition-invalid only, every problem of the definition (errors block the publish)
@@ -5006,7 +5291,7 @@ components:
           items: { $ref: "#/components/schemas/ConnectionFactory" }
         knowledge_sources:
           type: array
-          description: The knowledge sources synced through it (phase 4 knowledge)
+          description: The knowledge sources that read it, by name
           items: { type: string }
     ConnectionFactory:
       type: object
@@ -5060,3 +5345,138 @@ components:
         connection_id: { type: string }
         name: { type: string, description: The connection's name after the change }
         change: { type: string, enum: [created, updated, deleted, tested] }
+    KnowledgeSourceName:
+      type: string
+      description: 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
+      pattern: "^[a-z][a-z0-9-]{1,38}[a-z0-9]$"
+    KnowledgeSourceList:
+      type: object
+      required: [sources]
+      properties:
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/KnowledgeSource" }
+    KnowledgeSource:
+      type: object
+      description: One source of the organization's knowledge base (spec 4 §4.8)
+      required: [id, name, title, kind, config, sync_every_seconds, status, last_synced_at, next_sync_at, documents, used_by, created_by, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { $ref: "#/components/schemas/KnowledgeSourceName" }
+        title: { type: string }
+        kind: { $ref: "#/components/schemas/KnowledgeSourceKind" }
+        connection: { type: string, description: "The connection a synced or live source reads; absent for an upload source" }
+        config:
+          type: object
+          description: What its reader reads (a repository, a branch and path globs; a Confluence space)
+          additionalProperties: { type: string }
+        sync_every_seconds: { type: integer, description: How often it syncs }
+        status:
+          type: string
+          enum: [idle, syncing, failed]
+          description: syncing while a goald holds it; failed after a sync that stopped (last_error says why)
+        last_error: { type: string }
+        last_synced_at: { type: string, format: date-time, nullable: true }
+        next_sync_at: { type: string, format: date-time, nullable: true, description: "When it is due next; null for a live source" }
+        documents: { type: integer, description: How many documents it has }
+        embed_model: { type: string, description: "The model its chunks are embedded with; absent when they have no embeddings" }
+        used_by: { $ref: "#/components/schemas/KnowledgeSourceUsers" }
+        created_by: { $ref: "#/components/schemas/Actor" }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    KnowledgeSourceUsers:
+      type: object
+      description: What uses a source, so it cannot be deleted meanwhile
+      required: [factories]
+      properties:
+        factories:
+          type: array
+          description: The factories whose current version may search it (those the caller sees)
+          items: { $ref: "#/components/schemas/ConnectionFactory" }
+    KnowledgeSourceKind:
+      type: string
+      enum: [upload, synced, live]
+    NewKnowledgeSource:
+      type: object
+      required: [name, title, kind]
+      properties:
+        name: { $ref: "#/components/schemas/KnowledgeSourceName" }
+        title: { type: string, minLength: 1, maxLength: 120 }
+        kind: { $ref: "#/components/schemas/KnowledgeSourceKind" }
+        connection: { type: string, description: The connection a synced or live source reads }
+        config:
+          type: object
+          additionalProperties: { type: string }
+        sync_every_seconds: { type: integer, minimum: 900, description: "How often it syncs (default 3600)" }
+    KnowledgeSourcePatch:
+      type: object
+      properties:
+        title: { type: string, minLength: 1, maxLength: 120 }
+        config:
+          type: object
+          description: Replaces the config
+          additionalProperties: { type: string }
+        sync_every_seconds: { type: integer, minimum: 900 }
+    KnowledgeDocument:
+      type: object
+      required: [id, source, title, mime, bytes, status, indexed_at]
+      properties:
+        id: { type: string }
+        source: { type: string, description: Its source's name }
+        title: { type: string }
+        url: { type: string, description: "A synced document's link back to its source" }
+        mime: { type: string }
+        bytes: { type: integer, format: int64 }
+        status:
+          type: string
+          enum: [pending, indexed, failed, skipped]
+          description: pending until the next sync indexes it; failed with error; skipped when it has no text
+        error: { type: string }
+        indexed_at: { type: string, format: date-time, nullable: true }
+    KnowledgeDocumentList:
+      type: object
+      required: [documents]
+      properties:
+        documents:
+          type: array
+          items: { $ref: "#/components/schemas/KnowledgeDocument" }
+    KnowledgeDocumentPage:
+      type: object
+      required: [documents]
+      properties:
+        documents:
+          type: array
+          items: { $ref: "#/components/schemas/KnowledgeDocument" }
+        next_after: { type: string, description: "The after of the next page; absent on the last" }
+    KnowledgeDocumentText:
+      type: object
+      required: [document, text]
+      properties:
+        document: { $ref: "#/components/schemas/KnowledgeDocument" }
+        text: { type: string, description: "Its indexed text: its chunks joined in order, empty until it is indexed" }
+    KnowledgeSearchResult:
+      type: object
+      required: [hits]
+      properties:
+        hits:
+          type: array
+          items: { $ref: "#/components/schemas/KnowledgeHit" }
+    KnowledgeHit:
+      type: object
+      required: [document, source, title, heading, snippet, score]
+      properties:
+        document: { type: string, description: "The document's id, which getKnowledgeDocument and knowledge__read take" }
+        source: { type: string }
+        title: { type: string }
+        url: { type: string, description: A synced document's link back }
+        heading: { type: string, description: 'The headings the chunk is under ("Install > Docker")' }
+        snippet: { type: string, description: The chunk's text }
+        score: { type: number, format: double }
+    KnowledgeEvent:
+      type: object
+      description: "The data of one `event: knowledge` on /v1/orgs/{org}/stream: a source's sync started or ended"
+      required: [source_id, name, status]
+      properties:
+        source_id: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [idle, syncing, failed] }

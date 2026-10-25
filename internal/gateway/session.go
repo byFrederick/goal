@@ -40,6 +40,9 @@ type session struct {
 	claims domain.TaskClaims
 	policy policy
 	conns  []*connection
+	// sources are the knowledge sources the run's version lists, which Goal's knowledge tools
+	// search and read; none serves no knowledge tool.
+	sources []string
 	// secrets are the resolved credential values, scrubbed from everything the gateway
 	// returns, logs or records.
 	secrets []string
@@ -189,6 +192,10 @@ func (s *session) listTools(ctx context.Context) *mcp.ListToolsResult {
 	status := make(map[string]string, len(s.conns))
 	tools := []*mcp.Tool{}
 
+	if len(s.sources) > 0 {
+		tools = append(tools, knowledgeTools(s.sources)...)
+	}
+
 	for i, c := range s.conns {
 		if c.unavailable == "" && errs[i] != nil {
 			c.unavailable, c.err = reasonUpstream, errs[i]
@@ -242,6 +249,10 @@ func (s *session) upstreamTools(ctx context.Context, c *connection) ([]*mcp.Tool
 // call is a protocol error, as for an unknown tool; an upstream failure is a tool error the
 // agent can read and act on.
 func (s *session) callTool(ctx context.Context, p *mcp.CallToolParamsRaw) (*mcp.CallToolResult, error) {
+	if tool, ok := s.knowledgeTool(p.Name); ok {
+		return s.callKnowledge(ctx, tool, p.Arguments), nil
+	}
+
 	start := s.g.clock.Now()
 	connName, tool, _ := strings.Cut(p.Name, sep)
 	rec := call{connection: connName, tool: tool, requestBytes: len(p.Arguments)}

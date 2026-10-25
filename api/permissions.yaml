@@ -41,6 +41,10 @@ permissions:
   # value; owners and admins change and test them after a recent sign-in, never with a key.
   - {name: connection:read,    level: org, org_roles: [owner, admin, member], keys: true, pat: true}
   - {name: connection:manage,  level: org, org_roles: [owner, admin], fresh: true}
+  # The organization's knowledge base (spec 4 §8.1): members, keys and tokens search and read it;
+  # owners, admins and keys add, sync and delete sources and documents.
+  - {name: knowledge:read,     level: org, org_roles: [owner, admin, member], keys: true, pat: true}
+  - {name: knowledge:manage,   level: org, org_roles: [owner, admin], keys: true}
   - {name: factory:create,     level: org, org_roles: [owner, admin], keys: true, pat: true}   # high impact
   - {name: factory:read,       level: factory, factory_role: viewer,   keys: true, pat: true}
   - {name: item:create,        level: factory, factory_role: approver, keys: true, pat: true}

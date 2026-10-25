@@ -60,6 +60,9 @@ type bundleSpec struct {
 	// Connections are the agent's organization connections its token grants, in its order: the
 	// worker configures their MCP servers and tells the agent about them.
 	Connections []bundleConnection `json:"connections"`
+	// KnowledgeSources are the knowledge sources the gateway's knowledge tools search for the
+	// run, which the worker's prompt names.
+	KnowledgeSources []string `json:"knowledge_sources,omitempty"`
 }
 
 // bundleConnection is what the agent hears and the worker configures of one connection: the
@@ -183,7 +186,8 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 			Model: cmp.Or(agent.Model, line.Runtime.Model), Skills: make([]string, 0, len(agent.Skills)),
 			ToolsAllow: nonNil(agent.ToolsAllow), ToolsDeny: nonNil(agent.ToolsDeny), Purpose: line.Purpose,
 			Brief: it.Work(), Inputs: it.Outputs, Output: station.Output, MaxTurns: maxTurns, MaxUSD: maxUSD,
-			Connections: []bundleConnection{},
+			Connections:      []bundleConnection{},
+			KnowledgeSources: g.searchable(line),
 		},
 		Files: make(map[string][]byte, len(agentFiles)),
 		Git:   []gitCredential{},

@@ -128,6 +128,9 @@ type settings struct {
 	// KBWorkers is how many knowledge sources this goald syncs at once (GOAL_KB_WORKERS, default
 	// 2; 0 syncs none here).
 	KBWorkers int
+	// UploadMaxBytes is the largest file uploaded to the knowledge base (GOAL_UPLOAD_MAX_BYTES,
+	// default 25 MiB).
+	UploadMaxBytes int64
 }
 
 const (
@@ -154,6 +157,7 @@ const (
 	embedModelEnv = "GOAL_EMBED_MODEL"
 	embedKeyEnv   = "GOAL_EMBED_KEY"
 	kbWorkersEnv  = "GOAL_KB_WORKERS"
+	uploadMaxEnv  = "GOAL_UPLOAD_MAX_BYTES"
 	// defaultEmbedModel is Workers AI's bge-m3 (1024 dimensions), the default by spec 4's recall
 	// check on this repository's docs (§17 q2); on another API name its id of a 1024-dimension
 	// model (Ollama's bge-m3, OpenAI's text-embedding-3-small with dimensions).
@@ -194,7 +198,7 @@ var ownVariables = []string{
 	authEnv, upstreamEnv, proxiesEnv, googleEnv, authProxySecretEnv,
 	"GOAL_TICK_EVERY", "GOAL_REFRESH_EVERY", "GOAL_MAX_RUNS",
 	"GOAL_GITHUB_API_URL", githubWebEnv, "GOAL_LOG_LEVEL", "GOAL_LOG_FORMAT", agentImageEnv, "GOAL_ORG_RETENTION", "GOAL_MODELS",
-	"GOAL_DEFINITION_CACHE_BYTES", sandboxNetworkEnv, embedURLEnv, embedModelEnv, embedKeyEnv, kbWorkersEnv,
+	"GOAL_DEFINITION_CACHE_BYTES", sandboxNetworkEnv, embedURLEnv, embedModelEnv, embedKeyEnv, kbWorkersEnv, uploadMaxEnv,
 	"GOAL_S3_BUCKET", "GOAL_S3_ENDPOINT", "GOAL_S3_ACCESS_KEY", "GOAL_S3_SECRET_KEY",
 	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", masterkey.KeysEnv, masterkey.FileEnv, allowPrivateEnv,
 }
@@ -337,7 +341,7 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 	return s, errors.Join(append(errs, err)...)
 }
 
-// knowledgeSettings reads the embedding model and GOAL_KB_WORKERS.
+// knowledgeSettings reads the embedding model, GOAL_KB_WORKERS and GOAL_UPLOAD_MAX_BYTES.
 func knowledgeSettings(s *settings, or func(name, def string) string) []error {
 	var errs []error
 
@@ -354,6 +358,14 @@ func knowledgeSettings(s *settings, or func(name, def string) string) []error {
 	}
 
 	s.KBWorkers = workers
+
+	upload, err := strconv.ParseInt(or(uploadMaxEnv, strconv.Itoa(knowledge.DefaultMaxUpload)), 10, 64)
+	if err != nil || upload <= 0 {
+		errs = append(errs, fmt.Errorf("%s %q is not a positive number of bytes (default %d, 25 MiB)",
+			uploadMaxEnv, or(uploadMaxEnv, ""), knowledge.DefaultMaxUpload))
+	}
+
+	s.UploadMaxBytes = upload
 
 	return errs
 }

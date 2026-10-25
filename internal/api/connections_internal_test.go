@@ -52,7 +52,7 @@ func TestConnections_InUseByAFactory(t *testing.T) {
 	f.Metadata.ID, f.Metadata.Name = string(mxF), "builder"
 	f.Spec.Connections = []config.Connection{{Name: connGitHub}}
 
-	s := &server{factories: oneFactory{f}, connections: conns, authz: AllowAll{}, clock: porttest.NewClock(mxNow)}
+	s := &server{factories: oneFactory{f}, connections: conns, knowledge: porttest.NewKnowledge(conns, tenancy), authz: AllowAll{}, clock: porttest.NewClock(mxNow)}
 	ctx := domain.WithActor(domain.WithPrincipal(domain.WithOrg(t.Context(), org.ID), domain.LocalPrincipal), domain.LocalUser)
 
 	if _, err := conns.Create(ctx, domain.NewConnection{Name: connGitHub, Kind: connGitHub, Secrets: map[string]string{"token": "t"}}, domain.LocalUser); err != nil {

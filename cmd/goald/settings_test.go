@@ -68,15 +68,21 @@ func TestSettings_Knowledge(t *testing.T) {
 	t.Parallel()
 
 	s, err := settingsFrom(envOf(nil))
-	if err != nil || s.Embed.URL != "" || s.KBWorkers != 2 {
-		t.Fatalf("defaults = %+v, %d, %v", s.Embed, s.KBWorkers, err)
+	if err != nil || s.Embed.URL != "" || s.KBWorkers != 2 || s.UploadMaxBytes != 25<<20 {
+		t.Fatalf("defaults = %+v, %d, %d, %v", s.Embed, s.KBWorkers, s.UploadMaxBytes, err)
 	}
 
 	s, err = settingsFrom(envOf(map[string]string{
-		embedURLEnv: "https://api.cloudflare.com/client/v4/accounts/acme/ai/v1", embedKeyEnv: "k", kbWorkersEnv: "0",
+		embedURLEnv: "https://api.cloudflare.com/client/v4/accounts/acme/ai/v1", embedKeyEnv: "k", kbWorkersEnv: "0", uploadMaxEnv: "1048576",
 	}))
-	if err != nil || s.Embed.Model != "@cf/baai/bge-m3" || s.Embed.Key != "k" || s.KBWorkers != 0 {
-		t.Errorf("with an embedding API = %+v, %d, %v", s.Embed, s.KBWorkers, err)
+	if err != nil || s.Embed.Model != "@cf/baai/bge-m3" || s.Embed.Key != "k" || s.KBWorkers != 0 || s.UploadMaxBytes != 1<<20 {
+		t.Errorf("with an embedding API = %+v, %d, %d, %v", s.Embed, s.KBWorkers, s.UploadMaxBytes, err)
+	}
+
+	for _, bad := range []string{"0", "-1", "25MiB"} {
+		if _, err := settingsFrom(envOf(map[string]string{uploadMaxEnv: bad})); err == nil || !strings.Contains(err.Error(), uploadMaxEnv) {
+			t.Errorf("%s=%s: %v; want an error naming it", uploadMaxEnv, bad, err)
+		}
 	}
 }
 

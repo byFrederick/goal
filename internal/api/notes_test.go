@@ -37,7 +37,7 @@ func TestAPI_NoteGoesToTheNextRun(t *testing.T) {
 		t.Fatalf("note = %d, want 202", code)
 	}
 
-	if receipt.Delivery != gen.NextRun || receipt.EventId == 0 {
+	if receipt.Delivery != gen.NoteReceiptDeliveryNextRun || receipt.EventId == 0 {
 		t.Errorf("receipt %+v, want next_run with the event id", receipt)
 	}
 

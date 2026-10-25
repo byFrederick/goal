@@ -80,7 +80,7 @@ func TestNote_SendsTheTextToTheItem(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
-		_ = json.NewEncoder(w).Encode(gen.NoteReceipt{EventId: 42, Delivery: gen.NextRun})
+		_ = json.NewEncoder(w).Encode(gen.NoteReceipt{EventId: 42, Delivery: gen.NoteReceiptDeliveryNextRun})
 	})
 
 	srv := httptest.NewServer(mux)

@@ -204,14 +204,23 @@ export function agentEnv(env: NodeJS.ProcessEnv): Record<string, string | undefi
 
 /**
  * What goes after Claude Code's system prompt: the factory's purpose, when it has one, the agent's
- * prompt, then the agent's connections.
+ * prompt, then the agent's connections and the knowledge sources the gateway's knowledge tools
+ * search, when it serves them.
  */
 export function systemAppend(
-  spec: Pick<TaskSpec, 'purpose' | 'connections'>,
+  spec: Pick<TaskSpec, 'purpose' | 'connections' | 'gateway_url' | 'knowledge_sources'>,
   files: Pick<AgentFiles, 'prompt'>,
 ): string {
   const parts = spec.purpose ? [`## This factory\n${spec.purpose}`, files.prompt] : [files.prompt];
   if (spec.connections.length > 0) parts.push(connectionsSection(spec.connections));
+  const sources = spec.knowledge_sources ?? [];
+  if (spec.gateway_url && sources.length > 0) {
+    const tool = (name: string) => `mcp__${gatewayServer}__knowledge__${name}`;
+    parts.push(
+      `## Knowledge\nThe organization's knowledge sources ${sources.join(', ')} are searchable with ${tool('search')}; ` +
+        `${tool('read')} returns a whole document by the id a search gave.`,
+    );
+  }
   return parts.join('\n\n');
 }
 

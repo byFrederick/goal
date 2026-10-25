@@ -3,7 +3,8 @@
 // metrics, submitting and listing work items, reading items, their history and runs, human decisions
 // (approve, reject, retry, merge) and controls (move, pause; control.go), factory definition authoring (definitions.go: drafts,
 // validation, publishing, versions, templates), a Server-Sent Events stream of the
-// organization's events, and the factory editor's metadata and skills catalog (builder.go).
+// organization's events, the factory editor's metadata and skills catalog (builder.go), and the
+// organization's connections (connections.go) and knowledge base (knowledge.go).
 //
 // The handlers implement the strict server interface generated into internal/api/gen
 // (`task api:gen`). They reach the engine, the store, the organizations and the factory
@@ -154,6 +155,13 @@ type Deps struct {
 	Connections         ports.Connections
 	ParseKind           KindParser
 	ConnectionTransport http.RoundTripper
+	// Knowledge is the organization's knowledge base (spec 4 §4.8); KnowledgeUploads keeps its
+	// uploaded files, of at most UploadMaxBytes each (GOAL_UPLOAD_MAX_BYTES); KnowledgeSearch
+	// searches it as the gateway's knowledge__search does.
+	Knowledge        ports.Knowledge
+	KnowledgeUploads KnowledgeUploads
+	KnowledgeSearch  KnowledgeSearch
+	UploadMaxBytes   int64
 	// Clock dates ages and metric windows and paces stream heartbeats.
 	Clock  ports.Clock
 	Logger *slog.Logger
@@ -165,6 +173,7 @@ func (d Deps) complete() bool {
 		d.Engine == nil, d.Items == nil, d.Factories == nil, d.Definitions == nil, d.Versions == nil, d.Orgs == nil,
 		d.Audit == nil, d.Access == nil, d.Authorizer == nil, d.Platform == nil, d.Feed == nil, d.Builder == nil, d.Clock == nil,
 		d.Connections == nil, d.ParseKind == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
+		d.Knowledge == nil, d.KnowledgeUploads == nil, d.KnowledgeSearch == nil, d.UploadMaxBytes <= 0,
 	}
 
 	return !slices.Contains(missing, true)
@@ -206,7 +215,8 @@ var errInvalid = errors.New("invalid request")
 func New(d Deps) (http.Handler, error) {
 	if !d.complete() {
 		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Access, Authorizer, Platform, Feed, Builder, Clock, " +
-			"Connections, ParseKind, ConnectionTransport and a positive OrgRetention are required")
+			"Connections, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeSearch, a positive UploadMaxBytes " +
+			"and a positive OrgRetention are required")
 	}
 
 	if err := d.failsClosed(); err != nil {
@@ -223,7 +233,8 @@ func New(d Deps) (http.Handler, error) {
 		retention: d.OrgRetention, authz: d.Authorizer, auth: d.Auth, identity: d.Identity, access: d.Access, platform: d.Platform, feed: d.Feed,
 		builder: d.Builder, connections: d.Connections, parseKind: d.ParseKind,
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
-		clock:            d.Clock, log: log,
+		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, search: d.KnowledgeSearch, uploadMax: d.UploadMaxBytes,
+		clock: d.Clock, log: log,
 	}
 	s.inbox = append([]InboxSource{workInbox{s: s}}, d.InboxSources...)
 
@@ -255,16 +266,21 @@ func New(d Deps) (http.Handler, error) {
 		s.problem(w, r, errCrossOrigin)
 	}))
 
-	return s.accessLog(cop.Handler(limitBodies(withRequestID(withClientAddr(d.TrustedProxies, s.withCredential(h)))))), nil
+	return s.accessLog(cop.Handler(limitBodies(d.UploadMaxBytes, withRequestID(withClientAddr(d.TrustedProxies, s.withCredential(h)))))), nil
 }
 
 // limitBodies refuses request bodies over the route's limit (413): the definitions routes take
-// whole trees, every other route takes small JSON objects.
-func limitBodies(next http.Handler) http.Handler {
+// whole trees, the knowledge upload route files of up to uploadMax bytes, every other route
+// takes small JSON objects.
+func limitBodies(uploadMax int64, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		limit := int64(maxRequestBytes)
-		if definitionRoute(r.URL.Path) {
+
+		switch {
+		case definitionRoute(r.URL.Path):
 			limit = maxDefinitionBytes
+		case uploadRoute(r):
+			limit = uploadMax + uploadSlack
 		}
 
 		r2 := *r
@@ -297,6 +313,19 @@ func definitionRoute(path string) bool {
 	}
 }
 
+// uploadRoute reports whether r uploads knowledge documents:
+// POST /v1/orgs/{org}/knowledge/sources/{source}/documents.
+func uploadRoute(r *http.Request) bool {
+	rest, ok := strings.CutPrefix(r.URL.Path, "/v1/orgs/")
+	if !ok || r.Method != http.MethodPost {
+		return false
+	}
+
+	parts := strings.Split(rest, "/") // org, knowledge, sources, source, documents
+
+	return len(parts) == 5 && parts[1] == "knowledge" && parts[2] == "sources" && parts[4] == "documents"
+}
+
 // errCrossOrigin marks an unsafe request from another origin, which cross-origin protection
 // refuses (403).
 var errCrossOrigin = errors.New("cross-origin request refused: change things from goald's own origin")
@@ -322,8 +351,13 @@ type server struct {
 	connections      ports.Connections
 	parseKind        KindParser
 	connectionClient *http.Client
-	clock            ports.Clock
-	log              *slog.Logger
+	// knowledge, uploads and search serve the knowledge routes; uploadMax bounds an uploaded file.
+	knowledge ports.Knowledge
+	uploads   KnowledgeUploads
+	search    KnowledgeSearch
+	uploadMax int64
+	clock     ports.Clock
+	log       *slog.Logger
 }
 
 var _ gen.StrictServerInterface = (*server)(nil)
@@ -517,9 +551,10 @@ func problemOf(err error) gen.Problem {
 	var tooLarge *http.MaxBytesError
 
 	// The answers with a code of their own, the fixed bodies first.
-	// The connection routes' answers come before the definitions' (both wrap ports.ErrNameTaken).
+	// The connection and knowledge routes' answers come before the definitions' (all wrap
+	// ports.ErrNameTaken).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, connectionProblem, definitionProblem, controlProblem, agentProblem, apiKeyProblem, personalTokenProblem,
+		fixedProblem, connectionProblem, knowledgeProblem, definitionProblem, controlProblem, agentProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {
 			return p

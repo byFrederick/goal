@@ -229,8 +229,11 @@ type probe struct {
 }
 
 // probes has a request for every operation of api/openapi.yaml; the item is acme#1.
-// submitFix is a valid submission to acme.
-const submitFix = `{"title":"t","type":"fix"}`
+// submitFix is a valid submission to acme; noDocument is the id of no knowledge document.
+const (
+	submitFix  = `{"title":"t","type":"fix"}`
+	noDocument = "00000000-0000-7000-8000-fffffffffffd"
+)
 
 var probes = map[string]probe{
 	"getHealth":        {method: http.MethodGet, path: "/v1/health"},
@@ -305,6 +308,25 @@ var probes = map[string]probe{
 	"updateConnection": {method: http.MethodPatch, path: "/v1/orgs/acme/connections/docs", body: `{"description":"d"}`, org: testOrg},
 	"testConnection":   {method: http.MethodPost, path: "/v1/orgs/acme/connections/docs/test", org: testOrg},
 	"deleteConnection": {method: http.MethodDelete, path: "/v1/orgs/acme/connections/docs", org: testOrg},
+
+	"listKnowledgeSources": {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/sources?factory=acme", org: testOrg, factory: acmeID},
+	"createKnowledgeSource": {
+		method: http.MethodPost, path: "/v1/orgs/acme/knowledge/sources", org: testOrg, body: `{"name":"notes","title":"Notes","kind":"upload"}`,
+	},
+	"getKnowledgeSource":     {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/sources/notes", org: testOrg},
+	"updateKnowledgeSource":  {method: http.MethodPatch, path: "/v1/orgs/acme/knowledge/sources/notes", body: `{"title":"t"}`, org: testOrg},
+	"syncKnowledgeSource":    {method: http.MethodPost, path: "/v1/orgs/acme/knowledge/sources/notes/sync", org: testOrg},
+	"listKnowledgeDocuments": {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/sources/notes/documents", org: testOrg},
+	"uploadKnowledgeDocuments": {
+		method: http.MethodPost, path: "/v1/orgs/acme/knowledge/sources/notes/documents", org: testOrg,
+		header: http.Header{"Content-Type": {"multipart/form-data; boundary=x"}},
+		body:   "--x\r\nContent-Disposition: form-data; name=\"files\"; filename=\"a.md\"\r\n\r\n# A\r\n--x--\r\n",
+	},
+	"getKnowledgeDocument":        {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/documents/" + noDocument, org: testOrg},
+	"getKnowledgeDocumentContent": {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/documents/" + noDocument + "/content", org: testOrg},
+	"deleteKnowledgeDocument":     {method: http.MethodDelete, path: "/v1/orgs/acme/knowledge/documents/" + noDocument, org: testOrg},
+	"searchKnowledge":             {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/search?q=notes", org: testOrg},
+	"deleteKnowledgeSource":       {method: http.MethodDelete, path: "/v1/orgs/acme/knowledge/sources/notes", org: testOrg},
 	// The key's factory passes the resolver; no key has this id.
 	"createAPIKey": {
 		method: http.MethodPost, path: "/v1/orgs/acme/api-keys", org: testOrg, factory: acmeID,
