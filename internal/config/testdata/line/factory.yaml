@@ -51,3 +51,4 @@ spec:
       - { id: done, kind: done }
     flow:
       expedite: { types: [incident], wip: 1 }
+      assemblies: { freshBase: merge, onConflict: human }

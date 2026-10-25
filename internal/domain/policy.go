@@ -24,6 +24,34 @@ type FlowPolicy struct {
 	// Andon, when set, pulls the cord automatically on a high rework rate (later work).
 	Andon   *AndonPolicy
 	Targets Targets
+	// Assemblies says how runs keep item branches fresh and what a merge conflict does.
+	Assemblies AssemblyPolicy
+}
+
+// FreshBase says how a run brings an existing item branch up to date with the default branch.
+type FreshBase string
+
+const (
+	// FreshBaseRebase is the default: the branch is rebased on the default branch.
+	FreshBaseRebase FreshBase = "rebase"
+	// FreshBaseMerge merges the default branch into the branch.
+	FreshBaseMerge FreshBase = "merge"
+)
+
+// ConflictPolicy says what a merge conflict with the default branch does to an item.
+type ConflictPolicy string
+
+const (
+	// ConflictRework is the default: the item goes back to be built again with the conflict.
+	ConflictRework ConflictPolicy = "rework"
+	// ConflictHuman leaves the conflict to a person.
+	ConflictHuman ConflictPolicy = "human"
+)
+
+// AssemblyPolicy is board.flow.assemblies, with its defaults applied.
+type AssemblyPolicy struct {
+	FreshBase  FreshBase
+	OnConflict ConflictPolicy
 }
 
 // AndonPolicy pulls the andon cord when too many gate verdicts reject.

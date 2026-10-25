@@ -415,6 +415,15 @@
                 "leadTimeHours": { "type": "number", "exclusiveMinimum": 0, "description": "p85 lead time, created to done, in hours." },
                 "expediteLeadTimeMinutes": { "type": "integer", "minimum": 1, "description": "Lead time of each expedite item, in minutes." }
               }
+            },
+            "assemblies": {
+              "type": "object",
+              "description": "How runs keep item branches fresh and what a merge conflict does. Omitted keys take their defaults.",
+              "additionalProperties": false,
+              "properties": {
+                "freshBase": { "enum": ["rebase", "merge"], "description": "How a run brings an existing item branch up to date with the default branch; default rebase." },
+                "onConflict": { "enum": ["rework", "human"], "description": "What a merge conflict does: send the item back as rework (default) or leave it to a person." }
+              }
             }
           }
         }
