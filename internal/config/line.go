@@ -25,7 +25,7 @@ func (f *Factory) Line() domain.Line {
 	}
 
 	if r := s.Runtime.Repository; r != nil {
-		l.Runtime.Repository = domain.Repository{URL: r.URL, Connection: r.Connection, AuthRef: r.Token}
+		l.Runtime.Repository = domain.Repository{URL: r.URL, Connection: r.Connection}
 	}
 
 	for _, c := range s.Connections {
@@ -37,6 +37,8 @@ func (f *Factory) Line() domain.Line {
 	if s.Knowledge != nil {
 		l.KnowledgeSources = slices.Clone(s.Knowledge.Sources)
 	}
+
+	l.Removed = slices.Clone(f.removed)
 
 	if b := s.Runtime.Budget; b != nil {
 		l.Runtime.MaxTurnsPerTask, l.Runtime.PerItemUSD = b.MaxTurnsPerTask, b.PerItemUSD

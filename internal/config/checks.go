@@ -22,9 +22,7 @@ const (
 	checkLine       = "line"       // the line is well formed
 	checkReferences = "references" // every name and path points at something that exists
 	checkTools      = "tools"      // runtime.tools are mise tool specs
-	checkRemoved    = "removed"    // no form phase 4 removed is left
-	checkImages     = "images"     // connection images are pinned
-	checkSecrets    = "secrets"    // secrets are references, not values
+	checkRemoved    = "removed"    // no form connections replaced is left
 	// checkAvailability: what the definition declares that this install cannot serve yet.
 	checkAvailability = "availability"
 )
@@ -44,7 +42,6 @@ const (
 	codeGateNotUpstream = "gate-not-upstream"
 	codeAgentsOverWIP   = "agents-exceed-wip"
 	codeCheckRunMissing = "check-run-missing"
-	codeMergeNeedsRepo  = "merge-needs-repository"
 	codeBufferOffDrum   = "buffer-not-at-constraint"
 
 	codeDuplicateName     = "duplicate-name"
@@ -60,14 +57,11 @@ const (
 
 	codeToolSpecInvalid = "tool-spec-invalid"
 
-	// The forms phase 4 removed (spec 4 §4.4): warnings until the cutover makes goald refuse to
-	// run a version that has them, each with a quick fix.
+	// The forms connections replaced (spec 4 §4.4): errors, each with a quick fix. A version
+	// published before the cutover may have them; it loads but does not run (Load).
 	codeFieldRemoved        = "field-removed"
 	codeEnvReferenceRemoved = "env-reference-removed"
 	codeInlineRemoved       = "connection-inline-removed"
-
-	codeImageUnpinned = "image-unpinned"
-	codeLiteralSecret = "literal-secret"
 
 	codeBuiltinAsk = "builtin-ask-unavailable"
 )
@@ -100,8 +94,6 @@ func (c *checker) run() []domain.DefinitionProblem {
 	c.flowAndLearning()
 	c.tools()
 	c.removedForms()
-	c.images()
-	c.secrets()
 
 	return c.problems
 }
@@ -135,7 +127,7 @@ func (c *checker) duplicates() {
 		p := at("spec", "connections", i)
 
 		switch {
-		case conn.Connector != "" && !c.f.hasKey(append(slices.Clone(p), keyName)):
+		case conn.Inline() && !c.f.hasKey(append(slices.Clone(p), keyName)):
 			p = append(p, "connector")
 		case conn.Inline():
 			p = append(p, keyName)
@@ -266,7 +258,6 @@ func (c *checker) station(i int, s Station) {
 	}
 
 	c.gate(i, s)
-	c.action(i, s)
 	c.capacity(i, s)
 }
 
@@ -284,16 +275,6 @@ func (c *checker) gate(i int, s Station) {
 		c.errorf(checkLine, codeGateNotUpstream, p,
 			"station %s: gate.onReject %q must be a station before it, where the work is redone", s.ID, s.Gate.OnReject)
 	}
-}
-
-func (c *checker) action(i int, s Station) {
-	if s.Action != ActionMerge || c.f.Spec.Runtime.Repository != nil {
-		return
-	}
-
-	p := at("spec", "board", "stations", i, "action")
-	c.errorf(checkLine, codeMergeNeedsRepo, p, "station %s: action merge needs runtime.repository, whose pull requests it merges", s.ID).
-		Fixes = []domain.ProblemFix{RemoveFix("Remove the merge step", p)}
 }
 
 // capacity reports agents beyond the station's WIP: they would idle. The fixes raise WIP to the
@@ -388,9 +369,10 @@ var removedKeys = []struct {
 	{at("spec", "secrets"), "the organization's connections hold its credentials"},
 }
 
-// removedForms names each form phase 4 removed that the definition still has, with a fix that
-// takes it out (spec 4 §4.4). They are warnings: versions published before still run until the
-// cutover to connections.
+// removedForms names each form connections replaced that the definition still has, with a fix
+// that takes it out (spec 4 §4.4). They are errors, and the factory records each by path and
+// code for its line (domain.Line.Removed): goald refuses to run a version published before the
+// cutover that has one.
 func (c *checker) removedForms() {
 	for _, k := range removedKeys {
 		if !c.f.hasKey(k.path) {
@@ -398,13 +380,12 @@ func (c *checker) removedForms() {
 		}
 
 		name := strings.Join(k.path[1:], ".")
-		c.add(checkRemoved, codeFieldRemoved, domain.SeverityWarning, k.path, "%s is removed: %s", name, k.why).
+		c.removed(k.path, codeFieldRemoved, "%s is removed: %s", name, k.why).
 			Fixes = []domain.ProblemFix{RemoveFix("Remove "+name, k.path)}
 	}
 
-	if r := c.f.Spec.Runtime.Repository; r != nil && r.Token != "" {
-		p := at("spec", "runtime", "repository", "token")
-		c.add(checkRemoved, codeEnvReferenceRemoved, domain.SeverityWarning, p,
+	if p := at("spec", "runtime", "repository", "token"); c.f.hasKey(p) {
+		c.removed(p, codeEnvReferenceRemoved,
 			"runtime.repository.token is removed: set runtime.repository.connection to an organization connection that signs git in to the repository's host").
 			Fixes = []domain.ProblemFix{RemoveFix("Remove the token", p)}
 	}
@@ -415,32 +396,18 @@ func (c *checker) removedForms() {
 		}
 
 		p := at("spec", "connections", i)
-		c.add(checkRemoved, codeInlineRemoved, domain.SeverityWarning, p,
+		c.removed(p, codeInlineRemoved,
 			"connection %s: inline connections are removed; create an organization connection named %s (for example of kind mcp-server) "+
 				"and list it here by name, with its credentials in the connection", conn.Name, conn.Name).
 			Fixes = []domain.ProblemFix{ReplaceFix("Use the organization's connection "+conn.Name, p, map[string]string{keyName: conn.Name})}
 	}
 }
 
-func (c *checker) images() {
-	for i, conn := range c.f.Spec.Connections {
-		if conn.Image != "" && !Pinned(conn.Image) {
-			c.warnf(checkImages, codeImageUnpinned, at("spec", "connections", i, "image"),
-				"connection %s: image %s is not pinned; use a version tag or a digest (name:1.2.3@sha256:...)",
-				conn.Name, conn.Image)
-		}
-	}
-}
+// removed records a removed form at path: an error, and its place in the factory's removed list.
+func (c *checker) removed(path []string, code, format string, a ...any) *domain.DefinitionProblem {
+	c.f.removed = append(c.f.removed, fmt.Sprintf("%s (%s)", displayPath(path), code))
 
-// secrets warns about literal values where a secret belongs. The message names the place,
-// never the value.
-func (c *checker) secrets() {
-	for _, u := range c.f.SecretUses() {
-		if u.Literal() {
-			c.warnf(checkSecrets, codeLiteralSecret, splitPointer(u.Doc),
-				"%s is a literal value, not a secret reference; if it is a secret, use env:NAME so it stays out of the definition", u.Path)
-		}
-	}
+	return c.errorf(checkRemoved, code, path, format, a...)
 }
 
 // ReplaceFix is a fix that replaces the value at path (a factory.yaml path) with v, as a patch

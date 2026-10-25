@@ -55,6 +55,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Update_RenameKeepsSecrets", testRename},
 		{"Open_ValuesWithoutAUse", testOpen},
 		{"Resolve_OpensAuditsAndMarksUse", testResolve},
+		{"Resolve_AuditsAMergeByItsPerson", testResolveForAMerge},
 		{"RecordTest_StoredAndAudited", testRecordTest},
 		{"Delete_GoneAndAudited", testDelete},
 		{"OtherOrg_SeesNothing", testIsolation},
@@ -102,7 +103,9 @@ const (
 )
 
 var (
-	admin  = domain.Actor{Kind: domain.ActorUser, ID: "00000000-0000-7000-8000-000000000001", Name: "Ada"}
+	admin = domain.Actor{Kind: domain.ActorUser, ID: "00000000-0000-7000-8000-000000000001", Name: "Ada"}
+	// forRun is a run's use of connections.
+	forRun = domain.ConnectionUse{Run: run}
 	editor = domain.Actor{Kind: domain.ActorUser, ID: "00000000-0000-7000-8000-000000000002", Name: "Eve"}
 )
 
@@ -206,7 +209,7 @@ func (f *fixture) get(org domain.OrgID, name string) domain.Connection {
 func (f *fixture) resolve(org domain.OrgID, names ...string) []domain.ResolvedConnection {
 	f.t.Helper()
 
-	got, err := f.c.Resolve(f.in(org), names, run)
+	got, err := f.c.Resolve(f.in(org), names, forRun)
 	if err != nil {
 		f.t.Fatalf("Resolve %v: %v", names, err)
 	}
@@ -607,9 +610,26 @@ func testResolve(f *fixture) {
 	after := f.get(acme, connGit)
 	f.expect(after.LastUsedAt != nil && !after.LastUsedAt.Before(git.CreatedAt.Add(-time.Minute)), "Get after Resolve = %+v; want last used set", after)
 
-	_, err = f.c.Resolve(f.in(acme), []string{connGit, "nothing"}, run)
+	_, err = f.c.Resolve(f.in(acme), []string{connGit, "nothing"}, forRun)
 	f.refused("Resolve of an unknown connection", err, ports.ErrNotFound)
 	f.expect(len(f.audit(acme, domain.AuditConnectionUsed)) == 2, "a refused Resolve was audited")
+}
+
+// A person's merge of an item's pull requests is no run: its connection.used row names the person
+// and the item.
+func testResolveForAMerge(f *fixture) {
+	acme := f.NewOrg(f.t)
+	f.git(acme, sealedValue)
+
+	const item = domain.ItemID("00000000-0000-7000-8000-0000000000bb")
+
+	if _, err := f.c.Resolve(f.in(acme), []string{connGit}, domain.ConnectionUse{By: admin, Item: item}); err != nil {
+		f.t.Fatal(err)
+	}
+
+	used := f.one(acme, domain.AuditConnectionUsed)
+	f.expect(used.Actor.ID == admin.ID && used.Data["item_id"] == string(item) && used.Data["name"] == connGit && used.Data["run_id"] == nil,
+		"connection.used = %+v; want one by the person, naming the item and no run", used)
 }
 
 func testRecordTest(f *fixture) {
@@ -669,7 +689,7 @@ func testIsolation(f *fixture) {
 	_, err = f.c.Get(f.in(labs), connGit)
 	f.refused("another org's Get", err, ports.ErrNotFound)
 
-	_, err = f.c.Resolve(f.in(labs), []string{connGit}, run)
+	_, err = f.c.Resolve(f.in(labs), []string{connGit}, forRun)
 	f.refused("another org's Resolve", err, ports.ErrNotFound)
 
 	desc := "taken over"
@@ -693,7 +713,7 @@ func testNoKey(f *fixture) {
 	_, err := none.Create(ctx, domain.NewConnection{Name: connOther, Kind: gitName, Secrets: map[string]string{fieldToken: "t"}}, admin)
 	f.refused("Create with a secret without a master key", err, ports.ErrNoMasterKey)
 
-	_, err = none.Resolve(ctx, []string{connGit}, run)
+	_, err = none.Resolve(ctx, []string{connGit}, forRun)
 	f.refused("Resolve of a sealed connection without a master key", err, ports.ErrNoMasterKey)
 
 	_, err = none.Create(ctx, domain.NewConnection{Name: connDocs, Kind: docsName, Fields: map[string]string{fieldURL: docsURL}}, admin)
@@ -702,10 +722,10 @@ func testNoKey(f *fixture) {
 	got, err := none.List(ctx)
 	f.expect(err == nil && len(got) == 2, "List without a master key = %+v, %v", got, err)
 
-	resolved, err := none.Resolve(ctx, []string{connDocs}, run)
+	resolved, err := none.Resolve(ctx, []string{connDocs}, forRun)
 	f.expect(err == nil && len(resolved) == 1, "Resolve without secrets without a master key = %+v, %v", resolved, err)
 
-	_, err = f.Connections(f.Key("k9")).Resolve(ctx, []string{connGit}, run)
+	_, err = f.Connections(f.Key("k9")).Resolve(ctx, []string{connGit}, forRun)
 	f.expect(err != nil && strings.Contains(err.Error(), "k1"), "Resolve under another key = %v; want an error naming k1", err)
 }
 
@@ -731,11 +751,11 @@ func testRekey(f *fixture) {
 	onlyNew := f.Connections(f.Key("k2"))
 
 	for org, want := range map[domain.OrgID]string{acme: sealedValue, labs: labsValue} {
-		got, err := onlyNew.Resolve(f.in(org), []string{connGit}, run)
+		got, err := onlyNew.Resolve(f.in(org), []string{connGit}, forRun)
 		f.expect(err == nil && got[0].Values[fieldToken] == want, "Resolve under the new key alone = %+v, %v; want %s", got, err, want)
 	}
 
-	_, err = f.Connections(f.Key("k1")).Resolve(f.in(acme), []string{connGit}, run)
+	_, err = f.Connections(f.Key("k1")).Resolve(f.in(acme), []string{connGit}, forRun)
 	f.expect(err != nil, "the old key alone still opens a resealed connection")
 
 	got, err := onlyNew.Get(f.in(acme), connGit)
@@ -754,7 +774,7 @@ func testNoOrg(f *fixture) {
 	f.refused("Create", err, domain.ErrNoOrg)
 	_, err = f.c.Update(ctx, connDocs, domain.ConnectionPatch{Description: &desc}, admin)
 	f.refused("Update", err, domain.ErrNoOrg)
-	_, err = f.c.Resolve(ctx, []string{connDocs}, run)
+	_, err = f.c.Resolve(ctx, []string{connDocs}, forRun)
 	f.refused("Resolve", err, domain.ErrNoOrg)
 	f.refused("PutKind", f.c.PutKind(ctx, ownKind(""), admin), domain.ErrNoOrg)
 }

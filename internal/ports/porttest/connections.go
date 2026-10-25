@@ -588,7 +588,7 @@ func (c *Connections) RecordTest(ctx context.Context, name string, t domain.Conn
 }
 
 // Resolve implements ports.Connections.
-func (c *Connections) Resolve(ctx context.Context, names []string, run domain.RunID) ([]domain.ResolvedConnection, error) {
+func (c *Connections) Resolve(ctx context.Context, names []string, use domain.ConnectionUse) ([]domain.ResolvedConnection, error) {
 	org, ok := domain.OrgFrom(ctx)
 	if !ok {
 		return nil, domain.ErrNoOrg
@@ -624,8 +624,7 @@ func (c *Connections) Resolve(ctx context.Context, names []string, run domain.Ru
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
 	for _, r := range rows {
-		if err := c.appendAudit(ctx, domain.EngineActor, domain.AuditConnectionUsed, domain.AuditTargetConnection, string(r.conn.ID),
-			map[string]any{auditName: r.conn.Name, "run_id": string(run)}); err != nil {
+		if err := c.appendAudit(ctx, use.Actor(), domain.AuditConnectionUsed, domain.AuditTargetConnection, string(r.conn.ID), use.AuditData(r.conn.Name)); err != nil {
 			return nil, err
 		}
 

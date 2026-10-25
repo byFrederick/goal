@@ -59,9 +59,9 @@ spec:
 	}
 }
 
-// A merge action merges pull requests on the factory's repository at a human's word, so it
-// belongs only on a human station of a factory that has a repository.
-func TestLoad_MergeActionOnlyOnAHumanStationWithARepository(t *testing.T) {
+// A merge action merges the item's pull requests at a human's word, so it belongs only on a human
+// station. Whether a connection can merge them is the connections check's (merge-needs-code-host).
+func TestLoad_MergeActionOnlyOnAHumanStation(t *testing.T) {
 	t.Parallel()
 
 	factory := func(repository, station string) fstest.MapFS {
@@ -87,7 +87,7 @@ spec:
 		name, repository, station, wantErr string
 	}{
 		{"human station with a repository", repo, "{ id: merge, kind: human, action: merge }", ""},
-		{"no repository", "", "{ id: merge, kind: human, action: merge }", "action merge needs runtime.repository"},
+		{"human station without a repository", "", "{ id: merge, kind: human, action: merge }", ""},
 		{"agent station", repo, "{ id: merge, kind: agent, agent: worker, action: merge }", "schema"},
 		{"unknown action", repo, "{ id: merge, kind: human, action: deploy }", "schema"},
 	}
@@ -131,72 +131,6 @@ spec:
 	}
 }
 
-func TestPinned(t *testing.T) {
-	t.Parallel()
-
-	digest := "sha256:" + strings.Repeat("ab", 32)
-	tests := map[string]bool{
-		"ghcr.io/acme/db-mcp:1.2.3":            true,
-		"ghcr.io/acme/db-mcp:1.2.3@" + digest:  true,
-		"ghcr.io/acme/db-mcp@" + digest:        true,
-		"ghcr.io/acme/db-mcp:latest@" + digest: true,
-		"localhost:5000/acme/db-mcp:v0.0.83":   true,
-		"ghcr.io/acme/db-mcp":                  false,
-		"ghcr.io/acme/db-mcp:latest":           false,
-		"localhost:5000/acme/db-mcp":           false, // the port is not a tag
-		"ghcr.io/acme/db-mcp@sha256:abc":       false,
-	}
-
-	for image, want := range tests {
-		if got := Pinned(image); got != want {
-			t.Errorf("Pinned(%q) = %v, want %v", image, got, want)
-		}
-	}
-}
-
-func TestWarnings_NameUnpinnedConnectionImages(t *testing.T) {
-	t.Parallel()
-
-	f, err := Load(fstest.MapFS{
-		"agents/worker.md": {Data: []byte("# worker\n")},
-		"factory.yaml": {Data: []byte(`
-apiVersion: goal/v1
-kind: Factory
-metadata: { id: 00000000-0000-4000-8000-000000000002, name: unpinned }
-spec:
-  runtime: { modelConnection: claude }
-  connections:
-    - { name: shop-db, type: mcp, transport: stdio, image: "ghcr.io/acme/db-mcp:latest", network: true }
-    - { name: wiki, type: mcp, transport: stdio, image: "ghcr.io/acme/docs-mcp:2.0.1" }
-  agents:
-    - { name: worker, prompt: ./agents/worker.md, connections: [shop-db, wiki] }
-  board:
-    stations:
-      - { id: work, kind: agent, agent: worker }
-      - { id: done, kind: done }
-`)},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var unpinned []string
-
-	for _, w := range f.Warnings() {
-		if strings.Contains(w, "not pinned") {
-			unpinned = append(unpinned, w)
-		}
-	}
-
-	if len(unpinned) != 1 || !strings.Contains(unpinned[0], "connection shop-db: image ghcr.io/acme/db-mcp:latest is not pinned") {
-		t.Fatalf("unpinned image warnings = %q, want one for the shop-db connection", unpinned)
-	}
-
-	if !f.Spec.Connections[0].Network || f.Spec.Connections[1].Network {
-		t.Fatalf("network = %v, %v; want true, false", f.Spec.Connections[0].Network, f.Spec.Connections[1].Network)
-	}
-}
-
 // The keys the builder writes are optional additions: a definition using all of them loads.
 func TestLoad_AcceptsTheBuilderKeys(t *testing.T) {
 	t.Parallel()
@@ -229,18 +163,25 @@ func TestLoad_AcceptsTheBuilderKeys(t *testing.T) {
 	}
 }
 
-// A version published before phase 4 still loads: each removed form is a warning with its code,
-// so the engine runs it until the cutover.
-func TestLoad_PublishedVersionsWithRemovedFormsLoad(t *testing.T) {
+// Since the cutover to connections each form they replaced is an error, so no draft that has one
+// publishes; a version published before still loads, so its items stay visible, and its line
+// names the forms, so the engine refuses to run it saying what to fix.
+func TestLoad_RemovedFormsAreErrorsAndTheirVersionsDoNotRun(t *testing.T) {
 	t.Parallel()
 
-	f, problems := Check(os.DirFS("testdata/legacy"))
-	if f == nil || slices.ContainsFunc(problems, domain.DefinitionProblem.Blocking) {
-		t.Fatalf("problems = %+v, want warnings only", problems)
+	f, problems := Check(os.DirFS("testdata/.legacy"))
+	if f == nil {
+		t.Fatalf("problems = %+v, want the factory decoded", problems)
 	}
 
 	counts := map[string]int{}
+
 	for _, p := range problems {
+		removed := p.Code == codeFieldRemoved || p.Code == codeEnvReferenceRemoved || p.Code == codeInlineRemoved
+		if removed != p.Blocking() {
+			t.Errorf("problem %s is %s; want the removed forms errors and nothing else blocking", p.Code, p.Severity)
+		}
+
 		counts[p.Code]++
 	}
 
@@ -251,8 +192,15 @@ func TestLoad_PublishedVersionsWithRemovedFormsLoad(t *testing.T) {
 		}
 	}
 
-	if f.Spec.Runtime.Repository.Token != "env:ACME_GIT_TOKEN" {
-		t.Errorf("runtime = %+v, want the token the engine still reads", f.Spec.Runtime)
+	loaded, err := Load(os.DirFS("testdata/.legacy"))
+	if err != nil {
+		t.Fatalf("Load = %v; want a published version with removed forms to load", err)
+	}
+
+	line := loaded.Line()
+	if len(line.Removed) != 9 || !slices.Contains(line.Removed, "spec.runtime.repository.token (env-reference-removed)") ||
+		!strings.Contains(line.Refusal(), "publish a version with connections") {
+		t.Errorf("line removed %q, refusal %q; want the nine forms named and the fix", line.Removed, line.Refusal())
 	}
 }
 
@@ -314,7 +262,7 @@ func TestFactory_ConnectionNames(t *testing.T) {
 	t.Parallel()
 
 	f := &Factory{}
-	f.Spec.Connections = []Connection{{Name: "repos"}, {Name: "docs", Type: "mcp"}, {Name: "datadog"}}
+	f.Spec.Connections = []Connection{{Name: "repos"}, {Name: "docs", inline: true}, {Name: "datadog"}}
 	f.Spec.Runtime.ModelConnection = "model"
 	f.Spec.Runtime.Repository = &Repository{URL: "https://code.example.com/acme/goal", Connection: "repos"}
 

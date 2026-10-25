@@ -39,8 +39,7 @@ const acme = `apiVersion: goal/v1
 kind: Factory
 metadata: { id: ` + acmeID + `, name: acme, title: Acme }
 spec:
-  runtime: { runner: docker, image: ghcr.io/acme/agent:1.0.0, auth: anthropic-api-key }
-  knowledgeBase: { collections: [notes] }
+  runtime: { modelConnection: claude }
   agents:
     - { name: writer, prompt: ./agents/writer.md }
   board:
@@ -60,12 +59,10 @@ kind: Factory
 metadata: { id: ` + lineID + `, name: line }
 spec:
   runtime:
-    runner: docker
-    image: ghcr.io/acme/agent:1.0.0
-    auth: anthropic-api-key
-    repository: { url: "https://github.com/acme/app.git", token: env:REPO_TOKEN }
+    modelConnection: claude
+    repository: { url: "https://github.com/acme/app.git", connection: repo }
     budget: { weeklyUsd: 70, perItemUsd: 4, maxTurnsPerTask: 80 }
-  knowledgeBase: { collections: [notes] }
+  connections: [repo]
   contracts:
     change: ./contracts/change.schema.json
   agents:
@@ -354,9 +351,6 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
 
 	authors := authoring.New(authoring.Deps{
 		Store: h.defs, Loads: h.store, Templates: h.objects, Clock: h.clock,
-		Credentials: authoring.EnvReferences{
-			Secrets: porttest.Secrets{"REPO_TOKEN": "a-token"}, Policy: domain.SecretPolicy{Reserved: []string{"GOAL_DATABASE_URL"}},
-		},
 		NewID: func() string { return fmt.Sprintf("0b6f1c9e-0000-7000-8000-%012d", ids.Add(1)) },
 	})
 
@@ -367,9 +361,8 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
 	e, err := engine.New(engine.Deps{
 		Store: h.store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
 		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock,
-		CodeHosts:        map[string]ports.CodeHost{"github": h.codehost},
-		MergeConnections: porttest.CodeHostConnections(porttest.CodeHostConnection("github", "github", "github.com")),
-		Connections:      porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy),
+		CodeHosts:   map[string]ports.CodeHost{"github": h.codehost},
+		Connections: engineConnections(t, newTenancy(t)),
 	}, engine.Config{Image: "ghcr.io/acme/goal-agent:1", GatewayURL: "http://gateway.example.com/mcp", GatewayKeyRef: "env:GOAL_GATEWAY_KEY"})
 	if err != nil {
 		t.Fatal(err)
@@ -464,6 +457,34 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
 	})
 
 	return h
+}
+
+// engineConnections are the connections the engine's runs and merges get: acme's model connection
+// claude and its github connection repo, of goald's platform kinds.
+func engineConnections(t *testing.T, audit ports.Audit) *porttest.Connections {
+	t.Helper()
+
+	c := porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), audit)
+
+	kinds, err := connkind.Platform()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := c.SyncPlatformKinds(t.Context(), kinds); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, n := range []domain.NewConnection{
+		{Name: "claude", Kind: "anthropic", Secrets: map[string]string{"key": "sk-ant-test"}},
+		{Name: "repo", Kind: "github", Secrets: map[string]string{"token": "ghp_test"}},
+	} {
+		if _, err := c.Create(inOrg(t), n, domain.LocalUser); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	return c
 }
 
 // connections makes h's connections, with goald's platform kinds, and the knowledge base whose

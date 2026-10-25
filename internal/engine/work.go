@@ -46,13 +46,8 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 	c := claimed{line: l, station: st, item: it, lease: lease}
 	log := e.log.With(slog.String("factory", string(it.FactoryID)), slog.String("item", string(it.ID)), slog.String("station", st.ID))
 
-	name, err := st.AgentFor(it.Lane)
-	if err != nil {
-		e.block(ctx, log, c, err.Error())
-		return
-	}
-
-	if c.agent, err = agentSpec(l, name); err != nil {
+	var err error
+	if c.agent, err = agentFor(l, st, it.Lane); err != nil {
 		e.block(ctx, log, c, err.Error())
 		return
 	}
@@ -106,6 +101,22 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 		rejection = "Your previous attempt was rejected: " + rejected.err.Error() +
 			"\nFix that and return output that satisfies the station contract."
 	}
+}
+
+// agentFor is the agent that works on an item of lane at st, or why none can: no agent for the
+// lane, or a line that does not run on connections alone (domain.Line.Refusal), refused before
+// any run, box or connection.
+func agentFor(l domain.Line, st domain.Station, lane string) (domain.AgentSpec, error) {
+	name, err := st.AgentFor(lane)
+	if err != nil {
+		return domain.AgentSpec{}, err
+	}
+
+	if reason := l.Refusal(); reason != "" {
+		return domain.AgentSpec{}, errors.New(reason)
+	}
+
+	return agentSpec(l, name)
 }
 
 // outputFailed records an output that failed its checks and reports whether to try again;
@@ -408,23 +419,6 @@ func workspaceNote(c claimed, b *box, env runEnv) string {
 
 	return fmt.Sprintf("## Workspace\n\nYour working directory is a clone of %s with branch `%s` checked out (%s). %s",
 		r.URL, c.item.Branch(), state, env.pushNote(host))
-}
-
-// taskEnv resolves the variables every agent run gets in a version without a model connection
-// (Config.TaskEnv).
-func (e *Engine) taskEnv(ctx context.Context) (map[string]string, error) {
-	env := make(map[string]string, len(e.cfg.TaskEnv)+2)
-
-	for name, ref := range e.cfg.TaskEnv {
-		v, err := e.secrets.Resolve(ctx, ref)
-		if err != nil {
-			return nil, fmt.Errorf("task env %s: %w", name, err)
-		}
-
-		env[name] = v
-	}
-
-	return env, nil
 }
 
 // gatewayToken signs the run's task token: what the gateway serves it (its bundle, its tools)

@@ -39,34 +39,61 @@ const (
 	// one they lack.
 	mintAWS = "aws-sts"
 
+	// envModelKey is the variable the model connection sets; fieldToken and fieldHost are fields of
+	// the test kinds.
+	envModelKey = "MODEL_KEY"
+	fieldToken  = "token"
+	fieldHost   = "host"
+
 	envCodeToken    = "CODE_TOKEN"
 	envTrackerToken = "TRACKER_TOKEN"
 	envCloudKeyID   = "AWS_ACCESS_KEY_ID"
 	envCloudSession = "AWS_SESSION_TOKEN"
-	// envModelAccess is the install's task env the harness's engines give a version without a
-	// model connection.
-	envModelAccess = "MODEL_ACCESS"
+
+	// Connections whose kind names a code host goald lacks (connBitbucket), a code host on
+	// another host than the pull requests' (connGHE) and none at all (connPlain), all but connGHE
+	// for github.com.
+	connPlain     = "plain"
+	connBitbucket = "bitbucket"
+	connGHE       = "ghe"
 )
 
+// secretField is a required secret field of a test kind.
+func secretField(name string) domain.KindField {
+	return domain.KindField{Name: name, Title: name, Secret: true, Required: true}
+}
+
+// codeHostKind is a kind of git over https to host (by default) whose pull requests the code host
+// codeHost merges.
+func codeHostKind(name, codeHost, host string) domain.ConnectionKind {
+	return domain.ConnectionKind{Name: name, Title: name, Platform: true, Spec: domain.KindSpec{
+		Fields:   []domain.KindField{secretField(fieldToken), {Name: fieldHost, Title: "Host", Default: host}},
+		Env:      map[string]string{"HOST_TOKEN": "{{token}}"},
+		Git:      &domain.KindGit{Host: "{{host}}", Username: "x-access-token", PasswordEnv: "HOST_TOKEN"},
+		CodeHost: codeHost,
+	}}
+}
+
 // testKinds are the platform kinds of the tests' connections: a model's access, git over https
-// with an API token, a tracker's API and remote MCP server, a minted cloud login and a docs server
-// without credentials started in the box.
+// with an API token, a tracker's API and remote MCP server, a minted cloud login, a docs server
+// without credentials started in the box, and the code hosts merges reach.
 func testKinds() []domain.ConnectionKind {
-	secret := func(name string) domain.KindField {
-		return domain.KindField{Name: name, Title: name, Secret: true, Required: true}
-	}
+	secret := secretField
 
 	return []domain.ConnectionKind{
+		codeHostKind("github-host", codeHostGitHub, "github.com"),
+		codeHostKind("gitlab-host", codeHostGitLab, "gitlab.com"),
+		codeHostKind("bitbucket-host", "bitbucket", "github.com"),
 		{Name: "model-key", Title: "Model key", Platform: true, Spec: domain.KindSpec{
-			Fields: []domain.KindField{secret("key")}, Env: map[string]string{"MODEL_KEY": "{{key}}"}, Model: true,
+			Fields: []domain.KindField{secret("key")}, Env: map[string]string{envModelKey: "{{key}}"}, Model: true,
 		}},
 		{Name: "code-host", Title: "Code host", Platform: true, Spec: domain.KindSpec{
-			Fields: []domain.KindField{secret("token"), {Name: "host", Title: "Host", Default: gitHost}},
+			Fields: []domain.KindField{secret(fieldToken), {Name: fieldHost, Title: "Host", Default: gitHost}},
 			Env:    map[string]string{envCodeToken: "{{token}}", "CODE_HOST": "{{host}}"},
 			Git:    &domain.KindGit{Host: "{{host}}", Username: "x-access-token", PasswordEnv: envCodeToken},
 		}},
 		{Name: "tracker", Title: "Tracker", Platform: true, Spec: domain.KindSpec{
-			Fields: []domain.KindField{secret("token")},
+			Fields: []domain.KindField{secret(fieldToken)},
 			Env:    map[string]string{envTrackerToken: "{{token}}"},
 			MCP:    &domain.KindMCP{URL: "https://mcp.tracker.example.com/", Headers: map[string]string{"Authorization": "Bearer ${TRACKER_TOKEN}"}},
 			Docs:   "File issues with the tracker's tools.",
@@ -99,12 +126,18 @@ func newConnections(t *testing.T, audit ports.Audit) *porttest.Connections {
 
 	for _, n := range []domain.NewConnection{
 		{Name: connModel, Kind: "model-key", Secrets: map[string]string{"key": modelKey}},
-		{Name: connGit, Kind: "code-host", Secrets: map[string]string{"token": codeToken}},
-		{Name: connTracker, Kind: "tracker", Secrets: map[string]string{"token": trackerToken}},
-		{Name: connOther, Kind: "tracker", Secrets: map[string]string{"token": otherToken}},
+		{Name: connGit, Kind: "code-host", Secrets: map[string]string{fieldToken: codeToken}},
+		{Name: connTracker, Kind: "tracker", Secrets: map[string]string{fieldToken: trackerToken}},
+		{Name: connOther, Kind: "tracker", Secrets: map[string]string{fieldToken: otherToken}},
 		{Name: connCloud, Kind: "cloud", Secrets: map[string]string{"access_key_id": cloudKey, "secret_access_key": cloudSecret}},
 		{Name: connLeased, Kind: "leased", Secrets: map[string]string{"key": leasedKey}},
 		{Name: connDocs, Kind: "docs-server", Fields: map[string]string{"command": "npx -y @acme/docs-mcp@1.0.0"}},
+		// The host as people write it: matched without case.
+		{Name: connGitHub, Kind: "github-host", Fields: map[string]string{fieldHost: "GitHub.com"}, Secrets: map[string]string{fieldToken: "github-token"}},
+		{Name: connGitLab, Kind: "gitlab-host", Secrets: map[string]string{fieldToken: "gitlab-token"}},
+		{Name: connPlain, Kind: "code-host", Fields: map[string]string{fieldHost: "github.com"}, Secrets: map[string]string{fieldToken: "plain-token"}},
+		{Name: connBitbucket, Kind: "bitbucket-host", Secrets: map[string]string{fieldToken: "bitbucket-token"}},
+		{Name: connGHE, Kind: "github-host", Fields: map[string]string{fieldHost: "ghe.example.com"}, Secrets: map[string]string{fieldToken: "ghe-token"}},
 	} {
 		if _, err := c.Create(inOrg(t), n, domain.LocalUser); err != nil {
 			t.Fatal(err)
@@ -114,13 +147,10 @@ func newConnections(t *testing.T, audit ports.Audit) *porttest.Connections {
 	return c
 }
 
-// connLine is repoLine on connections: the model from connModel, the repository cloned with
-// connGit, and the worker given connTracker and the inline connection legacy, which is not the
-// organization's.
+// connLine is repoLine with more connections: the worker is given connTracker and legacy, a
+// name the factory does not list, which it does not get.
 func connLine() domain.Line {
 	line := repoLine()
-	line.Runtime.ModelConnection = connModel
-	line.Runtime.Repository = domain.Repository{URL: repoURL, Connection: connGit}
 	line.Connections = []string{connTracker, connOther, connCloud, connLeased, connDocs}
 	line.Agents = agentConnections(line.Agents, agWorker, connTracker, "legacy")
 
@@ -141,8 +171,7 @@ func agentConnections(agents []domain.AgentSpec, name string, names ...string) [
 }
 
 // Each exec gets the connections it needs and no other: prepare the repository connection's git
-// password, the agent the model's access and its own connections' env, a check nothing. The model
-// connection replaces the install's task env.
+// password, the agent the model's access and its own connections' env, a check nothing.
 func TestRun_ConnectionsReachOnlyTheExecsThatNeedThem(t *testing.T) {
 	t.Parallel()
 
@@ -164,14 +193,14 @@ func TestRun_ConnectionsReachOnlyTheExecsThatNeedThem(t *testing.T) {
 		want map[string]string
 	}{
 		{name: "prepare", env: prepares[0].Env, want: map[string]string{envCodeToken: codeToken}},
-		{name: "agent", env: runs[0].Env, want: map[string]string{"MODEL_KEY": modelKey, envTrackerToken: trackerToken}},
+		{name: "agent", env: runs[0].Env, want: map[string]string{envModelKey: modelKey, envTrackerToken: trackerToken}},
 		{name: "check", env: checks[0].Env, want: map[string]string{}},
 	}
 
 	for _, tt := range tests {
 		got := map[string]string{}
 
-		for _, name := range []string{envCodeToken, "CODE_HOST", "MODEL_KEY", envTrackerToken, envCloudKeyID, envModelAccess, "GOAL_REPOSITORY_TOKEN"} {
+		for _, name := range []string{envCodeToken, "CODE_HOST", envModelKey, envTrackerToken, envCloudKeyID} {
 			if v, ok := tt.env[name]; ok {
 				got[name] = v
 			}
@@ -313,7 +342,7 @@ func TestEngine_RelayScrubsConnectionValues(t *testing.T) {
 	h := newHarness(t, connLine(), func(_ context.Context, run porttest.ExecCall, stdout io.Writer) domain.RunResult {
 		_, _ = io.WriteString(stdout, `{"type":"tool_use","at":"2026-10-23T09:00:01Z","id":"t1","tool":"Bash","input":"curl -H 'Authorization: Bearer `+
 			run.Env[envTrackerToken]+`'"}`+"\n")
-		_, _ = io.WriteString(stdout, `{"type":"message","at":"2026-10-23T09:00:02Z","text":"the model key is `+run.Env["MODEL_KEY"]+`"}`+"\n")
+		_, _ = io.WriteString(stdout, `{"type":"message","at":"2026-10-23T09:00:02Z","text":"the model key is `+run.Env[envModelKey]+`"}`+"\n")
 
 		return domain.RunResult{Status: domain.RunFailed, Error: "gave up: " + run.Env[envTrackerToken] + " was refused"}
 	})

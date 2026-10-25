@@ -1,8 +1,9 @@
 // The mock's checks of phase 4's definition forms (spec 4 §4.4), as goald's config and authoring
 // report them: `tools` (tool-spec-invalid), `removed` (field-removed, env-reference-removed and
-// connection-inline-removed, warnings until the cutover) and `connections` (connection-unknown,
-// connection-not-model, repository-host-mismatch, connection-env-conflict and
-// knowledge-source-unknown, errors), each problem at its model pointer with goald's fixes.
+// connection-inline-removed, errors since the cutover) and `connections` (connection-unknown,
+// connection-not-model, repository-host-mismatch, connection-env-conflict,
+// knowledge-source-unknown and merge-needs-code-host, errors), each problem at its model pointer
+// with goald's fixes.
 import type { DefinitionProblem, ProblemFix } from '@goal/api-client';
 import type { ConnectionOutline } from './connections.ts';
 import type { Model } from './model.ts';
@@ -79,7 +80,7 @@ export function checkConnections(model: Model, conns: ConnectionOutline[], sourc
   // removed
   for (const [key, path, why] of removedKeys) {
     if (basics[key] === undefined) continue;
-    add('field-removed', 'warning', 'removed', `/basics/${key}`, `${path} is removed in phase 4: ${why}`, [
+    add('field-removed', 'error', 'removed', `/basics/${key}`, `${path} is removed: ${why}`, [
       remove(`Remove ${path}`, 'basics', `/${key}`),
     ]);
   }
@@ -87,10 +88,10 @@ export function checkConnections(model: Model, conns: ConnectionOutline[], sourc
   if (typeof repository?.token === 'string') {
     add(
       'env-reference-removed',
-      'warning',
+      'error',
       'removed',
       '/basics/repository/token',
-      'runtime.repository.token is removed in phase 4: name a connection that signs git in to the host',
+      'runtime.repository.token is removed: name a connection that signs git in to the host',
       [remove('Remove the token', 'basics', '/repository/token')],
     );
   }
@@ -98,10 +99,10 @@ export function checkConnections(model: Model, conns: ConnectionOutline[], sourc
     if (isOrgConnection(c)) return;
     add(
       'connection-inline-removed',
-      'warning',
+      'error',
       'removed',
       `/connections/${i}`,
-      `connection ${c.name}: inline connections are removed in phase 4; create an organization connection named ${c.name}`,
+      `connection ${c.name}: inline connections are removed; create an organization connection named ${c.name}`,
       [replace(`Use the organization’s ${c.name}`, 'connections', `/${i}`, { name: c.name })],
     );
   });
@@ -237,6 +238,21 @@ export function checkConnections(model: Model, conns: ConnectionOutline[], sourc
       `/basics/knowledge_sources/${i}`,
       `knowledge.sources: the organization has no knowledge source named ${source}`,
       [remove(`Remove ${source}`, 'basics', `/knowledge_sources/${i}`)],
+    );
+  });
+
+  // a merge station has a connection whose kind has a code host, listed or the repository's
+  if (connectionNames(model).some((n) => byName.get(n)?.codeHost)) return;
+  const titles = [...new Set(conns.filter((c) => c.codeHost).map((c) => c.title))].sort();
+  list(isObject(model.line) ? model.line.stations : undefined).forEach((s, i) => {
+    if (s.action !== 'merge') return;
+    add(
+      'merge-needs-code-host',
+      'error',
+      'connections',
+      `/line/stations/${i}/action`,
+      `station ${s.id}: action merge needs a connection that merges pull requests, of a kind with a code host (${titles.join(', ')}); add one to connections`,
+      [remove('Remove the merge step', 'line', `/stations/${i}/action`)],
     );
   });
 }

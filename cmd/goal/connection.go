@@ -10,6 +10,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"net/url"
 	"os"
 	"slices"
 	"strings"
@@ -49,7 +50,7 @@ func connectionCommand(ctx context.Context, out *printer, getenv func(string) st
 
 	handler, ok := map[string]command{
 		subList: connectionList, "show": connectionShow, verbCreate: connectionCreate, "update": connectionUpdate,
-		verbDelete: connectionDelete, "test": connectionTest, "kinds": kindList,
+		verbDelete: connectionDelete, "test": connectionTest, "kinds": kindList, "import-env": connectionImportEnv,
 	}[cmd]
 	if !ok {
 		return errUsage
@@ -603,4 +604,133 @@ func kindDelete(ctx context.Context, out *printer, getenv func(string) string, a
 
 		return deleted(res.StatusCode(), res.HTTPResponse, res.ApplicationproblemJSONDefault)
 	})
+}
+
+// The install's environment variables goal connection import-env reads.
+const (
+	envGitHubToken  = "GOAL_GITHUB_TOKEN" //nolint:gosec // a variable name, not a credential
+	envGitHubWeb    = "GOAL_GITHUB_WEB_URL"
+	envOAuthToken   = "CLAUDE_CODE_OAUTH_TOKEN" //nolint:gosec // a variable name, not a credential
+	envAnthropicKey = "ANTHROPIC_API_KEY"
+)
+
+// connectionImportEnv runs goal connection import-env, the one-time move of an install's
+// environment credentials into its organization's connections (spec 4 §14, step 4), from the
+// CLI's environment (task connection:import-env reads .env): GOAL_GITHUB_TOKEN becomes the
+// connection github, of kind github, on the host of GOAL_GITHUB_WEB_URL when it names a GitHub
+// Enterprise; CLAUDE_CODE_OAUTH_TOKEN, or else ANTHROPIC_API_KEY, becomes claude, of kind
+// claude-subscription or anthropic. A name the organization has already is left as it is, so a
+// second run changes nothing. No value is printed.
+func connectionImportEnv(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs := newFlags("connection import-env")
+	orgFlag := addOrgFlag(fs)
+
+	if pos, err := parseInterspersed(fs, args); err != nil || len(pos) != 0 {
+		return errUsage
+	}
+
+	imports, err := envConnections(getenv)
+	if err != nil {
+		return err
+	}
+
+	if len(imports) == 0 {
+		out.printf("nothing to import: none of %s, %s or %s is set (task connection:import-env reads .env)\n",
+			envGitHubToken, envOAuthToken, envAnthropicKey)
+
+		return nil
+	}
+
+	c, err := connect(ctx, getenv, *orgFlag)
+	if err != nil {
+		return err
+	}
+
+	for _, n := range imports {
+		res, err := c.CreateConnectionWithResponse(ctx, c.org, n.body)
+		if err != nil {
+			return apiDown(err)
+		}
+
+		switch p := res.ApplicationproblemJSONDefault; {
+		case res.JSON201 != nil:
+			out.printf("✓ created connection %s (%s) in %s from %s\n", n.body.Name, n.body.Kind, c.org, n.from)
+		case p != nil && deref(p.Code) == "connection-name-taken":
+			out.printf("connection %s exists in %s; left as it is\n", n.body.Name, c.org)
+		default:
+			return fmt.Errorf("connection %s: %w", n.body.Name, problem(res.HTTPResponse, p))
+		}
+	}
+
+	out.printf("name them in each factory: runtime.modelConnection: claude, runtime.repository.connection and connections: github; " +
+		"then publish (goal factory validate shows the fixes)\n")
+
+	return nil
+}
+
+// envConnection is one connection goal connection import-env creates, and the variable it is from.
+type envConnection struct {
+	body gen.NewConnection
+	from string
+}
+
+// envConnections are the connections the environment's variables make.
+func envConnections(getenv func(string) string) ([]envConnection, error) {
+	var out []envConnection
+
+	if token := strings.TrimSpace(getenv(envGitHubToken)); token != "" {
+		fields, err := githubFields(strings.TrimSpace(getenv(envGitHubWeb)))
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, envConnection{from: envGitHubToken, body: gen.NewConnection{
+			Name: "github", Kind: "github", Fields: &fields, Secrets: &map[string]string{"token": token},
+			Description: new("The repositories' token, imported from " + envGitHubToken),
+		}})
+	}
+
+	model := func(kind, field, from string) envConnection {
+		secrets := map[string]string{field: strings.TrimSpace(getenv(from))}
+
+		return envConnection{from: from, body: gen.NewConnection{
+			Name: "claude", Kind: kind, Secrets: &secrets, Description: new("The model's access, imported from " + from),
+		}}
+	}
+
+	switch {
+	case strings.TrimSpace(getenv(envOAuthToken)) != "":
+		out = append(out, model("claude-subscription", "token", envOAuthToken))
+	case strings.TrimSpace(getenv(envAnthropicKey)) != "":
+		out = append(out, model("anthropic", "key", envAnthropicKey))
+	}
+
+	return out, nil
+}
+
+// githubFields are the github kind's fields for the GitHub at web (GOAL_GITHUB_WEB_URL, an
+// origin; empty or github.com's needs none): a GitHub Enterprise's host, and its API for the
+// connection's test (https://api.<host> on Enterprise Cloud, https://<host>/api/v3 on a Server).
+func githubFields(web string) (map[string]string, error) {
+	fields := map[string]string{}
+	if web == "" {
+		return fields, nil
+	}
+
+	u, err := url.Parse(web)
+	if err != nil || u.Scheme != "https" || u.Host == "" || strings.Trim(u.Path, "/") != "" || u.User != nil {
+		return nil, fmt.Errorf("%s %q is not an https origin such as https://github.com", envGitHubWeb, web)
+	}
+
+	host := strings.ToLower(u.Host)
+
+	switch {
+	case host == "github.com":
+	case strings.HasSuffix(host, ".ghe.com"):
+		fields["host"], fields["api_url"] = host, "https://api."+host
+	default:
+		fields["host"], fields["api_url"] = host, "https://"+host+"/api/v3"
+	}
+
+	return fields, nil
 }

@@ -61,10 +61,61 @@ const (
 	connGitLab     = "gitlab"
 )
 
-// mergeLine is work (an agent that reports pull requests) → merge (human, action merge) → done.
-// It has no repository: the pull requests' URLs say where they are.
+// mergeLine is work (an agent that reports pull requests) → merge (human, action merge) → done,
+// with the organization's github and gitlab connections. It has no repository: the pull
+// requests' URLs say where they are.
 func mergeLine(action domain.StationAction) domain.Line {
-	return lineOf(agentStation(stWork, agWorker, 1, 1), domain.Station{ID: stMerge, Kind: domain.KindHuman, Action: action})
+	l := lineOf(agentStation(stWork, agWorker, 1, 1), domain.Station{ID: stMerge, Kind: domain.KindHuman, Action: action})
+	l.Connections = []string{connGitHub, connGitLab}
+
+	return l
+}
+
+// expectMergeUsed fails unless the merges of item opened exactly conn, for the person's merge:
+// the connection.used row names the person and the item, and no run.
+func (h *harness) expectMergeUsed(t *testing.T, item domain.ItemID, conn string) {
+	t.Helper()
+
+	if used := h.mergesUsed(t, item); len(used) != 1 || used[0].Data["name"] != conn || used[0].Actor.ID != human.ID ||
+		used[0].Data["run_id"] != nil {
+		t.Errorf("connection.used of the merge %+v; want %s only, by the person, naming no run", used, conn)
+	}
+}
+
+// expectRefusedMerge fails unless err says how to fix a version with removed forms, and unless a
+// merge refused for its hosts (ErrNoCodeHost) opened no connection.
+func (h *harness) expectRefusedMerge(t *testing.T, item domain.ItemID, err error, removed bool) {
+	t.Helper()
+
+	if removed && !strings.Contains(err.Error(), "publish a version with connections") {
+		t.Errorf("Merge = %v; want it to say how to fix the version", err)
+	}
+
+	if used := h.mergesUsed(t, item); errors.Is(err, engine.ErrNoCodeHost) && len(used) != 0 {
+		t.Errorf("connection.used of a merge refused for its hosts %+v; want none opened", used)
+	}
+}
+
+// setRemoved makes l the line of a version with a form connections replaced.
+func (h *harness) setRemoved(t *testing.T, l domain.Line) {
+	t.Helper()
+
+	l.Removed = []string{"spec.runtime.repository.token (env-reference-removed)"}
+	if err := h.e.SetLines([]domain.Line{l}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// mergesUsed are the connection.used rows of merges of item: the connections they opened.
+func (h *harness) mergesUsed(t *testing.T, item domain.ItemID) []domain.AuditEntry {
+	t.Helper()
+
+	used, err := h.tenancy.AuditLog(inOrg(t), ports.AuditQuery{Limit: 100, Action: domain.AuditConnectionUsed})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return slices.DeleteFunc(used, func(e domain.AuditEntry) bool { return e.Data["item_id"] != string(item) })
 }
 
 func openPR(url string) ports.PullRequest {
@@ -155,6 +206,8 @@ func TestMerge_MergesThePullRequestThenApproves(t *testing.T) {
 
 			// A merge at a merge station is a decision the line requires.
 			plannedAll(t, append(merged, h.eventsOf(it.ID, domain.EventApproved)...))
+
+			h.expectMergeUsed(t, it.ID, connGitHub)
 		})
 	}
 }
@@ -166,10 +219,6 @@ func TestMerge_EveryPullRequestThroughItsHostsConnection(t *testing.T) {
 
 	output := `{"pull_request":"` + prURL + `","pull_requests":["` + mrURL + `","` + docsURL + `","` + prURL + `"]}`
 	h := newHarness(t, mergeLine(domain.ActionMerge), porttest.Succeed(output))
-	h.setCodeConnections(
-		porttest.CodeHostConnection(connGitLab, codeHostGitLab, "gitlab.com"),
-		porttest.CodeHostConnection(connGitHub, codeHostGitHub, "GitHub.com"),
-	)
 	h.codehost.Add(openPR(prURL))
 	h.codehost.Add(openPR(docsURL))
 	h.gitlab.Add(openPR(mrURL))
@@ -216,10 +265,6 @@ func TestMerge_PartialMergeThenRetry(t *testing.T) {
 
 	output := `{"pull_requests":["` + prURL + `","` + mrURL + `","` + docsURL + `"]}`
 	h := newHarness(t, mergeLine(domain.ActionMerge), porttest.Succeed(output))
-	h.setCodeConnections(
-		porttest.CodeHostConnection(connGitHub, codeHostGitHub, "github.com"),
-		porttest.CodeHostConnection(connGitLab, codeHostGitLab, "gitlab.com"),
-	)
 	h.codehost.Add(openPR(prURL))
 	h.codehost.Add(openPR(docsURL))
 
@@ -277,7 +322,8 @@ func TestMerge_RefusesAndChangesNothing(t *testing.T) {
 		name    string
 		action  domain.StationAction
 		output  string
-		conns   []domain.ResolvedConnection // nil: the harness's github connection
+		conns   []string // the line's connections; nil: mergeLine's github and gitlab
+		removed bool     // the line is of a version with a form connections replaced
 		pr      func(*ports.PullRequest)
 		early   bool // ask before the item reaches the merge station
 		wantErr error
@@ -292,21 +338,23 @@ func TestMerge_RefusesAndChangesNothing(t *testing.T) {
 			name: "a host no connection serves", action: domain.ActionMerge,
 			output: `{"pull_request":"` + prURL + `","pull_requests":["` + elsewhere + `"]}`, wantErr: engine.ErrNoCodeHost,
 		},
+		{name: "no connection at all", action: domain.ActionMerge, conns: []string{}, wantErr: engine.ErrNoCodeHost},
 		{
-			name: "no connection at all", action: domain.ActionMerge,
-			conns: []domain.ResolvedConnection{}, wantErr: engine.ErrNoCodeHost,
+			// A version published before the cutover merged with the install's token, which is gone.
+			name: "a version with a removed form and no connection", action: domain.ActionMerge, conns: []string{}, removed: true,
+			wantErr: engine.ErrNoCodeHost,
 		},
 		{
 			name: "a connection for the host whose kind names no code host", action: domain.ActionMerge,
-			conns: []domain.ResolvedConnection{porttest.CodeHostConnection(connGitHub, "", "github.com")}, wantErr: engine.ErrNoCodeHost,
+			conns: []string{connPlain}, wantErr: engine.ErrNoCodeHost,
 		},
 		{
 			name: "a connection for the host whose code host goald lacks", action: domain.ActionMerge,
-			conns: []domain.ResolvedConnection{porttest.CodeHostConnection(connGitHub, "bitbucket", "github.com")}, wantErr: engine.ErrNoCodeHost,
+			conns: []string{connBitbucket}, wantErr: engine.ErrNoCodeHost,
 		},
 		{
 			name: "a connection for another host", action: domain.ActionMerge,
-			conns: []domain.ResolvedConnection{porttest.CodeHostConnection(connGitHub, codeHostGitHub, "ghe.example.com")}, wantErr: engine.ErrNoCodeHost,
+			conns: []string{connGHE}, wantErr: engine.ErrNoCodeHost,
 		},
 	}
 
@@ -319,10 +367,12 @@ func TestMerge_RefusesAndChangesNothing(t *testing.T) {
 				output = `{"pull_request":"` + prURL + `"}`
 			}
 
-			h := newHarness(t, mergeLine(tt.action), porttest.Succeed(output))
+			line := mergeLine(tt.action)
 			if tt.conns != nil {
-				h.setCodeConnections(tt.conns...)
+				line.Connections = tt.conns
 			}
+
+			h := newHarness(t, line, porttest.Succeed(output))
 
 			pr := openPR(prURL)
 
@@ -337,11 +387,18 @@ func TestMerge_RefusesAndChangesNothing(t *testing.T) {
 				h.step(t)
 			}
 
+			if tt.removed { // the item reached the merge station on a version that ran
+				h.setRemoved(t, line)
+			}
+
 			before := h.item(t, it.ID)
 
-			if _, err := h.e.Merge(inOrg(t), it.ID, human, ""); !errors.Is(err, tt.wantErr) {
+			_, err := h.e.Merge(inOrg(t), it.ID, human, "")
+			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("Merge = %v, want %v", err, tt.wantErr)
 			}
+
+			h.expectRefusedMerge(t, it.ID, err, tt.removed)
 
 			if after := h.item(t, it.ID); after.Position() != before.Position() {
 				t.Errorf("item moved from %+v to %+v", before.Position(), after.Position())

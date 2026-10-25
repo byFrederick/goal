@@ -48,7 +48,7 @@ type Config struct {
 	// DirectoryToken, optional, is sent as a bearer token to the directory's API, whose search
 	// requires one (GOAL_SKILLS_DIRECTORY_TOKEN).
 	DirectoryToken string
-	// GitHubAPIURL is GitHub's REST API (GOAL_GITHUB_API_URL). Default https://api.github.com.
+	// GitHubAPIURL is GitHub's REST API (GOAL_SKILLS_GITHUB_API_URL). Default https://api.github.com.
 	GitHubAPIURL string
 	// GitHubToken, optional, raises GitHub's rate limit; public repositories need none.
 	GitHubToken string

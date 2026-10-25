@@ -51,7 +51,7 @@
         "knowledgeBase": { "$ref": "#/$defs/knowledgeBase" },
         "secrets": {
           "type": "object",
-          "description": "Removed in phase 4 (field-removed): connections hold credentials. Accepted so versions published before still load.",
+          "description": "Removed in phase 4 (field-removed): connections hold credentials. Accepted so versions published before still load; goald does not run them.",
           "required": ["provider"],
           "additionalProperties": false,
           "properties": {
@@ -76,7 +76,7 @@
     "model": { "type": "string", "pattern": "^claude-[a-z0-9-]+$" },
     "secretRef": {
       "type": "string",
-      "description": "A value of a removed form: a literal or an environment reference (env:NAME) that goald resolves, for the repository token only into the sandbox's prepare, until the cutover to connections."
+      "description": "A value of a removed form (env-reference-removed): goald resolves none since the cutover to connections."
     },
     "runtime": {
       "type": "object",
@@ -99,7 +99,7 @@
           "properties": {
             "url": { "type": "string", "pattern": "^https://[^/@]+/.+", "description": "https clone URL without credentials" },
             "connection": { "$ref": "#/$defs/slug", "description": "The organization connection that clones and merges: one whose kind logs git in to the URL's host. Omit it for a public repository." },
-            "token": { "$ref": "#/$defs/secretRef", "description": "Removed in phase 4 (env-reference-removed): set connection. Accepted so versions published before still load." }
+            "token": { "$ref": "#/$defs/secretRef", "description": "Removed in phase 4 (env-reference-removed): set connection. Accepted so versions published before still load; goald does not run them." }
           }
         },
         "runner": { "enum": ["docker", "ecs"], "description": "Removed in phase 4 (field-removed): the platform chooses the sandbox backend." },
@@ -122,7 +122,7 @@
       "type": "object",
       "required": ["collections"],
       "additionalProperties": false,
-      "description": "Removed in phase 4 (field-removed): set knowledge.sources. Accepted so versions published before still load.",
+      "description": "Removed in phase 4 (field-removed): set knowledge.sources. Accepted so versions published before still load; goald does not run them.",
       "properties": {
         "collections": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/slug" } },
         "retrieval": {
@@ -138,7 +138,7 @@
       }
     },
     "connection": {
-      "description": "An organization connection, by name. The inline form (type) and the connector form (connector) are removed in phase 4 (connection-inline-removed) and accepted so versions published before still load.",
+      "description": "An organization connection, by name. The inline form (type) and the connector form (connector) are removed in phase 4 (connection-inline-removed) and accepted so versions published before still load; goald does not run them.",
       "if": { "type": "string" },
       "then": { "$ref": "#/$defs/slug" },
       "else": {

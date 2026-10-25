@@ -39,6 +39,9 @@ type Config struct {
 	APIURL string
 	// Timeout bounds one request. Default: 30s.
 	Timeout time.Duration
+	// Transport carries the requests; nil is http.DefaultTransport. goald passes its connection
+	// transport, which dials public addresses only (egress.PublicDialer).
+	Transport http.RoundTripper
 }
 
 const (
@@ -62,7 +65,8 @@ func New(cfg Config) *Client {
 	return &Client{
 		api: strings.TrimSuffix(cfg.APIURL, "/"),
 		http: &http.Client{
-			Timeout: cfg.Timeout,
+			Timeout:   cfg.Timeout,
+			Transport: cfg.Transport,
 			// A credentialed request is never sent anywhere but the connection's API.
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},

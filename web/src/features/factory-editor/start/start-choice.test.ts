@@ -110,12 +110,12 @@ describe('the Start step', () => {
       validation(
         problem('prompt-not-found', 'references'),
         problem('name-taken', 'name'),
-        problem('image-unpinned', 'images', 'warning'),
+        problem('builtin-ask-unavailable', 'availability', 'warning'),
       ),
     );
     expect(v.ok).toBe(true);
     expect(v.nameTaken?.code).toBe('name-taken');
-    expect(v.later.map((p) => p.code)).toEqual(['prompt-not-found', 'image-unpinned']);
+    expect(v.later.map((p) => p.code)).toEqual(['prompt-not-found', 'builtin-ask-unavailable']);
   });
 });
 

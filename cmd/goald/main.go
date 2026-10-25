@@ -78,8 +78,9 @@ func goald() int {
 
 	log := newLogger(s)
 
-	for _, name := range s.Ignored {
-		log.Warn("setting ignored: it was removed (spec 4 §5.13)", slog.String("variable", name))
+	for _, r := range s.Ignored {
+		log.Warn("setting ignored: it was removed (spec 4 §5.13); remove it from the environment",
+			slog.String("variable", r.name), slog.String("instead", r.instead))
 	}
 
 	if err := run(ctx, s, log); err != nil {
@@ -146,12 +147,10 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	kb := openKnowledge(s, store, connections, objects, clock, log)
 
 	// Definition authoring writes versions to PostgreSQL and file content to the bucket. A
-	// definition's connections and knowledge sources are checked against the organization's, and
-	// until the cutover the env: references of the removed forms against goald's environment.
-	envReferences := s.credentials(secrets)
+	// definition's connections and knowledge sources are checked against the organization's.
 	authors := authoring.New(authoring.Deps{
 		Store: definitionStore, Loads: store, Templates: objects,
-		Credentials: authoring.ConnectionsCheck{Connections: connections, Knowledge: kb.searcher, Env: &envReferences},
+		Credentials: authoring.ConnectionsCheck{Connections: connections, Knowledge: kb.searcher},
 		Clock:       clock,
 	})
 
@@ -168,9 +167,6 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return eng.SetLines(lines)
 	}, definitions.Config{CacheBytes: s.DefinitionCacheBytes}, log)
 
-	// One rule for env:NAME references wherever goald resolves one: clones, the code host, the gateway.
-	policy := s.secretPolicy()
-
 	// Boxes reach goald's gateway through the egress proxy, at the gateway's paths.
 	boxGateway, err := docker.BoxGatewayURL(s.GatewayURL)
 	if err != nil {
@@ -178,26 +174,22 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}
 
 	gw, err := gateway.New(gateway.Deps{
-		Definitions: defs, Items: store, Connections: connections, Secrets: secrets, Events: store, Clock: clock, Logger: log,
+		Definitions: defs, Items: store, Connections: connections, Events: store, Clock: clock, Logger: log,
 		Knowledge: kb.searcher,
-	}, gateway.Config{Key: []byte(key), SecretPolicy: policy})
+	}, gateway.Config{Key: []byte(key)})
 	if err != nil {
 		return err
 	}
 
-	// Merges reach GitHub and GitLab with a connection: until 4-14, the repository token's.
-	mergeWith := repositoryConnections(secrets, policy, s.GitHubWebHost)
-
-	// The engine runs each claim in a sandbox with the run's connections and, at its start and
-	// every ReapEvery, deletes the sandboxes of runs that are over, whichever goald on this Docker
-	// host started them.
+	// The engine runs each claim in a sandbox with the run's connections, merges with the
+	// factory's code host connections and, at its start and every ReapEvery, deletes the
+	// sandboxes of runs that are over, whichever goald on this Docker host started them.
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: docker.NewSandboxes(dockerClient, s.SandboxNetwork, log),
-		Contracts: defs, Secrets: secrets, Connections: connections, CodeHosts: codeHosts(s), MergeConnections: mergeWith, Clock: clock,
+		Contracts: defs, Secrets: secrets, Connections: connections, CodeHosts: codeHosts(s.AllowPrivateUpstreams), Clock: clock,
 		Minters: minters(s), Logger: log,
 	}, engine.Config{
-		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxGateway, GatewayKeyRef: s.GatewayKeyRef, TaskEnv: s.TaskEnv,
-		MaxRuns: s.MaxRuns, RepositoryHosts: []string{s.GitHubWebHost}, SecretPolicy: policy,
+		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxGateway, GatewayKeyRef: s.GatewayKeyRef, MaxRuns: s.MaxRuns,
 	})
 	if err != nil {
 		return err
@@ -347,8 +339,8 @@ func minters(s settings) map[string]ports.Minter {
 	}
 }
 
-// connectionTransport carries every request goald makes for a connection (its test, STS and
-// embeddings; later sync): to public addresses only (egress.PublicDialer, threat row 4), unless
+// connectionTransport carries every request goald makes for a connection (its test, STS, merges,
+// sync and embeddings): to public addresses only (egress.PublicDialer, threat row 4), unless
 // GOAL_ALLOW_PRIVATE_UPSTREAMS lets a laptop reach its own test servers. It uses no proxy, so a
 // proxy variable cannot route around the address check.
 func connectionTransport(allowPrivate bool) *http.Transport {

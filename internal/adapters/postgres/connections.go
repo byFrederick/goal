@@ -603,7 +603,7 @@ func (c *Connections) RecordTest(ctx context.Context, name string, r domain.Conn
 }
 
 // Resolve implements ports.Connections.
-func (c *Connections) Resolve(ctx context.Context, names []string, run domain.RunID) ([]domain.ResolvedConnection, error) {
+func (c *Connections) Resolve(ctx context.Context, names []string, use domain.ConnectionUse) ([]domain.ResolvedConnection, error) {
 	org, ok := domain.OrgFrom(ctx)
 	if !ok {
 		return nil, domain.ErrNoOrg
@@ -639,8 +639,7 @@ func (c *Connections) Resolve(ctx context.Context, names []string, run domain.Ru
 			out = append(out, rc)
 			ids = append(ids, r.ID)
 
-			if err := connectionAudit(ctx, q, domain.EngineActor, domain.AuditConnectionUsed, r.ID,
-				map[string]any{auditName: name, "run_id": string(run)}); err != nil {
+			if err := connectionAudit(ctx, q, use.Actor(), domain.AuditConnectionUsed, r.ID, use.AuditData(name)); err != nil {
 				return err
 			}
 		}

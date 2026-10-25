@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"path"
 	"slices"
 
@@ -93,10 +92,6 @@ type gitCredential struct {
 	Username    string `json:"username"`
 	PasswordEnv string `json:"password_env"`
 }
-
-// repositoryUser is the user name git sends with a repository token; code hosts read the token
-// and accept any name, and GitHub documents this one.
-const repositoryUser = "x-access-token"
 
 // ServeRun serves GET /run: the bundle of the run whose task token the request carries, from
 // the definition version the run started on and the item it works on. A token that does not
@@ -213,9 +208,8 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 	return b, nil
 }
 
-// addRepository puts the repository in b with the git login that clones it: its connection's or,
-// for a version published before connections, one for the repository token
-// (GOAL_REPOSITORY_TOKEN).
+// addRepository puts the repository in b with the git login of its connection, which clones it;
+// a public repository needs none.
 func (g *Gateway) addRepository(ctx context.Context, repo domain.Repository, branch string, b *runBundle) error {
 	if repo.URL == "" {
 		return nil
@@ -223,23 +217,17 @@ func (g *Gateway) addRepository(ctx context.Context, repo domain.Repository, bra
 
 	b.Repository = &bundleRepository{URL: repo.URL, Branch: branch}
 
-	switch {
-	case repo.Connection != "":
-		o, _, err := g.outline(ctx, repo.Connection)
-		if err != nil {
-			return err
-		}
+	if repo.Connection == "" {
+		return nil
+	}
 
-		if o.Git != nil {
-			b.addGit(gitCredentialOf(*o.Git))
-		}
-	case repo.AuthRef != "":
-		u, err := url.Parse(repo.URL)
-		if err != nil {
-			return fmt.Errorf("repository url: %w", err)
-		}
+	o, _, err := g.outline(ctx, repo.Connection)
+	if err != nil {
+		return err
+	}
 
-		b.addGit(gitCredential{Host: u.Host, Username: repositoryUser, PasswordEnv: domain.RunEnvRepositoryToken})
+	if o.Git != nil {
+		b.addGit(gitCredentialOf(*o.Git))
 	}
 
 	return nil

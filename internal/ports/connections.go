@@ -62,9 +62,10 @@ type Connections interface {
 	// RecordTest records a test's outcome (connection.tested). ErrNotFound when there is none.
 	RecordTest(ctx context.Context, name string, r domain.ConnectionTest, by domain.Actor) error
 
-	// Resolve opens the named connections for one run, audits connection.used and sets
-	// last_used_at. ErrNotFound names the first unknown connection.
-	Resolve(ctx context.Context, names []string, run domain.RunID) ([]domain.ResolvedConnection, error)
+	// Resolve opens the named connections for use (a run, a merge, a sync), audits each as
+	// connection.used by use's actor with what it is for, and sets last_used_at. ErrNotFound
+	// names the first unknown connection.
+	Resolve(ctx context.Context, names []string, use domain.ConnectionUse) ([]domain.ResolvedConnection, error)
 	// Open opens one connection for its test, whose outcome RecordTest records: its values, secret
 	// ones included, with no use recorded. ErrNotFound when there is none.
 	Open(ctx context.Context, name string) (domain.ResolvedConnection, error)

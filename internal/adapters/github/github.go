@@ -34,11 +34,13 @@ var _ ports.CodeHost = (*Client)(nil)
 // Config tunes the client. The zero value of each field means its default.
 type Config struct {
 	// APIURL, when set, is the REST API root for every host instead of the one derived from the
-	// connection's: goald's GOAL_GITHUB_API_URL until runs get connections (spec 4 PR 4-14), a
-	// stand-in GitHub in tests.
+	// connection's: a stand-in GitHub in tests.
 	APIURL string
 	// Timeout bounds one request. Default: 30s.
 	Timeout time.Duration
+	// Transport carries the requests; nil is http.DefaultTransport. goald passes its connection
+	// transport, which dials public addresses only (egress.PublicDialer).
+	Transport http.RoundTripper
 }
 
 const (
@@ -62,7 +64,8 @@ func New(cfg Config) *Client {
 	return &Client{
 		api: strings.TrimSuffix(cfg.APIURL, "/"),
 		http: &http.Client{
-			Timeout: cfg.Timeout,
+			Timeout:   cfg.Timeout,
+			Transport: cfg.Transport,
 			// A credentialed request is never sent anywhere but the connection's API.
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},

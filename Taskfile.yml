@@ -429,6 +429,12 @@ tasks:
     cmds:
       - bin/goal storage init
 
+  connection:import-env:
+    desc: Turn .env's GOAL_GITHUB_TOKEN and CLAUDE_CODE_OAUTH_TOKEN (or ANTHROPIC_API_KEY) into the organization's connections github and claude, once (task connection:import-env -- --org <slug>)
+    deps: [build]
+    cmds:
+      - bin/goal connection import-env {{.CLI_ARGS}}
+
   factory:validate:
     desc: Validate every factory in the working copy (GOAL_FACTORIES_DIR) through goald
     cmds:

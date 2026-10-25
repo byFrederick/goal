@@ -96,10 +96,8 @@ func TestPublish_RefusesErrorsButNotWarnings(t *testing.T) {
 		t.Fatalf("publish with an unknown agent = %v", err)
 	}
 
-	// A literal header value and an unpinned image are warnings only.
-	warned := strings.Replace(acmeYAML, "  agents:\n", "  connections:\n"+
-		"    - { name: docs, type: mcp, transport: http, url: \"https://mcp.example.com\", headers: { X-Team: acme } }\n"+
-		"    - { name: tools, type: mcp, transport: stdio, image: \"ghcr.io/acme/tools:latest\" }\n  agents:\n", 1)
+	// A built-in group set to ask is a warning only: it is served as off.
+	warned := strings.Replace(acmeYAML, "      prompt: ./agents/engineer.md\n", "      prompt: ./agents/engineer.md\n      builtins: { read: ask }\n", 1)
 
 	if _, err := h.svc.PutFile(h.ctx, f, authoring.FileWrite{Path: yamlFile, Content: []byte(warned)}); err != nil {
 		t.Fatal(err)
@@ -110,7 +108,7 @@ func TestPublish_RefusesErrorsButNotWarnings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !val.OK || !slices.Contains(codes(val.Problems), "literal-secret") || !slices.Contains(codes(val.Problems), "image-unpinned") {
+	if !val.OK || !slices.Contains(codes(val.Problems), "builtin-ask-unavailable") {
 		t.Fatalf("validation = ok %v, problems %v", val.OK, codes(val.Problems))
 	}
 

@@ -88,6 +88,16 @@ func TestConnectionsCheck_ReportsEachProblemWithItsFixes(t *testing.T) {
 			name: "an unknown knowledge source", edits: []string{agentsKey, "  knowledge: { sources: [handbook, ghost] }\n" + agentsKey},
 			code: "knowledge-source-unknown", pointer: "/basics/knowledge_sources/1", fixes: []string{"Remove ghost"}, inPlaces: []string{"ghost"},
 		},
+		{
+			name: "a merge without a code host connection",
+			edits: []string{
+				", connection: code }", " }",
+				"{ id: review, kind: human }", "{ id: review, kind: human, action: merge }",
+				agentsKey, "  connections: [docs]\n" + agentsKey,
+			},
+			code: "merge-needs-code-host", pointer: "/line/stations/2/action", fixes: []string{"Remove the merge step"},
+			inPlaces: []string{"review", "GitHub"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -124,6 +134,30 @@ func TestConnectionsCheck_ReportsEachProblemWithItsFixes(t *testing.T) {
 
 			assertNamesNoValue(t, p.Message, tt.inPlaces)
 		})
+	}
+}
+
+// A merge station needs no repository: any connection of the factory whose kind has a code host,
+// listed or the repository's, merges the item's pull requests.
+func TestConnectionsCheck_AMergeWithACodeHostConnectionPasses(t *testing.T) {
+	t.Parallel()
+
+	merge := strings.Replace(acmeYAML, "{ id: review, kind: human }", "{ id: review, kind: human, action: merge }", 1)
+
+	for name, doc := range map[string]string{
+		"the repository's":        merge,
+		"one of the factory list": strings.Replace(strings.Replace(merge, ", connection: code }", " }", 1), "  agents:\n", "  connections: [github]\n  agents:\n", 1),
+	} {
+		h := newHarness(t)
+
+		v, err := h.svc.ValidateFiles(h.ctx, acmeFiles(doc))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !v.OK {
+			t.Errorf("%s: validation problems %v; want none", name, codes(v.Problems))
+		}
 	}
 }
 

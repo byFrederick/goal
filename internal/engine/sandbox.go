@@ -10,8 +10,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/url"
-	"slices"
 	"strings"
 	"time"
 
@@ -104,31 +102,6 @@ func (e *Engine) open(ctx context.Context, c claimed, runID domain.RunID, b *box
 		slog.Int("exit", st.Code), slog.Float64("seconds", e.since(started)))
 
 	return nil
-}
-
-// repositoryToken resolves the token of the factory's repository for prepare: only for a
-// repository on one of the install's repository hosts, and never from a variable the install
-// reserves, even for a version published before the rule.
-func (e *Engine) repositoryToken(ctx context.Context, r domain.Repository) (string, error) {
-	if r.AuthRef == "" {
-		return "", nil
-	}
-
-	if e.cfg.SecretPolicy.ForRepository(r.AuthRef) == domain.SecretReserved {
-		return "", fmt.Errorf("repository token %s: %w", r.AuthRef, domain.ErrSecretReserved)
-	}
-
-	u, err := url.Parse(r.URL)
-	if err != nil || u.Scheme != "https" || u.User != nil || !slices.Contains(e.cfg.RepositoryHosts, strings.ToLower(u.Host)) {
-		return "", fmt.Errorf("repository %q: the repository token goes only to https://%s", r.URL, strings.Join(e.cfg.RepositoryHosts, ", https://"))
-	}
-
-	token, err := e.secrets.Resolve(ctx, r.AuthRef)
-	if err != nil {
-		return "", fmt.Errorf("repository token: %w", err)
-	}
-
-	return token, nil
 }
 
 // deleteBox deletes the claim's sandbox, if it has one, even as ctx is cancelled. A sandbox that

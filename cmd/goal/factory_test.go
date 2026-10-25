@@ -100,7 +100,7 @@ func newDefGoald(t *testing.T) *defGoald {
 	e, err := engine.New(engine.Deps{
 		Store: store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
 		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: clock,
-		CodeHosts: map[string]ports.CodeHost{}, MergeConnections: porttest.CodeHostConnections(),
+		CodeHosts:   map[string]ports.CodeHost{},
 		Connections: porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy),
 	}, engine.Config{Image: "ghcr.io/acme/goal-agent:1", GatewayURL: "http://gateway.example.com/mcp", GatewayKeyRef: "env:GOAL_GATEWAY_KEY"})
 	if err != nil {
@@ -556,12 +556,20 @@ func TestFactoryValidate_PrintsQuickFixes(t *testing.T) {
 	g := newDefGoald(t)
 	dir := newCopy(t, map[string]string{yamlPath: strings.Replace(factoryYAML, "modelConnection: claude", "modelConnection: claude, image: ghcr.io/acme/agent:1.0.0", 1)})
 
-	online := g.mustGoal(t, "factory", "validate", dir)
-	offline := g.mustGoal(t, validateAlias, dir)
+	// A form connections replaced is an error since the cutover: the folder is invalid, and the
+	// problem says how to fix it.
+	for _, validate := range []func() (string, error){
+		func() (string, error) { return g.goal(t, "factory", "validate", dir) },
+		func() (string, error) { return g.goal(t, validateAlias, dir) },
+	} {
+		out, err := validate()
+		if err == nil {
+			t.Fatalf("validate = %q; want the folder invalid", out)
+		}
 
-	for _, out := range []string{online, offline} {
-		if !strings.Contains(out, "warning field-removed runtime.image is removed") || !strings.Contains(out, "\n      fix: Remove runtime.image\n") {
-			t.Errorf("goal factory validate printed:\n%s", out)
+		if all := out + err.Error(); !strings.Contains(all, "error field-removed runtime.image is removed") ||
+			!strings.Contains(all, "\n      fix: Remove runtime.image\n") {
+			t.Errorf("validate printed:\n%s", all)
 		}
 	}
 }

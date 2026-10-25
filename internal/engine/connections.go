@@ -18,8 +18,8 @@ import (
 type runEnv struct {
 	// prepare is goal-agent prepare's: the password variable of the repository's git login.
 	prepare map[string]string
-	// agent is goal-agent run's: the model connection's env (or the install's task env for a
-	// version without one) and the env of the agent's connections.
+	// agent is goal-agent run's: the model connection's env and the env of the agent's
+	// connections.
 	agent map[string]string
 	// gitHosts are the hosts the agent's own connections sign git in to, by connection.
 	gitHosts map[string]string
@@ -28,10 +28,8 @@ type runEnv struct {
 }
 
 // runEnv resolves the run's connections, each use audited as connection.used: the runtime's model
-// and repository connections and the organization connections of the agent's list (an inline
-// connection of a version published before phase 4 is the gateway's). A version without a model
-// connection gets the model from the install's task env, and one with the repository token of the
-// removed form clones with it, until the cutover (4-14).
+// and repository connections and the organization connections of the agent's list. The line runs
+// (domain.Line.Refusal), so it has a model connection.
 func (e *Engine) runEnv(ctx context.Context, c claimed, run domain.RunID) (runEnv, error) {
 	rt := c.line.Runtime
 	own := slices.DeleteFunc(slices.Clone(c.agent.Connections), func(n string) bool { return !slices.Contains(c.line.Connections, n) })
@@ -54,11 +52,11 @@ func (e *Engine) runEnv(ctx context.Context, c claimed, run domain.RunID) (runEn
 		env.secrets = append(env.secrets, rc.secrets...)
 	}
 
-	if err := e.agentEnv(ctx, rt.ModelConnection, own, conns, &env); err != nil {
+	if err := agentEnv(rt.ModelConnection, own, conns, &env); err != nil {
 		return runEnv{}, err
 	}
 
-	if err := e.repositoryEnv(ctx, rt.Repository, conns, &env); err != nil {
+	if err := repositoryEnv(rt.Repository, conns, &env); err != nil {
 		return runEnv{}, err
 	}
 
@@ -69,29 +67,19 @@ func (e *Engine) runEnv(ctx context.Context, c claimed, run domain.RunID) (runEn
 	return env, nil
 }
 
-// agentEnv gives the agent the model connection's env, or the install's task env without one,
-// and the env of its own connections, refusing a variable two connections set.
-func (e *Engine) agentEnv(ctx context.Context, model string, own []string, conns map[string]runConnection, env *runEnv) error {
+// agentEnv gives the agent the model connection's env and the env of its own connections,
+// refusing a variable two connections set.
+func agentEnv(model string, own []string, conns map[string]runConnection, env *runEnv) error {
 	setBy := map[string]string{} // variable → the connection that sets it
 
-	if model == "" {
-		agent, err := e.taskEnv(ctx)
-		if err != nil {
-			return err
-		}
+	m := conns[model]
+	if !m.kind.Spec.Model {
+		return fmt.Errorf("model connection %s: its kind %s gives no model access", m.name, m.kind.Name)
+	}
 
-		env.agent = agent
-		env.secrets = append(env.secrets, slices.Collect(maps.Values(agent))...)
-	} else {
-		m := conns[model]
-		if !m.kind.Spec.Model {
-			return fmt.Errorf("model connection %s: its kind %s gives no model access", m.name, m.kind.Name)
-		}
-
-		env.agent = map[string]string{}
-		if err := addEnv(env.agent, setBy, m); err != nil {
-			return err
-		}
+	env.agent = map[string]string{}
+	if err := addEnv(env.agent, setBy, m); err != nil {
+		return err
 	}
 
 	for _, n := range own {
@@ -107,26 +95,19 @@ func (e *Engine) agentEnv(ctx context.Context, model string, own []string, conns
 	return nil
 }
 
-// repositoryEnv gives prepare what clones the repository: its connection's git password or, for a
-// version published before connections, the repository token (GOAL_REPOSITORY_TOKEN).
-func (e *Engine) repositoryEnv(ctx context.Context, r domain.Repository, conns map[string]runConnection, env *runEnv) error {
-	switch {
-	case r.Connection != "":
-		rc := conns[r.Connection]
-		if rc.Git == nil {
-			return fmt.Errorf("repository connection %s: its kind %s signs git in to no host", rc.name, rc.kind.Name)
-		}
-
-		env.prepare[rc.Git.PasswordEnv] = rc.Env[rc.Git.PasswordEnv]
-	case r.AuthRef != "":
-		token, err := e.repositoryToken(ctx, r)
-		if err != nil {
-			return err
-		}
-
-		env.prepare[domain.RunEnvRepositoryToken] = token
-		env.secrets = append(env.secrets, token)
+// repositoryEnv gives prepare what clones the repository: its connection's git password; a public
+// repository needs none.
+func repositoryEnv(r domain.Repository, conns map[string]runConnection, env *runEnv) error {
+	if r.Connection == "" {
+		return nil
 	}
+
+	rc := conns[r.Connection]
+	if rc.Git == nil {
+		return fmt.Errorf("repository connection %s: its kind %s signs git in to no host", rc.name, rc.kind.Name)
+	}
+
+	env.prepare[rc.Git.PasswordEnv] = rc.Env[rc.Git.PasswordEnv]
 
 	return nil
 }
@@ -148,7 +129,7 @@ func (e *Engine) resolve(ctx context.Context, names []string, run domain.RunID) 
 		return out, nil
 	}
 
-	resolved, err := e.connections.Resolve(ctx, names, run)
+	resolved, err := e.connections.Resolve(ctx, names, domain.ConnectionUse{Run: run})
 	if err != nil {
 		return nil, fmt.Errorf("connections: %w", err)
 	}

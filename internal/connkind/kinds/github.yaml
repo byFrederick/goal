@@ -7,7 +7,8 @@ metadata:
 spec:
   fields:
     - {name: token, title: Token, description: "A fine-grained token: only the repositories and permissions agents need.", secret: true, required: true}
-    - {name: host, title: Host, description: "github.com, or a GitHub Enterprise Server's host.", default: github.com}
+    - {name: host, title: Host, description: "github.com, or a GitHub Enterprise host.", default: github.com}
+    - {name: api_url, title: API URL, description: "The REST API the connection's test signs in to: https://<host>/api/v3 on a GitHub Enterprise Server, https://api.<host> on GitHub Enterprise Cloud.", default: "https://api.github.com"}
   env:
     GH_TOKEN: "{{token}}"
     GH_HOST: "{{host}}"
@@ -20,5 +21,5 @@ spec:
     headers: {Authorization: "Bearer ${GH_TOKEN}"}   # expanded by Claude Code from the box's env
   codeHost: github
   sync: gitdocs
-  test: {method: GET, url: "https://api.{{host}}/user", headers: {Authorization: "Bearer {{token}}"}, expect: 200}
+  test: {method: GET, url: "{{api_url}}/user", headers: {Authorization: "Bearer {{token}}"}, expect: 200}
   docs: Use gh and git; GH_TOKEN is set. Open a pull request for every change.

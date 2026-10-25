@@ -3,17 +3,12 @@ package main
 import (
 	"maps"
 	"net/netip"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/byFrederick/goal/internal/adapters/envsecrets"
-	"github.com/byFrederick/goal/internal/adapters/s3store"
-	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
-	"github.com/byFrederick/goal/internal/config"
 )
 
 func envOf(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
@@ -54,11 +49,6 @@ func TestSettings_Defaults(t *testing.T) {
 
 	if s.DefinitionCacheBytes != 64<<20 {
 		t.Errorf("definition cache %d bytes; want 64 MiB", s.DefinitionCacheBytes)
-	}
-
-	want := map[string]string{"CLAUDE_CODE_OAUTH_TOKEN": "env:CLAUDE_CODE_OAUTH_TOKEN"} //nolint:gosec // a reference, not a secret
-	if !maps.Equal(s.TaskEnv, want) {
-		t.Errorf("task env = %v, want %v", s.TaskEnv, want)
 	}
 }
 
@@ -111,8 +101,49 @@ func TestSettings_SandboxNetwork(t *testing.T) {
 	}
 
 	wantIgnored := []string{"GOAL_AGENT_EGRESS", "GOAL_EGRESS_NAME", "GOAL_RUN_DIR", "GOAL_DEFAULT_AGENT_IMAGE"}
-	if s.SandboxNetwork != "goal-dev_agents" || !slices.Equal(s.Ignored, wantIgnored) || s.AgentImage != "ghcr.io/acme/goal-agent:2" {
-		t.Errorf("network %q, ignored %v, image %q; want GOAL_SANDBOX_NETWORK's, %v and GOAL_AGENT_IMAGE's", s.SandboxNetwork, s.Ignored, s.AgentImage, wantIgnored)
+	if s.SandboxNetwork != "goal-dev_agents" || !slices.Equal(ignored(s), wantIgnored) || s.AgentImage != "ghcr.io/acme/goal-agent:2" {
+		t.Errorf("network %q, ignored %v, image %q; want GOAL_SANDBOX_NETWORK's, %v and GOAL_AGENT_IMAGE's", s.SandboxNetwork, ignored(s), s.AgentImage, wantIgnored)
+	}
+}
+
+// ignored names the removed settings s ignores.
+func ignored(s settings) []string {
+	out := make([]string, 0, len(s.Ignored))
+	for _, r := range s.Ignored {
+		out = append(out, r.name)
+	}
+
+	return out
+}
+
+// Since the cutover to connections (spec 4 §14, step 5) factories sign in with their
+// organization's connections: goald's model token, task env and GitHub settings are ignored, not
+// refused, so an install upgrades on its old environment, and goald's warning says what replaced
+// each.
+func TestSettings_TheCutoverIgnoresTheEnvironmentCredentials(t *testing.T) {
+	t.Parallel()
+
+	s, err := settingsFrom(envOf(map[string]string{ //nolint:gosec // made-up values
+		"GOAL_TASK_ENV": "ANTHROPIC_API_KEY=env:ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat-never-read",
+		"GOAL_GITHUB_TOKEN": "ghp_never-read", "GOAL_GITHUB_API_URL": "http://api.example.com", "GOAL_GITHUB_WEB_URL": "https://u@ghe.example.com/x",
+	}))
+	if err != nil {
+		t.Fatalf("an install's old environment refused goald's start: %v", err)
+	}
+
+	want := map[string]string{
+		"GOAL_TASK_ENV": "runtime.modelConnection", "CLAUDE_CODE_OAUTH_TOKEN": "goal connection import-env",
+		"GOAL_GITHUB_TOKEN": "github connection", "GOAL_GITHUB_API_URL": "host gives its API", "GOAL_GITHUB_WEB_URL": "host",
+	}
+
+	if got := ignored(s); len(got) != len(want) {
+		t.Fatalf("ignored %v; want %v", got, slices.Sorted(maps.Keys(want)))
+	}
+
+	for _, r := range s.Ignored {
+		if !strings.Contains(r.instead, want[r.name]) || strings.Contains(r.instead, "never-read") {
+			t.Errorf("%s is replaced by %q; want it to name %q", r.name, r.instead, want[r.name])
+		}
 	}
 }
 
@@ -210,17 +241,10 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 		want string
 	}{
 		{name: "public listen address", env: map[string]string{listenEnv: "0.0.0.0:8080"}, want: "loopback"},
-		{name: "API key for tasks", env: map[string]string{taskEnvEnv: "ANTHROPIC_API_KEY=env:ANTHROPIC_API_KEY"}, want: "never reach"},
-		{name: "GitHub token for tasks", env: map[string]string{taskEnvEnv: "goal_github_token=env:X"}, want: "never reach"},
-		{name: "literal secret for tasks", env: map[string]string{taskEnvEnv: "CLAUDE_CODE_OAUTH_TOKEN=sk-literal"}, want: "NAME=env:REF"},
 		{name: "bad duration", env: map[string]string{"GOAL_TICK_EVERY": "-1s"}, want: "GOAL_TICK_EVERY"},
 		{name: "negative run cap", env: map[string]string{"GOAL_MAX_RUNS": "-2"}, want: "GOAL_MAX_RUNS"},
 		{name: "no retention", env: map[string]string{"GOAL_ORG_RETENTION": "0d"}, want: "GOAL_ORG_RETENTION"},
 		{name: "empty definition cache", env: map[string]string{"GOAL_DEFINITION_CACHE_BYTES": "0"}, want: "GOAL_DEFINITION_CACHE_BYTES"},
-		{name: "GitHub API in clear text", env: map[string]string{"GOAL_GITHUB_API_URL": "http://api.example.com"}, want: "must be https"},
-		{name: "GitHub web in clear text", env: map[string]string{githubWebEnv: "http://ghe.example.com"}, want: githubWebEnv},
-		{name: "GitHub web with a path", env: map[string]string{githubWebEnv: "https://ghe.example.com/acme"}, want: githubWebEnv},
-		{name: "GitHub web with a user", env: map[string]string{githubWebEnv: "https://u@ghe.example.com"}, want: githubWebEnv},
 		{name: "not a model id", env: map[string]string{modelsEnv: "claude-opus-5-5,gpt-5"}, want: "not a model id"},
 		{name: "a model twice", env: map[string]string{modelsEnv: "claude-opus-5-5,claude-opus-5-5"}, want: "twice"},
 		{name: "an empty model", env: map[string]string{modelsEnv: "claude-opus-5-5,"}, want: "not a model id"},
@@ -434,189 +458,5 @@ func TestSettings_Hosts(t *testing.T) {
 				t.Errorf("hosts = %v, want %v", got, tt.want)
 			}
 		})
-	}
-}
-
-// Every variable goald reads is one a factory definition may not reference, so no definition can
-// hand goald's own settings or secrets to an agent or a connection.
-func TestSettings_EveryVariableGoaldReadsIsReserved(t *testing.T) {
-	t.Parallel()
-
-	var read []string
-
-	getenv := func(name string) string {
-		read = append(read, name)
-
-		if name == "GOAL_S3_BUCKET" {
-			return "goal-test"
-		}
-
-		return ""
-	}
-
-	s, err := settingsFrom(getenv)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := s3store.ConfigFromEnv(getenv); err != nil {
-		t.Fatal(err)
-	}
-
-	reserved := s.reserved()
-	for _, name := range append(read, "GOAL_GATEWAY_KEY") {
-		if !slices.Contains(reserved, name) {
-			t.Errorf("goald reads %s, but definitions may reference it", name)
-		}
-	}
-
-	custom, err := settingsFrom(envOf(map[string]string{"GOAL_GATEWAY_KEY_REF": "env:ACME_SIGNING_KEY"}))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !slices.Contains(custom.reserved(), "ACME_SIGNING_KEY") {
-		t.Errorf("reserved %v, want the variable the gateway key reference names", custom.reserved())
-	}
-}
-
-// The install's repository token goes only to its GitHub: github.com, or the GitHub Enterprise
-// host GOAL_GITHUB_WEB_URL names. Clones, merges and the credentials check read that one host, and
-// a definition cannot read the setting.
-func TestSettings_GitHubWebHost(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		env  map[string]string
-		want string
-	}{
-		{name: "default", want: "github.com"},
-		{name: "GitHub Enterprise", env: map[string]string{githubWebEnv: "https://GHE.example.com/"}, want: "ghe.example.com"},
-		{name: "a port", env: map[string]string{githubWebEnv: "https://ghe.example.com:8443"}, want: "ghe.example.com:8443"},
-		{name: "a stand-in on this machine", env: map[string]string{githubWebEnv: "http://127.0.0.1:3000"}, want: "127.0.0.1:3000"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			s, err := settingsFrom(envOf(tt.env))
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			if s.GitHubWebHost != tt.want {
-				t.Errorf("GitHub web host = %q, want %q", s.GitHubWebHost, tt.want)
-			}
-
-			if !slices.Contains(s.reserved(), githubWebEnv) {
-				t.Errorf("definitions may reference %s", githubWebEnv)
-			}
-
-			if got := s.credentials(envsecrets.New(nil)).RepositoryHosts; !slices.Equal(got, []string{tt.want}) {
-				t.Errorf("credentials check allows repositories on %v, want only %s", got, tt.want)
-			}
-		})
-	}
-}
-
-// No factory definition can hand an agent the identity settings and secrets, whether goald reads
-// them or only the identity service, the CLI or `goal db init` does, even when goald was started
-// with them in its environment (spec 3, §5.6).
-func TestSettings_ReservedIncludesAuthVariables(t *testing.T) {
-	t.Parallel()
-
-	s, err := settingsFrom(envOf(nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for _, name := range []string{
-		"GOAL_AUTH", "GOAL_PUBLIC_URL", "GOAL_AUTH_UPSTREAM", "GOAL_TRUSTED_PROXIES", "GOAL_GATEWAY_LISTEN", "GOAL_AUTH_GOOGLE",
-		"GOAL_AUTH_LISTEN", "GOAL_AUTH_DATABASE_URL", "BETTER_AUTH_SECRETS", "BETTER_AUTH_SECRET", "BETTER_AUTH_URL",
-		"GOAL_BOOTSTRAP_OWNER_EMAIL", "GOAL_SMTP_URL", "GOAL_SMTP_FROM", "GOAL_SMTP_PLAINTEXT", "GOOGLE_CLIENT_ID",
-		"GOOGLE_CLIENT_SECRET",
-		"GOAL_PG_AUTH_PASSWORD", "GOAL_API_KEY", "GOAL_DATABASE_ADMIN_URL",
-	} {
-		if !slices.Contains(s.reserved(), name) {
-			t.Errorf("definitions may reference %s", name)
-		}
-	}
-}
-
-// The platform's secrets are reserved too: those that never reach a task and the variables the
-// tasks' model access is read from (GOAL_TASK_ENV's references). The repository token is not
-// reserved but kept to the repository and GitHub's MCP server.
-func TestSettings_ReservesPlatformSecrets(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		env      map[string]string
-		reserved []string
-	}{
-		{name: "defaults", reserved: []string{"ANTHROPIC_API_KEY", "GOAL_GATEWAY_KEY", "CLAUDE_CODE_OAUTH_TOKEN"}},
-		{
-			name:     "custom task env",
-			env:      map[string]string{taskEnvEnv: "CLAUDE_CODE_OAUTH_TOKEN=env:ACME_MODEL_TOKEN,ACME_FLAG=env:ACME_FLAG_SOURCE"},
-			reserved: []string{"ANTHROPIC_API_KEY", "ACME_MODEL_TOKEN", "ACME_FLAG_SOURCE"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			s, err := settingsFrom(envOf(tt.env))
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			// Authoring and the gateway apply one policy.
-			got := s.secretPolicy()
-			if check := s.credentials(envsecrets.New(func(string) (string, bool) { return "", false })); !reflect.DeepEqual(check.Policy, got) {
-				t.Errorf("the credentials check's policy %+v is not the gateway's %+v", check.Policy, got)
-			}
-
-			for _, name := range tt.reserved {
-				if !slices.Contains(got.Reserved, name) {
-					t.Errorf("reserved %v, want %s among them", got.Reserved, name)
-				}
-			}
-
-			if slices.Contains(got.Reserved, repositoryToken) || !slices.Equal(got.RepositoryOnly, []string{repositoryToken}) ||
-				!slices.Equal(got.ConnectionHosts, []string{githubMCPHost}) {
-				t.Errorf("reserved %v, repository only %v to %v; want %s kept to the repository and %s",
-					got.Reserved, got.RepositoryOnly, got.ConnectionHosts, repositoryToken, githubMCPHost)
-			}
-		})
-	}
-}
-
-// The credentials check goald authors definitions with refuses a reference to one of its own
-// settings with env-reserved, even though the variable is set, and passes another set variable.
-func TestSettings_CredentialsRefuseGoaldsOwnVariables(t *testing.T) {
-	t.Parallel()
-
-	env := map[string]string{"GOAL_DATABASE_URL": "postgres://app@db.example.com/goal", "ACME_GIT_TOKEN": "t0ken"}
-
-	s, err := settingsFrom(envOf(env))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	lookup := func(k string) (string, bool) { v, ok := env[k]; return v, ok }
-
-	findings, err := s.credentials(envsecrets.New(lookup)).Findings(t.Context(), []config.SecretUse{
-		{Path: "runtime.repository.token", Ref: "env:GOAL_DATABASE_URL"},
-		{Path: "spec.connections[0].headers.Authorization", Ref: "env:ACME_GIT_TOKEN"},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(findings) != 1 || findings[0].Code != authoring.CodeEnvReserved || findings[0].Use.Ref != "env:GOAL_DATABASE_URL" {
-		t.Errorf("findings = %+v; want only env:GOAL_DATABASE_URL refused with %s", findings, authoring.CodeEnvReserved)
 	}
 }

@@ -138,6 +138,37 @@ func TestPlatform_RenderModes(t *testing.T) {
 	}
 }
 
+// github's test signs in to github.com's API by default, and to a GitHub Enterprise Server's own
+// /api/v3 (or an Enterprise Cloud's api.<host>) when the connection names it.
+func TestPlatform_GitHubTestReachesTheConnectionsAPI(t *testing.T) {
+	t.Parallel()
+
+	kinds, err := connkind.Platform()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gh := kinds[slices.IndexFunc(kinds, func(k domain.ConnectionKind) bool { return k.Name == kindGitHub })]
+
+	tests := []struct{ host, api, want string }{
+		{want: "https://api.github.com/user"},
+		{host: "ghe.example.com", api: "https://ghe.example.com/api/v3", want: "https://ghe.example.com/api/v3/user"},
+		{host: "acme.ghe.com", api: "https://api.acme.ghe.com", want: "https://api.acme.ghe.com/user"},
+	}
+
+	for _, tt := range tests {
+		values := maps.Clone(renderValues[kindGitHub])
+		if tt.host != "" {
+			values["host"], values["api_url"] = tt.host, tt.api
+		}
+
+		test, err := gh.RenderTest(values)
+		if err != nil || test == nil || test.URL != tt.want {
+			t.Errorf("test on %q = %+v, %v; want %s", tt.host, test, err, tt.want)
+		}
+	}
+}
+
 func TestParse(t *testing.T) {
 	t.Parallel()
 

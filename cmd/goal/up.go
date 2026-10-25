@@ -80,7 +80,7 @@ var authVariables = []string{
 }
 
 // authOnly are the auth service's variables goald never gets: its secrets, its database, its
-// mail and its Google client (goald's reserved list holds them too, cmd/goald identityVariables).
+// mail and its Google client.
 var authOnly = []string{
 	"GOAL_AUTH_LISTEN", "GOAL_AUTH_DATABASE_URL", "GOAL_PG_AUTH_PASSWORD", "BETTER_AUTH_SECRET", "BETTER_AUTH_SECRETS",
 	"BETTER_AUTH_URL", "GOAL_BOOTSTRAP_OWNER_EMAIL", "GOAL_SMTP_URL", "GOAL_SMTP_FROM", "GOAL_SMTP_PLAINTEXT",

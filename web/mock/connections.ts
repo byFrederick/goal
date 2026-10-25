@@ -129,6 +129,8 @@ export interface ConnectionOutline {
   env: string[];
   /** The host its git block signs in to; '' for none. */
   gitHost: string;
+  /** Whether its kind names a code host, so merges can use it. */
+  codeHost: boolean;
 }
 
 export interface MockConnections {
@@ -382,6 +384,7 @@ export function createConnections({
       model: kind.kind.model,
       env,
       gitHost: kind.gitHost ? render(kind.gitHost, kind.kind, fields) : '',
+      codeHost: Boolean(kind.kind.code_host),
     };
   }
 

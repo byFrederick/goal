@@ -78,9 +78,6 @@ type harness struct {
 	logs   *logBuffer // what every engine of the harness logs
 
 	mu sync.Mutex
-	// codeConns are the connections merges get (engine.MergeConnections): by default one of a
-	// github kind on github.com.
-	codeConns []domain.ResolvedConnection
 	// ticking, while step's tick runs, is closed when it returns; every agent run waits for it
 	// before it plays, so no run ends within the tick that started it (see step).
 	ticking chan struct{}
@@ -91,25 +88,7 @@ const (
 	agentImage = "ghcr.io/acme/goal-agent:1"
 	gatewayURL = "http://gateway.example.com/mcp"
 	gitHost    = "git.example.com"
-	gitToken   = "git-token-for-tests" //nolint:gosec // a test value, not a credential
-	modelToken = "model-token-for-tests"
 )
-
-// mergeConnections are the connections the harness's merges get.
-func (h *harness) mergeConnections(context.Context, domain.Line) ([]domain.ResolvedConnection, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	return slices.Clone(h.codeConns), nil
-}
-
-// setCodeConnections replaces the connections merges get.
-func (h *harness) setCodeConnections(conns ...domain.ResolvedConnection) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	h.codeConns = conns
-}
 
 // runs returns an item's runs in org, oldest first.
 func (h *harness) runs(t *testing.T, org domain.OrgID, id domain.ItemID) []domain.Run {
@@ -135,7 +114,6 @@ func newHarness(t *testing.T, line domain.Line, run porttest.AgentFunc) *harness
 		contracts: porttest.NewContracts(),
 		codehost:  porttest.NewCodeHost(),
 		gitlab:    porttest.NewCodeHost(),
-		codeConns: []domain.ResolvedConnection{porttest.CodeHostConnection(connGitHub, codeHostGitHub, "github.com")},
 		line:      line,
 		logs:      &logBuffer{},
 	}
@@ -167,13 +145,21 @@ func newHarness(t *testing.T, line domain.Line, run porttest.AgentFunc) *harness
 	return h
 }
 
-// newOrg creates an organization and returns its id.
+// newOrg creates an organization and returns its id. Every organization after the first gets
+// the model connection its lines run on (the first gets all of newConnections').
 func (h *harness) newOrg(t *testing.T, slug string) domain.OrgID {
 	t.Helper()
 
 	o, err := h.tenancy.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: slug, Name: slug})
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	if h.connections != nil {
+		model := domain.NewConnection{Name: connModel, Kind: "model-key", Secrets: map[string]string{"key": modelKey}}
+		if _, err := h.connections.Create(domain.WithOrg(t.Context(), o.ID), model, domain.LocalUser); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	return o.ID
@@ -192,24 +178,20 @@ func (h *harness) engineWith(t *testing.T, store ports.Store, maxRuns int, lines
 
 	e, err := engine.New(engine.Deps{
 		Store: store, Orgs: h.tenancy, Sandboxes: h.sandboxes, Contracts: h.contracts, Clock: h.clock,
-		Secrets:     porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y", "MODEL_ACCESS": modelToken, "GIT_TOKEN": gitToken, "REPO_TOKEN": gitToken},
+		Secrets:     porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y"},
 		Connections: h.connections, CodeHosts: map[string]ports.CodeHost{codeHostGitHub: h.codehost, codeHostGitLab: h.gitlab},
-		MergeConnections: h.mergeConnections,
-		Minters:          map[string]ports.Minter{mintAWS: h.minter},
-		Logger:           slog.New(slog.NewJSONHandler(h.logs, nil)),
+		Minters: map[string]ports.Minter{mintAWS: h.minter},
+		Logger:  slog.New(slog.NewJSONHandler(h.logs, nil)),
 	}, engine.Config{
-		Lines:           lines,
-		MaxRuns:         maxRuns,
-		TickEvery:       tickEvery,
-		LeaseTTL:        ttl,
-		HeartbeatEvery:  heartbeat,
-		ReapEvery:       reapEvery,
-		Image:           agentImage,
-		GatewayURL:      gatewayURL,
-		GatewayKeyRef:   "env:GOAL_GATEWAY_KEY",
-		TaskEnv:         map[string]string{"MODEL_ACCESS": "env:MODEL_ACCESS"},
-		RepositoryHosts: []string{gitHost, "github.com"},
-		SecretPolicy:    domain.SecretPolicy{Reserved: []string{"GOAL_GATEWAY_KEY"}},
+		Lines:          lines,
+		MaxRuns:        maxRuns,
+		TickEvery:      tickEvery,
+		LeaseTTL:       ttl,
+		HeartbeatEvery: heartbeat,
+		ReapEvery:      reapEvery,
+		Image:          agentImage,
+		GatewayURL:     gatewayURL,
+		GatewayKeyRef:  "env:GOAL_GATEWAY_KEY",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -391,7 +373,7 @@ func lineOf(stations ...domain.Station) domain.Line {
 		FactoryID:     factoryID,
 		VersionID:     v1,
 		Number:        1,
-		Runtime:       domain.Runtime{Model: "claude-sonnet-5-5", MaxTurnsPerTask: 40, PerItemUSD: 3},
+		Runtime:       domain.Runtime{Model: "claude-sonnet-5-5", ModelConnection: connModel, MaxTurnsPerTask: 40, PerItemUSD: 3},
 		Stations:      all,
 		Agents:        agents,
 		ExpediteTypes: []string{typeIncident},

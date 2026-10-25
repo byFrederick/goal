@@ -27,8 +27,9 @@ const MergeSquash = "squash"
 // Merge merges every pull request of an item waiting at a merge station, then approves the item
 // on by's behalf (spec 4 §4.7). The pull requests are the ones the item's outputs name
 // (domain.Item.PullRequests), each merged through the code host of the factory's connection that
-// serves its URL's host; a host no connection serves is refused (ErrNoCodeHost) before anything
-// is merged. Merge never forces: a pull request that is not open and mergeable, or whose head
+// serves its URL's host, opened for by's merge of the item (connection.used names both); a host
+// no connection serves is refused (ErrNoCodeHost) before anything is opened or merged. Merge
+// never forces: a pull request that is not open and mergeable, or whose head
 // moves meanwhile, stops the merge with an error wrapping ports.ErrNotMergeable, and the item
 // does not move. The ones merged before it stay merged and are skipped when the merge is asked
 // again, so a retry after a partial failure is safe. After each merge the pull request's head
@@ -52,7 +53,7 @@ func (e *Engine) Merge(ctx context.Context, id domain.ItemID, by domain.Actor, m
 		method = MergeSquash
 	}
 
-	targets, err := e.mergeTargets(ctx, l, urls)
+	targets, err := e.mergeTargets(ctx, l, urls, domain.ConnectionUse{By: by, Item: it.ID})
 	if err != nil {
 		return domain.Item{}, fmt.Errorf("merge %s: %w", id, err)
 	}
@@ -92,41 +93,23 @@ type mergeTarget struct {
 	host ports.CodeHost
 }
 
-// mergeTargets picks, for each pull request URL, the first of the line's connections whose kind
-// names a code host goald has and whose git login is for the URL's host.
-func (e *Engine) mergeTargets(ctx context.Context, l domain.Line, urls []string) ([]mergeTarget, error) {
-	conns, err := e.mergeWith(ctx, l)
+// codeHostConnection is one of a line's connections that can merge: its name, the host of its git
+// login and the code host of its kind.
+type codeHostConnection struct {
+	name, host string
+	ch         ports.CodeHost
+}
+
+// mergeTargets picks, for each pull request URL, the first of the line's connections
+// (domain.Line.MergeConnections) whose kind names a code host goald has and whose git login is
+// for the URL's host, then opens the ones it picked for use.
+func (e *Engine) mergeTargets(ctx context.Context, l domain.Line, urls []string, use domain.ConnectionUse) ([]mergeTarget, error) {
+	hosts, err := e.codeHostConnections(ctx, l)
 	if err != nil {
-		return nil, fmt.Errorf("open the code host connections: %w", err)
+		return nil, fmt.Errorf("the code host connections: %w", err)
 	}
 
-	// served are the connections that can merge, each with the host its git login is for.
-	type served struct {
-		host string
-		conn domain.ResolvedConnection
-		ch   ports.CodeHost
-	}
-
-	var hosts []served
-
-	for _, c := range conns {
-		ch, ok := e.codehosts[c.Kind.Spec.CodeHost]
-		if !ok {
-			continue
-		}
-
-		host, _, err := c.GitLogin()
-		if err != nil {
-			e.log.WarnContext(ctx, "a code host connection serves no host", slog.String("connection", c.Connection.Name),
-				slog.Any("error", err))
-
-			continue
-		}
-
-		hosts = append(hosts, served{host: host, conn: c, ch: ch})
-	}
-
-	out := make([]mergeTarget, 0, len(urls))
+	picked := make([]codeHostConnection, 0, len(urls))
 
 	for _, raw := range urls {
 		u, err := url.Parse(raw)
@@ -136,12 +119,75 @@ func (e *Engine) mergeTargets(ctx context.Context, l domain.Line, urls []string)
 
 		host := strings.ToLower(u.Host)
 
-		i := slices.IndexFunc(hosts, func(s served) bool { return s.host == host })
+		i := slices.IndexFunc(hosts, func(c codeHostConnection) bool { return c.host == host })
 		if i < 0 {
-			return nil, fmt.Errorf("%s: no connection of the factory with a code host goald has is for %s: %w", raw, u.Host, ErrNoCodeHost)
+			err := fmt.Errorf("%s: no connection of the factory with a code host goald has is for %s: %w", raw, u.Host, ErrNoCodeHost)
+			if reason := l.Refusal(); reason != "" {
+				err = fmt.Errorf("%w (%s)", err, reason)
+			}
+
+			return nil, err
 		}
 
-		out = append(out, mergeTarget{url: raw, conn: hosts[i].conn, host: hosts[i].ch})
+		picked = append(picked, hosts[i])
+	}
+
+	names := make([]string, 0, len(picked))
+	for _, c := range picked {
+		if !slices.Contains(names, c.name) {
+			names = append(names, c.name)
+		}
+	}
+
+	resolved, err := e.connections.Resolve(ctx, names, use)
+	if err != nil {
+		return nil, fmt.Errorf("open the code host connections: %w", err)
+	}
+
+	out := make([]mergeTarget, 0, len(urls))
+
+	for i, c := range picked {
+		j := slices.IndexFunc(resolved, func(r domain.ResolvedConnection) bool { return r.Connection.Name == c.name })
+		if j < 0 {
+			return nil, fmt.Errorf("connection %s was not opened", c.name)
+		}
+
+		out = append(out, mergeTarget{url: urls[i], conn: resolved[j], host: c.ch})
+	}
+
+	return out, nil
+}
+
+// codeHostConnections are the line's connections that can merge, from what members may see of
+// them (no secret is opened): those whose kind names a code host goald has, each with the host its
+// git login is for.
+func (e *Engine) codeHostConnections(ctx context.Context, l domain.Line) ([]codeHostConnection, error) {
+	var out []codeHostConnection
+
+	for _, name := range l.MergeConnections() {
+		c, err := e.connections.Get(ctx, name)
+		if err != nil {
+			return nil, fmt.Errorf("connection %s: %w", name, err)
+		}
+
+		k, err := e.connections.Kind(ctx, c.Kind)
+		if err != nil {
+			return nil, fmt.Errorf("connection %s: kind %s: %w", name, c.Kind, err)
+		}
+
+		ch, ok := e.codehosts[k.Spec.CodeHost]
+		if !ok {
+			continue
+		}
+
+		host := strings.ToLower(k.Outline(c).GitHost())
+		if host == "" {
+			e.log.WarnContext(ctx, "a code host connection signs git in to no host", slog.String("connection", name))
+
+			continue
+		}
+
+		out = append(out, codeHostConnection{name: name, host: host, ch: ch})
 	}
 
 	return out, nil

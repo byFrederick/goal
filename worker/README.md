@@ -27,8 +27,8 @@ goald creates one sandbox per run (`ports.Sandboxes`) and execs, in order:
 
 | Exec | Environment from goald | Does |
 | --- | --- | --- |
-| `goal-agent prepare` | `GOAL_GATEWAY_URL` (the sandbox's), `GOAL_GATEWAY_TOKEN`, the password variable of the repository's git login: its connection's (such as `GH_TOKEN`), or `GOAL_REPOSITORY_TOKEN` for a version published before connections | builds `/goal` and `/workspace` from the run bundle (below); one `prepared` line on stdout; exit 0, or 1 with the reason on stderr |
-| `goal-agent run` | `GOAL_GATEWAY_TOKEN`, the model connection's env (the install's `GOAL_TASK_ENV` for a version without `runtime.modelConnection`, until 4-14), the env of the agent's own connections, `GOAL_FEEDBACK` when goald adds to the brief | runs the agent once (How the agent runs); the stdout protocol; exit 0 with a result, 1 when the worker crashed |
+| `goal-agent prepare` | `GOAL_GATEWAY_URL` (the sandbox's), `GOAL_GATEWAY_TOKEN`, the password variable of the repository connection's git login (such as `GH_TOKEN`) | builds `/goal` and `/workspace` from the run bundle (below); one `prepared` line on stdout; exit 0, or 1 with the reason on stderr |
+| `goal-agent run` | `GOAL_GATEWAY_TOKEN`, the model connection's env, the env of the agent's own connections, `GOAL_FEEDBACK` when goald adds to the brief | runs the agent once (How the agent runs); the stdout protocol; exit 0 with a result, 1 when the worker crashed |
 | a station check, `sh -c '<command>'` in `/workspace` | `HOME`, `CI=true` | the exit code is the runtime's |
 
 `goal-agent` without a command prints its usage and exits 2.

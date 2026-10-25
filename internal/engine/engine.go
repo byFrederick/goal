@@ -84,25 +84,19 @@ type Orgs interface {
 	ActiveOrgs(ctx context.Context) ([]domain.OrgID, error)
 }
 
-// MergeConnections opens the connections a line's merges may use (spec 4 §4.7), for the
-// organization in ctx: those whose kind names a code host serve the pull requests on the host of
-// their git login. Until runs get the organization's connections (spec 4 PR 4-14), goald gives
-// the factory repository's token as a connection of the platform's github kind.
-type MergeConnections func(ctx context.Context, l domain.Line) ([]domain.ResolvedConnection, error)
-
 // Deps are the ports the engine works through.
 type Deps struct {
 	Store     ports.Store
 	Orgs      Orgs
 	Sandboxes ports.Sandboxes
 	Contracts ports.Contracts
-	Secrets   ports.Secrets
-	// Connections give each run its organization's connections (spec 4 §4.5).
+	// Secrets resolves the gateway key (Config.GatewayKeyRef).
+	Secrets ports.Secrets
+	// Connections give each run its organization's connections (spec 4 §4.5), and merges the
+	// line's connections whose kind has a code host (§4.7).
 	Connections ports.Connections
-	// CodeHosts are the code host adapters by the name a connection kind gives (KindSpec.CodeHost),
-	// and MergeConnections the connections merges reach them with.
-	CodeHosts        map[string]ports.CodeHost
-	MergeConnections MergeConnections
+	// CodeHosts are the code host adapters by the name a connection kind gives (KindSpec.CodeHost).
+	CodeHosts map[string]ports.CodeHost
 	// Minters are the minters by the name a connection kind gives (KindSpec.Mint): a run of a
 	// connection whose kind names one gets credentials minted for it; without one it cannot run.
 	Minters map[string]ports.Minter
@@ -112,7 +106,7 @@ type Deps struct {
 
 func (d Deps) complete() bool {
 	return d.Store != nil && d.Orgs != nil && d.Sandboxes != nil && d.Contracts != nil && d.Secrets != nil &&
-		d.Connections != nil && d.CodeHosts != nil && d.MergeConnections != nil && d.Clock != nil
+		d.Connections != nil && d.CodeHosts != nil && d.Clock != nil
 }
 
 // Config is the engine's behaviour; zero durations take the defaults below.
@@ -142,15 +136,6 @@ type Config struct {
 	// token. Both are required.
 	GatewayURL    string
 	GatewayKeyRef string
-	// TaskEnv maps environment variables of every agent run to secret references, resolved
-	// through Secrets when the run starts (the model's access).
-	TaskEnv map[string]string
-	// RepositoryHosts are the hosts (host[:port], lower case) the repository token may be sent
-	// to, and SecretPolicy the install's rule for env:NAME references: prepare gets the token of a
-	// repository on one of them whose reference the policy does not reserve, and nothing else
-	// does (until runs get connections, spec 4 PR 4-11).
-	RepositoryHosts []string
-	SecretPolicy    domain.SecretPolicy
 	// MaxRuns caps the agent runs this instance has in flight at once; 0 means no cap. With a
 	// cap, a busy organization cannot fill the instance before a quiet one's first item starts.
 	MaxRuns int
@@ -187,7 +172,6 @@ type Engine struct {
 	connections ports.Connections
 	codehosts   map[string]ports.CodeHost
 	minters     map[string]ports.Minter
-	mergeWith   MergeConnections
 	clock       ports.Clock
 	log         *slog.Logger
 	cfg         Config
@@ -244,7 +228,7 @@ func New(d Deps, cfg Config) (*Engine, error) {
 
 	return &Engine{
 		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, connections: d.Connections,
-		codehosts: d.CodeHosts, minters: d.Minters, mergeWith: d.MergeConnections, clock: d.Clock, log: log, cfg: cfg, lines: lines,
+		codehosts: d.CodeHosts, minters: d.Minters, clock: d.Clock, log: log, cfg: cfg, lines: lines,
 		active: map[domain.ItemID]*activeRun{}, exhausted: map[domain.FactoryID]bool{},
 	}, nil
 }

@@ -6,13 +6,14 @@
 // (a stable code, a severity, the Visual section and model pointer, the file, line and
 // column): every file parses, factory.yaml satisfies the JSON Schema, and then what a schema
 // cannot say: every reference (agent, skill, connection, station, contract, file) points at
-// something that exists, the line is well formed, tool specs are mise's, images are pinned,
-// secrets are references, and the forms phase 4 removed are named with a quick fix. Whether the
-// organization connections and knowledge sources it names exist is authoring's connections
-// check. Load is Check for callers that only need a valid factory.
+// something that exists, the line is well formed, tool specs are mise's, and the forms
+// connections replaced are named with a quick fix. Whether the organization connections and
+// knowledge sources it names exist is authoring's connections check. Load is Check for callers
+// that run published versions.
 package config
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -37,6 +38,8 @@ type Factory struct {
 	doc *document
 	// warnings are the problems found at load that do not block it.
 	warnings []domain.DefinitionProblem
+	// removed names each form connections replaced that the definition has (domain.Line.Removed).
+	removed []string
 }
 
 // Metadata identifies a factory.
@@ -55,8 +58,8 @@ type Metadata struct {
 // Spec is everything a factory declares.
 type Spec struct {
 	Runtime Runtime `json:"runtime"`
-	// Connections are the organization's connections the factory uses, and the inline ones of
-	// versions published before phase 4.
+	// Connections are the organization's connections the factory uses, and the removed inline
+	// ones of versions published before the cutover.
 	Connections []Connection      `json:"connections,omitempty"`
 	Knowledge   *Knowledge        `json:"knowledge,omitempty"`
 	Skills      []Skill           `json:"skills,omitempty"`
@@ -81,13 +84,11 @@ type Runtime struct {
 }
 
 // Repository is the git repository cloned into every run: a URL and the organization connection
-// that clones and merges it (none for a public repository).
+// that clones it (none for a public repository). The removed token (env-reference-removed) is
+// found in the document, not decoded.
 type Repository struct {
 	URL        string `json:"url"`
 	Connection string `json:"connection,omitempty"`
-	// Token is removed (env-reference-removed): a secret reference the engine clones and merges
-	// with, on the host only, until the cutover to connections.
-	Token string `json:"token,omitempty"`
 }
 
 // Budget caps spend and agent turns.
@@ -112,54 +113,39 @@ type KnowledgeBase struct {
 
 // Connection is an entry of spec.connections: the name of an organization connection, written
 // as a plain string, or a removed inline form (connection-inline-removed) that versions published
-// before phase 4 still have: a type with its transport fields, which the MCP gateway serves
-// until the cutover, or a connector, which was never served.
+// before the cutover may still have, an object with a type or a connector, of which only the
+// name is kept.
 type Connection struct {
-	// Name is unique in the factory. In the connector form it defaults to the connector's name,
-	// which Check fills in, so Name is always the name agents and tokens use.
-	Name      string            `json:"name"`
-	Type      string            `json:"type,omitempty"`
-	Transport string            `json:"transport,omitempty"`
-	URL       string            `json:"url,omitempty"`
-	Image     string            `json:"image,omitempty"`
-	Command   []string          `json:"command,omitempty"`
-	Headers   map[string]string `json:"headers,omitempty"`
-	Env       map[string]string `json:"env,omitempty"`
-	// Network gives a stdio connection's sidecar outbound network access.
-	Network bool   `json:"network,omitempty"`
-	RoleARN string `json:"roleArn,omitempty"`
-	Region  string `json:"region,omitempty"`
-	// Connector is the connector form's catalog connector: name or name@version.
-	Connector string `json:"connector,omitempty"`
+	// Name is unique in the factory; a connector-form entry without one is named after its
+	// connector (name@version), as the schema documented for that form.
+	Name   string `json:"name"`
+	inline bool
 }
 
-// UnmarshalJSON reads an organization connection's name, or an inline connection.
+// UnmarshalJSON reads an organization connection's name, or the name of an inline connection.
 func (c *Connection) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &c.Name); err == nil {
 		return nil
 	}
 
-	type plain Connection
+	var form struct {
+		Name      string `json:"name"`
+		Connector string `json:"connector"`
+	}
 
-	return json.Unmarshal(data, (*plain)(c))
+	if err := json.Unmarshal(data, &form); err != nil {
+		return err
+	}
+
+	connector, _, _ := strings.Cut(form.Connector, "@")
+	c.Name, c.inline = cmp.Or(form.Name, connector), true
+
+	return nil
 }
 
 // Inline reports whether the entry is a removed inline form rather than an organization
 // connection's name.
-func (c Connection) Inline() bool { return c.Type != "" || c.Connector != "" }
-
-// Pinned reports whether a container image reference names one version: it has a digest
-// (name@sha256:...) or a tag other than latest.
-func Pinned(image string) bool {
-	if _, digest, ok := strings.Cut(image, "@"); ok {
-		return strings.HasPrefix(digest, "sha256:") && len(digest) == len("sha256:")+64
-	}
-
-	name := image[strings.LastIndex(image, "/")+1:]
-	_, tag, ok := strings.Cut(name, ":")
-
-	return ok && tag != "" && tag != "latest"
-}
+func (c Connection) Inline() bool { return c.inline }
 
 // Skill is a SKILL.md folder, local or from skills.sh.
 type Skill struct {
@@ -355,16 +341,18 @@ func LoadDir(dir string) (*Factory, error) {
 	return Load(os.DirFS(dir))
 }
 
-// Load is Check for callers that need a valid factory: it fails with every blocking problem,
-// one per line, when there is any. Referenced paths resolve inside files only; a path that
-// leaves it is not found.
+// Load is Check for callers that run published versions: it fails with every blocking problem,
+// one per line, when there is any, but the forms connections replaced. A version published
+// before the cutover may have those; it loads, so its items stay visible, and its line names
+// them (domain.Line.Removed), so the engine refuses to run it. Referenced paths resolve inside
+// files only; a path that leaves it is not found.
 func Load(files fs.FS) (*Factory, error) {
 	f, problems := Check(files)
 
 	var errs []error
 
 	for _, p := range problems {
-		if p.Blocking() {
+		if p.Blocking() && p.Check != checkRemoved {
 			errs = append(errs, problemError(p))
 		}
 	}
@@ -415,8 +403,6 @@ func Check(files fs.FS) (*Factory, []domain.DefinitionProblem) {
 		return nil, append(problems, *yamlInvalid(FileName, err))
 	}
 
-	f.defaultConnectionNames()
-
 	found := newChecker(f).run()
 	for _, p := range found {
 		if !p.Blocking() {
@@ -427,18 +413,7 @@ func Check(files fs.FS) (*Factory, []domain.DefinitionProblem) {
 	return f, append(problems, found...)
 }
 
-// defaultConnectionNames names each connector-form connection without a name after its
-// connector (name@version), as the schema documented for that removed form.
-func (f *Factory) defaultConnectionNames() {
-	for i, c := range f.Spec.Connections {
-		if c.Name == "" {
-			f.Spec.Connections[i].Name, _, _ = strings.Cut(c.Connector, "@")
-		}
-	}
-}
-
-// Warnings lists the messages of what loads but should be fixed: removed forms, unpinned
-// connection images (the gateway does not start them), literal secrets, and what this install
+// Warnings lists the messages of what loads but should be fixed, such as what this install
 // cannot serve yet.
 func (f *Factory) Warnings() []string {
 	w := make([]string, 0, len(f.warnings))

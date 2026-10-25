@@ -28,6 +28,9 @@ const (
 	seededField      = "key"
 )
 
+// runUse is one run's use of connections.
+var runUse = domain.ConnectionUse{Run: "run-1"}
+
 // testKey is master keys ids with secrets derived from each id, so an id is the same key in every
 // call.
 func testKey(t *testing.T, ids ...string) ports.MasterKey {
@@ -200,7 +203,7 @@ func TestConnections_NoPlaintextInAnyColumn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := c.Resolve(ctx, []string{seededConnection}, "run-1"); err != nil {
+	if _, err := c.Resolve(ctx, []string{seededConnection}, runUse); err != nil {
 		t.Fatal(err)
 	}
 
@@ -272,13 +275,13 @@ func TestConnections_AADMismatchRefused(t *testing.T) {
 
 	copySealed(t, acme, acme, seededConnection, "other")
 
-	if got, err := c.Resolve(acmeCtx, []string{"other"}, "run-1"); err == nil {
+	if got, err := c.Resolve(acmeCtx, []string{"other"}, runUse); err == nil {
 		t.Errorf("another connection's ciphertext opened: %+v", got)
 	}
 
 	copySealed(t, acme, labs, seededConnection, seededConnection)
 
-	if got, err := c.Resolve(domain.WithOrg(t.Context(), labs), []string{seededConnection}, "run-1"); err == nil {
+	if got, err := c.Resolve(domain.WithOrg(t.Context(), labs), []string{seededConnection}, runUse); err == nil {
 		t.Errorf("another organization's ciphertext opened: %+v", got)
 	}
 
@@ -288,7 +291,7 @@ func TestConnections_AADMismatchRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := c.Resolve(acmeCtx, []string{seededConnection}, "run-1")
+	got, err := c.Resolve(acmeCtx, []string{seededConnection}, runUse)
 	if err == nil {
 		t.Errorf("a relabelled ciphertext opened: %+v", got)
 	} else if strings.Contains(err.Error(), "acme-secret") {

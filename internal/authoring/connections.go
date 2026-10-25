@@ -29,6 +29,9 @@ const (
 	// CodeKnowledgeSourceUnknown: the organization has no knowledge source of a name the
 	// definition may search.
 	CodeKnowledgeSourceUnknown = "knowledge-source-unknown"
+	// CodeMergeNeedsCodeHost: a station merges, but none of the factory's connections is of a
+	// kind with a code host, so nothing could merge the item's pull requests (spec 4 §4.7).
+	CodeMergeNeedsCodeHost = "merge-needs-code-host"
 )
 
 // KnowledgeSources names the organization of ctx's knowledge sources (spec 4 §4.8).
@@ -40,16 +43,14 @@ type KnowledgeSources interface {
 // connection the definition names exists (connection-unknown); its model connection gives model
 // access (connection-not-model); its repository's connection signs git in to the repository's
 // host (repository-host-mismatch); no two connections an agent's runs get set the same variable
-// (connection-env-conflict); and every knowledge source it may search exists
-// (knowledge-source-unknown). It reads names, kinds and non-secret fields, never a secret.
+// (connection-env-conflict); every knowledge source it may search exists
+// (knowledge-source-unknown); and a merge station has a connection of a kind with a code host to
+// merge with (merge-needs-code-host). It reads names, kinds and non-secret fields, never a secret.
 type ConnectionsCheck struct {
 	Connections ports.Connections
 	// Knowledge names the organization's knowledge sources; nil until the knowledge base ships
 	// (spec 4, 4-16), when an organization has none.
 	Knowledge KnowledgeSources
-	// Env checks the env: references of the forms phase 4 removed, which versions published
-	// before still run on until the cutover (spec 4, 4-14); nil checks none.
-	Env *EnvReferences
 }
 
 var _ Credentials = ConnectionsCheck{}
@@ -87,15 +88,7 @@ func (c ConnectionsCheck) Check(ctx context.Context, f *config.Factory) ([]domai
 	r.repository()
 	r.envConflicts()
 	r.knowledge(sources)
-
-	if c.Env != nil {
-		env, err := c.Env.Check(ctx, f)
-		if err != nil {
-			return nil, err
-		}
-
-		r.out = append(r.out, env...)
-	}
+	r.merge()
 
 	return r.out, nil
 }
@@ -349,6 +342,38 @@ func (r *connectionsRun) shared(a, b string) []string {
 	}
 
 	return out
+}
+
+// merge reports each merge station of a factory none of whose organization connections (its
+// list and its repository's, as domain.Line.MergeConnections) is of a kind with a code host: the
+// merge would have nothing to merge the item's pull requests with. The fix takes the merge off
+// the station; the message names the kinds that merge.
+func (r *connectionsRun) merge() {
+	names := r.f.ConnectionNames()
+	if slices.ContainsFunc(names, func(n string) bool { _, k, ok := r.kind(n); return ok && k.Spec.CodeHost != "" }) {
+		return
+	}
+
+	var titles []string
+
+	for _, k := range r.kinds {
+		if k.Spec.CodeHost != "" {
+			titles = append(titles, k.Title)
+		}
+	}
+
+	slices.Sort(titles)
+
+	for i, s := range r.f.Spec.Board.Stations {
+		if s.Action != config.ActionMerge {
+			continue
+		}
+
+		p := specPath("board", "stations", strconv.Itoa(i), "action")
+		r.add(p, CodeMergeNeedsCodeHost, fmt.Sprintf(
+			"station %s: action merge needs a connection that merges pull requests, of a kind with a code host (%s); add one to connections",
+			s.ID, strings.Join(titles, ", ")), config.RemoveFix("Remove the merge step", p))
+	}
 }
 
 // knowledge reports the knowledge sources the definition may search that the organization lacks.

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"net"
 	"net/netip"
 	"net/url"
@@ -16,19 +15,16 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/adapters/docker"
-	"github.com/byFrederick/goal/internal/adapters/masterkey"
 	"github.com/byFrederick/goal/internal/adapters/openaiembed"
 	"github.com/byFrederick/goal/internal/adapters/postgres"
-	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/definitions"
-	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/knowledge"
-	"github.com/byFrederick/goal/internal/ports"
 )
 
 // settings is goald's configuration, read from the environment (12-factor). Secrets appear here
-// only as references (env:NAME), resolved through the Secrets port.
+// only as references (env:NAME), resolved through the Secrets port. Factories' credentials are the
+// organizations' connections (spec 4), never goald's environment.
 type settings struct {
 	// MigrateDatabaseURL connects as goal_owner, which owns the schema, to apply migrations at
 	// startup (GOAL_MIGRATE_DATABASE_URL). DatabaseURL connects as goal_app for everything else
@@ -74,9 +70,6 @@ type settings struct {
 	// GatewayKeyRef names the secret that signs task tokens (GOAL_GATEWAY_KEY_REF, default
 	// env:GOAL_GATEWAY_KEY).
 	GatewayKeyRef string
-	// TaskEnv maps variables of every agent run to secret references (GOAL_TASK_ENV,
-	// NAME=ref pairs separated by commas; default CLAUDE_CODE_OAUTH_TOKEN=env:CLAUDE_CODE_OAUTH_TOKEN).
-	TaskEnv map[string]string
 	// TickEvery is how often the engine pulls work (GOAL_TICK_EVERY, default 5s); RefreshEvery how
 	// often the current definition versions are reconciled with PostgreSQL (GOAL_REFRESH_EVERY,
 	// default 30s), a safety net behind the goal_definitions notices that reload them at once.
@@ -91,15 +84,6 @@ type settings struct {
 	// OrgRetention is how long a deleted organization is kept before it is purged with its rows
 	// and bucket objects (GOAL_ORG_RETENTION, default 7d; a Go duration or a number of days).
 	OrgRetention time.Duration
-	// GitHubAPIURL is the GitHub REST API goald merges pull requests through
-	// (GOAL_GITHUB_API_URL, default https://api.github.com; http only on a loopback address).
-	GitHubAPIURL string
-	// GitHubWebHost is the host (host[:port], lower case) of the GitHub that holds the factories'
-	// repositories and pull requests (GOAL_GITHUB_WEB_URL, an origin: default https://github.com,
-	// a GitHub Enterprise Server's own; http only on a loopback address). A definition chooses its
-	// repository's URL but the token is the install's, so clones reach only this host and merges
-	// only its pull requests.
-	GitHubWebHost string
 	// Models are the models the factory editor offers (GOAL_MODELS: comma-separated model ids,
 	// each optionally id=Label; the first is the default; default defaultModels).
 	Models []builder.Model
@@ -115,8 +99,9 @@ type settings struct {
 	// default goal_agents): compose.yaml's agents network, whose goal-egress service is their
 	// only way out (ADR 0009 and its phase 4 amendment).
 	SandboxNetwork string
-	// Ignored are the removedVariables that are set: goald warns about them at start.
-	Ignored []string
+	// Ignored are the removed settings that are set: goald warns about each at start, naming
+	// what replaced it.
+	Ignored []removedSetting
 	// AllowPrivateUpstreams lets goald's requests for connections (their tests) reach private,
 	// loopback and link-local addresses too (GOAL_ALLOW_PRIVATE_UPSTREAMS: true or false, default
 	// false): for a laptop's own test servers, and refused when goald listens off loopback.
@@ -144,12 +129,10 @@ const (
 	authEnv        = "GOAL_AUTH"
 	upstreamEnv    = "GOAL_AUTH_UPSTREAM"
 	proxiesEnv     = "GOAL_TRUSTED_PROXIES"
-	githubWebEnv   = "GOAL_GITHUB_WEB_URL"
 	googleEnv      = "GOAL_AUTH_GOOGLE"
 	defaultAuthURL = "http://127.0.0.1:8081"
 	schemeHTTP     = "http"
 	schemeHTTPS    = "https"
-	taskEnvEnv     = "GOAL_TASK_ENV"
 	// sandboxNetworkEnv names the agents' network (compose.yaml's agents).
 	sandboxNetworkEnv = "GOAL_SANDBOX_NETWORK"
 
@@ -168,102 +151,42 @@ const (
 	authProxySecretRef = "env:" + authProxySecretEnv
 	defaultModels      = "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5"
 	defaultListen      = "127.0.0.1:8080"
-	defaultTaskEnv     = "CLAUDE_CODE_OAUTH_TOKEN=env:CLAUDE_CODE_OAUTH_TOKEN"
 	defaultKeyRef      = "env:GOAL_GATEWAY_KEY"
 	defaultImage       = "ghcr.io/byfrederick/goal-agent:0.2.0"
 	agentImageEnv      = "GOAL_AGENT_IMAGE"
 )
 
-// forbiddenTaskEnv never reaches a task: on a laptop the model is reached with the subscription
-// token, and an API key in a container would silently take over billing.
-var forbiddenTaskEnv = []string{"ANTHROPIC_API_KEY", "GOAL_GATEWAY_KEY", authProxySecretEnv, repositoryToken}
+// removedSetting is a setting of an earlier release that goald ignores, and what replaced it.
+type removedSetting struct {
+	name, instead string
+}
 
-// repositoryToken is the install's GitHub token, for the factory's runtime.repository (clones,
-// merges). Until phase 4's connectors give each connection its own credential, a definition may
-// also send it to GitHub's remote MCP server (githubMCPHost) in an https connection's headers,
-// and nowhere else (domain.SecretPolicy.RepositoryOnly, which authoring and the gateway apply).
+// Replacements of removed settings that several share.
 const (
-	repositoryToken = "GOAL_GITHUB_TOKEN" //nolint:gosec // a variable name, not a credential
-	githubMCPHost   = "api.githubcopilot.com"
+	insteadEgress    = "compose's goal-egress service, one policy for every box (ADR 0009's phase 4 amendment)"
+	insteadSandbox   = "nothing: a run's sandbox holds its workspace"
+	insteadModel     = "the factory's runtime.modelConnection, an organization connection (goal connection import-env creates one)"
+	insteadGitHubKey = "a github connection, named by the factory's runtime.repository.connection and connections (goal connection import-env creates it)"
 )
 
-// ownVariables are the environment variables of goald itself: every setting it reads
-// (settingsFrom, s3store.ConfigFromEnv) or reads later in phase 3 (GOAL_AUTH_GOOGLE), the
-// database passwords, the default gateway key and the AWS credentials the bucket client reads. A
-// factory definition may not reference them (authoring.EnvReferences, env-reserved), so no
-// definition can hand them to an agent or a connection.
-var ownVariables = []string{
-	"GOAL_MIGRATE_DATABASE_URL", "GOAL_DATABASE_URL", "GOAL_PG_PASSWORD", "GOAL_PG_OWNER_PASSWORD", "GOAL_PG_APP_PASSWORD",
-	listenEnv, publicURLEnv, gatewayEnv, gatewayURLEnv, "GOAL_GATEWAY_KEY_REF", "GOAL_GATEWAY_KEY", taskEnvEnv,
-	authEnv, upstreamEnv, proxiesEnv, googleEnv, authProxySecretEnv,
-	"GOAL_TICK_EVERY", "GOAL_REFRESH_EVERY", "GOAL_MAX_RUNS",
-	"GOAL_GITHUB_API_URL", githubWebEnv, "GOAL_LOG_LEVEL", "GOAL_LOG_FORMAT", agentImageEnv, "GOAL_ORG_RETENTION", "GOAL_MODELS",
-	"GOAL_DEFINITION_CACHE_BYTES", sandboxNetworkEnv, embedURLEnv, embedModelEnv, embedKeyEnv, kbWorkersEnv, uploadMaxEnv,
-	"GOAL_S3_BUCKET", "GOAL_S3_ENDPOINT", "GOAL_S3_ACCESS_KEY", "GOAL_S3_SECRET_KEY",
-	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", masterkey.KeysEnv, masterkey.FileEnv, allowPrivateEnv,
-}
-
-// identityVariables are the identity service's (auth/: its listen address, database, secrets,
-// base URL, bootstrap owner, mail and Google client), a person's API key for the CLI and the
-// database administrator `goal db init` connects as. goald never reads them, and a definition may
-// not reference them either, even when goald was started with them in its environment.
-var identityVariables = []string{
-	"GOAL_AUTH_LISTEN", "GOAL_AUTH_DATABASE_URL", "GOAL_PG_AUTH_PASSWORD", "BETTER_AUTH_SECRETS", "BETTER_AUTH_SECRET",
-	"BETTER_AUTH_URL", "GOAL_BOOTSTRAP_OWNER_EMAIL", "GOAL_SMTP_URL", "GOAL_SMTP_FROM", "GOAL_SMTP_PLAINTEXT",
-	"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
-	"GOAL_API_KEY", "GOAL_DATABASE_ADMIN_URL",
-}
-
-// removedVariables are settings of earlier releases that goald ignores, warning at start while
-// one is still set (spec 4 §5.13): the egress proxy is compose.yaml's goal-egress service now,
-// with one policy for every box (ADR 0009's phase 4 amendment); runs need no host folders, their
-// sandbox has everything; GOAL_AGENT_IMAGE replaces GOAL_DEFAULT_AGENT_IMAGE.
-var removedVariables = []string{
-	"GOAL_AGENT_EGRESS", "GOAL_EGRESS_NAME", "GOAL_EGRESS_IMAGE", "GOAL_WORKSPACE_ROOT", "GOAL_RUN_DIR", "GOAL_DEFAULT_AGENT_IMAGE",
-}
-
-// reserved is the variables definitions may not reference: goald's own (removed ones too), the identity service's,
-// the one its gateway key reference names, the platform secrets that never reach a task (forbiddenTaskEnv, but the
-// repository token, which serves the repository) and the variables GOAL_TASK_ENV hands every
-// task (the model's access, such as CLAUDE_CODE_OAUTH_TOKEN).
-func (s settings) reserved() []string {
-	out := slices.Concat(ownVariables, identityVariables, removedVariables)
-
-	add := func(ref string) {
-		if name, ok := strings.CutPrefix(ref, "env:"); ok && name != repositoryToken && !slices.Contains(out, name) {
-			out = append(out, name)
-		}
-	}
-
-	add(s.GatewayKeyRef)
-
-	for _, name := range forbiddenTaskEnv {
-		add("env:" + name)
-	}
-
-	for _, name := range slices.Sorted(maps.Keys(s.TaskEnv)) {
-		add(s.TaskEnv[name])
-	}
-
-	return out
-}
-
-// secretPolicy is the install's rule for definitions' env:NAME references until phase 4: the
-// reserved variables go nowhere, and the repository token, besides the repository, only to
-// GitHub's MCP server. Authoring validates with it (credentials) and the MCP gateway enforces
-// it again before resolving a reference for a version already published.
-func (s settings) secretPolicy() domain.SecretPolicy {
-	return domain.SecretPolicy{
-		Reserved: s.reserved(), RepositoryOnly: []string{repositoryToken}, ConnectionHosts: []string{githubMCPHost},
-	}
-}
-
-// credentials is the check of the env:NAME references versions published before phase 4 still
-// hold, until the cutover: they resolve through secrets, they follow secretPolicy (env-reserved),
-// and a repository must be on the install's GitHub host (GOAL_GITHUB_WEB_URL), the only one
-// clones reach. The connections check runs it beside its own.
-func (s settings) credentials(secrets ports.Secrets) authoring.EnvReferences {
-	return authoring.EnvReferences{Secrets: secrets, Policy: s.secretPolicy(), RepositoryHosts: []string{s.GitHubWebHost}}
+// removedSettings are the settings of earlier releases goald ignores, warning at start while one
+// is still set (spec 4 §5.13): the egress proxy is compose.yaml's goal-egress service; runs need
+// no host folders; GOAL_AGENT_IMAGE replaces GOAL_DEFAULT_AGENT_IMAGE; and since the cutover to
+// connections (spec 4 §14, step 5) factories sign in with their organization's connections, not
+// with goald's environment: runs get their model from the model connection, and clones and merges
+// use the repository's and the factory's connections.
+var removedSettings = []removedSetting{
+	{"GOAL_AGENT_EGRESS", insteadEgress},
+	{"GOAL_EGRESS_NAME", insteadEgress},
+	{"GOAL_EGRESS_IMAGE", insteadEgress},
+	{"GOAL_WORKSPACE_ROOT", insteadSandbox},
+	{"GOAL_RUN_DIR", insteadSandbox},
+	{"GOAL_DEFAULT_AGENT_IMAGE", agentImageEnv},
+	{"GOAL_TASK_ENV", insteadModel},
+	{"CLAUDE_CODE_OAUTH_TOKEN", insteadModel + "; runs no longer get it from goald's environment"},
+	{"GOAL_GITHUB_TOKEN", insteadGitHubKey},
+	{"GOAL_GITHUB_WEB_URL", "the github connection's host (goal connection import-env reads it)"},
+	{"GOAL_GITHUB_API_URL", "nothing: a github connection's host gives its API; goal catalog skills sync reads GOAL_SKILLS_GITHUB_API_URL"},
 }
 
 func settingsFrom(getenv func(string) string) (settings, error) {
@@ -283,7 +206,6 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 		Listen:        or(listenEnv, defaultListen),
 		GatewayKeyRef: or("GOAL_GATEWAY_KEY_REF", defaultKeyRef),
 		LogFormat:     or("GOAL_LOG_FORMAT", "json"),
-		GitHubAPIURL:  or("GOAL_GITHUB_API_URL", "https://api.github.com"),
 		AgentImage:    or(agentImageEnv, defaultImage),
 	}
 
@@ -295,10 +217,6 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 	errs = append(errs, sandboxSettings(&s, getenv, or)...)
 
 	var err error
-	if s.TaskEnv, err = taskEnv(or(taskEnvEnv, defaultTaskEnv)); err != nil {
-		errs = append(errs, err)
-	}
-
 	if s.TickEvery, err = duration(or("GOAL_TICK_EVERY", "5s")); err != nil {
 		errs = append(errs, fmt.Errorf("GOAL_TICK_EVERY: %w", err))
 	}
@@ -321,14 +239,6 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 
 	if err := s.LogLevel.UnmarshalText([]byte(or("GOAL_LOG_LEVEL", "info"))); err != nil {
 		errs = append(errs, fmt.Errorf("GOAL_LOG_LEVEL: %w", err))
-	}
-
-	if _, err := githubURL("GOAL_GITHUB_API_URL", s.GitHubAPIURL); err != nil {
-		errs = append(errs, err)
-	}
-
-	if s.GitHubWebHost, err = webHost(or(githubWebEnv, "https://github.com")); err != nil {
-		errs = append(errs, err)
 	}
 
 	if s.LogFormat != "json" && s.LogFormat != "text" {
@@ -375,9 +285,9 @@ func knowledgeSettings(s *settings, or func(name, def string) string) []error {
 func sandboxSettings(s *settings, getenv func(string) string, or func(name, def string) string) []error {
 	s.SandboxNetwork = or(sandboxNetworkEnv, docker.DefaultNetwork)
 
-	for _, name := range removedVariables {
-		if strings.TrimSpace(getenv(name)) != "" {
-			s.Ignored = append(s.Ignored, name)
+	for _, r := range removedSettings {
+		if strings.TrimSpace(getenv(r.name)) != "" {
+			s.Ignored = append(s.Ignored, r)
 		}
 	}
 
@@ -731,64 +641,6 @@ func (s settings) hosts() []string {
 	}
 
 	return out
-}
-
-// githubURL parses the GitHub URL setting name and refuses one that a repository token would
-// reach in clear text, except on this machine (a stand-in GitHub for tests).
-func githubURL(name, raw string) (*url.URL, error) {
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
-		return nil, fmt.Errorf("%s %q is not a URL", name, raw)
-	}
-
-	if u.Scheme != schemeHTTPS && (u.Scheme != schemeHTTP || !isLoopback(u.Hostname())) {
-		return nil, fmt.Errorf("%s %q must be https (http only on a loopback address)", name, raw)
-	}
-
-	return u, nil
-}
-
-// webHost reads GOAL_GITHUB_WEB_URL, an origin, as its host[:port] in lower case: the one host
-// the install's repository token may be sent to by clones and merges.
-func webHost(raw string) (string, error) {
-	u, err := githubURL(githubWebEnv, raw)
-	if err != nil {
-		return "", err
-	}
-
-	if u.User != nil || strings.Trim(u.Path, "/") != "" || u.RawQuery != "" || u.Fragment != "" {
-		return "", fmt.Errorf("%s %q must be an origin such as https://github.com, without a user or a path", githubWebEnv, raw)
-	}
-
-	return strings.ToLower(u.Host), nil
-}
-
-// taskEnv parses NAME=ref pairs. Values must be references (env:NAME), never secret literals,
-// and some names may never reach a task.
-func taskEnv(raw string) (map[string]string, error) {
-	out := map[string]string{}
-
-	for pair := range strings.SplitSeq(raw, ",") {
-		pair = strings.TrimSpace(pair)
-		if pair == "" {
-			continue
-		}
-
-		name, ref, ok := strings.Cut(pair, "=")
-		if !ok || name == "" || !strings.HasPrefix(ref, "env:") {
-			return nil, fmt.Errorf("GOAL_TASK_ENV: %q is not NAME=env:REF", name)
-		}
-
-		for _, f := range forbiddenTaskEnv {
-			if strings.EqualFold(name, f) {
-				return nil, fmt.Errorf("GOAL_TASK_ENV: %s must never reach an agent task", name)
-			}
-		}
-
-		out[name] = ref
-	}
-
-	return out, nil
 }
 
 // duration parses a positive Go duration, or a whole number of days such as 7d.

@@ -123,8 +123,8 @@ func parseSyncArgs(args []string) (syncArgs, error) {
 }
 
 // newSkillSource reads skills.sh and GitHub where the environment says (GOAL_SKILLS_DIRECTORY_URL,
-// GOAL_GITHUB_API_URL), with the optional tokens GOAL_SKILLS_DIRECTORY_TOKEN and
-// GOAL_GITHUB_TOKEN resolved through the Secrets port.
+// GOAL_SKILLS_GITHUB_API_URL), with the optional tokens GOAL_SKILLS_DIRECTORY_TOKEN and
+// GOAL_SKILLS_GITHUB_TOKEN resolved through the Secrets port.
 func newSkillSource(ctx context.Context, getenv func(string) string) (*skillssh.Source, error) {
 	secrets := envsecrets.New(func(name string) (string, bool) {
 		v := getenv(name)
@@ -145,14 +145,14 @@ func newSkillSource(ctx context.Context, getenv func(string) string) (*skillssh.
 		return nil, err
 	}
 
-	ghToken, err := token("GOAL_GITHUB_TOKEN")
+	ghToken, err := token("GOAL_SKILLS_GITHUB_TOKEN")
 	if err != nil {
 		return nil, err
 	}
 
 	return skillssh.New(skillssh.Config{
 		DirectoryURL: getenv("GOAL_SKILLS_DIRECTORY_URL"), DirectoryToken: dirToken,
-		GitHubAPIURL: getenv("GOAL_GITHUB_API_URL"), GitHubToken: ghToken,
+		GitHubAPIURL: getenv("GOAL_SKILLS_GITHUB_API_URL"), GitHubToken: ghToken,
 	})
 }
 

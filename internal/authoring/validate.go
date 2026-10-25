@@ -85,13 +85,12 @@ const (
 	checkSchema = "schema"
 )
 
-var configChecks = []string{"line", "references", "tools", "removed", "images", "secrets", "availability"}
+var configChecks = []string{"line", "references", "tools", "removed", "availability"}
 
 var checkSections = map[string]string{
 	checkYAML: domain.SectionFiles, checkSchema: domain.SectionFiles, "line": domain.SectionLine,
 	"references": domain.SectionAgents, CheckName: domain.SectionBasics, CheckItems: domain.SectionLine,
 	"tools": domain.SectionBasics, "removed": domain.SectionBasics,
-	"images": domain.SectionConnections, "secrets": domain.SectionConnections,
 	"availability": domain.SectionConnections, CheckConnections: domain.SectionConnections,
 }
 
@@ -451,15 +450,13 @@ func results(ran []string, problems []domain.DefinitionProblem, f *config.Factor
 }
 
 // staticSummaries are the green lines of checks whose summary needs no data.
-var staticSummaries = map[string]string{ //nolint:gosec // check summaries, not credentials
+var staticSummaries = map[string]string{
 	checkYAML:      "Every file parses",
 	checkSchema:    "factory.yaml matches the schema",
 	"references":   "Every agent, skill, contract, connection and prompt it names exists",
 	"tools":        "Every tool is a mise tool spec",
 	"removed":      "Uses none of the removed forms",
 	CheckItems:     "No open items at a removed station",
-	"images":       "Every connection image is pinned",
-	"secrets":      "Secrets are references, not values",
 	"availability": "Everything it declares is available on this install",
 }
 
@@ -488,21 +485,9 @@ func passedSummary(id string, f *config.Factory, m Model) string {
 }
 
 // connectionsSummary counts what the connections check found: the organization's connections
-// and knowledge sources the definition names, and the secret references of removed forms.
+// and knowledge sources the definition names.
 func connectionsSummary(f *config.Factory) string {
-	names := []string{f.Spec.Runtime.ModelConnection}
-	if r := f.Spec.Runtime.Repository; r != nil {
-		names = append(names, r.Connection)
-	}
-
-	for _, c := range f.Spec.Connections {
-		if !c.Inline() {
-			names = append(names, c.Name)
-		}
-	}
-
-	slices.Sort(names)
-	names = slices.DeleteFunc(slices.Compact(names), func(n string) bool { return n == "" })
+	names := f.ConnectionNames()
 
 	var parts []string
 	if len(names) > 0 {
@@ -511,18 +496,6 @@ func connectionsSummary(f *config.Factory) string {
 
 	if k := f.Spec.Knowledge; k != nil && len(k.Sources) > 0 {
 		parts = append(parts, plural(len(k.Sources), "knowledge source exists", "knowledge sources exist"))
-	}
-
-	refs := 0
-
-	for _, u := range f.SecretUses() {
-		if !u.Literal() {
-			refs++
-		}
-	}
-
-	if refs > 0 {
-		parts = append(parts, plural(refs, "secret reference resolves", "secret references resolve"))
 	}
 
 	if len(parts) == 0 {

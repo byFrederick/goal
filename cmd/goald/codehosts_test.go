@@ -1,59 +1,76 @@
 package main
 
 import (
-	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
+	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports/porttest"
 )
 
-// Until merges use the organization's connections, the repository token is a github connection
-// on the install's GitHub host, which the github code host can use.
-func TestRepositoryConnections_TheRepositoryTokenOnTheInstallsHost(t *testing.T) {
+// Every platform kind that names a code host has its adapter in goald, so its connections merge.
+func TestCodeHosts_EveryPlatformCodeHostHasAnAdapter(t *testing.T) {
 	t.Parallel()
 
-	const token = "ghp_repository-token" //nolint:gosec // a made-up token
-
-	open := repositoryConnections(porttest.Secrets{"GOAL_GITHUB_TOKEN": token}, domain.SecretPolicy{}, "ghe.example.com")
-
-	line := domain.Line{Runtime: domain.Runtime{Repository: domain.Repository{
-		URL: "https://ghe.example.com/acme/app.git", AuthRef: "env:GOAL_GITHUB_TOKEN",
-	}}}
-
-	conns, err := open(t.Context(), line)
-	if err != nil || len(conns) != 1 {
-		t.Fatalf("connections = %+v, %v; want one", conns, err)
+	kinds, err := connkind.Platform()
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	if host, password, err := conns[0].GitLogin(); err != nil || host != "ghe.example.com" || password != token ||
-		codeHosts(settings{})[conns[0].Kind.Spec.CodeHost] == nil {
-		t.Errorf("connection's code host %q, git login %q (%v); want a code host goald has, for ghe.example.com with the token",
-			conns[0].Kind.Spec.CodeHost, host, err)
-	}
+	hosts := codeHosts(false)
 
-	// A factory without a repository token has no connection to merge with.
-	if conns, err := open(t.Context(), domain.Line{}); err != nil || len(conns) != 0 {
-		t.Errorf("connections without a token = %+v, %v; want none", conns, err)
+	for _, k := range kinds {
+		if name := k.Spec.CodeHost; name != "" && hosts[name] == nil {
+			t.Errorf("kind %s names code host %q, which goald lacks", k.Name, name)
+		}
 	}
 }
 
-// A version published before a variable was reserved may still name it as the repository's token:
-// the install's policy refuses it before it is resolved, so the code host never receives goald's
-// own secrets.
-func TestRepositoryConnections_RefusesAReservedToken(t *testing.T) {
+// A merge reaches the connection's host through the connection transport: public addresses
+// only (threat row 4), so a connection whose host is goald's own network gets no request.
+func TestCodeHosts_ReachPublicAddressesOnly(t *testing.T) {
 	t.Parallel()
 
-	const secret = "gateway-key-never-sent"
+	var asked atomic.Int64
 
-	open := repositoryConnections(porttest.Secrets{"GOAL_GATEWAY_KEY": secret},
-		domain.SecretPolicy{Reserved: []string{"GOAL_GATEWAY_KEY"}}, "github.com")
+	private := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { asked.Add(1) }))
+	t.Cleanup(private.Close)
 
-	line := domain.Line{Runtime: domain.Runtime{Repository: domain.Repository{URL: "https://github.com/acme/app.git", AuthRef: "env:GOAL_GATEWAY_KEY"}}}
+	host := strings.TrimPrefix(private.URL, "https://")
 
-	conns, err := open(t.Context(), line)
-	if !errors.Is(err, domain.ErrSecretReserved) || len(conns) != 0 || strings.Contains(err.Error(), secret) {
-		t.Errorf("connections = %+v, %v; want the reserved token refused", conns, err)
+	kinds, err := connkind.Platform()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for name, ch := range codeHosts(false) {
+		var kind domain.ConnectionKind
+
+		for _, k := range kinds {
+			if k.Spec.CodeHost == name {
+				kind = k
+			}
+		}
+
+		conn := domain.ResolvedConnection{
+			Connection: domain.Connection{Name: name, Kind: kind.Name}, Kind: kind,
+			Values: map[string]string{"token": "a-token-never-sent", "host": host}, //nolint:gosec // a made-up token
+		}
+
+		url := "https://" + host + "/acme/app/pull/1"
+		if name == "gitlab" {
+			url = "https://" + host + "/acme/app/-/merge_requests/1"
+		}
+
+		if _, err := ch.PullRequest(t.Context(), conn, url); err == nil || strings.Contains(err.Error(), "a-token-never-sent") {
+			t.Errorf("%s: PullRequest on a loopback host = %v; want it refused, without the token", name, err)
+		}
+	}
+
+	if n := asked.Load(); n != 0 {
+		t.Errorf("the private host was asked %d times; want never", n)
 	}
 }

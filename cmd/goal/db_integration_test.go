@@ -350,7 +350,7 @@ func TestDB_Rekey(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := postgres.NewConnections(store, onlyNew).Resolve(ctx, []string{orgAcme}, "run-1")
+	got, err := postgres.NewConnections(store, onlyNew).Resolve(ctx, []string{orgAcme}, domain.ConnectionUse{Run: "run-1"})
 	if err != nil || got[0].Values["key"] != "s3cret" {
 		t.Errorf("Resolve under the new key alone = %+v, %v", got, err)
 	}

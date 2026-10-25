@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -29,5 +31,59 @@ func TestAgentSpec_Limits(t *testing.T) {
 				t.Errorf("Limits = %d, %v; want %d, %v", turns, usd, tt.wantTurns, tt.wantUSD)
 			}
 		})
+	}
+}
+
+// Since the cutover a line runs only on connections: a version with a form they replaced, or
+// without a model connection, is refused with what to do, naming the forms.
+func TestLine_Refusal(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		line Line
+		want []string // in the reason; none for a line that runs
+	}{
+		{name: "on connections", line: Line{Runtime: Runtime{ModelConnection: "claude"}}},
+		{
+			name: "a removed form", line: Line{
+				Number: 3, Runtime: Runtime{ModelConnection: "claude"}, Removed: []string{"spec.runtime.repository.token (env-reference-removed)"},
+			},
+			want: []string{"version 3", "spec.runtime.repository.token (env-reference-removed)", "publish a version with connections (spec 4 §4.4)"},
+		},
+		{
+			name: "no model connection", line: Line{Number: 2},
+			want: []string{"version 2", "runtime.modelConnection", "publish a version with connections (spec 4 §4.4)"},
+		},
+	}
+
+	for _, tt := range tests {
+		got := tt.line.Refusal()
+		if (got == "") != (len(tt.want) == 0) {
+			t.Errorf("%s: refusal %q; want one: %v", tt.name, got, len(tt.want) > 0)
+		}
+
+		for _, w := range tt.want {
+			if !strings.Contains(got, w) {
+				t.Errorf("%s: refusal %q; want %q in it", tt.name, got, w)
+			}
+		}
+	}
+}
+
+// A merge may use the line's connections and its repository's, each once.
+func TestLine_MergeConnections(t *testing.T) {
+	t.Parallel()
+
+	const repos = "repos"
+
+	l := Line{Connections: []string{repos, "datadog"}, Runtime: Runtime{Repository: Repository{Connection: "gitlab"}}}
+	if got := l.MergeConnections(); !slices.Equal(got, []string{repos, "datadog", "gitlab"}) {
+		t.Errorf("MergeConnections = %v", got)
+	}
+
+	l.Runtime.Repository.Connection = repos
+	if got := l.MergeConnections(); !slices.Equal(got, []string{repos, "datadog"}) {
+		t.Errorf("MergeConnections with the repository's listed = %v", got)
 	}
 }

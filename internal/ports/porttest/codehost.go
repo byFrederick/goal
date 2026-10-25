@@ -115,29 +115,6 @@ func (c *CodeHost) DeleteBranch(_ context.Context, conn domain.ResolvedConnectio
 	return nil
 }
 
-// CodeHostConnection is a resolved connection named name of a kind whose code host is codeHost
-// and whose git login is for host, with a test token.
-func CodeHostConnection(name, codeHost, host string) domain.ResolvedConnection {
-	kind := domain.ConnectionKind{Name: name, Spec: domain.KindSpec{
-		Fields:   []domain.KindField{{Name: "token", Secret: true, Required: true}, {Name: "host", Required: true}},
-		Env:      map[string]string{"CODE_TOKEN": "{{token}}"},
-		Git:      &domain.KindGit{Host: "{{host}}", Username: "x-access-token", PasswordEnv: "CODE_TOKEN"},
-		CodeHost: codeHost,
-	}}
-
-	return domain.ResolvedConnection{
-		Connection: domain.Connection{Name: name, Kind: name}, Kind: kind,
-		Values: map[string]string{"token": "code-host-token", "host": host},
-	}
-}
-
-// CodeHostConnections returns conns for every line, as an engine.MergeConnections does.
-func CodeHostConnections(conns ...domain.ResolvedConnection) func(context.Context, domain.Line) ([]domain.ResolvedConnection, error) {
-	return func(context.Context, domain.Line) ([]domain.ResolvedConnection, error) {
-		return slices.Clone(conns), nil
-	}
-}
-
 // onHost refuses a pull request URL that is not on the host of the connection's git login.
 func onHost(conn domain.ResolvedConnection, raw string) error {
 	host, _, err := conn.GitLogin()

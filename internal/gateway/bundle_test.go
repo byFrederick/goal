@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -123,26 +122,6 @@ spec:
       - { id: done, kind: done }
 `
 
-// legacyBundleYAML is the factory of a version published before connections: the repository is
-// cloned with a token from goald's environment.
-const legacyBundleYAML = `apiVersion: goal/v1
-kind: Factory
-metadata: { id: ` + string(factoryID) + `, name: acme-bundle }
-spec:
-  runtime:
-    runner: docker
-    image: ghcr.io/acme/agent:1.0.0
-    auth: anthropic-api-key
-    repository: { url: "https://github.com/acme/api.git", token: "env:ACME_REPO_TOKEN" }
-  agents:
-    - { name: engineer, prompt: ./agents/engineer.md }
-  board:
-    stations:
-      - { id: spec, kind: human }
-      - { id: build, kind: agent, agent: engineer }
-      - { id: done, kind: done }
-`
-
 var bundleFiles = map[string]string{
 	"skills/acme-conventions/SKILL.md": "---\nname: acme-conventions\n---\n",
 	"contracts/change.json":            `{"type":"object"}`,
@@ -219,7 +198,7 @@ func request(t *testing.T, method, url, token string) (int, http.Header, []byte)
 func TestServeRun_ServesTheRunsBundle(t *testing.T) {
 	t.Parallel()
 
-	h := newHarnessWith(t, Config{}, harnessDeps{yaml: bundleYAML, files: bundleFiles, secrets: porttest.Secrets{}})
+	h := newHarnessWith(t, Config{}, harnessDeps{yaml: bundleYAML, files: bundleFiles})
 	it := h.submit(t, factoryID, "Add a health endpoint", "For the load balancer.")
 	c := h.claims()
 	c.ItemID, c.Connections = it.ID, []string{connTracker, connDocs}
@@ -269,38 +248,12 @@ func TestServeRun_ServesTheRunsBundle(t *testing.T) {
 		},
 		Files:      map[string][]byte{"agent/prompt.md": []byte("# engineer\n"), "agent/output.schema.json": []byte(`{"type":"object"}`)},
 		Repository: &bundleRepository{URL: "https://github.com/acme/api.git", Branch: it.Branch()},
-		Git:        []gitCredential{{Host: "github.com", Username: repositoryUser, PasswordEnv: "CODE_TOKEN"}},
+		Git:        []gitCredential{{Host: "github.com", Username: "x-access-token", PasswordEnv: "CODE_TOKEN"}},
 		Tools:      []string{"task@3.46.1", "npm:@acme/issues-cli@2.0.0"},
 	}
 
 	if g, w := mustJSON(t, got), mustJSON(t, want); g != w {
 		t.Errorf("bundle\n got %s\nwant %s", g, w)
-	}
-}
-
-// A version published before connections clones with the repository token, whose variable the
-// git credential names; its runs get no connection in the bundle.
-func TestServeRun_LegacyRepositoryToken(t *testing.T) {
-	t.Parallel()
-
-	h := newHarnessWith(t, Config{}, harnessDeps{yaml: legacyBundleYAML, secrets: porttest.Secrets{"ACME_REPO_TOKEN": cloneToken}})
-	it := h.submit(t, factoryID, "Add a health endpoint", "")
-	c := h.claims()
-	c.ItemID = it.ID
-
-	status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, c))
-	if status != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (%s)", status, body)
-	}
-
-	var got runBundle
-	if err := json.Unmarshal(body, &got); err != nil {
-		t.Fatal(err)
-	}
-
-	want := []gitCredential{{Host: "github.com", Username: repositoryUser, PasswordEnv: domain.RunEnvRepositoryToken}}
-	if !reflect.DeepEqual(got.Git, want) || len(got.Spec.Connections) != 0 || strings.Contains(string(body), cloneToken) {
-		t.Errorf("git credentials %+v and connections %+v; want %+v and none, without the token", got.Git, got.Spec.Connections, want)
 	}
 }
 
@@ -310,7 +263,7 @@ func TestServeRun_OneGitLoginPerCredential(t *testing.T) {
 
 	yaml := strings.ReplaceAll(strings.ReplaceAll(bundleYAML, "connections: [issues, docs, wiki]\n  skills", "connections: [issues, docs, wiki, code]\n  skills"),
 		"connections: [issues, docs, wiki]\n      tools", "connections: [code, issues]\n      tools")
-	h := newHarnessWith(t, Config{}, harnessDeps{yaml: yaml, files: bundleFiles, secrets: porttest.Secrets{}})
+	h := newHarnessWith(t, Config{}, harnessDeps{yaml: yaml, files: bundleFiles})
 	it := h.submit(t, factoryID, "Add a health endpoint", "")
 	c := h.claims()
 	c.ItemID, c.Connections = it.ID, []string{"code", connTracker}

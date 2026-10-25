@@ -17,10 +17,10 @@ import (
 
 const repoURL = "https://" + gitHost + "/acme/app.git"
 
-// repoLine is a one-station line whose runs clone repoURL with the repository token.
+// repoLine is a one-station line whose runs clone repoURL with the repository connection connGit.
 func repoLine() domain.Line {
 	line := lineOf(agentStation(stWork, agWorker, 1, 1))
-	line.Runtime.Repository = domain.Repository{URL: repoURL, AuthRef: "env:GIT_TOKEN"}
+	line.Runtime.Repository = domain.Repository{URL: repoURL, Connection: connGit}
 
 	return line
 }
@@ -101,7 +101,8 @@ func isSubsequence(s []domain.EventKind, want ...domain.EventKind) bool {
 }
 
 // Each exec gets what it needs and nothing more: prepare the run's token and the repository
-// token, the agent the run's token and the model's access, never the repository token.
+// connection's git password, the agent the run's token and the model's access, never the
+// repository's password.
 func TestRun_EachExecGetsItsOwnEnvironment(t *testing.T) {
 	t.Parallel()
 
@@ -118,22 +119,22 @@ func TestRun_EachExecGetsItsOwnEnvironment(t *testing.T) {
 	run := h.runs(t, testOrg, it.ID)[0].ID
 
 	prepare := prepares[0]
-	if !slices.Equal(prepare.Argv, []string{"goal-agent", "prepare"}) || prepare.Env["GOAL_REPOSITORY_TOKEN"] != gitToken ||
+	if !slices.Equal(prepare.Argv, []string{"goal-agent", "prepare"}) || prepare.Env[envCodeToken] != codeToken ||
 		prepare.Env["GOAL_GATEWAY_URL"] != gatewayURL || h.claims(t, prepare.Env["GOAL_GATEWAY_TOKEN"]).RunID != run {
 		t.Errorf("prepare = %q with env %v; want goal-agent prepare with the repository token and the run's task token", prepare.Argv, keys(prepare.Env))
 	}
 
-	if _, ok := prepare.Env["MODEL_ACCESS"]; ok {
+	if _, ok := prepare.Env[envModelKey]; ok {
 		t.Error("prepare got the model's access")
 	}
 
 	agent := runs[0]
-	if !slices.Equal(agent.Argv, []string{"goal-agent", "run"}) || agent.Env["MODEL_ACCESS"] != modelToken ||
+	if !slices.Equal(agent.Argv, []string{"goal-agent", "run"}) || agent.Env[envModelKey] != modelKey ||
 		h.claims(t, agent.Env["GOAL_GATEWAY_TOKEN"]).RunID != run {
 		t.Errorf("agent = %q with env %v; want goal-agent run with the model's access and the run's task token", agent.Argv, keys(agent.Env))
 	}
 
-	if _, ok := agent.Env["GOAL_REPOSITORY_TOKEN"]; ok {
+	if _, ok := agent.Env[envCodeToken]; ok {
 		t.Error("the agent got the repository token")
 	}
 }
@@ -174,7 +175,7 @@ func TestRun_AgentHearsWhatItsWorkspaceHolds(t *testing.T) {
 				}
 			}
 
-			if strings.Contains(feedback, gitToken) || strings.Contains(feedback, "GIT_TOKEN") {
+			if strings.Contains(feedback, codeToken) || strings.Contains(feedback, envCodeToken) {
 				t.Errorf("feedback %q names the repository credential", feedback)
 			}
 		})
@@ -195,7 +196,7 @@ func TestRun_NoFeedbackWhenThereIsNothingToAdd(t *testing.T) {
 		t.Errorf("GOAL_FEEDBACK = %q, want it unset", feedback)
 	}
 
-	if _, ok := h.worker.Prepares()[0].Env["GOAL_REPOSITORY_TOKEN"]; ok {
+	if _, ok := h.worker.Prepares()[0].Env[envCodeToken]; ok {
 		t.Error("prepare got a repository token for a factory without a repository")
 	}
 }
@@ -206,7 +207,7 @@ func TestRun_PrepareFailureFailsTheRun(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t, repoLine(), porttest.Succeed(`{}`))
-	h.worker.FailPrepare(1, "goal-agent prepare: git clone exited 128 with "+gitToken)
+	h.worker.FailPrepare(1, "goal-agent prepare: git clone exited 128 with "+codeToken)
 	it := h.submit(t, domain.NewItem{})
 
 	h.step(t)
@@ -216,7 +217,7 @@ func TestRun_PrepareFailureFailsTheRun(t *testing.T) {
 	}
 
 	reason, _ := h.eventsOf(it.ID, domain.EventBlocked)[0].Data["reason"].(string)
-	if !strings.Contains(reason, "prepare") || !strings.Contains(reason, "git clone exited 128") || strings.Contains(reason, gitToken) {
+	if !strings.Contains(reason, "prepare") || !strings.Contains(reason, "git clone exited 128") || strings.Contains(reason, codeToken) {
 		t.Errorf("blocked reason %q, want prepare's failure without the token", reason)
 	}
 
@@ -231,18 +232,22 @@ func TestRun_PrepareFailureFailsTheRun(t *testing.T) {
 	h.noSandboxes(t)
 }
 
-// The repository token reaches only the install's repository hosts and never names a reserved
-// variable, even for a version published before the rule: the run fails before any sandbox.
-func TestRun_RepositoryTokenOnlyForTheInstallsHosts(t *testing.T) {
+// Since the cutover a version runs on connections only: one that still has a form connections
+// replaced, or names no model connection, blocks its items with what to do, before any run, box
+// or connection is opened (spec 4 §14, step 5).
+func TestRun_RefusesAVersionThatDoesNotRunOnConnections(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name string
-		repo domain.Repository
+		edit func(*domain.Line)
 		want string
 	}{
-		{name: "another host", repo: domain.Repository{URL: "https://code.example.com/acme/app.git", AuthRef: "env:GIT_TOKEN"}, want: "code.example.com"},
-		{name: "reserved variable", repo: domain.Repository{URL: repoURL, AuthRef: "env:GOAL_GATEWAY_KEY"}, want: "env-reserved"},
+		{
+			name: "a removed form", want: "spec.runtime.repository.token (env-reference-removed)",
+			edit: func(l *domain.Line) { l.Removed = []string{"spec.runtime.repository.token (env-reference-removed)"} },
+		},
+		{name: "no model connection", want: "runtime.modelConnection", edit: func(l *domain.Line) { l.Runtime.ModelConnection = "" }},
 	}
 
 	for _, tt := range tests {
@@ -250,7 +255,7 @@ func TestRun_RepositoryTokenOnlyForTheInstallsHosts(t *testing.T) {
 			t.Parallel()
 
 			line := repoLine()
-			line.Runtime.Repository = tt.repo
+			tt.edit(&line)
 			h := newHarness(t, line, porttest.Succeed(`{}`))
 			it := h.submit(t, domain.NewItem{})
 
@@ -260,13 +265,17 @@ func TestRun_RepositoryTokenOnlyForTheInstallsHosts(t *testing.T) {
 				t.Fatalf("item is %s, want blocked", got.State)
 			}
 
-			if reason, _ := h.eventsOf(it.ID, domain.EventBlocked)[0].Data["reason"].(string); !strings.Contains(reason, tt.want) {
-				t.Errorf("blocked reason %q does not mention %q", reason, tt.want)
+			reason, _ := h.eventsOf(it.ID, domain.EventBlocked)[0].Data["reason"].(string)
+			if !strings.Contains(reason, tt.want) || !strings.Contains(reason, "publish a version with connections (spec 4 §4.4)") {
+				t.Errorf("blocked reason %q; want it to name %q and the fix", reason, tt.want)
 			}
 
-			if n := len(h.worker.Prepares()); n != 0 {
-				t.Errorf("%d prepares, want none", n)
+			used, err := h.tenancy.AuditLog(inOrg(t), ports.AuditQuery{Limit: 10, Action: domain.AuditConnectionUsed})
+			if runs := h.runs(t, testOrg, it.ID); len(runs) != 0 || len(h.worker.Prepares()) != 0 || err != nil || len(used) != 0 {
+				t.Errorf("%d runs, %d prepares, connections used %+v (%v); want none", len(runs), len(h.worker.Prepares()), used, err)
 			}
+
+			h.noSandboxes(t)
 		})
 	}
 }
@@ -358,7 +367,7 @@ func TestRun_RelaysAgentEventsScrubbed(t *testing.T) {
 		_, _ = io.WriteString(stdout, "go: downloading example.com/mod v1.0.0\n")
 		_, _ = io.WriteString(stdout, `{"type":"message","text":"`+strings.Repeat("x", 17<<20)+`"}`+"\n") // over the line limit: dropped
 		_, _ = io.WriteString(stdout, `{"type":"tool_use","at":"2026-10-23T09:00:01Z","id":"t1","tool":"Bash","input":"echo `+
-			run.Env["MODEL_ACCESS"]+`"}`+"\n")
+			run.Env[envModelKey]+`"}`+"\n")
 		_, _ = io.WriteString(stdout, `{"type":"finished","status":"failed","permission_denials":[{"tool":"Bash","id":"t2"}]}`+"\n")
 
 		return domain.RunResult{Status: domain.RunFailed, Error: "gave up with " + run.Env["GOAL_GATEWAY_TOKEN"]}
@@ -372,7 +381,7 @@ func TestRun_RelaysAgentEventsScrubbed(t *testing.T) {
 		t.Fatalf("tool_call events %+v, want one of the run, by its agent", calls)
 	}
 
-	if input, _ := calls[0].Data["input"].(string); strings.Contains(input, modelToken) || !strings.Contains(input, "[redacted]") {
+	if input, _ := calls[0].Data["input"].(string); strings.Contains(input, modelKey) || !strings.Contains(input, "[redacted]") {
 		t.Errorf("tool_call input %q, want the model's access redacted", input)
 	}
 

@@ -2,139 +2,33 @@ package gateway
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"maps"
-	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/domain"
 )
 
-// Reasons a granted connection is not served. They reach the agent and the logs, so they
-// never carry a value.
-const (
-	// reasonStdio: stdio servers run only inside a run's box, as organization connections.
-	reasonStdio       = "stdio MCP servers run in the box: make it an organization connection (kind mcp-server)"
-	reasonKind        = " connections are not served"
-	reasonURL         = "its url is not https (plain http is allowed to loopback only)"
-	reasonCredentials = "its credentials are not configured"
-	reasonRefused     = "it references a secret this install does not send there"
-	reasonUpstream    = "the upstream server did not answer"
-)
+// sep joins a server and a tool into the name an agent sees: "knowledge__search".
+const sep = "__"
 
-// metaConnections is the tools/list _meta key that reports each granted connection's status.
-const metaConnections = "goal/connections"
-
-// session is one request's view of a task: its claims, its granted connections with their
-// resolved credentials, and its tool policy.
+// session is one request's view of a task: its claims and the knowledge sources its tools reach.
 type session struct {
 	g      *Gateway
 	claims domain.TaskClaims
-	policy policy
-	conns  []*connection
 	// sources are the knowledge sources the run's version lists, which Goal's knowledge tools
 	// search and read; none serves no knowledge tool.
 	sources []string
-	// secrets are the resolved credential values, scrubbed from everything the gateway
-	// returns, logs or records.
-	secrets []string
 }
 
-// connection is a granted inline connection's remote server (url and headers). unavailable, when
-// set, says why it is not served and err holds the cause for the log.
-type connection struct {
-	name        string
-	url         string
-	headers     map[string]string
-	unavailable string
-	err         error
-}
-
-// grant prepares the inline connections named both by the agent and by the token, in agent
-// order. The organization's connections are the box's, so they are not the gateway's to serve.
-func (s *session) grant(ctx context.Context, all []config.Connection, agentConns []string) {
-	for _, name := range agentConns {
-		i := slices.IndexFunc(all, func(c config.Connection) bool { return c.Name == name })
-		if i < 0 || !all[i].Inline() || !slices.Contains(s.claims.Connections, name) {
-			continue
-		}
-
-		s.conns = append(s.conns, s.prepare(ctx, all[i]))
-	}
-}
-
-func (s *session) prepare(ctx context.Context, c config.Connection) *connection {
-	conn := &connection{name: c.Name, url: c.URL}
-
-	switch {
-	case c.Type == "mcp" && c.Transport == "http":
-	case c.Type == "mcp":
-		conn.unavailable = reasonStdio
-
-		return conn
-	default:
-		conn.unavailable = c.Type + reasonKind
-
-		return conn
-	}
-
-	if err := checkURL(c.URL); err != nil {
-		conn.unavailable, conn.err = reasonURL, err
-
-		return conn
-	}
-
-	conn.headers = make(map[string]string, len(c.Headers))
-
-	for _, name := range slices.Sorted(maps.Keys(c.Headers)) {
-		v, err := s.resolve(ctx, c.Headers[name], c.URL)
-		if err != nil {
-			s.unresolved(ctx, conn, fmt.Errorf("header %s: %w", name, err))
-
-			return conn
-		}
-
-		conn.headers[name] = v
-	}
-
-	return conn
-}
-
-// unresolved makes conn unavailable because one of its references was refused or did not
-// resolve. A refusal is logged as it happens: it means a published version names a secret
-// where the install's policy does not send it.
-func (s *session) unresolved(ctx context.Context, conn *connection, err error) {
-	conn.unavailable, conn.err = reasonCredentials, err
-
-	if errors.Is(err, errRefused) {
-		conn.unavailable = reasonRefused
-		s.g.log.WarnContext(ctx, "gateway refused to send a secret", claimAttrs(s.claims,
-			"connection", conn.name, "error", s.redactErr(err))...)
-	}
-}
-
-func (s *session) connection(name string) *connection {
-	i := slices.IndexFunc(s.conns, func(c *connection) bool { return c.name == name })
-	if i < 0 {
-		return nil
-	}
-
-	return s.conns[i]
-}
-
-// server is the MCP server for this request. Tools are not registered with it: tools/list
-// and tools/call are answered by intercept from the upstream servers.
+// server is the MCP server for this request. Tools are not registered with it: tools/list and
+// tools/call are answered by intercept, from what the task may call.
 func (s *session) server() *mcp.Server {
 	srv := mcp.NewServer(implementation, &mcp.ServerOptions{
-		Instructions: s.instructions(),
+		Instructions: "Goal gateway: Goal's own tools for this run, named <server>" + sep + "<tool>.",
 		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
 	})
 	srv.AddReceivingMiddleware(s.intercept)
@@ -142,25 +36,11 @@ func (s *session) server() *mcp.Server {
 	return srv
 }
 
-func (s *session) instructions() string {
-	var b strings.Builder
-
-	b.WriteString("Goal gateway. Tools are named <connection>" + sep + "<tool>; credentials are added by the gateway.")
-
-	for _, c := range s.conns {
-		if c.unavailable != "" {
-			fmt.Fprintf(&b, "\nConnection %s is unavailable: %s.", c.name, c.unavailable)
-		}
-	}
-
-	return b.String()
-}
-
 func (s *session) intercept(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 		switch r := req.(type) {
 		case *mcp.ListToolsRequest:
-			return s.listTools(ctx), nil
+			return s.listTools(), nil
 		case *mcp.CallToolRequest:
 			return s.callTool(ctx, r.Params)
 		default:
@@ -169,180 +49,31 @@ func (s *session) intercept(next mcp.MethodHandler) mcp.MethodHandler {
 	}
 }
 
-// listTools lists the permitted tools of every served connection, asking the upstream servers
-// in parallel. A connection that is unavailable or fails is logged and reported in _meta; it
-// never fails the list.
-func (s *session) listTools(ctx context.Context) *mcp.ListToolsResult {
-	ctx, cancel := upstreamContext(ctx, s.g.cfg.ListTimeout)
-	defer cancel()
-
-	lists := make([][]*mcp.Tool, len(s.conns))
-	errs := make([]error, len(s.conns))
-
-	var wg sync.WaitGroup
-
-	for i, c := range s.conns {
-		if c.unavailable == "" {
-			wg.Go(func() { lists[i], errs[i] = s.upstreamTools(ctx, c) })
-		}
-	}
-
-	wg.Wait()
-
-	status := make(map[string]string, len(s.conns))
+// listTools lists the tools the task may call: the knowledge tools when its version lists sources.
+func (s *session) listTools() *mcp.ListToolsResult {
 	tools := []*mcp.Tool{}
-
 	if len(s.sources) > 0 {
 		tools = append(tools, knowledgeTools(s.sources)...)
 	}
 
-	for i, c := range s.conns {
-		if c.unavailable == "" && errs[i] != nil {
-			c.unavailable, c.err = reasonUpstream, errs[i]
-		}
-
-		if c.unavailable != "" {
-			status[c.name] = "unavailable: " + c.unavailable
-			s.g.log.WarnContext(ctx, "gateway connection unavailable", claimAttrs(s.claims,
-				"connection", c.name, "reason", c.unavailable, "error", s.redactErr(c.err))...)
-
-			continue
-		}
-
-		status[c.name] = "available"
-
-		tools = append(tools, lists[i]...)
-	}
-
 	// The list depends on the task's token, so it is private. The result bypasses the SDK's own
 	// tools/list handler, which would fill in the cache scope; clients reject an empty one.
-	return &mcp.ListToolsResult{
-		Tools: tools, Meta: mcp.Meta{metaConnections: status}, Cacheable: mcp.Cacheable{CacheScope: "private"},
-	}
+	return &mcp.ListToolsResult{Tools: tools, Cacheable: mcp.Cacheable{CacheScope: "private"}}
 }
 
-func (s *session) upstreamTools(ctx context.Context, c *connection) ([]*mcp.Tool, error) {
-	cs, done, err := s.open(ctx, c)
-	if err != nil {
-		return nil, err
-	}
-	defer done()
-
-	var out []*mcp.Tool
-
-	for t, err := range cs.Tools(ctx, nil) {
-		if err != nil {
-			return nil, fmt.Errorf("list tools of %s: %w", c.name, err)
-		}
-
-		if s.policy.permits(c.name, t.Name) {
-			named := *t
-			named.Name = c.name + sep + t.Name
-			out = append(out, &named)
-		}
-	}
-
-	return out, nil
-}
-
-// callTool proxies one call to its upstream server and records it. A tool the agent may not
-// call is a protocol error, as for an unknown tool; an upstream failure is a tool error the
-// agent can read and act on.
+// callTool answers one call and records it. A tool the task may not call is a protocol error, as
+// for an unknown tool.
 func (s *session) callTool(ctx context.Context, p *mcp.CallToolParamsRaw) (*mcp.CallToolResult, error) {
 	if tool, ok := s.knowledgeTool(p.Name); ok {
 		return s.callKnowledge(ctx, tool, p.Arguments), nil
 	}
 
 	start := s.g.clock.Now()
-	connName, tool, _ := strings.Cut(p.Name, sep)
-	rec := call{connection: connName, tool: tool, requestBytes: len(p.Arguments)}
+	server, tool, _ := strings.Cut(p.Name, sep)
 
-	c := s.connection(connName)
-	if c == nil || c.unavailable != "" || tool == "" || !s.policy.permits(connName, tool) {
-		rec.outcome = outcomeDenied
-		s.record(ctx, start, rec)
+	s.record(ctx, start, call{connection: server, tool: tool, outcome: outcomeDenied, requestBytes: len(p.Arguments)})
 
-		return nil, &jsonrpc.Error{
-			Code:    jsonrpc.CodeInvalidParams,
-			Message: fmt.Sprintf("tool %q is not available to this agent", p.Name),
-		}
-	}
-
-	res, size, err := s.forward(ctx, c, tool, p.Arguments)
-	rec.responseBytes = size
-
-	switch {
-	case err != nil:
-		rec.outcome, rec.err = outcomeFailed, s.redactErr(err)
-		s.g.log.WarnContext(ctx, "gateway tool call failed", claimAttrs(s.claims,
-			"connection", connName, "tool", tool, "error", rec.err)...)
-		res = &mcp.CallToolResult{
-			IsError: true,
-			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("connection %s: %s", connName, rec.err)}},
-		}
-	case res.IsError:
-		rec.outcome = outcomeToolError
-	default:
-		rec.outcome = outcomeOK
-	}
-
-	s.record(ctx, start, rec)
-
-	return res, nil
-}
-
-var errResultTooLarge = errors.New("tool result exceeds the gateway's size limit")
-
-// learnTool lists the upstream's tools until it has seen tool. Servers on the 2026 protocol
-// require Mcp-Param-* headers that mirror arguments the tool's schema annotates
-// (x-mcp-header), and the SDK adds them only for tools this client session has listed. A failed
-// listing is left to the call itself to report.
-func learnTool(ctx context.Context, cs *mcp.ClientSession, tool string) {
-	for t, err := range cs.Tools(ctx, nil) {
-		if err != nil || t.Name == tool {
-			return
-		}
-	}
-}
-
-// forward calls tool on c and returns its result with credentials scrubbed, and its size.
-func (s *session) forward(ctx context.Context, c *connection, tool string, args json.RawMessage) (*mcp.CallToolResult, int, error) {
-	ctx, cancel := upstreamContext(ctx, s.g.cfg.CallTimeout)
-	defer cancel()
-
-	cs, done, err := s.open(ctx, c)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer done()
-
-	params := &mcp.CallToolParams{Name: tool}
-	if len(args) > 0 {
-		params.Arguments = args
-	}
-
-	learnTool(ctx, cs, tool)
-
-	res, err := cs.CallTool(ctx, params)
-	if err != nil {
-		return nil, 0, fmt.Errorf("call %s: %w", tool, err)
-	}
-
-	raw, err := json.Marshal(res)
-	if err != nil {
-		return nil, 0, fmt.Errorf("encode result: %w", err)
-	}
-
-	if int64(len(raw)) > s.g.cfg.MaxResponseBytes {
-		return nil, len(raw), errResultTooLarge
-	}
-
-	scrubbed := new(mcp.CallToolResult)
-	if err := json.Unmarshal(s.scrubJSON(raw), scrubbed); err != nil {
-		return nil, len(raw), fmt.Errorf("decode result: %w", err)
-	}
-
-	return scrubbed, len(raw), nil
+	return nil, &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: fmt.Sprintf("tool %q is not available to this agent", p.Name)}
 }
 
 // Outcomes of a tool call in its audit event.

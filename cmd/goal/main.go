@@ -128,6 +128,9 @@ const usage = `usage:
   goal knowledge search "<query>" [--source S]... [--limit N]
                                                   search as agents do: the best passages first, with
                                                   their document ids or links
+  goal connection import-env                      once, after the cutover to connections: GOAL_GITHUB_TOKEN
+                                                  becomes github, CLAUDE_CODE_OAUTH_TOKEN (or ANTHROPIC_API_KEY)
+                                                  claude; names that exist are left as they are
   goal storage init                               create the bucket if missing
   goal catalog skills sync --file <sources.yaml> [--search <q>]... [--top <n>]
                                                   fetch skills.sh skills (a YAML list of

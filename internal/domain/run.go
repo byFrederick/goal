@@ -21,11 +21,6 @@ const (
 	SandboxLarge  SandboxSize = "large"
 )
 
-// RunEnvRepositoryToken is the variable that carries the factory's repository token into the
-// commands of a run's sandbox that need git to reach the repository; the run bundle's git
-// credential names it, so the token itself is never in the bundle or on the sandbox's disk.
-const RunEnvRepositoryToken = "GOAL_REPOSITORY_TOKEN"
-
 // Lease is an agent slot's hold on an item. It expires unless heartbeated, so work held by a
 // crashed instance returns to the queue.
 type Lease struct {

@@ -2,15 +2,12 @@ package authoring_test
 
 import (
 	"context"
-	"errors"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/byFrederick/goal/internal/authoring"
-	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports/porttest"
 )
 
 func checkIDs(v authoring.Validation) []string {
@@ -32,222 +29,31 @@ func checkResult(v authoring.Validation, id string) (authoring.CheckResult, bool
 	return authoring.CheckResult{}, false
 }
 
-// legacyYAML is acmeYAML as published before phase 4: its repository signs in with an env:
-// reference, which the interim rule checks until the cutover to connections.
+// legacyYAML is acmeYAML as published before connections: its repository signs in with an env:
+// reference, a form connections replaced.
 var legacyYAML = strings.Replace(acmeYAML, "connection: code }", "token: env:ACME_GIT_TOKEN }", 1)
 
-func TestValidate_InterimCredentialsCheck(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name, ref, code string
-	}{
-		{name: "a set variable passes", ref: "env:ACME_GIT_TOKEN"},
-		{name: "an unset variable", ref: "env:ACME_MISSING", code: authoring.CodeSecretEnvUnset},
-		{name: "an empty variable", ref: "env:ACME_EMPTY", code: authoring.CodeSecretEnvUnset},
-		{name: "a goald setting", ref: "env:GOAL_DATABASE_URL", code: authoring.CodeEnvReserved},
-		{name: "another provider's reference", ref: "\"op://acme/github/token\"", code: authoring.CodeCredentialsUnavailable},
-	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
-
-			h := newHarness(t)
-
-			v, err := h.svc.ValidateFiles(h.ctx, acmeFiles(strings.Replace(legacyYAML, "token: env:ACME_GIT_TOKEN", "token: "+c.ref, 1)))
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			res, ran := checkResult(v, authoring.CheckConnections)
-			if !ran {
-				t.Fatalf("connections check did not run: %v", checkIDs(v))
-			}
-
-			if c.code == "" {
-				want := authoring.CheckResult{
-					ID: authoring.CheckConnections, Section: domain.SectionConnections, Status: authoring.CheckPassed,
-					Summary: "1 connection exists, 1 secret reference resolves",
-				}
-				if !v.OK || res != want {
-					t.Errorf("validation = ok %v, %+v, problems %v", v.OK, res, codes(v.Problems))
-				}
-
-				return
-			}
-
-			assertTokenProblem(t, v, c.code)
-		})
-	}
-}
-
-// The repository's token is the install's, so a definition that points runtime.repository.url
-// at a host the install does not clone from is refused at the token, whose value would be sent
-// there, even though the reference itself resolves.
-func TestValidate_RefusesARepositoryOnAnotherHost(t *testing.T) {
+// Since the cutover a form connections replaced is an error: such a draft does not publish, and
+// the problem carries the fix that takes it out.
+func TestValidate_RemovedFormsAreErrors(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
 
-	v, err := h.svc.ValidateFiles(h.ctx, acmeFiles(strings.Replace(legacyYAML,
-		"https://git.example.com/acme/review.git", "https://attacker.example/x.git", 1)))
+	v, err := h.svc.ValidateFiles(h.ctx, acmeFiles(legacyYAML))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	assertTokenProblem(t, v, authoring.CodeRepositoryHostNotAllowed)
-
-	if p, _ := problem(v.Problems, authoring.CodeRepositoryHostNotAllowed); !strings.Contains(p.Message, "attacker.example") {
-		t.Errorf("message %q does not name the repository's host", p.Message)
-	}
-}
-
-// assertTokenProblem requires an error problem of code from the connections check, located on
-// the repository token, naming no value.
-func assertTokenProblem(t *testing.T, v authoring.Validation, code string) {
-	t.Helper()
-
-	p, ok := problem(v.Problems, code)
-	if !ok || v.OK {
-		t.Fatalf("validation = ok %v, problems %v; want %s", v.OK, codes(v.Problems), code)
+	p, ok := problem(v.Problems, "env-reference-removed")
+	if !ok || v.OK || p.Severity != domain.SeverityError || p.Pointer != "/basics/repository/token" ||
+		len(p.Fixes) != 1 || p.Fixes[0].Label != "Remove the token" {
+		t.Fatalf("validation = ok %v, problem %+v (found %v); want env-reference-removed, an error with its fix", v.OK, p, ok)
 	}
 
-	if res, _ := checkResult(v, authoring.CheckConnections); res.Status != authoring.CheckFailed {
-		t.Errorf("connections check = %+v", res)
+	if strings.Contains(p.Message, "ACME_GIT_TOKEN") {
+		t.Errorf("message %q names the reference; it names the fix", p.Message)
 	}
-
-	type place struct {
-		severity              domain.ProblemSeverity
-		check, section, point string
-		line                  int
-	}
-
-	got := place{p.Severity, p.Check, p.Section, p.Pointer, p.Line}
-	want := place{domain.SeverityError, authoring.CheckConnections, domain.SectionBasics, "/basics/repository/token", 11}
-
-	if got != want {
-		t.Errorf("problem at %+v, want %+v", got, want)
-	}
-
-	if strings.Contains(p.Message, "a-token") {
-		t.Errorf("message leaks a value: %s", p.Message)
-	}
-}
-
-func TestEnvReferences_ResolvesEachReferenceOnce(t *testing.T) {
-	t.Parallel()
-
-	calls := 0
-	e := authoring.EnvReferences{Secrets: countingSecrets{calls: &calls}}
-	uses := []config.SecretUse{
-		{Path: "a", Ref: "env:ACME_A"}, {Path: "b", Ref: "env:ACME_A"}, {Path: "c"}, {Path: "d", Ref: "env:1BAD"},
-	}
-
-	findings, err := e.Findings(t.Context(), uses)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if calls != 1 || len(findings) != 1 || findings[0].Use.Path != "d" || findings[0].Code != authoring.CodeSecretEnvUnset {
-		t.Errorf("calls %d, findings %+v", calls, findings)
-	}
-}
-
-// The repository's token serves the repository on one of the hosts the install clones from, and
-// a connection only in the headers of an https connection to one of the hosts it may reach
-// (GitHub's MCP server); anywhere else, such as a sidecar's environment or another server's
-// headers, it is refused like goald's own settings, so a definition cannot hand it to an agent
-// or an arbitrary upstream. A repository on another host is refused whatever its token, since
-// goald would not clone it.
-func TestEnvReferences_RepositoryTokenServesOnlyTheRepositoryAndItsHosts(t *testing.T) {
-	t.Parallel()
-
-	e := authoring.EnvReferences{
-		Secrets: porttest.Secrets{"ACME_REPO_TOKEN": "t0ken", "ACME_TICKETS_TOKEN": "t1cket"},
-		Policy: domain.SecretPolicy{
-			Reserved: []string{"ACME_MODEL_TOKEN"}, RepositoryOnly: []string{"ACME_REPO_TOKEN"}, ConnectionHosts: []string{"code.example.com"},
-		},
-		RepositoryHosts: []string{gitHost},
-	}
-	header := func(url, ref string) config.SecretUse {
-		return config.SecretUse{Path: "header " + url, Purpose: config.PurposeConnection, Connection: "c", URL: url, Ref: ref}
-	}
-	repo := func(url, ref string) config.SecretUse {
-		return config.SecretUse{Path: "repo " + url, Purpose: config.PurposeRepository, URL: url, Ref: ref}
-	}
-
-	const (
-		repoURL  = "https://git.example.com/acme/app.git"
-		reserved = authoring.CodeEnvReserved
-		host     = authoring.CodeRepositoryHostNotAllowed
-	)
-
-	tests := []struct {
-		name string
-		use  config.SecretUse
-		code string // "" when allowed
-	}{
-		{name: "the repository's token", use: repo(repoURL, "env:ACME_REPO_TOKEN")},
-		{name: "the repository's host without case", use: repo("https://Git.Example.com/acme/app.git", "env:ACME_REPO_TOKEN")},
-		{name: "the repository on another host", use: repo("https://attacker.example/x.git", "env:ACME_REPO_TOKEN"), code: host},
-		{name: "the repository on a look-alike host", use: repo("https://git.example.com.attacker.example/x.git", "env:ACME_REPO_TOKEN"), code: host},
-		{name: "the repository's host on another port", use: repo("https://git.example.com:8443/acme/app.git", "env:ACME_REPO_TOKEN"), code: host},
-		{name: "the repository on the MCP host", use: repo("https://code.example.com/acme/app.git", "env:ACME_REPO_TOKEN"), code: host},
-		{name: "another token for a repository on another host", use: repo("https://attacker.example/x.git", "env:ACME_TICKETS_TOKEN"), code: host},
-		{name: "a header to the code host's MCP server", use: header("https://code.example.com/mcp/", "env:ACME_REPO_TOKEN")},
-		{name: "a header to the repository's host", use: header("https://git.example.com/mcp", "env:ACME_REPO_TOKEN"), code: reserved},
-		{name: "a header to another server", use: header("https://tickets.example.com/mcp", "env:ACME_REPO_TOKEN"), code: reserved},
-		{name: "a header to the code host in clear text", use: header("http://code.example.com/mcp", "env:ACME_REPO_TOKEN"), code: reserved},
-		{name: "a host ending in the code host's", use: header("https://evilcode.example.com/mcp", "env:ACME_REPO_TOKEN"), code: reserved},
-		{
-			name: "a sidecar's environment", code: reserved,
-			use: config.SecretUse{Path: "env", Purpose: config.PurposeConnection, Connection: "c", Ref: "env:ACME_REPO_TOKEN"},
-		},
-		{name: "a reserved variable for the repository", use: repo(repoURL, "env:ACME_MODEL_TOKEN"), code: reserved},
-		{name: "another token in a header", use: header("https://tickets.example.com/mcp", "env:ACME_TICKETS_TOKEN")},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			findings, err := e.Findings(t.Context(), []config.SecretUse{tt.use})
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			switch {
-			case tt.code == "" && len(findings) != 0:
-				t.Errorf("findings %+v, want none", findings)
-			case tt.code != "" && (len(findings) != 1 || findings[0].Code != tt.code || findings[0].Severity != domain.SeverityError):
-				t.Errorf("findings %+v, want one %s error", findings, tt.code)
-			}
-		})
-	}
-}
-
-type countingSecrets struct{ calls *int }
-
-func (c countingSecrets) Resolve(context.Context, string) (string, error) {
-	*c.calls++
-
-	return "value", nil
-}
-
-func TestEnvReferences_FailsOnASecretsError(t *testing.T) {
-	t.Parallel()
-
-	e := authoring.EnvReferences{Secrets: failingSecrets{}}
-	if _, err := e.Findings(t.Context(), []config.SecretUse{{Ref: "env:ACME_A"}}); err == nil {
-		t.Error("a failing Secrets port was taken as an unset variable")
-	}
-}
-
-type failingSecrets struct{}
-
-func (failingSecrets) Resolve(context.Context, string) (string, error) {
-	return "", errors.New("secrets backend unreachable")
 }
 
 // laterCheck stands in for a check a later phase registers.
@@ -277,7 +83,7 @@ func TestValidate_ChecksOfLaterPhasesAreOmittedUntilRegistered(t *testing.T) {
 	}
 
 	want := []string{
-		"yaml", "schema", "line", "references", "tools", "removed", "images", "secrets", "availability", "name", "connections",
+		"yaml", "schema", "line", "references", "tools", "removed", "availability", "name", "connections",
 	}
 	if !slices.Equal(checkIDs(v), want) || !v.OK {
 		t.Errorf("checks = %v (ok %v, problems %v), want %v", checkIDs(v), v.OK, codes(v.Problems), want)

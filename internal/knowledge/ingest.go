@@ -25,7 +25,7 @@ type Orgs interface {
 
 // Connections opens a synced source's connection; ports.Connections satisfies it.
 type Connections interface {
-	Resolve(ctx context.Context, names []string, run domain.RunID) ([]domain.ResolvedConnection, error)
+	Resolve(ctx context.Context, names []string, use domain.ConnectionUse) ([]domain.ResolvedConnection, error)
 }
 
 // Defaults of the ingestion loop.
@@ -307,7 +307,7 @@ func (in *Ingestor) reader(ctx context.Context, src domain.KnowledgeSource) (dom
 		return spec, in.cfg.Uploads, nil
 	}
 
-	conns, err := in.cfg.Connections.Resolve(ctx, []string{src.Connection}, "")
+	conns, err := in.cfg.Connections.Resolve(ctx, []string{src.Connection}, domain.ConnectionUse{Source: src.Name})
 	if err != nil {
 		return spec, nil, fmt.Errorf("connection %s: %w", src.Connection, err)
 	}

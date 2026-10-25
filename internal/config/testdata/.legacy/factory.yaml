@@ -1,6 +1,8 @@
-# Test fixture for a version published before phase 4: every removed form (runner, image and
-# auth, a repository token, a secrets provider, the knowledge base, inline connections) still
-# loads, each with a warning. Self-contained: tests never read factory definitions from outside testdata.
+# Test fixture for a version published before the cutover to connections: every removed form
+# (runner, image and auth, a repository token, a secrets provider, the knowledge base, inline
+# connections) is an error, yet the version loads, so goald can refuse to run it saying why. The
+# folder is hidden so task validate, which checks the valid fixtures, leaves it out.
+# Self-contained: tests never read factory definitions from outside testdata.
 apiVersion: goal/v1
 kind: Factory
 metadata:

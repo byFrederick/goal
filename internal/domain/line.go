@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -53,11 +54,44 @@ type Line struct {
 	Paused bool
 	// Connections are the organization's connections the factory uses, by name (spec 4 §4.4);
 	// an agent's runs get the ones its AgentSpec.Connections names, besides the runtime's model
-	// and repository connections. Inline connections of versions published before phase 4 are
-	// not among them.
+	// and repository connections, and merges use those whose kind has a code host.
 	Connections []string
 	// KnowledgeSources are the organization's knowledge sources the factory's agents may search.
 	KnowledgeSources []string
+	// Removed names each form connections replaced that a version published before the cutover
+	// still has, as "<path> (<code>)" (spec 4 §4.4: field-removed, env-reference-removed,
+	// connection-inline-removed). Such a version loads, so its items stay visible, but it does
+	// not run (Refusal).
+	Removed []string
+}
+
+// Refusal is why no run of the line can start, "" when runs can: since the cutover to
+// connections (spec 4 §14, step 5) a version that still has a form connections replaced, or one
+// that names no runtime.modelConnection (the only way a run gets its model), is refused, and the
+// engine blocks its items with this reason.
+func (l Line) Refusal() string {
+	const fix = "publish a version with connections (spec 4 §4.4); goal factory validate and the builder show the fix of each problem"
+
+	switch {
+	case len(l.Removed) > 0:
+		return fmt.Sprintf("version %d still has %s, which connections replaced: %s", l.Number, strings.Join(l.Removed, ", "), fix)
+	case l.Runtime.ModelConnection == "":
+		return fmt.Sprintf("version %d names no runtime.modelConnection, which gives every run its model: %s", l.Number, fix)
+	default:
+		return ""
+	}
+}
+
+// MergeConnections are the connections the line's merges may use (spec 4 §4.7): its
+// organization connections and its repository's, each once; those whose kind has a code host
+// serve the pull requests on the host of their git login.
+func (l Line) MergeConnections() []string {
+	names := slices.Clone(l.Connections)
+	if c := l.Runtime.Repository.Connection; c != "" && !slices.Contains(names, c) {
+		names = append(names, c)
+	}
+
+	return names
 }
 
 // Runtime is what every agent task of the factory shares.
@@ -89,11 +123,6 @@ type Repository struct {
 	// Connection is the organization connection that clones and merges it; empty for a public
 	// repository.
 	Connection string
-	// AuthRef is the env: reference of a version published before phase 4 (runtime.repository
-	// .token, removed from definitions) to the repository's token, which only the sandbox's
-	// prepare gets (RunEnvRepositoryToken), to clone; the agent never does. Empty for a public
-	// repository. The cutover (spec 4, 4-14) removes it.
-	AuthRef string
 }
 
 // Station is one step of the line.

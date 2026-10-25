@@ -34,8 +34,7 @@ func acme(prompt string) map[string][]byte {
 kind: Factory
 metadata: { id: ` + string(acmeID) + `, name: acme-notes }
 spec:
-  runtime: { runner: docker, image: ghcr.io/acme/agent:1.0.0, auth: anthropic-api-key }
-  knowledgeBase: { collections: [notes] }
+  runtime: { modelConnection: claude }
   agents:
     - { name: writer, prompt: ./agents/writer.md }
   board:

@@ -850,8 +850,43 @@ func (k ConnectionKind) Outline(c Connection) ConnectionOutline {
 	return ConnectionOutline{Env: slices.Sorted(maps.Keys(rc.Env)), Git: rc.Git, MCP: rc.MCP, CLI: rc.CLI}
 }
 
-// EngineActor is who uses a connection for a run in the audit log (connection.used names the run).
+// EngineActor is who uses a connection for a run or a knowledge source's sync in the audit log.
 var EngineActor = Actor{Kind: ActorSystem, ID: "engine", Name: "engine"}
+
+// ConnectionUse is what connections are opened for, which their connection.used audit rows
+// record: one run, a person's merge of an item's pull requests or a knowledge source's sync.
+type ConnectionUse struct {
+	// By uses them: the zero value is EngineActor (runs and syncs); a merge is the person's.
+	By Actor
+	// Run is the run that receives them, Item the item whose pull requests are merged and
+	// Source the knowledge source synced; each is empty when the use is another.
+	Run    RunID
+	Item   ItemID
+	Source string
+}
+
+// Actor is who uses the connections: By, or EngineActor when unset.
+func (u ConnectionUse) Actor() Actor {
+	if u.By == (Actor{}) {
+		return EngineActor
+	}
+
+	return u.By
+}
+
+// AuditData is what the connection.used row of connection name records: the name, and the run,
+// the item or the source, whichever the use has.
+func (u ConnectionUse) AuditData(name string) map[string]any {
+	out := map[string]any{"name": name}
+
+	for key, v := range map[string]string{"run_id": string(u.Run), "item_id": string(u.Item), "source": u.Source} {
+		if v != "" {
+			out[key] = v
+		}
+	}
+
+	return out
+}
 
 // ConnectionAAD is the associated data a connection's sealed secrets are bound to (spec 4 §4.3):
 // its organization, its id and the key id, so a ciphertext copied to another row, organization or

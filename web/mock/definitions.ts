@@ -388,16 +388,6 @@ function validate(
         );
       }
     }
-    if (s.action === 'merge' && !isObject(basics.repository)) {
-      add(
-        'merge-needs-repository',
-        'error',
-        'line',
-        `${at}/action`,
-        `station ${s.id}: action merge needs runtime.repository, whose pull requests it merges`,
-        [{ label: 'Remove the merge step', section: 'line', patch: [{ op: 'remove', path: `/stations/${i}/action` }] }],
-      );
-    }
   });
 
   // references

@@ -189,20 +189,26 @@ func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 	}
 }
 
-// A version published before phase 4 runs as before until the cutover: the engine still reads
-// its repository token, its runs take the default size, and its inline connections are not the
-// organization's.
-func TestLine_KeepsWhatPublishedVersionsRunOn(t *testing.T) {
+// A version published before the cutover keeps loading, but its line runs nothing: it names the
+// forms connections replaced, and its inline connections are not the organization's.
+func TestLine_NamesTheRemovedFormsOfAPublishedVersion(t *testing.T) {
 	t.Parallel()
 
-	f, err := LoadDir("testdata/legacy")
+	f, err := LoadDir("testdata/.legacy")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	l := f.Line()
-	if r := l.Runtime; r.Repository.AuthRef != "env:ACME_GIT_TOKEN" || r.Size != "" {
-		t.Errorf("runtime = %+v, want the token and no size (medium)", r)
+	want := []string{
+		"spec.runtime.runner (field-removed)", "spec.runtime.image (field-removed)", "spec.runtime.auth (field-removed)",
+		"spec.knowledgeBase (field-removed)", "spec.secrets (field-removed)", "spec.runtime.repository.token (env-reference-removed)",
+		"spec.connections[0] (connection-inline-removed)", "spec.connections[1] (connection-inline-removed)",
+		"spec.connections[2] (connection-inline-removed)",
+	}
+
+	if !reflect.DeepEqual(l.Removed, want) || l.Runtime.Repository.URL != "https://github.com/acme/shop" {
+		t.Errorf("removed = %q, repository %+v; want %q and the repository", l.Removed, l.Runtime.Repository, want)
 	}
 
 	if len(l.Connections) != 0 {

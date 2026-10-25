@@ -150,10 +150,6 @@ var locatedCases = []struct {
 		code: "check-run-missing", section: domain.SectionLine, pointer: "/line/stations/1/checks/0",
 	},
 	{
-		name: "merge without repository", doc: edited(doneStation, "      - { id: merge, kind: human, action: merge } #here\n"+doneStation),
-		code: "merge-needs-repository", section: domain.SectionLine, pointer: "/line/stations/2/action", wantFixes: 1,
-	},
-	{
 		name: "duplicate station", doc: edited(doneStation, "      - { id: work, kind: queue } #here\n"+doneStation),
 		code: "duplicate-name", section: domain.SectionLine, pointer: "/line/stations/2/id",
 	},
@@ -194,48 +190,40 @@ var locatedCases = []struct {
 		code: "contract-not-found", section: domain.SectionFiles,
 	},
 	{
-		name: "unpinned image", doc: edited(specAgents, "  connections:\n    - { name: shop-db, type: mcp, transport: stdio, image: ghcr.io/acme/db:latest } #here\n"+specAgents),
-		code: "image-unpinned", severity: domain.SeverityWarning, section: domain.SectionConnections, pointer: "/connections/0/settings/image",
-	},
-	{
-		name: "literal secret", doc: edited(specAgents, "  connections:\n    - name: tickets\n      type: mcp\n      transport: http\n      url: https://tickets.example.com/mcp\n      headers:\n        Authorization: some-literal #here\n"+specAgents),
-		code: "literal-secret", severity: domain.SeverityWarning, section: domain.SectionConnections, pointer: "/connections/0/settings/headers/Authorization",
-	},
-	{
 		name: "built-in ask", doc: edited(agentPrompt, agentPrompt+"      builtins: { read: ask } #here\n"),
 		code: "builtin-ask-unavailable", severity: domain.SeverityWarning, section: domain.SectionAgents, pointer: "/agents/agents/0/builtins/read",
 	},
 	{
 		name: "removed runtime key", doc: edited(runtimeModel, runtimeModel+"    image: ghcr.io/acme/agent:1.0.0 #here\n"),
-		code: codeFieldRemoved, severity: domain.SeverityWarning, section: domain.SectionBasics, pointer: "/basics/image", wantFixes: 1,
+		code: codeFieldRemoved, severity: domain.SeverityError, section: domain.SectionBasics, pointer: "/basics/image", wantFixes: 1,
 	},
 	{
 		name: "removed runner", doc: edited(runtimeModel, runtimeModel+"    runner: docker #here\n"),
-		code: codeFieldRemoved, severity: domain.SeverityWarning, section: domain.SectionBasics, pointer: "/basics/runner", wantFixes: 1,
+		code: codeFieldRemoved, severity: domain.SeverityError, section: domain.SectionBasics, pointer: "/basics/runner", wantFixes: 1,
 	},
 	{
 		name: "removed model auth", doc: edited(runtimeModel, runtimeModel+"    auth: claude-subscription #here\n"),
-		code: codeFieldRemoved, severity: domain.SeverityWarning, section: domain.SectionBasics, pointer: "/basics/auth", wantFixes: 1,
+		code: codeFieldRemoved, severity: domain.SeverityError, section: domain.SectionBasics, pointer: "/basics/auth", wantFixes: 1,
 	},
 	{
 		name: "removed secrets provider", doc: edited(specAgents, "  secrets: { provider: env } #here\n"+specAgents),
-		code: codeFieldRemoved, severity: domain.SeverityWarning, section: domain.SectionBasics, pointer: "/basics/secrets", wantFixes: 1,
+		code: codeFieldRemoved, severity: domain.SeverityError, section: domain.SectionBasics, pointer: "/basics/secrets", wantFixes: 1,
 	},
 	{
 		name: "removed knowledge base", doc: edited(specAgents, "  knowledgeBase: { collections: [notes] } #here\n"+specAgents),
-		code: codeFieldRemoved, severity: domain.SeverityWarning, section: domain.SectionBasics, pointer: "/basics/knowledge_base", wantFixes: 1,
+		code: codeFieldRemoved, severity: domain.SeverityError, section: domain.SectionBasics, pointer: "/basics/knowledge_base", wantFixes: 1,
 	},
 	{
 		name: "repository token", doc: edited(runtimeModel, runtimeModel+"    repository: { url: \"https://github.com/acme/app\", token: env:ACME_TOKEN } #here\n"),
-		code: codeEnvReferenceRemoved, severity: domain.SeverityWarning, section: domain.SectionBasics, pointer: "/basics/repository/token", wantFixes: 1,
+		code: codeEnvReferenceRemoved, severity: domain.SeverityError, section: domain.SectionBasics, pointer: "/basics/repository/token", wantFixes: 1,
 	},
 	{
 		name: "inline connection", doc: edited(specAgents, "  connections:\n    - { name: tickets, type: mcp, transport: http, url: \"https://tickets.example.com/mcp\" } #here\n"+specAgents),
-		code: codeInlineRemoved, severity: domain.SeverityWarning, section: domain.SectionConnections, pointer: "/connections/0", wantFixes: 1,
+		code: codeInlineRemoved, severity: domain.SeverityError, section: domain.SectionConnections, pointer: "/connections/0", wantFixes: 1,
 	},
 	{
 		name: "connector form", doc: edited(specAgents, "  connections:\n    - { connector: playwright, name: browser } #here\n"+specAgents),
-		code: codeInlineRemoved, severity: domain.SeverityWarning, section: domain.SectionConnections, pointer: "/connections/0", wantFixes: 1,
+		code: codeInlineRemoved, severity: domain.SeverityError, section: domain.SectionConnections, pointer: "/connections/0", wantFixes: 1,
 	},
 	{
 		name: "tool spec", doc: edited(runtimeModel, runtimeModel+"    tools: [\"go@1.26.10\", \"go 1.26; rm -rf /\"] #here\n"),

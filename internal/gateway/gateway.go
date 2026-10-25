@@ -1,10 +1,7 @@
 // Package gateway is Goal's MCP server for runs (spec 4 §5.9): the run bundle (GET /run) and one
 // MCP endpoint (streamable HTTP) for Goal's own tools, authorized by the run's task token. It
-// proxies no organization connection: a run uses those directly from its box, MCP servers
-// included, with the env the engine gave it. Until the cutover (spec 4, 4-14) the endpoint also
-// serves the remote MCP servers of inline connections in versions published before phase 4,
-// whose credentials stay on the host: the gateway resolves them through ports.Secrets and adds
-// them to upstream requests.
+// proxies no connection and adds no credential: a run uses its organization connections directly
+// from its box, MCP servers included, with the env the engine gave it.
 //
 // # Auth
 //
@@ -31,49 +28,22 @@
 //
 // # Goal's tools
 //
-// A run whose definition version lists knowledge sources (spec.knowledge.sources) is served
-// knowledge__search and knowledge__read (knowledge.go) next to its connections' tools. They search
-// and read those sources only, in the token's organization only (row-level security), whatever
-// the agent asks: a document of another source answers as one that does not exist.
-//
-// # Inline connections and tools
-//
-// A task is granted the inline connections that are both in its token and in its agent's
-// connections in the definition version. Their remote MCP servers (type mcp, transport http)
-// are served; every other kind (builtin, aws, stdio) is reported unavailable, not an error.
-// Organization connections are not listed: the worker configures their MCP servers in the box.
-// Tools are exposed as "<connection>__<tool>"; connection names are slugs without underscores,
-// so the first "__" always splits a name unambiguously.
-//
-// An agent's tools.allow and tools.deny entries of the form "<connection>__<tool pattern>",
-// where <connection> is one of the factory's connections, apply to gateway tools (patterns as
-// in path.Match, so "github__get_*"); the worker applies the same entries to the MCP servers of
-// organization connections. Other entries (Read, Bash(git push*)) are the worker's business and
-// are ignored here. Deny wins; a connection with at least one allow entry serves only the tools
-// its allow entries match; a connection with none serves all its tools.
-//
-// # Secret policy
-//
-// Before it resolves a header value, the gateway checks each of its env:NAME references against
-// Config.SecretPolicy, the same domain.SecretPolicy goald's credentials check validates
-// definitions with: a reserved variable goes to no connection, and a host-bound one (the
-// install's repository token) only in the headers of an https connection to one of the policy's
-// hosts (GitHub's MCP server). A refused connection is unavailable (its tools are not listed and
-// calling one is an error): the refused reference is never resolved, nothing is sent to its
-// server, and the refusal is logged with the reference, never a value. This protects versions
-// published before the credentials check refused them.
+// The endpoint serves Goal's own tools, named "<server>__<tool>" (Claude's tool names allow no
+// dots); a tool the run may not call, a connection's included, is refused like an unknown one. A
+// run whose definition version lists knowledge sources (spec.knowledge.sources) is served
+// knowledge__search and knowledge__read (knowledge.go). They search and read those sources only,
+// in the token's organization only (row-level security), whatever the agent asks: a document of
+// another source answers as one that does not exist.
 //
 // # State
 //
-// None: every HTTP request is verified and served on its own (the SDK's stateless mode) and opens
-// its own short sessions with remote servers, so any goald serves any run.
+// None: every HTTP request is verified and served on its own (the SDK's stateless mode), so any
+// goald serves any run.
 //
 // # Audit
 //
-// Every tools/call, including denied ones, appends an event (EventToolCall) with the
-// connection, tool, duration, outcome and request and response sizes; never arguments,
-// results or credentials. Resolved credentials are also scrubbed from upstream results and
-// error messages before they reach the agent, the logs or an event.
+// Every tools/call, including refused ones, appends an event (EventToolCall) with the tool, its
+// duration, outcome and request and response sizes; never arguments or results.
 package gateway
 
 import (
@@ -83,6 +53,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -120,20 +91,16 @@ type Connections interface {
 	Kind(ctx context.Context, name string) (domain.ConnectionKind, error)
 }
 
-// Deps are the gateway's collaborators. Transport may be nil (http.DefaultTransport); Logger
-// may be nil (logs discarded).
+// Deps are the gateway's collaborators. Logger may be nil (logs discarded).
 type Deps struct {
 	Definitions Definitions
 	// Items gives the run bundle the item's brief, earlier outputs and branch.
 	Items Items
 	// Connections describe the run's organization connections in its bundle.
 	Connections Connections
-	Secrets     ports.Secrets
 	Events      Events
 	Clock       ports.Clock
 	Logger      *slog.Logger
-	// Transport carries upstream requests.
-	Transport http.RoundTripper
 	// Knowledge serves Goal's knowledge tools to runs whose factory lists knowledge sources; nil
 	// serves none.
 	Knowledge Knowledge
@@ -143,28 +110,16 @@ type Deps struct {
 type Config struct {
 	// Key verifies task tokens: the resolved value of the engine's GatewayKeyRef.
 	Key []byte
-	// CallTimeout bounds one upstream tools/call, connection included (default 2m).
-	CallTimeout time.Duration
-	// ListTimeout bounds listing the tools of all granted connections (default 30s).
-	ListTimeout time.Duration
-	// MaxResponseBytes caps one upstream HTTP response and one tool result (default 8 MiB).
-	MaxResponseBytes int64
 	// MaxRequestBytes caps one request from an agent (default 4 MiB).
 	MaxRequestBytes int64
-	// SecretPolicy says which env:NAME references a connection may send where; goald passes
-	// the policy authoring validates with. The zero value restricts nothing.
-	SecretPolicy domain.SecretPolicy
 }
 
 const (
-	defaultCallTimeout      = 2 * time.Minute
-	defaultListTimeout      = 30 * time.Second
-	defaultMaxResponseBytes = 8 << 20
-	defaultMaxRequestBytes  = 4 << 20
-	auditTimeout            = 5 * time.Second
+	defaultMaxRequestBytes = 4 << 20
+	auditTimeout           = 5 * time.Second
 )
 
-// implementation identifies the gateway to agents and to upstream servers.
+// implementation identifies the gateway to agents.
 var implementation = &mcp.Implementation{Name: "goal-gateway", Version: "1"}
 
 // Gateway serves the MCP endpoint. It is an http.Handler, safe for concurrent use.
@@ -172,11 +127,9 @@ type Gateway struct {
 	defs        Definitions
 	items       Items
 	connections Connections
-	secrets     ports.Secrets
 	events      Events
 	clock       ports.Clock
 	log         *slog.Logger
-	transport   http.RoundTripper
 	knowledge   Knowledge // nil without Deps.Knowledge
 	cfg         Config
 	mcp         http.Handler
@@ -184,29 +137,22 @@ type Gateway struct {
 
 // New returns a gateway; goald mounts it at its MCP path.
 func New(d Deps, cfg Config) (*Gateway, error) {
-	if d.Definitions == nil || d.Items == nil || d.Connections == nil || d.Secrets == nil || d.Events == nil || d.Clock == nil {
-		return nil, errors.New("gateway: Definitions, Items, Connections, Secrets, Events and Clock are required")
+	if d.Definitions == nil || d.Items == nil || d.Connections == nil || d.Events == nil || d.Clock == nil {
+		return nil, errors.New("gateway: Definitions, Items, Connections, Events and Clock are required")
 	}
 
 	if len(cfg.Key) == 0 {
 		return nil, errors.New("gateway: a token key is required")
 	}
 
-	cfg.CallTimeout = cmp.Or(cfg.CallTimeout, defaultCallTimeout)
-	cfg.ListTimeout = cmp.Or(cfg.ListTimeout, defaultListTimeout)
-	cfg.MaxResponseBytes = cmp.Or(cfg.MaxResponseBytes, defaultMaxResponseBytes)
 	cfg.MaxRequestBytes = cmp.Or(cfg.MaxRequestBytes, defaultMaxRequestBytes)
 
 	g := &Gateway{
-		defs: d.Definitions, items: d.Items, connections: d.Connections, secrets: d.Secrets, events: d.Events, clock: d.Clock,
-		log: d.Logger, transport: d.Transport, knowledge: d.Knowledge, cfg: cfg,
+		defs: d.Definitions, items: d.Items, connections: d.Connections, events: d.Events, clock: d.Clock, log: d.Logger,
+		knowledge: d.Knowledge, cfg: cfg,
 	}
 	if g.log == nil {
 		g.log = slog.New(slog.DiscardHandler)
-	}
-
-	if g.transport == nil {
-		g.transport = http.DefaultTransport
 	}
 
 	g.mcp = mcp.NewStreamableHTTPHandler(serverOf, &mcp.StreamableHTTPOptions{
@@ -289,22 +235,11 @@ func (g *Gateway) session(ctx context.Context, c domain.TaskClaims) (*session, e
 		return nil, fmt.Errorf("%w: version %s is not a version of factory %s", errForbidden, c.VersionID, c.FactoryID)
 	}
 
-	var agent *config.Agent
-
-	for i := range f.Spec.Agents {
-		if f.Spec.Agents[i].Name == c.Agent {
-			agent = &f.Spec.Agents[i]
-		}
-	}
-
-	if agent == nil {
+	if !slices.ContainsFunc(f.Spec.Agents, func(a config.Agent) bool { return a.Name == c.Agent }) {
 		return nil, fmt.Errorf("%w: agent %q is not in factory %s", errForbidden, c.Agent, c.FactoryID)
 	}
 
-	s := &session{g: g, claims: c, policy: newPolicy(f.Spec.Connections, agent), sources: g.searchable(f.Line())}
-	s.grant(ctx, f.Spec.Connections, agent.Connections)
-
-	return s, nil
+	return &session{g: g, claims: c, sources: g.searchable(f.Line())}, nil
 }
 
 func claimAttrs(c domain.TaskClaims, more ...any) []any {

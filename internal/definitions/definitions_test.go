@@ -29,8 +29,7 @@ func acme(name, contract string) map[string]string {
 kind: Factory
 metadata: { id: ` + string(acmeID) + `, name: ` + name + ` }
 spec:
-  runtime: { runner: docker, image: ghcr.io/acme/agent:1.0.0, auth: anthropic-api-key }
-  knowledgeBase: { collections: [notes] }
+  runtime: { modelConnection: claude }
   skills:
     - { name: acme-notes, source: ./skills/acme-notes }
     - { name: golang-testing, source: "skills.sh:samber/cc-skills-golang@golang-testing" }

@@ -119,7 +119,7 @@ func newKBHarness(t *testing.T) *kbHarness {
 
 	h.gw, err = New(Deps{
 		Definitions: definitions{version: loadYAML(t, knowledgeYAML), otherVersion: loadYAML(t, plainYAML)},
-		Items:       h.store, Connections: conns, Secrets: porttest.Secrets{}, Events: h.store, Clock: h.clock,
+		Items:       h.store, Connections: conns, Events: h.store, Clock: h.clock,
 		Knowledge: knowledge.NewSearcher(kb, nil, nil),
 	}, Config{Key: h.key})
 	if err != nil {
