@@ -8,7 +8,7 @@ spec:
   fields:
     - {name: token, title: Token, description: "A fine-grained token: only the repositories and permissions agents need.", secret: true, required: true}
     - {name: host, title: Host, description: "github.com, or a GitHub Enterprise host.", default: github.com}
-    - {name: api_url, title: API URL, description: "The REST API the connection's test signs in to: https://<host>/api/v3 on a GitHub Enterprise Server, https://api.<host> on GitHub Enterprise Cloud.", default: "https://api.github.com"}
+    - {name: api_url, title: API URL, description: "The REST API the connection's test signs in to, on the host: github.com's by default; set it with a GitHub Enterprise host: https://<host>/api/v3 on a Server, https://api.<host> on Enterprise Cloud.", default: "https://api.github.com"}
   env:
     GH_TOKEN: "{{token}}"
     GH_HOST: "{{host}}"

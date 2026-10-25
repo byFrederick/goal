@@ -126,7 +126,7 @@ func newHarness(t *testing.T, opts ...option) *harness {
 
 	for _, c := range []domain.NewConnection{
 		{Name: "claude", Kind: "anthropic", Secrets: map[string]string{"key": "sk-ant-secret"}},
-		{Name: "code", Kind: kindGitHub, Fields: map[string]string{"host": gitHost}, Secrets: map[string]string{"token": "a-token"}},
+		{Name: "code", Kind: kindGitHub, Fields: map[string]string{"host": gitHost, "api_url": "https://" + gitHost + "/api/v3"}, Secrets: map[string]string{"token": "a-token"}},
 		{Name: kindGitHub, Kind: kindGitHub, Secrets: map[string]string{"token": "a-token"}},
 		{Name: "docs", Kind: "mcp-server", Fields: map[string]string{"url": "https://docs.example.com/mcp"}},
 	} {

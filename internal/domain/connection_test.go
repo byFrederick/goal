@@ -26,6 +26,8 @@ const (
 	kindAWS             = "aws"
 	mintAWSSTS          = "aws-sts"
 	apiExampleURL       = "https://api.example.com"
+	fieldAPIURL         = "api_url"
+	hostGHE             = "ghe.example.com"
 	envAWSRegion        = "AWS_REGION"
 )
 
@@ -43,6 +45,16 @@ func githubKind() ConnectionKind {
 		Test: &KindTest{Method: "GET", URL: "https://api.{{host}}/user", Headers: map[string]string{headerAuthorization: "Bearer {{token}}"}, Expect: 200},
 		Docs: "Use gh and git; GH_TOKEN is set.",
 	}}
+}
+
+// githubAPIKind is the platform's github kind as built: its test signs in to the API at api_url,
+// github.com's by default.
+func githubAPIKind() ConnectionKind {
+	k := githubKind()
+	k.Spec.Fields = append(k.Spec.Fields, KindField{Name: fieldAPIURL, Default: "https://api.github.com"})
+	k.Spec.Test.URL = "{{api_url}}/user"
+
+	return k
 }
 
 // apiKeyKind is the generic kind whose env names come from a field.
@@ -162,6 +174,15 @@ func TestConnectionKind_CheckValues(t *testing.T) {
 		{name: "prefix makes a bad name", kind: apiKeyKind(), fields: map[string]string{fieldPrefix: "acme api", fieldBaseURL: "u"}, secrets: []string{fieldKey}, want: "not a variable name"},
 		{name: "prefix makes a reserved name", kind: apiKeyKind(), fields: map[string]string{fieldPrefix: "GOAL", fieldBaseURL: "u"}, secrets: []string{fieldKey}, want: "reserved"},
 		{name: "nothing required", kind: mcpKind()},
+		{
+			name: "an enterprise host tested on github.com", kind: githubAPIKind(), fields: map[string]string{fieldHost: hostGHE}, secrets: []string{fieldToken},
+			want: "test.url (from api_url) is on api.github.com",
+		},
+		{
+			name: "an enterprise host tested on its API", kind: githubAPIKind(), secrets: []string{fieldToken},
+			fields: map[string]string{fieldHost: hostGHE, fieldAPIURL: "https://" + hostGHE + "/api/v3"},
+		},
+		{name: "github.com tested on its API", kind: githubAPIKind(), secrets: []string{fieldToken}},
 	}
 
 	for _, tt := range tests {
@@ -421,6 +442,10 @@ func TestConnectionKind_RenderTest(t *testing.T) {
 		},
 		{name: "no test", kind: mcpKind()},
 		{name: "a missing value", kind: githubKind(), values: map[string]string{}, err: "has no value"},
+		{
+			name: "a test off the host of the login", kind: githubAPIKind(), values: map[string]string{fieldToken: token, fieldHost: hostGHE},
+			err: "not on " + hostGHE + " or api." + hostGHE,
+		},
 		{name: "a url that is not http", kind: jira, values: map[string]string{"site": "/x", "email": "e", fieldToken: token}, err: "not an http or https URL"},
 	}
 

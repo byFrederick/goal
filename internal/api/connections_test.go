@@ -90,7 +90,8 @@ func TestConnections_ChangeAndDelete(t *testing.T) {
 	created := h.createGitHub(t)
 
 	renamed := decode[gen.Connection](t, h.request(t, http.MethodPatch, githubPath,
-		`{"name":"repos","description":"acme's repositories","fields":{"host":"git.example.com"}}`, nil), http.StatusOK)
+		`{"name":"repos","description":"acme's repositories","fields":{"host":"git.example.com","api_url":"https://git.example.com/api/v3"}}`, nil),
+		http.StatusOK)
 	if renamed.Name != "repos" || renamed.Id != created.Id || renamed.Fields["host"] != "git.example.com" {
 		t.Errorf("patched = %+v; want repos with its host", renamed)
 	}

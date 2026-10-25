@@ -607,9 +607,12 @@ func newWorld(t *testing.T, h *codeHost, kind string, config map[string]string) 
 		t.Fatal(err)
 	}
 
-	if _, err := conns.Create(ctx, domain.NewConnection{
-		Name: kind, Kind: kind, Fields: map[string]string{"host": h.host()}, Secrets: map[string]string{"token": token},
-	}, admin); err != nil {
+	fields := map[string]string{"host": h.host()}
+	if kind == kindGitHub {
+		fields["api_url"] = "https://" + h.host() + "/api/v3" // a kind with a login is tested on its host
+	}
+
+	if _, err := conns.Create(ctx, domain.NewConnection{Name: kind, Kind: kind, Fields: fields, Secrets: map[string]string{"token": token}}, admin); err != nil {
 		t.Fatal(err)
 	}
 

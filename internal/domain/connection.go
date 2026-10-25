@@ -483,8 +483,8 @@ func (k ConnectionKind) checkTemplate(t template) error {
 // CheckValues enforces a connection's values against its kind: fields holds the non-secret
 // values an admin set, secrets the names of the secret fields that are set. Every name is a field
 // of the kind, of the right sort; every required field has a value (or a default); and the env
-// names the values make are ones a box may get. The error wraps ErrInvalid; it names fields,
-// never values.
+// names the values make are ones a box may get; and a kind with a git login is tested on its git
+// host (checkTestHost). The error wraps ErrInvalid; it names fields and hosts, never a secret.
 func (k ConnectionKind) CheckValues(fields map[string]string, secrets []string) error {
 	errs := k.checkValueNames(fields, secrets)
 
@@ -505,7 +505,43 @@ func (k ConnectionKind) CheckValues(fields map[string]string, secrets []string) 
 		}
 	}
 
+	errs = append(errs, k.checkTestHost(fields))
+
 	return errors.Join(errs...)
+}
+
+// checkTestHost refuses a test that would send a connection's credentials off the host its git
+// login names: a kind that signs git in to a host is tested on that host or its api. subdomain (a
+// GitHub Enterprise connection left with github.com's API URL is refused, not tested there).
+// values are the connection's, defaults filling empty ones; a test URL or git host that does not
+// render (a test or secret field they need is missing) is left to the test. Neither carries a
+// secret (Check), so the error names them.
+func (k ConnectionKind) checkTestHost(values map[string]string) error {
+	t, g := k.Spec.Test, k.Spec.Git
+	if t == nil || g == nil {
+		return nil
+	}
+
+	host, hostOK, hostErr := k.expand(g.Host, values, nil)
+	raw, urlOK, urlErr := k.expand(t.URL, values, nil)
+	u, parseErr := url.Parse(raw)
+
+	if rendered := hostOK && urlOK && errors.Join(hostErr, urlErr, parseErr) == nil; !rendered {
+		return nil
+	}
+
+	got, want := strings.ToLower(u.Host), strings.ToLower(host)
+	if got == want || got == "api."+want {
+		return nil
+	}
+
+	var from []string
+	for _, r := range mustRefs(t.URL) {
+		from = append(from, r.name)
+	}
+
+	return fmt.Errorf("test.url (from %s) is on %s, not on %s or api.%s, the host git signs in to: set it to that host's API: %w",
+		strings.Join(from, ", "), got, want, want, ErrInvalid)
 }
 
 // checkValueNames refuses names that are not fields of k of the right sort.
@@ -696,8 +732,8 @@ func (k ConnectionKind) RenderTest(values map[string]string) (*KindTest, error) 
 		return nil, err
 	}
 
-	if p, err := url.Parse(out.URL); err != nil || (p.Scheme != "https" && p.Scheme != "http") || p.Host == "" {
-		return nil, fmt.Errorf("render %s: test.url is not an http or https URL: %w", k.Name, ErrInvalid)
+	if err := k.checkTestURL(out.URL, values); err != nil {
+		return nil, fmt.Errorf("render %s: %w", k.Name, err)
 	}
 
 	for _, name := range slices.Sorted(maps.Keys(t.Headers)) {
@@ -726,6 +762,16 @@ func (k ConnectionKind) RenderTest(values map[string]string) (*KindTest, error) 
 	}
 
 	return &out, nil
+}
+
+// checkTestURL refuses a rendered test URL that is not http or https, or is off the host the
+// kind's git login names (checkTestHost).
+func (k ConnectionKind) checkTestURL(rendered string, values map[string]string) error {
+	if p, err := url.Parse(rendered); err != nil || (p.Scheme != "https" && p.Scheme != "http") || p.Host == "" {
+		return fmt.Errorf("test.url is not an http or https URL: %w", ErrInvalid)
+	}
+
+	return k.checkTestHost(values)
 }
 
 // mustExpand fills s's templates for a test, which needs every value it names.
