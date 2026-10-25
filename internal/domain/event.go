@@ -40,6 +40,10 @@ const (
 	EventDone           EventKind = "done"
 	EventRetried        EventKind = "retried"
 	EventMerged         EventKind = "merged"
+	// EventEdgeAdded and EventEdgeRemoved are a dependency of the item added or removed: data
+	// needs (the item it needs), kind and actor (ref).
+	EventEdgeAdded   EventKind = "edge_added"
+	EventEdgeRemoved EventKind = "edge_removed"
 	// EventUsage is a running agent's report of one turn's token usage; a run's usage events
 	// count its turns so far.
 	EventUsage EventKind = "usage"

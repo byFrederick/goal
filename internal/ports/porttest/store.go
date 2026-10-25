@@ -38,6 +38,7 @@ type Store struct {
 	spans     map[domain.ItemID][]domain.Span
 	leaseLog  map[domain.ItemID][]domain.LeaseSpan
 	andon     []andonRecord
+	edges     []domain.Edge // item needs, in the order they were added
 	ids       int
 	changes   changes
 }
@@ -126,6 +127,7 @@ func (s *Store) purge(org domain.OrgID) {
 	}
 
 	maps.DeleteFunc(s.runs, func(_ domain.RunID, r *domain.Run) bool { return gone[r.ItemID] })
+	s.edges = slices.DeleteFunc(s.edges, func(e domain.Edge) bool { return gone[e.Item] || gone[e.Needs] })
 	s.events = slices.DeleteFunc(s.events, func(e domain.Event) bool {
 		if gone[e.ItemID] {
 			delete(s.labels, e.ID)
@@ -311,7 +313,7 @@ func (s *Store) ClaimNext(ctx context.Context, c ports.Claim) (domain.Item, doma
 		}
 	}
 
-	w := s.waiting(org, c.FactoryID, c.Station.ID)
+	w := slices.DeleteFunc(s.waiting(org, c.FactoryID, c.Station.ID), s.heldByNeeds)
 	if len(w) == 0 {
 		return domain.Item{}, domain.Lease{}, fmt.Errorf("station %s: %w", c.Station.ID, ports.ErrNoWork)
 	}

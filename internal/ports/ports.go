@@ -69,7 +69,24 @@ type Store interface {
 	// serializes the organization's claims while a cap is set), ErrNoWork when nothing waits and
 	// ErrSlotTaken when the slot already holds a lease; in each case nothing changes. The unique
 	// (factory, station, slot) lease is what keeps WIP at or under capacity across instances.
+	//
+	// An item is skipped while any item it needs (AddEdge) is neither done nor cancelled. Waiting
+	// lists it all the same: only queue stations read it, and they hold nothing.
 	ClaimNext(ctx context.Context, c Claim) (domain.Item, domain.Lease, error)
+
+	// AddEdge records that e.Item needs e.Needs and appends an edge_added event on e.Item. It
+	// returns ErrNotFound when either item is missing, domain.ErrInvalid for an unknown kind, an
+	// item needing itself or items of different factories, domain.ErrCycle when e.Needs already
+	// needs e.Item (directly or through other items; checked under the factory's lock, so
+	// concurrent edges cannot close a cycle) and ErrConflict when the edge exists.
+	AddEdge(ctx context.Context, e domain.NewEdge) (domain.Edge, error)
+
+	// RemoveEdge removes the edge item → needs and appends an edge_removed event on item by
+	// `by` at at. It returns ErrNotFound when there is no such edge.
+	RemoveEdge(ctx context.Context, item, needs domain.ItemID, by domain.Actor, at time.Time) error
+
+	// Edges returns what an item needs and what needs it. An unknown item has none.
+	Edges(ctx context.Context, item domain.ItemID) (domain.ItemEdges, error)
 
 	// HeartbeatLease extends a held lease to expiresAt. It returns ErrLeaseLost when no lease
 	// with the same item and AcquiredAt exists any more.
