@@ -88,6 +88,21 @@ type Store interface {
 	// Edges returns what an item needs and what needs it. An unknown item has none.
 	Edges(ctx context.Context, item domain.ItemID) (domain.ItemEdges, error)
 
+	// Assemble makes a planning item an assembly, in one transaction: a.Transition moves it to
+	// state assembly (fenced as Transition is, its lease recorded as a lease span), each of
+	// a.Parts becomes an item with the parent's type, priority and class of service, its brief
+	// as body, queued at a.Transition.From.Station (the station that planned it), and each need a
+	// planned edge. It appends assembled on the parent and part_created on each part. A plan that
+	// fails domain.ValidatePlan (domain.ErrInvalid or domain.ErrCycle), a transition not to state
+	// assembly and a parent that is itself a part (assemblies do not nest) are refused with
+	// nothing written. When the parent already has parts, a retry, it returns them and changes
+	// nothing.
+	Assemble(ctx context.Context, a Assembly) (domain.Item, domain.Parts, error)
+
+	// Parts returns an assembly's parts in plan order and how many are done. An unknown item has
+	// none.
+	Parts(ctx context.Context, parent domain.ItemID) (domain.Parts, error)
+
 	// HeartbeatLease extends a held lease to expiresAt. It returns ErrLeaseLost when no lease
 	// with the same item and AcquiredAt exists any more.
 	HeartbeatLease(ctx context.Context, l domain.Lease, now, expiresAt time.Time) (domain.Lease, error)
@@ -133,6 +148,9 @@ type Store interface {
 	// Transition moves an item as described by t, compare-and-set on t.From (and on t.Lease
 	// when set). It returns ErrConflict or ErrLeaseLost when the guard fails; nothing changes.
 	// Releasing a lease records its lease span, so t.Lease needs t.Outcome (an error otherwise).
+	// Only Assemble moves an item to state assembly (domain.ErrInvalid here). The transition
+	// that leaves an assembly's last open part done or cancelled also closes the assembly: done
+	// (cancelled when every part was cancelled) with an assembly_done event.
 	Transition(ctx context.Context, t Transition) (domain.Item, error)
 
 	// AppendEvents appends events that come with no state change.
@@ -496,6 +514,12 @@ type NewRun struct {
 	Agent               string
 	Model               string
 	StartedAt           time.Time
+}
+
+// Assembly is a planning item's transition to state assembly and the parts its plan names.
+type Assembly struct {
+	Transition Transition
+	Parts      []domain.NewPart
 }
 
 // Transition is one atomic change to an item.

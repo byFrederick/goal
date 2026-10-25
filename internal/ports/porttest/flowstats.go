@@ -329,7 +329,7 @@ func (s *Store) trackSpan(it, before *domain.Item, at time.Time) {
 		}
 	}
 
-	if !closed(it.State) {
+	if !closed(it.State) && it.State != domain.StateAssembly {
 		spans = append(spans, domain.Span{
 			Station: it.Station, State: it.State, ReworkRound: it.ReworkCount, ReworkBy: by, EnteredAt: at,
 		})

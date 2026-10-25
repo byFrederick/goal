@@ -185,4 +185,6 @@ type WorkItem struct {
 	UpdatedAt      time.Time
 	DoneAt         *time.Time
 	OrgID          uuid.UUID
+	PartKey        *string
+	PartPaths      []string
 }
