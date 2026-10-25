@@ -28,7 +28,7 @@ mock_provider "random" {
 }
 
 mock_provider "planetscale" {
-  # The import block adopts the branch; a mock can only stand in for what it would read.
+  # The branch is adopted, never created; a mock can only stand in for what it would read.
   override_resource {
     target          = planetscale_postgres_branch.main
     override_during = plan

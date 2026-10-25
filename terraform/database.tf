@@ -2,21 +2,13 @@
 # processes connect with.
 #
 # The database and its production branch already exist (made in the Cloudflare dashboard, billed
-# through Cloudflare): the branch is adopted by the import below and protected, never recreated.
+# through Cloudflare): the branch was adopted with an import block (removed after the 2026-10-25
+# bootstrap; the runbook says when to put one back) and is protected, never recreated.
 # The administrator is a Terraform-managed role inheriting `postgres` (CREATEROLE, CREATEDB,
-# BYPASSRLS, no superuser); goal db init runs as it. Its password exists only in the state and the
-# Secrets Store. goal_owner, goal_app and goal_auth are PostgreSQL roles goal db init creates, with
-# the passwords generated here, and every URL is built from them by modules/database-urls.
-import {
-  # Adopts the existing branch; delete this block after the apply that imported it.
-  to = planetscale_postgres_branch.main
-  id = jsonencode({
-    organization = local.settings.planetscale.organization
-    database     = local.settings.planetscale.database
-    id           = local.settings.planetscale.branch
-  })
-}
-
+# BYPASSRLS, no superuser); goal db init runs as it. Its password exists only in the state (a
+# sensitive output for task db:production, never a store secret). goal_owner, goal_app and goal_auth
+# are PostgreSQL roles goal db init creates, with the passwords generated here, and every URL is
+# built from them by modules/database-urls.
 resource "planetscale_postgres_branch" "main" {
   organization = local.settings.planetscale.organization
   database     = local.settings.planetscale.database
