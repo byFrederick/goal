@@ -186,6 +186,7 @@ spec:
     modelConnection: claude
     budget: { weeklyUsd: 20, onExhausted: stop }
   connections: [aws-prod, datadog, pagerduty]
+  knowledge: { sources: [handbook] }
   skills:
     - { name: aws-investigation, source: ./skills/aws-investigation }
     - { name: incident-triage, source: ./skills/incident-triage }

@@ -9,6 +9,7 @@ import {
   heldByMove,
   invalidationsFor,
   isOverviewKey,
+  knowledgeInvalidations,
   resyncInvalidations,
 } from './invalidation';
 
@@ -270,6 +271,35 @@ describe('connectionInvalidations', () => {
   test('a publish re-reads what uses each connection', () => {
     expect(definitionInvalidations(acme, definition({ kind: 'current', number: 9 }))).toContainEqual(
       keys.connections(acme),
+    );
+  });
+});
+
+describe('knowledgeInvalidations', () => {
+  test("re-reads the organization's sources, their documents and searches, nothing else", async () => {
+    const client = definitionCache();
+    client.setQueryData(keys.knowledgeSources(acme, {}), []);
+    client.setQueryData(keys.knowledgeSources(acme, { factory: goal }), []);
+    client.setQueryData(keys.knowledgeSource(acme, 'handbook'), {});
+    client.setQueryData([...keys.knowledgeDocuments(acme, 'handbook'), 100], {});
+    client.setQueryData(keys.knowledgeSearch(acme, { q: 'deploy' }), []);
+    client.setQueryData(keys.connectionList(acme, {}), []);
+    client.setQueryData(keys.knowledgeSources(labs, {}), []);
+
+    const stale = await staleAfter(client, knowledgeInvalidations(acme));
+
+    expect(stale).toEqual([
+      keys.knowledgeSources(acme, {}),
+      keys.knowledgeSources(acme, { factory: goal }),
+      keys.knowledgeSource(acme, 'handbook'),
+      [...keys.knowledgeDocuments(acme, 'handbook'), 100],
+      keys.knowledgeSearch(acme, { q: 'deploy' }),
+    ]);
+  });
+
+  test('a publish re-reads which factories may search each source', () => {
+    expect(definitionInvalidations(acme, definition({ kind: 'current', number: 9 }))).toContainEqual(
+      keys.knowledge(acme),
     );
   });
 });

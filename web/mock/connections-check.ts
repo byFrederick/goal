@@ -56,7 +56,7 @@ const removedKeys: [string, string, string][] = [
   ],
 ];
 
-export function checkConnections(model: Model, conns: ConnectionOutline[], add: Add): void {
+export function checkConnections(model: Model, conns: ConnectionOutline[], sources: string[], add: Add): void {
   const basics = isObject(model.basics) ? model.basics : {};
   const agents = list(isObject(model.agents) ? model.agents.agents : undefined);
   const connections = list(model.connections);
@@ -227,8 +227,9 @@ export function checkConnections(model: Model, conns: ConnectionOutline[], add: 
     });
   });
 
-  // every knowledge source it may search exists: none do before the knowledge base (4-16)
+  // every knowledge source it may search is one of the organization's
   strings(basics.knowledge_sources).forEach((source, i) => {
+    if (sources.includes(source)) return;
     add(
       'knowledge-source-unknown',
       'error',
@@ -241,6 +242,12 @@ export function checkConnections(model: Model, conns: ConnectionOutline[], add: 
 }
 
 /** The connection names a factory model uses: its organization connections, model and repository's. */
+/** The knowledge sources a factory model may search (config.Factory.Knowledge.Sources). */
+export function knowledgeSourceNames(model: Model): string[] {
+  const basics = isObject(model.basics) ? model.basics : {};
+  return strings(basics.knowledge_sources);
+}
+
 export function connectionNames(model: Model): string[] {
   const basics = isObject(model.basics) ? model.basics : {};
   const repository = isObject(basics.repository) ? basics.repository : {};

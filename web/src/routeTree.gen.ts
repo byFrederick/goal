@@ -26,6 +26,9 @@ import { Route as OOrgNewStepRouteImport } from './routes/o.$org.new.$step'
 import { Route as OOrgOrgConnectionsIndexRouteImport } from './routes/o.$org._org.connections.index'
 import { Route as OOrgOrgConnectionsConnectionRouteImport } from './routes/o.$org._org.connections.$connection'
 import { Route as OOrgOrgConnectionsNewRouteImport } from './routes/o.$org._org.connections.new'
+import { Route as OOrgOrgKnowledgeIndexRouteImport } from './routes/o.$org._org.knowledge.index'
+import { Route as OOrgOrgKnowledgeSourceRouteImport } from './routes/o.$org._org.knowledge.$source'
+import { Route as OOrgOrgKnowledgeNewRouteImport } from './routes/o.$org._org.knowledge.new'
 import { Route as OOrgFFactoryIndexRouteImport } from './routes/o.$org.f.$factory.index'
 import { Route as OOrgFFactoryBoardRouteImport } from './routes/o.$org.f.$factory.board'
 import { Route as OOrgFFactoryDefinitionRouteImport } from './routes/o.$org.f.$factory.definition'
@@ -120,6 +123,21 @@ const OOrgOrgConnectionsNewRoute = OOrgOrgConnectionsNewRouteImport.update({
   path: '/connections/new',
   getParentRoute: () => OOrgOrgRoute,
 } as any)
+const OOrgOrgKnowledgeIndexRoute = OOrgOrgKnowledgeIndexRouteImport.update({
+  id: '/knowledge/',
+  path: '/knowledge/',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
+const OOrgOrgKnowledgeSourceRoute = OOrgOrgKnowledgeSourceRouteImport.update({
+  id: '/knowledge/$source',
+  path: '/knowledge/$source',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
+const OOrgOrgKnowledgeNewRoute = OOrgOrgKnowledgeNewRouteImport.update({
+  id: '/knowledge/new',
+  path: '/knowledge/new',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
 const OOrgFFactoryIndexRoute = OOrgFFactoryIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -179,9 +197,12 @@ export interface FileRoutesByFullPath {
   '/o/$org/': typeof OOrgOrgIndexRoute
   '/o/$org/connections/$connection': typeof OOrgOrgConnectionsConnectionRoute
   '/o/$org/connections/new': typeof OOrgOrgConnectionsNewRoute
+  '/o/$org/knowledge/$source': typeof OOrgOrgKnowledgeSourceRoute
+  '/o/$org/knowledge/new': typeof OOrgOrgKnowledgeNewRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
   '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionRouteWithChildren
   '/o/$org/connections/': typeof OOrgOrgConnectionsIndexRoute
+  '/o/$org/knowledge/': typeof OOrgOrgKnowledgeIndexRoute
   '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
@@ -203,8 +224,11 @@ export interface FileRoutesByTo {
   '/o/$org/new/$step': typeof OOrgNewStepRoute
   '/o/$org/connections/$connection': typeof OOrgOrgConnectionsConnectionRoute
   '/o/$org/connections/new': typeof OOrgOrgConnectionsNewRoute
+  '/o/$org/knowledge/$source': typeof OOrgOrgKnowledgeSourceRoute
+  '/o/$org/knowledge/new': typeof OOrgOrgKnowledgeNewRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
   '/o/$org/connections': typeof OOrgOrgConnectionsIndexRoute
+  '/o/$org/knowledge': typeof OOrgOrgKnowledgeIndexRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
@@ -230,9 +254,12 @@ export interface FileRoutesById {
   '/o/$org/_org/': typeof OOrgOrgIndexRoute
   '/o/$org/_org/connections/$connection': typeof OOrgOrgConnectionsConnectionRoute
   '/o/$org/_org/connections/new': typeof OOrgOrgConnectionsNewRoute
+  '/o/$org/_org/knowledge/$source': typeof OOrgOrgKnowledgeSourceRoute
+  '/o/$org/_org/knowledge/new': typeof OOrgOrgKnowledgeNewRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
   '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionRouteWithChildren
   '/o/$org/_org/connections/': typeof OOrgOrgConnectionsIndexRoute
+  '/o/$org/_org/knowledge/': typeof OOrgOrgKnowledgeIndexRoute
   '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
@@ -258,9 +285,12 @@ export interface FileRouteTypes {
     | '/o/$org/'
     | '/o/$org/connections/$connection'
     | '/o/$org/connections/new'
+    | '/o/$org/knowledge/$source'
+    | '/o/$org/knowledge/new'
     | '/o/$org/f/$factory/board'
     | '/o/$org/f/$factory/definition'
     | '/o/$org/connections/'
+    | '/o/$org/knowledge/'
     | '/o/$org/f/$factory/'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
@@ -282,8 +312,11 @@ export interface FileRouteTypes {
     | '/o/$org/new/$step'
     | '/o/$org/connections/$connection'
     | '/o/$org/connections/new'
+    | '/o/$org/knowledge/$source'
+    | '/o/$org/knowledge/new'
     | '/o/$org/f/$factory/board'
     | '/o/$org/connections'
+    | '/o/$org/knowledge'
     | '/o/$org/f/$factory'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
@@ -308,9 +341,12 @@ export interface FileRouteTypes {
     | '/o/$org/_org/'
     | '/o/$org/_org/connections/$connection'
     | '/o/$org/_org/connections/new'
+    | '/o/$org/_org/knowledge/$source'
+    | '/o/$org/_org/knowledge/new'
     | '/o/$org/f/$factory/board'
     | '/o/$org/f/$factory/definition'
     | '/o/$org/_org/connections/'
+    | '/o/$org/_org/knowledge/'
     | '/o/$org/f/$factory/'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
@@ -450,6 +486,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OOrgOrgConnectionsNewRouteImport
       parentRoute: typeof OOrgOrgRoute
     }
+    '/o/$org/_org/knowledge/': {
+      id: '/o/$org/_org/knowledge/'
+      path: '/knowledge'
+      fullPath: '/o/$org/knowledge/'
+      preLoaderRoute: typeof OOrgOrgKnowledgeIndexRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
+    '/o/$org/_org/knowledge/$source': {
+      id: '/o/$org/_org/knowledge/$source'
+      path: '/knowledge/$source'
+      fullPath: '/o/$org/knowledge/$source'
+      preLoaderRoute: typeof OOrgOrgKnowledgeSourceRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
+    '/o/$org/_org/knowledge/new': {
+      id: '/o/$org/_org/knowledge/new'
+      path: '/knowledge/new'
+      fullPath: '/o/$org/knowledge/new'
+      preLoaderRoute: typeof OOrgOrgKnowledgeNewRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
     '/o/$org/f/$factory/': {
       id: '/o/$org/f/$factory/'
       path: '/'
@@ -516,7 +573,10 @@ interface OOrgOrgRouteChildren {
   OOrgOrgIndexRoute: typeof OOrgOrgIndexRoute
   OOrgOrgConnectionsConnectionRoute: typeof OOrgOrgConnectionsConnectionRoute
   OOrgOrgConnectionsNewRoute: typeof OOrgOrgConnectionsNewRoute
+  OOrgOrgKnowledgeSourceRoute: typeof OOrgOrgKnowledgeSourceRoute
+  OOrgOrgKnowledgeNewRoute: typeof OOrgOrgKnowledgeNewRoute
   OOrgOrgConnectionsIndexRoute: typeof OOrgOrgConnectionsIndexRoute
+  OOrgOrgKnowledgeIndexRoute: typeof OOrgOrgKnowledgeIndexRoute
 }
 
 const OOrgOrgRouteChildren: OOrgOrgRouteChildren = {
@@ -526,7 +586,10 @@ const OOrgOrgRouteChildren: OOrgOrgRouteChildren = {
   OOrgOrgIndexRoute: OOrgOrgIndexRoute,
   OOrgOrgConnectionsConnectionRoute: OOrgOrgConnectionsConnectionRoute,
   OOrgOrgConnectionsNewRoute: OOrgOrgConnectionsNewRoute,
+  OOrgOrgKnowledgeSourceRoute: OOrgOrgKnowledgeSourceRoute,
+  OOrgOrgKnowledgeNewRoute: OOrgOrgKnowledgeNewRoute,
   OOrgOrgConnectionsIndexRoute: OOrgOrgConnectionsIndexRoute,
+  OOrgOrgKnowledgeIndexRoute: OOrgOrgKnowledgeIndexRoute,
 }
 
 const OOrgOrgRouteWithChildren =

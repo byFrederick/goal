@@ -7,7 +7,9 @@
 // knowledge-document-not-found, not-an-upload-source, upload-too-large, unsupported-document-type).
 // The mock indexes at once: a sync, or an upload, makes its source's pending documents indexed,
 // broadcasting `event: knowledge` as syncing, then idle. Its search ranks documents by how often
-// they hold the query's words. acme starts with an upload source, handbook, of two documents.
+// they hold the query's words. A source's used_by is the factories whose current version lists it
+// (knowledge.sources). acme starts with two upload sources, handbook (which sre lists) and
+// postmortems, and two synced through github: goal-docs and runbooks, whose last sync failed.
 import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
@@ -43,8 +45,6 @@ const maxUpload = 25 << 20;
 interface MockSource {
   source: KnowledgeSource;
   docs: MockDocument[];
-  /** The names of the factories whose current version may search it. */
-  usedBy: string[];
 }
 
 interface MockDocument {
@@ -55,6 +55,8 @@ interface MockDocument {
 export interface MockKnowledge {
   /** Starts over with the seed, dated from now. */
   reset: (now: number) => void;
+  /** The names of org's sources. */
+  names: (org: string) => string[];
   /** The names of org's sources that read the connection named connection. */
   readers: (org: string, connection: string) => string[];
   /** Serves the organization's knowledge routes; false for any other. */
@@ -72,6 +74,8 @@ interface Deps {
   clock: () => number;
   actor: (req: IncomingMessage) => Actor;
   factories: (org: string) => Factory[];
+  /** The knowledge sources the factory's current version may search. */
+  listedBy: (factory: Factory) => string[];
   /** The kind's sync hook of org's connection name: '' for a kind that cannot sync; undefined for no connection. */
   connectionSync: (org: string, name: string) => string | undefined;
   audit: (
@@ -108,50 +112,137 @@ const strings = (v: unknown): Record<string, string> =>
 
 const words = (text: string) => text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
 
-/** acme's handbook, dated from now. */
-function seed(now: number, by: Actor): MockSource {
+/** acme's sources, dated from now. */
+function seed(now: number, by: Actor): MockSource[] {
   const at = (ms: number) => new Date(now + ms).toISOString();
-  const doc = (n: number, title: string, text: string): MockDocument => ({
-    document: {
-      id: `019a1c00-0000-7000-8000-0000000000d${n}`,
-      source: 'handbook',
-      title,
-      mime: 'text/markdown',
-      bytes: text.length,
-      status: 'indexed',
-      indexed_at: at(-1 * dayMs),
-    },
-    text,
-  });
-  return {
-    source: {
-      id: '019a1c00-0000-7000-8000-0000000000e1',
-      name: 'handbook',
-      title: 'Handbook',
-      kind: 'upload',
-      config: {},
-      sync_every_seconds: 3600,
-      status: 'idle',
-      last_synced_at: at(-1 * dayMs),
-      next_sync_at: at(-1 * dayMs + 3600_000),
-      documents: 2,
-      used_by: { factories: [] },
-      created_by: by,
-      created_at: at(-30 * dayMs),
-      updated_at: at(-30 * dayMs),
-    },
-    docs: [
-      doc(1, 'deploy.md', '# Deploy\n\nDeploys go out on Tuesdays after the release review.'),
-      doc(2, 'oncall.md', '# On call\n\nThe on-call engineer acknowledges a page within 15 minutes.'),
-    ],
-    usedBy: [],
+  const hourMs = 3_600_000;
+  let n = 0;
+  const doc = (source: string, title: string, text: string, extra: Partial<KnowledgeDocument> = {}): MockDocument => {
+    n += 1;
+    return {
+      document: {
+        id: `019a1c00-0000-7000-8000-0000000000d${n.toString(16)}`,
+        source,
+        title,
+        mime: 'text/markdown',
+        bytes: text.length,
+        status: 'indexed',
+        indexed_at: at(-1 * dayMs),
+        ...extra,
+      },
+      text,
+    };
   };
+  const source = (
+    i: number,
+    s: Pick<KnowledgeSource, 'name' | 'title' | 'kind'> & Partial<KnowledgeSource>,
+  ): KnowledgeSource => ({
+    id: `019a1c00-0000-7000-8000-0000000000e${i}`,
+    config: {},
+    sync_every_seconds: 3600,
+    status: 'idle',
+    last_synced_at: at(-1 * dayMs),
+    next_sync_at: at(-1 * dayMs + hourMs),
+    documents: 0,
+    used_by: { factories: [] },
+    created_by: by,
+    created_at: at(-30 * dayMs),
+    updated_at: at(-30 * dayMs),
+    ...s,
+  });
+  const blob = (repo: string, path: string) => `https://github.com/acme/${repo}/blob/main/${path}`;
+  return [
+    {
+      source: source(1, { name: 'handbook', title: 'Handbook', kind: 'upload' }),
+      docs: [
+        doc('handbook', 'deploy.md', '# Deploy\n\nDeploys go out on Tuesdays after the release review.'),
+        doc('handbook', 'oncall.md', '# On call\n\nThe on-call engineer acknowledges a page within 15 minutes.'),
+      ],
+    },
+    {
+      source: source(2, {
+        name: 'postmortems',
+        title: 'Postmortems',
+        kind: 'upload',
+        last_synced_at: at(-5 * dayMs),
+      }),
+      docs: [
+        doc(
+          'postmortems',
+          '2026-09-14 checkout workers out of memory.md',
+          '# Checkout workers out of memory\n\nRoot cause: the image resize step loaded whole files into memory. ECS restarted 31 tasks in 40 minutes; the alert fired after the fifth.',
+          { indexed_at: at(-5 * dayMs) },
+        ),
+        doc('postmortems', 'timeline.html', '', {
+          mime: 'text/html',
+          bytes: 412,
+          status: 'skipped',
+          error: 'it has no text',
+          indexed_at: null,
+        }),
+      ],
+    },
+    {
+      source: source(3, {
+        name: 'goal-docs',
+        title: 'goal docs',
+        kind: 'synced',
+        connection: 'github',
+        config: { repository: 'https://github.com/acme/goal', branch: 'main', include: 'docs/**/*.md' },
+        last_synced_at: at(-45 * 60_000),
+        next_sync_at: at(15 * 60_000),
+        embed_model: '@cf/baai/bge-m3',
+      }),
+      docs: [
+        doc(
+          'goal-docs',
+          'docs/engineering/frontend.md',
+          '# Frontend and monorepo\n\n## Live updates\n\nThe stream invalidates the queries an event can change, so screens update without polling.',
+          { url: blob('goal', 'docs/engineering/frontend.md'), indexed_at: at(-45 * 60_000) },
+        ),
+        doc(
+          'goal-docs',
+          'docs/engineering/testing.md',
+          '# Testing\n\nTest the engine with in-memory port fakes; test adapters against real PostgreSQL.',
+          { url: blob('goal', 'docs/engineering/testing.md'), indexed_at: at(-45 * 60_000) },
+        ),
+      ],
+    },
+    {
+      source: source(4, {
+        name: 'runbooks',
+        title: 'Runbooks',
+        kind: 'synced',
+        connection: 'github',
+        config: { repository: 'https://github.com/acme/runbooks', include: '**/*.md' },
+        status: 'failed',
+        last_error: 'GET https://api.github.com/repos/acme/runbooks/git/trees/main answered 429',
+        last_synced_at: at(-2 * dayMs),
+        next_sync_at: at(2 * hourMs),
+      }),
+      docs: [
+        doc(
+          'runbooks',
+          'ecs-task-out-of-memory.md',
+          '# ECS task out of memory\n\nWhen a task stops with OutOfMemoryError, compare the container memory reservation with its hard limit before you raise either.',
+          { url: blob('runbooks', 'ecs-task-out-of-memory.md'), indexed_at: at(-2 * dayMs) },
+        ),
+        doc('runbooks', 'paging-policy.md', '', {
+          url: blob('runbooks', 'paging-policy.md'),
+          status: 'failed',
+          error: 'GitHub answered 429; the next sync tries again',
+          indexed_at: null,
+        }),
+      ],
+    },
+  ];
 }
 
 export function createKnowledge({
   clock,
   actor,
   factories,
+  listedBy,
   connectionSync,
   audit,
   broadcast,
@@ -160,7 +251,7 @@ export function createKnowledge({
   let sources = new Map<string, MockSource[]>();
 
   const reset = (now: number) => {
-    sources = new Map([[acme, [seed(now, { kind: 'user', id: 'local', name: 'Local user' })]]]);
+    sources = new Map([[acme, seed(now, { kind: 'user', id: 'local', name: 'Local user' })]]);
   };
   reset(clock());
 
@@ -174,15 +265,14 @@ export function createKnowledge({
     return undefined;
   };
 
+  /** The factories whose current version may search the source. */
+  const usersOf = (org: string, s: MockSource) => factories(org).filter((f) => listedBy(f).includes(s.source.name));
+
   /** The source as the contract has it: its documents counted, what uses it by current names. */
   const out = (org: string, s: MockSource): KnowledgeSource => ({
     ...structuredClone(s.source),
     documents: s.docs.length,
-    used_by: {
-      factories: factories(org)
-        .filter((f) => s.usedBy.includes(f.name))
-        .map((f) => ({ id: f.id, name: f.name })),
-    },
+    used_by: { factories: usersOf(org, s).map((f) => ({ id: f.id, name: f.name })) },
   });
 
   const event = (org: string, s: MockSource) =>
@@ -204,6 +294,7 @@ export function createKnowledge({
       }
     }
     s.source.status = 'idle';
+    delete s.source.last_error;
     s.source.last_synced_at = new Date(now).toISOString();
     s.source.next_sync_at = new Date(now + s.source.sync_every_seconds * 1000).toISOString();
     event(org, s);
@@ -255,7 +346,6 @@ export function createKnowledge({
         updated_at: now,
       },
       docs: [],
-      usedBy: [],
     };
     sources.set(org.id, [...list(org.id), s]);
     audit(
@@ -288,11 +378,12 @@ export function createKnowledge({
   }
 
   function remove(org: Org, s: MockSource, req: IncomingMessage, res: ServerResponse) {
-    if (s.usedBy.length > 0) {
+    const users = usersOf(org.id, s).map((f) => f.name);
+    if (users.length > 0) {
       return refuse(
         res,
         409,
-        `knowledge source "${s.source.name}" may be searched by ${s.usedBy.join(', ')}`,
+        `knowledge source "${s.source.name}" may be searched by ${users.join(', ')}`,
         'knowledge-source-in-use',
       );
     }
@@ -402,6 +493,7 @@ export function createKnowledge({
         document: d.document.id,
         source: s.source.name,
         title: d.document.title,
+        ...(d.document.url ? { url: d.document.url } : {}),
         heading: d.text.match(/^#+\s*(.+)$/m)?.[1] ?? '',
         snippet: d.text,
         score: score / 60,
@@ -411,6 +503,7 @@ export function createKnowledge({
 
   return {
     reset,
+    names: (org) => list(org).map((s) => s.source.name),
     readers: (org, connection) =>
       list(org)
         .filter((s) => s.source.connection === connection)
@@ -425,7 +518,7 @@ export function createKnowledge({
           return true;
         }
         const shown = list(org.id)
-          .filter((s) => !factory || s.usedBy.includes(factory.name))
+          .filter((s) => !factory || listedBy(factory).includes(s.source.name))
           .sort((a, b) => a.source.name.localeCompare(b.source.name));
         send(res, 200, { sources: shown.map((s) => out(org.id, s)) });
         return true;

@@ -19,6 +19,8 @@ export type OrgPermission =
   | 'personal_token:manage'
   | 'connection:read'
   | 'connection:manage'
+  | 'knowledge:read'
+  | 'knowledge:manage'
   | 'audit:read';
 export type FactoryPermission =
   | 'item:create'

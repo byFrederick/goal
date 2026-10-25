@@ -161,6 +161,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     state: () => state,
     // Read at request time: the connections are made just below.
     connections: (org) => connections.outlines(org),
+    knowledgeSources: (org) => knowledge.names(org),
     broadcast: (org, event, data) => {
       for (const sub of subscribers) {
         if (sub.org === org) sub.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -197,6 +198,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     clock,
     actor: (req) => auth.actor(req),
     factories: (org) => state.factories.filter((f) => f.org_id === org),
+    listedBy: (factory) => definitions.knowledgeSourceNames(factory),
     connectionSync: (org, name) => connections.syncOf(org, name),
     audit: (org, by, action, target, data) => auditAs(org, by, action, target, data),
     broadcast: (org, event, data) => {

@@ -2,18 +2,23 @@
 // which of the organization's connections the factory's runs get (a tick puts its name in
 // spec.connections), which of them each agent's runs get (the agent's `connections`; the model and
 // repository connections go to every run), and the knowledge sources its agents may search
-// (knowledge.sources; none exist before the knowledge base, 4-17). Beside them, the variables
+// (knowledge.sources, ticked from the organization's sources). Beside them, the variables
 // runs get. Each kind's modes show as badges; secrets stay with the connections, managed on the
 // Connections page. B's problems show where they are fixed: an entry the organization lacks or
 // an inline form phase 4 removed under the list, two connections setting one variable under the
 // agent, each with its quick fixes.
+import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Fragment, useId } from 'react';
+import { knowledgeSourcesQuery } from '../../../api/queries';
 import type { Connection, ConnectionKind } from '../../../api/types';
 import { runEnv } from '../../../shared/connections';
 import type { Model } from '../../../shared/definition/model';
+import { plural } from '../../../shared/format';
+import { sourceKinds, sourceSummary } from '../../../shared/knowledge';
 import { useOrg, useOrgHolds } from '../../../shared/org';
 import { Chip } from '../../../ui/chip';
+import { cn } from '../../../ui/cn';
 import { useOrgConnections } from '../basics/runtime-fields';
 import { setAgentConnection, setBasics, setFactoryConnection } from '../draft/ops';
 import { useDraftSession, useSection, useViewOnly } from '../draft/use-draft';
@@ -336,49 +341,88 @@ function AgentProblems({ index, span }: { index: number; span: number }) {
   );
 }
 
+/**
+ * The knowledge sources the factory's agents may search (knowledge.sources), picked from the
+ * organization's: a tick adds the source's name. A name the organization has no source of stays
+ * listed, ticked, with its problem and fix.
+ */
 function Knowledge({ factory }: { factory: string }) {
+  const org = useOrg();
   const session = useDraftSession();
   const viewOnly = useViewOnly();
   const basics = useSection('basics');
-  const sources = basics.knowledge_sources ?? [];
+  const read = useOrgHolds('knowledge:read');
+  const sources = useQuery({ ...knowledgeSourcesQuery(org.id), enabled: read }).data ?? [];
+  const listed = basics.knowledge_sources ?? [];
+  const unknown = listed.filter((name) => !sources.some((s) => s.name === name));
   const id = useId();
+  const toggle = (name: string, on: boolean) =>
+    session.edit(setBasics(basics, 'knowledge_sources', on ? [...listed, name] : listed.filter((x) => x !== name)));
   return (
     <section aria-labelledby={id} className={card}>
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h3 id={id} className="m-0 text-lg font-medium">
           Knowledge {factory} may search
         </h3>
-        <p className="m-0 text-sm text-muted">
-          Agents search the ticked sources with <code className="font-mono">knowledge__search</code>.
-        </p>
+        {read ? (
+          <Link
+            to="/o/$org/knowledge"
+            params={{ org: org.slug }}
+            className="text-sm text-ink underline underline-offset-3"
+          >
+            Knowledge
+          </Link>
+        ) : null}
       </div>
-      {sources.length === 0 ? (
+      <p className="m-0 -mt-1 text-sm text-muted">
+        Agents search the ticked sources with <code className="font-mono">knowledge__search</code>.
+      </p>
+      {sources.length === 0 && unknown.length === 0 ? (
         <p className="m-0 rounded-control border border-dashed border-rule px-3 py-2.5 text-sm text-muted">
-          No knowledge sources yet: they arrive with Knowledge.
+          {org.name} has no knowledge sources yet. Owners and admins add them in Knowledge.
         </p>
       ) : (
-        <ul className="m-0 flex list-none flex-col p-0">
-          {sources.map((s, i) => (
-            <li key={s} className="flex flex-col gap-1.5 border-t border-line py-2.5 first:border-t-0 first:pt-0">
-              <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-[15px] has-[:disabled]:cursor-default md:min-h-8">
+        <ul className="m-0 grid list-none grid-cols-1 gap-x-6 p-0 @[640px]:grid-cols-2">
+          {sources.map((s) => {
+            const Icon = sourceKinds[s.kind].icon;
+            return (
+              <li key={s.id} className="border-t border-line py-2.5">
+                <label className="flex min-h-11 cursor-pointer items-start gap-2.5 has-[:disabled]:cursor-default md:min-h-0">
+                  <input
+                    type="checkbox"
+                    checked={listed.includes(s.name)}
+                    disabled={viewOnly}
+                    onChange={(e) => toggle(s.name, e.target.checked)}
+                    className={cn(checkbox, 'mt-0.5')}
+                  />
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="text-[15px]">{s.title}</span>
+                    <span className="flex min-w-0 items-start gap-1 text-[13px] text-muted">
+                      <Icon size={13} strokeWidth={1.75} aria-hidden="true" className="mt-[3px] shrink-0" />
+                      <span translate="no" className="break-words">
+                        {sourceKinds[s.kind].label}, {sourceSummary(s)}
+                      </span>
+                    </span>
+                  </span>
+                </label>
+              </li>
+            );
+          })}
+          {unknown.map((name) => (
+            <li key={name} className="col-span-full flex flex-col gap-1.5 border-t border-line py-2.5">
+              <label className="inline-flex min-h-11 cursor-pointer items-center gap-2.5 text-[15px] has-[:disabled]:cursor-default md:min-h-8">
                 <input
                   type="checkbox"
                   checked
                   disabled={viewOnly}
-                  onChange={() =>
-                    session.edit(
-                      setBasics(
-                        basics,
-                        'knowledge_sources',
-                        sources.filter((x) => x !== s),
-                      ),
-                    )
-                  }
+                  onChange={() => toggle(name, false)}
                   className={checkbox}
                 />
-                {s}
+                <span translate="no" className="font-mono">
+                  {name}
+                </span>
               </label>
-              <ProblemFixes pointer={`/basics/knowledge_sources/${i}`} />
+              <ProblemFixes pointer={`/basics/knowledge_sources/${listed.indexOf(name)}`} />
             </li>
           ))}
         </ul>
@@ -452,7 +496,7 @@ function RunsGet() {
             {(basics.knowledge_sources ?? []).length > 0 ? (
               <>
                 <code className="font-mono text-xs">knowledge__search</code> over{' '}
-                {(basics.knowledge_sources ?? []).length} sources
+                {plural((basics.knowledge_sources ?? []).length, 'source')}
               </>
             ) : (
               'No sources'

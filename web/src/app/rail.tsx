@@ -8,17 +8,13 @@ import { useOrgHolds } from '../shared/org';
 import { AccountMenu } from './account-menu';
 import { useFactorySquares } from './factory-squares';
 import { OrgMark } from './org-mark';
-import { ConnectionsRailLink, FactorySquareLink, LaterRailItem, NewFactoryLink, useRailKeys } from './rail-items';
-import { knowledgeScreen } from './screens';
-
-const iconProps = { size: 20, strokeWidth: 1.5, 'aria-hidden': true } as const;
+import { ConnectionsRailLink, FactorySquareLink, KnowledgeRailLink, NewFactoryLink, useRailKeys } from './rail-items';
 
 export function Rail({ org }: { org: OrgSummary }) {
   const squares = useFactorySquares(org);
   // New factory only for whoever may create one (owners and admins).
   const mayCreate = useOrgHolds('factory:create');
   const onKeyDown = useRailKeys('vertical');
-  const Knowledge = knowledgeScreen.icon;
 
   return (
     <nav
@@ -45,9 +41,7 @@ export function Rail({ org }: { org: OrgSummary }) {
       </ul>
       <div className="mt-auto flex flex-col items-center gap-1.5 pt-3">
         <ConnectionsRailLink org={org} />
-        <LaterRailItem label={knowledgeScreen.label} kind="icon" size="rail">
-          <Knowledge {...iconProps} />
-        </LaterRailItem>
+        <KnowledgeRailLink org={org} />
         <AccountMenu org={org} size="rail" />
       </div>
     </nav>

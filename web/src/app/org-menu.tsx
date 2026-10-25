@@ -30,7 +30,6 @@ import {
   apiKeysScreen,
   connectionsScreen,
   knowledgeScreen,
-  laterText,
   membersScreen,
   type OrgScreen,
   screensFor,
@@ -47,7 +46,7 @@ interface OrgChoice {
 
 interface OrgMenuModel {
   orgs: OrgChoice[];
-  /** The current organization's pages: members, API keys, connections, knowledge (4-20) and settings. */
+  /** The current organization's pages: members, API keys, connections, knowledge and settings. */
   links: { screen: OrgScreen; label: string }[];
   /** Create organization is offered: to platform admins, or to the local user with sign-in off. */
   canCreate: boolean;
@@ -151,28 +150,20 @@ export function OrgMenuContent({ org, onCreate, navigating }: OrgMenuProps) {
       <MenuSeparator />
       <MenuGroup aria-labelledby={`${ids}-org`}>
         <MenuLabel id={`${ids}-org`}>{org.name}</MenuLabel>
-        {model.links.map(({ screen, label }) =>
-          screen.available ? (
-            <MenuItem
-              key={screen.id}
-              asChild
-              onSelect={() => {
-                navigating.current = model.leaves(orgPath(screen.to, org.slug));
-              }}
-            >
-              <Link to={screen.to} params={{ org: org.slug }}>
-                <screen.icon {...iconProps} />
-                {label}
-              </Link>
-            </MenuItem>
-          ) : (
-            <MenuItem key={screen.id} disabled>
+        {model.links.map(({ screen, label }) => (
+          <MenuItem
+            key={screen.id}
+            asChild
+            onSelect={() => {
+              navigating.current = model.leaves(orgPath(screen.to, org.slug));
+            }}
+          >
+            <Link to={screen.to} params={{ org: org.slug }}>
               <screen.icon {...iconProps} />
               {label}
-              <span className="ml-auto text-xs">{laterText}</span>
-            </MenuItem>
-          ),
-        )}
+            </Link>
+          </MenuItem>
+        ))}
       </MenuGroup>
       {model.canCreate ? (
         <>
@@ -243,27 +234,19 @@ export function OrgSheetContent({ org, onCreate, onClose, navigating }: OrgSheet
       <div aria-hidden="true" className="my-2 h-px bg-line" />
       <SheetLabel id={`${ids}-org`}>{org.name}</SheetLabel>
       <SheetList labelledBy={`${ids}-org`}>
-        {model.links.map(({ screen, label }) =>
-          screen.available ? (
-            <li key={screen.id}>
-              <Link
-                to={screen.to}
-                params={{ org: org.slug }}
-                onClick={() => go(orgPath(screen.to, org.slug))}
-                className={sheetRow}
-              >
-                <screen.icon {...iconProps} />
-                {label}
-              </Link>
-            </li>
-          ) : (
-            <li key={screen.id} aria-disabled="true" className={cn(menuRow, 'min-h-12 text-base text-muted')}>
+        {model.links.map(({ screen, label }) => (
+          <li key={screen.id}>
+            <Link
+              to={screen.to}
+              params={{ org: org.slug }}
+              onClick={() => go(orgPath(screen.to, org.slug))}
+              className={sheetRow}
+            >
               <screen.icon {...iconProps} />
               {label}
-              <span className="ml-auto text-xs">{laterText}</span>
-            </li>
-          ),
-        )}
+            </Link>
+          </li>
+        ))}
       </SheetList>
       <div aria-hidden="true" className="my-2 h-px bg-line" />
       {model.canCreate ? (

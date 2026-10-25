@@ -4,6 +4,7 @@
 // touches and a resync everything of one organization. Requests name the factory by id too.
 import {
   type EnsureQueryDataOptions,
+  infiniteQueryOptions,
   isCancelledError,
   keepPreviousData,
   type QueryClient,
@@ -60,6 +61,15 @@ import {
   validateDraft,
 } from './definitions';
 import { listApiKeys, listMemberTokens, listPersonalTokens } from './keys';
+import {
+  getKnowledgeDocument,
+  getKnowledgeSource,
+  type KnowledgeQuery,
+  type KnowledgeSourceFilter,
+  listKnowledgeDocuments,
+  listKnowledgeSources,
+  searchKnowledge,
+} from './knowledge';
 import type { ItemEvent } from './types';
 
 /**
@@ -134,6 +144,18 @@ export const keys = {
   /** Audit entries about connections: every one's (`all`) or one's, by its id. */
   connectionActivity: (org: string, id?: string) => ['org', org, 'connections', 'activity', id ?? 'all'] as const,
   connectionKinds: (org: string) => ['org', org, 'connection-kinds'] as const,
+  /**
+   * The prefix of everything of the organization's knowledge base (spec 4 §10): the source lists
+   * by filter, each source and its documents, a document's text, searches. `event: knowledge`
+   * invalidates it.
+   */
+  knowledge: (org: string) => ['org', org, 'knowledge'] as const,
+  knowledgeSources: (org: string, filter: KnowledgeSourceFilter) =>
+    ['org', org, 'knowledge', 'sources', filter] as const,
+  knowledgeSource: (org: string, name: string) => ['org', org, 'knowledge', 'source', name] as const,
+  knowledgeDocuments: (org: string, name: string) => ['org', org, 'knowledge', 'source', name, 'documents'] as const,
+  knowledgeDocument: (org: string, id: string) => ['org', org, 'knowledge', 'document', id] as const,
+  knowledgeSearch: (org: string, query: KnowledgeQuery) => ['org', org, 'knowledge', 'search', query] as const,
   /** The prefix of every factory overview window. */
   overviews: (org: string) => ['org', org, 'overview'] as const,
   overview: (org: string, window: string) => ['org', org, 'overview', window] as const,
@@ -262,6 +284,50 @@ export const connectionActivityQuery = (org: string, id?: string) =>
     queryKey: keys.connectionActivity(org, id),
     queryFn: ({ signal }) => listConnectionAudit(org, { connection: id, limit: id ? 6 : 5 }, signal),
     staleTime: 30_000,
+  });
+
+/** The organization's knowledge sources; `factory` (an id) narrows them to what its current version lists. */
+export const knowledgeSourcesQuery = (org: string, filter: KnowledgeSourceFilter = {}) =>
+  queryOptions({
+    queryKey: keys.knowledgeSources(org, filter),
+    queryFn: ({ signal }) => listKnowledgeSources(org, filter, signal),
+    staleTime: 30_000,
+  });
+
+export const knowledgeSourceQuery = (org: string, name: string) =>
+  queryOptions({
+    queryKey: keys.knowledgeSource(org, name),
+    queryFn: ({ signal }) => getKnowledgeSource(org, name, signal),
+    staleTime: 30_000,
+    retry: retryUnlessRefused,
+  });
+
+/** A source's documents, a page of `limit` at a time ("Show more"). */
+export const knowledgeDocumentsQuery = (org: string, name: string, limit = 100) =>
+  infiniteQueryOptions({
+    queryKey: [...keys.knowledgeDocuments(org, name), limit],
+    queryFn: ({ pageParam, signal }) => listKnowledgeDocuments(org, name, { after: pageParam, limit }, signal),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.next_after,
+    staleTime: 30_000,
+  });
+
+export const knowledgeDocumentQuery = (org: string, id: string) =>
+  queryOptions({
+    queryKey: keys.knowledgeDocument(org, id),
+    queryFn: ({ signal }) => getKnowledgeDocument(org, id, signal),
+    staleTime: 30_000,
+    retry: retryUnlessRefused,
+  });
+
+/** What knowledge__search answers; the previous answer stays shown while the next one loads. */
+export const knowledgeSearchQuery = (org: string, query: KnowledgeQuery) =>
+  queryOptions({
+    queryKey: keys.knowledgeSearch(org, query),
+    queryFn: ({ signal }) => searchKnowledge(org, query, signal),
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+    retry: retryUnlessRefused,
   });
 
 export const settingsQuery = (org: string) =>

@@ -65,7 +65,8 @@ const tabActive = { className: 'font-semibold text-ink shadow-[inset_0_2px_0_var
 
 /**
  * Floor, Board, Items, Build, More. Build goes to the first Build screen that exists (Definition);
- * More opens a sheet with Knowledge and Jonah (later) and the organization's Factories.
+ * More opens a sheet with Knowledge (the organization's, filtered to the factory), Jonah (later)
+ * and the organization's Factories.
  */
 export function TabBar({ org, factory }: { org: OrgSummary; factory: Factory }) {
   const params = { org: org.slug, factory: factory.name };
@@ -105,7 +106,7 @@ export function TabBar({ org, factory }: { org: OrgSummary; factory: Factory }) 
           <span className="sr-only">, {laterText}</span>
         </span>
       )}
-      <MoreSheet org={org} />
+      <MoreSheet org={org} factory={factory} />
     </nav>
   );
 }
@@ -113,7 +114,7 @@ export function TabBar({ org, factory }: { org: OrgSummary; factory: Factory }) 
 const sheetRow =
   'flex min-h-12 items-center gap-3 rounded-control px-2.5 text-base text-ink no-underline transition-colors duration-200';
 
-function MoreSheet({ org }: { org: OrgSummary }) {
+function MoreSheet({ org, factory }: { org: OrgSummary; factory: Factory }) {
   const [open, setOpen] = useState(false);
   const learn = factoryScreens.filter((s) => s.group === 'learn');
   const Factories = factoriesScreen.icon;
@@ -127,13 +128,29 @@ function MoreSheet({ org }: { org: OrgSummary }) {
       <SheetContent title="More">
         <SheetLabel id="more-learn">Learn</SheetLabel>
         <ul aria-labelledby="more-learn" className="m-0 flex list-none flex-col gap-0.5 p-0">
-          {learn.map((s) => (
-            <li key={s.id} aria-disabled="true" className={cn(sheetRow, 'text-muted')}>
-              <s.icon size={18} strokeWidth={1.5} aria-hidden="true" />
-              {s.label}
-              <span className="ml-auto text-xs">{laterText}</span>
-            </li>
-          ))}
+          {learn.map((s) =>
+            s.available && 'filters' in s ? (
+              <li key={s.id}>
+                <Link
+                  to={s.filters}
+                  params={{ org: org.slug }}
+                  search={{ factory: factory.name }}
+                  onClick={() => setOpen(false)}
+                  className={cn(sheetRow, 'hover:bg-shell')}
+                >
+                  <s.icon size={18} strokeWidth={1.5} aria-hidden="true" />
+                  {s.label}
+                  <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" className="ml-auto text-muted" />
+                </Link>
+              </li>
+            ) : (
+              <li key={s.id} aria-disabled="true" className={cn(sheetRow, 'text-muted')}>
+                <s.icon size={18} strokeWidth={1.5} aria-hidden="true" />
+                {s.label}
+                <span className="ml-auto text-xs">{laterText}</span>
+              </li>
+            ),
+          )}
         </ul>
         <div aria-hidden="true" className="my-2 h-px bg-line" />
         <SheetLabel id="more-org">{org.name}</SheetLabel>

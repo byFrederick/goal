@@ -1,17 +1,16 @@
 // The pieces the rail and the phone's top row share: one stop of the arrow-key movement, a
-// factory's square, the organization's Connections and a screen a later phase builds (the account
-// is account-menu.tsx).
+// factory's square, the organization's Connections and Knowledge (the account is
+// account-menu.tsx).
 import { Link, useRouterState } from '@tanstack/react-router';
 import { type KeyboardEvent, type ReactNode, useCallback } from 'react';
 import type { OrgSummary } from '../api/types';
 import { useConnectionTrouble } from '../shared/connections';
 import { useOrgHolds } from '../shared/org';
-import { cn } from '../ui/cn';
 import { Mark } from '../ui/mark';
 import { Tooltip } from '../ui/tooltip';
 import type { FactorySquare } from './factory-squares';
 import { type RailAxis, railFocusTarget } from './rail-focus';
-import { connectionsScreen, laterText, newFactoryScreen } from './screens';
+import { connectionsScreen, knowledgeScreen, newFactoryScreen } from './screens';
 
 /** A 44px target around a mark; `group` passes hover to the mark. */
 export const railItemClass =
@@ -127,38 +126,27 @@ export function ConnectionsRailLink({ org }: { org: OrgSummary }) {
   );
 }
 
-/** A screen a later phase builds (Knowledge): marked disabled, going nowhere. */
-export function LaterRailItem({
-  label,
-  kind,
-  size,
-  children,
-}: {
-  label: string;
-  kind: 'add' | 'icon';
-  size: Size;
-  children: ReactNode;
-}) {
-  const item = (
-    // aria-disabled, not disabled: it stays focusable so its tooltip can say why it does nothing.
-    <button
-      type="button"
-      aria-disabled="true"
-      aria-label={label}
-      className={cn(railItemClass, 'cursor-default')}
-      {...railItem}
-    >
-      <Mark kind={kind} size={size}>
-        {children}
-      </Mark>
-    </button>
-  );
-  return size === 'rail' ? (
-    <Tooltip label={label} detail={laterText}>
-      {item}
+/** The organization's Knowledge (rail only): ink while one of its pages is open. Only for whoever may read it. */
+export function KnowledgeRailLink({ org }: { org: OrgSummary }) {
+  const read = useOrgHolds('knowledge:read');
+  if (!read) return null;
+  const Icon = knowledgeScreen.icon;
+  return (
+    <Tooltip label={knowledgeScreen.label}>
+      <Link
+        to="/o/$org/knowledge"
+        params={{ org: org.slug }}
+        aria-label={knowledgeScreen.label}
+        className={railItemClass}
+        {...railItem}
+      >
+        {({ isActive }) => (
+          <Mark kind="icon" size="rail" current={isActive}>
+            <Icon size={20} strokeWidth={1.5} aria-hidden="true" />
+          </Mark>
+        )}
+      </Link>
     </Tooltip>
-  ) : (
-    item
   );
 }
 

@@ -38,7 +38,7 @@ import type {
 } from '@goal/api-client';
 import { parse as parseYaml } from 'yaml';
 import type { ConnectionOutline } from './connections.ts';
-import { checkConnections, connectionNames } from './connections-check.ts';
+import { checkConnections, connectionNames, knowledgeSourceNames } from './connections-check.ts';
 import { localUser, type MockDefinition, type MockSkill, type MockVersion, type Tree } from './definition-seed.ts';
 import type { MockFault } from './faults.ts';
 import { factoryCan, type MockState } from './fixtures.ts';
@@ -68,6 +68,8 @@ export interface DefinitionsDeps {
   state: () => MockState;
   /** What runs get from each of the organization's connections (the connections check). */
   connections: (org: string) => ConnectionOutline[];
+  /** The names of the organization's knowledge sources (the connections check). */
+  knowledgeSources: (org: string) => string[];
   /** Sends one event to every stream subscriber of the organization. */
   broadcast: (org: string, event: string, data: unknown) => void;
 }
@@ -212,7 +214,14 @@ spec:
 
 function validate(
   t: Tree,
-  opts: { org: string; factory?: string; state: MockState; changes: number; connections: ConnectionOutline[] },
+  opts: {
+    org: string;
+    factory?: string;
+    state: MockState;
+    changes: number;
+    connections: ConnectionOutline[];
+    sources: string[];
+  },
 ): Checked {
   const problems: DefinitionProblem[] = [];
   const counts: DefinitionCounts = {
@@ -496,7 +505,7 @@ function validate(
     });
   });
 
-  checkConnections(model, opts.connections, add);
+  checkConnections(model, opts.connections, opts.sources, add);
 
   // name
   const taken = opts.state.factories.some((f) => f.org_id === opts.org && f.name === name && f.id !== opts.factory);
@@ -772,6 +781,8 @@ export interface Definitions {
   faultBody: (path: string, fault: MockFault) => Json;
   /** The connection names the factory's current version uses (config.Factory.ConnectionNames). */
   connectionNames: (factory: Factory) => string[];
+  /** The knowledge sources the factory's current version may search. */
+  knowledgeSourceNames: (factory: Factory) => string[];
 }
 
 export function createDefinitions(deps: DefinitionsDeps): Definitions {
@@ -785,6 +796,14 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
     const defs = st().definitions;
     defs[f.id] ??= { versions: [], draft: null, current: null };
     return defs[f.id] as MockDefinition;
+  };
+
+  /** The model of the factory's current version, when it has one that reads. */
+  const currentModel = (f: Factory) => {
+    const def = st().definitions[f.id];
+    const current = def?.versions.find((v) => v.id === def.current);
+    const read = current ? modelOf(current.files) : undefined;
+    return read && !(read instanceof ParseError) ? read.model : undefined;
   };
 
   const draftOf = (def: MockDefinition) =>
@@ -873,6 +892,7 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
       factory: f.id,
       state: st(),
       connections: deps.connections(f.org_id),
+      sources: deps.knowledgeSources(f.org_id),
       changes: changes.length,
     });
     const items = result.read ? itemProblems(f, t, moves) : [];
@@ -1022,6 +1042,7 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
       factory: f.id,
       state: st(),
       connections: deps.connections(f.org_id),
+      sources: deps.knowledgeSources(f.org_id),
       changes,
     });
     return {
@@ -1302,8 +1323,13 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
       send(
         res,
         200,
-        validate(treeOf(body.files), { org: org.id, state: st(), connections: deps.connections(org.id), changes: 0 })
-          .validation,
+        validate(treeOf(body.files), {
+          org: org.id,
+          state: st(),
+          connections: deps.connections(org.id),
+          sources: deps.knowledgeSources(org.id),
+          changes: 0,
+        }).validation,
       );
       return true;
     }
@@ -1745,10 +1771,12 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
     },
 
     connectionNames: (f) => {
-      const def = st().definitions[f.id];
-      const current = def?.versions.find((v) => v.id === def.current);
-      const read = current ? modelOf(current.files) : undefined;
-      return read && !(read instanceof ParseError) ? connectionNames(read.model) : [];
+      const read = currentModel(f);
+      return read ? connectionNames(read) : [];
+    },
+    knowledgeSourceNames: (f) => {
+      const read = currentModel(f);
+      return read ? knowledgeSourceNames(read) : [];
     },
     faultBody: (path, fault) => {
       const status = fault.status ?? 500;

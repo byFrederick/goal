@@ -52,7 +52,7 @@ import type {
 export { ApiError, type StreamStatus };
 
 /** goald's origin; empty when the UI is served by goald itself or through the dev proxy. */
-const apiBase: string = import.meta.env.VITE_API_URL ?? '';
+export const apiBase: string = import.meta.env.VITE_API_URL ?? '';
 
 /**
  * The one client of goald. The other request modules of api/ (definitions.ts) use it; nothing

@@ -263,7 +263,9 @@ test.describe('the builder', () => {
     await expect(page.getByRole('checkbox', { name: 'reviewer gets github' })).toBeChecked();
     const runsGet = page.getByRole('region', { name: 'What runs get' });
     await expect(runsGet).toContainText('Model access, from Basics');
-    await expect(page.getByText('No knowledge sources yet: they arrive with Knowledge.')).toBeVisible();
+    await expect(
+      page.getByRole('region', { name: 'Knowledge goal may search' }).getByRole('checkbox', { name: /^Handbook/ }),
+    ).not.toBeChecked();
     await fits(page);
 
     await page.getByRole('checkbox', { name: /^datadog/ }).check();

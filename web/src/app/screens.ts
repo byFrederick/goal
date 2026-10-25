@@ -1,6 +1,7 @@
 // Every screen the shell links to, in one registry that drives the sidebars, the rail, the tab bar
-// and the More sheet (C §10.5). A screen a later phase builds is listed with `available: false`
-// and shows as "Later"; the PR that adds its route flips it to `available: true` with its `to`.
+// and the More sheet (C §10.5). A factory screen a later phase builds is listed with
+// `available: false` and shows as "Later"; the PR that adds its route flips it to
+// `available: true` with its `to`. Every organization screen exists.
 import {
   BookOpen,
   Code,
@@ -30,7 +31,13 @@ export type FactoryPath =
   | '/o/$org/f/$factory/items'
   | '/o/$org/f/$factory/definition';
 /** Paths of the organization's screens; their only param is its slug. */
-export type OrgPath = '/o/$org' | '/o/$org/members' | '/o/$org/settings' | '/o/$org/api-keys' | '/o/$org/connections';
+export type OrgPath =
+  | '/o/$org'
+  | '/o/$org/members'
+  | '/o/$org/settings'
+  | '/o/$org/api-keys'
+  | '/o/$org/connections'
+  | '/o/$org/knowledge';
 
 type Availability<Path> = { available: true; to: Path; exact?: boolean } | { available: false };
 
@@ -40,13 +47,13 @@ type Availability<Path> = { available: true; to: Path; exact?: boolean } | { ava
  */
 export type FactoryScreen = Screen & { group: 'work' | 'build' | 'learn' } & (
     | Availability<FactoryPath>
-    | { available: true; filters: '/o/$org/connections' }
+    | { available: true; filters: '/o/$org/connections' | '/o/$org/knowledge' }
   );
 /**
  * An organization screen; one with `permissions` is listed only for people who hold at least one
  * of them (Org.can).
  */
-export type OrgScreen = Screen & Availability<OrgPath> & { permissions?: readonly string[] };
+export type OrgScreen = Screen & { to: OrgPath; exact?: boolean; permissions?: readonly string[] };
 
 /** The factory sidebar, top to bottom: Work, Build, Learn. */
 export const factoryScreens: readonly FactoryScreen[] = [
@@ -79,8 +86,15 @@ export const factoryScreens: readonly FactoryScreen[] = [
     available: true,
     filters: '/o/$org/connections',
   },
-  // Later: /knowledge (4-20), /jonah (phase 5).
-  { id: 'knowledge', label: 'Knowledge', icon: BookOpen, group: 'learn', available: false },
+  // The organization's Knowledge, filtered to the factory (spec 4 §10). Later: /jonah (phase 5).
+  {
+    id: 'knowledge',
+    label: 'Knowledge',
+    icon: BookOpen,
+    group: 'learn',
+    available: true,
+    filters: '/o/$org/knowledge',
+  },
   { id: 'jonah', label: 'Jonah', icon: SearchCheck, group: 'learn', available: false },
 ];
 
@@ -94,7 +108,6 @@ export const factoriesScreen: OrgScreen = {
   id: 'factories',
   label: 'Factories',
   icon: Factory,
-  available: true,
   to: '/o/$org',
   exact: true,
 };
@@ -103,7 +116,6 @@ export const membersScreen: OrgScreen = {
   id: 'members',
   label: 'Members and roles',
   icon: Users,
-  available: true,
   to: '/o/$org/members',
 };
 
@@ -115,7 +127,6 @@ export const apiKeysScreen: OrgScreen = {
   id: 'api-keys',
   label: 'API keys',
   icon: SquareTerminal,
-  available: true,
   to: '/o/$org/api-keys',
   permissions: ['api_key:read', 'personal_token:read'],
 };
@@ -124,17 +135,21 @@ export const connectionsScreen: OrgScreen = {
   id: 'connections',
   label: 'Connections',
   icon: Plug,
-  available: true,
   to: '/o/$org/connections',
   permissions: ['connection:read'],
 };
-// 4-20: /o/:org/knowledge.
-export const knowledgeScreen: OrgScreen = { id: 'knowledge', label: 'Knowledge', icon: BookOpen, available: false };
+/** The organization's knowledge base (spec 4 §10): every member reads and searches it; owners and admins change it. */
+export const knowledgeScreen: OrgScreen = {
+  id: 'knowledge',
+  label: 'Knowledge',
+  icon: BookOpen,
+  to: '/o/$org/knowledge',
+  permissions: ['knowledge:read'],
+};
 export const settingsScreen: OrgScreen = {
   id: 'settings',
   label: 'Settings',
   icon: Settings,
-  available: true,
   to: '/o/$org/settings',
 };
 

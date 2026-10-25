@@ -57,11 +57,28 @@ async function upload<T>(source: string, files: Record<string, string>): Promise
 }
 
 describe('the mock knowledge base', () => {
-  it('starts acme with an upload source of indexed documents, searched as agents search', async () => {
+  it('starts acme with upload and synced sources, searched as agents search', async () => {
     const { body } = await call<KnowledgeSourceList>(sources);
-    expect(body.sources.map((s) => [s.name, s.kind, s.documents])).toEqual([['handbook', 'upload', 2]]);
+    expect(body.sources.map((s) => [s.name, s.kind, s.status, s.documents])).toEqual([
+      ['goal-docs', 'synced', 'idle', 2],
+      ['handbook', 'upload', 'idle', 2],
+      ['postmortems', 'upload', 'idle', 2],
+      ['runbooks', 'synced', 'failed', 2],
+    ]);
     const hits = await call<KnowledgeSearchResult>('/v1/orgs/acme/knowledge/search?q=tuesdays');
     expect(hits.body.hits.map((h) => [h.source, h.title])).toEqual([['handbook', 'deploy.md']]);
+    const synced = await call<KnowledgeSearchResult>('/v1/orgs/acme/knowledge/search?q=memory&source=runbooks');
+    expect(synced.body.hits.map((h) => h.url)).toEqual([
+      'https://github.com/acme/runbooks/blob/main/ecs-task-out-of-memory.md',
+    ]);
+  });
+
+  it('names the factories whose current version lists a source, and keeps it while they do', async () => {
+    const { body } = await call<KnowledgeSourceList>(`${sources}?factory=sre`);
+    expect(body.sources.map((s) => [s.name, s.used_by.factories.map((f) => f.name)])).toEqual([['handbook', ['sre']]]);
+    const refused = await call<Problem>(`${sources}/handbook`, 'DELETE');
+    expect([refused.status, refused.body.code]).toEqual([409, 'knowledge-source-in-use']);
+    expect((await call(`${sources}/postmortems`, 'DELETE')).status).toBe(204);
   });
 
   it('uploads files, indexes them, serves the original as an attachment and deletes them', async () => {
@@ -123,6 +140,6 @@ describe('the mock knowledge base', () => {
     expect(live.status).toBe(201);
     expect((await call<Problem>(`${sources}/repo-search/sync`, 'POST')).body.code).toBe('knowledge-source-live');
     const github = await call<Connection>('/v1/orgs/acme/connections/github');
-    expect(github.body.used_by.knowledge_sources).toEqual(['repo-search']);
+    expect(github.body.used_by.knowledge_sources).toEqual(['goal-docs', 'runbooks', 'repo-search']);
   });
 });

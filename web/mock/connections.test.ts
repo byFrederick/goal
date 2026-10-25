@@ -135,7 +135,7 @@ spec:
     tools: [go@1.26.10, "rm -rf /"]
     repository: { url: "https://gitlab.example.com/acme/infra", connection: github }
   connections: [aws-prod, nothing]
-  knowledge: { sources: [handbook] }
+  knowledge: { sources: [handbook, ghost] }
   agents:
     - { name: worker, connections: [aws-prod] }
   board:
@@ -154,7 +154,7 @@ spec:
     ]);
     expect(at('connection-unknown')).toEqual([['/connections/1', ['Remove nothing']]]);
     expect(at('tool-spec-invalid')).toEqual([['/basics/tools/1', ['Remove rm -rf /']]]);
-    expect(at('knowledge-source-unknown')).toEqual([['/basics/knowledge_sources/0', ['Remove handbook']]]);
+    expect(at('knowledge-source-unknown')).toEqual([['/basics/knowledge_sources/1', ['Remove ghost']]]);
     // The model connection (github) and aws-prod set no variable in common.
     expect(at('connection-env-conflict')).toEqual([]);
   });

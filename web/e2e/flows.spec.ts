@@ -191,7 +191,7 @@ test('the rail moves by arrow keys and opens a factory', async ({ page }) => {
   await page.keyboard.press('End');
   await expect(rail.getByRole('button', { name: 'LU, Local user, account' })).toBeFocused();
   await page.keyboard.press('ArrowUp');
-  await expect(rail.getByRole('button', { name: 'Knowledge' })).toBeFocused();
+  await expect(rail.getByRole('link', { name: 'Knowledge' })).toBeFocused();
   await page.keyboard.press('ArrowUp');
   // A connection's test failed (pagerduty): the rail's Connections says so.
   await expect(rail.getByRole('link', { name: 'Connections, 1 failing' })).toBeFocused();
@@ -627,7 +627,10 @@ test('on a phone: More opens a sheet that leads to the factories', async ({ page
 
   await more.click();
   const sheet = page.getByRole('dialog', { name: 'More' });
-  await expect(sheet.getByText('Knowledge')).toBeVisible();
+  await expect(sheet.getByRole('link', { name: 'Knowledge' })).toHaveAttribute(
+    'href',
+    '/o/acme/knowledge?factory=goal',
+  );
   await expectAccessible(page);
   await page.keyboard.press('Escape');
   await expect(sheet).toBeHidden();
@@ -661,7 +664,7 @@ test('switch organization from the menu by keyboard', async ({ page }) => {
     'false',
   );
   await expect(menu.getByRole('menuitem', { name: 'Connections' })).toHaveAttribute('href', '/o/acme/connections');
-  await expect(menu.getByRole('menuitem', { name: /Knowledge/ })).toHaveAttribute('aria-disabled', 'true');
+  await expect(menu.getByRole('menuitem', { name: 'Knowledge' })).toHaveAttribute('href', '/o/acme/knowledge');
   await expect(menu.getByRole('menuitem', { name: 'Organization settings' })).toHaveAttribute(
     'href',
     '/o/acme/settings',
