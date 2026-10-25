@@ -19,5 +19,6 @@ spec:
     url: https://api.githubcopilot.com/mcp/
     headers: {Authorization: "Bearer ${GH_TOKEN}"}   # expanded by Claude Code from the box's env
   codeHost: github
+  sync: gitdocs
   test: {method: GET, url: "https://api.{{host}}/user", headers: {Authorization: "Bearer {{token}}"}, expect: 200}
   docs: Use gh and git; GH_TOKEN is set. Open a pull request for every change.

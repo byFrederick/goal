@@ -17,5 +17,6 @@ spec:
     username: oauth2
     passwordEnv: GITLAB_TOKEN
   codeHost: gitlab
+  sync: gitdocs
   test: {method: GET, url: "https://{{host}}/api/v4/user", headers: {PRIVATE-TOKEN: "{{token}}"}, expect: 200}
   docs: Use glab and git; GITLAB_TOKEN and GITLAB_HOST are set. Open a merge request for every change.
