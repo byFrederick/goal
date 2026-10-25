@@ -35,12 +35,20 @@ abstract class Service extends DurableObject<Env> {
 
   private booting: Promise<void> | undefined;
 
-  /** forward sends request to the container's port (its main port by default). */
+  /**
+   * forward sends request to the container's port (its main port by default). A container is
+   * reached over HTTP only, so an https request keeps its host, path and query, and the scheme it
+   * arrived with goes in X-Forwarded-Proto.
+   */
   async forward(request: Request, port?: number): Promise<Response> {
     await this.ensure();
+    const url = new URL(request.url);
+    const headers = new Headers(request.headers);
+    headers.set('x-forwarded-proto', url.protocol.slice(0, -1));
+    url.protocol = 'http:';
     return this.container()
       .getTcpPort(port ?? this.port)
-      .fetch(request);
+      .fetch(new Request(url, new Request(request, { headers })));
   }
 
   /** ensure starts the container unless it runs, and waits until it answers its health check. */

@@ -52,9 +52,10 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Goald", "Auth", "RunBox", "BoxIndex"] }],
   // Settings that are not secrets; src/env.ts lists which reach goald and which the auth service.
-  // GOAL_S3_ENDPOINT is `terraform output s3_endpoint`. Add GOAL_BOOTSTRAP_OWNER_EMAIL, the one
-  // address that may sign in first, before the first deploy. Sign-in is Google only (no mail
-  // server, so GOAL_AUTH_EMAIL is off); cloudflare-operations.md says how to add email codes.
+  // GOAL_S3_ENDPOINT is `terraform output s3_endpoint`. GOAL_BOOTSTRAP_OWNER_EMAIL, the one
+  // address that may sign in first, is passed at deploy (`--var`), not kept here. Sign-in is
+  // Google only (no mail server, so GOAL_AUTH_EMAIL is off); cloudflare-operations.md says how
+  // to add email codes.
   "vars": {
     "GOAL_PUBLIC_URL": "https://goal.byfrederick.work",
     "GOAL_AUTH": "session",
@@ -62,9 +63,9 @@
     "GOAL_AUTH_EMAIL": "off",
     "GOAL_AGENT_IMAGE": "goal-agent",
     "GOAL_S3_BUCKET": "goal-production",
-    "GOAL_S3_ENDPOINT": "https://<account-id>.r2.cloudflarestorage.com",
+    "GOAL_S3_ENDPOINT": "https://426869b73edbba5b3150327b9b538cb2.r2.cloudflarestorage.com",
     "AWS_REGION": "auto",
-    "GOAL_EMBED_URL": "https://api.cloudflare.com/client/v4/accounts/<account-id>/ai/v1",
+    "GOAL_EMBED_URL": "https://api.cloudflare.com/client/v4/accounts/426869b73edbba5b3150327b9b538cb2/ai/v1",
     "GOAL_LOG_FORMAT": "json"
   },
   // Platform secrets only (AGENTS.md rule 7): Terraform's goal-production-<NAME>, in the store of
@@ -72,37 +73,37 @@
   // secret_consumers give it (src/env.ts). The database URLs follow spec 4 §5.12: port 5432,
   // verify-full (with sslrootcert=system and pool_max_conns=8 for goald).
   "secrets_store_secrets": [
-    { "binding": "GOAL_MASTER_KEYS", "store_id": "<secrets-store-id>", "secret_name": "goal-production-GOAL_MASTER_KEYS" },
-    { "binding": "GOAL_GATEWAY_KEY", "store_id": "<secrets-store-id>", "secret_name": "goal-production-GOAL_GATEWAY_KEY" },
-    { "binding": "GOAL_SANDBOX_KEY", "store_id": "<secrets-store-id>", "secret_name": "goal-production-GOAL_SANDBOX_KEY" },
+    { "binding": "GOAL_MASTER_KEYS", "store_id": "c495e044e49147dcb6f4cde9b282ec17", "secret_name": "goal-production-GOAL_MASTER_KEYS" },
+    { "binding": "GOAL_GATEWAY_KEY", "store_id": "c495e044e49147dcb6f4cde9b282ec17", "secret_name": "goal-production-GOAL_GATEWAY_KEY" },
+    { "binding": "GOAL_SANDBOX_KEY", "store_id": "c495e044e49147dcb6f4cde9b282ec17", "secret_name": "goal-production-GOAL_SANDBOX_KEY" },
     {
       "binding": "GOAL_AUTH_PROXY_SECRET",
-      "store_id": "<secrets-store-id>",
+      "store_id": "c495e044e49147dcb6f4cde9b282ec17",
       "secret_name": "goal-production-GOAL_AUTH_PROXY_SECRET"
     },
-    { "binding": "GOAL_DATABASE_URL", "store_id": "<secrets-store-id>", "secret_name": "goal-production-GOAL_DATABASE_URL" },
+    { "binding": "GOAL_DATABASE_URL", "store_id": "c495e044e49147dcb6f4cde9b282ec17", "secret_name": "goal-production-GOAL_DATABASE_URL" },
     {
       "binding": "GOAL_MIGRATE_DATABASE_URL",
-      "store_id": "<secrets-store-id>",
+      "store_id": "c495e044e49147dcb6f4cde9b282ec17",
       "secret_name": "goal-production-GOAL_MIGRATE_DATABASE_URL"
     },
-    { "binding": "GOAL_S3_ACCESS_KEY", "store_id": "<secrets-store-id>", "secret_name": "goal-production-GOAL_S3_ACCESS_KEY" },
-    { "binding": "GOAL_S3_SECRET_KEY", "store_id": "<secrets-store-id>", "secret_name": "goal-production-GOAL_S3_SECRET_KEY" },
-    { "binding": "GOAL_EMBED_KEY", "store_id": "<secrets-store-id>", "secret_name": "goal-production-GOAL_EMBED_KEY" },
+    { "binding": "GOAL_S3_ACCESS_KEY", "store_id": "c495e044e49147dcb6f4cde9b282ec17", "secret_name": "goal-production-GOAL_S3_ACCESS_KEY" },
+    { "binding": "GOAL_S3_SECRET_KEY", "store_id": "c495e044e49147dcb6f4cde9b282ec17", "secret_name": "goal-production-GOAL_S3_SECRET_KEY" },
+    { "binding": "GOAL_EMBED_KEY", "store_id": "c495e044e49147dcb6f4cde9b282ec17", "secret_name": "goal-production-GOAL_EMBED_KEY" },
     {
       "binding": "BETTER_AUTH_SECRET",
-      "store_id": "<secrets-store-id>",
+      "store_id": "c495e044e49147dcb6f4cde9b282ec17",
       "secret_name": "goal-production-BETTER_AUTH_SECRET"
     },
     {
       "binding": "GOAL_AUTH_DATABASE_URL",
-      "store_id": "<secrets-store-id>",
+      "store_id": "c495e044e49147dcb6f4cde9b282ec17",
       "secret_name": "goal-production-GOAL_AUTH_DATABASE_URL"
     },
-    { "binding": "GOOGLE_CLIENT_ID", "store_id": "<secrets-store-id>", "secret_name": "goal-production-GOOGLE_CLIENT_ID" },
+    { "binding": "GOOGLE_CLIENT_ID", "store_id": "c495e044e49147dcb6f4cde9b282ec17", "secret_name": "goal-production-GOOGLE_CLIENT_ID" },
     {
       "binding": "GOOGLE_CLIENT_SECRET",
-      "store_id": "<secrets-store-id>",
+      "store_id": "c495e044e49147dcb6f4cde9b282ec17",
       "secret_name": "goal-production-GOOGLE_CLIENT_SECRET"
     }
   ]

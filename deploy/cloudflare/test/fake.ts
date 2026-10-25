@@ -60,7 +60,14 @@ export class FakeContainer {
 
   getTcpPort(port: number): Fetcher {
     return {
-      fetch: async (input: RequestInfo, init?: RequestInit) => this.port(port, new Request(input, init)),
+      fetch: async (input: RequestInfo, init?: RequestInit) => {
+        const request = new Request(input, init);
+        // As Cloudflare does: a container's port is reached over HTTP only.
+        if (new URL(request.url).protocol !== 'http:') {
+          throw new Error('Connecting to a container using HTTPS is not currently supported; use HTTP instead.');
+        }
+        return this.port(port, request);
+      },
     } as Fetcher;
   }
 
