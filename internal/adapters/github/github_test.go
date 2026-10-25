@@ -1,14 +1,17 @@
 package github
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/domain"
@@ -21,6 +24,8 @@ const (
 	headSHA = "4b825dc6"
 	squash  = "squash"
 	message = "message"
+	merged  = "merged"
+	closed  = "closed"
 )
 
 // connection is a connection of the platform's github kind with values (token and host).
@@ -54,24 +59,48 @@ type fakeGitHub struct {
 	merge    func(body map[string]string) (int, any)
 	requests []string
 	deleted  []string
+	// mergeable, when not empty, is what successive reads of the pull request answer for
+	// mergeable, the last one from then on.
+	mergeable []any
 }
+
+// fastPolls re-reads a pull request whose mergeability is unknown three times, at once.
+var fastPolls = []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond}
 
 func newFakeGitHub(t *testing.T) (*fakeGitHub, *Client) {
 	t.Helper()
 
+	return newFakeGitHubWith(t, Config{})
+}
+
+// newFakeGitHubWith is newFakeGitHub with cfg, its APIURL the fake's.
+func newFakeGitHubWith(t *testing.T, cfg Config) (*fakeGitHub, *Client) {
+	t.Helper()
+
 	f := &fakeGitHub{pr: map[string]any{
-		"state": "open", "merged": false, "mergeable": true, "merge_commit_sha": "test-merge-sha",
+		"state": "open", merged: false, "mergeable": true, "merge_commit_sha": "test-merge-sha",
 		"head": map[string]any{"sha": headSHA, "ref": "goal/7-add-x", "repo": map[string]any{"full_name": "acme/app"}},
 		"base": map[string]any{"ref": "main", "repo": map[string]any{"full_name": "acme/app"}},
 	}}
 	f.merge = func(map[string]string) (int, any) {
-		f.pr["state"], f.pr["merged"] = "closed", true
+		f.pr["state"], f.pr[merged] = closed, true
 
 		return http.StatusOK, map[string]any{"sha": "merge-sha", "merged": true, message: "Pull Request successfully merged"}
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /repos/acme/app/pulls/7", func(w http.ResponseWriter, _ *http.Request) { f.reply(w, http.StatusOK, f.pr) })
+	mux.HandleFunc("GET /repos/acme/app/pulls/7", func(w http.ResponseWriter, _ *http.Request) {
+		f.mu.Lock()
+		if len(f.mergeable) > 0 {
+			f.pr["mergeable"] = f.mergeable[0]
+			if len(f.mergeable) > 1 {
+				f.mergeable = f.mergeable[1:]
+			}
+		}
+		f.mu.Unlock()
+
+		f.reply(w, http.StatusOK, f.pr)
+	})
 	mux.HandleFunc("PUT /repos/acme/app/pulls/7/merge", func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]string
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -105,7 +134,9 @@ func newFakeGitHub(t *testing.T) (*fakeGitHub, *Client) {
 	}))
 	t.Cleanup(srv.Close)
 
-	return f, New(Config{APIURL: srv.URL})
+	cfg.APIURL = srv.URL
+
+	return f, New(cfg)
 }
 
 func (f *fakeGitHub) reply(w http.ResponseWriter, status int, body any) {
@@ -159,6 +190,71 @@ func TestPullRequest_ReadsStateHeadAndBase(t *testing.T) {
 	}
 	if pr != want {
 		t.Errorf("pull request = %+v; want %+v", pr, want)
+	}
+}
+
+// GitHub answers mergeable null while it computes it: the client reads the pull request again
+// until it knows, and says so when it never does. A known answer, or a pull request no longer
+// open (merged and closed ones always answer null), is not read again.
+func TestPullRequest_WaitsForMergeability(t *testing.T) {
+	t.Parallel()
+
+	const get = "GET /repos/acme/app/pulls/7"
+
+	tests := []struct {
+		name          string
+		pr            map[string]any // fields replacing the fake's
+		mergeable     []any
+		wantMergeable bool
+		wantPending   bool
+		wantGets      int
+	}{
+		{name: "null then true", mergeable: []any{nil, nil, true}, wantMergeable: true, wantGets: 3},
+		{name: "always null", mergeable: []any{nil}, wantPending: true, wantGets: 1 + len(fastPolls)},
+		{name: "false", mergeable: []any{false, true}, wantGets: 1},
+		{name: merged, pr: map[string]any{"state": closed, merged: true}, mergeable: []any{nil, true}, wantGets: 1},
+		{name: closed, pr: map[string]any{"state": closed}, mergeable: []any{nil, true}, wantGets: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f, c := newFakeGitHubWith(t, Config{MergeabilityPolls: fastPolls})
+			f.mergeable = tt.mergeable
+			maps.Copy(f.pr, tt.pr)
+
+			pr, err := c.PullRequest(t.Context(), dotComConn(t), prURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if pr.Mergeable != tt.wantMergeable || pr.MergeabilityPending != tt.wantPending {
+				t.Errorf("mergeable %v, pending %v; want %v, %v", pr.Mergeable, pr.MergeabilityPending, tt.wantMergeable, tt.wantPending)
+			}
+
+			if got := f.sent(); len(got) != tt.wantGets || slices.ContainsFunc(got, func(r string) bool { return r != get }) {
+				t.Errorf("requests %v; want %d reads of the pull request", got, tt.wantGets)
+			}
+		})
+	}
+}
+
+// The wait ends with the context, with its error.
+func TestPullRequest_WaitStopsWithTheContext(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitHubWith(t, Config{MergeabilityPolls: []time.Duration{time.Hour}})
+	f.mergeable = []any{nil}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	defer cancel()
+
+	// The deadline may also end the first read, whose transport error does not wrap it.
+	if _, err := c.PullRequest(ctx, dotComConn(t), prURL); err == nil || ctx.Err() == nil {
+		t.Errorf("PullRequest = %v, context %v; want an error once the context ended", err, ctx.Err())
+	} else if got := f.sent(); len(got) > 1 {
+		t.Errorf("requests %v; want no read after the context ended", got)
 	}
 }
 

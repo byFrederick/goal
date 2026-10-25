@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -41,6 +42,15 @@ type Config struct {
 	// Transport carries the requests; nil is http.DefaultTransport. goald passes its connection
 	// transport, which dials public addresses only (egress.PublicDialer).
 	Transport http.RoundTripper
+	// MergeabilityPolls are the waits before each new read of an open pull request whose
+	// mergeability GitHub is still computing (it answers mergeable null). Default: about 10s in
+	// all, GitHub's documented behavior.
+	MergeabilityPolls []time.Duration
+}
+
+// defaultMergeabilityPolls add up to 10s.
+var defaultMergeabilityPolls = []time.Duration{
+	500 * time.Millisecond, time.Second, 1500 * time.Millisecond, 2 * time.Second, 2 * time.Second, 3 * time.Second,
 }
 
 const (
@@ -51,8 +61,9 @@ const (
 
 // Client calls GitHub's REST API. It is safe for concurrent use and keeps no state.
 type Client struct {
-	api  string
-	http *http.Client
+	api   string
+	http  *http.Client
+	polls []time.Duration
 }
 
 // New returns a client. cfg.APIURL, when set, must be an http(s) URL; goald's settings check it.
@@ -61,8 +72,13 @@ func New(cfg Config) *Client {
 		cfg.Timeout = 30 * time.Second
 	}
 
+	if len(cfg.MergeabilityPolls) == 0 {
+		cfg.MergeabilityPolls = defaultMergeabilityPolls
+	}
+
 	return &Client{
-		api: strings.TrimSuffix(cfg.APIURL, "/"),
+		api:   strings.TrimSuffix(cfg.APIURL, "/"),
+		polls: slices.Clone(cfg.MergeabilityPolls),
 		http: &http.Client{
 			Timeout:   cfg.Timeout,
 			Transport: cfg.Transport,
@@ -142,6 +158,58 @@ type repoJSON struct {
 	FullName string `json:"full_name"`
 }
 
+// read gets the pull request once.
+func (cl *Client) read(ctx context.Context, p pull, prURL string) (pullJSON, error) {
+	var pj pullJSON
+
+	status, _, err := cl.call(ctx, p, http.MethodGet, p.repoPath("/pulls/"+p.number), nil, &pj)
+
+	switch {
+	case err != nil:
+		return pullJSON{}, fmt.Errorf("pull request %s: %w", prURL, err)
+	case status == http.StatusNotFound:
+		return pullJSON{}, fmt.Errorf("pull request %s does not exist: %w", prURL, ports.ErrNotMergeable)
+	case status != http.StatusOK:
+		return pullJSON{}, fmt.Errorf("pull request %s: GitHub answered %d", prURL, status)
+	}
+
+	return pj, nil
+}
+
+// readKnown reads the pull request, and again after each of cl.polls while GitHub is still
+// computing its mergeability in the background (it answers null until it knows). Merged and
+// closed pull requests always answer null: they are read once.
+func (cl *Client) readKnown(ctx context.Context, p pull, prURL string) (pullJSON, error) {
+	pj, err := cl.read(ctx, p, prURL)
+
+	for _, wait := range cl.polls {
+		if err != nil || pj.Mergeable != nil || pj.State != "open" || pj.Merged {
+			break
+		}
+
+		if err := sleep(ctx, wait); err != nil {
+			return pullJSON{}, fmt.Errorf("pull request %s: waiting for GitHub to compute its mergeability: %w", prURL, err)
+		}
+
+		pj, err = cl.read(ctx, p, prURL)
+	}
+
+	return pj, err
+}
+
+// sleep waits d, or until ctx ends.
+func sleep(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
+}
+
 // PullRequest implements ports.CodeHost.
 func (cl *Client) PullRequest(ctx context.Context, c domain.ResolvedConnection, prURL string) (ports.PullRequest, error) {
 	p, err := cl.open(c, prURL)
@@ -149,22 +217,16 @@ func (cl *Client) PullRequest(ctx context.Context, c domain.ResolvedConnection, 
 		return ports.PullRequest{}, err
 	}
 
-	var pj pullJSON
-
-	status, _, err := cl.call(ctx, p, http.MethodGet, p.repoPath("/pulls/"+p.number), nil, &pj)
-
-	switch {
-	case err != nil:
-		return ports.PullRequest{}, fmt.Errorf("pull request %s: %w", prURL, err)
-	case status == http.StatusNotFound:
-		return ports.PullRequest{}, fmt.Errorf("pull request %s does not exist: %w", prURL, ports.ErrNotMergeable)
-	case status != http.StatusOK:
-		return ports.PullRequest{}, fmt.Errorf("pull request %s: GitHub answered %d", prURL, status)
+	pj, err := cl.readKnown(ctx, p, prURL)
+	if err != nil {
+		return ports.PullRequest{}, err
 	}
 
+	unmerged := pj.State == "open" && !pj.Merged
 	pr := ports.PullRequest{
 		URL: prURL, Open: pj.State == "open", Merged: pj.Merged, Mergeable: pj.Mergeable != nil && *pj.Mergeable,
-		HeadSHA: pj.Head.SHA, HeadBranch: pj.Head.Ref, BaseBranch: pj.Base.Ref,
+		MergeabilityPending: unmerged && pj.Mergeable == nil,
+		HeadSHA:             pj.Head.SHA, HeadBranch: pj.Head.Ref, BaseBranch: pj.Base.Ref,
 		SameRepository: pj.Head.Repo != nil && pj.Base.Repo != nil && strings.EqualFold(pj.Head.Repo.FullName, pj.Base.Repo.FullName),
 	}
 
