@@ -66,9 +66,10 @@ type settings struct {
 	// identity service is told about (GOAL_TRUSTED_PROXIES: comma-separated CIDRs or addresses,
 	// default none).
 	TrustedProxies []netip.Prefix
-	// GatewayURL is the MCP gateway as agent containers reach it, the only goald address they are
-	// given (GOAL_GATEWAY_URL, default http://<gateway listen or listen>/mcp, a wildcard host
-	// becoming 127.0.0.1; the Docker runner rewrites loopback to host.docker.internal).
+	// GatewayURL is the MCP gateway's URL (GOAL_GATEWAY_URL, default http://<gateway listen or
+	// listen>/mcp, a wildcard host becoming 127.0.0.1). Agent containers are given the egress
+	// proxy's address at its path, and the proxy reaches goald as GOAL_EGRESS_GATEWAY says
+	// (goal up derives it from this listener).
 	GatewayURL string
 	// GatewayKeyRef names the secret that signs task tokens (GOAL_GATEWAY_KEY_REF, default
 	// env:GOAL_GATEWAY_KEY).
@@ -114,14 +115,12 @@ type settings struct {
 	// DefaultAgentImage is the agent image a blank factory's skeleton names
 	// (GOAL_DEFAULT_AGENT_IMAGE, default the agent image this repository builds).
 	DefaultAgentImage string
-	// Egress is the egress proxy agent, sidecar and check containers reach the outside through
-	// (ADR 0009): its container and network name (GOAL_EGRESS_NAME, default goal-egress; goalds
-	// with different settings on one Docker host need different names), its image
-	// (GOAL_EGRESS_IMAGE, default the one task egress:image builds), the hosts agents may reach
-	// besides the gateway (GOAL_AGENT_EGRESS: comma-separated host or host:port, port 443 by
-	// default; default api.anthropic.com, the model API) and the gateway it serves them
-	// (GatewayURL).
-	Egress docker.EgressConfig
+	// SandboxNetwork is the Docker network agent, sidecar and check containers run on
+	// (GOAL_SANDBOX_NETWORK, default goal_agents): compose.yaml's agents network, whose
+	// goal-egress service is their only way out (ADR 0009 and its phase 4 amendment).
+	SandboxNetwork string
+	// Ignored are the removedVariables that are set: goald warns about them at start.
+	Ignored []string
 }
 
 const (
@@ -141,13 +140,12 @@ const (
 	schemeHTTP     = "http"
 	schemeHTTPS    = "https"
 	taskEnvEnv     = "GOAL_TASK_ENV"
-	egressNameEnv  = "GOAL_EGRESS_NAME"
+	// sandboxNetworkEnv names the agents' network (compose.yaml's agents).
+	sandboxNetworkEnv = "GOAL_SANDBOX_NETWORK"
 	// authProxySecretEnv is the secret goald's /api/auth proxy sends the identity service, which
 	// refuses requests without it (GOAL_AUTH=session only; goal up generates one for both).
 	authProxySecretEnv = "GOAL_AUTH_PROXY_SECRET" //nolint:gosec // a variable name, not a credential
 	authProxySecretRef = "env:" + authProxySecretEnv
-	egressImageEnv     = "GOAL_EGRESS_IMAGE"
-	agentEgressEnv     = "GOAL_AGENT_EGRESS"
 	defaultModels      = "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5"
 	defaultListen      = "127.0.0.1:8080"
 	defaultTaskEnv     = "CLAUDE_CODE_OAUTH_TOKEN=env:CLAUDE_CODE_OAUTH_TOKEN"
@@ -179,7 +177,7 @@ var ownVariables = []string{
 	authEnv, upstreamEnv, proxiesEnv, googleEnv, authProxySecretEnv,
 	"GOAL_WORKSPACE_ROOT", "GOAL_RUN_DIR", "GOAL_TICK_EVERY", "GOAL_REFRESH_EVERY", "GOAL_MAX_RUNS",
 	"GOAL_GITHUB_API_URL", githubWebEnv, "GOAL_LOG_LEVEL", "GOAL_LOG_FORMAT", "GOAL_DEFAULT_AGENT_IMAGE", "GOAL_ORG_RETENTION", "GOAL_MODELS",
-	"GOAL_DEFINITION_CACHE_BYTES", egressNameEnv, egressImageEnv, agentEgressEnv,
+	"GOAL_DEFINITION_CACHE_BYTES", sandboxNetworkEnv,
 	"GOAL_S3_BUCKET", "GOAL_S3_ENDPOINT", "GOAL_S3_ACCESS_KEY", "GOAL_S3_SECRET_KEY",
 	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", masterkey.KeysEnv, masterkey.FileEnv,
 }
@@ -194,12 +192,17 @@ var identityVariables = []string{
 	"GOAL_API_KEY", "GOAL_DATABASE_ADMIN_URL",
 }
 
-// reserved is the variables definitions may not reference: goald's own, the identity service's,
+// removedVariables are settings of earlier releases that goald ignores, warning at start while
+// one is still set (spec 4 §5.13): the egress proxy is compose.yaml's goal-egress service now,
+// with one policy for every box (ADR 0009's phase 4 amendment).
+var removedVariables = []string{"GOAL_AGENT_EGRESS", "GOAL_EGRESS_NAME", "GOAL_EGRESS_IMAGE"}
+
+// reserved is the variables definitions may not reference: goald's own (removed ones too), the identity service's,
 // the one its gateway key reference names, the platform secrets that never reach a task (forbiddenTaskEnv, but the
 // repository token, which serves the repository) and the variables GOAL_TASK_ENV hands every
 // task (the model's access, such as CLAUDE_CODE_OAUTH_TOKEN).
 func (s settings) reserved() []string {
-	out := slices.Concat(ownVariables, identityVariables)
+	out := slices.Concat(ownVariables, identityVariables, removedVariables)
 
 	add := func(ref string) {
 		if name, ok := strings.CutPrefix(ref, "env:"); ok && name != repositoryToken && !slices.Contains(out, name) {
@@ -266,7 +269,7 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 	s.GatewayURL = or(gatewayURLEnv, defaultGatewayURL(s))
 	errs := authSettings(&s, or)
 	errs = append(errs, listenErrors(s)...)
-	errs = append(errs, egressSettings(&s, or)...)
+	errs = append(errs, sandboxSettings(&s, getenv, or)...)
 
 	var err error
 	if s.TaskEnv, err = taskEnv(or(taskEnvEnv, defaultTaskEnv)); err != nil {
@@ -313,22 +316,19 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 	return s, errors.Join(append(errs, err)...)
 }
 
-// egressSettings reads GOAL_EGRESS_NAME, GOAL_EGRESS_IMAGE and GOAL_AGENT_EGRESS, checked as the
-// Docker adapter will use them.
-func egressSettings(s *settings, or func(name, def string) string) []error {
-	s.Egress = docker.EgressConfig{
-		Name: or(egressNameEnv, docker.DefaultEgressName), Image: or(egressImageEnv, docker.DefaultEgressImage), Gateway: s.GatewayURL,
-	}
+// sandboxSettings reads GOAL_SANDBOX_NETWORK, checks GOAL_GATEWAY_URL as containers are given
+// its path, and lists the removed settings still set.
+func sandboxSettings(s *settings, getenv func(string) string, or func(name, def string) string) []error {
+	s.SandboxNetwork = or(sandboxNetworkEnv, docker.DefaultNetwork)
 
-	for h := range strings.SplitSeq(or(agentEgressEnv, docker.DefaultAgentHost), ",") {
-		if h = strings.TrimSpace(h); h != "" {
-			s.Egress.AgentHosts = append(s.Egress.AgentHosts, h)
+	for _, name := range removedVariables {
+		if strings.TrimSpace(getenv(name)) != "" {
+			s.Ignored = append(s.Ignored, name)
 		}
 	}
 
-	// NewEgress only checks and keeps its configuration; the Docker client is not used.
-	if _, err := docker.NewEgress(nil, s.Egress, slog.New(slog.DiscardHandler)); err != nil {
-		return []error{fmt.Errorf("%s, %s, %s: %w", egressNameEnv, agentEgressEnv, gatewayURLEnv, err)}
+	if u, err := url.Parse(s.GatewayURL); err != nil || (u.Scheme != schemeHTTP && u.Scheme != schemeHTTPS) || u.Host == "" || u.Path == "" || u.RawQuery != "" {
+		return []error{fmt.Errorf("%s %q is not an http(s) URL with a path and no query, such as http://127.0.0.1:8080/mcp", gatewayURLEnv, s.GatewayURL)}
 	}
 
 	return nil

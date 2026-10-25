@@ -1,0 +1,19 @@
+# The image builds from the repository root and needs the Go module, goald's packages, the
+# migrations, the schemas and the web UI's workspace.
+*
+!go.mod
+!go.sum
+!cmd/goald/
+!internal/
+!migrations/
+!schema/
+!web/
+!packages/api-client/
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+**/node_modules/
+web/dist/
+web/e2e/
+web/e2e-auth/
+**/*_test.go

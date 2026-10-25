@@ -1,19 +1,16 @@
-// Package egress is the proxy that agent, sidecar and check containers reach everything outside
-// their network through (ADR 0009). They run on Docker networks with no route out; the proxy is
-// the one container on both those networks and one that has a route, and it decides by the
-// client's source address what the client may reach:
+// Package egress is the proxy every sandbox reaches the outside through (ADR 0009 and its phase 4
+// amendment). Sandboxes run on a Docker network with no route out; the proxy is the one
+// container on that network and on one that has a route, and every client gets one policy:
 //
-//   - agents (Config.Agents): the hosts in Config.AgentHosts (the model API) over CONNECT, and
-//     goald's MCP gateway, served as a reverse proxy at exactly the gateway's path, so the agent
-//     reaches /mcp and nothing else of goald;
-//   - tools (Config.Tools: sidecars with network access and command checks): any public host, over
-//     CONNECT or as plain-http forward requests;
-//   - anyone else: nothing.
+//   - any destination whose resolved addresses are all public, over CONNECT or as plain-http
+//     forward requests;
+//   - goald's gateway, served as a reverse proxy at exactly its paths (GatewayPaths: the MCP
+//     gateway and the run's bundle), so a box reaches those and nothing else of goald.
 //
-// Every destination but the gateway and Config.Trusted is resolved by the proxy itself and dialed
-// only at the addresses it vetted, all of which must be public (Public): a name that resolves, or
-// rebinds, to a loopback, private, link-local (the cloud metadata service) or other non-public
-// address is refused, whoever asks.
+// Every destination but the gateway is resolved by the proxy itself and dialed only at the
+// addresses it vetted, all of which must be public (Public): a name that resolves, or rebinds, to
+// a loopback, private, link-local (the cloud metadata service) or other non-public address is
+// refused.
 package egress
 
 import (
@@ -40,20 +37,15 @@ var ErrNotPublic = errors.New("destination is not a public address")
 // DialTimeout bounds resolving and connecting to one destination.
 const DialTimeout = 10 * time.Second
 
-// Config is the proxy's policy. Agents and Tools must not overlap.
+// GatewayPaths are goald's paths a box reaches through the proxy, exactly: the MCP gateway and
+// the run's bundle. Any other path, an encoded one included, is 404.
+var GatewayPaths = []string{"/mcp", "/run"}
+
+// Config is the proxy's setup.
 type Config struct {
-	// Gateway is goald's MCP gateway as the proxy reaches it; agents get it at Gateway.Path.
-	// Nil serves no gateway.
+	// Gateway is goald's gateway listener as the proxy reaches it, an http(s) origin; requests at
+	// GatewayPaths go there as they came. Nil serves no gateway.
 	Gateway *url.URL
-	// Agents and Tools are the client networks of the two policies.
-	Agents []netip.Prefix
-	Tools  []netip.Prefix
-	// AgentHosts are the destinations agents may reach, as host:port.
-	AgentHosts []string
-	// Trusted are destinations (host:port) dialed by name without the public-address check, for
-	// a test's stub or a package mirror on a private network. A trusted destination must still
-	// be allowed by the client's policy.
-	Trusted []string
 	// Log receives one line per refusal and per tunnel or forward, never a path or a header.
 	Log *slog.Logger
 	// Lookup and Dial replace DNS resolution and connecting (tests); nil means the system's.
@@ -61,39 +53,21 @@ type Config struct {
 	Dial   func(ctx context.Context, network, address string) (net.Conn, error)
 }
 
-type role int
-
-const (
-	roleNone role = iota
-	roleAgent
-	roleTool
-)
-
-func (r role) String() string {
-	switch r {
-	case roleAgent:
-		return "agent"
-	case roleTool:
-		return "tool"
-	case roleNone:
-	}
-
-	return "unknown"
-}
-
 // Proxy is the egress proxy's HTTP handler. It is safe for concurrent use.
 type Proxy struct {
 	cfg     Config
-	agents  []string // AgentHosts, normalized
-	trusted []string // Trusted, normalized
 	gateway *httputil.ReverseProxy
 	forward *httputil.ReverseProxy
 	lookup  func(ctx context.Context, host string) ([]netip.Addr, error)
 	dialFn  func(ctx context.Context, network, address string) (net.Conn, error)
 }
 
-// New returns the proxy for cfg, refusing a policy that does not hold together.
+// New returns the proxy for cfg, refusing a gateway that is not an http(s) origin.
 func New(cfg Config) (*Proxy, error) {
+	if err := gatewayError(cfg.Gateway); err != nil {
+		return nil, err
+	}
+
 	p := &Proxy{cfg: cfg, lookup: cfg.Lookup, dialFn: cfg.Dial}
 	if p.cfg.Log == nil {
 		p.cfg.Log = slog.New(slog.DiscardHandler)
@@ -107,14 +81,6 @@ func New(cfg Config) (*Proxy, error) {
 		p.dialFn = (&net.Dialer{Timeout: DialTimeout}).DialContext
 	}
 
-	agents, errAgents := destinations(cfg.AgentHosts)
-	trusted, errTrusted := destinations(cfg.Trusted)
-	p.agents, p.trusted = agents, trusted
-
-	if err := errors.Join(overlaps(cfg.Agents, cfg.Tools), errAgents, errTrusted, gatewayError(cfg.Gateway)); err != nil {
-		return nil, err
-	}
-
 	if cfg.Gateway != nil {
 		p.gateway = p.gatewayProxy(*cfg.Gateway)
 	}
@@ -124,43 +90,10 @@ func New(cfg Config) (*Proxy, error) {
 	return p, nil
 }
 
-func overlaps(agents, tools []netip.Prefix) error {
-	var errs []error
-
-	for _, a := range agents {
-		for _, t := range tools {
-			if a.Overlaps(t) {
-				errs = append(errs, fmt.Errorf("agent network %s overlaps tool network %s", a, t))
-			}
-		}
-	}
-
-	return errors.Join(errs...)
-}
-
-// destinations normalizes host:port entries.
-func destinations(in []string) ([]string, error) {
-	var (
-		out  []string
-		errs []error
-	)
-
-	for _, hp := range in {
-		host, port, err := destination(hp)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-
-		out = append(out, net.JoinHostPort(host, port))
-	}
-
-	return out, errors.Join(errs...)
-}
-
 func gatewayError(g *url.URL) error {
-	if g != nil && (g.Scheme != "http" && g.Scheme != "https" || g.Host == "" || !strings.HasPrefix(g.Path, "/")) {
-		return fmt.Errorf("gateway %q is not an http(s) URL with a path", g.Redacted())
+	if g != nil && (g.Scheme != "http" && g.Scheme != "https" || g.Host == "" || strings.Trim(g.Path, "/") != "" ||
+		g.RawQuery != "" || g.User != nil) {
+		return fmt.Errorf("gateway %q is not an http(s) origin, such as http://goald:8080", g.Redacted())
 	}
 
 	return nil
@@ -171,76 +104,36 @@ func systemLookup(ctx context.Context, host string) ([]netip.Addr, error) {
 }
 
 // ServeHTTP implements http.Handler: CONNECT tunnels, absolute-form forward requests, and the
-// gateway at its path for agents. Anything else is 404.
+// gateway at its paths. Anything else is 404.
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	who := p.roleOf(r.RemoteAddr)
-
 	switch {
-	case who == roleNone:
-		p.refuse(w, r, who, r.Host, "unknown client network", http.StatusForbidden)
 	case r.Method == http.MethodConnect:
-		p.tunnel(w, r, who)
+		p.tunnel(w, r)
 	case r.URL.IsAbs():
-		p.forwardHTTP(w, r, who)
-	case who == roleAgent && p.gateway != nil && r.URL.RawPath == "" && r.URL.Path == p.cfg.Gateway.Path:
+		p.forwardHTTP(w, r)
+	case p.gateway != nil && r.URL.RawPath == "" && slices.Contains(GatewayPaths, r.URL.Path):
 		p.gateway.ServeHTTP(w, r)
 	default:
 		http.NotFound(w, r)
 	}
 }
 
-// roleOf is the policy of the client at addr (ip:port).
-func (p *Proxy) roleOf(addr string) role {
-	ap, err := netip.ParseAddrPort(addr)
-	if err != nil {
-		return roleNone
-	}
-
-	ip := ap.Addr().Unmap()
-
-	switch {
-	case slices.ContainsFunc(p.cfg.Agents, func(n netip.Prefix) bool { return n.Contains(ip) }):
-		return roleAgent
-	case slices.ContainsFunc(p.cfg.Tools, func(n netip.Prefix) bool { return n.Contains(ip) }):
-		return roleTool
-	default:
-		return roleNone
-	}
-}
-
-// allowed reports whether who may reach host:port (normalized).
-func (p *Proxy) allowed(who role, hostport string) bool {
-	switch who {
-	case roleAgent:
-		return slices.Contains(p.agents, hostport)
-	case roleTool:
-		return true
-	case roleNone:
-	}
-
-	return false
-}
-
-// tunnel serves CONNECT: the destination must be allowed and public, then bytes flow both ways
-// until either side closes.
-func (p *Proxy) tunnel(w http.ResponseWriter, r *http.Request, who role) {
+// tunnel serves CONNECT: the destination must be public, then bytes flow both ways until either
+// side closes.
+func (p *Proxy) tunnel(w http.ResponseWriter, r *http.Request) {
 	host, port, err := destination(r.Host)
 	if err != nil {
-		p.refuse(w, r, who, r.Host, "bad destination", http.StatusBadRequest)
+		p.refuse(w, r, r.Host, "bad destination", http.StatusBadRequest)
 		return
 	}
 
 	dest := net.JoinHostPort(host, port)
-	if !p.allowed(who, dest) {
-		p.refuse(w, r, who, dest, "not allowed", http.StatusForbidden)
-		return
-	}
 
 	// The server cancels a CONNECT's context once the client sends past its headers (a TLS
 	// hello, say), so the dial is bounded by DialTimeout alone.
 	up, err := p.dial(context.WithoutCancel(r.Context()), dest)
 	if err != nil {
-		p.dialFailed(w, r, who, dest, err)
+		p.dialFailed(w, r, dest, err)
 		return
 	}
 
@@ -259,7 +152,7 @@ func (p *Proxy) tunnel(w http.ResponseWriter, r *http.Request, who role) {
 		return
 	}
 
-	p.cfg.Log.Info("egress tunnel", slog.String("role", who.String()), slog.String("dest", dest))
+	p.cfg.Log.Info("egress tunnel", slog.String("client", clientIP(r.RemoteAddr)), slog.String("dest", dest))
 
 	if _, err := io.WriteString(conn, "HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
 		_ = conn.Close()
@@ -283,9 +176,9 @@ func (p *Proxy) tunnel(w http.ResponseWriter, r *http.Request, who role) {
 }
 
 // forwardHTTP serves a plain-http request in absolute form; https goes through CONNECT.
-func (p *Proxy) forwardHTTP(w http.ResponseWriter, r *http.Request, who role) {
+func (p *Proxy) forwardHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Scheme != "http" {
-		p.refuse(w, r, who, r.URL.Host, "only http is forwarded; use CONNECT", http.StatusBadRequest)
+		p.refuse(w, r, r.URL.Host, "only http is forwarded; use CONNECT", http.StatusBadRequest)
 		return
 	}
 
@@ -296,38 +189,30 @@ func (p *Proxy) forwardHTTP(w http.ResponseWriter, r *http.Request, who role) {
 
 	host, port, err := destination(net.JoinHostPort(r.URL.Hostname(), port))
 	if err != nil {
-		p.refuse(w, r, who, r.URL.Host, "bad destination", http.StatusBadRequest)
+		p.refuse(w, r, r.URL.Host, "bad destination", http.StatusBadRequest)
 		return
 	}
 
 	dest := net.JoinHostPort(host, port)
-	if !p.allowed(who, dest) {
-		p.refuse(w, r, who, dest, "not allowed", http.StatusForbidden)
-		return
-	}
 
 	// Logged once the destination answered (forwardProxy), since the dial may still refuse it.
-	p.forward.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), forwardKey{}, forwarded{who: who, dest: dest})))
+	p.forward.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), forwardKey{}, forwarded{client: clientIP(r.RemoteAddr), dest: dest})))
 }
 
-// forwardKey is the context key of a plain-http request's forwarded: its client's role and its
+// forwardKey is the context key of a plain-http request's forwarded: its client and its
 // normalized destination, for forwardProxy's log lines.
 type forwardKey struct{}
 
 type forwarded struct {
-	who  role
-	dest string
+	client string
+	dest   string
 }
 
-// dial connects to dest (host:port, normalized): a trusted destination by name; any other at the
-// addresses its name resolves to, all of which must be public.
+// dial connects to dest (host:port, normalized) at the addresses its name resolves to, all of
+// which must be public.
 func (p *Proxy) dial(ctx context.Context, dest string) (net.Conn, error) {
 	ctx, cancel := context.WithTimeout(ctx, DialTimeout)
 	defer cancel()
-
-	if slices.Contains(p.trusted, dest) {
-		return p.dialFn(ctx, "tcp", dest)
-	}
 
 	host, port, err := net.SplitHostPort(dest)
 	if err != nil {
@@ -366,22 +251,21 @@ func (p *Proxy) dial(ctx context.Context, dest string) (net.Conn, error) {
 	return nil, errors.Join(errs...)
 }
 
-func (p *Proxy) dialFailed(w http.ResponseWriter, r *http.Request, who role, dest string, err error) {
+func (p *Proxy) dialFailed(w http.ResponseWriter, r *http.Request, dest string, err error) {
 	if errors.Is(err, ErrNotPublic) {
-		p.refuse(w, r, who, dest, "not a public address", http.StatusForbidden)
+		p.refuse(w, r, dest, "not a public address", http.StatusForbidden)
 		return
 	}
 
-	p.cfg.Log.Info("egress unreachable", slog.String("role", who.String()), slog.String("dest", dest), slog.Any("error", err))
+	p.cfg.Log.Info("egress unreachable", slog.String("client", clientIP(r.RemoteAddr)), slog.String("dest", dest), slog.Any("error", err))
 	w.Header().Set("Connection", "close")
 	http.Error(w, "destination unreachable", http.StatusBadGateway)
 }
 
 // refuse answers status and closes the connection, so nothing the client sent after a refused
 // CONNECT is read as a request of its own.
-func (p *Proxy) refuse(w http.ResponseWriter, r *http.Request, who role, dest, reason string, status int) {
-	p.cfg.Log.Info("egress refused", slog.String("role", who.String()), slog.String("client", clientIP(r.RemoteAddr)),
-		slog.String("dest", dest), slog.String("reason", reason))
+func (p *Proxy) refuse(w http.ResponseWriter, r *http.Request, dest, reason string, status int) {
+	p.cfg.Log.Info("egress refused", slog.String("client", clientIP(r.RemoteAddr)), slog.String("dest", dest), slog.String("reason", reason))
 	w.Header().Set("Connection", "close")
 	http.Error(w, "refused by goal's egress proxy: "+reason, status)
 }
@@ -394,12 +278,12 @@ func clientIP(addr string) string {
 	return ""
 }
 
-// gatewayProxy forwards a request at the gateway's path to the gateway, as it came but for the
-// host, streaming responses (server-sent events) as they arrive.
+// gatewayProxy forwards a request at one of the gateway's paths to the gateway, as it came but
+// for the host, streaming responses (server-sent events) as they arrive.
 func (p *Proxy) gatewayProxy(gw url.URL) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
-			pr.Out.URL.Scheme, pr.Out.URL.Host, pr.Out.URL.Path, pr.Out.URL.RawPath = gw.Scheme, gw.Host, gw.Path, ""
+			pr.Out.URL.Scheme, pr.Out.URL.Host, pr.Out.URL.RawPath = gw.Scheme, gw.Host, ""
 			pr.Out.Host = gw.Host
 		},
 		Transport: &http.Transport{
@@ -432,13 +316,13 @@ func (p *Proxy) forwardProxy() *httputil.ReverseProxy {
 		},
 		ModifyResponse: func(res *http.Response) error {
 			f, _ := res.Request.Context().Value(forwardKey{}).(forwarded)
-			p.cfg.Log.Info("egress forward", slog.String("role", f.who.String()), slog.String("dest", f.dest))
+			p.cfg.Log.Info("egress forward", slog.String("client", f.client), slog.String("dest", f.dest))
 
 			return nil
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			f, _ := r.Context().Value(forwardKey{}).(forwarded)
-			p.dialFailed(w, r, f.who, f.dest, err)
+			p.dialFailed(w, r, f.dest, err)
 		},
 	}
 }

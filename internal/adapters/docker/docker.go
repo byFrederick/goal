@@ -1,7 +1,8 @@
-// Package docker implements ports.Runner, ports.Checker and ports.Sidecars with local Docker
-// containers (Docker Desktop, OrbStack or Docker Engine on Linux): one hardened container of the
-// factory's worker image per agent task, one per command check, and one per stdio MCP server a
-// run uses (sidecars.go).
+// Package docker implements ports.Sandboxes, ports.Runner, ports.Checker and ports.Sidecars with
+// local Docker containers (Docker Desktop, OrbStack or Docker Engine on Linux): one dev box per
+// run (sandboxes.go, phase 4), and until the engine runs on sandboxes one hardened container of
+// the factory's worker image per agent task, one per command check, and one per stdio MCP server
+// a run uses (sidecars.go).
 //
 // Per run the runner creates <RunDir>/<run id>/ on the host, writes spec.json (the task without
 // secrets) into it, has AgentFiles write the agent's prompt, skills and output schema into its
@@ -10,13 +11,13 @@
 // its result as JSON lines on stdout (domain.DecodeWorkerLine). worker/README.md describes the whole
 // contract from the container's side.
 //
-// Networking (egress.go, ADR 0009): agent containers run on an internal network (<egress>-agents),
-// and sidecars with network access and command checks on another (<egress>-tools); neither has a
-// route to the host, to other networks or to the internet. The one other container on them is
-// the egress proxy (cmd/goal-egress), which every container's HTTP_PROXY and HTTPS_PROXY name: it
-// lets agents reach the model API and, at the gateway's path only, goald's MCP gateway (the
-// gateway URL an agent is given is the proxy's), and lets tools reach public hosts. Nothing
-// reaches a loopback, private or link-local address through it.
+// Networking (network.go, ADR 0009 and its phase 4 amendment): boxes, agent tasks, checks and
+// sidecars with network access run on compose.yaml's agents network (GOAL_SANDBOX_NETWORK), which
+// has no route to the host, to other networks or to the internet. The one other container there
+// is the egress proxy (compose's goal-egress service, cmd/goal-egress), which every container's
+// HTTP_PROXY and HTTPS_PROXY name: it reaches public hosts and, at its paths only, goald's
+// gateway (the gateway URL a container is given is the proxy's). Nothing reaches a loopback,
+// private or link-local address through it.
 package docker
 
 import (
@@ -67,9 +68,16 @@ type Config struct {
 	PIDs        int64
 	// StopGrace is how long a stopped worker gets to exit before it is killed. Default 5s.
 	StopGrace time.Duration
+	// Network is the agents' network containers run on (GOAL_SANDBOX_NETWORK). Default
+	// DefaultNetwork.
+	Network string
 }
 
 func (c Config) withDefaults() Config {
+	if c.Network == "" {
+		c.Network = DefaultNetwork
+	}
+
 	if c.RunDir == "" {
 		c.RunDir = filepath.Join(os.TempDir(), "goal-runs")
 	}
@@ -97,33 +105,32 @@ func (c Config) withDefaults() Config {
 type Runner struct {
 	docker *client.Client
 	files  AgentFiles
-	egress *Egress
 	cfg    Config
 	log    *slog.Logger
 }
 
-// New returns a runner that talks to docker, stages agent files with files and runs tasks on
-// egress's agents' network.
-func New(docker *client.Client, files AgentFiles, egress *Egress, cfg Config, log *slog.Logger) *Runner {
-	return &Runner{docker: docker, files: files, egress: egress, cfg: cfg.withDefaults(), log: log}
+// New returns a runner that talks to docker, stages agent files with files and runs tasks on the
+// agents' network.
+func New(docker *client.Client, files AgentFiles, cfg Config, log *slog.Logger) *Runner {
+	return &Runner{docker: docker, files: files, cfg: cfg.withDefaults(), log: log}
 }
 
 // cleanupTimeout bounds removing a container and its files once the task's context is gone.
 const cleanupTimeout = 30 * time.Second
 
-// Start implements ports.Runner. It makes sure the egress proxy runs, pulls the image when it is
+// Start implements ports.Runner. It checks the agents' network, pulls the image when it is
 // missing, then creates, attaches to and starts the task's container.
 func (r *Runner) Start(ctx context.Context, t ports.TaskSpec) (ports.Task, error) {
 	if err := validate(t); err != nil {
 		return nil, fmt.Errorf("task spec: %w", err)
 	}
 
-	gateway, err := r.egress.gatewayFor(t.GatewayURL)
+	gateway, err := gatewayFor(t.GatewayURL)
 	if err != nil {
 		return nil, fmt.Errorf("task spec: %w", err)
 	}
 
-	if err := r.egress.Ensure(ctx); err != nil {
+	if err := checkNetwork(ctx, r.docker, r.cfg.Network); err != nil {
 		return nil, err
 	}
 
@@ -146,7 +153,7 @@ func (r *Runner) start(ctx context.Context, t ports.TaskSpec, runDir string) (*t
 		return nil, err
 	}
 
-	cc, hc := containerOf(r.cfg, r.egress.agents(), t, runDir)
+	cc, hc := containerOf(r.cfg, agentsRoute(r.cfg.Network), t, runDir)
 
 	created, err := r.docker.ContainerCreate(ctx, client.ContainerCreateOptions{Config: cc, HostConfig: hc, Name: containerName(t.RunID)})
 	if err != nil {

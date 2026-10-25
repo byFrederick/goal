@@ -15,8 +15,6 @@ vars:
   FACTORIES: '{{.FACTORIES | default "internal/config/testdata/*/"}}'
   # The one image every run's sandbox starts from (spec 4 §4.1); built locally, never pushed from here.
   WORKER_IMAGE: '{{.WORKER_IMAGE | default "ghcr.io/byfrederick/goal-agent:0.2.0"}}'
-  # The egress proxy agents, sidecars and checks go out through (ADR 0009); built locally, never pushed.
-  EGRESS_IMAGE: '{{.GOAL_EGRESS_IMAGE | default "ghcr.io/byfrederick/goal-egress:0.1.0"}}'
   # The auth service's sidecar image (spec 3 §5.5); built locally, never pushed from here.
   AUTH_IMAGE: '{{.AUTH_IMAGE | default "ghcr.io/byfrederick/goal-auth:0.1.0"}}'
   # Where migrate-check gets its throwaway PostgreSQL 18: Docker, or a local cluster where there is
@@ -60,16 +58,23 @@ tasks:
       - go build -trimpath -tags webui -o bin/ ./cmd/...
 
   up:
-    desc: Start PostgreSQL and RustFS, prepare the database roles and the bucket, run goald in the foreground with, under GOAL_AUTH=session, the auth service and Mailpit (goal up)
+    desc: Start PostgreSQL, RustFS and the egress proxy, prepare the database roles and the bucket, run goald in the foreground with, under GOAL_AUTH=session, the auth service and Mailpit (goal up)
     deps: [build, auth:build, egress:image]
     cmds:
       - bin/goal up
 
-  goald:
-    desc: Run goald in the foreground against already running compose services (after goal db init)
+  up:compose:
+    desc: goal up with goald and the auth service as compose services too (the stack profile; images built from this checkout), detached; needs GOAL_AUTH=session (goal up --compose)
     deps: [build]
     cmds:
+      - bin/goal up --compose
+
+  goald:
+    desc: Run goald in the foreground against already running compose services (after goal db init), with the egress proxy toward it
+    deps: [build, egress:image]
+    cmds:
       - bin/goal db init
+      - docker compose up -d --wait goal-egress
       - bin/goald
 
   db:init:
@@ -390,9 +395,14 @@ tasks:
         ! goal-agent prepare 2>/tmp/err; grep -q "GOAL_GATEWAY_URL is not set" /tmp/err; echo "goal-agent: ok"'
 
   egress:image:
-    desc: Build the egress proxy's image locally (EGRESS_IMAGE, cmd/goal-egress); goald runs it for agent runs, sidecars and checks; never pushes
+    desc: Build the egress proxy's image locally (compose.yaml's goal-egress, cmd/goal-egress), the way out of every agent container; never pushes
     cmds:
-      - docker build -q -f cmd/goal-egress/Dockerfile --target runtime -t {{.EGRESS_IMAGE}} . >/dev/null
+      - docker compose build -q goal-egress
+
+  goald:image:
+    desc: Build goald's image with the web UI embedded locally (compose.yaml's goald, cmd/goald/Dockerfile); never pushes
+    cmds:
+      - docker compose build goald
 
   auth:image:
     desc: Build the auth service's sidecar image locally (AUTH_IMAGE); never pushes

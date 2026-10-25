@@ -62,9 +62,9 @@ func TestSettings_Defaults(t *testing.T) {
 	}
 }
 
-// Agents reach the model API and the gateway through the egress proxy, nothing else, unless
-// GOAL_AGENT_EGRESS adds hosts.
-func TestSettings_Egress(t *testing.T) {
+// Containers run on compose.yaml's agents network unless GOAL_SANDBOX_NETWORK names another;
+// the egress settings of earlier releases are ignored, and listed for goald's warning.
+func TestSettings_SandboxNetwork(t *testing.T) {
 	t.Parallel()
 
 	s, err := settingsFrom(envOf(nil))
@@ -72,18 +72,20 @@ func TestSettings_Egress(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if e := s.Egress; e.Name != "goal-egress" || e.Image != "ghcr.io/byfrederick/goal-egress:0.1.0" || e.Gateway != s.GatewayURL ||
-		!slices.Equal(e.AgentHosts, []string{"api.anthropic.com"}) || len(e.Trusted) != 0 {
-		t.Errorf("egress = %+v; want the default proxy serving the gateway and the model API to agents", e)
+	if s.SandboxNetwork != "goal_agents" || len(s.Ignored) != 0 {
+		t.Errorf("network %q, ignored %v; want goal_agents and nothing ignored", s.SandboxNetwork, s.Ignored)
 	}
 
-	s, err = settingsFrom(envOf(map[string]string{agentEgressEnv: " api.anthropic.com, proxy.golang.org:443 ,", egressNameEnv: "goal-egress-dev"}))
+	s, err = settingsFrom(envOf(map[string]string{
+		sandboxNetworkEnv: "goal-dev_agents", "GOAL_AGENT_EGRESS": "api.anthropic.com, proxy.golang.org", "GOAL_EGRESS_NAME": "../goal",
+		"GOAL_EGRESS_IMAGE": " ",
+	}))
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("removed settings refused goald's start: %v", err)
 	}
 
-	if !slices.Equal(s.Egress.AgentHosts, []string{"api.anthropic.com", "proxy.golang.org:443"}) || s.Egress.Name != "goal-egress-dev" {
-		t.Errorf("egress = %+v; want GOAL_AGENT_EGRESS's hosts and GOAL_EGRESS_NAME", s.Egress)
+	if s.SandboxNetwork != "goal-dev_agents" || !slices.Equal(s.Ignored, []string{"GOAL_AGENT_EGRESS", "GOAL_EGRESS_NAME"}) {
+		t.Errorf("network %q, ignored %v; want GOAL_SANDBOX_NETWORK's, and the two removed settings that are set", s.SandboxNetwork, s.Ignored)
 	}
 }
 
@@ -204,8 +206,9 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 		{name: "gateway listener on the main one by name", env: map[string]string{gatewayEnv: "localhost:8080"}, want: "another address"},
 		{name: "gateway listener on every interface's main port", env: map[string]string{gatewayEnv: ":8080"}, want: "another address"},
 		{name: "gateway listener without a port", env: map[string]string{gatewayEnv: "gateway.example.com"}, want: "host:port"},
-		{name: "an agent egress URL", env: map[string]string{agentEgressEnv: "https://api.anthropic.com/v1"}, want: agentEgressEnv},
-		{name: "an egress name with a path", env: map[string]string{egressNameEnv: "../goal"}, want: egressNameEnv},
+		{name: "a gateway URL without a path", env: map[string]string{gatewayURLEnv: "http://127.0.0.1:9090"}, want: gatewayURLEnv},
+		{name: "a gateway URL with a query", env: map[string]string{gatewayURLEnv: "http://127.0.0.1:8080/mcp?x=1"}, want: gatewayURLEnv},
+		{name: "a gateway URL not over http", env: map[string]string{gatewayURLEnv: "unix:///mcp"}, want: gatewayURLEnv},
 		{
 			name: "gateway URL on the main listener beside a gateway listener",
 			env:  map[string]string{gatewayEnv: "127.0.0.1:8090", gatewayURLEnv: "http://host.docker.internal:8080/mcp"},

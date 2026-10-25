@@ -28,9 +28,11 @@ import (
 )
 
 const usage = `usage:
-  goal up                                         start PostgreSQL and RustFS, prepare the database roles,
-                                                  migrate the database, prepare the bucket, run goald
-                                                  (and, with sign-in, Mailpit and the auth service)
+  goal up [--compose]                             start PostgreSQL and RustFS, prepare the database roles,
+                                                  migrate the database, prepare the bucket, start the egress
+                                                  proxy, run goald (and, with sign-in, Mailpit and the auth
+                                                  service); --compose runs goald and the auth service as
+                                                  compose services too, and returns once they are healthy
   goal run <factory> "<brief>" [--type T] [--body B] [--priority N] [--detach]
                                                   submit a work item and follow it until a human or done
                                                   (--type: one of the factory's work types; default its

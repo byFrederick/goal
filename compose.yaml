@@ -1,5 +1,8 @@
-# Local dependencies. PostgreSQL is Goal's only database; RustFS stands in for S3 and holds the
-# factory definitions and knowledge documents (one bucket without versioning, as R2 on Cloudflare).
+# The local platform. PostgreSQL is Goal's only database; RustFS stands in for S3 and holds the
+# factory definitions and knowledge documents (one bucket without versioning, as R2 on
+# Cloudflare). goal-egress and the agents network are where every agent container runs and goes
+# out (ADR 0009). goald and the auth service run on this machine (goal up), or here too with the
+# stack profile (goal up --compose).
 # Ports bind to 127.0.0.1 only. Credentials come from .env (see .env.example) with dev-only defaults.
 services:
   postgres:
@@ -63,6 +66,157 @@ services:
       timeout: 3s
       retries: 10
       start_period: 5s
+
+  # The egress proxy (cmd/goal-egress; ADR 0009 and its phase 4 amendment): the one other
+  # container on the agents network and its only way out. Every box reaches public hosts through
+  # it and goald's gateway at /mcp and /run, never a loopback, private or metadata address. Its
+  # upstream is goald's gateway listener as it reaches it: goal up sets GOAL_EGRESS_GATEWAY from
+  # goald's listener (host.docker.internal for goald on this machine, goald:8090 under the stack
+  # profile). It keeps no state.
+  goal-egress:
+    image: ghcr.io/byfrederick/goal-egress:0.2.0
+    build:
+      context: .
+      dockerfile: cmd/goal-egress/Dockerfile
+      target: runtime
+    environment:
+      GOAL_EGRESS_GATEWAY: ${GOAL_EGRESS_GATEWAY:-http://host.docker.internal:8080}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - agents
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    cpus: 1
+    mem_limit: 256m
+    pids_limit: 256
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/goal-egress", "-health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+      start_interval: 250ms
+
+  # goald in a container (profile stack, goal up --compose), the Docker socket mounted to start
+  # agent containers: root on this machine, so for one's own laptop only (spec 4 §11.3). Its
+  # settings are .env's, with the addresses of this network; the auth service's secrets never
+  # reach it (AGENTS.md rule 7), so they are blanked here. GOAL_AUTH must be session: it listens
+  # off loopback inside its container. GOAL_DOCKER_GID is the socket's group on Linux
+  # (stat -c %g /var/run/docker.sock); Docker Desktop and OrbStack need 0.
+  goald:
+    profiles: [stack]
+    image: ghcr.io/byfrederick/goald:0.1.0
+    build:
+      context: .
+      dockerfile: cmd/goald/Dockerfile
+      target: runtime
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      GOAL_LISTEN: 0.0.0.0:8080
+      GOAL_GATEWAY_LISTEN: 0.0.0.0:8090
+      GOAL_GATEWAY_URL: http://goald:8090/mcp
+      GOAL_PUBLIC_URL: ${GOAL_PUBLIC_URL:-http://127.0.0.1:8080}
+      GOAL_AUTH_UPSTREAM: http://127.0.0.1:8081
+      GOAL_AUTH_PROXY_SECRET: ${GOAL_AUTH_PROXY_SECRET:-}
+      GOAL_DATABASE_URL: postgres://goal_app:${GOAL_PG_APP_PASSWORD:-goal-app-dev-only}@postgres:5432/goal?sslmode=disable
+      GOAL_MIGRATE_DATABASE_URL: postgres://goal_owner:${GOAL_PG_OWNER_PASSWORD:-goal-owner-dev-only}@postgres:5432/goal?sslmode=disable
+      GOAL_S3_ENDPOINT: http://rustfs:9000
+      GOAL_SANDBOX_NETWORK: ${GOAL_SANDBOX_NETWORK:-goal_agents}
+      GOAL_LOG_FORMAT: ${GOAL_LOG_FORMAT:-text}
+      # Agent runs bind-mount their folders from the Docker host, so they live at the same path on
+      # both sides until runs need no mounts (spec 4 PR 4-7).
+      GOAL_RUN_DIR: /tmp/goal-stack/runs
+      GOAL_WORKSPACE_ROOT: /tmp/goal-stack/workspaces
+      BETTER_AUTH_SECRET: ""
+      BETTER_AUTH_SECRETS: ""
+      GOAL_PG_PASSWORD: ""
+      GOAL_PG_AUTH_PASSWORD: ""
+      GOAL_AUTH_DATABASE_URL: ""
+      GOAL_DATABASE_ADMIN_URL: ""
+      GOAL_BOOTSTRAP_OWNER_EMAIL: ""
+      GOAL_SMTP_URL: ""
+      GOOGLE_CLIENT_SECRET: ""
+      GOAL_API_KEY: ""
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/goal-stack:/tmp/goal-stack
+    user: "65532:65532"
+    group_add: ["${GOAL_DOCKER_GID:-0}"]
+    ports:
+      - "127.0.0.1:8080:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
+      goal-egress:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/v1/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+      start_interval: 1s
+
+  # The auth service (auth/, profile stack) in goald's network namespace, as beside goald in any
+  # deployment: it listens on loopback and goald's /api/auth proxy is the only way in. Only its
+  # own variables reach it.
+  auth:
+    profiles: [stack]
+    image: ghcr.io/byfrederick/goal-auth:0.1.0
+    build:
+      context: .
+      dockerfile: auth/Dockerfile
+      target: runtime
+    network_mode: service:goald
+    environment:
+      GOAL_AUTH_LISTEN: 127.0.0.1:8081
+      GOAL_PUBLIC_URL: ${GOAL_PUBLIC_URL:-http://127.0.0.1:8080}
+      GOAL_AUTH_PROXY_SECRET: ${GOAL_AUTH_PROXY_SECRET:-}
+      GOAL_AUTH_DATABASE_URL: postgres://goal_auth:${GOAL_PG_AUTH_PASSWORD:-goal-auth-dev-only}@postgres:5432/goal?sslmode=disable
+      GOAL_SMTP_URL: smtp://mailpit:1025
+      GOAL_SMTP_FROM: ${GOAL_SMTP_FROM:-}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      BETTER_AUTH_SECRETS: ${BETTER_AUTH_SECRETS:-}
+      GOAL_BOOTSTRAP_OWNER_EMAIL: ${GOAL_BOOTSTRAP_OWNER_EMAIL:-}
+      GOAL_AUTH_GOOGLE: ${GOAL_AUTH_GOOGLE:-off}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    depends_on:
+      # Healthy once it has migrated the database, the auth service's tables included.
+      goald:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+
+# The agents network (ADR 0009): internal and without an address on the host's side, so a
+# container on it reaches nothing but its neighbours and goal-egress. GOAL_SANDBOX_NETWORK names
+# it, for goald too.
+networks:
+  agents:
+    name: ${GOAL_SANDBOX_NETWORK:-goal_agents}
+    internal: true
+    driver_opts:
+      com.docker.network.bridge.inhibit_ipv4: "true"
 
 volumes:
   goal-pg:

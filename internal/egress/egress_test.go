@@ -21,9 +21,6 @@ import (
 	"time"
 )
 
-// loopback is where the tests' clients come from: httptest serves on 127.0.0.1.
-var loopback = []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")}
-
 // The model API as the tests' DNS has it.
 const (
 	modelHost = "api.anthropic.com"
@@ -167,33 +164,31 @@ func connect(t *testing.T, proxy *httptest.Server, dest string) (status int, rep
 	return res.StatusCode, strings.TrimSpace(line)
 }
 
-func TestProxy_AgentsReachOnlyTheirHosts(t *testing.T) {
+// Any client reaches any public host and port, by name (normalized) or by address, dialed at the
+// address the proxy resolved.
+func TestProxy_TunnelsToPublicHosts(t *testing.T) {
 	t.Parallel()
 
 	echo := echoServer(t)
 	w := &world{
-		names:  map[string][]string{modelHost: {"160.79.104.10"}, "example.com": {"93.184.215.14"}},
-		routes: map[string]string{modelAddr: echo, "93.184.215.14:443": echo},
+		names:  map[string][]string{modelHost: {"160.79.104.10"}, "registry.npmjs.org": {"104.16.1.34"}},
+		routes: map[string]string{modelAddr: echo, "104.16.1.34:443": echo, "104.16.1.34:22": echo},
 	}
-	proxy := startProxy(t, Config{Agents: loopback, AgentHosts: []string{"API.Anthropic.com.:443"}}, w)
+	proxy := startProxy(t, Config{}, w)
 
-	if status, reply := connect(t, proxy, modelDest); status != http.StatusOK || reply != "echo: ping" {
-		t.Errorf("allowed host: status %d, reply %q; want a working tunnel", status, reply)
-	}
-
-	for _, dest := range []string{"example.com:443", "api.anthropic.com:80", "160.79.104.10:443"} {
-		if status, _ := connect(t, proxy, dest); status != http.StatusForbidden {
-			t.Errorf("CONNECT %s = %d, want 403", dest, status)
+	for _, dest := range []string{"API.Anthropic.com.:443", "registry.npmjs.org:443", "104.16.1.34:22"} {
+		if status, reply := connect(t, proxy, dest); status != http.StatusOK || reply != "echo: ping" {
+			t.Errorf("CONNECT %s: status %d, reply %q; want a working tunnel", dest, status, reply)
 		}
 	}
 
-	if got := w.dials(); !slices.Equal(got, []string{modelAddr}) {
-		t.Errorf("dialed %v; want only the allowed host, at the address it resolved to", got)
+	if got := w.dials(); !slices.Equal(got, []string{modelAddr, "104.16.1.34:443", "104.16.1.34:22"}) {
+		t.Errorf("dialed %v; want each destination at the address it resolved to", got)
 	}
 }
 
-// A name that resolves (or rebinds) to a non-public address is never dialed, even when the
-// policy allows it, and no IP literal of the host, its bridge or the metadata service is either.
+// A name that resolves (or rebinds) to a non-public address is never dialed, and no IP literal
+// of the host, its bridge or the metadata service is either.
 func TestProxy_RefusesNonPublicDestinations(t *testing.T) {
 	t.Parallel()
 
@@ -201,8 +196,9 @@ func TestProxy_RefusesNonPublicDestinations(t *testing.T) {
 	w := &world{
 		names: map[string][]string{
 			modelHost:              {"10.0.0.7"},
-			"mixed.example.com":    {"93.184.215.14", "127.0.0.1"},
+			"mixed.example.com":    {"93.184.215.14", "127.0.0.2"},
 			"host.docker.internal": {"0.250.250.254"},
+			"rustfs":               {"172.18.0.3"},
 			"metadata.example.com": {"169.254.169.254"},
 			"v6.example.com":       {"::1"},
 			"mapped.example.com":   {"::ffff:192.168.1.10"},
@@ -210,46 +206,20 @@ func TestProxy_RefusesNonPublicDestinations(t *testing.T) {
 		},
 		routes: map[string]string{"10.0.0.7:443": echo, "127.0.0.1:443": echo, "93.184.215.14:443": echo},
 	}
-	agents := startProxy(t, Config{Agents: loopback, AgentHosts: []string{modelDest}}, w)
-	tools := startProxy(t, Config{Tools: loopback}, w)
-
-	if status, _ := connect(t, agents, modelDest); status != http.StatusForbidden {
-		t.Errorf("allowed host rebound to 10.0.0.7: status %d, want 403", status)
-	}
+	proxy := startProxy(t, Config{}, w)
 
 	for _, dest := range []string{
-		"mixed.example.com:443", "host.docker.internal:8080", "metadata.example.com:80", "v6.example.com:443", "mapped.example.com:443",
-		"127.0.0.1:5432", "[::1]:8080", "169.254.169.254:80", "172.17.0.1:8090", "192.168.65.254:8025", "localhost:8081",
+		modelDest, "mixed.example.com:443", "host.docker.internal:8080", "rustfs:9000", "metadata.example.com:80", "v6.example.com:443",
+		"mapped.example.com:443", "127.0.0.1:5432", "[::1]:8080", "169.254.169.254:80", "172.17.0.1:8090", "192.168.65.254:8025",
+		"localhost:8081", "100.100.100.200:80", "[fd00:ec2::254]:80",
 	} {
-		if status, _ := connect(t, tools, dest); status != http.StatusForbidden {
-			t.Errorf("tool CONNECT %s = %d, want 403", dest, status)
+		if status, _ := connect(t, proxy, dest); status != http.StatusForbidden {
+			t.Errorf("CONNECT %s = %d, want 403", dest, status)
 		}
 	}
 
 	if got := w.dials(); len(got) != 0 {
 		t.Errorf("dialed %v; want nothing", got)
-	}
-}
-
-func TestProxy_ToolsReachPublicHostsAndTrustedOnes(t *testing.T) {
-	t.Parallel()
-
-	echo := echoServer(t)
-	w := &world{
-		names:  map[string][]string{"registry.npmjs.org": {"104.16.1.34"}, "mirror.acme.internal": {"10.20.30.40"}},
-		routes: map[string]string{"104.16.1.34:443": echo, "mirror.acme.internal:8443": echo},
-	}
-	proxy := startProxy(t, Config{Tools: loopback, Trusted: []string{"mirror.acme.internal:8443"}}, w)
-
-	for _, dest := range []string{"registry.npmjs.org:443", "mirror.acme.internal:8443"} {
-		if status, reply := connect(t, proxy, dest); status != http.StatusOK || reply != "echo: ping" {
-			t.Errorf("CONNECT %s: status %d, reply %q; want a working tunnel", dest, status, reply)
-		}
-	}
-
-	// Trusted is one host:port, not the host.
-	if status, _ := connect(t, proxy, "mirror.acme.internal:22"); status != http.StatusForbidden {
-		t.Errorf("CONNECT to another port of a trusted host = %d, want 403", status)
 	}
 }
 
@@ -259,7 +229,7 @@ func TestProxy_TunnelsBytesSentWithTheConnect(t *testing.T) {
 
 	echo := echoServer(t)
 	w := &world{names: map[string][]string{modelHost: {"160.79.104.10"}}, routes: map[string]string{modelAddr: echo}}
-	proxy := startProxy(t, Config{Agents: loopback, AgentHosts: []string{modelDest}}, w)
+	proxy := startProxy(t, Config{}, w)
 
 	c, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(t.Context(), "tcp", proxy.Listener.Addr().String())
 	if err != nil {
@@ -291,18 +261,6 @@ func TestProxy_TunnelsBytesSentWithTheConnect(t *testing.T) {
 	}
 }
 
-func TestProxy_RefusesClientsOfNoNetwork(t *testing.T) {
-	t.Parallel()
-
-	echo := echoServer(t)
-	w := &world{names: map[string][]string{"example.com": {"93.184.215.14"}}, routes: map[string]string{"93.184.215.14:443": echo}}
-	proxy := startProxy(t, Config{Agents: []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}}, w)
-
-	if status, _ := connect(t, proxy, "example.com:443"); status != http.StatusForbidden {
-		t.Errorf("client outside every network: status %d, want 403", status)
-	}
-}
-
 // gatewayStub records the requests goald's gateway would receive.
 type gatewayStub struct {
 	mu   sync.Mutex
@@ -311,7 +269,7 @@ type gatewayStub struct {
 
 func (g *gatewayStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	g.mu.Lock()
-	g.seen = append(g.seen, r.Method+" "+r.URL.RequestURI()+" auth="+r.Header.Get("Authorization"))
+	g.seen = append(g.seen, r.Method+" "+r.Host+r.URL.RequestURI()+" auth="+r.Header.Get("Authorization"))
 	g.mu.Unlock()
 
 	_, _ = io.WriteString(w, "gateway")
@@ -324,25 +282,24 @@ func (g *gatewayStub) requests() []string {
 	return slices.Clone(g.seen)
 }
 
-// Agents reach goald at exactly the gateway's path, with their task token; nothing else of
-// goald, and tools not even that.
-func TestProxy_ServesTheGatewayToAgentsOnly(t *testing.T) {
+// A box reaches goald at exactly the gateway's paths, with its task token and the query it sent;
+// nothing else of goald.
+func TestProxy_ServesTheGatewayAtItsPathsOnly(t *testing.T) {
 	t.Parallel()
 
 	stub := &gatewayStub{}
 	upstream := httptest.NewServer(stub)
 	t.Cleanup(upstream.Close)
 
-	gw, err := url.Parse(upstream.URL + "/mcp")
+	gw, err := url.Parse(upstream.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	w := &world{routes: map[string]string{upstream.Listener.Addr().String(): upstream.Listener.Addr().String()}}
-	agents := startProxy(t, Config{Agents: loopback, Gateway: gw}, w)
-	tools := startProxy(t, Config{Tools: loopback, Gateway: gw}, w)
+	proxy := startProxy(t, Config{Gateway: gw}, w)
 
-	call := func(proxy *httptest.Server, method, path string) int {
+	call := func(method, path string) int {
 		req, err := http.NewRequestWithContext(t.Context(), method, proxy.URL+path, strings.NewReader("{}"))
 		if err != nil {
 			t.Fatal(err)
@@ -360,26 +317,30 @@ func TestProxy_ServesTheGatewayToAgentsOnly(t *testing.T) {
 		return res.StatusCode
 	}
 
-	if status := call(agents, http.MethodPost, "/mcp"); status != http.StatusOK {
-		t.Errorf("agent POST /mcp = %d, want 200", status)
-	}
-
-	for _, path := range []string{"/v1/me", "/api/auth/email-otp/send-verification-otp", "/mcp/", "/%6Dcp", "/"} {
-		if status := call(agents, http.MethodPost, path); status != http.StatusNotFound {
-			t.Errorf("agent POST %s = %d, want 404", path, status)
+	for method, path := range map[string]string{http.MethodPost: "/mcp", http.MethodGet: "/run?part=bundle"} {
+		if status := call(method, path); status != http.StatusOK {
+			t.Errorf("%s %s = %d, want 200", method, path, status)
 		}
 	}
 
-	if status := call(tools, http.MethodPost, "/mcp"); status != http.StatusNotFound {
-		t.Errorf("tool POST /mcp = %d, want 404", status)
+	for _, path := range []string{"/v1/me", "/api/auth/email-otp/send-verification-otp", "/mcp/", "/run/x", "/%6Dcp", "/%72un", "/"} {
+		if status := call(http.MethodPost, path); status != http.StatusNotFound {
+			t.Errorf("POST %s = %d, want 404", path, status)
+		}
 	}
 
-	if got := stub.requests(); !slices.Equal(got, []string{"POST /mcp auth=Bearer task-token"}) {
-		t.Errorf("gateway saw %v; want the agent's one call with its token", got)
+	host := upstream.Listener.Addr().String()
+
+	got := stub.requests()
+	slices.Sort(got)
+
+	if want := []string{"GET " + host + "/run?part=bundle auth=Bearer task-token", "POST " + host + "/mcp auth=Bearer task-token"}; !slices.Equal(got, want) {
+		t.Errorf("gateway saw %v; want %v", got, want)
 	}
 }
 
-func TestProxy_ForwardsPlainHTTPForToolsOnly(t *testing.T) {
+// Plain http goes to public hosts only, without the client's proxy headers.
+func TestProxy_ForwardsPlainHTTPToPublicHostsOnly(t *testing.T) {
 	t.Parallel()
 
 	var got []string
@@ -398,10 +359,9 @@ func TestProxy_ForwardsPlainHTTPForToolsOnly(t *testing.T) {
 		names:  map[string][]string{"deb.debian.org": {"151.101.2.132"}, "internal.example.com": {"192.168.1.20"}},
 		routes: map[string]string{"151.101.2.132:80": upstream.Listener.Addr().String(), "192.168.1.20:80": upstream.Listener.Addr().String()},
 	}
-	tools := startProxy(t, Config{Tools: loopback}, w)
-	agents := startProxy(t, Config{Agents: loopback, AgentHosts: []string{modelDest}}, w)
+	proxy := startProxy(t, Config{}, w)
 
-	get := func(proxy *httptest.Server, target string) int {
+	get := func(target string) int {
 		proxyURL, _ := url.Parse(proxy.URL)
 		client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
 
@@ -422,27 +382,23 @@ func TestProxy_ForwardsPlainHTTPForToolsOnly(t *testing.T) {
 		return res.StatusCode
 	}
 
-	if status := get(tools, "http://deb.debian.org/debian/dists/bookworm/Release"); status != http.StatusOK {
-		t.Errorf("tool GET = %d, want 200", status)
+	if status := get("http://deb.debian.org/debian/dists/bookworm/Release"); status != http.StatusOK {
+		t.Errorf("GET of a public host = %d, want 200", status)
 	}
 
 	for name, target := range map[string]string{
 		"private name": "http://internal.example.com/", "metadata": "http://169.254.169.254/latest/meta-data/", "loopback": "http://127.0.0.1:8080/v1/me",
 	} {
-		if status := get(tools, target); status != http.StatusForbidden {
-			t.Errorf("tool GET %s = %d, want 403", name, status)
+		if status := get(target); status != http.StatusForbidden {
+			t.Errorf("GET %s = %d, want 403", name, status)
 		}
-	}
-
-	if status := get(agents, "http://deb.debian.org/"); status != http.StatusForbidden {
-		t.Errorf("agent GET of a host it may not reach = %d, want 403", status)
 	}
 
 	mu.Lock()
 	defer mu.Unlock()
 
 	if !slices.Equal(got, []string{"deb.debian.org/debian/dists/bookworm/Release proxy-auth="}) {
-		t.Errorf("upstream saw %v; want the one allowed request, without the proxy's headers", got)
+		t.Errorf("upstream saw %v; want the one public request, without the proxy's headers", got)
 	}
 }
 
@@ -469,9 +425,13 @@ func (b *lockedBuffer) byMessage(t *testing.T) map[string][]string {
 	got := map[string][]string{}
 
 	for line := range strings.Lines(b.buf.String()) {
-		var rec struct{ Msg, Dest string }
+		var rec struct{ Msg, Dest, Client string }
 		if err := json.Unmarshal([]byte(line), &rec); err != nil {
 			t.Fatalf("log line %q: %v", line, err)
+		}
+
+		if rec.Client != "127.0.0.1" {
+			t.Errorf("log line %q names client %q; want the box's address", line, rec.Client)
 		}
 
 		got[rec.Msg] = append(got[rec.Msg], rec.Dest)
@@ -495,8 +455,8 @@ func TestProxy_LogsAForwardOnlyWhenItWasForwarded(t *testing.T) {
 
 	var out lockedBuffer
 
-	tools := startProxy(t, Config{Tools: loopback, Log: slog.New(slog.NewJSONHandler(&out, nil))}, w)
-	proxyURL, _ := url.Parse(tools.URL)
+	proxy := startProxy(t, Config{Log: slog.New(slog.NewJSONHandler(&out, nil))}, w)
+	proxyURL, _ := url.Parse(proxy.URL)
 	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
 
 	for target, want := range map[string]int{
@@ -534,18 +494,31 @@ func TestProxy_LogsAForwardOnlyWhenItWasForwarded(t *testing.T) {
 	}
 }
 
-func TestNew_RefusesAPolicyThatDoesNotHoldTogether(t *testing.T) {
+func TestNew_RefusesAGatewayThatIsNotAnOrigin(t *testing.T) {
 	t.Parallel()
 
-	for name, cfg := range map[string]Config{
-		"overlapping networks": {Agents: []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, Tools: []netip.Prefix{netip.MustParsePrefix("10.1.0.0/16")}},
-		"host without port":    {AgentHosts: []string{"api.anthropic.com"}},
-		"bad port":             {Trusted: []string{"mirror.example.com:99999"}},
-		"gateway without path": {Gateway: &url.URL{Scheme: "http", Host: "host.docker.internal:8080"}},
-		"gateway not http":     {Gateway: &url.URL{Scheme: "unix", Host: "x", Path: "/mcp"}},
+	for name, raw := range map[string]string{
+		"a path":     "http://host.docker.internal:8080/mcp",
+		"a query":    "http://goald:8080?x=1",
+		"user info":  "http://user@goald:8080",
+		"not http":   "unix://goald",
+		"no host":    "http:///",
+		"plain name": "goald:8080",
 	} {
-		if _, err := New(cfg); err == nil {
-			t.Errorf("%s: New accepted %+v", name, cfg)
+		u, err := url.Parse(raw)
+		if err != nil {
+			continue
+		}
+
+		if _, err := New(Config{Gateway: u}); err == nil {
+			t.Errorf("%s: New accepted gateway %s", name, raw)
+		}
+	}
+
+	for _, raw := range []string{"http://goald:8080", "http://host.docker.internal:8080/", "https://gateway.example.com"} {
+		u, _ := url.Parse(raw)
+		if _, err := New(Config{Gateway: u}); err != nil {
+			t.Errorf("New refused gateway %s: %v", raw, err)
 		}
 	}
 }

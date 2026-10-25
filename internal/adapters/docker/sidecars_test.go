@@ -15,8 +15,8 @@ func TestSidecarContainerOf_IsHardened(t *testing.T) {
 		OrgID: "o1", FactoryID: "f1", ItemID: "i1", RunID: "r1", Connection: "shop-db", Image: "ghcr.io/acme/shop-db-mcp:1.4.2",
 		Command: []string{"--read-only"}, Env: map[string]string{"SHOP_TOKEN": "token-123456"},
 	}
-	cfg := NewSidecars(nil, nil, Config{}, slog.New(slog.DiscardHandler)).cfg
-	tools := unitEgress(t).tools()
+	cfg := NewSidecars(nil, Config{}, slog.New(slog.DiscardHandler)).cfg
+	tools := unitRoute()
 
 	cc, hc := sidecarContainerOf(cfg, tools, spec, "")
 	got := hardeningOf(cc, hc)
@@ -42,8 +42,8 @@ func TestSidecarContainerOf_IsHardened(t *testing.T) {
 	spec.Env["HTTPS_PROXY"] = "http://attacker.example.com:3128"
 
 	cc, hc = sidecarContainerOf(cfg, tools, spec, "")
-	if hc.NetworkMode != "goal-egress-tools" || len(hc.ExtraHosts) != 0 {
-		t.Errorf("with network: mode %q, extra hosts %v; want the tools' network and no host alias", hc.NetworkMode, hc.ExtraHosts)
+	if hc.NetworkMode != DefaultNetwork || len(hc.ExtraHosts) != 0 {
+		t.Errorf("with network: mode %q, extra hosts %v; want the agents' network and no host alias", hc.NetworkMode, hc.ExtraHosts)
 	}
 
 	if got := fmt.Sprint(cc.Env); got != "[HOME=/tmp "+upperProxyVars+" SHOP_TOKEN=token-123456 "+lowerProxyVars+"]" {

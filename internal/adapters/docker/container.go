@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"net"
-	"net/url"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -53,11 +51,6 @@ const (
 	envAPIKey = "ANTHROPIC_API_KEY" //nolint:gosec // a variable name, not a credential
 )
 
-// hostAlias is how the egress proxy reaches goald on the host; Docker Desktop and OrbStack
-// resolve it, and the host-gateway extra host makes it resolve on Linux too. No other container
-// is given it.
-const hostAlias = "host.docker.internal"
-
 // safeID matches run ids usable as a container name and a directory name.
 var safeID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
 
@@ -83,7 +76,7 @@ type workerSpec struct {
 }
 
 // workerSpecOf is t as the worker reads it, with gateway, the gateway's URL as the container
-// reaches it (Egress.gatewayFor).
+// reaches it (gatewayFor).
 func workerSpecOf(t ports.TaskSpec, gateway string) workerSpec {
 	s := workerSpec{
 		FactoryID: t.FactoryID, ItemID: t.ItemID, RunID: t.RunID, Station: t.Station, Agent: t.Agent, Model: t.Model,
@@ -104,34 +97,6 @@ func nonNil(s []string) []string {
 	}
 
 	return s
-}
-
-// containerURL rewrites a loopback URL (goald's own address on the host) to one the egress proxy
-// can reach.
-func containerURL(raw string) (string, error) {
-	if raw == "" {
-		return "", nil
-	}
-
-	u, err := url.Parse(raw)
-	if err != nil {
-		return "", err
-	}
-
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return "", fmt.Errorf("%q is not an http(s) URL", raw)
-	}
-
-	switch u.Hostname() {
-	case "localhost", "127.0.0.1", "::1":
-		if port := u.Port(); port != "" {
-			u.Host = net.JoinHostPort(hostAlias, port)
-		} else {
-			u.Host = hostAlias
-		}
-	}
-
-	return u.String(), nil
 }
 
 // taskEnv is the container's whole environment: the spec's Env (which carries
@@ -185,8 +150,8 @@ func containerName(run domain.RunID) string { return "goal-run-" + string(run) }
 
 // containerOf is the hardened container for one task: non-root, read-only root filesystem with
 // a tmpfs /tmp and a throwaway home volume, every capability dropped, no privilege escalation,
-// CPU, memory and PID limits, on the agents' network (r), where nothing but the egress proxy is
-// reachable. The run directory is mounted read-only at /goal and the workspace read-write at
+// CPU, memory and PID limits, on the agents' network (r), where only the egress proxy is
+// reachable, and through it public hosts and goald's gateway. The run directory is mounted read-only at /goal and the workspace read-write at
 // /workspace.
 func containerOf(cfg Config, r route, t ports.TaskSpec, runDir string) (*container.Config, *container.HostConfig) {
 	cc := &container.Config{

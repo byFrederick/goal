@@ -76,6 +76,10 @@ func goald() int {
 
 	log := newLogger(s)
 
+	for _, name := range s.Ignored {
+		log.Warn("setting ignored: it was removed (spec 4 §5.13)", slog.String("variable", name))
+	}
+
 	if err := run(ctx, s, log); err != nil {
 		log.Error("goald stopped", slog.Any("error", err))
 		return 1
@@ -144,7 +148,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Clock:       clock, DefaultImage: s.DefaultAgentImage,
 	})
 
-	dockerClient, egress, err := containers(ctx, s, log)
+	dockerClient, err := containers(ctx)
 	if err != nil {
 		return err
 	}
@@ -159,14 +163,14 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	// One rule for env:NAME references wherever goald resolves one: clones, the code host, the gateway.
 	policy := s.secretPolicy()
-	runnerCfg := docker.Config{RunDir: s.RunDir}
+	runnerCfg := docker.Config{RunDir: s.RunDir, Network: s.SandboxNetwork}
 	workspaces := gitworkspace.New(secrets, gitworkspace.Config{Root: s.WorkspaceRoot, Hosts: []string{s.GitHubWebHost}, Policy: policy}, log)
 
-	runner := docker.New(dockerClient, defs, egress, runnerCfg, log)
+	runner := docker.New(dockerClient, defs, runnerCfg, log)
 
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Secrets: secrets, Events: store, Clock: clock, Logger: log,
-		Sidecars: docker.NewSidecars(dockerClient, egress, docker.Config{}, log),
+		Sidecars: docker.NewSidecars(dockerClient, docker.Config{Network: s.SandboxNetwork}, log),
 	}, gateway.Config{Key: []byte(key), SecretPolicy: policy})
 	if err != nil {
 		return err
@@ -177,7 +181,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	codehost := github.New(secrets, github.Config{APIURL: s.GitHubAPIURL, WebHost: s.GitHubWebHost, Policy: policy})
 
 	eng, err = engine.New(engine.Deps{
-		Store: store, Orgs: store, Runner: runner, Workspaces: workspaces, Checker: docker.NewChecker(dockerClient, egress, runnerCfg, log),
+		Store: store, Orgs: store, Runner: runner, Workspaces: workspaces, Checker: docker.NewChecker(dockerClient, runnerCfg, log),
 		Contracts: defs, Secrets: secrets, CodeHost: codehost, Clock: clock, Logger: log, RunEnded: gw.EndRun,
 		// The engine reaps what runs that are over left in Docker and on disk, whichever goald on
 		// this host started them: at its start and every ReapEvery.
@@ -270,31 +274,20 @@ func openConnections(ctx context.Context, store *postgres.Store, getenv func(str
 	return connections, nil
 }
 
-// containers connects to Docker and prepares the egress proxy that agents, networked sidecars and
-// checks reach the outside through (ADR 0009); the proxy itself starts with the first container
-// that needs it. A missing proxy image is a warning: goald serves everything else without it.
-func containers(ctx context.Context, s settings, log *slog.Logger) (*client.Client, *docker.Egress, error) {
+// containers connects to Docker. The agents' network and its egress proxy are compose.yaml's
+// (ADR 0009 and its phase 4 amendment); a container that would run without them says so.
+func containers(ctx context.Context) (*client.Client, error) {
 	dockerClient, err := client.New(client.FromEnv)
 	if err != nil {
-		return nil, nil, fmt.Errorf("docker: %w", err)
+		return nil, fmt.Errorf("docker: %w", err)
 	}
 
 	if _, err := dockerClient.Ping(ctx, client.PingOptions{}); err != nil {
 		_ = dockerClient.Close()
-		return nil, nil, fmt.Errorf("docker is not reachable: %w", err)
+		return nil, fmt.Errorf("docker is not reachable: %w", err)
 	}
 
-	egress, err := docker.NewEgress(dockerClient, s.Egress, log)
-	if err != nil {
-		_ = dockerClient.Close()
-		return nil, nil, err
-	}
-
-	if err := egress.CheckImage(ctx); err != nil {
-		log.WarnContext(ctx, "agent runs, networked sidecars and checks cannot start until the egress proxy's image is built", slog.Any("error", err))
-	}
-
-	return dockerClient, egress, nil
+	return dockerClient, nil
 }
 
 // httpServers are goald's HTTP servers: the main listener and, with GOAL_GATEWAY_LISTEN, the

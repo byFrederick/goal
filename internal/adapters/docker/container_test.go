@@ -44,7 +44,7 @@ func TestContainerOf_IsHardened(t *testing.T) {
 		Env: map[string]string{"CLAUDE_CODE_OAUTH_TOKEN": "oauth-token-123", "ANTHROPIC_API_KEY": "sk-ant-not-passed"}, //nolint:gosec // fake values
 	}
 
-	cc, hc := containerOf(Config{}.withDefaults(), unitEgress(t).agents(), spec, "/runs/r1")
+	cc, hc := containerOf(Config{}.withDefaults(), unitRoute(), spec, "/runs/r1")
 	got := hardeningOf(cc, hc)
 	want := hardening{
 		User: "1000:1000", CapDrop: "[ALL]", SecurityOpt: "[no-new-privileges:true]",
@@ -62,7 +62,7 @@ func TestContainerOf_IsHardened(t *testing.T) {
 	}
 
 	// The agents' network reaches nothing but the egress proxy; no name leads to the host.
-	if hc.NetworkMode != "goal-egress-agents" || len(hc.ExtraHosts) != 0 {
+	if hc.NetworkMode != DefaultNetwork || len(hc.ExtraHosts) != 0 {
 		t.Errorf("network %q, extra hosts %v; want the agents' network and no host alias", hc.NetworkMode, hc.ExtraHosts)
 	}
 }
@@ -73,8 +73,8 @@ func TestTaskEnv_TheProxyVariablesWin(t *testing.T) {
 
 	spec := ports.TaskSpec{Env: map[string]string{"HTTPS_PROXY": "http://attacker.example.com:3128", "NO_PROXY": "*"}}
 
-	env := taskEnv(spec, unitEgress(t).agents())
-	if !slices.Contains(env, "HTTPS_PROXY=http://goal-egress:3128") || !slices.Contains(env, "NO_PROXY=goal-egress") {
+	env := taskEnv(spec, unitRoute())
+	if !slices.Contains(env, "HTTPS_PROXY=http://goal-egress:3128") || !slices.Contains(env, "NO_PROXY="+noProxy) {
 		t.Errorf("env %v: want the egress proxy's variables", env)
 	}
 }
@@ -90,7 +90,7 @@ func TestContainerOf_KeepsHostClaudeConfigOut(t *testing.T) {
 		Env: map[string]string{"CLAUDE_CONFIG_DIR": "/Users/acme/.claude", "CLAUDE_CODE_OAUTH_TOKEN": "oauth-token-123"}, //nolint:gosec // fake values
 	}
 
-	cc, hc := containerOf(Config{}.withDefaults(), unitEgress(t).agents(), spec, "/runs/r1")
+	cc, hc := containerOf(Config{}.withDefaults(), unitRoute(), spec, "/runs/r1")
 
 	for _, m := range hc.Mounts {
 		if m.Type == mount.TypeBind && m.Target != containerGoal && m.Target != containerWorkspace {

@@ -1,13 +1,11 @@
-// Command goal-egress is the egress proxy of agent, sidecar and check containers (internal/egress,
-// ADR 0009). goald's Docker adapter runs it as a container of its own on the agents' and tools'
-// networks and on one with a route out; nothing else runs it. Flags:
+// Command goal-egress is the egress proxy of every sandbox (internal/egress, ADR 0009 and its
+// phase 4 amendment): compose.yaml's goal-egress service, on the agents' network and on one with
+// a route out. Flags:
 //
-//	-listen :3128                 the proxy's address
-//	-gateway URL                  goald's MCP gateway, served to agents at its path
-//	-agents CIDR, -tools CIDR     the client networks of each policy (repeatable)
-//	-agent-host host:port         a destination agents may reach (repeatable)
-//	-trust host:port              a destination dialed without the public-address check (repeatable)
-//	-health                       exit 0 when the proxy at -listen accepts connections (the image's health check)
+//	-listen :3128     the proxy's address
+//	-gateway URL      goald's gateway listener, an origin whose /mcp and /run boxes reach
+//	                  (default $GOAL_EGRESS_GATEWAY; empty serves no gateway)
+//	-health           exit 0 when the proxy at -listen accepts connections (the image's health check)
 //
 // It logs JSON lines on stderr and stops on SIGTERM.
 package main
@@ -16,68 +14,31 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
-	"net/netip"
 	"net/url"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/byFrederick/goal/internal/egress"
 )
 
-func main() { os.Exit(run(os.Args[1:], os.Stderr)) }
+// gatewayEnv is the -gateway default: compose.yaml sets it.
+const gatewayEnv = "GOAL_EGRESS_GATEWAY"
 
-// list is a repeatable string flag.
-type list []string
+func main() { os.Exit(run(os.Args[1:], os.Getenv, os.Stderr)) }
 
-func (l *list) String() string { return strings.Join(*l, ",") }
-
-func (l *list) Set(v string) error {
-	*l = append(*l, v)
-	return nil
-}
-
-// prefixes is a repeatable CIDR flag.
-type prefixes []netip.Prefix
-
-func (p *prefixes) String() string { return fmt.Sprint(*p) }
-
-func (p *prefixes) Set(v string) error {
-	n, err := netip.ParsePrefix(v)
-	if err != nil {
-		return err
-	}
-
-	*p = append(*p, n.Masked())
-
-	return nil
-}
-
-func run(args []string, stderr io.Writer) int {
+func run(args []string, getenv func(string) string, stderr io.Writer) int {
 	fs := flag.NewFlagSet("goal-egress", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	var (
-		cfg                 egress.Config
-		agents, tools       prefixes
-		agentHosts, trusted list
-	)
-
 	listen := fs.String("listen", ":3128", "the proxy's address")
-	gateway := fs.String("gateway", "", "goald's MCP gateway, served to agents at its path")
+	gateway := fs.String("gateway", getenv(gatewayEnv), "goald's gateway listener, an origin whose /mcp and /run boxes reach (default $"+gatewayEnv+")")
 	health := fs.Bool("health", false, "exit 0 when the proxy at -listen accepts connections")
-
-	fs.Var(&agents, "agents", "an agents' network (CIDR, repeatable)")
-	fs.Var(&tools, "tools", "a tools' network: sidecars and checks (CIDR, repeatable)")
-	fs.Var(&agentHosts, "agent-host", "a destination agents may reach (host:port, repeatable)")
-	fs.Var(&trusted, "trust", "a destination dialed without the public-address check (host:port, repeatable)")
 
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -89,6 +50,8 @@ func run(args []string, stderr io.Writer) int {
 
 	log := slog.New(slog.NewJSONHandler(stderr, nil))
 
+	var cfg egress.Config
+
 	if *gateway != "" {
 		u, err := url.Parse(*gateway)
 		if err != nil {
@@ -99,7 +62,7 @@ func run(args []string, stderr io.Writer) int {
 		cfg.Gateway = u
 	}
 
-	cfg.Agents, cfg.Tools, cfg.AgentHosts, cfg.Trusted, cfg.Log = agents, tools, agentHosts, trusted, log
+	cfg.Log = log
 
 	proxy, err := egress.New(cfg)
 	if err != nil {

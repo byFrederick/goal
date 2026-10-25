@@ -33,7 +33,7 @@ const (
 	stubImage    = "goal-runner-stub:test"
 	oauth        = "oauth-token-for-tests-only"
 	gatewayToken = "gateway-token-for-tests-only"
-	// stubGateway is the gateway stub tasks name; the shared test egress serves it.
+	// stubGateway is the gateway stub tasks name; the shared test network's proxy maps it to its own address.
 	stubGateway = "http://127.0.0.1:8081/mcp"
 )
 
@@ -65,7 +65,7 @@ func newTestRunner(t *testing.T) (*Runner, *client.Client) {
 		t.Fatalf("build stub image: %v", errStubBuild)
 	}
 
-	return New(docker, promptFiles{}, testEgress(t, docker), Config{RunDir: t.TempDir(), StopGrace: time.Second}, slog.New(slog.DiscardHandler)), docker
+	return New(docker, promptFiles{}, Config{RunDir: t.TempDir(), StopGrace: time.Second, Network: testNet(t, docker)}, slog.New(slog.DiscardHandler)), docker
 }
 
 func buildStub(docker *client.Client) error {
@@ -290,7 +290,7 @@ func assertHardened(t *testing.T, docker *client.Client, r *Runner, spec ports.T
 	}
 
 	running := hardeningOf(got.Container.Config, got.Container.HostConfig)
-	want := hardeningOf(containerOf(r.cfg, r.egress.agents(), spec, r.runDir(spec.RunID)))
+	want := hardeningOf(containerOf(r.cfg, agentsRoute(r.cfg.Network), spec, r.runDir(spec.RunID)))
 	running.Env, want.Env = "", "" // the image adds its own variables, such as PATH
 
 	if running != want {
@@ -327,11 +327,7 @@ func TestRunner_CrashReportsRedactedStderr(t *testing.T) {
 func createOrphan(t *testing.T, r *Runner, docker *client.Client, spec ports.TaskSpec, runDir string) {
 	t.Helper()
 
-	if err := r.egress.Ensure(t.Context()); err != nil { // the agents' network must exist
-		t.Fatal(err)
-	}
-
-	cc, hc := containerOf(r.cfg, r.egress.agents(), spec, runDir)
+	cc, hc := containerOf(r.cfg, agentsRoute(r.cfg.Network), spec, runDir)
 	if _, err := docker.ContainerCreate(t.Context(), client.ContainerCreateOptions{Config: cc, HostConfig: hc, Name: containerName(spec.RunID)}); err != nil {
 		t.Fatal(err)
 	}

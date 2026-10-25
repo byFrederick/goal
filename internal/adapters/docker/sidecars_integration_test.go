@@ -48,7 +48,7 @@ func newTestSidecars(t *testing.T, logs *syncBuffer) (*Sidecars, *client.Client)
 
 	log := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	return NewSidecars(docker, testEgress(t, docker), Config{}, log), docker
+	return NewSidecars(docker, Config{Network: testNet(t, docker)}, log), docker
 }
 
 // buildMCPStub cross-compiles testdata/mcpstub for the Docker host and builds it into an image
@@ -209,7 +209,7 @@ func assertSidecarHardened(t *testing.T, docker *client.Client, s *Sidecars, spe
 	}
 
 	running := hardeningOf(got.Container.Config, got.Container.HostConfig)
-	want := hardeningOf(sidecarContainerOf(s.cfg, s.egress.tools(), spec, ""))
+	want := hardeningOf(sidecarContainerOf(s.cfg, agentsRoute(s.cfg.Network), spec, ""))
 	running.Env, want.Env = "", "" // the image may add its own variables
 
 	if running != want {
@@ -217,7 +217,7 @@ func assertSidecarHardened(t *testing.T, docker *client.Client, s *Sidecars, spe
 	}
 
 	hc := got.Container.HostConfig
-	if wantMode := map[bool]string{false: "none", true: s.egress.toolsNetwork()}[spec.Network]; string(hc.NetworkMode) != wantMode {
+	if wantMode := map[bool]string{false: "none", true: s.cfg.Network}[spec.Network]; string(hc.NetworkMode) != wantMode {
 		t.Errorf("network mode = %q, want %q", hc.NetworkMode, wantMode)
 	}
 

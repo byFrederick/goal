@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
@@ -8,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/url"
 	"os"
 	"os/exec"
@@ -60,6 +62,15 @@ const (
 	mailpitAuthName = "mailpit-ui-auth"
 )
 
+// The egress proxy's upstream (compose.yaml's goal-egress): goald's gateway listener as the proxy
+// reaches it, on this machine (egressGateway) or as the stack's goald service.
+const (
+	egressGatewayEnv = "GOAL_EGRESS_GATEWAY"
+	stackGateway     = "http://goald:8090"
+	dockerHost       = "host.docker.internal"
+	defaultListen    = "127.0.0.1:8080"
+)
+
 // authVariables are the auth service's own variables, and the only ones it is started with: the
 // Taskfile's AUTH_VARIABLES (task auth:dev), kept equal by TestUp_AuthVariablesAreTheTaskfiles.
 var authVariables = []string{
@@ -87,9 +98,22 @@ var authOnly = []string{
 // GOAL_AUTH=none as the way to keep the single local user. It
 // pushes no factory: the bucket's definitions are what goald runs. The compose services keep
 // running afterwards; `docker compose down` stops them.
+//
+// With --compose goald and the auth service run as compose.yaml's services too (startStack).
 func up(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
-	if len(args) != 0 {
+	fs := newFlags("up")
+	inCompose := fs.Bool("compose", false, "run goald and the auth service as compose services too")
+
+	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
 		return errUsage
+	}
+
+	if *inCompose {
+		if err := stackSignIn(getenv); err != nil {
+			return err
+		}
+
+		return localPlatform().startStack(ctx, out, getenv)
 	}
 
 	signIn, err := signInMode(getenv)
@@ -103,7 +127,9 @@ func up(ctx context.Context, out *printer, getenv func(string) string, args []st
 // platform is goal up's steps, which start takes in order: localPlatform's run compose, the
 // database, node and goald for real; tests give fakes of them.
 type platform struct {
-	compose     func(ctx context.Context, out *printer, what string, services ...string) error
+	// compose brings services up with env added to compose's own (its interpolation); args are
+	// docker compose up's.
+	compose     func(ctx context.Context, out *printer, what string, env []string, args ...string) error
 	bootstrap   func(ctx context.Context, getenv func(string) string) error
 	dbInit      func(ctx context.Context, out *printer, getenv func(string) string) error
 	dbMigrate   func(ctx context.Context, out *printer, getenv func(string) string) error
@@ -123,9 +149,10 @@ func localPlatform() platform {
 	}
 }
 
-// start takes goal up's steps once signInMode has said whether people sign in.
-func (p platform) start(ctx context.Context, out *printer, getenv func(string) string, signIn bool) error {
-	if err := p.compose(ctx, out, "PostgreSQL and RustFS", "postgres", "rustfs"); err != nil {
+// prepare is what goal up does before it starts anyone: PostgreSQL and RustFS, the bootstrap
+// check under sign-in, the database roles, the migrations and the bucket.
+func (p platform) prepare(ctx context.Context, out *printer, getenv func(string) string, signIn bool) error {
+	if err := p.compose(ctx, out, "PostgreSQL and RustFS", nil, "postgres", "rustfs"); err != nil {
 		return err
 	}
 
@@ -146,7 +173,18 @@ func (p platform) start(ctx context.Context, out *printer, getenv func(string) s
 		return err
 	}
 
-	if err := p.storageInit(ctx, out, getenv); err != nil {
+	return p.storageInit(ctx, out, getenv)
+}
+
+// start takes goal up's steps once signInMode has said whether people sign in: prepare, the
+// egress proxy agent containers go out through (compose's goal-egress, reaching this machine's
+// goald), then the auth service under sign-in and goald on this machine.
+func (p platform) start(ctx context.Context, out *printer, getenv func(string) string, signIn bool) error {
+	if err := p.prepare(ctx, out, getenv, signIn); err != nil {
+		return err
+	}
+
+	if err := p.compose(ctx, out, "the egress proxy", []string{egressGatewayEnv + "=" + egressGateway(getenv)}, "goal-egress"); err != nil {
 		return err
 	}
 
@@ -166,7 +204,7 @@ func (p platform) start(ctx context.Context, out *printer, getenv func(string) s
 			return err
 		}
 
-		if err := p.compose(ctx, out, "Mailpit", "mailpit"); err != nil {
+		if err := p.compose(ctx, out, "Mailpit", nil, "mailpit"); err != nil {
 			return err
 		}
 
@@ -180,6 +218,75 @@ func (p platform) start(ctx context.Context, out *printer, getenv func(string) s
 	}
 
 	return p.runGoald(ctx, out, bin, goaldEnv(environ, getenv, signIn, publicURL))
+}
+
+// startStack is goal up --compose: prepare, then Mailpit, the egress proxy, goald and the auth
+// service as compose.yaml's services (their images built when their sources changed), sharing
+// a proxy secret as start's do, and returns once they are healthy; they keep running.
+func (p platform) startStack(ctx context.Context, out *printer, getenv func(string) string) error {
+	if err := p.prepare(ctx, out, getenv, true); err != nil {
+		return err
+	}
+
+	inbox, err := mailpitAuth(getenv)
+	if err != nil {
+		return err
+	}
+
+	env := withProxySecret([]string{egressGatewayEnv + "=" + stackGateway}, getenv)
+	if err := p.compose(ctx, out, "Mailpit, the egress proxy, goald and the auth service", env, "--build", "mailpit", "goal-egress", "goald", "auth"); err != nil {
+		return err
+	}
+
+	publicURL := cmp.Or(strings.TrimSpace(getenv("GOAL_PUBLIC_URL")), "http://"+defaultListen)
+	out.printf("goald runs in compose: sign in at %s (codes arrive in Mailpit, %s: user %s, password in %s); "+
+		"docker compose logs -f goald follows it, docker compose stop goald auth stops it\n", publicURL, mailpitInbox, mailpitUser, inbox)
+
+	return nil
+}
+
+// stackSignIn is signInMode for goal up --compose: goald listens off loopback inside its
+// container, so people sign in, and the auth service is its image, not a local build.
+func stackSignIn(getenv func(string) string) error {
+	if mode := strings.TrimSpace(getenv(authModeEnv)); mode != "" && mode != authSession {
+		return errors.New("goal up --compose needs GOAL_AUTH=session: goald listens off loopback in its container (goal up runs the single local user on this machine)")
+	}
+
+	if err := authSecrets(getenv); err != nil {
+		return err
+	}
+
+	return publishedPasswords(getenv)
+}
+
+// egressGateway is goald's gateway listener as the egress proxy reaches it from its container
+// when goald runs on this machine: GOAL_EGRESS_GATEWAY when set, else the origin of
+// GOAL_GATEWAY_URL or of the gateway's listener (GOAL_GATEWAY_LISTEN, else GOAL_LISTEN), with a
+// loopback or wildcard host as host.docker.internal, the name the proxy has for this machine.
+func egressGateway(getenv func(string) string) string {
+	if set := strings.TrimSpace(getenv(egressGatewayEnv)); set != "" {
+		return set
+	}
+
+	scheme, host := "http", cmp.Or(strings.TrimSpace(getenv("GOAL_GATEWAY_LISTEN")), strings.TrimSpace(getenv("GOAL_LISTEN")), defaultListen)
+	if u, err := url.Parse(strings.TrimSpace(getenv("GOAL_GATEWAY_URL"))); err == nil && u.Host != "" {
+		scheme, host = u.Scheme, u.Host
+	}
+
+	name, port, err := net.SplitHostPort(host)
+	if err != nil {
+		name, port = host, ""
+	}
+
+	if ip := net.ParseIP(name); name == "" || name == "localhost" || ip != nil && (ip.IsLoopback() || ip.IsUnspecified()) {
+		name = dockerHost
+	}
+
+	if port != "" {
+		name = net.JoinHostPort(name, port)
+	}
+
+	return scheme + "://" + name
 }
 
 // signInMode resolves GOAL_AUTH as goald does and reports whether it is session, refusing
@@ -337,12 +444,15 @@ func mailpitAuth(getenv func(string) string) (string, error) {
 	return path, nil
 }
 
-// compose starts compose.yaml's services and waits until they are healthy.
-func compose(ctx context.Context, out *printer, what string, services ...string) error {
+// compose starts compose.yaml's services and waits until they are healthy, with env on top of
+// this process's environment for compose's interpolation.
+func compose(ctx context.Context, out *printer, what string, env []string, args ...string) error {
 	out.printf("starting %s (docker compose)\n", what)
 
-	cmd := exec.CommandContext(ctx, "docker", slices.Concat([]string{"compose", "up", "--detach", "--wait"}, services)...) //nolint:gosec // fixed service names
+	cmd := exec.CommandContext(ctx, "docker", slices.Concat([]string{"compose", "up", "--detach", "--wait"}, args)...) //nolint:gosec // fixed service names
 	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
+
+	cmd.Env = append(os.Environ(), env...)
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("docker compose up: %w (run goal up from the repository root)", err)
@@ -460,7 +570,7 @@ func publicURLOf(getenv func(string) string) string {
 
 	listen := strings.TrimSpace(getenv("GOAL_LISTEN"))
 	if listen == "" {
-		listen = "127.0.0.1:8080"
+		listen = defaultListen
 	}
 
 	return "http://" + listen

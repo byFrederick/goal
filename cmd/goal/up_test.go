@@ -21,6 +21,12 @@ import (
 	"github.com/byFrederick/goal/internal/adapters/postgres"
 )
 
+// Variables the tests set.
+const (
+	xdgConfigHome = "XDG_CONFIG_HOME"
+	listenEnv     = "GOAL_LISTEN"
+)
+
 // goal up and task auth:dev start the auth service with the same variables.
 func TestUp_AuthVariablesAreTheTaskfiles(t *testing.T) {
 	t.Parallel()
@@ -257,7 +263,7 @@ func TestUp_MailpitAuthIsGeneratedOnceAndPrivate(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	getenv := func(n string) string { return map[string]string{"XDG_CONFIG_HOME": dir}[n] }
+	getenv := func(n string) string { return map[string]string{xdgConfigHome: dir}[n] }
 
 	path, err := mailpitAuth(getenv)
 	if err != nil {
@@ -297,6 +303,8 @@ type fakeInstall struct {
 	mu       sync.Mutex
 	migrated bool
 	steps    []string
+	// composed is what each compose step was given: its env and its args, by what it starts.
+	composed map[string][]string
 	// authStarts counts the auth services started; serving is closed once one serves.
 	authStarts int
 	serving    chan struct{}
@@ -308,7 +316,9 @@ type fakeInstall struct {
 	goaldRuns time.Duration
 }
 
-func newFakeInstall() *fakeInstall { return &fakeInstall{serving: make(chan struct{})} }
+func newFakeInstall() *fakeInstall {
+	return &fakeInstall{serving: make(chan struct{}), composed: map[string][]string{}}
+}
 
 func (f *fakeInstall) step(name string) {
 	f.mu.Lock()
@@ -368,8 +378,12 @@ func (f *fakeInstall) startAuth(ctx context.Context, _ []string) (func() error, 
 // then runs until an auth service serves (and goaldRuns more) or ten minutes have passed.
 func (f *fakeInstall) platform() platform {
 	return platform{
-		compose: func(_ context.Context, _ *printer, what string, _ ...string) error {
+		compose: func(_ context.Context, _ *printer, what string, env []string, args ...string) error {
 			f.step("compose " + what)
+
+			f.mu.Lock()
+			f.composed[what] = slices.Concat(env, args)
+			f.mu.Unlock()
 
 			return nil
 		},
@@ -421,7 +435,7 @@ func startUp(t *testing.T, f *fakeInstall) string {
 	dir := t.TempDir()
 	out := &printer{w: io.Discard, e: &notices}
 
-	if err := f.platform().start(t.Context(), out, func(n string) string { return map[string]string{"XDG_CONFIG_HOME": dir}[n] }, true); err != nil {
+	if err := f.platform().start(t.Context(), out, func(n string) string { return map[string]string{xdgConfigHome: dir}[n] }, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -439,7 +453,8 @@ func TestUp_MigratesBeforeTheAuthServiceStarts(t *testing.T) {
 		notices := startUp(t, f)
 
 		want := []string{
-			"compose PostgreSQL and RustFS", "bootstrap check", "db init", "db migrate", "storage init", "compose Mailpit", "auth service", "goald",
+			"compose PostgreSQL and RustFS", "bootstrap check", "db init", "db migrate", "storage init", "compose the egress proxy", "compose Mailpit",
+			"auth service", "goald",
 		}
 		if !slices.Equal(f.steps, want) {
 			t.Errorf("goal up took %v; want %v", f.steps, want)
@@ -520,4 +535,84 @@ func TestUp_SteadyRunsResetTheAuthServicesRestarts(t *testing.T) {
 			t.Errorf("goal up said %q; want every restart after the first backoff", notices)
 		}
 	})
+}
+
+// The egress proxy forwards boxes' gateway calls to goald on this machine at the listener goald
+// serves its gateway on, which a container names host.docker.internal.
+func TestUp_EgressGatewayIsGoaldsGatewayListener(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		env  map[string]string
+		want string
+	}{
+		"the default":                      {nil, "http://host.docker.internal:8080"},
+		"the main listener":                {map[string]string{listenEnv: "127.0.0.1:9080"}, "http://host.docker.internal:9080"},
+		"a gateway listener":               {map[string]string{listenEnv: "127.0.0.1:9080", "GOAL_GATEWAY_LISTEN": ":8090"}, "http://host.docker.internal:8090"},
+		"a gateway listener on the bridge": {map[string]string{"GOAL_GATEWAY_LISTEN": "172.17.0.1:8090"}, "http://172.17.0.1:8090"},
+		"GOAL_GATEWAY_URL":                 {map[string]string{"GOAL_GATEWAY_URL": "https://localhost:8443/mcp"}, "https://host.docker.internal:8443"},
+		"GOAL_EGRESS_GATEWAY":              {map[string]string{"GOAL_EGRESS_GATEWAY": "http://gw.example.com", listenEnv: "127.0.0.1:9080"}, "http://gw.example.com"},
+	} {
+		if got := egressGateway(func(n string) string { return tt.env[n] }); got != tt.want {
+			t.Errorf("%s: egressGateway = %q; want %q", name, got, tt.want)
+		}
+	}
+}
+
+// goal up starts the egress proxy toward this machine's goald before goald, so its first run
+// has a way out.
+func TestUp_StartsTheEgressProxyBeforeGoald(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		f := newFakeInstall()
+		_ = startUp(t, f)
+
+		if got := f.composed["the egress proxy"]; !slices.Equal(got, []string{"GOAL_EGRESS_GATEWAY=http://host.docker.internal:8080", "goal-egress"}) {
+			t.Errorf("egress proxy started with %v; want goal-egress reaching goald on this machine", got)
+		}
+
+		if i, j := slices.Index(f.steps, "compose the egress proxy"), slices.Index(f.steps, "goald"); i < 0 || i > j {
+			t.Errorf("goal up took %v; want the egress proxy before goald", f.steps)
+		}
+	})
+}
+
+// goal up --compose prepares the database and the bucket as goal up does, then runs goald, the
+// auth service, Mailpit and the egress proxy in compose, built from this checkout, the proxy
+// reaching goald's service and goald sharing a proxy secret with the auth service; it starts no
+// process of its own.
+func TestUp_ComposeRunsTheStackInCompose(t *testing.T) {
+	t.Parallel()
+
+	f := newFakeInstall()
+	dir := t.TempDir()
+	out := &printer{w: io.Discard, e: io.Discard}
+
+	if err := f.platform().startStack(t.Context(), out, func(n string) string { return map[string]string{xdgConfigHome: dir}[n] }); err != nil {
+		t.Fatal(err)
+	}
+
+	stack := "Mailpit, the egress proxy, goald and the auth service"
+	if want := []string{"compose PostgreSQL and RustFS", "bootstrap check", "db init", "db migrate", "storage init", "compose " + stack}; !slices.Equal(f.steps, want) {
+		t.Errorf("goal up --compose took %v; want %v", f.steps, want)
+	}
+
+	got := f.composed[stack]
+	if len(got) != 7 || got[0] != "GOAL_EGRESS_GATEWAY=http://goald:8090" || !regexp.MustCompile(`^GOAL_AUTH_PROXY_SECRET=[0-9a-f]{64}$`).MatchString(got[1]) ||
+		!slices.Equal(got[2:], []string{"--build", "mailpit", "goal-egress", "goald", "auth"}) {
+		t.Errorf("the stack started with %v; want the proxy toward goald's service, a proxy secret and the four services built", got)
+	}
+}
+
+// goald listens off loopback in its container, so goal up --compose signs people in.
+func TestUp_ComposeRefusesTheSingleLocalUser(t *testing.T) {
+	t.Parallel()
+
+	getenv := func(n string) string { return map[string]string{"GOAL_AUTH": "none"}[n] }
+
+	err := up(t.Context(), &printer{w: io.Discard, e: io.Discard}, getenv, []string{"--compose"})
+	if err == nil || !strings.Contains(err.Error(), "GOAL_AUTH=session") {
+		t.Errorf("goal up --compose under GOAL_AUTH=none = %v; want a refusal naming GOAL_AUTH=session", err)
+	}
 }

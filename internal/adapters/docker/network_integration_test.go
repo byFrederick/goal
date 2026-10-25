@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -25,7 +24,10 @@ import (
 	"testing"
 	"time"
 
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/moby/api/pkg/stdcopy"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -40,31 +42,104 @@ var (
 	egressImageOnce sync.Once
 	errEgressImage  error
 
-	// sharedEgress serves the tests that only need their containers' networks to exist; TestMain
-	// removes it. Every test that checks reachability has an egress of its own.
-	sharedEgressOnce sync.Once
-	sharedEgress     *Egress
-	errSharedEgress  error
+	// sharedNet serves the tests that only need their containers' network to exist; TestMain
+	// removes it. Every test that checks reachability has a network of its own.
+	sharedNetOnce sync.Once
+	sharedNet     *testNetwork
+	errSharedNet  error
 )
 
 func TestMain(m *testing.M) {
 	code := m.Run()
 
-	if sharedEgress != nil {
-		if err := sharedEgress.Remove(context.Background()); err != nil {
-			fmt.Fprintln(os.Stderr, "remove the shared test egress:", err)
+	if sharedNet != nil {
+		if err := sharedNet.remove(context.Background()); err != nil {
+			fmt.Fprintln(os.Stderr, "remove the shared test network:", err)
 		}
 	}
 
 	os.Exit(code)
 }
 
-// uniqueEgressName names a test's egress proxy and networks apart from goald's and other runs'.
-func uniqueEgressName() string {
+// testNetwork is compose.yaml's agents network and goal-egress service, made for a test: an
+// internal network without a bridge address, and the proxy on it under the service's name and
+// on the default bridge, its way out.
+type testNetwork struct {
+	docker *client.Client
+	name   string // the network's
+	proxy  string // the proxy container's
+}
+
+// newTestNetwork makes the network and starts its proxy, serving gateway (an origin; empty for
+// none), and waits until the proxy is healthy.
+func newTestNetwork(ctx context.Context, docker *client.Client, gateway string) (*testNetwork, error) {
+	if err := egressImage(docker); err != nil {
+		return nil, fmt.Errorf("build egress image: %w", err)
+	}
+
 	b := make([]byte, 4)
 	_, _ = rand.Read(b)
 
-	return "goal-egress-it-" + hex.EncodeToString(b)
+	n := &testNetwork{docker: docker, name: "goal-it-agents-" + hex.EncodeToString(b), proxy: "goal-it-egress-" + hex.EncodeToString(b)}
+
+	if _, err := docker.NetworkCreate(ctx, n.name, client.NetworkCreateOptions{
+		Driver: "bridge", Internal: true, Options: map[string]string{noBridgeAddress: "true"},
+	}); err != nil {
+		return nil, fmt.Errorf("create network: %w", err)
+	}
+
+	useInit := true
+	cc := &container.Config{
+		Image: egressTestImage, User: "65532:65532", Cmd: []string{"-gateway", gateway},
+		Healthcheck: &container.HealthConfig{
+			Test: []string{"CMD", "/goal-egress", "-health"}, Interval: time.Second, Timeout: time.Second, StartInterval: 200 * time.Millisecond,
+			StartPeriod: 10 * time.Second, Retries: 3,
+		},
+	}
+	hc := &container.HostConfig{
+		NetworkMode: "bridge", ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges:true"}, Init: &useInit,
+		ExtraHosts: []string{"host.docker.internal:host-gateway"},
+	}
+	nc := &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{
+		"bridge": {GwPriority: 1},
+		n.name:   {Aliases: []string{proxyHost}},
+	}}
+
+	if _, err := docker.ContainerCreate(ctx, client.ContainerCreateOptions{Config: cc, HostConfig: hc, NetworkingConfig: nc, Name: n.proxy}); err != nil {
+		_ = n.remove(ctx)
+		return nil, fmt.Errorf("create proxy: %w", err)
+	}
+
+	if _, err := docker.ContainerStart(ctx, n.proxy, client.ContainerStartOptions{}); err != nil {
+		_ = n.remove(ctx)
+		return nil, fmt.Errorf("start proxy: %w", err)
+	}
+
+	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(200 * time.Millisecond) {
+		c, err := docker.ContainerInspect(ctx, n.proxy, client.ContainerInspectOptions{})
+		if err == nil && c.Container.State != nil && c.Container.State.Health != nil && c.Container.State.Health.Status == container.Healthy {
+			return n, nil
+		}
+
+		if time.Now().After(deadline) {
+			_ = n.remove(ctx)
+			return nil, fmt.Errorf("proxy %s is not healthy (inspect error: %w)", n.proxy, err)
+		}
+	}
+}
+
+// remove removes the proxy and the network; a network a container still uses stays, with an
+// error.
+func (n *testNetwork) remove(ctx context.Context) error {
+	if _, err := n.docker.ContainerRemove(ctx, n.proxy, client.ContainerRemoveOptions{Force: true}); err != nil && !cerrdefs.IsNotFound(err) {
+		return err
+	}
+
+	if _, err := n.docker.NetworkRemove(ctx, n.name, client.NetworkRemoveOptions{}); err != nil && !cerrdefs.IsNotFound(err) {
+		return err
+	}
+
+	return nil
 }
 
 // buildEgressImage cross-compiles cmd/goal-egress for the Docker host into an image from scratch.
@@ -105,55 +180,41 @@ func buildEgressImage(docker *client.Client) error {
 	return buildImage(docker, egressTestImage, files)
 }
 
-// testEgress is the shared egress for the stub tasks' gateway (stubSpec).
-func testEgress(t *testing.T, docker *client.Client) *Egress {
-	t.Helper()
-
-	sharedEgressOnce.Do(func() {
-		if errSharedEgress = egressImage(docker); errSharedEgress != nil {
-			return
-		}
-
-		sharedEgress, errSharedEgress = NewEgress(docker, EgressConfig{
-			Name: uniqueEgressName(), Image: egressTestImage, Gateway: stubGateway,
-		}, slog.New(slog.DiscardHandler))
-	})
-
-	if errSharedEgress != nil {
-		t.Fatalf("shared test egress: %v", errSharedEgress)
-	}
-
-	return sharedEgress
-}
-
 func egressImage(docker *client.Client) error {
 	egressImageOnce.Do(func() { errEgressImage = buildEgressImage(docker) })
 	return errEgressImage
 }
 
-// newEgress returns an egress of the test's own, removed when the test ends (after the
-// containers on its networks, which are cleaned up first).
-func newEgress(t *testing.T, docker *client.Client, cfg EgressConfig) *Egress {
+// testNet is the shared network, for tests whose containers need one and reach nothing.
+func testNet(t *testing.T, docker *client.Client) string {
 	t.Helper()
 
-	if err := egressImage(docker); err != nil {
-		t.Fatalf("build egress image: %v", err)
+	sharedNetOnce.Do(func() { sharedNet, errSharedNet = newTestNetwork(context.Background(), docker, "") })
+
+	if errSharedNet != nil {
+		t.Fatalf("shared test network: %v", errSharedNet)
 	}
 
-	cfg.Name, cfg.Image = uniqueEgressName(), egressTestImage
+	return sharedNet.name
+}
 
-	e, err := NewEgress(docker, cfg, slog.New(slog.DiscardHandler))
+// ownNet is a network of the test's own whose proxy serves gateway, removed when the test ends
+// (after the containers on it, which are cleaned up first).
+func ownNet(t *testing.T, docker *client.Client, gateway string) *testNetwork {
+	t.Helper()
+
+	n, err := newTestNetwork(t.Context(), docker, gateway)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	t.Cleanup(func() {
-		if err := e.Remove(context.Background()); err != nil {
-			t.Errorf("remove egress %s: %v", cfg.Name, err)
+		if err := n.remove(context.Background()); err != nil {
+			t.Errorf("remove test network %s: %v", n.name, err)
 		}
 	})
 
-	return e
+	return n
 }
 
 // hostListener is an HTTP listener on the host where containers would find goald and its
@@ -195,7 +256,8 @@ func (l *hostListener) port() string {
 	return port
 }
 
-func (l *hostListener) loopbackURL(path string) string { return "http://127.0.0.1:" + l.port() + path }
+// hostURL is the listener as the proxy reaches it: goald's gateway on the host is found so.
+func (l *hostListener) hostURL() string { return "http://host.docker.internal:" + l.port() }
 
 func text(body string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, body) })
@@ -208,7 +270,7 @@ func hostAddresses(t *testing.T, docker *client.Client) []string {
 
 	addrs := []string{"0.250.250.254", "198.19.248.254", "192.168.65.254", "172.17.0.1"}
 
-	bridge, err := docker.NetworkInspect(t.Context(), egressExit, client.NetworkInspectOptions{})
+	bridge, err := docker.NetworkInspect(t.Context(), "bridge", client.NetworkInspectOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,32 +297,34 @@ func probes(events []ports.RunEvent) map[string]string {
 	return out
 }
 
-// An agent reaches goald's gateway (and only its path) and the hosts its policy allows, through
-// the egress proxy; it cannot reach a listener on the host, the host's or a bridge's address,
-// or the metadata service, directly or through the proxy.
-func TestEgress_AgentsReachOnlyTheGatewayAndTheirHosts(t *testing.T) {
+// An agent task reaches goald's gateway (and only its paths) through the egress proxy; it cannot
+// reach a listener on the host, the host's or a bridge's address, or the metadata service,
+// directly or through the proxy.
+func TestRunner_AgentReachesTheGatewayAndNoPrivateAddress(t *testing.T) {
 	t.Parallel()
 
 	r, docker := newTestRunner(t)
 
-	var gatewayAuth atomic.Value
+	var (
+		mu      sync.Mutex
+		gateway []string
+	)
 
-	gateway := newHostListener(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gatewayAuth.Store(r.Method + " " + r.URL.Path + " " + r.Header.Get("Authorization"))
+	gw := newHostListener(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+
+		gateway = append(gateway, r.Method+" "+r.URL.Path+" "+r.Header.Get("Authorization"))
+		mu.Unlock()
 
 		_, _ = io.WriteString(w, "gateway")
 	}))
 	external := newHostListener(t, text("external"))
 	secret := newHostListener(t, text("secret"))
 
-	externalDest := net.JoinHostPort(hostAlias, external.port())
-	egress := newEgress(t, docker, EgressConfig{
-		Gateway: gateway.loopbackURL("/mcp"), AgentHosts: []string{externalDest}, Trusted: []string{externalDest},
-	})
-	r.egress = egress
+	n := ownNet(t, docker, gw.hostURL())
+	r.cfg.Network = n.name
 
 	spec := stubSpec(t, "netprobe")
-	spec.GatewayURL = gateway.loopbackURL("/mcp")
 	ips := hostAddresses(t, docker)
 	spec.Env["PROBE_SECRET_PORT"], spec.Env["PROBE_EXTERNAL_PORT"], spec.Env["PROBE_HOST_IPS"] = secret.port(), external.port(), strings.Join(ips, " ")
 
@@ -272,9 +336,9 @@ func TestEgress_AgentsReachOnlyTheGatewayAndTheirHosts(t *testing.T) {
 	got := probes(events)
 	want := map[string]string{
 		"direct-host-name": "fail", "direct-metadata": "fail",
-		"proxy-host": "403", "proxy-metadata": "403",
-		"proxy-external": "ok-external", "tunnel-external": "200,200,external", "tunnel-metadata": "403", "tunnel-host": "403",
-		"gateway": "ok-gateway", "goald-api": "404",
+		"proxy-host": "403", "proxy-metadata": "403", "proxy-external": "403",
+		"tunnel-external": "403", "tunnel-metadata": "403", "tunnel-host": "403",
+		"gateway": "ok-gateway", "gateway-run": "ok-gateway", "goald-api": "404",
 	}
 
 	for _, ip := range ips {
@@ -288,113 +352,19 @@ func TestEgress_AgentsReachOnlyTheGatewayAndTheirHosts(t *testing.T) {
 	}
 
 	if t.Failed() {
-		lines, _ := proxyLines(t.Context(), docker, egress.cfg.Name)
+		lines, _ := proxyLines(t.Context(), docker, n.proxy)
 		t.Logf("proxy log: %v", lines)
 	}
 
-	if n := secret.hits.Load(); n != 0 {
-		t.Errorf("the host listener the agent must not reach got %d requests", n)
+	if hits := secret.hits.Load() + external.hits.Load(); hits != 0 {
+		t.Errorf("host listeners the agent must not reach got %d requests", hits)
 	}
 
-	if auth, _ := gatewayAuth.Load().(string); auth != "POST /mcp Bearer "+gatewayToken {
-		t.Errorf("gateway saw %q; want the agent's POST /mcp with its task token", auth)
-	}
-}
+	mu.Lock()
+	defer mu.Unlock()
 
-// Sidecars and checks reach public hosts through the proxy (here a trusted stub stands in for
-// one), never the host, a private address, the metadata service or goald's gateway.
-func TestEgress_ToolsReachNeitherTheHostNorTheGateway(t *testing.T) {
-	t.Parallel()
-
-	_, docker := newTestRunner(t)
-	external := newHostListener(t, text("external"))
-	secret := newHostListener(t, text("secret"))
-	gateway := newHostListener(t, text("gateway"))
-
-	externalDest := net.JoinHostPort(hostAlias, external.port())
-	egress := newEgress(t, docker, EgressConfig{Gateway: gateway.loopbackURL("/mcp"), Trusted: []string{externalDest}})
-	k := NewChecker(docker, egress, Config{StopGrace: time.Second}, slog.New(slog.DiscardHandler))
-
-	proxy := egress.cfg.Name + ":" + egressPort
-	command := fmt.Sprintf(`try() { if out=$(wget -q -T 4 -O - "$@" 2>&1); then echo "ok-$out"; else echo "$out" | grep -o 'HTTP/1.1 [0-9]*' | cut -d' ' -f2 | grep . || echo fail; fi; }
-echo "direct-host=$(try -Y off http://%[1]s:%[2]s/)"
-echo "direct-metadata=$(try -Y off http://169.254.169.254/)"
-echo "proxy-host=$(try http://%[1]s:%[2]s/)"
-echo "proxy-metadata=$(try http://169.254.169.254/)"
-echo "proxy-external=$(try http://%[1]s:%[3]s/)"
-echo "gateway=$(try -Y off --post-data '{}' http://%[4]s/mcp)"`, hostAlias, secret.port(), external.port(), proxy)
-
-	spec := checkSpec(t, command, time.Minute)
-
-	res, err := k.Check(t.Context(), spec)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for _, want := range []string{
-		"direct-host=fail", "direct-metadata=fail", "proxy-host=403", "proxy-metadata=403", "proxy-external=ok-external", "gateway=404",
-	} {
-		if !strings.Contains(res.Output, want+"\n") {
-			t.Errorf("check output lacks %q:\n%s", want, res.Output)
-		}
-	}
-
-	if n := secret.hits.Load() + gateway.hits.Load(); n != 0 {
-		t.Errorf("the host listeners a check must not reach got %d requests", n)
-	}
-}
-
-// A goald whose configuration differs replaces the proxy of the same name, keeping its
-// networks; the same configuration keeps the running proxy.
-func TestEgress_EnsureReplacesAStaleProxy(t *testing.T) {
-	t.Parallel()
-
-	_, docker := newTestRunner(t)
-	first := newEgress(t, docker, EgressConfig{AgentHosts: []string{"api.anthropic.com"}})
-
-	if err := first.Ensure(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-
-	id := func() string {
-		c, err := docker.ContainerInspect(t.Context(), first.cfg.Name, client.ContainerInspectOptions{})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		return c.Container.ID
-	}
-
-	before := id()
-
-	same, err := NewEgress(docker, first.cfg, slog.New(slog.DiscardHandler))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := same.Ensure(t.Context()); err != nil || id() != before {
-		t.Errorf("the same configuration replaced the proxy (err %v)", err)
-	}
-
-	other := first.cfg
-	other.AgentHosts = []string{"api.anthropic.com", "proxy.golang.org"}
-
-	changed, err := NewEgress(docker, other, slog.New(slog.DiscardHandler))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := changed.Ensure(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-
-	if id() == before {
-		t.Error("a changed configuration kept the old proxy")
-	}
-
-	c, err := docker.ContainerInspect(t.Context(), first.cfg.Name, client.ContainerInspectOptions{})
-	if err != nil || !slices.Contains(c.Container.Config.Cmd, "proxy.golang.org:443") {
-		t.Errorf("the proxy runs with %v (err %v); want the new allowlist", c.Container.Config.Cmd, err)
+	if w := []string{"POST /mcp Bearer " + gatewayToken, "GET /run Bearer " + gatewayToken}; !slices.Equal(gateway, w) {
+		t.Errorf("gateway saw %q; want %q: the agent's calls with its task token", gateway, w)
 	}
 }
 
@@ -402,8 +372,8 @@ func TestEgress_EnsureReplacesAStaleProxy(t *testing.T) {
 const workerImage = "ghcr.io/byfrederick/goal-agent:0.1.0"
 
 // The real worker on the agents' network: Claude Code connects to the gateway through the proxy
-// and sends its model traffic to the proxy, which refuses it here (the model API is not
-// allowlisted, so the test reaches no real service), and nothing else.
+// and sends its model traffic through the proxy too (the test's token is refused there), and
+// nothing else.
 func TestRunner_RealWorkerGoesOutOnlyThroughTheProxy(t *testing.T) {
 	t.Parallel()
 
@@ -437,11 +407,11 @@ func TestRunner_RealWorkerGoesOutOnlyThroughTheProxy(t *testing.T) {
 	}))
 	secret := newHostListener(t, text("secret"))
 
-	egress := newEgress(t, docker, EgressConfig{Gateway: gateway.loopbackURL("/mcp"), AgentHosts: []string{"proxy.golang.org"}})
-	r.egress = egress
+	n := ownNet(t, docker, gateway.hostURL())
+	r.cfg.Network = n.name
 
 	spec := stubSpec(t, "real")
-	spec.Image, spec.GatewayURL, spec.Brief, spec.Timeout = workerImage, gateway.loopbackURL("/mcp"), "Reply with {}.", 3*time.Minute
+	spec.Image, spec.Brief, spec.Timeout = workerImage, "Reply with {}.", 3*time.Minute
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
@@ -453,7 +423,7 @@ func TestRunner_RealWorkerGoesOutOnlyThroughTheProxy(t *testing.T) {
 
 		// The model call follows the start; once the proxy has seen it, the task has shown what
 		// it reaches.
-		if !waitForLog(ctx, t, docker, egress.cfg.Name, "api.anthropic.com:443", time.Minute) {
+		if !waitForLog(ctx, t, docker, n.proxy, "api.anthropic.com:443", time.Minute) {
 			t.Error("the proxy never saw the model API: Claude Code does not use HTTPS_PROXY")
 		}
 
@@ -476,7 +446,7 @@ func TestRunner_RealWorkerGoesOutOnlyThroughTheProxy(t *testing.T) {
 		t.Errorf("a host listener got %d requests from the worker", n)
 	}
 
-	dests := proxyDestinations(t, docker, egress.cfg.Name)
+	dests := proxyDestinations(t, docker, n.proxy)
 	t.Logf("destinations the worker asked the proxy for: %v", dests)
 
 	for _, d := range dests {

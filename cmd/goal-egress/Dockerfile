@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
-# Goal's egress proxy (cmd/goal-egress, ADR 0009). Build from the repository root (task egress:image):
-#   docker build -f cmd/goal-egress/Dockerfile -t ghcr.io/byfrederick/goal-egress:0.1.0 .
-# goald's Docker adapter runs it on the agents' and tools' networks; it is never pushed from here.
+# Goal's egress proxy (cmd/goal-egress, ADR 0009). compose.yaml's goal-egress service builds and
+# runs it on the agents network (task egress:image: docker compose build goal-egress); it is never
+# pushed from here.
 
 ARG GO_IMAGE=golang:1.26.10-alpine@sha256:27f2d3b83cfc5803c8078f8e730af0f7c431bf067afaec8f60a36fb763187cba
 ARG RUNTIME_IMAGE=gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab

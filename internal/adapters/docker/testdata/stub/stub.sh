@@ -48,6 +48,7 @@ netprobe)
 	say tunnel-metadata "$(tunnel 169.254.169.254:80)"
 	say tunnel-host "$(tunnel "host.docker.internal:$PROBE_SECRET_PORT")"
 	say gateway "$(result wget -Y off -q -T 5 -O - --header "Authorization: Bearer $GOAL_GATEWAY_TOKEN" --post-data '{}' "$gw")"
+	say gateway-run "$(result wget -Y off -q -T 5 -O - --header "Authorization: Bearer $GOAL_GATEWAY_TOKEN" "${gw%/mcp}/run")"
 	say goald-api "$(direct "http://$proxy/v1/me")"
 	echo "{\"type\":\"finished\",\"at\":\"$(now)\",\"status\":\"succeeded\",\"output\":{\"ok\":true},\"turns\":1,\"session_id\":\"stub\"}"
 	;;
