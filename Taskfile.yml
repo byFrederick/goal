@@ -32,6 +32,9 @@ vars:
   TF_WORKSPACE_NAME: production
   SOPS_FILE: terraform/secrets/production.sops.yaml
   SOPS_DECRYPTED: terraform/secrets/production.decrypted.yaml
+  # The data directory of tf:validate, tf:test and tf:lint: inside terraform/.terraform/ (ignored)
+  # but apart from the s3 backend that tf:plan saves there, so they never reach for credentials.
+  TF_OFFLINE_DATA_DIR: .terraform/offline
   # The environment of every terraform command that reaches the state and the providers (run in
   # terraform/). The state token goes to the s3 backend as AWS_* only here, so no other AWS setting
   # of the shell or .env reaches it. Google gets an access token of the goal gcloud configuration
@@ -40,7 +43,7 @@ vars:
     set -eu
     export AWS_ACCESS_KEY_ID="$GOAL_TF_STATE_ACCESS_KEY" AWS_SECRET_ACCESS_KEY="$GOAL_TF_STATE_SECRET_KEY"
     export AWS_ENDPOINT_URL_S3="https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com"
-    unset AWS_PROFILE AWS_SESSION_TOKEN AWS_ENDPOINT_URL TF_WORKSPACE
+    unset AWS_PROFILE AWS_SESSION_TOKEN AWS_ENDPOINT_URL TF_WORKSPACE TF_DATA_DIR
     unset GOOGLE_CREDENTIALS GOOGLE_APPLICATION_CREDENTIALS GOOGLE_CLOUD_KEYFILE_JSON GCLOUD_KEYFILE_JSON
     GOOGLE_OAUTH_ACCESS_TOKEN="$(CLOUDSDK_ACTIVE_CONFIG_NAME=goal gcloud auth print-access-token)"
     export GOOGLE_OAUTH_ACCESS_TOKEN
@@ -197,6 +200,7 @@ tasks:
     dir: terraform
     env:
       TF_WORKSPACE: "{{.TF_WORKSPACE_NAME}}"
+      TF_DATA_DIR: "{{.TF_OFFLINE_DATA_DIR}}"
     cmds:
       - terraform init -backend=false -input=false -lockfile=readonly >/dev/null
       - terraform validate
@@ -206,6 +210,7 @@ tasks:
     dir: terraform
     env:
       TF_WORKSPACE: "{{.TF_WORKSPACE_NAME}}"
+      TF_DATA_DIR: "{{.TF_OFFLINE_DATA_DIR}}"
     cmds:
       - tflint --recursive --config "$PWD/.tflint.hcl"
 
@@ -215,6 +220,7 @@ tasks:
     dir: terraform
     env:
       TF_WORKSPACE: "{{.TF_WORKSPACE_NAME}}"
+      TF_DATA_DIR: "{{.TF_OFFLINE_DATA_DIR}}"
     cmds:
       - terraform test
 
