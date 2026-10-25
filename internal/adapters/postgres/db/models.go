@@ -103,6 +103,15 @@ type FactoryRecord struct {
 	ArchivedBy        *string
 }
 
+type ItemEdge struct {
+	OrgID     uuid.UUID
+	ItemID    uuid.UUID
+	NeedsID   uuid.UUID
+	Kind      string
+	CreatedBy string
+	CreatedAt time.Time
+}
+
 type ItemEvent struct {
 	ID        int64
 	FactoryID uuid.UUID

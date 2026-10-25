@@ -34,12 +34,18 @@ LIMIT sqlc.arg(max_items)::bigint;
 
 -- name: LockNextWaitingItem :one
 -- Pull, never push: one agent slot takes the next item at its station. SKIP LOCKED lets many
--- slots claim concurrently without blocking each other or taking the same item.
-SELECT * FROM work_items
-WHERE factory_id = $1 AND station = $2 AND state IN ('queued', 'ready')
-ORDER BY (class_of_service = 'expedite') DESC, priority DESC, created_at, number
+-- slots claim concurrently without blocking each other or taking the same item. An item is
+-- skipped while any item it needs is neither done nor cancelled (item_edges, by its primary key).
+-- WaitingItems lists it all the same: only queue stations read that, and they hold nothing.
+SELECT * FROM work_items w
+WHERE w.factory_id = $1 AND w.station = $2 AND w.state IN ('queued', 'ready')
+  AND NOT EXISTS (
+    SELECT 1 FROM item_edges e JOIN work_items n ON n.id = e.needs_id
+    WHERE e.item_id = w.id AND n.state NOT IN ('done', 'cancelled')
+  )
+ORDER BY (w.class_of_service = 'expedite') DESC, w.priority DESC, w.created_at, w.number
 LIMIT 1
-FOR NO KEY UPDATE SKIP LOCKED;
+FOR NO KEY UPDATE OF w SKIP LOCKED;
 
 -- name: StartItem :one
 UPDATE work_items SET state = 'in_progress', updated_at = $2 WHERE id = $1 RETURNING *;
