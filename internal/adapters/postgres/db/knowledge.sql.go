@@ -473,6 +473,18 @@ func (q *Queries) KnowledgeVersions(ctx context.Context, sourceID uuid.UUID) ([]
 	return items, nil
 }
 
+const lockKnowledgeBlobs = `-- name: LockKnowledgeBlobs :exec
+SELECT pg_advisory_xact_lock(hashtextextended('goal-knowledge-blob/' || goal_org()::text || '/' || b.blob, 0))
+FROM (SELECT DISTINCT x AS blob FROM unnest($1::text[]) x ORDER BY 1) b
+`
+
+// Holds the organization's upload contents of the given hashes until the transaction ends, in
+// order: an upload of one waits for a deletion that drops its object, and the other way round.
+func (q *Queries) LockKnowledgeBlobs(ctx context.Context, blobs []string) error {
+	_, err := q.db.Exec(ctx, lockKnowledgeBlobs, blobs)
+	return err
+}
+
 const lockKnowledgeDocument = `-- name: LockKnowledgeDocument :one
 SELECT d.id, d.blob_sha256, d.title, s.kind AS source_kind, s.name AS source_name
 FROM knowledge_documents d JOIN knowledge_sources s ON s.org_id = d.org_id AND s.id = d.source_id
@@ -515,15 +527,6 @@ func (q *Queries) LockKnowledgeSource(ctx context.Context, name string) (LockKno
 	var i LockKnowledgeSourceRow
 	err := row.Scan(&i.ID, &i.Kind)
 	return i, err
-}
-
-const makeKnowledgeSourceDue = `-- name: MakeKnowledgeSourceDue :exec
-UPDATE knowledge_sources SET next_sync_at = now() WHERE id = $1 AND kind <> 'live'
-`
-
-func (q *Queries) MakeKnowledgeSourceDue(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, makeKnowledgeSourceDue, id)
-	return err
 }
 
 const markKnowledgeSeen = `-- name: MarkKnowledgeSeen :exec
@@ -716,9 +719,10 @@ func (q *Queries) SetSearchScan(ctx context.Context) error {
 const sourceBlobs = `-- name: SourceBlobs :many
 SELECT DISTINCT blob_sha256::text AS blob FROM knowledge_documents
 WHERE source_id = $1 AND blob_sha256 IS NOT NULL
+ORDER BY 1
 `
 
-// The uploads' content hashes of a source's documents.
+// The uploads' content hashes of a source's documents, in order (LockKnowledgeBlobs).
 func (q *Queries) SourceBlobs(ctx context.Context, sourceID uuid.UUID) ([]string, error) {
 	rows, err := q.db.Query(ctx, sourceBlobs, sourceID)
 	if err != nil {

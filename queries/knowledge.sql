@@ -39,9 +39,16 @@ RETURNING id;
 SELECT id, kind FROM knowledge_sources WHERE name = sqlc.arg(name) FOR UPDATE;
 
 -- name: SourceBlobs :many
--- The uploads' content hashes of a source's documents.
+-- The uploads' content hashes of a source's documents, in order (LockKnowledgeBlobs).
 SELECT DISTINCT blob_sha256::text AS blob FROM knowledge_documents
-WHERE source_id = sqlc.arg(source_id) AND blob_sha256 IS NOT NULL;
+WHERE source_id = sqlc.arg(source_id) AND blob_sha256 IS NOT NULL
+ORDER BY 1;
+
+-- name: LockKnowledgeBlobs :exec
+-- Holds the organization's upload contents of the given hashes until the transaction ends, in
+-- order: an upload of one waits for a deletion that drops its object, and the other way round.
+SELECT pg_advisory_xact_lock(hashtextextended('goal-knowledge-blob/' || goal_org()::text || '/' || b.blob, 0))
+FROM (SELECT DISTINCT x AS blob FROM unnest(sqlc.arg(blobs)::text[]) x ORDER BY 1) b;
 
 -- name: DeleteKnowledgeSource :exec
 DELETE FROM knowledge_sources WHERE id = sqlc.arg(id);
@@ -138,9 +145,6 @@ VALUES (sqlc.arg(id), sqlc.arg(source_id), sqlc.arg(blob_sha256)::text, sqlc.arg
         sqlc.arg(bytes), sqlc.arg(blob_sha256)::text, 'pending', now(), sqlc.arg(created_by))
 ON CONFLICT (source_id, external_id) DO NOTHING
 RETURNING id;
-
--- name: MakeKnowledgeSourceDue :exec
-UPDATE knowledge_sources SET next_sync_at = now() WHERE id = sqlc.arg(id) AND kind <> 'live';
 
 -- name: KnowledgeDocuments :many
 -- A page of a source's documents in id order, or the document of an external id, or with an id.

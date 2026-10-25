@@ -315,7 +315,7 @@ func testSources(f *fixture) {
 	g := f.get(f.org, runbooks)
 	f.want("Source after the update", g, g.Title == title, g.SyncEvery == every)
 
-	_, err = f.Knowledge.DeleteSource(ctx, chatSearch, admin)
+	err = f.Knowledge.DeleteSource(ctx, chatSearch, admin, nil)
 	f.must(err)
 
 	_, err = f.Knowledge.Source(ctx, chatSearch)
@@ -364,7 +364,7 @@ func testSourceRules(f *fixture) {
 	_, err = f.Knowledge.UpdateSource(ctx, "nope", domain.KnowledgeSourcePatch{Title: &title}, admin)
 	f.refused("UpdateSource unknown", err, ports.ErrNotFound)
 
-	_, err = f.Knowledge.DeleteSource(ctx, "nope", admin)
+	err = f.Knowledge.DeleteSource(ctx, "nope", admin, nil)
 	f.refused("DeleteSource unknown", err, ports.ErrNotFound)
 
 	f.source(f.org, domain.NewKnowledgeSource{Name: chatSearch, Kind: domain.SourceLive, Connection: chatConn})
@@ -383,7 +383,7 @@ func testConnectionInUse(f *fixture) {
 
 	f.refused("Delete a connection a source reads", f.Connections.Delete(ctx, docsConn, admin), ports.ErrConflict)
 
-	_, err := f.Knowledge.DeleteSource(ctx, runbooks, admin)
+	err := f.Knowledge.DeleteSource(ctx, runbooks, admin, nil)
 	f.must(err)
 	f.must(f.Connections.Delete(ctx, docsConn, admin))
 }
@@ -676,8 +676,9 @@ func (f *fixture) add(source string, h domain.BlobHash) domain.KnowledgeDocument
 	return d
 }
 
-// testUploads: an upload is pending and makes its source due; the same content is the same
-// document; deleting returns the content no document holds any more.
+// testUploads: an upload is pending (Uploads makes its source due once its content is
+// stored); the same content is the same document; a deletion drops the content no document
+// holds any more, and a drop that fails undoes it.
 func testUploads(f *fixture) {
 	ctx := f.ctx()
 	f.upload(handbook)
@@ -698,9 +699,7 @@ func testUploads(f *fixture) {
 
 	again := f.add(handbook, h1)
 	f.want("the same content again (the same document)", again.ID, again.ID == d1.ID)
-
-	due := f.claimed("after an upload", t0.Add(2*time.Minute), time.Minute, "")
-	f.want("due after an upload", due.Source.Name, due.Source.Name == handbook)
+	f.none("after an upload, before Sync now", t0.Add(2*time.Minute), "")
 
 	v, err := f.Knowledge.Versions(ctx, d1.Source)
 	f.must(err)
@@ -709,17 +708,27 @@ func testUploads(f *fixture) {
 	d2 := f.add(handbook, h2)
 	f.add("archive", h2)
 
-	orphan, err := f.Knowledge.DeleteDocument(ctx, d1.ID, admin)
-	f.must(err)
-	f.want("DeleteDocument of the only holder", orphan, orphan == h1)
+	var dropped []domain.BlobHash
 
-	orphan, err = f.Knowledge.DeleteDocument(ctx, d2.ID, admin)
-	f.must(err)
-	f.want("DeleteDocument while archive holds it", orphan, orphan == "")
+	drop := func(_ context.Context, unheld []domain.BlobHash) error {
+		dropped = append(dropped, unheld...)
 
-	orphans, err := f.Knowledge.DeleteSource(ctx, "archive", admin)
-	f.must(err)
-	f.want("DeleteSource", orphans, slices.Equal(orphans, []domain.BlobHash{h2}))
+		return nil
+	}
+	failing := func(context.Context, []domain.BlobHash) error { return errors.New("the bucket is unreachable") }
+
+	err = f.Knowledge.DeleteDocument(ctx, d1.ID, admin, failing)
+	f.want("DeleteDocument whose drop fails", err, err != nil)
+	f.want("the document after a failed drop", f.docNamed(handbook, string(h1)).ID, f.docNamed(handbook, string(h1)).ID == d1.ID)
+
+	f.must(f.Knowledge.DeleteDocument(ctx, d1.ID, admin, drop))
+	f.want("DeleteDocument of the only holder", dropped, slices.Equal(dropped, []domain.BlobHash{h1}))
+
+	f.must(f.Knowledge.DeleteDocument(ctx, d2.ID, admin, drop))
+	f.want("DeleteDocument while archive holds it", dropped, len(dropped) == 1)
+
+	f.must(f.Knowledge.DeleteSource(ctx, "archive", admin, drop))
+	f.want("DeleteSource", dropped, slices.Equal(dropped, []domain.BlobHash{h1, h2}))
 
 	uploaded, deleted := f.audit(f.org, domain.AuditKnowledgeDocumentUploaded), f.audit(f.org, domain.AuditKnowledgeDocumentDeleted)
 	f.want("audit (the same content again is none)", []int{len(uploaded), len(deleted)}, len(uploaded) == 3, len(deleted) == 2)
@@ -742,7 +751,7 @@ func (f *fixture) uploadRefusals(h domain.BlobHash) {
 
 	f.put(f.org, f.get(f.org, runbooks).ID, docA, "v1", []string{"alpha"}, nil)
 
-	_, err = f.Knowledge.DeleteDocument(ctx, f.docNamed(runbooks, docA).ID, admin)
+	err = f.Knowledge.DeleteDocument(ctx, f.docNamed(runbooks, docA).ID, admin, nil)
 	f.refused("DeleteDocument of a synced document", err, domain.ErrNotUploadSource)
 }
 
@@ -845,7 +854,7 @@ func testIsolation(f *fixture) {
 	_, _, err = f.Knowledge.Document(in, doc.ID)
 	f.refused("Document of another org", err, ports.ErrNotFound)
 
-	_, err = f.Knowledge.DeleteDocument(in, doc.ID, admin)
+	err = f.Knowledge.DeleteDocument(in, doc.ID, admin, nil)
 	f.refused("DeleteDocument of another org", err, ports.ErrNotFound)
 
 	v, err := f.Knowledge.Versions(in, src.ID)

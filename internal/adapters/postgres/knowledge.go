@@ -222,10 +222,9 @@ func (k *Knowledge) UpdateSource(ctx context.Context, name string, p domain.Know
 	return out, nil
 }
 
-// DeleteSource implements ports.Knowledge.
-func (k *Knowledge) DeleteSource(ctx context.Context, name string, by domain.Actor) ([]domain.BlobHash, error) {
-	var orphans []domain.BlobHash
-
+// DeleteSource implements ports.Knowledge: the source's upload contents are held
+// (LockKnowledgeBlobs) from before the deletion until drop has run and the transaction ends.
+func (k *Knowledge) DeleteSource(ctx context.Context, name string, by domain.Actor, drop ports.DropBlobs) error {
 	err := k.s.inTx(ctx, func(q *db.Queries) error {
 		src, err := q.LockKnowledgeSource(ctx, name)
 		if notFound(err) {
@@ -241,6 +240,10 @@ func (k *Knowledge) DeleteSource(ctx context.Context, name string, by domain.Act
 			return err
 		}
 
+		if err := q.LockKnowledgeBlobs(ctx, blobs); err != nil {
+			return err
+		}
+
 		if err := q.DeleteKnowledgeSource(ctx, src.ID); err != nil {
 			return err
 		}
@@ -250,26 +253,25 @@ func (k *Knowledge) DeleteSource(ctx context.Context, name string, by domain.Act
 			return err
 		}
 
-		orphans, err = unheld(ctx, q, blobs)
-
-		return err
+		return dropUnheld(ctx, q, blobs, drop)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("delete knowledge source: %w", err)
+		return fmt.Errorf("delete knowledge source: %w", err)
 	}
 
-	return orphans, nil
+	return nil
 }
 
-// unheld is those of blobs no document of the organization holds.
-func unheld(ctx context.Context, q *db.Queries, blobs []string) ([]domain.BlobHash, error) {
-	if len(blobs) == 0 {
-		return nil, nil
+// dropUnheld calls drop with those of blobs, held by the transaction, that no document of the
+// organization holds any more.
+func dropUnheld(ctx context.Context, q *db.Queries, blobs []string, drop ports.DropBlobs) error {
+	if len(blobs) == 0 || drop == nil {
+		return nil
 	}
 
 	gone, err := q.UnheldBlobs(ctx, blobs)
-	if err != nil {
-		return nil, err
+	if err != nil || len(gone) == 0 {
+		return err
 	}
 
 	out := make([]domain.BlobHash, 0, len(gone))
@@ -277,7 +279,7 @@ func unheld(ctx context.Context, q *db.Queries, blobs []string) ([]domain.BlobHa
 		out = append(out, domain.BlobHash(b))
 	}
 
-	return out, nil
+	return drop(ctx, out)
 }
 
 // SyncNow implements ports.Knowledge.
@@ -613,6 +615,10 @@ func (k *Knowledge) AddUpload(ctx context.Context, source string, d domain.Knowl
 			return fmt.Errorf("knowledge source %q: %w", source, domain.ErrNotUploadSource)
 		}
 
+		if err := q.LockKnowledgeBlobs(ctx, []string{string(d.Blob)}); err != nil {
+			return err
+		}
+
 		added, err := q.InsertKnowledgeUpload(ctx, db.InsertKnowledgeUploadParams{
 			ID: id, SourceID: src.ID, BlobSha256: string(d.Blob), Title: truncate(d.Title, maxDocumentTitle), Mime: d.MIME,
 			Bytes: d.Bytes, CreatedBy: by.Ref(),
@@ -622,10 +628,6 @@ func (k *Knowledge) AddUpload(ctx context.Context, source string, d domain.Knowl
 		}
 
 		if len(added) > 0 {
-			if err := q.MakeKnowledgeSourceDue(ctx, src.ID); err != nil {
-				return err
-			}
-
 			if err := appendAudit(ctx, q, domain.AuditEntry{
 				Actor: by, Action: domain.AuditKnowledgeDocumentUploaded, TargetKind: domain.AuditTargetKnowledgeDocument,
 				TargetID: added[0].String(), Data: map[string]any{auditSource: source, auditTitle: d.Title, "bytes": d.Bytes},
@@ -647,14 +649,12 @@ func (k *Knowledge) AddUpload(ctx context.Context, source string, d domain.Knowl
 	return out, nil
 }
 
-// DeleteDocument implements ports.Knowledge.
-func (k *Knowledge) DeleteDocument(ctx context.Context, id domain.KnowledgeDocumentID, by domain.Actor) (domain.BlobHash, error) {
+// DeleteDocument implements ports.Knowledge, holding the document's content as DeleteSource does.
+func (k *Knowledge) DeleteDocument(ctx context.Context, id domain.KnowledgeDocumentID, by domain.Actor, drop ports.DropBlobs) error {
 	did, err := parseID("knowledge document", string(id))
 	if err != nil {
-		return "", err
+		return err
 	}
-
-	var orphan domain.BlobHash
 
 	err = k.s.inTx(ctx, func(q *db.Queries) error {
 		d, err := q.LockKnowledgeDocument(ctx, did)
@@ -670,6 +670,15 @@ func (k *Knowledge) DeleteDocument(ctx context.Context, id domain.KnowledgeDocum
 			return fmt.Errorf("knowledge document %s: %w", id, domain.ErrNotUploadSource)
 		}
 
+		var blobs []string
+		if d.BlobSha256 != nil {
+			blobs = []string{*d.BlobSha256}
+		}
+
+		if err := q.LockKnowledgeBlobs(ctx, blobs); err != nil {
+			return err
+		}
+
 		if err := q.DeleteKnowledgeDocument(ctx, did); err != nil {
 			return err
 		}
@@ -681,18 +690,13 @@ func (k *Knowledge) DeleteDocument(ctx context.Context, id domain.KnowledgeDocum
 			return err
 		}
 
-		gone, err := unheld(ctx, q, []string{deref(d.BlobSha256)})
-		if len(gone) > 0 {
-			orphan = gone[0]
-		}
-
-		return err
+		return dropUnheld(ctx, q, blobs, drop)
 	})
 	if err != nil {
-		return "", fmt.Errorf("delete knowledge document: %w", err)
+		return fmt.Errorf("delete knowledge document: %w", err)
 	}
 
-	return orphan, nil
+	return nil
 }
 
 // Documents implements ports.Knowledge.

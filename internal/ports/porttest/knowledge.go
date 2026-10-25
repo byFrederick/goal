@@ -270,14 +270,33 @@ func (k *Knowledge) UpdateSource(ctx context.Context, name string, p domain.Know
 	return out, err
 }
 
-// DeleteSource implements ports.Knowledge.
-func (k *Knowledge) DeleteSource(ctx context.Context, name string, by domain.Actor) ([]domain.BlobHash, error) {
-	var orphans []domain.BlobHash
-
-	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
+// DeleteSource implements ports.Knowledge; drop runs before anything changes, so its error
+// changes nothing.
+func (k *Knowledge) DeleteSource(ctx context.Context, name string, by domain.Actor, drop ports.DropBlobs) error {
+	return k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
 		s, ok := o.sources[name]
 		if !ok {
 			return fmt.Errorf("knowledge source %q: %w", name, ports.ErrNotFound)
+		}
+
+		var blobs []domain.BlobHash
+
+		for _, d := range o.docs {
+			if d.doc.Source == s.src.ID && d.doc.Blob != "" {
+				blobs = append(blobs, d.doc.Blob)
+			}
+		}
+
+		var orphans []domain.BlobHash
+
+		for _, b := range slices.Compact(slices.Sorted(slices.Values(blobs))) {
+			if !o.holds(b, s.src.ID, "") {
+				orphans = append(orphans, b)
+			}
+		}
+
+		if err := dropped(ctx, drop, orphans); err != nil {
+			return err
 		}
 
 		if err := k.audit.Append(ctx, sourceEntry(by, domain.AuditKnowledgeSourceDeleted, s.src.ID,
@@ -285,36 +304,32 @@ func (k *Knowledge) DeleteSource(ctx context.Context, name string, by domain.Act
 			return err
 		}
 
-		var blobs []domain.BlobHash
-
 		for id, d := range o.docs {
 			if d.doc.Source == s.src.ID {
-				if d.doc.Blob != "" {
-					blobs = append(blobs, d.doc.Blob)
-				}
-
 				delete(o.docs, id)
 			}
 		}
 
 		delete(o.sources, name)
 
-		for _, b := range slices.Compact(slices.Sorted(slices.Values(blobs))) {
-			if !o.holds(b) {
-				orphans = append(orphans, b)
-			}
-		}
-
 		return nil
 	})
-
-	return orphans, err
 }
 
-// holds reports whether a document of o has the content b.
-func (o *knowledgeOrg) holds(b domain.BlobHash) bool {
-	for _, d := range o.docs {
-		if d.doc.Blob == b {
+// dropped calls drop with unheld unless either is empty.
+func dropped(ctx context.Context, drop ports.DropBlobs, unheld []domain.BlobHash) error {
+	if drop == nil || len(unheld) == 0 {
+		return nil
+	}
+
+	return drop(ctx, unheld)
+}
+
+// holds reports whether a document of o, other than those of the source without and the
+// document except, has the content b.
+func (o *knowledgeOrg) holds(b domain.BlobHash, without domain.KnowledgeSourceID, except domain.KnowledgeDocumentID) bool {
+	for id, d := range o.docs {
+		if d.doc.Blob == b && d.doc.Source != without && id != except {
 			return true
 		}
 	}
@@ -654,7 +669,6 @@ func (k *Knowledge) AddUpload(ctx context.Context, source string, d domain.Knowl
 		}
 
 		o.docs[doc.ID] = &fakeDocument{doc: doc}
-		s.src.NextSyncAt = &now
 		out = doc
 
 		return nil
@@ -663,11 +677,10 @@ func (k *Knowledge) AddUpload(ctx context.Context, source string, d domain.Knowl
 	return out, err
 }
 
-// DeleteDocument implements ports.Knowledge.
-func (k *Knowledge) DeleteDocument(ctx context.Context, id domain.KnowledgeDocumentID, by domain.Actor) (domain.BlobHash, error) {
-	var orphan domain.BlobHash
-
-	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
+// DeleteDocument implements ports.Knowledge; drop runs before anything changes, so its error
+// changes nothing.
+func (k *Knowledge) DeleteDocument(ctx context.Context, id domain.KnowledgeDocumentID, by domain.Actor, drop ports.DropBlobs) error {
+	return k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
 		d, ok := o.docs[id]
 		if !ok {
 			return fmt.Errorf("knowledge document %s: %w", id, ports.ErrNotFound)
@@ -676,6 +689,12 @@ func (k *Knowledge) DeleteDocument(ctx context.Context, id domain.KnowledgeDocum
 		src := o.byID(d.doc.Source)
 		if src.src.Kind != domain.SourceUpload {
 			return fmt.Errorf("knowledge document %s: %w", id, domain.ErrNotUploadSource)
+		}
+
+		if d.doc.Blob != "" && !o.holds(d.doc.Blob, "", id) {
+			if err := dropped(ctx, drop, []domain.BlobHash{d.doc.Blob}); err != nil {
+				return err
+			}
 		}
 
 		if err := k.audit.Append(ctx, domain.AuditEntry{
@@ -687,14 +706,8 @@ func (k *Knowledge) DeleteDocument(ctx context.Context, id domain.KnowledgeDocum
 
 		delete(o.docs, id)
 
-		if d.doc.Blob != "" && !o.holds(d.doc.Blob) {
-			orphan = d.doc.Blob
-		}
-
 		return nil
 	})
-
-	return orphan, err
 }
 
 // Documents implements ports.Knowledge.

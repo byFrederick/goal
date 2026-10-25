@@ -27,9 +27,9 @@ type Knowledge interface {
 	// ErrNotFound when there is none.
 	UpdateSource(ctx context.Context, name string, p domain.KnowledgeSourcePatch, by domain.Actor) (domain.KnowledgeSource, error)
 	// DeleteSource deletes a source with its documents and chunks (knowledge_source.deleted) and
-	// returns the uploads' content hashes no document of the organization holds any more, whose
-	// objects the caller deletes. ErrNotFound when there is none.
-	DeleteSource(ctx context.Context, name string, by domain.Actor) (orphans []domain.BlobHash, err error)
+	// calls drop, before the deletion commits, with the uploads' content hashes no document of
+	// the organization holds any more (DropBlobs). ErrNotFound when there is none.
+	DeleteSource(ctx context.Context, name string, by domain.Actor, drop DropBlobs) error
 	// SyncNow makes a source due at once. ErrNotFound when there is none; a live source never
 	// syncs (domain.ErrInvalid).
 	SyncNow(ctx context.Context, name string) error
@@ -63,15 +63,18 @@ type Knowledge interface {
 	// returns how many. ErrLeaseLost, deleting nothing, once another claim took the source.
 	DeleteUnseen(ctx context.Context, l domain.SourceLease, before time.Time) (int, error)
 
-	// AddUpload adds an uploaded document to the upload source named source, pending, and makes
-	// the source due (knowledge_document.uploaded). d.Blob is its content's hash, which is its
-	// external id and version too: uploading the same content again returns the document it is.
-	// ErrNotFound for an unknown source, domain.ErrNotUploadSource for one of another kind.
+	// AddUpload adds an uploaded document to the upload source named source, pending
+	// (knowledge_document.uploaded); the caller then stores its content and makes the source
+	// due. d.Blob is its content's hash, which is its external id and version too: uploading the
+	// same content again returns the document it is. It waits for a deletion dropping that
+	// content (DropBlobs). ErrNotFound for an unknown source, domain.ErrNotUploadSource for one of
+	// another kind.
 	AddUpload(ctx context.Context, source string, d domain.KnowledgeDocument, by domain.Actor) (domain.KnowledgeDocument, error)
-	// DeleteDocument deletes an uploaded document (knowledge_document.deleted) and returns its
-	// content hash when no document of the organization holds it any more ("" otherwise).
-	// ErrNotFound when there is none; domain.ErrNotUploadSource for a document of another kind.
-	DeleteDocument(ctx context.Context, id domain.KnowledgeDocumentID, by domain.Actor) (orphan domain.BlobHash, err error)
+	// DeleteDocument deletes an uploaded document (knowledge_document.deleted) and calls drop,
+	// before the deletion commits, with its content hash when no document of the organization
+	// holds it any more (DropBlobs). ErrNotFound when there is none; domain.ErrNotUploadSource for
+	// a document of another kind.
+	DeleteDocument(ctx context.Context, id domain.KnowledgeDocumentID, by domain.Actor, drop DropBlobs) error
 	// Documents are one page of a source's documents in id order, after the id after ("" from
 	// the first). ErrNotFound for an unknown source.
 	Documents(ctx context.Context, source string, after domain.KnowledgeDocumentID, limit int) ([]domain.KnowledgeDocument, error)
@@ -84,6 +87,12 @@ type Knowledge interface {
 	// (domain.FuseRanks); there is no unfiltered variant.
 	Search(ctx context.Context, q domain.KnowledgeQuery) ([]domain.KnowledgeHit, error)
 }
+
+// DropBlobs deletes the objects of uploads' contents no document holds any more. A deletion calls
+// it before it commits, holding those contents against AddUpload, so an upload of the same
+// content meanwhile never ends up with its object gone; its error undoes the deletion. nil drops
+// nothing.
+type DropBlobs func(ctx context.Context, unheld []domain.BlobHash) error
 
 // Embedder turns texts into embeddings of domain.EmbeddingDimensions, one per text in order.
 // Model names the embedding space; chunks are searched only against queries of their model.

@@ -3,6 +3,7 @@
 package postgres
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -223,6 +224,63 @@ func TestKnowledge_VectorSearchFindsPastOtherOrganizationsNearerChunks(t *testin
 	// acme's source of 30,001 chunks walks the index (approximate: any five of its near ones).
 	if hits := search(acme); len(hits) != 5 {
 		t.Errorf("acme's vector search = %+v, want five of its chunks", hits)
+	}
+}
+
+// Review 4 SQL L1: a deletion holds the content it drops until it commits, so an upload of the
+// same content waits for it and then writes its object again, instead of committing between the
+// deletion's check and its drop and losing the object.
+func TestKnowledge_AnUploadWaitsForTheDropOfItsContent(t *testing.T) {
+	t.Parallel()
+
+	d := newConnectionsDB(t)
+	k := NewKnowledge(d.store)
+	ctx := domain.WithOrg(t.Context(), newOrgID(t, d.store))
+	h := domain.HashBlob([]byte("# Policy"))
+
+	for _, name := range []string{"policies", "archive"} {
+		if _, err := k.CreateSource(ctx, domain.NewKnowledgeSource{Name: name, Title: name, Kind: domain.SourceUpload}, domain.LocalUser); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	doc, err := k.AddUpload(ctx, "policies", domain.KnowledgeDocument{Title: "policy.md", MIME: domain.MediaMarkdown, Bytes: 8, Blob: h}, domain.LocalUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dropping, added := make(chan struct{}), make(chan error, 1)
+
+	go func() {
+		<-dropping
+
+		_, err := k.AddUpload(ctx, "archive", domain.KnowledgeDocument{Title: "copy.md", MIME: domain.MediaMarkdown, Bytes: 8, Blob: h}, domain.LocalUser)
+		added <- err
+	}()
+
+	early := false
+
+	err = k.DeleteDocument(ctx, doc.ID, domain.LocalUser, func(context.Context, []domain.BlobHash) error {
+		close(dropping)
+
+		select {
+		case err := <-added:
+			early = true
+
+			t.Errorf("the upload committed while the drop ran (%v)", err)
+		case <-time.After(300 * time.Millisecond):
+		}
+
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !early {
+		if err := <-added; err != nil {
+			t.Fatalf("the upload after the drop: %v", err)
+		}
 	}
 }
 

@@ -523,6 +523,68 @@ func TestUploads_StoredOnceAndDeletedWithTheLastHolder(t *testing.T) {
 	}
 }
 
+// racing is a bucket that runs then right after each PutIfAbsent: what another request does
+// meanwhile.
+type racing struct {
+	*porttest.ObjectStore
+
+	then func()
+}
+
+func (r *racing) PutIfAbsent(ctx context.Context, key string, body []byte) (ports.ObjectInfo, bool, error) {
+	info, created, err := r.ObjectStore.PutIfAbsent(ctx, key, body)
+	if r.then != nil {
+		r.then()
+	}
+
+	return info, created, err
+}
+
+// Review 4 SQL L1 / Go L19: an upload of content whose only other holder is deleted meanwhile
+// keeps its object. The upload found the object there and wrote nothing, the deletion then
+// removed it as held by none, and the upload's document pointed at nothing.
+func TestUploads_ADeleteOfTheSameContentMeanwhileKeepsTheObject(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	ctx := w.ctx()
+
+	if _, err := w.kb.CreateSource(ctx, domain.NewKnowledgeSource{Name: "archive", Title: "Archive", Kind: domain.SourceUpload}, admin); err != nil {
+		t.Fatal(err)
+	}
+
+	body := []byte("# Policy\n\nBe kind.")
+	key := domain.KnowledgeKey(w.org, domain.HashBlob(body))
+
+	first, err := w.uploads.Upload(ctx, "handbook", "policy.md", body, admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bucket := &racing{ObjectStore: w.objects}
+	uploads := knowledge.NewUploads(w.kb, bucket, 0)
+	bucket.then = func() {
+		bucket.then = nil
+
+		if err := uploads.DeleteDocument(ctx, first.ID, admin); err != nil {
+			t.Error(err)
+		}
+	}
+
+	again, err := uploads.Upload(ctx, "archive", "policy-copy.md", body, admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := w.objects.Get(ctx, key); err != nil {
+		t.Errorf("the object of archive's %s after the other holder went: %v", again.Title, err)
+	}
+
+	if src := w.source("archive"); src.NextSyncAt == nil || src.NextSyncAt.After(time.Now()) {
+		t.Errorf("archive after an upload = %+v, want due", src)
+	}
+}
+
 // renewals is a knowledge base that reports each lease renewal.
 type renewals struct {
 	ports.Knowledge
@@ -561,7 +623,7 @@ func TestIngestor_ATakenOverSyncRecordsNothing(t *testing.T) {
 
 	w := newWorld(t)
 
-	if _, err := w.kb.DeleteSource(w.ctx(), "handbook", admin); err != nil {
+	if err := w.kb.DeleteSource(w.ctx(), "handbook", admin, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -617,7 +679,7 @@ func TestIngestor_LeasesSurviveAKilledGoald(t *testing.T) {
 	w.docs.set(map[string]string{slowMD: "# Slow\n\nA slow page."})
 
 	// The upload source is due too; sync it first, so only runbooks is left.
-	if _, err := w.kb.DeleteSource(w.ctx(), "handbook", admin); err != nil {
+	if err := w.kb.DeleteSource(w.ctx(), "handbook", admin, nil); err != nil {
 		t.Fatal(err)
 	}
 

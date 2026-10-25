@@ -15,8 +15,9 @@ var _ ports.SourceReader = (*Uploads)(nil)
 // Uploads keeps uploaded documents: their content in the bucket once per organization and
 // content (domain.KnowledgeKey, written with PutIfAbsent, so an object is never rewritten), their
 // rows in the knowledge base, pending until the next sync of their source indexes them. An
-// object goes when the last document holding its content does. It is also the source reader of
-// upload sources.
+// object goes when the last document holding its content does, inside that deletion's
+// transaction (ports.DropBlobs), and an upload writes its object only once its row holds the
+// content, so the two never cross. It is also the source reader of upload sources.
 type Uploads struct {
 	kb      ports.Knowledge
 	objects ports.ObjectStore
@@ -48,24 +49,24 @@ func (u *Uploads) Upload(ctx context.Context, source, name string, body []byte, 
 		return domain.KnowledgeDocument{}, err
 	}
 
-	// Refused before the bucket is written, so a refusal leaves no object behind.
-	src, err := u.kb.Source(ctx, source)
-	if err != nil {
-		return domain.KnowledgeDocument{}, err
-	}
-
-	if src.Kind != domain.SourceUpload {
-		return domain.KnowledgeDocument{}, fmt.Errorf("knowledge source %q: %w", source, domain.ErrNotUploadSource)
-	}
-
+	// The row first: it holds the content against a deletion of another holder, and a refusal
+	// leaves no object behind. A sync between the two finds no object and tries again once the
+	// source is due.
 	h := domain.HashBlob(body)
-	if _, _, err := u.objects.PutIfAbsent(ctx, domain.KnowledgeKey(org, h), body); err != nil {
-		return domain.KnowledgeDocument{}, fmt.Errorf("upload %q: store: %w", name, err)
-	}
 
 	d, err := u.kb.AddUpload(ctx, source, domain.KnowledgeDocument{Title: name, MIME: mime, Bytes: int64(len(body)), Blob: h}, by)
 	if err != nil {
 		return domain.KnowledgeDocument{}, err
+	}
+
+	if _, _, err := u.objects.PutIfAbsent(ctx, domain.KnowledgeKey(org, h), body); err != nil {
+		return domain.KnowledgeDocument{}, fmt.Errorf("upload %q: store: %w", name, err)
+	}
+
+	if d.Status == domain.DocumentPending {
+		if err := u.kb.SyncNow(ctx, source); err != nil {
+			return domain.KnowledgeDocument{}, err
+		}
 	}
 
 	return d, nil
@@ -118,27 +119,17 @@ func (u *Uploads) Original(ctx context.Context, id domain.KnowledgeDocumentID) (
 // DeleteDocument deletes an uploaded document and, when no other document holds its content,
 // its object.
 func (u *Uploads) DeleteDocument(ctx context.Context, id domain.KnowledgeDocumentID, by domain.Actor) error {
-	orphan, err := u.kb.DeleteDocument(ctx, id, by)
-	if err != nil {
-		return err
-	}
-
-	return u.drop(ctx, orphan)
+	return u.kb.DeleteDocument(ctx, id, by, u.drop)
 }
 
 // DeleteSource deletes a source with its documents and the objects no other document holds.
 func (u *Uploads) DeleteSource(ctx context.Context, name string, by domain.Actor) error {
-	orphans, err := u.kb.DeleteSource(ctx, name, by)
-	if err != nil {
-		return err
-	}
-
-	return u.drop(ctx, orphans...)
+	return u.kb.DeleteSource(ctx, name, by, u.drop)
 }
 
-// drop deletes the objects of contents no document holds any more. One that fails stays in the
-// bucket until the organization's purge; nothing reads it.
-func (u *Uploads) drop(ctx context.Context, hashes ...domain.BlobHash) error {
+// drop deletes the objects of contents no document holds any more (ports.DropBlobs): a failure
+// undoes the deletion, which can be tried again.
+func (u *Uploads) drop(ctx context.Context, hashes []domain.BlobHash) error {
 	org, ok := domain.OrgFrom(ctx)
 	if !ok {
 		return domain.ErrNoOrg
