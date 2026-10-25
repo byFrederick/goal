@@ -3,6 +3,7 @@ package engine_test
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -405,7 +406,7 @@ func TestHumanControl_MidRunCancelsTheRun(t *testing.T) {
 	}
 }
 
-// A run still winding down after a person sent its item back (task stop, sidecars, workspace)
+// A run still winding down after a person sent its item back (agent stop, sidecars, sandbox)
 // must not stop the item's next run: when the old run's work ends it forgets and cancels only
 // its own claim, so the next one keeps running and finishes.
 func TestHumanControl_WindingDownRunLeavesTheNextClaimRunning(t *testing.T) {
@@ -413,8 +414,8 @@ func TestHumanControl_WindingDownRunLeavesTheNextClaimRunning(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		windDown, release := make(chan struct{}), make(chan struct{})
-		h := newHarness(t, controlLine(), func(ctx context.Context, spec ports.TaskSpec, _ chan<- ports.RunEvent) domain.RunResult {
-			if spec.Station == stWork { // the first run: once cancelled, slow to wind down
+		h := newHarness(t, controlLine(), func(ctx context.Context, run porttest.ExecCall, _ io.Writer) domain.RunResult {
+			if run.Sandbox.Station == stWork { // the first run: once cancelled, slow to wind down
 				<-ctx.Done()
 				<-windDown
 
@@ -446,7 +447,7 @@ func TestHumanControl_WindingDownRunLeavesTheNextClaimRunning(t *testing.T) {
 
 		synctest.Wait()
 
-		if n := len(h.runner.Started()); n != 2 {
+		if n := len(h.worker.Runs()); n != 2 {
 			t.Fatalf("%d runs started; want the first still winding down and the next at spec", n)
 		}
 
@@ -498,7 +499,7 @@ func TestInterrupt_IgnoresNoticesOfAnEarlierClaim(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := h.runner.WaitStarted(bounded(t), 1); err != nil {
+			if err := h.worker.WaitRuns(bounded(t), 1); err != nil {
 				t.Fatal(err)
 			}
 

@@ -1,6 +1,8 @@
 package docker
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -25,7 +27,7 @@ import (
 var _ ports.Sidecars = (*Sidecars)(nil)
 
 // LabelConnection marks a sidecar container with its connection. Sidecars also carry their
-// run's labels, so Runner.Reap removes them with their run.
+// run's labels, so Sandboxes.Delete removes them with their run.
 const LabelConnection = "goal.connection"
 
 // sidecarUser runs a sidecar whose image would run as root: nobody.
@@ -61,7 +63,7 @@ type Sidecars struct {
 
 // NewSidecars returns a sidecar manager on docker whose networked sidecars run on the agents
 // network of cfg. Zero CPUs, MemoryBytes and PIDs in cfg take the sidecar defaults (1 CPU, 2 GiB, 512
-// PIDs); RunDir is not used.
+// PIDs).
 func NewSidecars(docker *client.Client, cfg Config, log *slog.Logger) *Sidecars {
 	if cfg.CPUs <= 0 {
 		cfg.CPUs = sidecarCPUs
@@ -309,3 +311,104 @@ func (c *sidecar) remove() {
 		c.log.Warn("remove sidecar container; Reap will retry", slog.Any("error", err))
 	}
 }
+
+// maxLine bounds one stderr line a sidecar logs.
+const maxLine = 16 << 20
+
+// redactor replaces secret values with a marker wherever they appear in what a sidecar logs.
+type redactor struct {
+	r *strings.Replacer
+}
+
+// minSecretLen keeps short settings values (true, 1) from being treated as secrets.
+const minSecretLen = 8
+
+const redacted = "[redacted]"
+
+func newRedactor(values ...string) redactor {
+	var pairs []string
+
+	for _, v := range values {
+		if len(v) >= minSecretLen {
+			pairs = append(pairs, v, redacted)
+		}
+	}
+
+	return redactor{r: strings.NewReplacer(pairs...)}
+}
+
+func (r redactor) string(s string) string { return r.r.Replace(s) }
+
+// value redacts every string inside a decoded JSON value.
+func (r redactor) value(v any) any {
+	switch x := v.(type) {
+	case string:
+		return r.string(x)
+	case map[string]any:
+		for k, e := range x {
+			x[k] = r.value(e)
+		}
+	case []any:
+		for i, e := range x {
+			x[i] = r.value(e)
+		}
+	}
+
+	return v
+}
+
+// eachLine calls fn with every non-empty line of r, trimmed. Lines longer than limit are
+// dropped, but r is always read to its end so the writer never blocks. fn must not keep the
+// slice.
+func eachLine(r io.Reader, limit int, fn func([]byte)) error {
+	br := bufio.NewReaderSize(r, 64<<10)
+
+	var (
+		line    []byte
+		tooLong bool
+	)
+
+	for {
+		chunk, err := br.ReadSlice('\n')
+
+		switch {
+		case tooLong:
+		case len(line)+len(chunk) > limit:
+			tooLong, line = true, line[:0]
+		default:
+			line = append(line, chunk...)
+		}
+
+		switch {
+		case errors.Is(err, bufio.ErrBufferFull):
+			continue
+		case err != nil && !errors.Is(err, io.EOF):
+			return err
+		}
+
+		if t := bytes.TrimSpace(line); !tooLong && len(t) > 0 {
+			fn(t)
+		}
+
+		line, tooLong = line[:0], false
+
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+	}
+}
+
+// tail keeps the last lines written to it.
+type tail struct {
+	lines []string
+	max   int
+}
+
+func (t *tail) add(line string) {
+	t.lines = append(t.lines, line)
+	if len(t.lines) > t.max {
+		t.lines = t.lines[len(t.lines)-t.max:]
+	}
+}
+
+func (t *tail) String() string { return strings.Join(t.lines, "\n") }

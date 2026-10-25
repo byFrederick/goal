@@ -31,7 +31,7 @@ const publicURL = "https://example.com/"
 func newTestSandboxes(t *testing.T, gateway string) (*Sandboxes, *testNetwork, *client.Client) {
 	t.Helper()
 
-	_, docker := newTestRunner(t) // skips without Docker
+	docker := newTestDocker(t)
 	n := ownNet(t, docker, gateway)
 
 	return NewSandboxes(docker, n.name, slog.New(slog.DiscardHandler)), n, docker

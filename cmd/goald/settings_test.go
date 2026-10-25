@@ -63,7 +63,8 @@ func TestSettings_Defaults(t *testing.T) {
 }
 
 // Containers run on compose.yaml's agents network unless GOAL_SANDBOX_NETWORK names another;
-// the egress settings of earlier releases are ignored, and listed for goald's warning.
+// the egress and run folder settings of earlier releases are ignored, and listed for goald's
+// warning.
 func TestSettings_SandboxNetwork(t *testing.T) {
 	t.Parallel()
 
@@ -72,20 +73,22 @@ func TestSettings_SandboxNetwork(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if s.SandboxNetwork != "goal_agents" || len(s.Ignored) != 0 {
-		t.Errorf("network %q, ignored %v; want goal_agents and nothing ignored", s.SandboxNetwork, s.Ignored)
+	if s.SandboxNetwork != "goal_agents" || len(s.Ignored) != 0 || s.AgentImage != "ghcr.io/byfrederick/goal-agent:0.2.0" {
+		t.Errorf("network %q, ignored %v, image %q; want goal_agents, nothing ignored and goal-agent 0.2.0", s.SandboxNetwork, s.Ignored, s.AgentImage)
 	}
 
 	s, err = settingsFrom(envOf(map[string]string{
 		sandboxNetworkEnv: "goal-dev_agents", "GOAL_AGENT_EGRESS": "api.anthropic.com, proxy.golang.org", "GOAL_EGRESS_NAME": "../goal",
-		"GOAL_EGRESS_IMAGE": " ",
+		"GOAL_EGRESS_IMAGE": " ", "GOAL_RUN_DIR": "/tmp/goal-stack/runs", "GOAL_DEFAULT_AGENT_IMAGE": "ghcr.io/acme/agent:1",
+		agentImageEnv: "ghcr.io/acme/goal-agent:2",
 	}))
 	if err != nil {
 		t.Fatalf("removed settings refused goald's start: %v", err)
 	}
 
-	if s.SandboxNetwork != "goal-dev_agents" || !slices.Equal(s.Ignored, []string{"GOAL_AGENT_EGRESS", "GOAL_EGRESS_NAME"}) {
-		t.Errorf("network %q, ignored %v; want GOAL_SANDBOX_NETWORK's, and the two removed settings that are set", s.SandboxNetwork, s.Ignored)
+	wantIgnored := []string{"GOAL_AGENT_EGRESS", "GOAL_EGRESS_NAME", "GOAL_RUN_DIR", "GOAL_DEFAULT_AGENT_IMAGE"}
+	if s.SandboxNetwork != "goal-dev_agents" || !slices.Equal(s.Ignored, wantIgnored) || s.AgentImage != "ghcr.io/acme/goal-agent:2" {
+		t.Errorf("network %q, ignored %v, image %q; want GOAL_SANDBOX_NETWORK's, %v and GOAL_AGENT_IMAGE's", s.SandboxNetwork, s.Ignored, s.AgentImage, wantIgnored)
 	}
 }
 

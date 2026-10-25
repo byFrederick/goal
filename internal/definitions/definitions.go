@@ -2,9 +2,9 @@
 // version every factory of every live organization runs (its current version) and of the
 // older versions runs started on, read from ports.DefinitionStore. It serves the readers that
 // need a definition: the engine's lines (LoadFunc), the API (api.Factories), the MCP gateway
-// (gateway.Definitions), contract validation (ports.Contracts) and the Docker runner's agent
-// files (docker.AgentFiles). A run reads the version it started on (TaskSpec.
-// DefinitionVersionID, the gateway token's v claim), whatever was published meanwhile.
+// (gateway.Definitions, which serves a run its bundle with the agent's files) and contract
+// validation (ports.Contracts). A run reads the version it started on (the gateway token's v
+// claim), whatever was published meanwhile.
 //
 // Published versions never change, so a loaded version is kept by id: current versions while
 // they are current, older ones in a least-recently-used set bounded by Config.CacheBytes. A

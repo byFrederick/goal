@@ -139,7 +139,7 @@ func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 	}
 
 	wantRuntime := domain.Runtime{
-		Image: "ghcr.io/acme/agent:1.0.0", Model: "claude-sonnet-5-5", MaxTurnsPerTask: 50, PerItemUSD: 2.5,
+		Model: "claude-sonnet-5-5", MaxTurnsPerTask: 50, PerItemUSD: 2.5,
 		Repository: domain.Repository{URL: "https://git.example.com/acme/line.git", AuthRef: "env:ACME_GIT_TOKEN"},
 	}
 	if l.Runtime != wantRuntime {

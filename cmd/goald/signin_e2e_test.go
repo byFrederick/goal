@@ -318,8 +318,8 @@ func startE2EStack(t *testing.T) *e2eStack {
 		"GOAL_PUBLIC_URL=" + e2ePublicURL, "GOAL_AUTH_UPSTREAM=http://" + e2eAuthListen, "GOAL_GATEWAY_KEY=" + gatewayKey,
 		"GOAL_MIGRATE_DATABASE_URL=" + roleURL(t, database, postgres.OwnerRole), "GOAL_DATABASE_URL=" + roleURL(t, database, postgres.AppRole),
 		"GOAL_S3_BUCKET=" + bucket, "GOAL_S3_ENDPOINT=" + os.Getenv("GOAL_S3_ENDPOINT"), "GOAL_S3_ACCESS_KEY=" + os.Getenv("GOAL_S3_ACCESS_KEY"),
-		"GOAL_S3_SECRET_KEY=" + os.Getenv("GOAL_S3_SECRET_KEY"), "AWS_REGION=us-east-1", "GOAL_WORKSPACE_ROOT=" + t.TempDir(),
-		"GOAL_RUN_DIR=" + t.TempDir(), "GOAL_LOG_FORMAT=text", "GOAL_AUTH_PROXY_SECRET=" + proxySecret,
+		"GOAL_S3_SECRET_KEY=" + os.Getenv("GOAL_S3_SECRET_KEY"), "AWS_REGION=us-east-1",
+		"GOAL_LOG_FORMAT=text", "GOAL_AUTH_PROXY_SECRET=" + proxySecret,
 	}
 	if docker := os.Getenv("DOCKER_HOST"); docker != "" {
 		goaldEnv = append(goaldEnv, "DOCKER_HOST="+docker)

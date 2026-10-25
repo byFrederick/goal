@@ -6,20 +6,10 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
-	"os"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
-)
-
-// Agent files are read-only for the container's user, who may not own them on Linux; they
-// hold no secrets.
-const (
-	fileMode = 0o644
-	dirMode  = 0o755
 )
 
 // AgentFiles returns one agent's files from definition version id, by slash-separated path
@@ -82,37 +72,6 @@ func (c *Cache) agentFiles(ctx context.Context, v *version, agent domain.AgentSp
 	}
 
 	return out, nil
-}
-
-// WriteAgentFiles writes one task's AgentFiles into dir, from the definition version the task's
-// run started on. It implements docker.AgentFiles.
-func (c *Cache) WriteAgentFiles(ctx context.Context, t ports.TaskSpec, dir string) error {
-	v, err := c.version(ctx, t.DefinitionVersionID)
-	if err != nil {
-		return err
-	}
-
-	if v.factory.Metadata.ID != string(t.FactoryID) {
-		return fmt.Errorf("definition version %s is not a version of factory %s: %w", v.id, t.FactoryID, ports.ErrNotFound)
-	}
-
-	files, err := c.agentFiles(ctx, v, domain.AgentSpec{Name: t.Agent, PromptPath: t.PromptPath, Skills: t.Skills}, t.Output)
-	if err != nil {
-		return err
-	}
-
-	for p, body := range files {
-		dst := filepath.Join(dir, filepath.FromSlash(p))
-		if err := os.MkdirAll(filepath.Dir(dst), dirMode); err != nil {
-			return err
-		}
-
-		if err := os.WriteFile(dst, body, fileMode); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // outputSchema is a contract as the agent gets it, without its "$schema" keyword: Claude Code's

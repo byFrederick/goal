@@ -95,9 +95,9 @@ type Store interface {
 	// longer running (finished by their instance or by the sweeps) and no longer holding their
 	// lease (the item's lease at the run's station acquired no later than the run started, which
 	// a run's checks use after its agent task ended): it was released, taken, or swept as expired
-	// (RequeueExpiredLeases). What such a run left on a host may be reaped (Reaper). Ids that name
-	// no run of the organization are not returned: they may be another deployment's runs on a
-	// shared host. Order is unspecified.
+	// (RequeueExpiredLeases). Such a run's sandbox may be deleted (engine.ReapOrphans). Ids that
+	// name no run of the organization are not returned: they may be another deployment's runs on a
+	// shared sandbox backend. Order is unspecified.
 	RunsOver(ctx context.Context, runs []domain.RunID) ([]domain.RunID, error)
 
 	// StartRun records a running agent run and appends a run_started event.
@@ -600,163 +600,6 @@ type Merge struct {
 	HeadSHA string
 }
 
-// Runner starts agent tasks: a container on a laptop (Docker) or a task on AWS (ECS).
-type Runner interface {
-	// Start launches one agent task. ctx bounds the task's whole life: cancelling it stops the
-	// task, after which Wait returns a cancelled result.
-	Start(ctx context.Context, t TaskSpec) (Task, error)
-}
-
-// Reaper finds and removes what agent runs leave on this instance's host: containers (task,
-// check, sidecar), run folders and workspaces. They outlive their run when the goald running it
-// dies, and several goald instances may share one host, so a reaper never decides which runs are
-// over: the engine asks the store (Store.RunsOver) and has only those reaped.
-type Reaper interface {
-	// Leftovers lists the runs that have something on this host, live ones included.
-	Leftovers(ctx context.Context) ([]Leftover, error)
-	// Reap removes what the given runs left on this host. What is already gone is not an error.
-	Reap(ctx context.Context, runs []domain.RunID) error
-}
-
-// Leftover is a run that has something on a host.
-type Leftover struct {
-	Run domain.RunID
-	// Org is the run's organization when the reaper recorded it (a container label); empty
-	// when it cannot tell (a folder).
-	Org domain.OrgID
-}
-
-// Task is a started agent task.
-type Task interface {
-	// Events streams the task's progress (tool calls, messages). It is closed when the task
-	// ends, and the caller must drain it.
-	Events() <-chan RunEvent
-	// Wait blocks until the task ends and returns its result. A task that ran and failed
-	// returns a result with status failed; an error means the result could not be obtained.
-	Wait() (domain.RunResult, error)
-}
-
-// RunEvent is one progress event from a running task.
-type RunEvent struct {
-	Kind domain.EventKind
-	At   time.Time
-	Data map[string]any
-}
-
-// TaskSpec is everything a runner needs to run one agent on one item.
-type TaskSpec struct {
-	// OrgID is the organization of the run; runners record it with what they create, so a
-	// Reaper can tell which organization's store knows the run.
-	OrgID     domain.OrgID
-	FactoryID domain.FactoryID
-	// DefinitionVersionID is the version the run started on; its prompt, skills and contract
-	// are the ones the runner stages.
-	DefinitionVersionID domain.DefinitionVersionID
-	ItemID              domain.ItemID
-	RunID               domain.RunID
-	Station             string
-	Agent               string
-	Image               string
-	Model               string
-	// PromptPath and skill sources are relative to the factory's root; the runner fetches them.
-	PromptPath string
-	Skills     []domain.SkillRef
-	ToolsAllow []string
-	ToolsDeny  []string
-	// GatewayURL is the MCP gateway; GatewayToken scopes this task's access to it.
-	GatewayURL   string
-	GatewayToken string
-	// Purpose is what the factory is for; the agent reads it before the work. Empty when unset.
-	Purpose string
-	// Brief is the work: the item's title and body, plus feedback from a failed attempt.
-	Brief string
-	// Inputs are the item's outputs from earlier stations, by station id.
-	Inputs map[string]json.RawMessage
-	// Output names the contract the result must satisfy; empty when none.
-	Output string
-	// WorkspaceDir is the host path of the git checkout prepared for this run; the task works in
-	// it and never receives git or GitHub credentials.
-	WorkspaceDir string
-	// Env holds resolved secrets and settings for the task. Runners never log it.
-	Env     map[string]string
-	Timeout time.Duration
-	Budget  Budget
-}
-
-// Budget limits one task; zero values mean unset. The worker enforces them.
-type Budget struct {
-	MaxTurns int
-	MaxUSD   float64
-}
-
-// Workspaces prepares the host folder an agent task works in: a fresh clone of the factory's
-// repository on the item's branch, or an empty folder when the factory has none. Credentials
-// for the clone are used on the host only; nothing in the folder holds them.
-type Workspaces interface {
-	// Prepare creates the workspace of one run. The caller removes it with Remove.
-	Prepare(ctx context.Context, w WorkspaceSpec) (Workspace, error)
-	// Remove deletes a workspace; removing one that is already gone is not an error.
-	Remove(ctx context.Context, w Workspace) error
-}
-
-// WorkspaceSpec describes the workspace of one run.
-type WorkspaceSpec struct {
-	FactoryID domain.FactoryID
-	ItemID    domain.ItemID
-	RunID     domain.RunID
-	// Repository is cloned into the workspace; the zero value means an empty workspace.
-	Repository domain.Repository
-	// Branch is checked out: the remote branch when it exists, otherwise a new branch from the
-	// repository's default branch.
-	Branch string
-}
-
-// Workspace is a prepared workspace.
-type Workspace struct {
-	RunID domain.RunID
-	// Dir is the host path of the checkout (TaskSpec.WorkspaceDir).
-	Dir string
-	// Branch is the branch checked out; empty for an empty workspace.
-	Branch string
-	// Existed reports whether the branch already existed in the repository.
-	Existed bool
-}
-
-// Checker runs a station's command checks against a run's workspace. Agent-written code is
-// never executed on the host: each check runs isolated (a hardened container on a laptop).
-type Checker interface {
-	// Check runs one command and reports how it exited. An error means the check could not be
-	// run at all, as opposed to a command that ran and failed.
-	Check(ctx context.Context, c CheckSpec) (CheckResult, error)
-}
-
-// CheckSpec is one command check.
-type CheckSpec struct {
-	// OrgID is the organization of the run, recorded like TaskSpec.OrgID.
-	OrgID     domain.OrgID
-	FactoryID domain.FactoryID
-	ItemID    domain.ItemID
-	RunID     domain.RunID
-	Station   string
-	// Image runs the command; it is the factory's agent image.
-	Image string
-	// Command is a shell command line run in the workspace's root.
-	Command      string
-	WorkspaceDir string
-	Timeout      time.Duration
-}
-
-// CheckResult is how a command check ended.
-type CheckResult struct {
-	ExitCode int
-	// Output is the tail of the command's combined output.
-	Output   string
-	Duration time.Duration
-}
-
-// Passed reports whether the command exited 0.
-func (r CheckResult) Passed() bool { return r.ExitCode == 0 }
-
 // Sidecars runs the stdio MCP servers of a run's connections, each in its own hardened
 // container (a sidecar), so the gateway can serve their tools without running them on the host
 // or in the agent's container.
@@ -768,7 +611,7 @@ type Sidecars interface {
 
 // SidecarSpec is one stdio MCP server for one run.
 type SidecarSpec struct {
-	// OrgID is the organization of the run, recorded like TaskSpec.OrgID.
+	// OrgID is the organization of the run, which the sidecar is labelled with like its sandbox.
 	OrgID      domain.OrgID
 	FactoryID  domain.FactoryID
 	ItemID     domain.ItemID

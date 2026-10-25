@@ -3,11 +3,9 @@
 package docker
 
 import (
-	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -18,21 +16,15 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
-	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
-
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
 )
 
 // egressTestImage is cmd/goal-egress built for the tests (testdata/egress).
@@ -282,254 +274,4 @@ func hostAddresses(t *testing.T, docker *client.Client) []string {
 	}
 
 	return addrs
-}
-
-// probes are the "probe <name>=<result>" messages of a netprobe task.
-func probes(events []ports.RunEvent) map[string]string {
-	out := map[string]string{}
-
-	for _, ev := range events {
-		if name, result, ok := strings.Cut(strings.TrimPrefix(fmt.Sprint(ev.Data["text"]), "probe "), "="); ok && ev.Kind == domain.EventAgentMessage {
-			out[name] = result
-		}
-	}
-
-	return out
-}
-
-// An agent task reaches goald's gateway (and only its paths) through the egress proxy; it cannot
-// reach a listener on the host, the host's or a bridge's address, or the metadata service,
-// directly or through the proxy.
-func TestRunner_AgentReachesTheGatewayAndNoPrivateAddress(t *testing.T) {
-	t.Parallel()
-
-	r, docker := newTestRunner(t)
-
-	var (
-		mu      sync.Mutex
-		gateway []string
-	)
-
-	gw := newHostListener(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-
-		gateway = append(gateway, r.Method+" "+r.URL.Path+" "+r.Header.Get("Authorization"))
-		mu.Unlock()
-
-		_, _ = io.WriteString(w, "gateway")
-	}))
-	external := newHostListener(t, text("external"))
-	secret := newHostListener(t, text("secret"))
-
-	n := ownNet(t, docker, gw.hostURL())
-	r.cfg.Network = n.name
-
-	spec := stubSpec(t, "netprobe")
-	ips := hostAddresses(t, docker)
-	spec.Env["PROBE_SECRET_PORT"], spec.Env["PROBE_EXTERNAL_PORT"], spec.Env["PROBE_HOST_IPS"] = secret.port(), external.port(), strings.Join(ips, " ")
-
-	events, res := run(t.Context(), t, r, spec, nil)
-	if res.Status != domain.RunSucceeded {
-		t.Fatalf("netprobe = %+v", res)
-	}
-
-	got := probes(events)
-	want := map[string]string{
-		"direct-host-name": "fail", "direct-metadata": "fail",
-		"proxy-host": "403", "proxy-metadata": "403", "proxy-external": "403",
-		"tunnel-external": "403", "tunnel-metadata": "403", "tunnel-host": "403",
-		"gateway": "ok-gateway", "gateway-run": "ok-gateway", "goald-api": "404",
-	}
-
-	for _, ip := range ips {
-		want["direct-"+ip], want["proxy-"+ip] = "fail", "403"
-	}
-
-	for name, w := range want {
-		if got[name] != w {
-			t.Errorf("probe %s = %q, want %q", name, got[name], w)
-		}
-	}
-
-	if t.Failed() {
-		lines, _ := proxyLines(t.Context(), docker, n.proxy)
-		t.Logf("proxy log: %v", lines)
-	}
-
-	if hits := secret.hits.Load() + external.hits.Load(); hits != 0 {
-		t.Errorf("host listeners the agent must not reach got %d requests", hits)
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	if w := []string{"POST /mcp Bearer " + gatewayToken, "GET /run Bearer " + gatewayToken}; !slices.Equal(gateway, w) {
-		t.Errorf("gateway saw %q; want %q: the agent's calls with its task token", gateway, w)
-	}
-}
-
-// workerImage is the real agent image (task worker:image).
-const workerImage = "ghcr.io/byfrederick/goal-agent:0.1.0"
-
-// The real worker on the agents' network: Claude Code connects to the gateway through the proxy
-// and sends its model traffic through the proxy too (the test's token is refused there), and
-// nothing else.
-func TestRunner_RealWorkerGoesOutOnlyThroughTheProxy(t *testing.T) {
-	t.Parallel()
-
-	r, docker := newTestRunner(t)
-	if _, err := docker.ImageInspect(t.Context(), workerImage); err != nil {
-		t.Skipf("%s is not built (task worker:image): %v", workerImage, err)
-	}
-
-	server := mcp.NewServer(&mcp.Implementation{Name: "stub-gateway", Version: "1"}, nil)
-	mcp.AddTool(server, &mcp.Tool{Name: "ping", Description: "Answers pong."}, func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, struct{}, error) {
-		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "pong"}}}, struct{}{}, nil
-	})
-
-	var (
-		authorized atomic.Int64
-		calls      syncBuffer
-	)
-
-	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, DisableLocalhostProtection: true})
-	gateway := newHostListener(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer "+gatewayToken {
-			http.Error(w, "no task token", http.StatusUnauthorized)
-			return
-		}
-
-		authorized.Add(1)
-
-		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
-		mcpHandler.ServeHTTP(rec, r)
-		_, _ = fmt.Fprintf(&calls, "%s %d; ", r.Method, rec.status)
-	}))
-	secret := newHostListener(t, text("secret"))
-
-	n := ownNet(t, docker, gateway.hostURL())
-	r.cfg.Network = n.name
-
-	spec := stubSpec(t, "real")
-	spec.Image, spec.Brief, spec.Timeout = workerImage, "Reply with {}.", 3*time.Minute
-
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	var servers string
-
-	_, res := run(ctx, t, r, spec, func(ev ports.RunEvent) {
-		servers = fmt.Sprint(ev.Data["mcp_servers"])
-
-		// The model call follows the start; once the proxy has seen it, the task has shown what
-		// it reaches.
-		if !waitForLog(ctx, t, docker, n.proxy, "api.anthropic.com:443", time.Minute) {
-			t.Error("the proxy never saw the model API: Claude Code does not use HTTPS_PROXY")
-		}
-
-		cancel()
-	})
-
-	if res.Status != domain.RunCancelled && res.Status != domain.RunFailed {
-		t.Logf("result: %+v", res)
-	}
-
-	if !strings.Contains(servers, "goal") || !strings.Contains(servers, "connected") {
-		t.Errorf("started with MCP servers %s; want goal connected through the proxy (gateway calls: %s)", servers, calls.String())
-	}
-
-	if authorized.Load() == 0 {
-		t.Error("the gateway got no request with the task's token")
-	}
-
-	if n := secret.hits.Load(); n != 0 {
-		t.Errorf("a host listener got %d requests from the worker", n)
-	}
-
-	dests := proxyDestinations(t, docker, n.proxy)
-	t.Logf("destinations the worker asked the proxy for: %v", dests)
-
-	for _, d := range dests {
-		if d != "api.anthropic.com:443" {
-			t.Errorf("the worker asked the proxy for %s: nonessential traffic should be off", d)
-		}
-	}
-}
-
-// statusRecorder keeps the status a handler answered with.
-type statusRecorder struct {
-	http.ResponseWriter
-
-	status int
-}
-
-func (s *statusRecorder) WriteHeader(code int) {
-	s.status = code
-	s.ResponseWriter.WriteHeader(code)
-}
-
-func (s *statusRecorder) Flush() {
-	if f, ok := s.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
-}
-
-// proxyLines are the egress proxy's log lines with a destination.
-func proxyLines(ctx context.Context, docker *client.Client, name string) ([]map[string]any, error) {
-	logs, err := docker.ContainerLogs(ctx, name, client.ContainerLogsOptions{ShowStdout: true, ShowStderr: true})
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = logs.Close() }()
-
-	pr, pw := io.Pipe()
-
-	go func() { _, err := stdcopy.StdCopy(pw, pw, logs); pw.CloseWithError(err) }()
-
-	var out []map[string]any
-
-	s := bufio.NewScanner(pr)
-	for s.Scan() {
-		var line map[string]any
-		if json.Unmarshal(s.Bytes(), &line) == nil && line["dest"] != nil {
-			out = append(out, line)
-		}
-	}
-
-	return out, nil
-}
-
-func waitForLog(ctx context.Context, t *testing.T, docker *client.Client, name, dest string, within time.Duration) bool {
-	t.Helper()
-
-	deadline := time.Now().Add(within)
-	for time.Now().Before(deadline) && ctx.Err() == nil {
-		lines, err := proxyLines(ctx, docker, name)
-		if err == nil && slices.ContainsFunc(lines, func(l map[string]any) bool { return l["dest"] == dest }) {
-			return true
-		}
-
-		time.Sleep(500 * time.Millisecond)
-	}
-
-	return false
-}
-
-func proxyDestinations(t *testing.T, docker *client.Client, name string) []string {
-	t.Helper()
-
-	lines, err := proxyLines(t.Context(), docker, name)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var dests []string
-
-	for _, l := range lines {
-		if d := fmt.Sprint(l["dest"]); !slices.Contains(dests, d) {
-			dests = append(dests, d)
-		}
-	}
-
-	return dests
 }

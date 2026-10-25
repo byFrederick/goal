@@ -21,7 +21,7 @@ func unitRoute() route { return agentsRoute(Config{}.withDefaults().Network) }
 
 // A container is given the egress proxy's address for goald's gateway, at the gateway's path,
 // wherever goald listens: the proxy alone knows the way to goald.
-func TestGatewayFor_IsTheProxyAtTheGatewaysPath(t *testing.T) {
+func TestBoxGatewayURL_IsTheProxyAtTheGatewaysPath(t *testing.T) {
 	t.Parallel()
 
 	for gateway, want := range map[string]string{
@@ -31,14 +31,14 @@ func TestGatewayFor_IsTheProxyAtTheGatewaysPath(t *testing.T) {
 		"https://gw.example.com/mcp":  boxGateway,
 		"http://goald:8090/mcp?x=%20": boxGateway,
 	} {
-		if got, err := gatewayFor(gateway); err != nil || got != want {
-			t.Errorf("gatewayFor(%q) = %q, %v; want %q", gateway, got, err, want)
+		if got, err := BoxGatewayURL(gateway); err != nil || got != want {
+			t.Errorf("BoxGatewayURL(%q) = %q, %v; want %q", gateway, got, err, want)
 		}
 	}
 
 	for _, gateway := range []string{"goald:8080/mcp", "unix:///run/goald.sock", "http://goald:8080"} {
-		if got, err := gatewayFor(gateway); err == nil {
-			t.Errorf("gatewayFor(%q) = %q; want an error", gateway, got)
+		if got, err := BoxGatewayURL(gateway); err == nil {
+			t.Errorf("BoxGatewayURL(%q) = %q; want an error", gateway, got)
 		}
 	}
 }

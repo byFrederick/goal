@@ -9,8 +9,6 @@ import (
 	"net"
 	"net/netip"
 	"net/url"
-	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -74,14 +72,9 @@ type settings struct {
 	// GatewayKeyRef names the secret that signs task tokens (GOAL_GATEWAY_KEY_REF, default
 	// env:GOAL_GATEWAY_KEY).
 	GatewayKeyRef string
-	// TaskEnv maps variables of every agent task to secret references (GOAL_TASK_ENV,
+	// TaskEnv maps variables of every agent run to secret references (GOAL_TASK_ENV,
 	// NAME=ref pairs separated by commas; default CLAUDE_CODE_OAUTH_TOKEN=env:CLAUDE_CODE_OAUTH_TOKEN).
 	TaskEnv map[string]string
-	// WorkspaceRoot holds the runs' git checkouts (GOAL_WORKSPACE_ROOT, default
-	// $TMPDIR/goal-workspaces); RunDir the runs' agent files (GOAL_RUN_DIR, default
-	// $TMPDIR/goal-runs). Docker must be able to bind-mount both.
-	WorkspaceRoot string
-	RunDir        string
 	// TickEvery is how often the engine pulls work (GOAL_TICK_EVERY, default 5s); RefreshEvery how
 	// often the current definition versions are reconciled with PostgreSQL (GOAL_REFRESH_EVERY,
 	// default 30s), a safety net behind the goal_definitions notices that reload them at once.
@@ -112,12 +105,14 @@ type settings struct {
 	// text) shape the structured log on stdout.
 	LogLevel  slog.Level
 	LogFormat string
-	// DefaultAgentImage is the agent image a blank factory's skeleton names
-	// (GOAL_DEFAULT_AGENT_IMAGE, default the agent image this repository builds).
-	DefaultAgentImage string
-	// SandboxNetwork is the Docker network agent, sidecar and check containers run on
-	// (GOAL_SANDBOX_NETWORK, default goal_agents): compose.yaml's agents network, whose
-	// goal-egress service is their only way out (ADR 0009 and its phase 4 amendment).
+	// AgentImage is the image every run's sandbox starts from (GOAL_AGENT_IMAGE, default the
+	// agent image this repository builds, task worker:image); a definition's runtime.image is
+	// ignored. A blank factory's skeleton names it too, until the definition schema drops the
+	// field (spec 4 PR 4-10).
+	AgentImage string
+	// SandboxNetwork is the Docker network sandboxes and sidecars run on (GOAL_SANDBOX_NETWORK,
+	// default goal_agents): compose.yaml's agents network, whose goal-egress service is their
+	// only way out (ADR 0009 and its phase 4 amendment).
 	SandboxNetwork string
 	// Ignored are the removedVariables that are set: goald warns about them at start.
 	Ignored []string
@@ -150,7 +145,8 @@ const (
 	defaultListen      = "127.0.0.1:8080"
 	defaultTaskEnv     = "CLAUDE_CODE_OAUTH_TOKEN=env:CLAUDE_CODE_OAUTH_TOKEN"
 	defaultKeyRef      = "env:GOAL_GATEWAY_KEY"
-	defaultImage       = "ghcr.io/byfrederick/goal-agent:0.1.0"
+	defaultImage       = "ghcr.io/byfrederick/goal-agent:0.2.0"
+	agentImageEnv      = "GOAL_AGENT_IMAGE"
 )
 
 // forbiddenTaskEnv never reaches a task: on a laptop the model is reached with the subscription
@@ -175,8 +171,8 @@ var ownVariables = []string{
 	"GOAL_MIGRATE_DATABASE_URL", "GOAL_DATABASE_URL", "GOAL_PG_PASSWORD", "GOAL_PG_OWNER_PASSWORD", "GOAL_PG_APP_PASSWORD",
 	listenEnv, publicURLEnv, gatewayEnv, gatewayURLEnv, "GOAL_GATEWAY_KEY_REF", "GOAL_GATEWAY_KEY", taskEnvEnv,
 	authEnv, upstreamEnv, proxiesEnv, googleEnv, authProxySecretEnv,
-	"GOAL_WORKSPACE_ROOT", "GOAL_RUN_DIR", "GOAL_TICK_EVERY", "GOAL_REFRESH_EVERY", "GOAL_MAX_RUNS",
-	"GOAL_GITHUB_API_URL", githubWebEnv, "GOAL_LOG_LEVEL", "GOAL_LOG_FORMAT", "GOAL_DEFAULT_AGENT_IMAGE", "GOAL_ORG_RETENTION", "GOAL_MODELS",
+	"GOAL_TICK_EVERY", "GOAL_REFRESH_EVERY", "GOAL_MAX_RUNS",
+	"GOAL_GITHUB_API_URL", githubWebEnv, "GOAL_LOG_LEVEL", "GOAL_LOG_FORMAT", agentImageEnv, "GOAL_ORG_RETENTION", "GOAL_MODELS",
 	"GOAL_DEFINITION_CACHE_BYTES", sandboxNetworkEnv,
 	"GOAL_S3_BUCKET", "GOAL_S3_ENDPOINT", "GOAL_S3_ACCESS_KEY", "GOAL_S3_SECRET_KEY",
 	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", masterkey.KeysEnv, masterkey.FileEnv,
@@ -194,8 +190,11 @@ var identityVariables = []string{
 
 // removedVariables are settings of earlier releases that goald ignores, warning at start while
 // one is still set (spec 4 §5.13): the egress proxy is compose.yaml's goal-egress service now,
-// with one policy for every box (ADR 0009's phase 4 amendment).
-var removedVariables = []string{"GOAL_AGENT_EGRESS", "GOAL_EGRESS_NAME", "GOAL_EGRESS_IMAGE"}
+// with one policy for every box (ADR 0009's phase 4 amendment); runs need no host folders, their
+// sandbox has everything; GOAL_AGENT_IMAGE replaces GOAL_DEFAULT_AGENT_IMAGE.
+var removedVariables = []string{
+	"GOAL_AGENT_EGRESS", "GOAL_EGRESS_NAME", "GOAL_EGRESS_IMAGE", "GOAL_WORKSPACE_ROOT", "GOAL_RUN_DIR", "GOAL_DEFAULT_AGENT_IMAGE",
+}
 
 // reserved is the variables definitions may not reference: goald's own (removed ones too), the identity service's,
 // the one its gateway key reference names, the platform secrets that never reach a task (forbiddenTaskEnv, but the
@@ -256,12 +255,9 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 			localDatabase(postgres.AppRole, or("GOAL_PG_APP_PASSWORD", postgres.DevAppPassword))),
 		Listen:        or(listenEnv, defaultListen),
 		GatewayKeyRef: or("GOAL_GATEWAY_KEY_REF", defaultKeyRef),
-		WorkspaceRoot: or("GOAL_WORKSPACE_ROOT", filepath.Join(os.TempDir(), "goal-workspaces")),
-		RunDir:        or("GOAL_RUN_DIR", filepath.Join(os.TempDir(), "goal-runs")),
 		LogFormat:     or("GOAL_LOG_FORMAT", "json"),
 		GitHubAPIURL:  or("GOAL_GITHUB_API_URL", "https://api.github.com"),
-
-		DefaultAgentImage: or("GOAL_DEFAULT_AGENT_IMAGE", defaultImage),
+		AgentImage:    or(agentImageEnv, defaultImage),
 	}
 
 	s.PublicURL = or(publicURLEnv, defaultPublicURL(s.Listen))

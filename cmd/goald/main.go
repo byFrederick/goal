@@ -1,16 +1,15 @@
 // Command goald is Goal's daemon: it runs the current definition version of every factory on one
 // flow engine, serves the HTTP API (/v1/) and the gateway agents use (/mcp and /run, on a listener of
-// its own with GOAL_GATEWAY_LISTEN), and starts agent tasks in Docker.
+// its own with GOAL_GATEWAY_LISTEN), and runs every agent run in a sandbox of its own in Docker.
 //
 // All wiring happens here, by hand: PostgreSQL (store, definition versions, item and definition
-// notices), the bucket (definition file content), environment secrets, git workspaces, GitHub
-// (merges), the Docker runner, checker and MCP sidecars, the system clock, the engine, the gateway,
-// definition authoring, the API and its stream feed. Configuration comes from the environment;
-// settings.go lists every variable. goald keeps nothing another instance would need: work state
-// and definition versions are in PostgreSQL, file content is in the bucket, and its workspaces
-// and run folders are scratch, reaped by any instance once their run is over. The exception is
-// the gateway's running MCP sidecars, which serve only the runs this instance started (see
-// internal/gateway).
+// notices), the bucket (definition file content), environment secrets, GitHub (merges), Docker's
+// sandboxes and MCP sidecars, the system clock, the engine, the gateway, definition authoring, the
+// API and its stream feed. Configuration comes from the environment; settings.go lists every
+// variable. goald keeps nothing another instance would need: work state and definition versions
+// are in PostgreSQL, file content is in the bucket, and its runs' sandboxes are scratch, reaped by
+// any instance once their run is over. The exception is the gateway's running MCP sidecars, which
+// serve only the runs this instance started (see internal/gateway).
 package main
 
 import (
@@ -34,7 +33,6 @@ import (
 	"github.com/byFrederick/goal/internal/adapters/docker"
 	"github.com/byFrederick/goal/internal/adapters/envsecrets"
 	"github.com/byFrederick/goal/internal/adapters/github"
-	"github.com/byFrederick/goal/internal/adapters/gitworkspace"
 	"github.com/byFrederick/goal/internal/adapters/masterkey"
 	"github.com/byFrederick/goal/internal/adapters/postgres"
 	"github.com/byFrederick/goal/internal/adapters/s3store"
@@ -145,7 +143,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	authors := authoring.New(authoring.Deps{
 		Store: definitionStore, Loads: store, Templates: objects,
 		Credentials: s.credentials(secrets),
-		Clock:       clock, DefaultImage: s.DefaultAgentImage,
+		Clock:       clock, DefaultImage: s.AgentImage,
 	})
 
 	dockerClient, err := containers(ctx)
@@ -163,10 +161,12 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	// One rule for env:NAME references wherever goald resolves one: clones, the code host, the gateway.
 	policy := s.secretPolicy()
-	runnerCfg := docker.Config{RunDir: s.RunDir, Network: s.SandboxNetwork}
-	workspaces := gitworkspace.New(secrets, gitworkspace.Config{Root: s.WorkspaceRoot, Hosts: []string{s.GitHubWebHost}, Policy: policy}, log)
 
-	runner := docker.New(dockerClient, defs, runnerCfg, log)
+	// Boxes reach goald's gateway through the egress proxy, at the gateway's paths.
+	boxGateway, err := docker.BoxGatewayURL(s.GatewayURL)
+	if err != nil {
+		return err
+	}
 
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Secrets: secrets, Events: store, Clock: clock, Logger: log,
@@ -180,14 +180,14 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	codehost := github.New(secrets, github.Config{APIURL: s.GitHubAPIURL, WebHost: s.GitHubWebHost, Policy: policy})
 
+	// The engine runs each claim in a sandbox and, at its start and every ReapEvery, deletes the
+	// sandboxes of runs that are over, whichever goald on this Docker host started them.
 	eng, err = engine.New(engine.Deps{
-		Store: store, Orgs: store, Runner: runner, Workspaces: workspaces, Checker: docker.NewChecker(dockerClient, runnerCfg, log),
+		Store: store, Orgs: store, Sandboxes: docker.NewSandboxes(dockerClient, s.SandboxNetwork, log),
 		Contracts: defs, Secrets: secrets, CodeHost: codehost, Clock: clock, Logger: log, RunEnded: gw.EndRun,
-		// The engine reaps what runs that are over left in Docker and on disk, whichever goald on
-		// this host started them: at its start and every ReapEvery.
-		Reapers: []ports.Reaper{runner, workspaces},
 	}, engine.Config{
-		TickEvery: s.TickEvery, GatewayURL: s.GatewayURL, GatewayKeyRef: s.GatewayKeyRef, TaskEnv: s.TaskEnv, MaxRuns: s.MaxRuns,
+		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxGateway, GatewayKeyRef: s.GatewayKeyRef, TaskEnv: s.TaskEnv,
+		MaxRuns: s.MaxRuns, RepositoryHosts: []string{s.GitHubWebHost}, SecretPolicy: policy,
 	})
 	if err != nil {
 		return err

@@ -13,7 +13,7 @@ var eventName = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 // receives such events and the stream that writes them both refuse any other.
 func IsEventName(name string) bool { return eventName.MatchString(name) }
 
-// EventKind names what happened to an item. Kinds are open: runners add their own (tool_call, ...).
+// EventKind names what happened to an item. Kinds are open: the worker adds its own (tool_call, ...).
 type EventKind string
 
 // Event kinds the engine writes.
@@ -55,6 +55,12 @@ const (
 	// EventToolDenied is a tool call the agent's policy (tools.deny, permissions) refused
 	// before it ran, as the worker reports it at the end of a run. Data tool and id.
 	EventToolDenied EventKind = "tool_denied"
+	// EventSandboxStarted is a run's sandbox up, before it is prepared. Data size and seconds.
+	EventSandboxStarted EventKind = "sandbox_started"
+	// EventPrepared is a run's sandbox prepared for its agent: the run bundle fetched, the
+	// repository cloned on the item's branch, the tools installed. Data seconds, tools (how many
+	// of the definition's) and, with a repository, branch_existed.
+	EventPrepared EventKind = "prepared"
 )
 
 // Audit of items.

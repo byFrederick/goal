@@ -5,8 +5,17 @@
 // another goald instance would need: every decision reads and writes the Store, claims are
 // slot leases that never exceed a station's capacity, every transition is compare-and-set,
 // and work held by a dead instance returns to the queue when its lease expires. Several
-// instances can run Tick and SweepLeases at once, and share one host: ReapOrphans (reap.go)
-// removes only what runs the store says are over left there.
+// instances can run Tick and SweepLeases at once, and share one sandbox backend: ReapOrphans
+// (reap.go) deletes only the sandboxes of runs the store says are over.
+//
+// Runs (work.go, sandbox.go). Every claim gets one sandbox (ports.Sandboxes), created by its first
+// run from the agent image and prepared once by the image's `goal-agent prepare`, which fetches
+// the run's bundle from the gateway and clones the factory's repository on the item's branch.
+// The agent runs there as `goal-agent run`; a retry after a broken contract or a failed command
+// check runs in the same sandbox, and the station's checks are commands in it whose exit codes
+// come from the runtime. The sandbox is deleted when the claim ends, however it ends. Nothing
+// runs while nothing is claimable: a station's slots are its sandboxes, from zero to its agent
+// count (capped by WIP).
 //
 // Organizations. Every line belongs to one organization, and every store call the engine makes
 // for a line is bound to it (domain.WithOrg), so row-level security keeps each organization's
@@ -39,10 +48,9 @@
 // and clearing the pull of a line over budget releases work but claims none.
 //
 // Phase 1 scope. The engine pulls into every agent station with free capacity, releases
-// items waiting at queue stations straight to the next station, prepares a fresh workspace
-// (a clone of the factory's repository on the item's branch) for every run, validates outputs
-// against station contracts, runs the station's command checks against the workspace, applies
-// gates and human approvals, routes by lane and sweeps expired leases. Humans also send
+// items waiting at queue stations straight to the next station, runs every claim in a sandbox
+// of its own, validates outputs against station contracts, runs the station's command checks in
+// the sandbox, applies gates and human approvals, routes by lane and sweeps expired leases. Humans also send
 // blocked items back to their queue (Retry) and, at a human station whose action is merge,
 // merge the item's pull request through the CodeHost port before approving it (Merge).
 // These arrive in later phases and are deliberately absent here: drum-buffer-rope
@@ -76,27 +84,22 @@ type Orgs interface {
 
 // Deps are the ports the engine works through.
 type Deps struct {
-	Store      ports.Store
-	Orgs       Orgs
-	Runner     ports.Runner
-	Workspaces ports.Workspaces
-	Checker    ports.Checker
-	Contracts  ports.Contracts
-	Secrets    ports.Secrets
-	CodeHost   ports.CodeHost
-	Clock      ports.Clock
-	Logger     *slog.Logger // nil discards logs
-	// RunEnded, when set, is told each run whose agent task has ended (goald stops the run's
-	// MCP sidecars). It is called once per run, with the run's result already recorded.
+	Store     ports.Store
+	Orgs      Orgs
+	Sandboxes ports.Sandboxes
+	Contracts ports.Contracts
+	Secrets   ports.Secrets
+	CodeHost  ports.CodeHost
+	Clock     ports.Clock
+	Logger    *slog.Logger // nil discards logs
+	// RunEnded, when set, is told each run whose agent has ended (goald stops the run's MCP
+	// sidecars). It is called once per run, with the run's result already recorded.
 	RunEnded func(ctx context.Context, run domain.RunID)
-	// Reapers hold what runs leave on this instance's host (containers, run folders,
-	// workspaces); ReapOrphans removes what runs that are over left there. None: nothing to reap.
-	Reapers []ports.Reaper
 }
 
 func (d Deps) complete() bool {
-	return d.Store != nil && d.Orgs != nil && d.Runner != nil && d.Workspaces != nil && d.Checker != nil && d.Contracts != nil &&
-		d.Secrets != nil && d.CodeHost != nil && d.Clock != nil
+	return d.Store != nil && d.Orgs != nil && d.Sandboxes != nil && d.Contracts != nil && d.Secrets != nil && d.CodeHost != nil &&
+		d.Clock != nil
 }
 
 // Config is the engine's behaviour; zero durations take the defaults below.
@@ -109,22 +112,32 @@ type Config struct {
 	LeaseTTL time.Duration
 	// HeartbeatEvery must be shorter than LeaseTTL (default LeaseTTL/3).
 	HeartbeatEvery time.Duration
-	// ReapEvery is how often Run reaps what runs that are over left on the host, the first time
-	// when it starts (default LeaseTTL/2).
+	// ReapEvery is how often Run deletes the sandboxes of runs that are over, the first time when
+	// it starts (default LeaseTTL/2).
 	ReapEvery time.Duration
-	// TaskTimeout stops an agent task that runs longer (default 2h).
+	// TaskTimeout bounds one run: its sandbox's start and preparation, the agent and the checks
+	// (default 2h).
 	TaskTimeout time.Duration
 	// CheckTimeout stops one command check that runs longer (default 30m).
 	CheckTimeout time.Duration
 	// SweepLimit caps leases requeued per sweep and items released per queue station per tick (default 100).
 	SweepLimit int
-	// GatewayURL is the MCP gateway agents use; when set, GatewayKeyRef names the secret
-	// that signs per-task gateway tokens.
+	// Image is the agent image every sandbox starts from (required).
+	Image string
+	// GatewayURL is goald's gateway as sandboxes reach it, at its MCP path (/mcp; the run bundle
+	// is /run at the same origin), and GatewayKeyRef names the secret that signs each run's task
+	// token. Both are required.
 	GatewayURL    string
 	GatewayKeyRef string
-	// TaskEnv maps environment variables for every task to secret references, resolved
-	// through Secrets when the task starts (for example model credentials).
+	// TaskEnv maps environment variables of every agent run to secret references, resolved
+	// through Secrets when the run starts (the model's access).
 	TaskEnv map[string]string
+	// RepositoryHosts are the hosts (host[:port], lower case) the repository token may be sent
+	// to, and SecretPolicy the install's rule for env:NAME references: prepare gets the token of a
+	// repository on one of them whose reference the policy does not reserve, and nothing else
+	// does (until runs get connections, spec 4 PR 4-11).
+	RepositoryHosts []string
+	SecretPolicy    domain.SecretPolicy
 	// MaxRuns caps the agent runs this instance has in flight at once; 0 means no cap. With a
 	// cap, a busy organization cannot fill the instance before a quiet one's first item starts.
 	MaxRuns int
@@ -153,19 +166,16 @@ const (
 
 // Engine runs factory lines. It is safe for concurrent use.
 type Engine struct {
-	store      ports.Store
-	orgs       Orgs
-	runner     ports.Runner
-	workspaces ports.Workspaces
-	checker    ports.Checker
-	contracts  ports.Contracts
-	secrets    ports.Secrets
-	codehost   ports.CodeHost
-	clock      ports.Clock
-	log        *slog.Logger
-	runEnded   func(context.Context, domain.RunID)
-	reapers    []ports.Reaper
-	cfg        Config
+	store     ports.Store
+	orgs      Orgs
+	sandboxes ports.Sandboxes
+	contracts ports.Contracts
+	secrets   ports.Secrets
+	codehost  ports.CodeHost
+	clock     ports.Clock
+	log       *slog.Logger
+	runEnded  func(context.Context, domain.RunID)
+	cfg       Config
 
 	mu    sync.RWMutex
 	lines map[domain.FactoryID]domain.Line
@@ -199,8 +209,8 @@ func New(d Deps, cfg Config) (*Engine, error) {
 		return nil, fmt.Errorf("engine: heartbeat every %s must be shorter than the lease TTL %s", cfg.HeartbeatEvery, cfg.LeaseTTL)
 	}
 
-	if cfg.GatewayURL != "" && cfg.GatewayKeyRef == "" {
-		return nil, errors.New("engine: a gateway URL needs a gateway key reference")
+	if cfg.Image == "" || cfg.GatewayURL == "" || cfg.GatewayKeyRef == "" {
+		return nil, errors.New("engine: the agent image, the gateway URL and the gateway key reference are required")
 	}
 
 	if cfg.MaxRuns < 0 {
@@ -218,8 +228,8 @@ func New(d Deps, cfg Config) (*Engine, error) {
 	}
 
 	return &Engine{
-		store: d.Store, orgs: d.Orgs, runner: d.Runner, workspaces: d.Workspaces, checker: d.Checker, contracts: d.Contracts,
-		secrets: d.Secrets, codehost: d.CodeHost, clock: d.Clock, log: log, runEnded: d.RunEnded, reapers: d.Reapers, cfg: cfg, lines: lines,
+		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, codehost: d.CodeHost,
+		clock: d.Clock, log: log, runEnded: d.RunEnded, cfg: cfg, lines: lines,
 		active: map[domain.ItemID]*activeRun{}, exhausted: map[domain.FactoryID]bool{},
 	}, nil
 }
@@ -307,9 +317,9 @@ func withDefaults(cfg Config) Config {
 	return cfg
 }
 
-// Run sweeps expired leases and pulls work every TickEvery until ctx ends, and reaps what runs
-// that are over left on the host when it starts and every ReapEvery, right after a sweep, so
-// the leftovers of the leases it swept go at once. On return, every run this instance started
+// Run sweeps expired leases and pulls work every TickEvery until ctx ends, and reaps the
+// sandboxes of runs that are over when it starts and every ReapEvery, right after a sweep, so
+// the sandboxes of the leases it swept go at once. On return, every run this instance started
 // has finished or released its item.
 func (e *Engine) Run(ctx context.Context) error {
 	t := e.clock.NewTicker(e.cfg.TickEvery)

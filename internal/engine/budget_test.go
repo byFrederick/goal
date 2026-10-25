@@ -126,7 +126,7 @@ func TestWeeklyBudget_DrainSkipsAgentClaimsOnly(t *testing.T) {
 	running := h.submit(t, domain.NewItem{Title: "running"})
 	h.tick(t) // under budget: claimed
 
-	if err := h.runner.WaitStarted(bounded(t), 1); err != nil {
+	if err := h.worker.WaitRuns(bounded(t), 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -158,8 +158,8 @@ func TestWeeklyBudget_DrainSkipsAgentClaimsOnly(t *testing.T) {
 		t.Errorf("approved item = %s; want done", got.State)
 	}
 
-	if n := len(h.runner.Started()); n != 1 {
-		t.Errorf("%d tasks started; want only the one claimed under budget", n)
+	if n := len(h.worker.Runs()); n != 1 {
+		t.Errorf("%d runs started; want only the one claimed under budget", n)
 	}
 
 	if got, want := h.logs.budgetLogs(t), []string{"budget_exhausted 1"}; !slices.Equal(got, want) {
@@ -180,7 +180,7 @@ func TestWeeklyBudget_StopCancelsRunningAndRequeues(t *testing.T) {
 	waiting := h.submit(t, domain.NewItem{Title: "waiting"})
 	h.tick(t) // under budget: the one slot is claimed
 
-	if err := h.runner.WaitStarted(bounded(t), 1); err != nil {
+	if err := h.worker.WaitRuns(bounded(t), 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -211,8 +211,8 @@ func TestWeeklyBudget_StopCancelsRunningAndRequeues(t *testing.T) {
 	h.tick(t) // still over budget: nothing is claimed again
 	h.wait(t, h.e)
 
-	if n := len(h.runner.Started()); n != 1 {
-		t.Errorf("%d tasks started; want no claim while the budget is used up", n)
+	if n := len(h.worker.Runs()); n != 1 {
+		t.Errorf("%d runs started; want no claim while the budget is used up", n)
 	}
 
 	if w := h.item(t, waiting.ID); w.State != domain.StateQueued {
@@ -231,8 +231,8 @@ func TestWeeklyBudget_ResumesWhenWindowMoves(t *testing.T) {
 	h.clock.Advance(week) // the run started exactly 7×24h ago still counts
 	h.step(t)
 
-	if n := len(h.runner.Started()); n != 0 {
-		t.Fatalf("%d tasks started; want none while the spend is in the window", n)
+	if n := len(h.worker.Runs()); n != 0 {
+		t.Fatalf("%d runs started; want none while the spend is in the window", n)
 	}
 
 	h.clock.Advance(time.Second) // now it has left the window
@@ -325,7 +325,7 @@ func TestWeeklyBudget_StopStillCancelsTheRunsOfAPausedLine(t *testing.T) {
 	running := h.submit(t, domain.NewItem{Title: "running"})
 	h.tick(t)
 
-	if err := h.runner.WaitStarted(bounded(t), 1); err != nil {
+	if err := h.worker.WaitRuns(bounded(t), 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -342,7 +342,7 @@ func TestWeeklyBudget_StopStillCancelsTheRunsOfAPausedLine(t *testing.T) {
 		t.Errorf("item of the paused line = %s/%s; want its run cancelled and the item back in the queue", got.Station, got.State)
 	}
 
-	if n := len(h.runner.Started()); n != 1 {
-		t.Errorf("%d tasks started; want nothing claimed while paused", n)
+	if n := len(h.worker.Runs()); n != 1 {
+		t.Errorf("%d runs started; want nothing claimed while paused", n)
 	}
 }

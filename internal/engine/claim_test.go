@@ -14,7 +14,7 @@ const otherFactory domain.FactoryID = "5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a01"
 
 // twoOrgs is a harness whose runs do run, with a second organization that owns otherFactory;
 // both factories have one agent station with five slots.
-func twoOrgs(t *testing.T, run porttest.RunFunc) (*harness, domain.Line, domain.OrgID) {
+func twoOrgs(t *testing.T, run porttest.AgentFunc) (*harness, domain.Line, domain.OrgID) {
 	t.Helper()
 
 	h := newHarness(t, lineOf(agentStation(stWork, agWorker, 5, 5)), run)
@@ -37,17 +37,17 @@ func (h *harness) submitTo(t *testing.T, e *engine.Engine, org domain.OrgID, fac
 	}
 }
 
-// startedBy waits until n tasks started and counts them per factory.
+// startedBy waits until n runs started and counts them per factory.
 func (h *harness) startedBy(t *testing.T, n int) map[domain.FactoryID]int {
 	t.Helper()
 
-	if err := h.runner.WaitStarted(bounded(t), n); err != nil {
+	if err := h.worker.WaitRuns(bounded(t), n); err != nil {
 		t.Fatal(err)
 	}
 
 	by := map[domain.FactoryID]int{}
-	for _, spec := range h.runner.Started() {
-		by[spec.FactoryID]++
+	for _, run := range h.worker.Runs() {
+		by[run.Sandbox.FactoryID]++
 	}
 
 	return by

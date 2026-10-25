@@ -3,6 +3,7 @@ package engine_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"slices"
 	"sync"
@@ -60,25 +61,32 @@ const (
 )
 
 type harness struct {
-	e          *engine.Engine
-	store      *porttest.Store
-	tenancy    *porttest.Tenancy
-	runner     *porttest.Runner
-	workspaces *porttest.Workspaces
-	checker    *porttest.Checker
-	clock      *porttest.Clock
-	contracts  *porttest.Contracts
-	codehost   *porttest.CodeHost
-	host       *porttest.Host // the Docker host every engine of the harness shares
-	line       domain.Line
-	logs       *logBuffer // what every engine of the harness logs
+	e         *engine.Engine
+	store     *porttest.Store
+	tenancy   *porttest.Tenancy
+	worker    *porttest.Worker    // the agent image every sandbox runs
+	sandboxes *porttest.Sandboxes // the sandbox backend every engine of the harness shares
+	clock     *porttest.Clock
+	contracts *porttest.Contracts
+	codehost  *porttest.CodeHost
+	line      domain.Line
+	logs      *logBuffer // what every engine of the harness logs
 
 	mu    sync.Mutex
 	ended []domain.RunID // runs reported to RunEnded
-	// ticking, while step's tick runs, is closed when it returns; every task waits for it
-	// before it plays, so no task ends within the tick that started it (see step).
+	// ticking, while step's tick runs, is closed when it returns; every agent run waits for it
+	// before it plays, so no run ends within the tick that started it (see step).
 	ticking chan struct{}
 }
+
+// Settings of the tests' engines.
+const (
+	agentImage = "ghcr.io/acme/goal-agent:1"
+	gatewayURL = "http://gateway.example.com/mcp"
+	gitHost    = "git.example.com"
+	gitToken   = "git-token-for-tests" //nolint:gosec // a test value, not a credential
+	modelToken = "model-token-for-tests"
+)
 
 func (h *harness) runEnded(_ context.Context, run domain.RunID) {
 	h.mu.Lock()
@@ -106,26 +114,22 @@ func (h *harness) runs(t *testing.T, org domain.OrgID, id domain.ItemID) []domai
 	return runs
 }
 
-func newHarness(t *testing.T, line domain.Line, run porttest.RunFunc) *harness {
+func newHarness(t *testing.T, line domain.Line, run porttest.AgentFunc) *harness {
 	t.Helper()
 
 	clock := porttest.NewClock(t0)
 	store := porttest.NewStore()
 	h := &harness{
-		store:      store,
-		tenancy:    porttest.NewTenancy(clock.Now).WithStore(store),
-		workspaces: porttest.NewWorkspaces(),
-		checker:    porttest.NewChecker(),
-		clock:      clock,
-		contracts:  porttest.NewContracts(),
-		codehost:   porttest.NewCodeHost(),
-		host:       porttest.NewHost(),
-		line:       line,
-		logs:       &logBuffer{},
+		store:     store,
+		tenancy:   porttest.NewTenancy(clock.Now).WithStore(store),
+		clock:     clock,
+		contracts: porttest.NewContracts(),
+		codehost:  porttest.NewCodeHost(),
+		line:      line,
+		logs:      &logBuffer{},
 	}
 
-	run = porttest.LeavingOn(h.host, run)
-	h.runner = porttest.NewRunner(func(ctx context.Context, spec ports.TaskSpec, events chan<- ports.RunEvent) domain.RunResult {
+	h.worker = porttest.NewWorker(func(ctx context.Context, c porttest.ExecCall, stdout io.Writer) domain.RunResult {
 		h.mu.Lock()
 		ticking := h.ticking
 		h.mu.Unlock()
@@ -137,8 +141,9 @@ func newHarness(t *testing.T, line domain.Line, run porttest.RunFunc) *harness {
 			}
 		}
 
-		return run(ctx, spec, events)
+		return run(ctx, c, stdout)
 	})
+	h.sandboxes = porttest.NewSandboxes(h.worker.Exec)
 
 	if org := h.newOrg(t, "acme"); org != testOrg {
 		t.Fatalf("the first organization is %s, want %s", org, testOrg)
@@ -173,20 +178,23 @@ func (h *harness) engineWith(t *testing.T, store ports.Store, maxRuns int, lines
 	t.Helper()
 
 	e, err := engine.New(engine.Deps{
-		Store: store, Orgs: h.tenancy, Runner: h.runner, Workspaces: h.workspaces, Checker: h.checker, Contracts: h.contracts, Clock: h.clock,
-		Secrets: porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y", "MODEL_ACCESS": "tok"}, CodeHost: h.codehost, RunEnded: h.runEnded,
-		Reapers: []ports.Reaper{h.host},
-		Logger:  slog.New(slog.NewJSONHandler(h.logs, nil)),
+		Store: store, Orgs: h.tenancy, Sandboxes: h.sandboxes, Contracts: h.contracts, Clock: h.clock,
+		Secrets:  porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y", "MODEL_ACCESS": modelToken, "GIT_TOKEN": gitToken, "REPO_TOKEN": gitToken},
+		CodeHost: h.codehost, RunEnded: h.runEnded,
+		Logger: slog.New(slog.NewJSONHandler(h.logs, nil)),
 	}, engine.Config{
-		Lines:          lines,
-		MaxRuns:        maxRuns,
-		TickEvery:      tickEvery,
-		LeaseTTL:       ttl,
-		HeartbeatEvery: heartbeat,
-		ReapEvery:      reapEvery,
-		GatewayURL:     "http://gateway.example.com/mcp",
-		GatewayKeyRef:  "env:GOAL_GATEWAY_KEY",
-		TaskEnv:        map[string]string{"MODEL_ACCESS": "env:MODEL_ACCESS"},
+		Lines:           lines,
+		MaxRuns:         maxRuns,
+		TickEvery:       tickEvery,
+		LeaseTTL:        ttl,
+		HeartbeatEvery:  heartbeat,
+		ReapEvery:       reapEvery,
+		Image:           agentImage,
+		GatewayURL:      gatewayURL,
+		GatewayKeyRef:   "env:GOAL_GATEWAY_KEY",
+		TaskEnv:         map[string]string{"MODEL_ACCESS": "env:MODEL_ACCESS"},
+		RepositoryHosts: []string{gitHost, "github.com"},
+		SecretPolicy:    domain.SecretPolicy{Reserved: []string{"GOAL_GATEWAY_KEY"}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -215,7 +223,7 @@ func (h *harness) submit(t *testing.T, n domain.NewItem) domain.Item {
 	return it
 }
 
-// step runs one tick and waits for every run it started. The tasks play only once the tick has
+// step runs one tick and waits for every run it started. The agents play only once the tick has
 // returned, so a step moves an item through one agent station whatever the scheduler does: a
 // run that ended within the tick would let the same tick claim its item again at the next
 // agent station.
@@ -368,7 +376,7 @@ func lineOf(stations ...domain.Station) domain.Line {
 		FactoryID:     factoryID,
 		VersionID:     v1,
 		Number:        1,
-		Runtime:       domain.Runtime{Image: "ghcr.io/acme/agent:1", Model: "claude-sonnet-5-5", MaxTurnsPerTask: 40, PerItemUSD: 3},
+		Runtime:       domain.Runtime{Model: "claude-sonnet-5-5", MaxTurnsPerTask: 40, PerItemUSD: 3},
 		Stations:      all,
 		Agents:        agents,
 		ExpediteTypes: []string{typeIncident},
@@ -454,8 +462,8 @@ func TestTick_ClaimsExpediteBeforePriority(t *testing.T) {
 			}
 
 			var got []string
-			for _, spec := range h.runner.Started() {
-				got = append(got, spec.Brief)
+			for _, run := range h.worker.Runs() {
+				got = append(got, h.item(t, run.Sandbox.ItemID).Title)
 			}
 
 			if len(got) != len(tt.want) {
@@ -520,9 +528,11 @@ func TestTick_NeverExceedsWIP(t *testing.T) {
 				t.Errorf("%d leases at work, want %d", len(leases), tt.want)
 			}
 
-			if err := h.runner.WaitStarted(bounded(t), tt.want); err != nil {
+			if err := h.worker.WaitRuns(bounded(t), tt.want); err != nil {
 				t.Fatal(err)
 			}
+
+			h.expectSandboxes(t, tt.want) // one per run: the line scales to its slots and no further
 
 			close(release)
 
@@ -530,9 +540,11 @@ func TestTick_NeverExceedsWIP(t *testing.T) {
 				h.wait(t, e)
 			}
 
-			if got := len(h.runner.Started()); got != tt.want {
-				t.Errorf("%d tasks started, want %d", got, tt.want)
+			if got := len(h.worker.Runs()); got != tt.want {
+				t.Errorf("%d runs started, want %d", got, tt.want)
 			}
+
+			h.expectSandboxes(t, 0) // the line scales back to zero
 		})
 	}
 }
@@ -547,7 +559,7 @@ func TestSweep_ExpiredLeaseRequeues(t *testing.T) {
 
 	h.step(t)
 
-	if len(h.runner.Started()) != 0 {
+	if len(h.worker.Runs()) != 0 {
 		t.Fatal("a tick started work while the dead instance's lease filled the only slot")
 	}
 
@@ -733,7 +745,7 @@ func TestSetLines_UnloadingAFactoryReleasesItsRuns(t *testing.T) {
 
 		synctest.Wait()
 
-		if n := len(h.runner.Started()); n != 2 {
+		if n := len(h.worker.Runs()); n != 2 {
 			t.Fatalf("%d runs started, want one per factory", n)
 		}
 
@@ -777,8 +789,8 @@ func TestTick_PausedLineTakesNoWork(t *testing.T) {
 	h.step(t)
 	h.step(t)
 
-	if got := h.item(t, it.ID); got.Station != stInbox || len(h.runner.Started()) != 0 {
-		t.Fatalf("paused line: item at %s, %d tasks started; want inbox and none", got.Station, len(h.runner.Started()))
+	if got := h.item(t, it.ID); got.Station != stInbox || len(h.worker.Runs()) != 0 {
+		t.Fatalf("paused line: item at %s, %d runs started; want inbox and none", got.Station, len(h.worker.Runs()))
 	}
 
 	line.Paused = false

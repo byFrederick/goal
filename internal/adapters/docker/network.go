@@ -71,9 +71,9 @@ type route struct {
 
 func agentsRoute(network string) route { return route{network: network, env: proxyEnv()} }
 
-// gatewayFor is the gateway URL a container is given for goald's gateway (a task's GatewayURL):
+// BoxGatewayURL is the URL a box is given for goald's gateway at the URL gateway (GOAL_GATEWAY_URL):
 // the egress proxy's, at the gateway's path, which the proxy forwards to goald.
-func gatewayFor(gateway string) (string, error) {
+func BoxGatewayURL(gateway string) (string, error) {
 	if gateway == "" {
 		return "", nil
 	}

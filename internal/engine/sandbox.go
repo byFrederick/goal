@@ -1,0 +1,301 @@
+package engine
+
+import (
+	"bufio"
+	"bytes"
+	"cmp"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/url"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/ports"
+)
+
+// The agent image's sandbox contract (worker/README.md): the commands goald runs in a sandbox,
+// the variables it gives them and where the repository is cloned.
+const (
+	envGatewayURL   = "GOAL_GATEWAY_URL"
+	envGatewayToken = "GOAL_GATEWAY_TOKEN"
+	// envFeedback is what goald adds to the brief for one attempt: people's notes, why the
+	// previous attempt was rejected, what the workspace holds.
+	envFeedback  = "GOAL_FEEDBACK"
+	workspaceDir = "/workspace"
+)
+
+var (
+	argvPrepare = []string{"goal-agent", "prepare"}
+	argvAgent   = []string{"goal-agent", "run"}
+)
+
+// box is a claim's sandbox: created by the claim's first run and prepared once; a retry runs in
+// it too. The claim's work deletes it when it ends.
+type box struct {
+	sandbox ports.Sandbox
+	// repoToken is the repository token prepare got, scrubbed from what the sandbox reports.
+	repoToken string
+	// existed reports whether the item's branch was on the remote when prepare checked it out.
+	existed bool
+}
+
+// prepared is goal-agent prepare's one stdout line.
+type prepared struct {
+	Type          string  `json:"type"`
+	Seconds       float64 `json:"seconds"`
+	Tools         int     `json:"tools"`
+	BranchExisted bool    `json:"branch_existed"`
+}
+
+// open creates the claim's sandbox on its first run and prepares it with the run's task token
+// and the repository token; a box already open is left as it is.
+func (e *Engine) open(ctx context.Context, c claimed, runID domain.RunID, b *box, token string) error {
+	if b.sandbox != nil {
+		return nil
+	}
+
+	repoToken, err := e.repositoryToken(ctx, c.line.Runtime.Repository)
+	if err != nil {
+		return err
+	}
+
+	started := e.clock.Now()
+	size := cmp.Or(c.line.Runtime.Size, domain.SandboxMedium)
+
+	sb, err := e.sandboxes.Create(ctx, ports.SandboxSpec{
+		OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, ItemID: c.item.ID, RunID: runID, Station: c.station.ID, Agent: c.agent.Name,
+		Image: e.cfg.Image, Size: c.line.Runtime.Size, Env: map[string]string{envGatewayURL: e.cfg.GatewayURL},
+		// A retry runs in the same sandbox: it lives as long as both attempts may.
+		Deadline: started.Add(maxAttempts*e.cfg.TaskTimeout + e.cfg.LeaseTTL),
+	})
+	if err != nil {
+		return fmt.Errorf("create sandbox: %w", err)
+	}
+
+	b.sandbox, b.repoToken = sb, repoToken
+
+	e.record(ctx, c, runID, domain.EventSandboxStarted, map[string]any{"size": string(size), "seconds": e.since(started)})
+
+	env := map[string]string{envGatewayToken: token}
+	if repoToken != "" {
+		env[domain.RunEnvRepositoryToken] = repoToken
+	}
+
+	scrub := newScrubber(token, repoToken)
+
+	var line *prepared
+
+	started = e.clock.Now()
+
+	st, err := execLines(ctx, sb, ports.Exec{Argv: argvPrepare, Env: env}, func(l []byte) {
+		var p prepared
+		if json.Unmarshal(l, &p) == nil && p.Type == "prepared" {
+			line = &p
+		}
+	})
+
+	switch {
+	case err != nil:
+		return fmt.Errorf("prepare the sandbox: %w", scrub.err(err))
+	case st.Code != 0 || line == nil:
+		return fmt.Errorf("prepare the sandbox: goal-agent prepare exited %d: %s", st.Code, scrub.string(strings.TrimSpace(st.StderrTail)))
+	}
+
+	data := map[string]any{"seconds": line.Seconds, "tools": line.Tools}
+	if c.line.Runtime.Repository.URL != "" {
+		b.existed, data["branch_existed"] = line.BranchExisted, line.BranchExisted
+	}
+
+	e.record(ctx, c, runID, domain.EventPrepared, data)
+	e.log.InfoContext(ctx, "sandbox exec", slog.String("run", string(runID)), slog.String("step", "prepare"),
+		slog.Int("exit", st.Code), slog.Float64("seconds", e.since(started)))
+
+	return nil
+}
+
+// repositoryToken resolves the token of the factory's repository for prepare: only for a
+// repository on one of the install's repository hosts, and never from a variable the install
+// reserves, even for a version published before the rule.
+func (e *Engine) repositoryToken(ctx context.Context, r domain.Repository) (string, error) {
+	if r.AuthRef == "" {
+		return "", nil
+	}
+
+	if e.cfg.SecretPolicy.ForRepository(r.AuthRef) == domain.SecretReserved {
+		return "", fmt.Errorf("repository token %s: %w", r.AuthRef, domain.ErrSecretReserved)
+	}
+
+	u, err := url.Parse(r.URL)
+	if err != nil || u.Scheme != "https" || u.User != nil || !slices.Contains(e.cfg.RepositoryHosts, strings.ToLower(u.Host)) {
+		return "", fmt.Errorf("repository %q: the repository token goes only to https://%s", r.URL, strings.Join(e.cfg.RepositoryHosts, ", https://"))
+	}
+
+	token, err := e.secrets.Resolve(ctx, r.AuthRef)
+	if err != nil {
+		return "", fmt.Errorf("repository token: %w", err)
+	}
+
+	return token, nil
+}
+
+// deleteBox deletes the claim's sandbox, if it has one, even as ctx is cancelled. A sandbox that
+// cannot be deleted now is left to ReapOrphans.
+func (e *Engine) deleteBox(ctx context.Context, log *slog.Logger, b *box) {
+	if b.sandbox == nil {
+		return
+	}
+
+	ctx, cancel := cleanup(ctx)
+	defer cancel()
+
+	if err := b.sandbox.Delete(ctx); err != nil {
+		log.WarnContext(ctx, "delete the run's sandbox; the reaper deletes it once the run is over", slog.Any("error", err))
+	}
+}
+
+// record appends an engine event of the run, logging a failure.
+func (e *Engine) record(ctx context.Context, c claimed, runID domain.RunID, kind domain.EventKind, data map[string]any) {
+	ev := event(c.item, kind, e.clock.Now(), domain.ActorEngine, data)
+	ev.RunID = runID
+
+	if err := e.store.AppendEvents(ctx, ev); err != nil && ctx.Err() == nil {
+		e.log.WarnContext(ctx, "record run event", slog.String("item", string(c.item.ID)), slog.String("kind", string(kind)), slog.Any("error", err))
+	}
+}
+
+// since is the seconds from start to now, to the millisecond.
+func (e *Engine) since(start time.Time) float64 {
+	return float64(e.clock.Now().Sub(start).Milliseconds()) / 1000
+}
+
+// execLines runs x in sb, calls line with each line of its stdout as it comes and returns how it
+// ended once its output has ended.
+func execLines(ctx context.Context, sb ports.Sandbox, x ports.Exec, line func([]byte)) (ports.ExitStatus, error) {
+	p, err := sb.Exec(ctx, x)
+	if err != nil {
+		return ports.ExitStatus{}, err
+	}
+
+	readErr := eachLine(p.Stdout(), maxLine, line)
+
+	st, err := p.Wait()
+	if err != nil {
+		return st, err
+	}
+
+	if readErr != nil && !errors.Is(readErr, io.ErrClosedPipe) {
+		return st, fmt.Errorf("read the command's output: %w", readErr)
+	}
+
+	return st, nil
+}
+
+// maxLine bounds one stdout line; the worker's finished line carries the whole output.
+const maxLine = 16 << 20
+
+// eachLine calls fn with every non-empty line of r, trimmed. Lines longer than limit are
+// dropped, but r is always read to its end so the writer never blocks. fn must not keep the
+// slice.
+func eachLine(r io.Reader, limit int, fn func([]byte)) error {
+	br := bufio.NewReaderSize(r, 64<<10)
+
+	var (
+		line    []byte
+		tooLong bool
+	)
+
+	for {
+		chunk, err := br.ReadSlice('\n')
+
+		switch {
+		case tooLong:
+		case len(line)+len(chunk) > limit:
+			tooLong, line = true, line[:0]
+		default:
+			line = append(line, chunk...)
+		}
+
+		switch {
+		case errors.Is(err, bufio.ErrBufferFull):
+			continue
+		case err != nil && !errors.Is(err, io.EOF):
+			return err
+		}
+
+		if t := bytes.TrimSpace(line); !tooLong && len(t) > 0 {
+			fn(t)
+		}
+
+		line, tooLong = line[:0], false
+
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+	}
+}
+
+// scrubber replaces secret values with a marker wherever they appear in what a sandbox reports:
+// events, errors and logs (exact strings, best effort).
+type scrubber struct {
+	r *strings.Replacer
+}
+
+// minSecretLen keeps short settings values (true, 1) from being treated as secrets.
+const minSecretLen = 8
+
+const redacted = "[redacted]"
+
+func newScrubber(values ...string) scrubber {
+	var pairs []string
+
+	for _, v := range values {
+		if len(v) >= minSecretLen {
+			pairs = append(pairs, v, redacted)
+		}
+	}
+
+	return scrubber{r: strings.NewReplacer(pairs...)}
+}
+
+func (s scrubber) string(v string) string { return s.r.Replace(v) }
+
+func (s scrubber) err(err error) error { return errors.New(s.string(err.Error())) }
+
+// value scrubs every string inside a decoded JSON value, in place, and returns it.
+func (s scrubber) value(v any) any {
+	switch x := v.(type) {
+	case string:
+		return s.string(x)
+	case map[string]any:
+		for k, e := range x {
+			x[k] = s.value(e)
+		}
+	case []any:
+		for i, e := range x {
+			x[i] = s.value(e)
+		}
+	}
+
+	return v
+}
+
+// tail keeps the last max bytes of the lines added to it.
+type tail struct {
+	buf []byte
+	max int
+}
+
+func (t *tail) add(line []byte) {
+	t.buf = append(append(t.buf, line...), '\n')
+	if over := len(t.buf) - t.max; over > 0 {
+		t.buf = t.buf[over:]
+	}
+}
+
+func (t *tail) String() string { return strings.ToValidUTF8(string(t.buf), "") }

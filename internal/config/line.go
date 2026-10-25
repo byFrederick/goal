@@ -16,7 +16,7 @@ func (f *Factory) Line() domain.Line {
 	l := domain.Line{
 		FactoryID: domain.FactoryID(f.Metadata.ID),
 		Purpose:   f.Purpose(),
-		Runtime:   domain.Runtime{Image: s.Runtime.Image, Model: s.Runtime.Model},
+		Runtime:   domain.Runtime{Model: s.Runtime.Model},
 		Stations:  make([]domain.Station, 0, len(s.Board.Stations)),
 		Agents:    make([]domain.AgentSpec, 0, len(s.Agents)),
 	}

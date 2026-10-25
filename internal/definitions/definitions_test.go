@@ -1,7 +1,6 @@
 package definitions
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -607,52 +606,6 @@ func TestAgentFiles_AreTheRunsVersionsPromptLocalSkillsAndSchema(t *testing.T) {
 
 	if _, err := c.AgentFiles(ctxOf(t, org), v.ID, writer, "no-such-contract"); err == nil {
 		t.Error("AgentFiles with an unknown contract succeeded")
-	}
-}
-
-func TestWriteAgentFiles_WritesTheAgentFiles(t *testing.T) {
-	t.Parallel()
-
-	h := newHarness(t)
-	v := h.publish(t, org, acme(acmeName, noteContract))
-	c := h.cache(t, nil)
-	dir := t.TempDir()
-
-	err := c.WriteAgentFiles(ctxOf(t, org), ports.TaskSpec{
-		FactoryID: acmeID, DefinitionVersionID: v.ID, Agent: writer.Name, PromptPath: writer.PromptPath, Skills: writer.Skills, Output: note,
-	}, dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	want, err := c.AgentFiles(ctxOf(t, org), v.ID, writer, note)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	written := map[string][]byte{}
-
-	err = filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-
-		rel, _ := filepath.Rel(dir, p)
-		written[filepath.ToSlash(rel)], err = os.ReadFile(p) //nolint:gosec // the test's own temp dir
-
-		return err
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !maps.EqualFunc(written, want, bytes.Equal) {
-		t.Errorf("wrote %v, want AgentFiles' %v", slices.Sorted(maps.Keys(written)), slices.Sorted(maps.Keys(want)))
-	}
-
-	err = c.WriteAgentFiles(ctxOf(t, org), ports.TaskSpec{FactoryID: otherID, DefinitionVersionID: v.ID, PromptPath: writer.PromptPath}, t.TempDir())
-	if !errors.Is(err, ports.ErrNotFound) {
-		t.Errorf("WriteAgentFiles with another factory's version = %v, want ErrNotFound", err)
 	}
 }
 

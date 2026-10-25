@@ -33,8 +33,9 @@ type ExecCall struct {
 type Sandboxes struct {
 	fn ExecFunc
 
-	mu    sync.Mutex
-	boxes map[domain.RunID]*sandbox
+	mu      sync.Mutex
+	boxes   map[domain.RunID]*sandbox
+	changes changes
 }
 
 // NewSandboxes returns sandboxes that play fn for every command.
@@ -59,7 +60,24 @@ func (s *Sandboxes) Create(_ context.Context, spec ports.SandboxSpec) (ports.San
 	b := &sandbox{owner: s, spec: spec, kills: map[*process]context.CancelCauseFunc{}}
 	s.boxes[spec.RunID] = b
 
+	s.changes.signal()
+
 	return b, nil
+}
+
+// Has reports whether run has a sandbox.
+func (s *Sandboxes) Has(run domain.RunID) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, ok := s.boxes[run]
+
+	return ok
+}
+
+// Await blocks until run has a sandbox (want true) or none (want false), or ctx ends.
+func (s *Sandboxes) Await(ctx context.Context, run domain.RunID, want bool) error {
+	return s.changes.await(ctx, func() bool { return s.Has(run) == want })
 }
 
 // List implements ports.Sandboxes, in run order.
@@ -86,6 +104,7 @@ func (s *Sandboxes) Delete(_ context.Context, run domain.RunID) error {
 
 	if ok {
 		b.kill()
+		s.changes.signal()
 	}
 
 	return nil

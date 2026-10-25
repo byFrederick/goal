@@ -228,7 +228,7 @@ type Deps struct {
 	Clock    ports.Clock
 	// NewID returns a new factory id (a UUIDv7); uuid.NewV7 when nil.
 	NewID func() string
-	// DefaultImage is the agent image of the blank skeleton (GOAL_DEFAULT_AGENT_IMAGE).
+	// DefaultImage is the agent image of the blank skeleton (GOAL_AGENT_IMAGE).
 	DefaultImage string
 }
 

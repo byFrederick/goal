@@ -351,10 +351,9 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
 	}
 
 	e, err := engine.New(engine.Deps{
-		Store: h.store, Orgs: tenancy, Runner: porttest.NewRunner(porttest.Succeed(`{}`)), Workspaces: porttest.NewWorkspaces(),
-		Checker: porttest.NewChecker(), Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{},
-		CodeHost: h.codehost, Clock: h.clock,
-	}, engine.Config{})
+		Store: h.store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
+		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, CodeHost: h.codehost, Clock: h.clock,
+	}, engine.Config{Image: "ghcr.io/acme/goal-agent:1", GatewayURL: "http://gateway.example.com/mcp", GatewayKeyRef: "env:GOAL_GATEWAY_KEY"})
 	if err != nil {
 		t.Fatal(err)
 	}

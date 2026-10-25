@@ -87,8 +87,8 @@ func TestAndon_StopsReleasesAndClaimsUntilCleared(t *testing.T) {
 	h.expectAt(t, inbox, "inbox", domain.StateQueued)
 	h.expectAt(t, ready, stWork, domain.StateQueued)
 
-	if n := len(h.runner.Started()); n != 0 {
-		t.Errorf("%d tasks started while the cord is pulled; want none", n)
+	if n := len(h.worker.Runs()); n != 0 {
+		t.Errorf("%d runs started while the cord is pulled; want none", n)
 	}
 
 	if _, err := h.e.Approve(inOrg(t), decision.ID, domain.LocalUser); err != nil {
@@ -113,7 +113,7 @@ func TestAndon_RunsInProgressFinish(t *testing.T) {
 
 	h.tick(t) // inbox releases it and work claims it
 
-	if err := h.runner.WaitStarted(bounded(t), 1); err != nil {
+	if err := h.worker.WaitRuns(bounded(t), 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -181,7 +181,7 @@ func TestAndon_CombinesWithPauseAndBudget(t *testing.T) {
 		running := h.queuedAt(t, stWork, inProgress)
 		h.tick(t)
 
-		if err := h.runner.WaitStarted(bounded(t), 1); err != nil {
+		if err := h.worker.WaitRuns(bounded(t), 1); err != nil {
 			t.Fatal(err)
 		}
 
@@ -209,8 +209,8 @@ func TestAndon_CombinesWithPauseAndBudget(t *testing.T) {
 
 		h.expectAt(t, inbox, stWork, domain.StateQueued)
 
-		if n := len(h.runner.Started()); n != 0 {
-			t.Errorf("%d tasks started over budget; want none", n)
+		if n := len(h.worker.Runs()); n != 0 {
+			t.Errorf("%d runs started over budget; want none", n)
 		}
 	})
 }

@@ -38,7 +38,7 @@ var (
 func newTestSidecars(t *testing.T, logs *syncBuffer) (*Sidecars, *client.Client) {
 	t.Helper()
 
-	_, docker := newTestRunner(t)
+	docker := newTestDocker(t)
 
 	mcpStubOnce.Do(func() { errMCPStubBuild = buildMCPStub(t.Context(), t.TempDir(), docker) })
 
@@ -271,11 +271,13 @@ func TestSidecars_StartFailsCleanlyForAMissingImage(t *testing.T) {
 	}
 }
 
-func TestRunner_ReapRemovesOrphanedSidecars(t *testing.T) {
+// A run's sidecars carry its labels, so the sandboxes list them with the run and delete them
+// with its sandbox: the reaper needs no other port.
+func TestSandboxes_DeleteRemovesTheRunsSidecars(t *testing.T) {
 	t.Parallel()
 
 	s, docker := newTestSidecars(t, &syncBuffer{})
-	r, _ := newTestRunner(t)
+	r := NewSandboxes(docker, s.cfg.Network, slog.New(slog.DiscardHandler))
 	orphan, live := sidecarSpec(false), sidecarSpec(false)
 
 	started := make([]ports.Sidecar, 0, 2)
@@ -289,14 +291,14 @@ func TestRunner_ReapRemovesOrphanedSidecars(t *testing.T) {
 		started = append(started, sc)
 	}
 
-	left, err := r.Leftovers(t.Context())
+	left, err := r.List(t.Context())
 	if err != nil || !slices.Contains(left, ports.Leftover{Run: orphan.RunID, Org: testOrg}) {
-		t.Errorf("Leftovers = %v, %v; want the orphan's sidecar labelled with its organization", left, err)
+		t.Errorf("List = %v, %v; want the orphan's sidecar labelled with its organization", left, err)
 	}
 
-	// Other tests' and goald's containers carry the run label too; only the orphan is reaped.
-	if err := r.Reap(t.Context(), []domain.RunID{orphan.RunID}); err != nil {
-		t.Errorf("Reap: %v", err)
+	// Other tests' and goald's containers carry the run label too; only the orphan's go.
+	if err := r.Delete(t.Context(), orphan.RunID); err != nil {
+		t.Errorf("Delete: %v", err)
 	}
 
 	if left := sidecarContainers(t, docker, orphan.RunID); len(left) != 0 {
@@ -307,10 +309,10 @@ func TestRunner_ReapRemovesOrphanedSidecars(t *testing.T) {
 		t.Errorf("live run's sidecars = %v, want its one sidecar kept", left)
 	}
 
-	// Closing a reaped sidecar is not an error: its container is already gone.
+	// Closing a deleted sidecar is not an error: its container is already gone.
 	for _, sc := range started {
 		if err := sc.Close(); err != nil {
-			t.Errorf("Close after Reap: %v", err)
+			t.Errorf("Close after Delete: %v", err)
 		}
 	}
 

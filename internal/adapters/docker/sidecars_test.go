@@ -3,6 +3,7 @@ package docker
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/byFrederick/goal/internal/ports"
@@ -67,5 +68,44 @@ func TestSidecarUserOf_NeverRoot(t *testing.T) {
 		if got := sidecarUserOf(image); got != want {
 			t.Errorf("sidecarUserOf(%q) = %q, want %q", image, got, want)
 		}
+	}
+}
+
+func TestRedactor_HidesSecretsInNestedEventData(t *testing.T) {
+	t.Parallel()
+
+	r := newRedactor("sk-oauth-0123456789", "gateway-token-xyz", "true")
+	data := map[string]any{
+		"summary": "CLAUDE_CODE_OAUTH_TOKEN=sk-oauth-0123456789\n",
+		"input":   map[string]any{"headers": []any{"Bearer gateway-token-xyz", 3.0}},
+		"flag":    "true",
+	}
+
+	r.value(data)
+
+	got := fmt.Sprint(data)
+	if strings.Contains(got, "sk-oauth") || strings.Contains(got, "gateway-token") {
+		t.Errorf("secrets leaked: %s", got)
+	}
+
+	if data["flag"] != "true" {
+		t.Errorf("short values must not be redacted: %v", data["flag"])
+	}
+}
+
+func TestEachLine_DropsOverlongLinesAndKeepsReading(t *testing.T) {
+	t.Parallel()
+
+	in := "first\n" + strings.Repeat("x", 200_000) + "\n\n  second  \nlast-without-newline"
+
+	var got []string
+
+	err := eachLine(strings.NewReader(in), 100_000, func(b []byte) { got = append(got, string(b)) })
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if want := []string{"first", "second", "last-without-newline"}; fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("lines = %q; want %q", got, want)
 	}
 }

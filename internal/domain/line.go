@@ -55,8 +55,9 @@ type Line struct {
 
 // Runtime is what every agent task of the factory shares.
 type Runtime struct {
-	Image string
 	Model string // default model; an agent's own Model wins
+	// Size is how much CPU and memory each run's sandbox gets; empty is medium.
+	Size SandboxSize
 	// MaxTurnsPerTask and PerItemUSD are passed to the runner as limits; zero means unset.
 	MaxTurnsPerTask int
 	PerItemUSD      float64
@@ -64,8 +65,8 @@ type Runtime struct {
 	// engine enforces it (WeeklyBudget) by OnExhausted, whose zero value is BudgetDrain.
 	WeeklyUSD   float64
 	OnExhausted BudgetPolicy
-	// Repository is what every task's workspace is cloned from; the zero value means tasks
-	// get an empty workspace.
+	// Repository is cloned into every run's sandbox; the zero value means runs get an empty
+	// workspace.
 	Repository Repository
 }
 
@@ -73,8 +74,8 @@ type Runtime struct {
 type Repository struct {
 	// URL is an https clone URL without credentials.
 	URL string
-	// AuthRef is a secret reference to the token goald clones with, on the host only; it never
-	// reaches a task. Empty for a public repository.
+	// AuthRef is a secret reference to the repository's token, which only the sandbox's prepare
+	// gets (RunEnvRepositoryToken), to clone; the agent never does. Empty for a public repository.
 	AuthRef string
 }
 

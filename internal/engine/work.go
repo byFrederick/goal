@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 
@@ -37,7 +39,8 @@ type claimed struct {
 }
 
 // work runs the agent on a claimed item until the item moves on, is blocked, is released (at
-// shutdown, or cancelled by the weekly budget) or the lease is lost to another instance.
+// shutdown, or cancelled by the weekly budget) or the lease is lost to another instance. The
+// claim's runs share one sandbox, deleted when work returns.
 func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it domain.Item, lease domain.Lease) {
 	c := claimed{line: l, station: st, item: it, lease: lease}
 	log := e.log.With(slog.String("factory", string(it.FactoryID)), slog.String("item", string(it.ID)), slog.String("station", st.ID))
@@ -60,10 +63,13 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 		return
 	}
 
-	brief := briefOf(it, notes)
+	var b box
+	defer e.deleteBox(ctx, log, &b)
+
+	rejection := ""
 
 	for attempt := 1; ; attempt++ {
-		res, verdict, err := e.runOnce(ctx, c, brief)
+		res, verdict, err := e.runOnce(ctx, c, &b, feedbackOf(notes, rejection))
 
 		var rejected *outputError
 
@@ -96,7 +102,7 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 			log.WarnContext(ctx, "notes left during the run do not reach its retry", slog.Any("error", err))
 		}
 
-		brief = briefOf(it, notes) + "\n\nYour previous attempt was rejected: " + rejected.err.Error() +
+		rejection = "Your previous attempt was rejected: " + rejected.err.Error() +
 			"\nFix that and return output that satisfies the station contract."
 	}
 }
@@ -148,11 +154,11 @@ func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (
 	return &v, nil
 }
 
-// runOnce records a run and, while heartbeating the lease, prepares its workspace, runs the
-// agent task and checks its output. It returns ErrLeaseLost when another instance took the
-// item, an *outputError when the output failed its checks, and any other error when the run
-// could not be carried out.
-func (e *Engine) runOnce(ctx context.Context, c claimed, brief string) (domain.RunResult, *domain.Verdict, error) {
+// runOnce records a run and, while heartbeating the lease, runs it in the claim's sandbox (b,
+// created and prepared by the first run), checks its output and runs the station's checks. It
+// returns ErrLeaseLost when another instance took the item, an *outputError when the output
+// failed its checks, and any other error when the run could not be carried out.
+func (e *Engine) runOnce(ctx context.Context, c claimed, b *box, feedback string) (domain.RunResult, *domain.Verdict, error) {
 	runID, err := e.store.StartRun(ctx, ports.NewRun{
 		FactoryID: c.line.FactoryID, DefinitionVersionID: c.line.VersionID, ItemID: c.item.ID, Station: c.station.ID,
 		Agent: c.agent.Name, Model: modelOf(c), StartedAt: e.clock.Now(),
@@ -164,8 +170,8 @@ func (e *Engine) runOnce(ctx context.Context, c claimed, brief string) (domain.R
 	taskCtx, stop := context.WithTimeout(ctx, e.cfg.TaskTimeout)
 	defer stop()
 
-	// Heartbeat from before the start: cloning, pulling an image and the checks can all
-	// outlast the TTL.
+	// Heartbeat from before the start: pulling the image, preparing the sandbox and the checks
+	// can all outlast the TTL.
 	var (
 		beats sync.WaitGroup
 		lost  bool
@@ -175,7 +181,7 @@ func (e *Engine) runOnce(ctx context.Context, c claimed, brief string) (domain.R
 
 	beats.Go(func() { lost = e.heartbeat(beatCtx, c.lease, stop) })
 
-	res, verdict, err := e.runInWorkspace(taskCtx, c, runID, brief)
+	res, verdict, err := e.runInBox(taskCtx, c, runID, b, feedback)
 
 	stopBeat()
 	beats.Wait()
@@ -187,40 +193,31 @@ func (e *Engine) runOnce(ctx context.Context, c claimed, brief string) (domain.R
 	return res, verdict, err
 }
 
-// runInWorkspace prepares the run's workspace, runs the task in it, checks the output and
-// removes the workspace.
-func (e *Engine) runInWorkspace(ctx context.Context, c claimed, runID domain.RunID, brief string) (domain.RunResult, *domain.Verdict, error) {
-	ws, err := e.workspaces.Prepare(ctx, ports.WorkspaceSpec{
-		FactoryID: c.line.FactoryID, ItemID: c.item.ID, RunID: runID,
-		Repository: c.line.Runtime.Repository, Branch: c.item.Branch(),
-	})
-	if err != nil {
-		err = fmt.Errorf("prepare workspace: %w", err)
-		e.finishRun(ctx, runID, domain.RunResult{Status: domain.RunFailed, Error: err.Error()})
+// runInBox opens the claim's sandbox when the run is its first, runs the agent there, checks
+// its output and runs the station's checks.
+func (e *Engine) runInBox(ctx context.Context, c claimed, runID domain.RunID, b *box, feedback string) (domain.RunResult, *domain.Verdict, error) {
+	token, err := e.gatewayToken(ctx, c, runID)
 
+	var env map[string]string
+	if err == nil {
+		env, err = e.taskEnv(ctx)
+	}
+
+	if err == nil {
+		err = e.open(ctx, c, runID, b, token)
+	}
+
+	if err != nil {
+		e.finishRun(ctx, runID, failure(ctx, err))
 		return domain.RunResult{}, nil, err
 	}
 
-	defer e.removeWorkspace(ctx, ws)
-
-	task, err := e.start(ctx, c, runID, brief+workspaceNote(c.line.Runtime.Repository, ws), ws.Dir)
-	if err != nil {
-		e.finishRun(ctx, runID, domain.RunResult{Status: domain.RunFailed, Error: err.Error()})
-		return domain.RunResult{}, nil, err
+	env[envGatewayToken] = token
+	if f := joinParts(feedback, workspaceNote(c, b)); f != "" {
+		env[envFeedback] = f
 	}
 
-	var relayed sync.WaitGroup
-
-	relayed.Go(func() { e.relay(ctx, c, runID, task.Events()) })
-
-	res, err := task.Wait()
-
-	relayed.Wait()
-
-	if err != nil {
-		res = domain.RunResult{Status: domain.RunFailed, Error: "wait for task: " + err.Error()}
-	}
-
+	res := e.agent(ctx, c, runID, b, env, newScrubber(append(slices.Collect(maps.Values(env)), b.repoToken)...))
 	e.finishRun(ctx, runID, res)
 
 	if res.Status != domain.RunSucceeded {
@@ -232,42 +229,127 @@ func (e *Engine) runInWorkspace(ctx context.Context, c claimed, runID domain.Run
 		return res, nil, &outputError{err: err}
 	}
 
-	if err := e.runChecks(ctx, c, runID, ws); err != nil {
+	if err := e.runChecks(ctx, c, runID, b); err != nil {
 		return res, nil, err
 	}
 
 	return res, verdict, nil
 }
 
-// runChecks runs the station's command checks in order against the workspace and stops at the
-// first that fails, which is returned as an *outputError.
-func (e *Engine) runChecks(ctx context.Context, c claimed, runID domain.RunID, ws ports.Workspace) error {
+// agent runs `goal-agent run` in the claim's sandbox with env, relays the events it reports and
+// returns its result. How the command ended (cancelled, timed out, crashed) wins over what the
+// worker reported; what reaches the store is scrubbed of the run's secrets.
+func (e *Engine) agent(ctx context.Context, c claimed, runID domain.RunID, b *box, env map[string]string, scrub scrubber) domain.RunResult {
+	var fin *domain.WorkerFinished
+
+	started := e.clock.Now()
+
+	st, err := execLines(ctx, b.sandbox, ports.Exec{Argv: argvAgent, Env: env}, func(line []byte) {
+		ev, f, err := domain.DecodeWorkerLine(line, e.clock.Now())
+
+		switch {
+		case errors.Is(err, domain.ErrNotWorkerLine):
+		case err != nil:
+			e.log.DebugContext(ctx, "ignored worker stdout line", slog.String("run", string(runID)), slog.Any("error", err))
+		case f != nil:
+			fin = f
+
+			for _, d := range f.Denials(e.clock.Now()) {
+				e.relay(ctx, c, runID, d, scrub)
+			}
+		default:
+			e.relay(ctx, c, runID, *ev, scrub)
+		}
+	})
+
+	var res domain.RunResult
+	if fin != nil {
+		res = fin.Result()
+	}
+
+	switch {
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		res.Status, res.Output, res.Error = domain.RunFailed, nil, fmt.Sprintf("timed out after %s", e.cfg.TaskTimeout)
+	case ctx.Err() != nil:
+		res.Status, res.Output, res.Error = domain.RunCancelled, nil, ctx.Err().Error()
+	case err != nil:
+		res.Status, res.Output, res.Error = domain.RunFailed, nil, "agent: "+err.Error()
+	case fin == nil:
+		res.Status, res.Error = domain.RunFailed, fmt.Sprintf("worker exited with code %d without a result", st.Code)
+		if tail := strings.TrimSpace(st.StderrTail); tail != "" {
+			res.Error += ": " + tail
+		}
+	}
+
+	res.Error = scrub.string(res.Error)
+
+	e.log.InfoContext(ctx, "sandbox exec", slog.String("run", string(runID)), slog.String("step", "agent"),
+		slog.Int("exit", st.Code), slog.Float64("seconds", e.since(started)))
+
+	return res
+}
+
+// relay records one event the agent reported, by the agent, for its run.
+func (e *Engine) relay(ctx context.Context, c claimed, runID domain.RunID, ev domain.Event, scrub scrubber) {
+	scrub.value(ev.Data)
+
+	rec := event(c.item, ev.Kind, ev.At, c.agent.Name, ev.Data)
+	rec.RunID = runID
+
+	if err := e.store.AppendEvents(ctx, rec); err != nil && ctx.Err() == nil {
+		e.log.WarnContext(ctx, "record agent event", slog.String("item", string(c.item.ID)), slog.Any("error", err))
+	}
+}
+
+// failure is the result of a run that could not be carried out: cancelled when its ctx was, so
+// a shutdown does not read as a failure.
+func failure(ctx context.Context, err error) domain.RunResult {
+	if ctx.Err() != nil && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return domain.RunResult{Status: domain.RunCancelled, Error: err.Error()}
+	}
+
+	return domain.RunResult{Status: domain.RunFailed, Error: err.Error()}
+}
+
+// exitTimedOut is the exit code a check reports when it ran out of time, as timeout(1) does.
+const exitTimedOut = 124
+
+// runChecks runs the station's command checks in order in the claim's sandbox, in its workspace,
+// with no credential, and stops at the first that fails, which is returned as an *outputError.
+// The exit code is the runtime's: nothing the agent left in the sandbox can report a pass.
+func (e *Engine) runChecks(ctx context.Context, c claimed, runID domain.RunID, b *box) error {
+	scrub := newScrubber(b.repoToken)
+
 	for _, cmd := range c.station.Checks {
-		res, err := e.checker.Check(ctx, ports.CheckSpec{
-			OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, ItemID: c.item.ID, RunID: runID, Station: c.station.ID,
-			Image: c.line.Runtime.Image, Command: cmd, WorkspaceDir: ws.Dir, Timeout: e.cfg.CheckTimeout,
-		})
+		started := e.clock.Now()
+		out := &tail{max: maxCheckOutput}
+
+		st, err := execLines(ctx, b.sandbox, ports.Exec{
+			Argv: []string{"sh", "-c", cmd}, Env: map[string]string{"CI": "true"}, Dir: workspaceDir, Timeout: e.cfg.CheckTimeout,
+		}, out.add)
 		if err != nil {
 			return fmt.Errorf("run check %q: %w", cmd, err)
 		}
 
+		code, output := st.Code, joinParts(out.String(), st.StderrTail)
+		if st.TimedOut {
+			code, output = exitTimedOut, joinParts(output, fmt.Sprintf("timed out after %s", e.cfg.CheckTimeout))
+		}
+
+		output = scrub.string(cut(strings.TrimSpace(output), maxCheckOutput))
 		kind := domain.EventCheckPassed
-		data := map[string]any{"command": cmd, "exit_code": res.ExitCode, "duration_ms": res.Duration.Milliseconds()}
+		data := map[string]any{"command": cmd, "exit_code": code, "duration_ms": e.clock.Now().Sub(started).Milliseconds()}
 
-		if !res.Passed() {
-			kind, data["output"] = domain.EventCheckFailed, cut(res.Output, maxCheckOutput)
+		if code != 0 {
+			kind, data["output"] = domain.EventCheckFailed, output
 		}
 
-		ev := event(c.item, kind, e.clock.Now(), domain.ActorEngine, data)
-		ev.RunID = runID
+		e.record(ctx, c, runID, kind, data)
+		e.log.InfoContext(ctx, "sandbox exec", slog.String("run", string(runID)), slog.String("step", "check"),
+			slog.Int("exit", code), slog.Float64("seconds", e.since(started)))
 
-		if err := e.store.AppendEvents(ctx, ev); err != nil {
-			e.log.WarnContext(ctx, "record check event", slog.String("item", string(c.item.ID)), slog.Any("error", err))
-		}
-
-		if !res.Passed() {
-			return &outputError{err: fmt.Errorf("%w: `%s` exited %d; the end of its output:\n%s",
-				errCheckFailed, cmd, res.ExitCode, cut(res.Output, maxCheckOutput))}
+		if code != 0 {
+			return &outputError{err: fmt.Errorf("%w: `%s` exited %d; the end of its output:\n%s", errCheckFailed, cmd, code, output)}
 		}
 	}
 
@@ -286,33 +368,37 @@ func cut(s string, n int) string {
 	return "…" + strings.ToValidUTF8(s[len(s)-n:], "")
 }
 
-func (e *Engine) removeWorkspace(ctx context.Context, ws ports.Workspace) {
-	ctx, cancel := cleanup(ctx)
-	defer cancel()
-
-	if err := e.workspaces.Remove(ctx, ws); err != nil {
-		e.log.WarnContext(ctx, "remove workspace", slog.String("run", string(ws.RunID)), slog.Any("error", err))
-	}
+// feedbackOf is what goald adds to the brief for one attempt: the notes people left and, on a
+// retry, why the previous attempt was rejected.
+func feedbackOf(notes []domain.Event, rejection string) string {
+	return joinParts(notesSection(notes), rejection)
 }
 
-// workspaceNote tells the agent what its working directory holds.
-func workspaceNote(r domain.Repository, ws ports.Workspace) string {
-	if ws.Branch == "" {
+// joinParts joins the non-empty parts with a blank line.
+func joinParts(parts ...string) string {
+	return strings.Join(slices.DeleteFunc(parts, func(s string) bool { return s == "" }), "\n\n")
+}
+
+// workspaceNote tells the agent what its working directory holds, as the sandbox's prepare left
+// it; nothing without a repository.
+func workspaceNote(c claimed, b *box) string {
+	r := c.line.Runtime.Repository
+	if r.URL == "" {
 		return ""
 	}
 
 	state := "a new branch from the default branch"
-	if ws.Existed {
+	if b.existed {
 		state = "it already exists: it holds the work of earlier runs of this item"
 	}
 
-	return fmt.Sprintf("\n\n## Workspace\n\nYour working directory is a clone of %s with branch `%s` checked out (%s). "+
-		"It holds no git credentials.", r.URL, ws.Branch, state)
+	return fmt.Sprintf("## Workspace\n\nYour working directory is a clone of %s with branch `%s` checked out (%s). "+
+		"It holds no git credentials.", r.URL, c.item.Branch(), state)
 }
 
-// start builds the task spec, resolving secrets and signing the gateway token, and starts it.
-func (e *Engine) start(ctx context.Context, c claimed, runID domain.RunID, brief, workspace string) (ports.Task, error) {
-	env := make(map[string]string, len(e.cfg.TaskEnv))
+// taskEnv resolves the variables every agent run gets (Config.TaskEnv).
+func (e *Engine) taskEnv(ctx context.Context) (map[string]string, error) {
+	env := make(map[string]string, len(e.cfg.TaskEnv)+2)
 
 	for name, ref := range e.cfg.TaskEnv {
 		v, err := e.secrets.Resolve(ctx, ref)
@@ -323,34 +409,12 @@ func (e *Engine) start(ctx context.Context, c claimed, runID domain.RunID, brief
 		env[name] = v
 	}
 
-	token, err := e.gatewayToken(ctx, c, runID)
-	if err != nil {
-		return nil, err
-	}
-
-	a, rt := c.agent, c.line.Runtime
-	maxTurns, maxUSD := a.Limits(rt)
-
-	task, err := e.runner.Start(ctx, ports.TaskSpec{
-		OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, DefinitionVersionID: c.line.VersionID, ItemID: c.item.ID, RunID: runID,
-		Station: c.station.ID, Agent: a.Name, Image: rt.Image, Model: modelOf(c), PromptPath: a.PromptPath, Skills: a.Skills,
-		ToolsAllow: a.ToolsAllow, ToolsDeny: a.ToolsDeny, GatewayURL: e.cfg.GatewayURL, GatewayToken: token,
-		Purpose: c.line.Purpose, Brief: brief, Inputs: c.item.Outputs, Output: c.station.Output, WorkspaceDir: workspace, Env: env,
-		Timeout: e.cfg.TaskTimeout,
-		Budget:  ports.Budget{MaxTurns: maxTurns, MaxUSD: maxUSD},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("start task: %w", err)
-	}
-
-	return task, nil
+	return env, nil
 }
 
+// gatewayToken signs the run's task token: what the gateway serves it (its bundle, its tools)
+// and until when.
 func (e *Engine) gatewayToken(ctx context.Context, c claimed, runID domain.RunID) (string, error) {
-	if e.cfg.GatewayURL == "" {
-		return "", nil
-	}
-
 	key, err := e.secrets.Resolve(ctx, e.cfg.GatewayKeyRef)
 	if err != nil {
 		return "", fmt.Errorf("gateway key: %w", err)
@@ -390,23 +454,6 @@ func (e *Engine) heartbeat(ctx context.Context, lease domain.Lease, stopTask con
 			return true
 		case err != nil && ctx.Err() == nil:
 			e.log.WarnContext(ctx, "heartbeat lease", slog.String("item", string(lease.ItemID)), slog.Any("error", err))
-		}
-	}
-}
-
-// relay records the task's progress events until the task closes the stream.
-func (e *Engine) relay(ctx context.Context, c claimed, runID domain.RunID, events <-chan ports.RunEvent) {
-	for ev := range events {
-		at := ev.At
-		if at.IsZero() {
-			at = e.clock.Now()
-		}
-
-		rec := event(c.item, ev.Kind, at, c.agent.Name, ev.Data)
-		rec.RunID = runID
-
-		if err := e.store.AppendEvents(ctx, rec); err != nil && ctx.Err() == nil {
-			e.log.WarnContext(ctx, "record task event", slog.String("item", string(c.item.ID)), slog.Any("error", err))
 		}
 	}
 }

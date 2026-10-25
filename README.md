@@ -12,7 +12,7 @@ auth/                  identity service (Better Auth on Hono): sign-in, sessions
 internal/engine/       flow engine: pull, WIP, gates, workspaces and command checks per run
 internal/config/       loader and cross-reference validation (reads a folder or a bucket prefix)
 internal/authoring/    definition authoring behind the API: drafts, validation, publish, restore, the template catalog
-internal/adapters/     postgres (store, LISTEN/NOTIFY), s3store (S3 and RustFS), docker (runner, checker), gitworkspace, github (merges), envsecrets, sysclock
+internal/adapters/     postgres (store, LISTEN/NOTIFY), s3store (S3 and RustFS), docker (sandboxes), github (merges), envsecrets, sysclock
 packages/api-client/   @goal/api-client: typed TypeScript client of the API (generated types + openapi-fetch) for the UI
 schema/                factory.schema.json, evals.schema.json (editor autocompletion + validation)
 migrations/            PostgreSQL schema (goose, forward-only)

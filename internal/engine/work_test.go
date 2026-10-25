@@ -2,13 +2,13 @@ package engine_test
 
 import (
 	"context"
+	"io"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/ports/porttest"
 )
 
@@ -76,7 +76,8 @@ func TestRun_SuccessMovesItemToTheNextStation(t *testing.T) {
 			}
 
 			wantKinds := []domain.EventKind{
-				domain.EventCreated, domain.EventMoved, domain.EventClaimed, domain.EventRunStarted, domain.EventRunFinished,
+				domain.EventCreated, domain.EventMoved, domain.EventClaimed, domain.EventRunStarted, domain.EventSandboxStarted,
+				domain.EventPrepared, domain.EventRunFinished,
 			}
 			if !slices.Equal(h.kinds(it.ID)[:len(wantKinds)], wantKinds) {
 				t.Errorf("events %v, want them to start with %v", h.kinds(it.ID), wantKinds)
@@ -119,13 +120,13 @@ func TestContract_FailureRetriesOnceThenBlocks(t *testing.T) {
 				t.Errorf("%d contract_failed events, want %d", got, tt.failed)
 			}
 
-			started := h.runner.Started()
-			if want := min(len(tt.results), 2); len(started) != want {
-				t.Fatalf("%d tasks started, want %d", len(started), want)
+			runs := h.worker.Runs()
+			if want := min(len(tt.results), 2); len(runs) != want {
+				t.Fatalf("%d agent runs, want %d", len(runs), want)
 			}
 
-			if len(started) == 2 && !strings.Contains(started[1].Brief, `missing property "answer"`) {
-				t.Errorf("retry brief %q does not carry the contract error", started[1].Brief)
+			if len(runs) == 2 && !strings.Contains(runs[1].Env["GOAL_FEEDBACK"], `missing property "answer"`) {
+				t.Errorf("retry feedback %q does not carry the contract error", runs[1].Env["GOAL_FEEDBACK"])
 			}
 
 			if tt.want == domain.StateBlocked {
@@ -137,7 +138,7 @@ func TestContract_FailureRetriesOnceThenBlocks(t *testing.T) {
 	}
 }
 
-// reviewLine is build → review (gate back to build), driven by a runner that answers per agent.
+// reviewLine is build → review (gate back to build), driven by agents that answer per agent.
 func reviewLine(maxRework int) domain.Line {
 	review := agentStation("review", agReviewer, 1, 1)
 	review.Gate = &domain.Gate{OnReject: "build", MaxRework: maxRework}
@@ -145,9 +146,9 @@ func reviewLine(maxRework int) domain.Line {
 	return lineOf(agentStation("build", agWorker, 1, 1), review)
 }
 
-func byAgent(outputs map[string]string) porttest.RunFunc {
-	return func(_ context.Context, t ports.TaskSpec, _ chan<- ports.RunEvent) domain.RunResult {
-		return ok(outputs[t.Agent])
+func byAgent(outputs map[string]string) porttest.AgentFunc {
+	return func(_ context.Context, run porttest.ExecCall, _ io.Writer) domain.RunResult {
+		return ok(outputs[run.Sandbox.Agent])
 	}
 }
 
@@ -293,7 +294,7 @@ func TestRoute_PicksAgentByLane(t *testing.T) {
 			h.step(t) // spec
 			h.step(t) // build
 
-			started := h.runner.Started()
+			started := h.worker.Runs()
 			got := h.item(t, it.ID)
 
 			if tt.wantAgent == "" {
@@ -309,8 +310,8 @@ func TestRoute_PicksAgentByLane(t *testing.T) {
 				return
 			}
 
-			if len(started) != 2 || started[1].Agent != tt.wantAgent || got.State != domain.StateDone {
-				t.Fatalf("tasks %d, build agent %q, item %s; want %s and done", len(started), started[len(started)-1].Agent, got.State, tt.wantAgent)
+			if len(started) != 2 || started[1].Sandbox.Agent != tt.wantAgent || got.State != domain.StateDone {
+				t.Fatalf("runs %d, build agent %q, item %s; want %s and done", len(started), started[len(started)-1].Sandbox.Agent, got.State, tt.wantAgent)
 			}
 		})
 	}
@@ -328,66 +329,8 @@ func policyLine() domain.Line {
 	return line
 }
 
-func TestRun_TaskSpecCarriesAgentPolicy(t *testing.T) {
-	t.Parallel()
-
-	h := newHarness(t, policyLine(), porttest.Succeed(`{}`))
-	h.submit(t, domain.NewItem{Title: "Expire stale leases", Body: "Leases must expire."})
-
-	h.step(t)
-
-	spec := h.runner.Started()[0]
-	want := ports.TaskSpec{
-		OrgID: testOrg, FactoryID: factoryID, DefinitionVersionID: v1, ItemID: spec.ItemID, RunID: spec.RunID, Station: stWork, Agent: agWorker,
-		Image: "ghcr.io/acme/agent:1", Model: "claude-opus-5-5", PromptPath: "./agents/worker.md",
-		Skills:     []domain.SkillRef{{Name: "conventions", Source: "./skills/conventions"}},
-		ToolsAllow: []string{"Read"}, ToolsDeny: []string{"Bash(git push*)"},
-		GatewayURL: "http://gateway.example.com/mcp", GatewayToken: spec.GatewayToken,
-		Brief: "Expire stale leases\n\nLeases must expire.", Inputs: spec.Inputs,
-		WorkspaceDir: "/workspaces/" + string(spec.RunID) + "/repo",
-		Env:          map[string]string{"MODEL_ACCESS": "tok"}, Timeout: spec.Timeout,
-		Budget: ports.Budget{MaxTurns: 40, MaxUSD: 3},
-	}
-
-	if !reflect.DeepEqual(spec, want) {
-		t.Errorf("task spec =\n%+v\nwant\n%+v", spec, want)
-	}
-}
-
-// An agent's own caps replace the runtime's for its tasks; an unset one falls back.
-func TestRun_AgentCapsOverrideTheRuntimeBudget(t *testing.T) {
-	t.Parallel()
-
-	line := policyLine()
-	line.Agents[1].MaxTurns = 12
-
-	h := newHarness(t, line, porttest.Succeed(`{}`))
-	h.submit(t, domain.NewItem{Title: "Expire stale leases"})
-
-	h.step(t)
-
-	if got, want := h.runner.Started()[0].Budget, (ports.Budget{MaxTurns: 12, MaxUSD: 3}); got != want {
-		t.Errorf("budget = %+v, want %+v", got, want)
-	}
-}
-
-// Agents read what the factory is for before every item: the line's purpose reaches each task.
-func TestStart_PurposeReachesTask(t *testing.T) {
-	t.Parallel()
-
-	line := policyLine()
-	line.Purpose = "Keeps the acme shop's leases healthy."
-
-	h := newHarness(t, line, porttest.Succeed(`{}`))
-	h.submit(t, domain.NewItem{Title: "Expire stale leases"})
-
-	h.step(t)
-
-	if got := h.runner.Started()[0].Purpose; got != line.Purpose {
-		t.Errorf("purpose = %q, want %q", got, line.Purpose)
-	}
-}
-
+// The run's task token names exactly its run: the gateway serves its bundle (the agent's prompt,
+// skills, tools, model and budget) and tools from it.
 func TestRun_GatewayTokenIsScopedToTheTask(t *testing.T) {
 	t.Parallel()
 
@@ -396,12 +339,7 @@ func TestRun_GatewayTokenIsScopedToTheTask(t *testing.T) {
 
 	h.step(t)
 
-	spec := h.runner.Started()[0]
-
-	claims, err := domain.VerifyTaskToken([]byte("k3y"), spec.GatewayToken, h.clock.Now())
-	if err != nil {
-		t.Fatalf("gateway token does not verify with the configured key: %v", err)
-	}
+	claims := h.claims(t, h.worker.Runs()[0].Env["GOAL_GATEWAY_TOKEN"])
 
 	want := domain.TaskClaims{
 		Audience: domain.TaskAudience, OrgID: testOrg, FactoryID: factoryID, VersionID: v1, ItemID: it.ID, Station: stWork, Agent: agWorker, RunID: h.runs(t, testOrg, it.ID)[0].ID,
@@ -530,7 +468,7 @@ func TestRun_ShutdownReleasesItemsToTheQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := h.runner.WaitStarted(bounded(t), 2); err != nil {
+	if err := h.worker.WaitRuns(bounded(t), 2); err != nil {
 		t.Fatal(err)
 	}
 
@@ -552,8 +490,9 @@ func TestRun_ShutdownReleasesItemsToTheQueue(t *testing.T) {
 // v2 is the version published while a run on v1 is in progress.
 const v2 domain.DefinitionVersionID = "019a1c00-0000-7000-8000-0000000000a2"
 
-// A run keeps the version it started on: it records it, the task and its gateway token name
-// it, and its output is checked against that version's contract even after v2 is published.
+// A run keeps the version it started on: it records it, its gateway token names it (the
+// gateway serves that version's bundle), and its output is checked against that version's
+// contract even after v2 is published.
 // The item's next move follows v2, matched by station id.
 func TestRun_KeepsItsVersionAndTheNextMoveUsesTheCurrentLine(t *testing.T) {
 	t.Parallel()
@@ -570,7 +509,7 @@ func TestRun_KeepsItsVersionAndTheNextMoveUsesTheCurrentLine(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := h.runner.WaitStarted(bounded(t), 1); err != nil {
+	if err := h.worker.WaitRuns(bounded(t), 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -589,17 +528,11 @@ func TestRun_KeepsItsVersionAndTheNextMoveUsesTheCurrentLine(t *testing.T) {
 			got, h.kinds(it.ID))
 	}
 
-	spec := h.runner.Started()[0]
-	if spec.DefinitionVersionID != v1 {
-		t.Errorf("task version = %q, want %q", spec.DefinitionVersionID, v1)
-	}
-
 	if runs := h.runs(t, testOrg, it.ID); len(runs) != 1 || runs[0].DefinitionVersionID != v1 {
 		t.Errorf("runs = %+v, want one recorded on %s", runs, v1)
 	}
 
-	claims, err := domain.VerifyTaskToken([]byte("k3y"), spec.GatewayToken, h.clock.Now())
-	if err != nil || claims.VersionID != v1 {
-		t.Errorf("token version = %q (%v), want %q", claims.VersionID, err, v1)
+	if claims := h.claims(t, h.worker.Runs()[0].Env["GOAL_GATEWAY_TOKEN"]); claims.VersionID != v1 {
+		t.Errorf("token version = %q, want %q", claims.VersionID, v1)
 	}
 }

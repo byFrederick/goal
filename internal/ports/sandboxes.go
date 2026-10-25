@@ -23,6 +23,13 @@ type Sandboxes interface {
 	Delete(ctx context.Context, run domain.RunID) error
 }
 
+// Leftover is a sandbox as Sandboxes.List reports it: the run it was created for and the
+// organization it is labelled with, whose store knows the run.
+type Leftover struct {
+	Run domain.RunID
+	Org domain.OrgID
+}
+
 // SandboxSpec is the sandbox of one run.
 type SandboxSpec struct {
 	OrgID     domain.OrgID

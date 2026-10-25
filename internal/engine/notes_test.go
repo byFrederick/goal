@@ -3,6 +3,7 @@ package engine_test
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -38,8 +39,11 @@ func TestNote_RecordsANoteEvent(t *testing.T) {
 	}
 }
 
-// A note reaches the brief of the next run, once: the run after that has moved on.
-func TestNote_TheNextRunsBriefCarriesItOnce(t *testing.T) {
+// feedback is what goald added to the brief of the item's i-th agent run (GOAL_FEEDBACK).
+func (h *harness) feedback(i int) string { return h.worker.Runs()[i].Env["GOAL_FEEDBACK"] }
+
+// A note reaches the next run, once, after its brief: the run after that has moved on.
+func TestNote_TheNextRunCarriesItOnce(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t, humanLine(), porttest.Succeed(`{}`))
@@ -53,15 +57,15 @@ func TestNote_TheNextRunsBriefCarriesItOnce(t *testing.T) {
 
 	h.step(t) // spec runs, then waits at approve
 
-	first := h.runner.Started()[0].Brief
+	first := h.feedback(0)
 
-	if want := "Write the spec\n\nFor the lease sweep.\n\n" + notesHeading + "\n\n"; !strings.HasPrefix(first, want) {
-		t.Fatalf("brief %q, want the item, then the notes section", first)
+	if want := notesHeading + "\n\n"; !strings.HasPrefix(first, want) {
+		t.Fatalf("feedback %q, want the notes section", first)
 	}
 
 	for _, s := range []string{"Note from Local user: Also check the connection pool.", "Note from Local user: Keep it under a page.\n  No tables."} {
 		if strings.Count(first, s) != 1 {
-			t.Errorf("brief %q, want %q once", first, s)
+			t.Errorf("feedback %q, want %q once", first, s)
 		}
 	}
 
@@ -75,9 +79,9 @@ func TestNote_TheNextRunsBriefCarriesItOnce(t *testing.T) {
 
 	h.step(t)
 
-	second := h.runner.Started()[1].Brief
+	second := h.feedback(1)
 	if strings.Contains(second, "connection pool") || strings.Count(second, "Note from Local user: Split by station.") != 1 {
-		t.Errorf("second brief %q, want only the note left since the first run", second)
+		t.Errorf("second feedback %q, want only the note left since the first run", second)
 	}
 
 	if _, err := h.e.Reject(inOrg(t), it.ID, human, "again"); err != nil {
@@ -86,8 +90,8 @@ func TestNote_TheNextRunsBriefCarriesItOnce(t *testing.T) {
 
 	h.step(t)
 
-	if third := h.runner.Started()[2].Brief; strings.Contains(third, notesHeading) {
-		t.Errorf("third brief %q, want no notes section: nobody left one", third)
+	if third := h.feedback(2); strings.Contains(third, notesHeading) {
+		t.Errorf("third feedback %q, want no notes section: nobody left one", third)
 	}
 }
 
@@ -103,9 +107,9 @@ func TestNote_ARetryKeepsTheNotesAndAddsNewOnes(t *testing.T) {
 		calls atomic.Int32
 	)
 
-	h = newHarness(t, lineOf(work), func(_ context.Context, spec ports.TaskSpec, _ chan<- ports.RunEvent) domain.RunResult {
+	h = newHarness(t, lineOf(work), func(_ context.Context, run porttest.ExecCall, _ io.Writer) domain.RunResult {
 		if calls.Add(1) == 1 {
-			if _, err := h.e.Note(domain.WithOrg(context.Background(), testOrg), spec.ItemID, human, "Use the staging data."); err != nil {
+			if _, err := h.e.Note(domain.WithOrg(context.Background(), testOrg), run.Sandbox.ItemID, human, "Use the staging data."); err != nil {
 				t.Error(err)
 			}
 
@@ -123,19 +127,18 @@ func TestNote_ARetryKeepsTheNotesAndAddsNewOnes(t *testing.T) {
 
 	h.step(t)
 
-	started := h.runner.Started()
-	if len(started) != 2 {
-		t.Fatalf("%d tasks started, want 2 (events %v)", len(started), h.kinds(it.ID))
+	if n := len(h.worker.Runs()); n != 2 {
+		t.Fatalf("%d agent runs, want 2 (events %v)", n, h.kinds(it.ID))
 	}
 
-	if first := started[0].Brief; !strings.Contains(first, "Count twice.") || strings.Contains(first, "staging") {
-		t.Errorf("first brief %q, want only the note left before it", first)
+	if first := h.feedback(0); !strings.Contains(first, "Count twice.") || strings.Contains(first, "staging") {
+		t.Errorf("first feedback %q, want only the note left before it", first)
 	}
 
-	retry := started[1].Brief
+	retry := h.feedback(1)
 	for _, s := range []string{"Note from Local user: Count twice.", "Note from Local user: Use the staging data.", `missing property "answer"`} {
 		if strings.Count(retry, s) != 1 {
-			t.Errorf("retry brief %q, want %q once", retry, s)
+			t.Errorf("retry feedback %q, want %q once", retry, s)
 		}
 	}
 }

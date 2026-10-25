@@ -129,10 +129,6 @@ services:
       GOAL_S3_ENDPOINT: http://rustfs:9000
       GOAL_SANDBOX_NETWORK: ${GOAL_SANDBOX_NETWORK:-goal_agents}
       GOAL_LOG_FORMAT: ${GOAL_LOG_FORMAT:-text}
-      # Agent runs bind-mount their folders from the Docker host, so they live at the same path on
-      # both sides until runs need no mounts (spec 4 PR 4-7).
-      GOAL_RUN_DIR: /tmp/goal-stack/runs
-      GOAL_WORKSPACE_ROOT: /tmp/goal-stack/workspaces
       BETTER_AUTH_SECRET: ""
       BETTER_AUTH_SECRETS: ""
       GOAL_PG_PASSWORD: ""
@@ -145,7 +141,6 @@ services:
       GOAL_API_KEY: ""
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /tmp/goal-stack:/tmp/goal-stack
     user: "65532:65532"
     group_add: ["${GOAL_DOCKER_GID:-0}"]
     ports:
