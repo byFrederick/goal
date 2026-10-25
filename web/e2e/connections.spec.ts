@@ -219,6 +219,41 @@ test.describe('a connection’s page', () => {
     await expect(page.getByRole('heading', { level: 2, name: '7 connections' })).toBeVisible();
   });
 
+  test('replacing a secret keeps the field edits not saved yet', async ({ page }) => {
+    await page.goto('/o/acme/connections/pagerduty');
+    await page.getByLabel('Description').fill('Paging for the on-call');
+    await page.getByRole('button', { name: /^Replace secret…/ }).click();
+    const dialog = page.getByRole('dialog', { name: 'Replace api key of pagerduty' });
+    await dialog.getByLabel('API key').fill('a-fresh-pagerduty-key');
+    await dialog.getByRole('button', { name: 'Replace api key' }).click();
+    await expectToast(page, 'API key replaced on pagerduty');
+    await expect(page.getByText(/^Set, last changed/)).toBeVisible();
+    await expect(page.getByLabel('Description')).toHaveValue('Paging for the on-call');
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expectToast(page, 'Saved pagerduty');
+    await expect(page.getByText('Paging for the on-call.')).toBeVisible();
+  });
+
+  test('a rename opens the new name with what a run gets, and reads the old name no more', async ({ page }) => {
+    await page.goto('/o/acme/connections/gitlab-infra');
+    const gets = page.getByRole('region', { name: 'What a run gets' });
+    await expect(gets.locator('code').first()).toBeVisible();
+    const env = (await gets.locator('code').allTextContents()).filter(Boolean);
+    expect(env.length).toBeGreaterThan(0);
+    const oldName: string[] = [];
+    page.on('request', (r) => {
+      if (r.method() === 'GET' && new URL(r.url()).pathname.endsWith('/connections/gitlab-infra'))
+        oldName.push(r.url());
+    });
+    await page.getByLabel('Name').fill('gitlab-ops');
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expectToast(page, 'Saved gitlab-ops');
+    await expect(page).toHaveURL(/\/o\/acme\/connections\/gitlab-ops$/);
+    await expect(gets.locator('code')).toHaveText(env);
+    await page.waitForLoadState('networkidle');
+    expect(oldName).toEqual([]);
+  });
+
   test('an unknown connection is not found', async ({ page }) => {
     await page.goto('/o/acme/connections/nothing-here');
     await expect(page.getByRole('heading', { name: 'No such connection' })).toBeVisible();

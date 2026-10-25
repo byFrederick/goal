@@ -17,6 +17,7 @@ import { connectionName, modeLabels, namesText, statusLine, testedText } from '.
 import { formatDay } from '../../shared/format';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { reasons } from '../../shared/permissions';
+import { useEdits } from '../../shared/use-edits';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
@@ -128,9 +129,9 @@ export function ConnectionPage() {
       <div className="grid items-start gap-4 @[960px]:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
         <div className="flex min-w-0 flex-col gap-4">
           {manage ? null : <Callout tone="note">{reasons.connections(org.name)}</Callout>}
-          {/* A change saved anywhere (here, another tab, the CLI) starts the form over from it. */}
+          {/* Edits survive a replaced secret and other changes; untouched fields follow the saved connection. */}
           <FieldsCard
-            key={`${connection.id}:${connection.updated_at}`}
+            key={connection.id}
             connection={connection}
             kind={kind}
             manage={manage}
@@ -166,9 +167,8 @@ function FieldsCard({
   const client = useQueryClient();
   const navigate = useNavigate();
   const id = useId();
-  const [name, setName] = useState(c.name);
-  const [description, setDescription] = useState(c.description);
-  const [fields, setFields] = useState<Record<string, string>>(c.fields);
+  const edits = useEdits({ name: c.name, description: c.description, fields: c.fields });
+  const { name, description, fields } = edits.value;
   const used = c.used_by.factories.length > 0;
   const plain = kind?.fields.filter((f) => !f.secret) ?? [];
   const secret = kind?.fields.filter((f) => f.secret) ?? [];
@@ -188,19 +188,21 @@ function FieldsCard({
           : {}),
       }),
     onSuccess: async (updated) => {
-      client.setQueryData(keys.connection(org.id, updated.name), (old: Connection | undefined) => ({
-        ...old,
-        ...updated,
-      }));
+      // PATCH answers without what only GET has (env, docs): keep those from the page's copy.
+      const before = client.getQueryData<Connection>(keys.connection(org.id, c.name));
+      client.setQueryData<Connection>(keys.connection(org.id, updated.name), { ...before, ...updated });
+      edits.reset();
       toast.success(`Saved ${updated.name}`, { description: 'Runs get it from their next start.' });
-      await client.invalidateQueries({ queryKey: keys.connections(org.id) });
       if (updated.name !== c.name) {
         await navigate({
           to: '/o/$org/connections/$connection',
           params: { org: org.slug, connection: updated.name },
           replace: true,
         });
+        // The old name is gone: refetching it would only answer 404.
+        client.removeQueries({ queryKey: keys.connection(org.id, c.name), exact: true });
       }
+      await client.invalidateQueries({ queryKey: keys.connections(org.id) });
     },
   });
   const refusal = save.error instanceof ApiError ? save.error : undefined;
@@ -233,7 +235,7 @@ function FieldsCard({
         >
           <Input
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => edits.set('name', e.target.value)}
             readOnly={used}
             maxLength={40}
             autoComplete="off"
@@ -252,7 +254,7 @@ function FieldsCard({
             <Input
               value={fields[f.name] ?? ''}
               placeholder={f.default}
-              onChange={(e) => setFields((v) => ({ ...v, [f.name]: e.target.value }))}
+              onChange={(e) => edits.set('fields', { ...fields, [f.name]: e.target.value })}
               autoComplete="off"
               spellCheck={false}
             />
@@ -289,7 +291,7 @@ function FieldsCard({
         <Field label="Description" className="col-span-full">
           <Input
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(e) => edits.set('description', e.target.value)}
             maxLength={500}
             autoComplete="off"
           />
