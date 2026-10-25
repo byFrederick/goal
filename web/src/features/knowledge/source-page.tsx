@@ -14,6 +14,7 @@ import { namesText } from '../../shared/connections';
 import { plural } from '../../shared/format';
 import { sourceKinds, sourceSummary } from '../../shared/knowledge';
 import { useOrg, useOrgHolds } from '../../shared/org';
+import { useEdits } from '../../shared/use-edits';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
@@ -22,7 +23,7 @@ import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Field, Input, NativeSelect } from '../../ui/field';
 import { descriptionClass, PageHeader } from '../../ui/page-header';
 import { ReadOnly } from '../../ui/read-only';
-import { type Config, ConfigFields, configErrors, readerOf, trimmed } from './config-fields';
+import { ConfigFields, configErrors, readerOf, trimmed } from './config-fields';
 import { DocumentDialog, DocumentList } from './documents';
 import { StatusText, SyncNowButton, useSyncSource } from './parts';
 import { DropZone, UploadRows, useUploader } from './upload';
@@ -125,8 +126,8 @@ export function SourcePage() {
           )}
         </div>
         <div className="flex min-w-0 flex-col gap-4">
-          {/* A change saved anywhere (here, another tab, the CLI) starts the form over from it. */}
-          <SettingsCard key={`${source.id}:${source.updated_at}`} source={source} manage={manage} />
+          {/* Edits survive a sync's end and other changes; untouched fields follow the saved source. */}
+          <SettingsCard key={source.id} source={source} manage={manage} />
           <UsedByCard source={source} />
           {manage ? <DeleteCard source={source} /> : null}
         </div>
@@ -182,9 +183,8 @@ function SettingsCard({ source: s, manage }: { source: KnowledgeSource; manage: 
   const kinds = useQuery({ ...connectionKindsQuery(org.id), enabled: read }).data ?? [];
   const kind = kinds.find((k) => k.name === connections.find((c) => c.name === s.connection)?.kind);
   const reader = s.kind === 'synced' ? readerOf(kind?.sync, s.config) : undefined;
-  const [title, setTitle] = useState(s.title);
-  const [every, setEvery] = useState(s.sync_every_seconds);
-  const [config, setConfig] = useState<Config>(s.config);
+  const edits = useEdits({ title: s.title, every: s.sync_every_seconds, config: s.config });
+  const { title, every, config } = edits.value;
   const [submitted, setSubmitted] = useState(false);
   const changedConfig = JSON.stringify(trimmed(config)) !== JSON.stringify(trimmed(s.config));
   const dirty = title.trim() !== s.title || every !== s.sync_every_seconds || changedConfig;
@@ -200,6 +200,7 @@ function SettingsCard({ source: s, manage }: { source: KnowledgeSource; manage: 
       }),
     onSuccess: async (updated) => {
       client.setQueryData(keys.knowledgeSource(org.id, updated.name), updated);
+      edits.reset();
       toast.success(`Saved ${updated.title}`, {
         description: changedConfig ? 'The next sync reads what you changed.' : undefined,
       });
@@ -228,7 +229,7 @@ function SettingsCard({ source: s, manage }: { source: KnowledgeSource; manage: 
         error={submitted ? titleError : undefined}
         help="What people see on Knowledge and in the builder."
       >
-        <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} autoComplete="off" />
+        <Input value={title} onChange={(e) => edits.set('title', e.target.value)} maxLength={120} autoComplete="off" />
       </Field>
       <Field label="Name" help="How definitions list it. It never changes.">
         <Input value={s.name} readOnly translate="no" className="font-mono md:text-sm" />
@@ -243,10 +244,10 @@ function SettingsCard({ source: s, manage }: { source: KnowledgeSource; manage: 
             connection={s.connection ?? ''}
             config={config}
             errors={submitted ? errors : {}}
-            onChange={setConfig}
+            onChange={(c) => edits.set('config', c)}
           />
           <Field label="Sync every" help="At least 15 minutes. Only changed documents are fetched again.">
-            <NativeSelect value={every} onChange={(e) => setEvery(Number(e.target.value))}>
+            <NativeSelect value={every} onChange={(e) => edits.set('every', Number(e.target.value))}>
               {choices.map((c) => (
                 <option key={c.seconds} value={c.seconds}>
                   {c.label}

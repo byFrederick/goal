@@ -118,7 +118,8 @@ shared/       code more than one feature uses: decisions (approve, send back, me
               the organization's live stream, org and factory helpers, marks, formatting (Intl), state labels, the address rule (org-rules.ts), human touches in words (touches.ts: reasons, kinds, the Touches panel's groupings),
               signing in by code (code-sign-in.ts), the re-auth host and dialog (reauth.tsx), the account's actions (account.ts),
               connections in words (connections.ts: status, last test and use, the env names a run gets, the shell's "1 failing"),
-              knowledge sources in words (knowledge.ts: each kind's name and icon, what a source reads)
+              knowledge sources in words (knowledge.ts: each kind's name and icon, what a source reads),
+              a form's edits over what goald last saved (use-edits.ts: a background change never throws typing away)
 ui/           design-system primitives on Radix: button, dialog, confirm-dialog (typed confirmation), field and input, segmented-control, sheet, menu, tooltip,
               card (SectionCard, StatGrid), chip, count, mark, hatch (Meter, HatchBars), target-bar, bars (weekly bars with a target line and a hidden table), bridge (the lead-time waterfall, `bridgeGeometry`, with a hidden table), date-range, page-header, list-row, empty-state, logo
 ```

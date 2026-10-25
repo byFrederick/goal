@@ -198,6 +198,23 @@ test.describe('a source', () => {
     await expect(page.getByText('github, acme/goal main, docs/**/*.md, README.md')).toBeVisible();
   });
 
+  test('a sync that ends while the settings are being edited keeps the edits', async ({ page }) => {
+    await page.goto('/o/acme/knowledge/goal-docs');
+    const settings = page.getByRole('form', { name: 'Settings' });
+    const paths = settings.getByRole('textbox', { name: 'Paths' });
+    await paths.fill('docs/**/*.md, README.md');
+    await settings.getByRole('textbox', { name: 'Title' }).fill('Goal docs');
+    await page.getByRole('button', { name: /Sync now/ }).click();
+    await expectToast(page, 'goal docs syncs now');
+    // The sync's end (goald moves updated_at) reaches the page through the stream.
+    await expect(page.getByText(/^Last sync/)).not.toContainText('45 min');
+    await expect(paths).toHaveValue('docs/**/*.md, README.md');
+    await expect(settings.getByRole('textbox', { name: 'Title' })).toHaveValue('Goal docs');
+    await settings.getByRole('button', { name: 'Save changes' }).click();
+    await expectToast(page, 'Saved Goal docs');
+    await expect(settings.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+  });
+
   test('Delete is refused while a factory lists the source, and needs the name typed otherwise', async ({ page }) => {
     await page.goto('/o/acme/knowledge/handbook');
     await expect(page.getByRole('region', { name: 'Used by' }).getByRole('link', { name: 'sre' })).toHaveAttribute(
@@ -212,6 +229,15 @@ test.describe('a source', () => {
     await fits(page);
 
     await page.goto('/o/acme/knowledge/postmortems');
+    await expect(page.getByRole('region', { name: 'Documents' }).getByRole('list')).toBeVisible();
+    // Once it is deleted, nothing asks goald for the gone source's documents (a 404 that flashed).
+    let deleted = false;
+    const afterDelete: string[] = [];
+    page.on('request', (r) => {
+      const path = new URL(r.url()).pathname;
+      if (r.method() === 'DELETE' && path.endsWith('/knowledge/sources/postmortems')) deleted = true;
+      else if (deleted && path.includes('/knowledge/sources/postmortems')) afterDelete.push(path);
+    });
     await page.getByRole('button', { name: 'Delete…' }).click();
     const dialog = page.getByRole('dialog', { name: 'Delete Postmortems?' });
     await dialog.getByLabel(/Type postmortems to confirm/).fill('postmortems');
@@ -219,6 +245,8 @@ test.describe('a source', () => {
     await expectToast(page, 'Deleted Postmortems');
     await expect(page).toHaveURL(/\/o\/acme\/knowledge$/);
     await expect(page.getByRole('heading', { level: 2, name: '3 sources' })).toBeVisible();
+    await page.waitForLoadState('networkidle');
+    expect(afterDelete).toEqual([]);
   });
 
   test('a member reads it all and changes nothing', async ({ page, request }) => {

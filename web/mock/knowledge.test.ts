@@ -81,6 +81,16 @@ describe('the mock knowledge base', () => {
     expect((await call(`${sources}/postmortems`, 'DELETE')).status).toBe(204);
   });
 
+  it("moves a source's updated_at when a sync ends, as goald's FinishKnowledgeSync does", async () => {
+    const before = (await call<KnowledgeSource>(`${sources}/goal-docs`)).body.updated_at;
+    expect((await call(`${sources}/goal-docs/sync`, 'POST')).status).toBe(202);
+    expect((await call<KnowledgeSource>(`${sources}/goal-docs`)).body.updated_at).not.toBe(before);
+
+    const uploaded = (await call<KnowledgeSource>(`${sources}/handbook`)).body.updated_at;
+    await upload('handbook', { 'leave.md': '# Leave' });
+    expect((await call<KnowledgeSource>(`${sources}/handbook`)).body.updated_at).not.toBe(uploaded);
+  });
+
   it('uploads files, indexes them, serves the original as an attachment and deletes them', async () => {
     const up = await upload<KnowledgeDocumentList>('handbook', { 'leave.md': '# Leave\n\nAsk your lead.' });
     expect(up.status).toBe(202);

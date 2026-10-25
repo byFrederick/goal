@@ -6,8 +6,8 @@
 // knowledge-source-not-found, knowledge-source-in-use, knowledge-source-live,
 // knowledge-document-not-found, not-an-upload-source, upload-too-large, unsupported-document-type).
 // The mock indexes at once: a sync, or an upload, makes its source's pending documents indexed,
-// broadcasting `event: knowledge` as syncing, then idle. Its search ranks documents by how often
-// they hold the query's words. A source's used_by is the factories whose current version lists it
+// broadcasting `event: knowledge` as syncing, then idle; its end moves updated_at, as goald's
+// does. Its search ranks documents by how often they hold the query's words. A source's used_by is the factories whose current version lists it
 // (knowledge.sources). acme starts with two upload sources, handbook (which sre lists) and
 // postmortems, and two synced through github: goal-docs and runbooks, whose last sync failed.
 import { createHash } from 'node:crypto';
@@ -296,6 +296,8 @@ export function createKnowledge({
     s.source.status = 'idle';
     delete s.source.last_error;
     s.source.last_synced_at = new Date(now).toISOString();
+    // goald's FinishKnowledgeSync moves updated_at too: a form keyed by it would lose its edits.
+    s.source.updated_at = s.source.last_synced_at;
     s.source.next_sync_at = new Date(now + s.source.sync_every_seconds * 1000).toISOString();
     event(org, s);
   };
