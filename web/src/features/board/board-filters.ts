@@ -1,0 +1,113 @@
+// The board's filters and grouping as pure functions over the board response: what the Assembly,
+// Agent role and Status choices offer, which cards they keep, and how a station's cards group by
+// assembly. The choices live in the board route's search params (assembly, role, status, group),
+// so a link reproduces the view. Nothing here reads a station or factory name.
+import type { Board, BoardStation, ItemCard } from '../../api/types';
+import { itemStatus } from '../../shared/item-state';
+import type { StatusKind } from '../../ui/status-icon';
+
+export const statusChoices: { value: StatusKind; label: string }[] = [
+  { value: 'working', label: 'Working' },
+  { value: 'waiting', label: 'Waiting for another item' },
+  { value: 'same-files', label: 'Waiting for same files' },
+  { value: 'ready', label: 'Ready' },
+];
+
+export type BoardGroup = 'assembly';
+
+/** The choices the filters and the grouping hold; an absent field is "Any" or "None". */
+export interface BoardView {
+  assembly?: string | undefined;
+  role?: string | undefined;
+  status?: StatusKind | undefined;
+  group?: BoardGroup | undefined;
+}
+
+export interface AssemblyOption {
+  id: string;
+  title: string;
+}
+
+function allItems(board: Board): ItemCard[] {
+  return board.stations.flatMap((s) => s.items);
+}
+
+/** Each assembly on the board, by title: from the PartOf of its parts and from the assembly's own card. */
+export function assemblyOptions(board: Board): AssemblyOption[] {
+  const byId = new Map<string, AssemblyOption>();
+  for (const it of allItems(board)) {
+    const assembly = it.assembly ?? (it.state === 'assembly' ? { id: it.id, title: it.title } : undefined);
+    if (assembly && !byId.has(assembly.id)) byId.set(assembly.id, { id: assembly.id, title: assembly.title });
+  }
+  return [...byId.values()].sort((a, b) => a.title.localeCompare(b.title));
+}
+
+/** The distinct lane roles on the board, by name. */
+export function roleOptions(board: Board): string[] {
+  const roles = new Set(board.stations.flatMap((s) => (s.lanes ?? []).map((lane) => lane.role)));
+  return [...roles].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * The view with the choices the board does not offer dropped: an assembly that left the board, a
+ * role no lane has, an unknown status or group. The page shows all of them, never a filter it cannot show.
+ */
+export function knownView(board: Board, view: BoardView): BoardView {
+  const assembly = assemblyOptions(board).some((o) => o.id === view.assembly) ? view.assembly : undefined;
+  const role = roleOptions(board).includes(view.role ?? '') ? view.role : undefined;
+  const status = statusChoices.some((s) => s.value === view.status) ? view.status : undefined;
+  const group = view.group === 'assembly' ? view.group : undefined;
+  return { assembly, role, status, group };
+}
+
+/** The role of the lane a card names in board_lane, within its station; undefined for an unclaimed card. */
+function laneRole(station: BoardStation, item: ItemCard): string | undefined {
+  return station.lanes?.find((lane) => lane.key === item.board_lane)?.role;
+}
+
+/** A card matches an assembly when it is the assembly itself or one of its parts. */
+function matches(station: BoardStation, item: ItemCard, view: BoardView): boolean {
+  if (view.assembly && item.id !== view.assembly && item.assembly?.id !== view.assembly) return false;
+  if (view.role && laneRole(station, item) !== view.role) return false;
+  if (view.status && itemStatus(item) !== view.status) return false;
+  return true;
+}
+
+/**
+ * The cards of one station grouped by assembly: each assembly's cards together in part order (an
+ * assembly's own card first), the assemblies in the order of their first card, then the cards of no
+ * assembly in their own order. A lane keeps this order, so its working cards and waiting rows stay
+ * in it too.
+ */
+export function groupByAssembly(items: ItemCard[]): ItemCard[] {
+  const groups = new Map<string, ItemCard[]>();
+  const loose: ItemCard[] = [];
+  for (const it of items) {
+    const key = it.assembly?.id ?? (it.state === 'assembly' ? it.id : undefined);
+    if (key === undefined) {
+      loose.push(it);
+      continue;
+    }
+    const members = groups.get(key);
+    if (members) members.push(it);
+    else groups.set(key, [it]);
+  }
+  const grouped = [...groups.values()].flatMap((members) =>
+    members.sort((a, b) => (a.assembly?.part ?? 0) - (b.assembly?.part ?? 0)),
+  );
+  return [...grouped, ...loose];
+}
+
+/**
+ * The board as the view shows it: each station's cards that match, grouped when asked. Stations,
+ * lanes and the line keep their numbers and their names, so only the cards change.
+ */
+export function arrangeBoard(board: Board, view: BoardView): Board {
+  return {
+    ...board,
+    stations: board.stations.map((station) => {
+      const items = station.items.filter((it) => matches(station, it, view));
+      return { ...station, items: view.group === 'assembly' ? groupByAssembly(items) : items };
+    }),
+  };
+}

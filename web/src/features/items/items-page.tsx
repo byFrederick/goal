@@ -5,6 +5,7 @@ import { itemsQuery } from '../../api/queries';
 import type { ItemState } from '../../api/types';
 import { factoryTitle, refParam, useFactory, useFactoryParams } from '../../shared/factory';
 import { formatAge, formatUsd, humanize } from '../../shared/format';
+import { InboxButton } from '../../shared/inbox-drawer';
 import { describeState, itemStatus, toneText } from '../../shared/item-state';
 import { NewItemButton } from '../../shared/new-item';
 import { useOrg } from '../../shared/org';
@@ -12,7 +13,6 @@ import { holds } from '../../shared/permissions';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { StatusIcon } from '../../ui/status-icon';
-import { PhoneNeedsYou } from './phone-needs-you';
 
 export const itemFilters: { state?: ItemState; label: string }[] = [
   { label: 'All' },
@@ -36,15 +36,16 @@ export function ItemsPage() {
         <h1 className="m-0 text-[34px] leading-[1.05] font-normal tracking-display md:text-5xl">
           {factoryTitle(factory)} items
         </h1>
-        <span className="md:hidden">
-          <NewItemButton factory={factory} compact />
-        </span>
-        <span className="hidden md:inline-flex">
-          <NewItemButton factory={factory} />
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <InboxButton factory={factory} />
+          <span className="md:hidden">
+            <NewItemButton factory={factory} compact />
+          </span>
+          <span className="hidden md:inline-flex">
+            <NewItemButton factory={factory} />
+          </span>
+        </div>
       </header>
-
-      <PhoneNeedsYou factory={factory} />
 
       <nav aria-label="Filter items" className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
         <ul className="m-0 flex list-none gap-1 p-0">

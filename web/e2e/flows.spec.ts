@@ -256,62 +256,56 @@ test('the organization pages have the organization sidebar', async ({ page }) =>
 
 test('the floor says what waits on you and leads to it', async ({ page }) => {
   await page.goto('/o/acme/f/goal');
-  const needs = page.getByRole('region', { name: 'Needs you' });
 
-  // Decisions in one row, then blocked and expedited work, each a row of its own.
-  const decisions = needs.getByRole('link', { name: /^2 things wait for your OK/ });
-  await expect(decisions).toContainText('1 feature at Approve spec, 1 design at Merge');
-  await expect(needs.getByRole('link', { name: /goal#5 .*Blocked at Build/ })).toBeVisible();
-  await expect(needs.getByRole('link', { name: /goal#16 is in the expedite lane/ })).toBeVisible();
+  // What waits on you is the Inbox: the decisions, then blocked work, each a row that leads to its item.
+  await page.getByRole('button', { name: /^Inbox/ }).click();
+  const drawer = page.getByRole('dialog', { name: 'Inbox' });
+  await expect(drawer.getByRole('heading', { name: 'Needs a decision' })).toBeVisible();
+  await expect(drawer.getByRole('link', { name: /goal#5 .*Blocked at Build/ })).toBeVisible();
+  await expect(drawer.getByRole('link', { name: /goal#16/ })).toHaveCount(0);
   await expectAccessible(page);
 
-  await decisions.click();
-  await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/items\?state=waiting_human$/);
+  await drawer.getByRole('link', { name: /goal#5 .*Blocked at Build/ }).click();
+  await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/items\/5$/);
 });
 
 test('a stopped line is what its floor needs first, and clears from it', async ({ page, request }) => {
   await page.goto('/o/acme/f/support');
-  const needs = page.getByRole('region', { name: 'Needs you' });
+  await page.getByRole('button', { name: /^Inbox/ }).click();
+  const drawer = page.getByRole('dialog', { name: 'Inbox' });
   await expect(
-    needs.getByRole('link', { name: /^Line stopped: Answers sent back 4 of the last 10 times/ }),
+    drawer.getByRole('link', { name: /^Line stopped: Answers sent back 4 of the last 10 times/ }),
   ).toBeVisible();
 
   // Someone clears it (the CLI, another tab): the stream brings the change.
   await request.post('/v1/orgs/acme/factories/support/andon/clear', { data: {} });
-  await expect(needs.getByRole('link', { name: /^Line stopped/ })).toHaveCount(0);
+  await expect(drawer.getByRole('link', { name: /^Line stopped/ })).toHaveCount(0);
 });
 
-test('approve from the phone: the oldest decision is open to decide on the spot', async ({ page }) => {
-  test.skip(!isPhone(page), 'the Needs you view is the phone Items tab');
+test('approve from the phone: the Inbox drawer decides the oldest decision', async ({ page }) => {
+  test.skip(!isPhone(page), 'the phone Items view is the one that opens the Inbox drawer');
   await page.goto('/o/acme/f/sre/items');
+  await expect(page.getByRole('heading', { name: 'Needs you' })).toHaveCount(0);
 
-  const needs = page.getByRole('region', { name: 'Needs you' });
-  await expect(needs.getByText('2 changes, 1 toil at Approve.')).toBeVisible();
-  const card = needs.getByRole('article', { name: 'Raise ALB idle timeout for websockets' });
-  await expect(card).toContainText('sre#4, change');
-  await expect(card).toContainText('Idle timeout 60 s; the clients ping every 90 s. Raise it to 120 s.');
-  await expect(card.getByRole('definition').filter({ hasText: '1 line of Terraform' })).toBeVisible();
-  await expect(card.getByRole('link', { name: 'Read the trace' })).toHaveAttribute('href', '/o/acme/f/sre/items/4');
-  await expect(card.getByRole('button', { name: 'Send back with a note' })).toBeVisible();
-  await expect(needs.getByRole('status')).toHaveText('Line running. 7 in progress, constraint at Investigate.');
+  await page.getByRole('button', { name: /^Inbox/ }).click();
+  const drawer = page.getByRole('dialog', { name: 'Inbox' });
+  await expect(drawer.getByRole('link', { name: /sre#4/ })).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
-  await card.getByRole('button', { name: 'Approve' }).click();
+  await drawer.getByRole('button', { name: 'Approve sre#4' }).click();
   await expectToast(page, 'Approved sre#4.');
-  await expect(needs.getByText('1 toil, 1 change at Approve.')).toBeVisible();
-  await expect(needs.getByRole('article', { name: 'Rotate the staging TLS certificate' })).toBeVisible();
+  await expect(drawer.getByRole('button', { name: 'Approve sre#4' })).toHaveCount(0);
 });
 
 test('merging from the phone names every pull request the merge lands', async ({ page, request }) => {
-  test.skip(!isPhone(page), 'the Needs you view is the phone Items tab');
+  test.skip(!isPhone(page), 'the phone Items view is the one that opens the Inbox drawer');
   // goal#12 is older; once approved, goal#6 (two pull requests, at Merge) is the one to decide.
   await request.post('/v1/orgs/acme/items/goal%2312/approve', { data: {} });
   await page.goto('/o/acme/f/goal/items');
-  const card = page.getByRole('region', { name: 'Needs you' }).getByRole('article', {
-    name: 'Floor: throughput bars per day',
-  });
-  await card.getByRole('button', { name: 'Merge' }).click();
+  await page.getByRole('button', { name: /^Inbox/ }).click();
+  const drawer = page.getByRole('dialog', { name: 'Inbox' });
+  await drawer.getByRole('button', { name: 'Merge goal#6' }).click();
   const dialog = page.getByRole('dialog', { name: 'Merge 2 pull requests?' });
   await expect(dialog.getByRole('link', { name: /Review acme\/goal PR #38 first/ })).toBeVisible();
   await expect(dialog.getByRole('link', { name: /Review acme\/design-tokens MR !12 first/ })).toBeVisible();
