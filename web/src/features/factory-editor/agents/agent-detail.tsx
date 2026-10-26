@@ -1,5 +1,6 @@
 // One agent (D §10.7): its name and where it works, Duplicate / Rename… / Remove…, then Role,
-// Model, Max turns and Cap per item, the prompt, its skills and its built-in tools. Every field
+// Model, Max turns and Cap per item, the prompt, its skills, its built-in tools and the factory
+// rules that apply to it (agent-rules.tsx). Every field
 // is a session edit (typing into one field is one undo step), saved 800 ms later or on leaving it.
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -20,6 +21,7 @@ import { useProblemText } from '../frame/use-editor';
 import { useSetSearch } from '../search-link';
 import type { SectionViewProps } from '../section-views';
 import { RemoveAgentDialog, RenameAgentDialog } from './agent-dialogs';
+import { AgentRules } from './agent-rules';
 import { BuiltinsEditor } from './builtins-editor';
 import { PromptEditor, usePromptText } from './prompt-editor';
 import { SkillsEditor } from './skills-editor';
@@ -142,6 +144,8 @@ export function AgentDetail({ agent, place, openPicker }: AgentDetailProps) {
         <SkillsEditor agent={agent} index={index} openPicker={openPicker} />
         <BuiltinsEditor agent={agent} index={index} />
       </div>
+
+      <AgentRules agent={agent.name} />
     </section>
   );
 }

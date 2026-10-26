@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -690,6 +691,53 @@ func TestAgentFiles_AreTheRunsVersionsPromptLocalSkillsAndSchema(t *testing.T) {
 
 	if _, err := c.AgentFiles(ctxOf(t, org), v.ID, writer, "no-such-contract"); err == nil {
 		t.Error("AgentFiles with an unknown contract succeeded")
+	}
+}
+
+// withRules is acme declaring two rules: errors, whose text is given, for every run on Go files,
+// and closing, for runs at the done station only.
+func withRules(files map[string]string, errorsText string) map[string]string {
+	out := maps.Clone(files)
+	out[config.FileName] = strings.Replace(out[config.FileName], "  contracts:",
+		"  rules:\n    - { name: errors, source: ./rules/errors.md }\n    - { name: closing, source: ./rules/closing.md }\n  contracts:", 1)
+	out["rules/errors.md"] = "---\ndescription: Wrap errors.\npaths: [\"**/*.go\", cmd/**]\n---\n\n" + errorsText
+	out["rules/closing.md"] = "---\ndescription: Close cleanly.\nappliesTo:\n  stations: [done]\n---\nClose it.\n"
+
+	return out
+}
+
+// A run gets the rules of the version it started on, as the worker writes them: frontmatter
+// with the description and paths, no appliesTo, then the body, under the hash of the rule file.
+func TestRules_AreThePinnedVersionsNotTheCurrentOnes(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	v1Files := withRules(acme(acmeName, noteContract), "Use %w.\n")
+	v1 := h.publish(t, org, v1Files)
+	h.publish(t, org, withRules(acme(acmeName, noteContract), "Use errors.Join.\n")) // current
+	c := h.cache(t, nil)
+
+	got, err := c.Rules(ctxOf(t, org), v1.ID, domain.RuleTarget{Agent: "writer", Station: "write"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []domain.RunRule{{
+		Name: "errors", SHA256: domain.HashBlob([]byte(v1Files["rules/errors.md"])), Paths: []string{"**/*.go", "cmd/**"},
+		Content: "---\ndescription: Wrap errors.\npaths:\n    - '**/*.go'\n    - cmd/**\n---\n\nUse %w.\n",
+	}}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Rules(v1) =\n %+v\nwant\n %+v", got, want)
+	}
+
+	at, err := c.Rules(ctxOf(t, org), v1.ID, domain.RuleTarget{Agent: "writer", Station: "done"})
+	if err != nil || len(at) != 2 || at[1].Content != "---\ndescription: Close cleanly.\n---\n\nClose it.\n" {
+		t.Errorf("Rules(v1) at done = %+v, %v; want errors then closing, without its appliesTo", at, err)
+	}
+
+	if _, err := c.Rules(ctxOf(t, other), v1.ID, domain.RuleTarget{}); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("Rules from another organization = %v, want ErrNotFound", err)
 	}
 }
 

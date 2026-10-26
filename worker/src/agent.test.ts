@@ -170,6 +170,26 @@ describe('agentQuery', () => {
     expect(() => optionsOf({ connections: [{ ...issues, name: 'goal' }] })).toThrow(/goal/);
   });
 
+  it('tells the agent its factory rules and that they win on a conflict, when the run has rules', () => {
+    const prompt = systemPromptOf({
+      rules: [
+        { name: 'go-errors', sha256: 'a'.repeat(64), paths: ['**/*.go'], content: 'Wrap with %w.\n' },
+        { name: 'tone', sha256: 'b'.repeat(64), content: 'Say what you did.\n' },
+      ],
+    });
+
+    expect(prompt).toContain('## Factory rules');
+    expect(prompt).toContain('`go-errors`, `tone`');
+    expect(prompt).toContain('$CLAUDE_CONFIG_DIR/rules');
+    expect(prompt).toContain('the factory rule wins inside this factory');
+    expect(prompt).toContain('say so in your output');
+  });
+
+  it('has no factory rules section without rules', () => {
+    expect(systemPromptOf({})).not.toContain('Factory rules');
+    expect(systemPromptOf({ rules: [] })).not.toContain('Factory rules');
+  });
+
   it('names the knowledge tools and their sources after the prompt when the gateway serves them', () => {
     const append = systemPromptOf({
       gateway_url: 'http://gateway.internal/mcp',

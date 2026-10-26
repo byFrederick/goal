@@ -171,7 +171,7 @@ func (h *kbHarness) token(t *testing.T, f domain.FactoryID, v domain.DefinitionV
 	t.Helper()
 
 	tok, err := domain.SignTaskToken(h.key, domain.TaskClaims{
-		OrgID: h.orgs["acme"], FactoryID: f, VersionID: v, ItemID: item, Station: kbStation, Agent: "engineer", RunID: "run-kb",
+		OrgID: h.orgs["acme"], FactoryID: f, VersionID: v, ItemID: item, Station: kbStation, Agent: agentEngineer, RunID: "run-kb",
 		ExpiresAt: h.clock.Now().Add(time.Hour).Unix(),
 	})
 	if err != nil {

@@ -14,8 +14,8 @@ export interface PrepareDeps {
   output: Output;
   env: NodeJS.ProcessEnv;
   now: () => Date;
-  /** Where the bundle's files go (/goal) and the repository is cloned (/workspace). */
-  dirs: { goal: string; workspace: string };
+  /** Where the bundle's files go (/goal), the repository is cloned (/workspace) and Claude Code's config dir (claude). */
+  dirs: { goal: string; workspace: string; claude: string };
 }
 
 /** prepare's one stdout line: what it set up, for goald's run events. */
@@ -47,7 +47,9 @@ type FreshBase = NonNullable<NonNullable<Bundle['repository']>['fresh_base']>;
  * /workspace on the item's branch (the remote one when it exists, otherwise new from the default
  * branch), brings an existing branch up to date with the default branch (fresh_base: rebase or
  * merge; a conflict is aborted and reported, not failed), and installs tools with mise: the
- * repository's own (mise.toml, .tool-versions, …), then the definition's runtime.tools. Any failure throws; nothing is retried.
+ * repository's own (mise.toml, .tool-versions, …), then the definition's runtime.tools. The factory's rules
+ * go to the user-level rules in the config dir, never into /workspace, so they cannot be committed.
+ * Any failure throws; nothing is retried.
  */
 export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   const started = deps.now();
@@ -56,6 +58,10 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
 
   for (const [path, content] of Object.entries(bundle.files)) {
     await put(join(deps.dirs.goal, path), Buffer.from(content, 'base64'));
+  }
+  // Each rule is the complete file (frontmatter included); its name is a slug, so it stays in rules/.
+  for (const rule of bundle.spec.rules ?? []) {
+    await put(join(deps.dirs.claude, 'rules', `${rule.name}.md`), rule.content);
   }
   for (const c of bundle.git_credentials) {
     // --add: two connections may sign git in to one host; git asks each helper until one answers.
