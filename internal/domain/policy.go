@@ -89,6 +89,9 @@ type AssemblyPolicy struct {
 	FreshBase  FreshBase
 	OnConflict ConflictPolicy
 	Overlap    OverlapPolicy
+	// Materialize makes a station's plan (PlanFrom) an assembly with its parts when the station
+	// finishes; off, the plan is ignored and the item moves on. On by default.
+	Materialize bool
 }
 
 // AndonPolicy pulls the andon cord when too many gate verdicts reject.
