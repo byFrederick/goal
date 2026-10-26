@@ -591,3 +591,175 @@ func testCascadeRefused(f *fixture) {
 		}
 	}
 }
+
+// keyDocs is the part the AddPart cases add to plan()'s assembly.
+const keyDocs = "docs"
+
+// addedPart is one part added to the assembly it: docs, needing api and store.
+func addedPart(it domain.Item, at time.Time) ports.NewAssemblyPart {
+	return ports.NewAssemblyPart{
+		Assembly: it.ID,
+		Part: domain.NewPart{
+			Key: keyDocs, Title: "Docs", Lane: laneBackend, Brief: "the guide", Paths: []string{"docs/guide.md"},
+			Needs: []string{keyAPI, keyStore},
+		},
+		By: domain.LocalUser, At: at,
+		Audit: &domain.AuditEntry{
+			Actor: domain.LocalUser, Action: domain.AuditItemPartAdded, TargetKind: domain.AuditTargetItem,
+			TargetID: string(it.ID), FactoryID: it.FactoryID, Data: map[string]any{"key": keyDocs},
+		},
+	}
+}
+
+// AddPart creates one part of an open assembly as Assemble creates each: the parent's type,
+// priority and class, its brief and paths, queued at the assembly's station, with a planned edge
+// per need, part_created on the part, part_added on the assembly and the audit entry.
+func testAddPart(f *fixture) {
+	t := f.t
+	ctx := f.ctx(t)
+	t2 := t1.Add(time.Minute)
+
+	it, l := f.planning(t, domain.NewItem{Title: titleBig, Type: "feature", Priority: 4, Class: domain.ClassExpedite})
+	assembled, before := f.assemble(t, assembly(it, l, plan()))
+
+	part, parts, err := f.Store.AddPart(ctx, addedPart(assembled, t2))
+	if err != nil {
+		t.Fatalf("AddPart: %v", err)
+	}
+
+	paths := []string{"docs/guide.md"}
+	sameItem(t, part, domain.Item{
+		ID: part.ID, OrgID: f.org, FactoryID: f.factory, Number: it.Number + 4, ParentID: it.ID,
+		PartKey: keyDocs, PartPaths: paths, Paths: paths, Type: "feature", Lane: laneBackend, Title: "Docs", Body: "the guide",
+		Station: stWork, State: domain.StateQueued, Class: domain.ClassExpedite, Priority: 4, Outputs: map[string]json.RawMessage{},
+		CreatedAt: t2, UpdatedAt: t2,
+	})
+	sameItem(t, f.item(t, part.ID), part)
+
+	if got := keysOf(parts); !reflect.DeepEqual(got, []string{keyAPI, keyStore, keyWeb, keyDocs}) || parts.Total != before.Total+1 {
+		t.Fatalf("AddPart parts = %v, %d in all; want api, store, web, docs and %d", got, parts.Total, before.Total+1)
+	}
+
+	sameItem(t, parts.Items[3], part)
+
+	if got := f.parts(t, it.ID); !reflect.DeepEqual(got, parts) {
+		t.Errorf("Parts =\n  %+v\nwant what AddPart returned\n  %+v", got, parts)
+	}
+
+	planned := func(needs domain.ItemID) domain.Edge {
+		return domain.Edge{Item: part.ID, Needs: needs, Kind: domain.EdgePlanned, By: domain.LocalUser.Ref(), At: t2}
+	}
+	sameEdges(t, "docs needs", f.edges(t, part.ID).Needs, []domain.Edge{planned(before.Items[0].ID), planned(before.Items[1].ID)})
+
+	sameEvents(t, f.Events(t, part.ID), []domain.Event{{
+		FactoryID: f.factory, ItemID: part.ID, At: t2, Kind: domain.EventPartCreated, Station: stWork, Actor: domain.LocalUser.Name,
+		Data: map[string]any{"parent": string(it.ID), "key": keyDocs},
+	}})
+
+	events := f.Events(t, it.ID)
+	sameEvents(t, events[len(events)-1:], []domain.Event{{
+		FactoryID: f.factory, ItemID: it.ID, At: t2, Kind: domain.EventPartAdded, Station: stWork, Actor: domain.LocalUser.Name,
+		Data: map[string]any{"part": string(part.ID), "key": keyDocs, "actor": domain.LocalUser.Ref()},
+	}})
+
+	if got := f.item(t, it.ID); got.State != domain.StateAssembly {
+		t.Errorf("assembly after AddPart is %q; want assembly", got.State)
+	}
+
+	entries, err := f.Audit.AuditLog(ctx, ports.AuditQuery{Action: domain.AuditItemPartAdded, Limit: 10})
+	if err != nil || len(entries) != 1 || entries[0].TargetID != string(it.ID) || entries[0].Data["key"] != keyDocs {
+		t.Errorf("audit log of %s = %+v, %v; want the one entry of the added part", domain.AuditItemPartAdded, entries, err)
+	}
+}
+
+// A malformed part, a key the assembly has, an unknown or repeated need, an item that is not an
+// assembly, a part, an assembly done and an unknown item are refused, and nothing is written.
+func testAddPartRefused(f *fixture) {
+	t := f.t
+	ctx := f.ctx(t)
+	t2 := t1.Add(time.Minute)
+
+	it, l := f.planning(t, domain.NewItem{Title: titleBig})
+	assembled, parts := f.assemble(t, assembly(it, l, plan()))
+	plain := f.create(t, domain.NewItem{Title: "plain"})
+
+	edgesOf := func() [][]domain.Edge {
+		var out [][]domain.Edge
+		for _, p := range f.parts(t, it.ID).Items {
+			out = append(out, f.edges(t, p.ID).Needs)
+		}
+
+		return out
+	}
+
+	events, edges := len(f.Events(t, it.ID)), edgesOf()
+
+	with := func(edit func(n *ports.NewAssemblyPart)) ports.NewAssemblyPart {
+		n := addedPart(assembled, t2)
+		edit(&n)
+
+		return n
+	}
+
+	refused := []struct {
+		name string
+		n    ports.NewAssemblyPart
+		want error
+	}{
+		{"no key", with(func(n *ports.NewAssemblyPart) { n.Part.Key = " " }), domain.ErrInvalid},
+		{"no title", with(func(n *ports.NewAssemblyPart) { n.Part.Title = "" }), domain.ErrInvalid},
+		{"unknown need", with(func(n *ports.NewAssemblyPart) { n.Part.Needs = []string{"db"} }), domain.ErrInvalid},
+		{"need twice", with(func(n *ports.NewAssemblyPart) { n.Part.Needs = []string{keyAPI, keyAPI} }), domain.ErrInvalid},
+		{"key used", with(func(n *ports.NewAssemblyPart) { n.Part.Key = keyWeb }), ports.ErrConflict},
+		{"not an assembly", with(func(n *ports.NewAssemblyPart) { n.Assembly = plain.ID }), domain.ErrInvalid},
+		{"a part", with(func(n *ports.NewAssemblyPart) { n.Assembly = parts.Items[0].ID }), domain.ErrInvalid},
+		{"unknown item", with(func(n *ports.NewAssemblyPart) { n.Assembly = missingItem }), ports.ErrNotFound},
+	}
+
+	for _, r := range refused {
+		if _, _, err := f.Store.AddPart(ctx, r.n); !errors.Is(err, r.want) {
+			t.Errorf("AddPart with %s = %v; want %v", r.name, err, r.want)
+		}
+	}
+
+	if got := f.parts(t, it.ID); !reflect.DeepEqual(got, parts) {
+		t.Errorf("Parts after refusals =\n  %+v\nwant\n  %+v", got, parts)
+	}
+
+	if got := edgesOf(); !reflect.DeepEqual(got, edges) {
+		t.Errorf("edges after refusals = %+v; want %+v", got, edges)
+	}
+
+	if n := len(f.Events(t, it.ID)); n != events {
+		t.Errorf("assembly events after refusals = %d; want %d", n, events)
+	}
+
+	if got := f.parts(t, plain.ID); got.Total != 0 {
+		t.Errorf("Parts of the plain item = %+v; want none", got)
+	}
+
+	for _, p := range parts.Items {
+		if err := f.finishPart(t, p, domain.StateDone, t2); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	done := len(f.Events(t, it.ID))
+
+	if _, _, err := f.Store.AddPart(ctx, addedPart(assembled, t2)); !errors.Is(err, ports.ErrConflict) {
+		t.Errorf("AddPart to a done assembly = %v; want ErrConflict", err)
+	}
+
+	if got := f.parts(t, it.ID); got.Total != 3 {
+		t.Errorf("Parts of the done assembly = %d; want 3", got.Total)
+	}
+
+	if n := len(f.Events(t, it.ID)); n != done {
+		t.Errorf("done assembly events after AddPart = %d; want %d", n, done)
+	}
+
+	entries, err := f.Audit.AuditLog(ctx, ports.AuditQuery{Action: domain.AuditItemPartAdded, Limit: 10})
+	if err != nil || len(entries) != 0 {
+		t.Errorf("audit log of %s = %+v, %v; want none", domain.AuditItemPartAdded, entries, err)
+	}
+}

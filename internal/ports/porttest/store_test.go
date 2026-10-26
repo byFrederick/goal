@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/ports/porttest"
 	"github.com/byFrederick/goal/internal/ports/porttest/storetest"
 )
@@ -16,17 +18,24 @@ func TestStore_Conformance(t *testing.T) {
 
 	storetest.Run(t, func(*testing.T) storetest.Harness {
 		s := porttest.NewStore()
+		tn := porttest.NewTenancy(time.Now).WithStore(s)
 
 		var orgs, factories, versions atomic.Int64
 
 		return storetest.Harness{
 			Store: s,
 			Flow:  s,
+			Audit: tn,
 			LeaseSpans: func(_ *testing.T, org domain.OrgID, id domain.ItemID) []domain.LeaseSpan {
 				return s.LeaseSpans(org, id)
 			},
-			NewOrg: func(*testing.T) domain.OrgID {
-				return domain.OrgID(fmt.Sprintf("00000000-0000-4000-9000-%012d", orgs.Add(1)))
+			NewOrg: func(t *testing.T) domain.OrgID {
+				o, err := tn.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: fmt.Sprintf("acme-%d", orgs.Add(1)), Name: "Acme"})
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				return o.ID
 			},
 			NewFactory: func(_ *testing.T, org domain.OrgID) domain.FactoryID {
 				id := domain.FactoryID(fmt.Sprintf("00000000-0000-4000-8000-%012d", factories.Add(1)))

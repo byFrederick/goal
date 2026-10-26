@@ -120,3 +120,35 @@ func TestPlanFrom_RefusesBadPlans(t *testing.T) {
 		})
 	}
 }
+
+func TestValidatePart(t *testing.T) {
+	t.Parallel()
+
+	keys := map[string]bool{"api": true, "store": true}
+
+	tests := []struct {
+		name string
+		part NewPart
+		want error
+	}{
+		{name: "valid", part: NewPart{Key: "web", Title: "Web", Needs: []string{"api", "store"}}},
+		{name: "no needs", part: NewPart{Key: "docs", Title: "Docs"}},
+		{name: "missing key", part: NewPart{Key: " ", Title: "Web"}, want: ErrInvalid},
+		{name: "missing title", part: NewPart{Key: "web", Title: ""}, want: ErrInvalid},
+		{name: "key already used", part: NewPart{Key: "api", Title: "API again"}, want: ErrInvalid},
+		{name: "unknown need", part: NewPart{Key: "web", Title: "Web", Needs: []string{"db"}}, want: ErrInvalid},
+		{name: "needs itself", part: NewPart{Key: "web", Title: "Web", Needs: []string{"web"}}, want: ErrInvalid},
+		{name: "repeated need", part: NewPart{Key: "web", Title: "Web", Needs: []string{"api", "api"}}, want: ErrInvalid},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := ValidatePart(tt.part, keys)
+			if tt.want == nil && err != nil || tt.want != nil && !errors.Is(err, tt.want) {
+				t.Errorf("ValidatePart(%+v) = %v; want %v", tt.part, err, tt.want)
+			}
+		})
+	}
+}

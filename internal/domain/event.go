@@ -46,9 +46,11 @@ const (
 	EventEdgeRemoved EventKind = "edge_removed"
 	// EventAssembled is an item whose plan became parts (data parts: how many); EventPartCreated
 	// a part created from it (data parent and key), its first event; EventAssemblyDone the
-	// assembly closed by its last part (data state, parts_done and parts).
+	// assembly closed by its last part (data state, parts_done and parts); EventPartAdded a part
+	// added to an open assembly after it was assembled (data part: its id, key and actor: ref).
 	EventAssembled    EventKind = "assembled"
 	EventPartCreated  EventKind = "part_created"
+	EventPartAdded    EventKind = "part_added"
 	EventAssemblyDone EventKind = "assembly_done"
 	// EventUsage is a running agent's report of one turn's token usage; a run's usage events
 	// count its turns so far.
@@ -87,6 +89,8 @@ const (
 	AuditItemPaused = "item.paused"
 	// AuditItemRejected is a person sending an item back for rework (from, to, reason).
 	AuditItemRejected = "item.rejected"
+	// AuditItemPartAdded is a part added to an open assembly (part, key).
+	AuditItemPartAdded = "item.part_added"
 	// AuditTargetItem is the target kind of entries about an item.
 	AuditTargetItem = "item"
 )

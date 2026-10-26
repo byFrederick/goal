@@ -102,6 +102,99 @@ func (s *Store) assemble(org domain.OrgID, a ports.Assembly) (domain.Item, domai
 	return clone(it), s.partsOf(it.ID), s.audit, true, nil
 }
 
+// AddPart implements ports.Store. The store's mutex serializes it as the factory's and the
+// assembly's locks do in PostgreSQL; its audit entry goes to the linked Tenancy, if any, after
+// the change, as Transition's does.
+func (s *Store) AddPart(ctx context.Context, n ports.NewAssemblyPart) (domain.Item, domain.Parts, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.Item{}, domain.Parts{}, err
+	}
+
+	part, parts, audit, err := s.addPart(org, n)
+	if err != nil {
+		return domain.Item{}, domain.Parts{}, fmt.Errorf("add part to %s: %w", n.Assembly, err)
+	}
+
+	if audit != nil && n.Audit != nil {
+		if err := audit.Append(ctx, *n.Audit); err != nil {
+			return domain.Item{}, domain.Parts{}, fmt.Errorf("audit add part: %w", err)
+		}
+	}
+
+	return part, parts, nil
+}
+
+func (s *Store) addPart(org domain.OrgID, n ports.NewAssemblyPart) (domain.Item, domain.Parts, ports.Audit, error) {
+	s.mu.Lock()
+	defer s.changes.signal()
+	defer s.mu.Unlock()
+
+	it, ok := s.visible(n.Assembly, org)
+	if !ok {
+		return domain.Item{}, domain.Parts{}, nil, fmt.Errorf("item %s: %w", n.Assembly, ports.ErrNotFound)
+	}
+
+	existing := s.partsOf(it.ID)
+
+	switch {
+	case it.PartKey != "":
+		return domain.Item{}, domain.Parts{}, nil, fmt.Errorf("item %s is a part: %w", n.Assembly, domain.ErrInvalid)
+	case it.State != domain.StateAssembly && existing.Total == 0:
+		return domain.Item{}, domain.Parts{}, nil, fmt.Errorf("item %s is no assembly: %w", n.Assembly, domain.ErrInvalid)
+	case it.State != domain.StateAssembly:
+		return domain.Item{}, domain.Parts{}, nil, fmt.Errorf("item %s is %s, not an open assembly: %w", n.Assembly, it.State, ports.ErrConflict)
+	}
+
+	ids := make(map[string]domain.ItemID, existing.Total)
+	keys := make(map[string]bool, existing.Total)
+
+	for _, p := range existing.Items {
+		ids[p.PartKey], keys[p.PartKey] = p.ID, true
+	}
+
+	p := n.Part
+	if keys[p.Key] {
+		return domain.Item{}, domain.Parts{}, nil, fmt.Errorf("part key %q is taken: %w", p.Key, ports.ErrConflict)
+	}
+
+	if err := domain.ValidatePart(p, keys); err != nil {
+		return domain.Item{}, domain.Parts{}, nil, err
+	}
+
+	s.numbers[it.FactoryID]++
+	part := &domain.Item{
+		ID: domain.ItemID(s.newID()), OrgID: org, FactoryID: it.FactoryID, Number: s.numbers[it.FactoryID],
+		ParentID: it.ID, PartKey: p.Key, PartPaths: slices.Clone(p.Paths), Paths: slices.Clone(p.Paths), Type: it.Type, Lane: p.Lane,
+		Title: p.Title, Body: p.Brief, Station: it.Station, State: domain.StateQueued, Class: it.Class,
+		Priority: it.Priority, Outputs: map[string]json.RawMessage{}, CreatedAt: n.At, UpdatedAt: n.At,
+	}
+
+	for _, k := range p.Needs {
+		if s.reaches(ids[k], part.ID) {
+			return domain.Item{}, domain.Parts{}, nil, fmt.Errorf("part %q needs %q: %w", p.Key, k, domain.ErrCycle)
+		}
+	}
+
+	s.items[part.ID] = part
+	s.trackSpan(part, nil, n.At)
+
+	for _, k := range p.Needs {
+		s.edges = append(s.edges, domain.Edge{Item: part.ID, Needs: ids[k], Kind: domain.EdgePlanned, By: n.By.Ref(), At: n.At})
+	}
+
+	s.append(domain.Event{
+		FactoryID: part.FactoryID, ItemID: part.ID, At: n.At, Kind: domain.EventPartCreated, Station: part.Station,
+		Actor: n.By.Name, Data: map[string]any{"parent": string(it.ID), "key": p.Key},
+	})
+	s.append(domain.Event{
+		FactoryID: it.FactoryID, ItemID: it.ID, At: n.At, Kind: domain.EventPartAdded, Station: it.Station,
+		Actor: n.By.Name, Data: map[string]any{"part": string(part.ID), "key": p.Key, "actor": n.By.Ref()},
+	})
+
+	return clone(part), s.partsOf(it.ID), s.audit, nil
+}
+
 // Parts implements ports.Store.
 func (s *Store) Parts(ctx context.Context, parent domain.ItemID) (domain.Parts, error) {
 	org, err := orgOf(ctx)
