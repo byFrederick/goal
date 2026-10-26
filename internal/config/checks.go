@@ -56,6 +56,10 @@ const (
 	codePromptNotFound    = "prompt-not-found"
 	codeSkillNotFound     = "skill-not-found"
 	codeContractNotFound  = "contract-not-found"
+	codeUnknownLane       = "unknown-lane"
+	codeUnknownWorkType   = "unknown-work-type"
+	codeRuleNotFound      = "rule-not-found"
+	codeRuleInvalid       = "rule-invalid"
 
 	codeContractNotToolSchema = "contract-not-tool-schema"
 
@@ -94,6 +98,7 @@ func (c *checker) run() []domain.DefinitionProblem {
 	c.duplicates()
 	c.files()
 	c.agentRefs()
+	c.rules()
 	c.line()
 	c.flowAndLearning()
 	c.tools()
@@ -120,13 +125,14 @@ func (c *checker) warnf(check, code string, path []string, format string, a ...a
 	c.add(check, code, domain.SeverityWarning, path, format, a...)
 }
 
-// duplicates reports a station id, agent, skill or connection name used twice: references
+// duplicates reports a station id, agent, skill, rule or connection name used twice: references
 // would silently pick the first.
 func (c *checker) duplicates() {
 	s := c.f.Spec
 	dup(c, "station", names(s.Board.Stations, func(st Station) string { return st.ID }), "board", "stations", "id")
 	dup(c, "agent", names(s.Agents, func(a Agent) string { return a.Name }), keyAgents, "", keyName)
 	dup(c, "skill", names(s.Skills, func(sk Skill) string { return sk.Name }), "skills", "", keyName)
+	dup(c, "rule", names(s.Rules, func(r Rule) string { return r.Name }), "rules", "", keyName)
 
 	for i, conn := range s.Connections {
 		p := at("spec", "connections", i)

@@ -1,5 +1,5 @@
 // Package config loads and validates a factory definition: factory.yaml at the root of a
-// file tree that holds its prompts, skills, contracts and evals. The tree is an fs.FS, so the
+// file tree that holds its prompts, skills, rules, contracts and evals. The tree is an fs.FS, so the
 // same loader reads a local working copy or a version's files from the bucket.
 //
 // Check validates in passes and reports every finding as a located domain.DefinitionProblem
@@ -63,6 +63,7 @@ type Spec struct {
 	Connections []Connection      `json:"connections,omitempty"`
 	Knowledge   *Knowledge        `json:"knowledge,omitempty"`
 	Skills      []Skill           `json:"skills,omitempty"`
+	Rules       []Rule            `json:"rules,omitempty"`
 	Contracts   map[string]string `json:"contracts,omitempty"`
 	Agents      []Agent           `json:"agents"`
 	Board       Board             `json:"board"`
@@ -158,6 +159,18 @@ type Skill struct {
 
 // Local reports whether the skill ships inside the factory folder rather than from skills.sh.
 func (s Skill) Local() bool { return strings.HasPrefix(s.Source, "./") }
+
+// Rule is a factory rule (ADR 0014): its entry in spec.rules and, once Check has read the rule
+// file, what the file says. A rule file that does not parse leaves those fields zero.
+type Rule struct {
+	Name   string `json:"name"`
+	Source string `json:"source"`
+
+	Description string           `json:"-"`
+	AppliesTo   domain.RuleScope `json:"-"`
+	Paths       []string         `json:"-"`
+	Body        string           `json:"-"`
+}
 
 // Agent is a worker definition: prompt, model, limits, skills, connections and tool policy.
 type Agent struct {

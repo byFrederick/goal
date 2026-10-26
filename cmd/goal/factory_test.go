@@ -790,3 +790,28 @@ func TestFactoryList_Archived(t *testing.T) {
 		t.Errorf("list = %s", out)
 	}
 }
+
+// goal validate checks the working copy's rules: a rule naming an agent the factory does not have
+// is an error that names the rule, the agent and its code.
+func TestFactoryValidate_ReportsRuleProblems(t *testing.T) {
+	t.Parallel()
+
+	g := newDefGoald(t)
+	withRules := strings.Replace(factoryYAML, "  agents:\n", "  rules:\n    - { name: tone, source: ./rules/tone.md }\n  agents:\n", 1)
+	rule := func(agent string) string {
+		return "---\ndescription: Write plainly.\nappliesTo: { agents: [" + agent + "] }\n---\n\nShort sentences.\n"
+	}
+
+	good := newCopy(t, map[string]string{yamlPath: withRules, "rules/tone.md": rule("writer")})
+	broken := newCopy(t, map[string]string{yamlPath: withRules, "rules/tone.md": rule("ghost")})
+
+	out, err := g.goal(t, validateAlias, good, broken)
+	if err == nil || !strings.Contains(err.Error(), "1 of 2 factories are invalid") {
+		t.Errorf("goal validate = %v", err)
+	}
+
+	if !strings.Contains(out, "✓ acme") || !strings.Contains(out, "✗ "+broken) ||
+		!strings.Contains(out, `rule tone: appliesTo.agents: unknown agent "ghost"`) || !strings.Contains(out, "error unknown-agent") {
+		t.Errorf("goal validate printed:\n%s", out)
+	}
+}
