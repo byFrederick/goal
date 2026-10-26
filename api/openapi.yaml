@@ -1796,6 +1796,22 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EventPage" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/items/{item}/parts:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ItemRef"
+    get:
+      operationId: listItemParts
+      x-goal-scope: factory:read
+      summary: An assembly's parts in plan order, with their needs and waves
+      description: An item that is not an assembly has no parts (done 0, total 0).
+      responses:
+        "200":
+          description: The parts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssemblyParts" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/runs:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -3302,7 +3318,8 @@ components:
       enum: [merge]
     ItemState:
       type: string
-      enum: [queued, ready, in_progress, waiting_human, blocked, done, cancelled]
+      description: "assembly: the item was split into parts (its children) and closes when they are; never claimed (ADR 0012)"
+      enum: [queued, ready, in_progress, waiting_human, blocked, done, cancelled, assembly]
     ClassOfService:
       type: string
       enum: [standard, expedite]
@@ -3346,6 +3363,11 @@ components:
         factory_id: { type: string }
         number: { type: integer, format: int64 }
         parent_id: { type: string }
+        part_key: { type: string, description: "The part's key in its assembly's plan; absent unless the item is a part" }
+        part_paths:
+          type: array
+          description: The files the plan said the part changes; absent unless the item is a part
+          items: { type: string }
         type: { type: string }
         lane: { type: string }
         title: { type: string }
@@ -3368,6 +3390,50 @@ components:
         touches:
           description: The item's human touches; getItem only
           allOf: [{ $ref: "#/components/schemas/ItemTouches" }]
+    AssemblyParts:
+      type: object
+      required: [done, total, lead_time_seconds, parts]
+      properties:
+        done: { type: integer, description: Parts done }
+        total: { type: integer, description: All parts }
+        lead_time_seconds:
+          type: integer
+          format: int64
+          description: The assembly's lead time, created to its last part done, or to now while it is open; 0 for an item that is not an assembly
+        parts:
+          type: array
+          description: In plan order
+          items: { $ref: "#/components/schemas/AssemblyPart" }
+    AssemblyPart:
+      type: object
+      required: [id, ref, number, index, key, title, paths, station, state, needs, waiting_on, wave, cost_usd, pr_url, agent, created_at, done_at]
+      properties:
+        id: { type: string }
+        ref: { type: string, description: "<factory name>#<number>" }
+        number: { type: integer, format: int64 }
+        index: { type: integer, minimum: 1, description: "1-based position in the plan, as in part 3 of 6" }
+        key: { type: string, description: The part's key in the plan }
+        title: { type: string }
+        paths:
+          type: array
+          description: The files the plan said the part changes
+          items: { type: string }
+        station: { type: string }
+        state: { $ref: "#/components/schemas/ItemState" }
+        needs:
+          type: array
+          description: Refs of the parts this part needs
+          items: { type: string }
+        waiting_on:
+          type: array
+          description: Refs of the needs that are neither done nor cancelled
+          items: { type: string }
+        wave: { type: integer, minimum: 0, description: "0 for no needs, otherwise 1 + the largest wave among its needs" }
+        cost_usd: { type: number, format: double }
+        pr_url: { type: string, nullable: true, description: The pull request its outputs name }
+        agent: { type: string, nullable: true, description: The agent id working it while in progress; never a numbered copy }
+        created_at: { type: string, format: date-time }
+        done_at: { type: string, format: date-time, nullable: true }
     ItemTouches:
       type: object
       required: [count, planned, unplanned, list]
@@ -3685,7 +3751,7 @@ components:
             For an assembly (an item with parts), where its parts stand; absent or null for any
             other item
           nullable: true
-          allOf: [{ $ref: "#/components/schemas/AssemblyParts" }]
+          allOf: [{ $ref: "#/components/schemas/PartsSummary" }]
     PartOf:
       type: object
       description: The assembly an item is a part of, and which part ("3 of 6")
@@ -3696,7 +3762,7 @@ components:
         title: { type: string }
         part: { type: integer, description: "The item's place among the assembly's parts by number, 1-based" }
         parts: { type: integer, description: The assembly's parts in all }
-    AssemblyParts:
+    PartsSummary:
       type: object
       description: >-
         Where an assembly's parts stand ("4 of 6 parts merged"): every part counts in total; a

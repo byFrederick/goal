@@ -105,6 +105,8 @@ type Items interface {
 	ItemTouches(ctx context.Context, item domain.ItemID) ([]domain.Touch, error)
 	TouchCounts(ctx context.Context, items []domain.ItemID) (map[domain.ItemID]int, error)
 	LabelTouch(ctx context.Context, event int64, reason domain.TouchReason, by domain.Actor) error
+	Parts(ctx context.Context, parent domain.ItemID) (domain.Parts, error)
+	Edges(ctx context.Context, item domain.ItemID) (domain.ItemEdges, error)
 }
 
 // Factories are the definitions goald runs; *definitions.Cache satisfies it.
@@ -682,6 +684,10 @@ func (s *server) itemOf(ctx context.Context, it domain.Item) gen.Item {
 
 	for station, raw := range it.Outputs {
 		out.Outputs[station] = raw
+	}
+
+	if it.PartKey != "" {
+		out.PartKey, out.PartPaths = &it.PartKey, new(append([]string{}, it.PartPaths...))
 	}
 
 	if !it.DoneAt.IsZero() {

@@ -1488,6 +1488,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/items/{item}/parts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * An assembly's parts in plan order, with their needs and waves
+         * @description An item that is not an assembly has no parts (done 0, total 0).
+         */
+        get: operations["listItemParts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/items/{item}/runs": {
         parameters: {
             query?: never;
@@ -2590,8 +2615,11 @@ export interface components {
          * @enum {string}
          */
         StationAction: "merge";
-        /** @enum {string} */
-        ItemState: "queued" | "ready" | "in_progress" | "waiting_human" | "blocked" | "done" | "cancelled";
+        /**
+         * @description assembly: the item was split into parts (its children) and closes when they are; never claimed (ADR 0012)
+         * @enum {string}
+         */
+        ItemState: "queued" | "ready" | "in_progress" | "waiting_human" | "blocked" | "done" | "cancelled" | "assembly";
         /** @enum {string} */
         ClassOfService: "standard" | "expedite";
         NewItem: {
@@ -2632,6 +2660,10 @@ export interface components {
             /** Format: int64 */
             number: number;
             parent_id?: string;
+            /** @description The part's key in its assembly's plan; absent unless the item is a part */
+            part_key?: string;
+            /** @description The files the plan said the part changes; absent unless the item is a part */
+            part_paths?: string[];
             type: string;
             lane?: string;
             title: string;
@@ -2656,6 +2688,51 @@ export interface components {
             flow?: components["schemas"]["ItemFlow"];
             /** @description The item's human touches; getItem only */
             touches?: components["schemas"]["ItemTouches"];
+        };
+        AssemblyParts: {
+            /** @description Parts done */
+            done: number;
+            /** @description All parts */
+            total: number;
+            /**
+             * Format: int64
+             * @description The assembly's lead time, created to its last part done, or to now while it is open; 0 for an item that is not an assembly
+             */
+            lead_time_seconds: number;
+            /** @description In plan order */
+            parts: components["schemas"]["AssemblyPart"][];
+        };
+        AssemblyPart: {
+            id: string;
+            /** @description <factory name>#<number> */
+            ref: string;
+            /** Format: int64 */
+            number: number;
+            /** @description 1-based position in the plan, as in part 3 of 6 */
+            index: number;
+            /** @description The part's key in the plan */
+            key: string;
+            title: string;
+            /** @description The files the plan said the part changes */
+            paths: string[];
+            station: string;
+            state: components["schemas"]["ItemState"];
+            /** @description Refs of the parts this part needs */
+            needs: string[];
+            /** @description Refs of the needs that are neither done nor cancelled */
+            waiting_on: string[];
+            /** @description 0 for no needs, otherwise 1 + the largest wave among its needs */
+            wave: number;
+            /** Format: double */
+            cost_usd: number;
+            /** @description The pull request its outputs name */
+            pr_url: string | null;
+            /** @description The agent id working it while in progress; never a numbered copy */
+            agent: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            done_at: string | null;
         };
         ItemTouches: {
             count: number;
@@ -2916,7 +2993,7 @@ export interface components {
             /** @description For a part of an assembly (an item whose parent has parts), the assembly and the part's place in it; absent or null for any other item */
             assembly?: components["schemas"]["PartOf"] | null;
             /** @description For an assembly (an item with parts), where its parts stand; absent or null for any other item */
-            parts?: components["schemas"]["AssemblyParts"] | null;
+            parts?: components["schemas"]["PartsSummary"] | null;
         };
         /** @description The assembly an item is a part of, and which part ("3 of 6") */
         PartOf: {
@@ -2931,7 +3008,7 @@ export interface components {
             parts: number;
         };
         /** @description Where an assembly's parts stand ("4 of 6 parts merged"): every part counts in total; a cancelled part counts in no other field */
-        AssemblyParts: {
+        PartsSummary: {
             total: number;
             /** @description Parts done */
             merged: number;
@@ -6706,6 +6783,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EventPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listItemParts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The parts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssemblyParts"];
                 };
             };
             default: components["responses"]["Problem"];
