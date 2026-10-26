@@ -3421,6 +3421,11 @@ components:
           type: array
           description: The files the plan said the part changes; absent unless the item is a part
           items: { type: string }
+        assembly:
+          description: >-
+            The assembly the item is a part of, and its place among the parts in plan order;
+            getItem only, absent unless the item is a part. The parts themselves are listItemParts
+          allOf: [{ $ref: "#/components/schemas/PartOf" }]
         type: { type: string }
         lane: { type: string }
         title: { type: string }
@@ -3820,6 +3825,43 @@ components:
             lease while in progress, else the agent its station routes its lane to at an agent
             station, the person lane at a human station; absent or null at queue and done stations,
             or when the station has no route for the item's lane
+        assembly:
+          description: >-
+            For a part of an assembly (an item whose parent has parts), the assembly and the
+            part's place in it; absent or null for any other item
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/PartOf" }]
+        parts:
+          description: >-
+            For an assembly (an item with parts), where its parts stand; absent or null for any
+            other item
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/PartsSummary" }]
+    PartOf:
+      type: object
+      description: The assembly an item is a part of, and which part ("3 of 6")
+      required: [id, ref, title, part, parts]
+      properties:
+        id: { type: string, description: The assembly's item id }
+        ref: { type: string, description: "The assembly's <factory name>#<number>" }
+        title: { type: string }
+        part: { type: integer, description: "The item's place among the assembly's parts by number, 1-based" }
+        parts: { type: integer, description: The assembly's parts in all }
+    PartsSummary:
+      type: object
+      description: >-
+        Where an assembly's parts stand ("4 of 6 parts merged"): every part counts in total; a
+        cancelled part counts in no other field
+      required: [total, merged, in_progress, waiting, stations]
+      properties:
+        total: { type: integer }
+        merged: { type: integer, description: Parts done }
+        in_progress: { type: integer, description: Parts in progress }
+        waiting: { type: integer, description: "Parts in any other open state: queued, ready, waiting for a person or blocked" }
+        stations:
+          type: array
+          items: { type: string }
+          description: The distinct stations of the open parts, in part order
     ItemPage:
       type: object
       required: [items, next_after]

@@ -3,6 +3,7 @@ package domain
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -146,4 +147,66 @@ type NewItem struct {
 	State     ItemState
 	Class     ClassOfService
 	CreatedAt time.Time
+}
+
+// Assembly is an item with parts: a request split into several items (each part's ParentID is
+// the assembly) that ship together.
+type Assembly struct {
+	ID     ItemID
+	Number int64
+	Title  string
+	// Parts are in number order.
+	Parts []Part
+}
+
+// Part is one item of an assembly, as the assembly's progress counts it.
+type Part struct {
+	ID      ItemID
+	Number  int64
+	Station string
+	State   ItemState
+}
+
+// AssemblyProgress is where an assembly's parts stand: of Total, Merged are done, InProgress
+// are in progress and Waiting are in any other open state (a cancelled part is in none of them).
+// Stations are the distinct stations of the open parts, in part order.
+type AssemblyProgress struct {
+	Total, Merged, InProgress, Waiting int
+	Stations                           []string
+}
+
+// Progress counts where a's parts stand.
+func (a Assembly) Progress() AssemblyProgress {
+	p := AssemblyProgress{Total: len(a.Parts), Stations: []string{}}
+
+	for _, pt := range a.Parts {
+		switch pt.State {
+		case StateDone:
+			p.Merged++
+			continue
+		case StateCancelled, StateAssembly: // assemblies do not nest: no part is ever an assembly
+			continue
+		case StateInProgress:
+			p.InProgress++
+		case StateQueued, StateReady, StateWaitingHuman, StateBlocked:
+			p.Waiting++
+		}
+
+		if !slices.Contains(p.Stations, pt.Station) {
+			p.Stations = append(p.Stations, pt.Station)
+		}
+	}
+
+	return p
+}
+
+// PartNumber is item id's place among a's parts, 1-based, or 0 when it is not one of them.
+func (a Assembly) PartNumber(id ItemID) int {
+	for i, pt := range a.Parts {
+		if pt.ID == id {
+			return i + 1
+		}
+	}
+
+	return 0
 }

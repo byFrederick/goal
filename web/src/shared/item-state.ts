@@ -1,6 +1,7 @@
 // What an item's state means to the person looking at it, and which decisions they can take.
 // Derived only from the API's kinds and states, never from station or factory names.
 import type { ItemCard, ItemState, Station } from '../api/types';
+import { humanize } from './format';
 
 export type Tone = 'run' | 'you' | 'rework' | 'muted' | 'ok';
 
@@ -20,7 +21,8 @@ export interface StateLabel {
 
 /**
  * An item's state in words. A decision waits on "you" only for someone who decides there
- * (`decides`: the factory's item:decide); anyone else sees it waiting on an approver.
+ * (`decides`: the factory's item:decide); anyone else sees it waiting on an approver. `agent` is
+ * the agent's name; it reads as its role ("Infra engineer working").
  */
 export function describeState(
   item: Pick<ItemCard, 'state' | 'agent' | 'rework_count'>,
@@ -28,7 +30,7 @@ export function describeState(
 ): StateLabel {
   switch (item.state) {
     case 'in_progress':
-      return { text: item.agent ? `${item.agent} working` : 'In progress', tone: 'run' };
+      return { text: item.agent ? `${humanize(item.agent)} working` : 'In progress', tone: 'run' };
     case 'waiting_human':
       return opts.decides === false
         ? { text: 'Waiting on an approver', tone: 'muted' }

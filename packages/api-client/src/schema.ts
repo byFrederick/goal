@@ -2716,6 +2716,8 @@ export interface components {
             part_key?: string;
             /** @description The files the plan said the part changes; absent unless the item is a part */
             part_paths?: string[];
+            /** @description The assembly the item is a part of, and its place among the parts in plan order; getItem only, absent unless the item is a part. The parts themselves are listItemParts */
+            assembly?: components["schemas"]["PartOf"];
             type: string;
             lane?: string;
             title: string;
@@ -3070,6 +3072,34 @@ export interface components {
             touch_count: number;
             /** @description The key of the station's lane (BoardLane.key) the item belongs to: the agent holding its lease while in progress, else the agent its station routes its lane to at an agent station, the person lane at a human station; absent or null at queue and done stations, or when the station has no route for the item's lane */
             board_lane?: string | null;
+            /** @description For a part of an assembly (an item whose parent has parts), the assembly and the part's place in it; absent or null for any other item */
+            assembly?: components["schemas"]["PartOf"] | null;
+            /** @description For an assembly (an item with parts), where its parts stand; absent or null for any other item */
+            parts?: components["schemas"]["PartsSummary"] | null;
+        };
+        /** @description The assembly an item is a part of, and which part ("3 of 6") */
+        PartOf: {
+            /** @description The assembly's item id */
+            id: string;
+            /** @description The assembly's <factory name>#<number> */
+            ref: string;
+            title: string;
+            /** @description The item's place among the assembly's parts by number, 1-based */
+            part: number;
+            /** @description The assembly's parts in all */
+            parts: number;
+        };
+        /** @description Where an assembly's parts stand ("4 of 6 parts merged"): every part counts in total; a cancelled part counts in no other field */
+        PartsSummary: {
+            total: number;
+            /** @description Parts done */
+            merged: number;
+            /** @description Parts in progress */
+            in_progress: number;
+            /** @description Parts in any other open state: queued, ready, waiting for a person or blocked */
+            waiting: number;
+            /** @description The distinct stations of the open parts, in part order */
+            stations: string[];
         };
         ItemPage: {
             items: components["schemas"]["ItemCard"][];

@@ -2371,6 +2371,8 @@ type Inviter struct {
 
 // Item defines model for Item.
 type Item struct {
+	// Assembly The assembly the item is a part of, and its place among the parts in plan order; getItem only, absent unless the item is a part. The parts themselves are listItemParts
+	Assembly       *PartOf        `json:"assembly,omitempty"`
 	Body           string         `json:"body"`
 	ClassOfService ClassOfService `json:"class_of_service"`
 	CostUsd        float64        `json:"cost_usd"`
@@ -2440,6 +2442,9 @@ type ItemCard struct {
 	// Agent The agent working the item now (in progress), else null
 	Agent *string `json:"agent"`
 
+	// Assembly For a part of an assembly (an item whose parent has parts), the assembly and the part's place in it; absent or null for any other item
+	Assembly *PartOf `json:"assembly,omitempty"`
+
 	// BoardLane The key of the station's lane (BoardLane.key) the item belongs to: the agent holding its lease while in progress, else the agent its station routes its lane to at an agent station, the person lane at a human station; absent or null at queue and done stations, or when the station has no route for the item's lane
 	BoardLane      *string        `json:"board_lane,omitempty"`
 	ClassOfService ClassOfService `json:"class_of_service"`
@@ -2451,6 +2456,9 @@ type ItemCard struct {
 	InBuffer bool    `json:"in_buffer"`
 	Lane     *string `json:"lane,omitempty"`
 	Number   int64   `json:"number"`
+
+	// Parts For an assembly (an item with parts), where its parts stand; absent or null for any other item
+	Parts *PartsSummary `json:"parts,omitempty"`
 
 	// PrUrl The pull request the item's latest station output names, else null
 	PrUrl *string `json:"pr_url"`
@@ -3209,6 +3217,38 @@ type ParseError struct {
 	// Line 1-based; 0 when unknown
 	Line    int    `json:"line"`
 	Message string `json:"message"`
+}
+
+// PartOf The assembly an item is a part of, and which part ("3 of 6")
+type PartOf struct {
+	// Id The assembly's item id
+	Id string `json:"id"`
+
+	// Part The item's place among the assembly's parts by number, 1-based
+	Part int `json:"part"`
+
+	// Parts The assembly's parts in all
+	Parts int `json:"parts"`
+
+	// Ref The assembly's <factory name>#<number>
+	Ref   string `json:"ref"`
+	Title string `json:"title"`
+}
+
+// PartsSummary Where an assembly's parts stand ("4 of 6 parts merged"): every part counts in total; a cancelled part counts in no other field
+type PartsSummary struct {
+	// InProgress Parts in progress
+	InProgress int `json:"in_progress"`
+
+	// Merged Parts done
+	Merged int `json:"merged"`
+
+	// Stations The distinct stations of the open parts, in part order
+	Stations []string `json:"stations"`
+	Total    int      `json:"total"`
+
+	// Waiting Parts in any other open state: queued, ready, waiting for a person or blocked
+	Waiting int `json:"waiting"`
 }
 
 // PatchOp One RFC 6902 operation, its path relative to the section's value

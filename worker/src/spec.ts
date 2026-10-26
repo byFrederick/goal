@@ -58,6 +58,11 @@ export const TaskSpec = z.object({
   connections: z.array(Connection).default([]),
   /** The knowledge sources the gateway's knowledge tools search for this run. */
   knowledge_sources: z.array(z.string()).optional(),
+  /**
+   * Files that conflicted when prepare brought the item's branch up to date with the default
+   * branch; it aborted, so the branch is as pushed and the agent resolves them first.
+   */
+  base_conflicts: z.array(z.string()).optional(),
 });
 export type TaskSpec = z.infer<typeof TaskSpec>;
 
@@ -96,7 +101,7 @@ const toolSpec = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9@:/._+-]*$/);
  * It holds no secrets: git credentials name the variables that carry their passwords.
  */
 export const Bundle = z.object({
-  spec: TaskSpec.omit({ gateway_url: true }),
+  spec: TaskSpec.omit({ gateway_url: true, base_conflicts: true }),
   /** Files under /goal by path, base64. */
   files: z.record(bundlePath, z.base64()),
   /** Cloned into /workspace with the item's branch checked out; absent leaves it empty. */
@@ -105,6 +110,8 @@ export const Bundle = z.object({
       /** A clone URL with a scheme (goald's definitions allow https only), never an option. */
       url: z.string().regex(/^[A-Za-z][A-Za-z0-9+.-]*:\/\/\S+$/),
       branch: z.string().min(1),
+      /** How an existing branch is brought up to date with the default branch; rebase when absent. */
+      fresh_base: z.enum(['rebase', 'merge']).optional(),
     })
     .optional(),
   git_credentials: z.array(GitCredential).default([]),
