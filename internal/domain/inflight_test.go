@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+const stationTriage = "triage"
+
 // The section lists each entry with its ref, title, state, station and paths, ranked by how many
 // of its globs' literal prefixes the request names, then by most recently updated; entries
 // without paths come last.
@@ -17,11 +19,11 @@ func TestInFlightSection(t *testing.T) {
 	request := "Move terraform/ and the design-system/goal/ docs"
 
 	entries := []InFlightEntry{
-		{Ref: "acme#1", Title: "No paths, newest", State: StateQueued, Station: "inbox", UpdatedAt: at.Add(5 * time.Hour)},
-		{Ref: "acme#2", Title: "One overlap, older", State: StateInProgress, Station: "build", Paths: []string{"terraform/**", "cmd/**"}, UpdatedAt: at},
+		{Ref: "acme#1", Title: "No paths, newest", State: StateQueued, Station: stationTriage, UpdatedAt: at.Add(5 * time.Hour)},
+		{Ref: "acme#2", Title: "One overlap, older", State: StateInProgress, Station: stationBuild, Paths: []string{"terraform/**", "cmd/**"}, UpdatedAt: at},
 		{Ref: "acme#3", Title: "Two overlaps", State: StateAssembly, Station: "plan", Paths: []string{"terraform/*.tf", "design-system/goal/**"}, UpdatedAt: at},
-		{Ref: "acme#4", Title: "One overlap, newer", State: StateBlocked, Station: "build", Paths: []string{"design-system/**"}, UpdatedAt: at.Add(time.Hour)},
-		{Ref: "acme#5", Title: "No overlap, wildcard first", State: StateReady, Station: "build", Paths: []string{"**/*.go", "{a,b}/x"}, UpdatedAt: at.Add(2 * time.Hour)},
+		{Ref: "acme#4", Title: "One overlap, newer", State: StateBlocked, Station: stationBuild, Paths: []string{"design-system/**"}, UpdatedAt: at.Add(time.Hour)},
+		{Ref: "acme#5", Title: "No overlap, wildcard first", State: StateReady, Station: stationBuild, Paths: []string{"**/*.go", "{a,b}/x"}, UpdatedAt: at.Add(2 * time.Hour)},
 	}
 
 	got := InFlightSection(request, entries)
@@ -35,7 +37,7 @@ func TestInFlightSection(t *testing.T) {
 		`- acme#4 "One overlap, newer": blocked at build, paths design-system/**`,
 		`- acme#2 "One overlap, older": in_progress at build, paths terraform/**, cmd/**`,
 		`- acme#5 "No overlap, wildcard first": ready at build, paths **/*.go, {a,b}/x`,
-		`- acme#1 "No paths, newest": queued at inbox, no paths known`,
+		`- acme#1 "No paths, newest": queued at triage, no paths known`,
 	}, "\n")
 
 	if got != want {
@@ -52,7 +54,7 @@ func TestInFlightSection_BoundedToMaxInFlight(t *testing.T) {
 
 	for i := range MaxInFlight + 5 {
 		entries = append(entries, InFlightEntry{
-			Ref: fmt.Sprintf("acme#%d", i+1), Title: "t", State: StateQueued, Station: "inbox",
+			Ref: fmt.Sprintf("acme#%d", i+1), Title: "t", State: StateQueued, Station: stationTriage,
 			Paths: []string{fmt.Sprintf("dir%d/**", i)}, UpdatedAt: at.Add(time.Duration(i) * time.Minute),
 		})
 	}

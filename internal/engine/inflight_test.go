@@ -61,7 +61,7 @@ func TestEngine_InFlightSectionListsOpenItems(t *testing.T) {
 		domain.Position{Station: stBuild, State: domain.StateBlocked}, []string{"terraform/**"})
 	shipped := h.move(t, h.submit(t, domain.NewItem{Title: "Shipped"}),
 		domain.Position{Station: stDone, State: domain.StateDone}, []string{"cmd/**"})
-	it := h.submit(t, domain.NewItem{Title: "Ship the report"})
+	it := h.submit(t, domain.NewItem{Title: "Plan the export"})
 	otherLine := fmt.Sprintf("- %s %q: blocked at %s, paths terraform/**", ref(other.Number), other.Title, stBuild)
 
 	h.step(t) // the item runs spec and plans its assembly
@@ -99,8 +99,17 @@ func TestEngine_InFlightSectionListsOpenItems(t *testing.T) {
 		}
 	}
 
-	// web is done: its paths are no longer in flight. A later item hears the assembly and its
-	// open parts, those that change contracts/api/, which the item names, ranked first.
+	h.laterHearsTheAssembly(t, it, parts, otherLine)
+}
+
+// laterHearsTheAssembly closes the web part of it, then runs a later item: it hears the
+// assembly with its open parts' paths and those parts, the two that change contracts/api/, which
+// the later item names, ranked first. web is done: its paths are no longer in flight.
+func (h *harness) laterHearsTheAssembly(t *testing.T, it domain.Item, parts map[string]domain.Item, otherLine string) {
+	t.Helper()
+
+	ref := func(n int64) string { return domain.ItemRef{Factory: testFactory, Number: n}.String() }
+
 	h.move(t, parts["web"], domain.Position{Station: stDone, State: domain.StateDone}, nil)
 	later := h.submit(t, domain.NewItem{Title: "Document contracts/api/"})
 
@@ -141,9 +150,9 @@ func TestEngine_NoInFlightSectionWithoutContext(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t, planLine(true), porttest.Succeed(plan))
-	h.move(t, h.submit(t, domain.NewItem{Title: "Move terraform"}),
+	h.move(t, h.submit(t, domain.NewItem{Title: "Move the modules"}),
 		domain.Position{Station: stBuild, State: domain.StateBlocked}, []string{"terraform/**"})
-	h.submit(t, domain.NewItem{Title: "Ship the report"})
+	h.submit(t, domain.NewItem{Title: "Plan the export"})
 
 	h.step(t)
 
@@ -172,7 +181,7 @@ func TestEngine_InFlightReadErrorBlocks(t *testing.T) {
 
 	h := newHarness(t, inFlightLine(), porttest.Succeed(plan))
 	h.e = h.engine(t, listDown{Store: h.store})
-	it := h.submit(t, domain.NewItem{Title: "Ship the report"})
+	it := h.submit(t, domain.NewItem{Title: "Plan the export"})
 
 	h.step(t)
 

@@ -70,15 +70,8 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 		return
 	}
 
-	// A part's agent hears which assembly it serves, on every attempt.
-	assembly, err := e.assemblyNote(ctx, l, it)
-	if err != nil {
-		e.block(ctx, log, c, err.Error())
-		return
-	}
-
-	// A station that preloads the factory's open work hears it, read once per claim.
-	inFlight, err := e.inFlightNote(ctx, l, st, it)
+	// What the claim's every attempt hears: its assembly, the factory's open work.
+	preloaded, err := e.preloaded(ctx, l, st, it)
 	if err != nil {
 		e.block(ctx, log, c, err.Error())
 		return
@@ -90,7 +83,7 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 	rejection, attempt, lost := "", 1, 0
 
 	for {
-		res, chk, err := e.runOnce(ctx, c, &b, joinParts(assembly, inFlight, feedbackOf(notes, rejection)))
+		res, chk, err := e.runOnce(ctx, c, &b, joinParts(preloaded, feedbackOf(notes, rejection)))
 
 		if e.cut(ctx, log, c, err) {
 			return
@@ -519,6 +512,22 @@ func cut(s string, n int) string {
 	}
 
 	return "…" + strings.ToValidUTF8(s[len(s)-n:], "")
+}
+
+// preloaded is what every attempt of a claim hears, read once per claim: the assembly a part
+// serves and, at a station that preloads it, the factory's open work.
+func (e *Engine) preloaded(ctx context.Context, l domain.Line, st domain.Station, it domain.Item) (string, error) {
+	assembly, err := e.assemblyNote(ctx, l, it)
+	if err != nil {
+		return "", err
+	}
+
+	inFlight, err := e.inFlightNote(ctx, l, st, it)
+	if err != nil {
+		return "", err
+	}
+
+	return joinParts(assembly, inFlight), nil
 }
 
 // feedbackOf is what goald adds to the brief for one attempt: the notes people left and, on a

@@ -35,6 +35,7 @@ func (e *Engine) inFlightNote(ctx context.Context, l domain.Line, st domain.Stat
 	}
 
 	partPaths := map[domain.ItemID][]string{}
+
 	for _, o := range open {
 		if o.ParentID != "" {
 			partPaths[o.ParentID] = append(partPaths[o.ParentID], o.PartPaths...)
