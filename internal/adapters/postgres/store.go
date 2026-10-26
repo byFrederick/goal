@@ -646,7 +646,7 @@ func releaseOrTake(ctx context.Context, q *db.Queries, item uuid.UUID, t ports.T
 func moveParams(item uuid.UUID, t ports.Transition) db.MoveItemParams {
 	p := db.MoveItemParams{
 		ID: item, Station: t.To.Station, State: string(t.To.State), UpdatedAt: t.At, Lane: optional(t.Lane),
-		Output: t.Output, OutputStation: t.OutputStation,
+		Paths: t.Paths, Output: t.Output, OutputStation: t.OutputStation,
 		SetDoneAt: t.To.State == domain.StateDone, DoneAt: optionalTime(t.DoneAt),
 	}
 
