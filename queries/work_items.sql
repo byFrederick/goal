@@ -94,3 +94,13 @@ FROM work_items
 WHERE factory_id = $1 AND state NOT IN ('done', 'cancelled')
 GROUP BY station;
 
+-- name: AssemblyParts :many
+-- The parts of those of the factory's items among ids that have any (work_items_parent_id_idx),
+-- each with its assembly's number and title, by assembly then part number. A part is a child
+-- with a part_key, as Parts counts them (ADR 0012).
+SELECT a.id AS assembly_id, a.number AS assembly_number, a.title AS assembly_title,
+       p.id, p.number, p.station, p.state
+FROM work_items p
+JOIN work_items a ON a.id = p.parent_id
+WHERE p.parent_id = ANY (sqlc.arg(ids)::uuid[]) AND p.part_key IS NOT NULL AND a.factory_id = sqlc.arg(factory_id)
+ORDER BY a.number, p.number;

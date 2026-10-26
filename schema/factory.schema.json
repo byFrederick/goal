@@ -298,6 +298,21 @@
       "not": { "required": ["tools", "builtins"] }
     },
     "builtinMode": { "enum": ["off", "ask", "allowed"] },
+    "routeEntry": {
+      "description": "The agent for a lane, or { agent, agents } to keep agents of the station's slots for the lane.",
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "required": ["agent"],
+          "additionalProperties": false,
+          "properties": {
+            "agent": { "type": "string" },
+            "agents": { "type": "integer", "minimum": 1, "maximum": 20, "description": "Slots of the station kept for this lane; the lane uses no others." }
+          }
+        }
+      ]
+    },
     "station": {
       "type": "object",
       "required": ["id", "kind"],
@@ -310,9 +325,9 @@
         "agent": { "type": "string" },
         "route": {
           "type": "object",
-          "description": "Pick the agent by the item's lane instead of one fixed agent, e.g. { backend: backend-engineer, frontend: frontend-engineer }.",
+          "description": "Pick the agent by the item's lane instead of one fixed agent, e.g. { backend: backend-engineer, frontend: frontend-engineer }. An entry is an agent name or { agent, agents }: an entry with agents: n gets n of the station's slots kept for its lane, and that lane uses no others; entries without a count share the station's remaining slots. The counts add up to at most the station's agents.",
           "minProperties": 1,
-          "additionalProperties": { "type": "string" }
+          "additionalProperties": { "$ref": "#/$defs/routeEntry" }
         },
         "agents": { "type": "integer", "minimum": 1, "maximum": 20, "description": "Parallel agent containers at this station." },
         "wip": { "type": "integer", "minimum": 1, "description": "Max items in progress at this station." },

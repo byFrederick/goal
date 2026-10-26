@@ -82,6 +82,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"ItemEvents_PagesInAppendOrder", testItemEvents},
 		{"ItemByNumber_PerFactory", testItemByNumber},
 		{"ListItems_NewestFirstFilteredAndPaged", testListItems},
+		{"Assemblies_PartsInNumberOrder", testAssembliesPartsInNumberOrder},
 		{"StationLoads_CountWaitingAndInProgress", testStationLoads},
 		{"FlowMetrics_DoneLeadTimeReworkWIPAndSpend", testFlowMetrics},
 		{"SpendSince_WindowBoundsAndFactoryIsolation", testSpendSince},
