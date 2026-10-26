@@ -51,7 +51,15 @@ type Config struct {
 	// mergeability GitHub is still computing (it answers mergeable null). Default: about 10s in
 	// all, GitHub's documented behavior.
 	MergeabilityPolls []time.Duration
+	// MergeRetries are the waits before each new try of a merge GitHub refused with 409 "Head
+	// branch was modified": the head moved since the caller read it, usually because GitHub's
+	// background update-branch pushed its merge commit. Each try merges at the head read again.
+	// Default: 3 retries, about 10s in all.
+	MergeRetries []time.Duration
 }
+
+// defaultMergeRetries add up to 10s.
+var defaultMergeRetries = []time.Duration{2 * time.Second, 3 * time.Second, 5 * time.Second}
 
 // defaultMergeabilityPolls add up to 10s.
 var defaultMergeabilityPolls = []time.Duration{
@@ -69,9 +77,10 @@ const (
 
 // Client calls GitHub's REST API. It is safe for concurrent use and keeps no state.
 type Client struct {
-	api   string
-	http  *http.Client
-	polls []time.Duration
+	api     string
+	http    *http.Client
+	polls   []time.Duration
+	retries []time.Duration
 }
 
 // New returns a client. cfg.APIURL, when set, must be an http(s) URL; goald's settings check it.
@@ -84,9 +93,14 @@ func New(cfg Config) *Client {
 		cfg.MergeabilityPolls = defaultMergeabilityPolls
 	}
 
+	if len(cfg.MergeRetries) == 0 {
+		cfg.MergeRetries = defaultMergeRetries
+	}
+
 	return &Client{
 		api:   strings.TrimSuffix(cfg.APIURL, "/"),
-		polls: slices.Clone(cfg.MergeabilityPolls),
+		polls:   slices.Clone(cfg.MergeabilityPolls),
+		retries: slices.Clone(cfg.MergeRetries),
 		http: &http.Client{
 			Timeout:   cfg.Timeout,
 			Transport: cfg.Transport,
@@ -273,7 +287,15 @@ func (cl *Client) PullRequest(ctx context.Context, c domain.ResolvedConnection, 
 	return pr, nil
 }
 
-// Merge implements ports.CodeHost.
+// headWasModified is GitHub's 409 answer to a merge at a SHA that is no longer the head ("Head
+// branch was modified. Review and try the merge again."), matched case-insensitively.
+const headWasModified = "head branch was modified"
+
+// Merge implements ports.CodeHost. GitHub updates a branch in the background after it answers an
+// update-branch, so a merge right after one can carry a head that is already stale: GitHub then
+// refuses with 409 "Head branch was modified". Merge reads the pull request again after each of
+// cl.retries and merges at the head it reports now; a pull request found merged meanwhile is not
+// merged twice. Any other refusal, or the last 409, is ErrNotMergeable.
 func (cl *Client) Merge(ctx context.Context, c domain.ResolvedConnection, prURL string, m ports.Merge) (string, error) {
 	p, err := cl.open(c, prURL)
 	if err != nil {
@@ -284,25 +306,69 @@ func (cl *Client) Merge(ctx context.Context, c domain.ResolvedConnection, prURL 
 		return "", fmt.Errorf("merge %s: the head SHA to merge is required", prURL)
 	}
 
+	head := m.HeadSHA
+
+	for try := 0; ; try++ {
+		sha, status, msg, err := cl.mergeOnce(ctx, p, prURL, m.Method, head)
+		if err != nil || status == http.StatusOK {
+			return sha, err
+		}
+
+		if status != http.StatusConflict || !strings.Contains(strings.ToLower(msg), headWasModified) || try == len(cl.retries) {
+			return "", mergeRefusal(prURL, status, msg)
+		}
+
+		if err := sleep(ctx, cl.retries[try]); err != nil {
+			return "", fmt.Errorf("merge %s: waiting to retry after GitHub said the head was modified: %w", prURL, err)
+		}
+
+		pj, err := cl.read(ctx, p, prURL)
+
+		switch {
+		case err != nil:
+			return "", fmt.Errorf("merge %s: %w", prURL, err)
+		case pj.Merged:
+			return pj.MergeCommitSHA, nil
+		case pj.State != "open":
+			return "", fmt.Errorf("merge %s: closed while retrying: %w", prURL, ports.ErrNotMergeable)
+		}
+
+		head = pj.Head.SHA
+	}
+}
+
+// mergeOnce asks GitHub to merge the pull request at head once. It answers the merge SHA and 200
+// when GitHub merged it, or GitHub's refusal status and message.
+func (cl *Client) mergeOnce(ctx context.Context, p pull, prURL, method, head string) (string, int, string, error) {
 	var res struct {
 		SHA    string `json:"sha"`
 		Merged bool   `json:"merged"`
 	}
 
 	status, msg, err := cl.call(ctx, p, http.MethodPut, p.repoPath("/pulls/"+p.number+"/merge"), map[string]string{
-		"merge_method": m.Method, "sha": m.HeadSHA,
+		"merge_method": method, "sha": head,
 	}, &res)
 
 	switch {
 	case err != nil:
-		return "", fmt.Errorf("merge %s: %w", prURL, err)
+		return "", 0, "", fmt.Errorf("merge %s: %w", prURL, err)
 	case status == http.StatusOK && res.Merged:
-		return res.SHA, nil
-	case status == http.StatusMethodNotAllowed, status == http.StatusConflict, status == http.StatusUnprocessableEntity:
-		// Not mergeable, head moved, or a merge GitHub rejects as invalid.
-		return "", fmt.Errorf("merge %s: GitHub refused (%d): %s: %w", prURL, status, msg, ports.ErrNotMergeable)
+		return res.SHA, http.StatusOK, "", nil
+	case status == http.StatusOK:
+		return "", 0, "", fmt.Errorf("merge %s: GitHub answered 200 without merging: %s", prURL, msg)
 	default:
-		return "", fmt.Errorf("merge %s: GitHub answered %d: %s", prURL, status, msg)
+		return "", status, msg, nil
+	}
+}
+
+// mergeRefusal is what GitHub's refusal status and msg of a merge of prURL mean.
+func mergeRefusal(prURL string, status int, msg string) error {
+	switch status {
+	case http.StatusMethodNotAllowed, http.StatusConflict, http.StatusUnprocessableEntity:
+		// Not mergeable, head moved, or a merge GitHub rejects as invalid.
+		return fmt.Errorf("merge %s: GitHub refused (%d): %s: %w", prURL, status, msg, ports.ErrNotMergeable)
+	default:
+		return fmt.Errorf("merge %s: GitHub answered %d: %s", prURL, status, msg)
 	}
 }
 

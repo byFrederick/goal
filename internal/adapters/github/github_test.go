@@ -1,9 +1,11 @@
 package github
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -467,16 +469,167 @@ func TestMerge_SquashesTheHeadItWasGiven(t *testing.T) {
 func TestMerge_GitHubRefusalsAreNotMergeable(t *testing.T) {
 	t.Parallel()
 
-	for _, status := range []int{http.StatusMethodNotAllowed, http.StatusConflict, http.StatusUnprocessableEntity} {
-		f, c := newFakeGitHub(t)
+	for _, refusal := range []struct {
+		status int
+		msg    string
+	}{
+		{http.StatusMethodNotAllowed, "Pull Request is not mergeable"},
+		{http.StatusUnprocessableEntity, headModified},
+		{http.StatusConflict, "Merge conflict"},
+	} {
+		f, c := newFakeGitHubWith(t, Config{MergeRetries: fastPolls})
 		f.merge = func(map[string]string) (int, any) {
-			return status, map[string]any{message: "Head branch was modified. Review and try the merge again."}
+			return refusal.status, map[string]any{message: refusal.msg}
 		}
 
 		_, err := c.Merge(t.Context(), dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
-		if !errors.Is(err, ports.ErrNotMergeable) || !strings.Contains(err.Error(), "Head branch was modified") {
-			t.Errorf("merge answered %d: err = %v; want ErrNotMergeable with GitHub's reason", status, err)
+		if !errors.Is(err, ports.ErrNotMergeable) || !strings.Contains(err.Error(), refusal.msg) {
+			t.Errorf("merge answered %d %q: err = %v; want ErrNotMergeable with GitHub's reason", refusal.status, refusal.msg, err)
 		}
+
+		if got := mergeRequests(f); got != 1 {
+			t.Errorf("merge answered %d %q: %d merge requests; want 1, refused at once", refusal.status, refusal.msg, got)
+		}
+	}
+}
+
+// headModified is GitHub's 409 answer to a merge at a head that is no longer the branch's.
+const headModified = "Head branch was modified. Review and try the merge again."
+
+// mergeRequests counts the merge requests f received.
+func mergeRequests(f *fakeGitHub) int {
+	n := 0
+
+	for _, r := range f.sent() {
+		if r == "PUT /repos/acme/app/pulls/7/merge" {
+			n++
+		}
+	}
+
+	return n
+}
+
+func TestMerge_RetriesAtTheNewHeadWhenGitHubSaysTheHeadWasModified(t *testing.T) {
+	t.Parallel()
+
+	const newHead = "9c1f2e7a"
+
+	f, c := newFakeGitHubWith(t, Config{MergeRetries: fastPolls})
+
+	var asked []string
+
+	f.merge = func(body map[string]string) (int, any) {
+		asked = append(asked, body["sha"])
+
+		if body["sha"] != newHead {
+			// GitHub's background update has pushed newHead since the caller read the head.
+			f.pr["head"].(map[string]any)[keySHA] = newHead
+
+			return http.StatusConflict, map[string]any{message: headModified}
+		}
+
+		f.pr["state"], f.pr[merged] = closed, true
+
+		return http.StatusOK, map[string]any{keySHA: "merge-sha", "merged": true}
+	}
+
+	sha, err := c.Merge(t.Context(), dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
+	if err != nil || sha != "merge-sha" {
+		t.Fatalf("Merge = %q, %v; want merge-sha", sha, err)
+	}
+
+	if !slices.Equal(asked, []string{headSHA, newHead}) {
+		t.Errorf("merge requests at %v; want %v", asked, []string{headSHA, newHead})
+	}
+}
+
+func TestMerge_HeadModifiedRetriesEndNotMergeable(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitHubWith(t, Config{MergeRetries: fastPolls})
+	f.merge = func(map[string]string) (int, any) {
+		return http.StatusConflict, map[string]any{message: headModified}
+	}
+
+	_, err := c.Merge(t.Context(), dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
+	if !errors.Is(err, ports.ErrNotMergeable) || errors.Is(err, ports.ErrMergeConflict) || !strings.Contains(err.Error(), "Head branch was modified") {
+		t.Errorf("err = %v; want ErrNotMergeable, not a conflict, with GitHub's reason", err)
+	}
+
+	if got, want := mergeRequests(f), len(fastPolls)+1; got != want {
+		t.Errorf("%d merge requests; want %d", got, want)
+	}
+
+	// A cancelled context stops the waiting.
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	f, c = newFakeGitHubWith(t, Config{MergeRetries: []time.Duration{time.Hour}, Transport: cancelAfter(cancel)})
+	f.merge = func(map[string]string) (int, any) {
+		return http.StatusConflict, map[string]any{message: headModified}
+	}
+
+	if _, err := c.Merge(ctx, dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA}); !errors.Is(err, context.Canceled) {
+		t.Errorf("cancelled: err = %v; want context.Canceled", err)
+	}
+}
+
+// cancelAfter is a transport that calls cancel once it has read a whole answer.
+func cancelAfter(cancel context.CancelFunc) http.RoundTripper {
+	return roundTripper(func(r *http.Request) (*http.Response, error) {
+		res, err := http.DefaultTransport.RoundTrip(r)
+		if err != nil {
+			return nil, err
+		}
+
+		body, err := io.ReadAll(res.Body)
+		_ = res.Body.Close()
+
+		res.Body = io.NopCloser(bytes.NewReader(body))
+
+		cancel()
+
+		return res, err
+	})
+}
+
+type roundTripper func(*http.Request) (*http.Response, error)
+
+func (f roundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestMerge_HeadModifiedThenMergedIsNotMergedTwice(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitHubWith(t, Config{MergeRetries: fastPolls})
+	f.merge = func(map[string]string) (int, any) {
+		// Someone else merged it meanwhile.
+		f.pr["state"], f.pr[merged], f.pr["merge_commit_sha"] = closed, true, "their-merge-sha"
+
+		return http.StatusConflict, map[string]any{message: headModified}
+	}
+
+	sha, err := c.Merge(t.Context(), dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
+	if err != nil || sha != "their-merge-sha" {
+		t.Errorf("Merge = %q, %v; want their-merge-sha", sha, err)
+	}
+
+	if got := mergeRequests(f); got != 1 {
+		t.Errorf("%d merge requests; want 1", got)
+	}
+
+	f, c = newFakeGitHubWith(t, Config{MergeRetries: fastPolls})
+	f.merge = func(map[string]string) (int, any) {
+		f.pr["state"] = closed
+
+		return http.StatusConflict, map[string]any{message: headModified}
+	}
+
+	if _, err := c.Merge(t.Context(), dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA}); !errors.Is(err, ports.ErrNotMergeable) {
+		t.Errorf("closed: err = %v; want ErrNotMergeable", err)
+	}
+
+	if got := mergeRequests(f); got != 1 {
+		t.Errorf("closed: %d merge requests; want 1", got)
 	}
 }
 
