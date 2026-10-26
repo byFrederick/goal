@@ -39,6 +39,7 @@ export function renderFactoryPage({
   factories = [factory],
   seed = [],
   station,
+  search = {},
 }: {
   page: () => ReactNode;
   /** The page's route under the factory: 'board', 'items/' or '/' (the Floor). */
@@ -49,6 +50,8 @@ export function renderFactoryPage({
   factories?: Factory[];
   seed?: readonly Seed[];
   station?: string | undefined;
+  /** The route's search params, as the URL carries them (`{ state: 'in_progress' }`). */
+  search?: Record<string, string>;
 }) {
   polyfillLayout();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
@@ -72,7 +75,8 @@ export function renderFactoryPage({
   const itemRoute = createRoute({ getParentRoute: () => factoryRoute, path: 'items/$ref', component: () => null });
   const routeTree = rootRoute.addChildren([orgRoute.addChildren([factoryRoute.addChildren([pageRoute, itemRoute])])]);
 
-  const query = station ? `?station=${encodeURIComponent(station)}` : '';
+  const params = new URLSearchParams({ ...(station ? { station } : {}), ...search }).toString();
+  const query = params ? `?${params}` : '';
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({

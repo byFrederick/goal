@@ -94,7 +94,7 @@ routes/       file-based route files (TanStack Router plugin; routeTree.gen.ts i
                                                   (?from&to&type: the range of UTC days and work type;
                                                   ?touches=kind|reason|version groups the Touches panel)
                   /o/$org/f/$factory/board      → Board        (?station= picks the station on phones)
-                  /o/$org/f/$factory/items      → Items list   (?state= filters; the Inbox button in its header opens the Inbox drawer)
+                  /o/$org/f/$factory/items      → Items list   (?state= filters; ?show=flat lists every item flat; the Inbox button in its header opens the Inbox drawer)
                   /o/$org/f/$factory/items/$ref → Item         ($ref: the number, goal#12 or the id)
                   /o/$org/f/$factory/definition → D's editor: frame + draft session; its index → /definition/line
                   /o/$org/f/$factory/definition/$section → basics|line|agents|connections|review|versions (?mode=yaml, ?station=, ?agent=, …)
@@ -165,6 +165,8 @@ The Inbox button sits in the header of the Board, the Floor and Items, at every 
 ### Status icons
 
 `ui/status-icon.tsx` (`StatusIcon`) is the one set of item status icons, the same everywhere an item's status shows: working is a half-filled circle (teal), waiting for another item a clock (amber), waiting for the same files two crossing arrows (rust), ready or merged a check (green). Each is decorative (`aria-hidden`); the words beside it say the same. `itemStatus` (`shared/item-state.ts`) maps an item's state to its icon, and the board's rows, the inbox drawer, the Items list (desktop column and phone sub-line) and the item page's state chip all use it: a clock for queued, waiting on you, and ready in the drum's buffer; a check for ready outside it and done; none for blocked, cancelled and assemblies. The Inbox drawer keeps its own row mapping (`shared/inbox.ts`). The two crossing arrows (same files) wait on the overlap wait the API does not expose yet, so no state shows them.
+
+The Items list (`features/items/items-page.tsx`, rows in `assembly-rows.tsx`) groups by default (ADR 0012): an assembly is one row, with a chevron that opens or closes its parts (open by default; `aria-expanded`), the "Assembly" label and ref, its title (two lines), its open parts' stations on one line, and a progress bar with "N of M parts merged" from its `parts`. Its parts sit beneath it, indented, in plan order, each with its number, title, station and a status pill (the words and the shared icon). A part is never a top-level row, and an item that is neither shows as a plain row with no type chip. `listRows` does the grouping: a part whose assembly is not on the page gets its row from the part's `assembly` ("N parts", no bar). `?show=flat` (the Show switch; the default drops the param, and a filter change keeps it) lists every item as a plain row. A filter applies to parts; while one is on, the list also reads `state=assembly` (the loader and the page) so a kept part's row has its assembly's progress, and an assembly with no kept part does not show. A footnote under the list says how it groups and filters.
 
 ### Colour theme (dark mode)
 
