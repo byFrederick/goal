@@ -106,6 +106,49 @@ func TestPurgeOrg_RefusesAnOrgDeletedAfterTheCutoff(t *testing.T) {
 	}
 }
 
+// goal_delete_factory deletes only an archived factory of the transaction's organization, whoever
+// calls it: goal_app calling it directly on a live factory, or on another organization's archived
+// one, deletes nothing.
+func TestDeleteFactory_RefusesALiveOrForeignFactory(t *testing.T) {
+	t.Parallel()
+
+	pool := newTestPool(t)
+	s := New(pool)
+	org, other := newOrgID(t, s), newOrgID(t, s)
+	id := saveFactory(domain.WithOrg(t.Context(), org), t, s)
+
+	refused := func(what string, in domain.OrgID) {
+		t.Helper()
+
+		err := inOrgTx(t, pool, in, func(tx pgx.Tx) error {
+			_, err := tx.Exec(t.Context(), "SELECT goal_delete_factory($1)", string(id))
+			return err
+		})
+
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != checkViolation {
+			t.Errorf("goal_delete_factory of %s = %v; want check_violation", what, err)
+		}
+	}
+
+	refused("a live factory", org)
+
+	err := inOrgTx(t, pool, org, func(tx pgx.Tx) error {
+		_, err := tx.Exec(t.Context(), "UPDATE factories SET archived_at = now(), archived_by = 'user:local' WHERE id = $1", string(id))
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	refused("another organization's archived factory", other)
+
+	var factories int
+	if err := asOrg(t, pool, org, "SELECT count(*) FROM factories", &factories); err != nil || factories != 1 {
+		t.Errorf("factories after the refused deletes = %d, %v; want 1", factories, err)
+	}
+}
+
 // Published versions outlive a soft delete: until the purge, nobody deletes one, not even
 // goal_app in the deleted organization (review 2.2 L1), so a restore would find its history.
 func TestDeletedOrg_KeepsItsPublishedVersionsUntilThePurge(t *testing.T) {

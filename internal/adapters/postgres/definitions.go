@@ -242,6 +242,38 @@ func (d *Definitions) setArchived(ctx context.Context, id domain.FactoryID, arch
 	return rec, err
 }
 
+// DeleteArchivedFactory implements ports.DefinitionStore. Archived and leases are checked under
+// the factory's row lock, as ArchiveFactory checks them; goal_delete_factory deletes the rows
+// goal_app may not, in the same transaction. Its NoticeFactory comes from the factory row's
+// delete (00010's trigger).
+func (d *Definitions) DeleteArchivedFactory(ctx context.Context, id domain.FactoryID, by domain.Actor) error {
+	err := d.change(ctx, id, func(q *db.Queries, f db.LockFactoryRow) error {
+		if f.ArchivedAt == nil {
+			return fmt.Errorf("factory %s: %w", id, ports.ErrFactoryNotArchived)
+		}
+
+		leased, err := q.FactoryLeases(ctx, f.ID)
+		if err != nil {
+			return fmt.Errorf("leases: %w", err)
+		}
+
+		if leased > 0 {
+			return fmt.Errorf("factory %s: %w", id, &ports.FactoryBusyError{Items: int(leased)})
+		}
+
+		if err := appendAudit(ctx, q, factoryEntry(by, domain.AuditFactoryDeleted, id, map[string]any{auditName: f.Name})); err != nil {
+			return err
+		}
+
+		return q.DeleteArchivedFactory(ctx, f.ID)
+	})
+	if err != nil {
+		return fmt.Errorf("delete archived factory: %w", err)
+	}
+
+	return nil
+}
+
 // archiveLocked archives or restores the locked factory f, audited.
 func archiveLocked(ctx context.Context, q *db.Queries, f db.LockFactoryRow, archive bool, by domain.Actor) error {
 	action := domain.AuditFactoryRestored

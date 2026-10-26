@@ -14,31 +14,7 @@ const noticeWait = 10 * time.Second
 
 func testNotices(f *fixture) {
 	t := f.t
-	ctx, cancel := context.WithCancel(t.Context())
-	got := make(chan ports.DefinitionNotice, 1024)
-	done := make(chan error, 1)
-
-	go func() {
-		done <- f.Notices.Listen(ctx, func(n ports.DefinitionNotice) {
-			select {
-			case got <- n:
-			default:
-			}
-		})
-	}()
-
-	t.Cleanup(func() {
-		cancel()
-
-		if err := <-done; err != nil {
-			t.Errorf("Listen: %v", err)
-		}
-	})
-
-	if n := next(t, got, func(n ports.DefinitionNotice) bool { return n.Resync }); !n.Resync {
-		t.Fatalf("first notice = %+v; want Resync", n)
-	}
-
+	got := f.listen(t)
 	r, d := f.create(t, acme)
 	d = f.save(t, r.ID, d.Revision, map[string]string{notesPath: "second revision"})
 	v := f.publish(t, r.ID, "first")
@@ -83,6 +59,39 @@ func testNotices(f *fixture) {
 	}
 }
 
+// listen listens to Notices until the test ends and returns what they announce once listening
+// (after the first notice, Resync).
+func (f *fixture) listen(t *testing.T) <-chan ports.DefinitionNotice {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	got := make(chan ports.DefinitionNotice, 1024)
+	done := make(chan error, 1)
+
+	go func() {
+		done <- f.Notices.Listen(ctx, func(n ports.DefinitionNotice) {
+			select {
+			case got <- n:
+			default:
+			}
+		})
+	}()
+
+	t.Cleanup(func() {
+		cancel()
+
+		if err := <-done; err != nil {
+			t.Errorf("Listen: %v", err)
+		}
+	})
+
+	if n := next(t, got, func(n ports.DefinitionNotice) bool { return n.Resync }); !n.Resync {
+		t.Fatalf("first notice = %+v; want Resync", n)
+	}
+
+	return got
+}
+
 // next returns the next notice that matches, failing the test when none comes in time.
 func next(t *testing.T, got <-chan ports.DefinitionNotice, match func(ports.DefinitionNotice) bool) ports.DefinitionNotice {
 	t.Helper()
@@ -122,6 +131,7 @@ func testNoOrg(f *fixture) {
 	expect(t, "SetPaused", err, domain.ErrNoOrg)
 	_, err = s.ArchiveFactory(ctx, r.ID, local)
 	expect(t, "ArchiveFactory", err, domain.ErrNoOrg)
+	expect(t, "DeleteArchivedFactory", s.DeleteArchivedFactory(ctx, r.ID, local), domain.ErrNoOrg)
 	_, err = s.RestoreArchivedFactory(ctx, r.ID, local)
 	expect(t, "RestoreArchivedFactory", err, domain.ErrNoOrg)
 	_, err = s.PutBlobs(ctx, map[string][]byte{"x.md": []byte("x")})
@@ -189,6 +199,7 @@ func testOtherOrg(f *fixture) {
 	expect(t, "SetPaused from another org", err, ports.ErrNotFound)
 	_, err = s.ArchiveFactory(ctx, r.ID, local)
 	expect(t, "ArchiveFactory from another org", err, ports.ErrNotFound)
+	expect(t, "DeleteArchivedFactory from another org", s.DeleteArchivedFactory(ctx, r.ID, local), ports.ErrNotFound)
 	_, err = s.RestoreArchivedFactory(ctx, r.ID, local)
 	expect(t, "RestoreArchivedFactory from another org", err, ports.ErrNotFound)
 	expect(t, "DeleteUnpublished from another org", s.DeleteUnpublished(ctx, r.ID, local), ports.ErrNotFound)

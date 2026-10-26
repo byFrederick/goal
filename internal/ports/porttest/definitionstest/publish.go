@@ -453,7 +453,7 @@ func testRestoreGuards(f *fixture) {
 	v1 := f.publish(t, r.ID, "one")
 	v2 := f.publish(t, r.ID, "two")
 	draft := f.openDraft(t, r.ID)
-	other, _ := f.create(t, "zeta")
+	other, _ := f.create(t, zeta)
 	otherV1 := f.publish(t, other.ID, "one")
 	restore := ports.Restore{Factory: r.ID, Version: v1.ID, ExpectedCurrent: v2.ID, Name: acme, By: local}
 
@@ -470,7 +470,7 @@ func testRestoreGuards(f *fixture) {
 	}
 
 	taken := restore
-	taken.Name = "zeta"
+	taken.Name = zeta
 	_, err = f.Definitions.Restore(ctx, taken)
 	expect(t, "Restore under another factory's name", err, ports.ErrNameTaken)
 
