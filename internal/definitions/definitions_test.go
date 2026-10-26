@@ -553,7 +553,7 @@ func TestValidate_ContractsCannotReferenceOutsideThemselves(t *testing.T) {
 	}
 
 	h := newHarness(t)
-	v := h.publish(t, org, acme(acmeName, `{"$ref": "file://`+filepath.ToSlash(secret)+`"}`))
+	v := h.publish(t, org, acme(acmeName, `{"type": "object", "$ref": "file://`+filepath.ToSlash(secret)+`"}`))
 
 	err := h.cache(t, nil).Validate(ctxOf(t, org), v.ID, note, json.RawMessage(`{}`))
 	if err == nil || errors.Is(err, ports.ErrContractViolation) {
