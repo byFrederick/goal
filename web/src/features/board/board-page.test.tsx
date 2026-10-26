@@ -181,6 +181,20 @@ describe('BoardPage', () => {
     expect(screen.queryByText(/^Expedite/)).toBeNull();
   });
 
+  it('a queue column has no header, and the agent, human and done columns keep theirs', async () => {
+    const intake = station({ id: 'intake', kind: 'queue', agents: [], wip_limit: null, items: [standardItem] });
+    const withQueue = { ...board(), stations: [intake, ...board().stations] };
+    renderBoardPage({ page: BoardPage, org, factory, board: withQueue });
+
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const queue = within(columns).getByRole('region', { name: 'Intake' });
+    expect(within(queue).queryByRole('heading', { level: 2 })).toBeNull();
+    expect(within(queue).getByRole('link', { name: STANDARD })).toBeTruthy();
+
+    expect(within(columns).getByRole('heading', { name: 'Investigate' })).toBeTruthy();
+    expect(within(columns).getByRole('heading', { name: 'Build' })).toBeTruthy();
+  });
+
   it('the header Inbox button opens the inbox drawer over the board', async () => {
     renderBoardPage({ page: BoardPage, org, factory, board: board() });
 
