@@ -3763,6 +3763,28 @@ components:
             other item
           nullable: true
           allOf: [{ $ref: "#/components/schemas/PartsSummary" }]
+        activity:
+          type: string
+          nullable: true
+          description: >-
+            While its run runs, one short line (at most 80 characters) from the run's latest tool
+            call, credential-shaped text replaced by ***: "Editing <path>", "Running <command>",
+            "Reading <path>", "Searching <pattern>" or "Using <tool>"; absent or null when no run
+            runs or it has called no tool yet
+        plan_steps:
+          description: >-
+            While its run runs, how far it is through its latest todo list (its latest TodoWrite
+            call); absent or null when no run runs, it has listed no todos or the list did not
+            parse (the worker cuts long tool input)
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/PlanSteps" }]
+    PlanSteps:
+      type: object
+      description: The todos a running run completed of all it listed ("2 of 5 steps")
+      required: [done, total]
+      properties:
+        done: { type: integer, description: Todos completed }
+        total: { type: integer, description: Todos listed }
     PartOf:
       type: object
       description: The assembly an item is a part of, and which part ("3 of 6")

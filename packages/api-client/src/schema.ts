@@ -2999,6 +2999,17 @@ export interface components {
             assembly?: components["schemas"]["PartOf"] | null;
             /** @description For an assembly (an item with parts), where its parts stand; absent or null for any other item */
             parts?: components["schemas"]["PartsSummary"] | null;
+            /** @description While its run runs, one short line (at most 80 characters) from the run's latest tool call, credential-shaped text replaced by ***: "Editing <path>", "Running <command>", "Reading <path>", "Searching <pattern>" or "Using <tool>"; absent or null when no run runs or it has called no tool yet */
+            activity?: string | null;
+            /** @description While its run runs, how far it is through its latest todo list (its latest TodoWrite call); absent or null when no run runs, it has listed no todos or the list did not parse (the worker cuts long tool input) */
+            plan_steps?: components["schemas"]["PlanSteps"] | null;
+        };
+        /** @description The todos a running run completed of all it listed ("2 of 5 steps") */
+        PlanSteps: {
+            /** @description Todos completed */
+            done: number;
+            /** @description Todos listed */
+            total: number;
         };
         /** @description The assembly an item is a part of, and which part ("3 of 6") */
         PartOf: {
