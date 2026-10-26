@@ -67,8 +67,8 @@ func (s *Store) CurrentRun(ctx context.Context, id domain.ItemID) (*domain.Curre
 	return cur, nil
 }
 
-// LiveTurns implements ports.FlowStats.
-func (s *Store) LiveTurns(ctx context.Context, factory domain.FactoryID) (map[domain.ItemID]int, error) {
+// LiveRuns implements ports.FlowStats.
+func (s *Store) LiveRuns(ctx context.Context, factory domain.FactoryID) (map[domain.ItemID]domain.LiveRun, error) {
 	org, err := orgOf(ctx)
 	if err != nil {
 		return nil, err
@@ -78,16 +78,29 @@ func (s *Store) LiveTurns(ctx context.Context, factory domain.FactoryID) (map[do
 	defer s.mu.Unlock()
 
 	running := s.liveRuns(org, factory)
-	out := make(map[domain.ItemID]int, len(running))
+	out := make(map[domain.ItemID]domain.LiveRun, len(running))
 
 	for id, r := range running {
-		out[id] = 0
+		var live domain.LiveRun
 
+		// Events are kept in the order they were appended, so the last match is the newest.
 		for _, e := range s.events {
-			if e.RunID == r.ID && e.Kind == domain.EventUsage {
-				out[id]++
+			if e.RunID != r.ID {
+				continue
+			}
+
+			switch e.Kind {
+			case domain.EventUsage:
+				live.Turns++
+			case domain.EventToolCall:
+				live.LastToolCall = e.Data
+				if tool, _ := e.Data["tool"].(string); tool == domain.ToolTodoWrite {
+					live.LastPlan = e.Data
+				}
 			}
 		}
+
+		out[id] = live
 	}
 
 	return out, nil
