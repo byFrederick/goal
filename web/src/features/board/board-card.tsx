@@ -7,7 +7,6 @@ import { formatAge, humanize, plural } from '../../shared/format';
 import { pullRequestLabel, toneText } from '../../shared/item-state';
 import { isMoveShortcut, MoveButton, moveShortcut } from '../../shared/move-menu';
 import { holds } from '../../shared/permissions';
-import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { cardState, isExpedite } from './stats';
 
@@ -23,7 +22,7 @@ export interface CardDrag {
 }
 
 /** M on a focused card opens its Move menu; other keys go on to the drag, if any. */
-function moveKeys(onMove: (() => void) | undefined, drag?: CardDrag) {
+export function moveKeys(onMove: (() => void) | undefined, drag?: CardDrag) {
   if (!onMove) return drag?.onKeyDown;
   return (e: KeyboardEvent) => {
     if (isMoveShortcut(e)) {
@@ -59,37 +58,14 @@ export function BoardCard({
   const state = cardState(item, decides);
   const age = formatAge(item.age_seconds);
   const expedite = isExpedite(item);
-  const expediteLabel = expedite ? (
-    <span className="inline-flex w-fit items-center gap-1 text-xs font-medium text-rework-ink">
-      <Zap size={12} strokeWidth={1.75} aria-hidden="true" />
-      Expedite
-    </span>
-  ) : null;
+  const expediteLabel = expedite ? <ExpediteMark /> : null;
 
   // Two lines at most: a done item's summary is an excerpt, and a card stays about as tall as its neighbours.
   const stateLine = (
     <span className={cn('line-clamp-2', compact ? 'text-[13px]' : 'text-xs', toneText[state.tone])}>{state.text}</span>
   );
-  // People who had to act on it so far (spec 4 §4.9); a card nobody touched says nothing.
-  const touches =
-    item.touch_count > 0 ? (
-      <span className="inline-flex basis-full items-center gap-1 text-xs text-you-ink tabular-nums">
-        <Users size={12} strokeWidth={1.75} aria-hidden="true" />
-        {plural(item.touch_count, 'touch', 'touches')}
-      </span>
-    ) : null;
-  const prLink = item.pr_url ? (
-    <a
-      href={item.pr_url}
-      target="_blank"
-      rel="noreferrer"
-      className="relative z-10 inline-flex items-center gap-1 text-xs text-ink underline-offset-2 hover:text-run"
-    >
-      {pullRequestLabel(item.pr_url)}
-      <ExternalLink size={12} strokeWidth={1.5} aria-hidden="true" />
-      <span className="sr-only">(opens in a new tab)</span>
-    </a>
-  ) : null;
+  const touches = <TouchCount item={item} />;
+  const prLink = <PrLink item={item} />;
 
   return (
     <article
@@ -138,10 +114,6 @@ export function BoardCard({
             <span className="whitespace-nowrap">{age}</span>
           </div>
           <CardTitle item={item} describedBy={drag?.describedBy} movable={Boolean(onMove)} />
-          <div className="flex flex-wrap items-center gap-1.5">
-            {item.type ? <Chip tone="quiet">{humanize(item.type)}</Chip> : null}
-            {item.lane ? <Chip tone="quiet">{item.lane}</Chip> : null}
-          </div>
           <div className="flex items-end gap-2">
             <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-2 gap-y-1">
               {stateLine}
@@ -156,7 +128,45 @@ export function BoardCard({
   );
 }
 
-function CardTitle({
+/** The expedite label: text with an icon, so the tint is not the only sign (WCAG 1.4.1). */
+export function ExpediteMark() {
+  return (
+    <span className="inline-flex w-fit items-center gap-1 text-xs font-medium text-rework-ink">
+      <Zap size={12} strokeWidth={1.75} aria-hidden="true" />
+      Expedite
+    </span>
+  );
+}
+
+/** People who had to act on an item so far (spec 4 §4.9); an item nobody touched says nothing. */
+export function TouchCount({ item }: { item: Pick<ItemCard, 'touch_count'> }) {
+  if (item.touch_count <= 0) return null;
+  return (
+    <span className="inline-flex basis-full items-center gap-1 text-xs text-you-ink tabular-nums">
+      <Users size={12} strokeWidth={1.75} aria-hidden="true" />
+      {plural(item.touch_count, 'touch', 'touches')}
+    </span>
+  );
+}
+
+/** The item's pull request, in a new tab; nothing when it has none. */
+export function PrLink({ item }: { item: Pick<ItemCard, 'pr_url'> }) {
+  if (!item.pr_url) return null;
+  return (
+    <a
+      href={item.pr_url}
+      target="_blank"
+      rel="noreferrer"
+      className="relative z-10 inline-flex items-center gap-1 text-xs text-ink underline-offset-2 hover:text-run"
+    >
+      {pullRequestLabel(item.pr_url)}
+      <ExternalLink size={12} strokeWidth={1.5} aria-hidden="true" />
+      <span className="sr-only">(opens in a new tab)</span>
+    </a>
+  );
+}
+
+export function CardTitle({
   item,
   compact = false,
   describedBy,
@@ -175,9 +185,10 @@ function CardTitle({
         to="/o/$org/f/$factory/items/$ref"
         params={{ ...params, ref: refParam(item.ref) }}
         draggable={false}
+        title={item.title}
         aria-keyshortcuts={movable ? moveShortcut : undefined}
         aria-describedby={describedBy}
-        className="line-clamp-3 no-underline outline-none after:absolute after:inset-0 after:rounded-control"
+        className="line-clamp-2 no-underline outline-none after:absolute after:inset-0 after:rounded-control"
       >
         {item.title}
       </Link>
