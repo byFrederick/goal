@@ -381,13 +381,14 @@ func (s *server) listCards(ctx context.Context, f *config.Factory, items []domai
 }
 
 // cards renders items of factory f as cards: for every item in progress the agent working it, the
-// copy (1-based) when its station runs several, and the turns of its running run; for every item
+// copy (1-based) when its station runs several, and the turns, latest tool call (activity) and
+// plan steps of its running run; for every item
 // the pull request and the summary its outputs name, its human touches, and whether it waits in the buffer of drum
 // (none when drum is ""), and for an assembly where its parts stand, for a part its assembly and
 // which part it is, read for the whole page at once. Nothing is held by the rope until
 // drum-buffer-rope is enforced.
 func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, drum string, items []domain.Item) ([]gen.ItemCard, error) {
-	leases, turns, err := s.inProgress(ctx, l, items)
+	leases, live, err := s.inProgress(ctx, l, items)
 	if err != nil {
 		return nil, err
 	}
@@ -439,8 +440,8 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 			}
 		}
 
-		if n, ok := turns[it.ID]; ok {
-			c.Turn = &n
+		if run, ok := live[it.ID]; ok {
+			c.Turn, c.Activity, c.PlanSteps = liveFields(run)
 		}
 
 		c.Assembly, c.Parts = assemblyFields(f, it, asms)
@@ -507,9 +508,30 @@ func (s *server) assemblies(ctx context.Context, f domain.FactoryID, items []dom
 	return asms, nil
 }
 
-// inProgress reads the leases of the stations where items are in progress, by item, and the
-// turns of the runs under them; nothing when no item is in progress.
-func (s *server) inProgress(ctx context.Context, l domain.Line, items []domain.Item) (map[domain.ItemID]domain.Lease, map[domain.ItemID]int, error) {
+// liveFields are a card's turn, activity and plan steps while run runs; activity and plan steps
+// are nil when the run has no tool call to summarize or no todo list that parses.
+func liveFields(run domain.LiveRun) (*int, *string, *gen.PlanSteps) {
+	turns := run.Turns
+
+	var (
+		activity *string
+		steps    *gen.PlanSteps
+	)
+
+	if line := domain.CardActivity(run.LastToolCall); line != "" {
+		activity = &line
+	}
+
+	if p, ok := domain.PlanSteps(run.LastPlan); ok {
+		steps = &gen.PlanSteps{Done: p.Done, Total: p.Total}
+	}
+
+	return &turns, activity, steps
+}
+
+// inProgress reads the leases of the stations where items are in progress, by item, and what
+// the runs under them have done so far; nothing when no item is in progress.
+func (s *server) inProgress(ctx context.Context, l domain.Line, items []domain.Item) (map[domain.ItemID]domain.Lease, map[domain.ItemID]domain.LiveRun, error) {
 	leases := map[domain.ItemID]domain.Lease{}
 	seen := map[string]bool{}
 
@@ -531,13 +553,13 @@ func (s *server) inProgress(ctx context.Context, l domain.Line, items []domain.I
 	}
 
 	if len(seen) == 0 {
-		return leases, map[domain.ItemID]int{}, nil
+		return leases, map[domain.ItemID]domain.LiveRun{}, nil
 	}
 
-	turns, err := s.items.LiveTurns(ctx, l.FactoryID)
+	live, err := s.items.LiveRuns(ctx, l.FactoryID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return leases, turns, nil
+	return leases, live, nil
 }

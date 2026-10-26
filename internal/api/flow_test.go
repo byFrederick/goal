@@ -271,6 +271,64 @@ func TestAPI_BoardCardsShowAgentPullRequestAndAge(t *testing.T) {
 	}
 }
 
+// A card whose item has a running run says what the run is doing now, from its latest tool call,
+// and how far it is through its latest todo list, on the board and in the items list; a queued
+// card says neither.
+func TestAPI_BoardCardsSayWhatTheRunIsDoing(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.seed(t, stBuild, domain.StateQueued, t0)
+	queued := h.seed(t, stBuild, domain.StateQueued, t0)
+	working := h.claim(t, 0)
+
+	run, err := h.store.StartRun(inOrg(t), ports.NewRun{FactoryID: lineID, ItemID: working.ID, Station: stBuild, Agent: agBackend, StartedAt: t0})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	call := func(tool, input string) domain.Event {
+		return domain.Event{
+			FactoryID: lineID, ItemID: working.ID, RunID: run, At: t0, Kind: domain.EventToolCall, Station: stBuild,
+			Data: map[string]any{"id": tool, domain.ToolCallTool: tool, domain.ToolCallInput: input},
+		}
+	}
+
+	todos := `{"todos":[{"status":"completed"},{"status":"completed"},{"status":"in_progress"},{"status":"pending"},{"status":"pending"}]}`
+	if err := h.store.AppendEvents(inOrg(t),
+		call("Read", `{"file_path":"AGENTS.md"}`), call(domain.ToolTodoWrite, todos), call("Edit", `{"file_path":"internal/x.go"}`),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	check := func(where string, c gen.ItemCard) {
+		t.Helper()
+
+		if c.Activity == nil || *c.Activity != "Editing internal/x.go" || c.PlanSteps == nil || *c.PlanSteps != (gen.PlanSteps{Done: 2, Total: 5}) {
+			t.Errorf("%s: in-progress card activity %v, plan steps %v; want 'Editing internal/x.go', 2 of 5", where, c.Activity, c.PlanSteps)
+		}
+	}
+
+	var board gen.Board
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/board", "", &board); code != http.StatusOK {
+		t.Fatalf("board = %d", code)
+	}
+
+	cards := cardsOf(board)
+	check("board", cards[working.Number])
+
+	if c := cards[queued.Number]; c.Activity != nil || c.PlanSteps != nil {
+		t.Errorf("queued card activity %v, plan steps %v; want neither", c.Activity, c.PlanSteps)
+	}
+
+	var page gen.ItemPage
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/items?state=in_progress", "", &page); code != http.StatusOK || len(page.Items) != 1 {
+		t.Fatalf("items = %d with %d cards, want one", code, len(page.Items))
+	}
+
+	check("items", page.Items[0])
+}
+
 // stationStats is what a test checks of one station's statistics on the board.
 type stationStats struct {
 	Busy, SendBack *float64

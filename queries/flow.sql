@@ -19,11 +19,17 @@ WHERE r.item_id = sqlc.arg(item_id) AND r.status = 'running'
 ORDER BY r.started_at DESC, r.id DESC
 LIMIT 1;
 
--- name: LiveTurns :many
--- The usage events of each item's newest running run under its live lease, for the board's
--- cards (leases_pkey on item_id, item_events_run_id_idx).
+-- name: LiveRuns :many
+-- The usage events of each item's newest running run under its live lease, the data of its
+-- newest tool call and of its newest call of the todo tool, for the board's cards (leases_pkey
+-- on item_id, item_events_run_id_idx).
 SELECT DISTINCT ON (r.item_id) r.item_id,
-       (SELECT count(*) FROM item_events e WHERE e.run_id = r.id AND e.kind = sqlc.arg(usage_kind)::text) AS usage_turns
+       (SELECT count(*) FROM item_events e WHERE e.run_id = r.id AND e.kind = sqlc.arg(usage_kind)::text) AS usage_turns,
+       (SELECT e.data FROM item_events e WHERE e.run_id = r.id AND e.kind = sqlc.arg(tool_call_kind)::text
+        ORDER BY e.id DESC LIMIT 1)::jsonb AS last_tool_call,
+       (SELECT e.data FROM item_events e WHERE e.run_id = r.id AND e.kind = sqlc.arg(tool_call_kind)::text
+          AND e.data->>'tool' = sqlc.arg(todo_tool)::text
+        ORDER BY e.id DESC LIMIT 1)::jsonb AS last_plan
 FROM leases l
 JOIN agent_runs r ON r.item_id = l.item_id
 WHERE l.factory_id = sqlc.arg(factory_id) AND r.status = 'running'
