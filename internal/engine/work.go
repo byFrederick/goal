@@ -77,13 +77,20 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 		return
 	}
 
+	// A station that preloads the factory's open work hears it, read once per claim.
+	inFlight, err := e.inFlightNote(ctx, l, st, it)
+	if err != nil {
+		e.block(ctx, log, c, err.Error())
+		return
+	}
+
 	var b box
 	defer e.deleteBox(ctx, log, &b)
 
 	rejection, attempt, lost := "", 1, 0
 
 	for {
-		res, chk, err := e.runOnce(ctx, c, &b, joinParts(assembly, feedbackOf(notes, rejection)))
+		res, chk, err := e.runOnce(ctx, c, &b, joinParts(assembly, inFlight, feedbackOf(notes, rejection)))
 
 		if e.cut(ctx, log, c, err) {
 			return
