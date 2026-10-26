@@ -5,7 +5,7 @@
 // What the caller may do comes from the factory's `can` (spec 3 §10.2): without item:decide the
 // decisions show disabled with who decides ("Approvers of sre decide here."); without
 // item:operate pause and move are not offered. goald refuses them anyway.
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { type QueryKey, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, Check, ExternalLink, GitMerge, Pause, Play, RotateCcw, Undo2 } from 'lucide-react';
 import { type FormEvent, useId, useState } from 'react';
 import { toast } from 'sonner';
@@ -78,13 +78,24 @@ export function useDecision(item: DecidableItem, factory: string) {
       toast.error(`Could not ${verb} ${item.ref}`, { description: err.message });
     },
     onSettled: () =>
-      Promise.all([
-        ...factoryWorkInvalidations(org.id, factory).map((queryKey) => client.invalidateQueries({ queryKey })),
-        client.invalidateQueries({ queryKey: keys.attention(org.id) }),
-        client.invalidateQueries({ queryKey: keys.inboxes(org.id) }),
-        client.invalidateQueries({ queryKey: keys.item(org.id, item.key) }),
-      ]),
+      Promise.all(
+        itemChangeInvalidations(org.id, factory, item.key).map((queryKey) => client.invalidateQueries({ queryKey })),
+      ),
   });
+}
+
+/**
+ * The queries a change to one item moves: its factory's work (the board), the organization's
+ * attention and inboxes, and the item with its parts (an assembly's pause, retry or cancel changes them).
+ */
+export function itemChangeInvalidations(org: string, factory: string, item: string): QueryKey[] {
+  return [
+    ...factoryWorkInvalidations(org, factory),
+    keys.attention(org),
+    keys.inboxes(org),
+    keys.item(org, item),
+    keys.parts(org, item),
+  ];
 }
 
 /** What the Item page knows to offer pause, resume, move and send back mid-run. */

@@ -90,6 +90,21 @@ export function hasOpenParts(parts: readonly Pick<AssemblyPart, 'state'>[]): boo
   return parts.some(isOpen);
 }
 
+/** How many parts are still to finish: neither merged nor cancelled. Cancelling the assembly cancels these. */
+export function openPartCount(parts: readonly Pick<AssemblyPart, 'state'>[]): number {
+  return parts.filter(isOpen).length;
+}
+
+/**
+ * What the header's pause control does: Resume once every open part is blocked (paused), Pause while
+ * any open part still runs, and nothing when no part is open.
+ */
+export function pauseAction(parts: readonly Pick<AssemblyPart, 'state'>[]): 'pause' | 'resume' | null {
+  const open = parts.filter(isOpen);
+  if (open.length === 0) return null;
+  return open.every((p) => p.state === 'blocked') ? 'resume' : 'pause';
+}
+
 /**
  * Who works a part, as the board names the agent's lane: "Infra engineer · Opus 5.5". Without a
  * lane (the board is not loaded, or the agent has none) it is the agent's name as words, never a

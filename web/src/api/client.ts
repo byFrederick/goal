@@ -411,6 +411,13 @@ export function pauseItem(org: string, item: string, reason?: string): Promise<I
   );
 }
 
+/** Closes an open item as cancelled; an assembly cancels its open parts too. 409 item-closed when it is done or cancelled. */
+export function cancelItem(org: string, item: string, reason?: string): Promise<Item> {
+  return unwrap(
+    goal.POST(orgPath('/items/{item}/cancel'), { params: { path: { org, item } }, body: reason ? { reason } : {} }),
+  );
+}
+
 /** Says why a person had to act on an item: one of its touches, named by its event id. */
 export async function setTouchReason(org: string, item: string, event: number, reason: TouchReason): Promise<void> {
   await unwrap(

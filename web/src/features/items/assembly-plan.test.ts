@@ -4,8 +4,10 @@ import {
   agentLabel,
   barSegments,
   hasOpenParts,
+  openPartCount,
   partStatus,
   partTone,
+  pauseAction,
   planWaves,
   spend,
   timeToFinish,
@@ -139,5 +141,28 @@ describe('agentLabel', () => {
 
   it('falls back to the agent name as words while the board is not loaded', () => {
     expect(agentLabel('infra-engineer', [])).toBe('Infra engineer');
+  });
+});
+
+describe('openPartCount', () => {
+  it('counts the parts neither done nor cancelled', () => {
+    const parts = [part(1, { state: 'done' }), part(2, { state: 'cancelled' }), part(3), part(4, { state: 'blocked' })];
+    expect(openPartCount(parts)).toBe(2);
+  });
+});
+
+describe('pauseAction', () => {
+  it('pauses while some open part still runs', () => {
+    expect(pauseAction([part(1, { state: 'in_progress' }), part(2, { state: 'blocked' })])).toBe('pause');
+  });
+
+  it('resumes once every open part is blocked; done and cancelled parts do not count', () => {
+    expect(
+      pauseAction([part(1, { state: 'done' }), part(2, { state: 'blocked' }), part(3, { state: 'blocked' })]),
+    ).toBe('resume');
+  });
+
+  it('offers nothing when no part is open', () => {
+    expect(pauseAction([part(1, { state: 'done' }), part(2, { state: 'cancelled' })])).toBeNull();
   });
 });
