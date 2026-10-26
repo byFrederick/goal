@@ -14,8 +14,8 @@ import (
 // domain.MaxInFlight entries shown, the newest page is what a planner needs.
 const inFlightRead = 500
 
-// openStates are the states of an item that is neither done nor cancelled.
-var openStates = []domain.ItemState{
+// inFlightStates are the states of an item or assembly that is neither done nor cancelled.
+var inFlightStates = []domain.ItemState{
 	domain.StateQueued, domain.StateReady, domain.StateInProgress,
 	domain.StateWaitingHuman, domain.StateBlocked, domain.StateAssembly,
 }
@@ -29,7 +29,7 @@ func (e *Engine) inFlightNote(ctx context.Context, l domain.Line, st domain.Stat
 		return "", nil
 	}
 
-	open, err := e.store.ListItems(ctx, ports.ItemQuery{FactoryID: it.FactoryID, States: openStates, Limit: inFlightRead})
+	open, err := e.store.ListItems(ctx, ports.ItemQuery{FactoryID: it.FactoryID, States: inFlightStates, Limit: inFlightRead})
 	if err != nil {
 		return "", fmt.Errorf("read the open items of factory %s: %w", it.FactoryID, err)
 	}

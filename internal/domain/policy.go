@@ -29,6 +29,16 @@ type FlowPolicy struct {
 	Assemblies AssemblyPolicy
 	// Retry caps the runs again of a claim whose sandbox is lost.
 	Retry RetryPolicy
+	// Dependencies maps the output fields that set an item's dependencies.
+	Dependencies DependencyPolicy
+}
+
+// DependencyPolicy is board.flow.dependencies: which output fields set an item's dependencies.
+// The platform names no field; a definition maps them (AGENTS.md rule 1).
+type DependencyPolicy struct {
+	// Paths is the output field whose list of file globs replaces the item's paths when a
+	// station finishes with it (PathsFrom); "" when no output sets paths.
+	Paths string
 }
 
 // DefaultTransientAttempts is board.flow.retry.transient.attempts when a definition leaves it out.
@@ -83,6 +93,10 @@ const (
 	// OverlapAllow builds items in parallel whatever files they share.
 	OverlapAllow OverlapPolicy = "allow"
 )
+
+// Holds reports whether items whose paths overlap wait for each other: every policy but
+// OverlapAllow serializes them, as does the zero policy of a line built without config.
+func (p OverlapPolicy) Holds() bool { return p != OverlapAllow }
 
 // AssemblyPolicy is board.flow.assemblies, with its defaults applied.
 type AssemblyPolicy struct {

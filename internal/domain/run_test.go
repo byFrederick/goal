@@ -3,6 +3,7 @@ package domain
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 	"testing"
 )
 
@@ -49,5 +50,38 @@ func TestParseVerdict_KeepsTheCategory(t *testing.T) {
 	v, err := ParseVerdict(json.RawMessage(`{"decision":"reject","reason":"no links","category":"Claims without evidence"}`))
 	if err != nil || v.Category != catEvidence {
 		t.Fatalf("ParseVerdict = %+v, %v; want the category kept", v, err)
+	}
+}
+
+// PathsFrom reads the output field a definition maps to the item's paths; an unmapped field, a
+// missing or empty one and one that is not a list of strings set none.
+func TestPathsFrom(t *testing.T) {
+	t.Parallel()
+
+	const field = "touches"
+
+	tests := []struct {
+		name, field, output string
+		want                []string
+	}{
+		{"mapped", field, `{"touches":["internal/a/**","docs/a.md"]}`, []string{"internal/a/**", "docs/a.md"}},
+		{"blank entries dropped", field, `{"touches":["", "internal/a/**"]}`, []string{"internal/a/**"}},
+		{"unmapped", "", `{"touches":["internal/a/**"]}`, nil},
+		{"absent", field, `{"lane":"backend"}`, nil},
+		{"empty", field, `{"touches":[]}`, nil},
+		{"only blanks", field, `{"touches":[""]}`, nil},
+		{"not a list", field, `{"touches":"internal/a/**"}`, nil},
+		{"not strings", field, `{"touches":[1,2]}`, nil},
+		{"not an object", field, `[1]`, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := PathsFrom(json.RawMessage(tt.output), tt.field)
+			if !slices.Equal(got, tt.want) || (got == nil) != (tt.want == nil) {
+				t.Errorf("PathsFrom(%s, %q) = %#v, want %#v", tt.output, tt.field, got, tt.want)
+			}
+		})
 	}
 }

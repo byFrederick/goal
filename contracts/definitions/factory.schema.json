@@ -472,6 +472,18 @@
                 }
               }
             },
+            "dependencies": {
+              "type": "object",
+              "description": "Which station output fields set an item's dependencies. The platform names no field; an omitted key maps none.",
+              "additionalProperties": false,
+              "properties": {
+                "paths": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The top-level output field whose list of file globs replaces the item's paths when a station finishes with a non-empty one. Items whose paths overlap wait for each other under assemblies.overlap serialize."
+                }
+              }
+            },
             "retry": {
               "type": "object",
               "description": "How often a claim runs an item again after a failure that is not the item's fault. Omitted keys take their defaults.",
