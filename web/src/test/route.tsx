@@ -53,7 +53,7 @@ export function renderFactoryPage({
   seed?: readonly Seed[];
   station?: string | undefined;
   /** Further search params the page is at (a filter's choice, a grouping), beside `station`. */
-  search?: Record<string, string>;
+  search?: Record<string, string> | undefined;
 }) {
   polyfillLayout();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
@@ -120,7 +120,7 @@ export function renderBoardPage({
   builderMeta?: BuilderMeta;
   station?: string;
   /** Further search params the page is at (a filter's choice, a grouping), beside `station`. */
-  search?: Record<string, string>;
+  search?: Record<string, string> | undefined;
 }) {
   const seed: Seed[] = [];
   if (board) seed.push([boardQuery(org.id, factory.id).queryKey, board]);

@@ -21,13 +21,19 @@ interface BoardSearch extends BoardView {
 const text = (value: unknown): string | undefined => (typeof value === 'string' && value !== '' ? value : undefined);
 
 export const Route = createFileRoute('/o/$org/f/$factory/board')({
-  validateSearch: (search: Record<string, unknown>): BoardSearch => ({
-    station: text(search.station),
-    assembly: text(search.assembly),
-    role: text(search.role),
-    status: statusChoices.find((s) => s.value === search.status)?.value,
-    group: search.group === 'assembly' ? 'assembly' : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>): BoardSearch => {
+    const valid: BoardSearch = {};
+    const station = text(search.station);
+    const assembly = text(search.assembly);
+    const role = text(search.role);
+    const status = statusChoices.find((s) => s.value === search.status)?.value;
+    if (station) valid.station = station;
+    if (assembly) valid.assembly = assembly;
+    if (role) valid.role = role;
+    if (status) valid.status = status;
+    if (search.group === 'assembly') valid.group = 'assembly';
+    return valid;
+  },
   // The touch metrics only add each station's rate: fetched alongside, never waited for.
   loader: ({ context: { queryClient, org, factory } }) => {
     void queryClient.prefetchQuery(touchesQuery(org.id, factory.id));

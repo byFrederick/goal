@@ -369,10 +369,11 @@ describe('board filters and grouping', () => {
   };
 
   /** The titles of the cards shown in the board's columns, in the order they render. */
+  /** The titles of the cards shown, in order: each card's heading link (not its assembly line). */
   const shownTitles = (region: HTMLElement = screen.getByRole('region', { name: 'Stations' })) =>
     within(region)
-      .queryAllByRole('link')
-      .map((link) => link.textContent);
+      .queryAllByRole('article')
+      .map((card) => within(within(card).getByRole('heading', { level: 3 })).getByRole('link').textContent);
 
   /** A filter's chosen value: the option's value, '' for Any. */
   const choice = (name: string) => (screen.getByRole('combobox', { name }) as HTMLSelectElement).value;
