@@ -143,6 +143,22 @@ func (q *Queries) ItemParts(ctx context.Context, parentID uuid.UUID) ([]WorkItem
 	return items, nil
 }
 
+const lastDonePartStation = `-- name: LastDonePartStation :one
+SELECT station FROM work_items
+WHERE parent_id = $1::uuid AND part_key IS NOT NULL AND state = 'done'
+ORDER BY done_at DESC NULLS LAST, number DESC
+LIMIT 1
+`
+
+// The station of an assembly's most recently done part, the line's done station: where a done
+// assembly closes (migration 00062 backfills with the same order).
+func (q *Queries) LastDonePartStation(ctx context.Context, parentID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, lastDonePartStation, parentID)
+	var station string
+	err := row.Scan(&station)
+	return station, err
+}
+
 const partCounts = `-- name: PartCounts :one
 SELECT count(*) FILTER (WHERE state NOT IN ('done', 'cancelled')) AS open,
        count(*) FILTER (WHERE state = 'done')                      AS done,

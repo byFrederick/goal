@@ -26,3 +26,11 @@ SELECT count(*) FILTER (WHERE state NOT IN ('done', 'cancelled')) AS open,
        count(*) FILTER (WHERE state = 'done')                      AS done,
        count(*)                                                    AS total
 FROM work_items WHERE parent_id = sqlc.arg(parent_id)::uuid AND part_key IS NOT NULL;
+
+-- name: LastDonePartStation :one
+-- The station of an assembly's most recently done part, the line's done station: where a done
+-- assembly closes (migration 00062 backfills with the same order).
+SELECT station FROM work_items
+WHERE parent_id = sqlc.arg(parent_id)::uuid AND part_key IS NOT NULL AND state = 'done'
+ORDER BY done_at DESC NULLS LAST, number DESC
+LIMIT 1;

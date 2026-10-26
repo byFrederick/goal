@@ -236,7 +236,9 @@ func (s *Store) partsOf(parent domain.ItemID) domain.Parts {
 
 // closeAssembly closes the assembly of a part that just closed when it was the last one open:
 // cancelled when cancel is set (a person cancelled the assembly), else done when any part is
-// done, cancelled otherwise. Callers hold s.mu.
+// done, cancelled otherwise. Done, it moves to the station of its most recently done part, the
+// line's done station, where a finished single item lands; cancelled, it keeps its own, as a
+// cancelled single item does. Callers hold s.mu.
 func (s *Store) closeAssembly(part *domain.Item, at time.Time, cancel bool) {
 	if part.PartKey == "" || !closed(part.State) {
 		return
@@ -256,7 +258,7 @@ func (s *Store) closeAssembly(part *domain.Item, at time.Time, cancel bool) {
 	parent.State, parent.UpdatedAt = domain.StateCancelled, at
 
 	if parts.Done > 0 && !cancel {
-		parent.State, parent.DoneAt = domain.StateDone, at
+		parent.State, parent.DoneAt, parent.Station = domain.StateDone, at, lastDone(parts).Station
 	}
 
 	s.trackSpan(parent, &before, at)
@@ -264,6 +266,23 @@ func (s *Store) closeAssembly(part *domain.Item, at time.Time, cancel bool) {
 		FactoryID: parent.FactoryID, ItemID: parent.ID, At: at, Kind: domain.EventAssemblyDone, Station: parent.Station,
 		Actor: domain.ActorEngine, Data: map[string]any{"state": string(parent.State), "parts_done": parts.Done, "parts": parts.Total},
 	})
+}
+
+// lastDone returns the most recently done of parts, by done time, then number; parts has one.
+func lastDone(parts domain.Parts) domain.Item {
+	var last domain.Item
+
+	for _, p := range parts.Items {
+		if p.State != domain.StateDone {
+			continue
+		}
+
+		if last.ID == "" || p.DoneAt.After(last.DoneAt) || (p.DoneAt.Equal(last.DoneAt) && p.Number > last.Number) {
+			last = p
+		}
+	}
+
+	return last
 }
 
 // CascadeParts implements ports.Store. It checks every part's transition before it moves any,

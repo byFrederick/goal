@@ -332,19 +332,21 @@ func testAssemblyClosesWithItsLastPart(f *fixture) {
 		t.Fatal(err)
 	}
 
+	// Done, it lands where its done parts did, the line's done station, as a finished item does.
 	want := f.item(t, it.ID)
-	if want.State != domain.StateDone || !want.DoneAt.Equal(t3) || !want.UpdatedAt.Equal(t3) || want.Station != stWork {
-		t.Errorf("assembly after its last part = %s at %s, done %v, updated %v; want done at %s at %v", want.State, want.Station, want.DoneAt, want.UpdatedAt, stWork, t3)
+	if want.State != domain.StateDone || !want.DoneAt.Equal(t3) || !want.UpdatedAt.Equal(t3) || want.Station != stNext {
+		t.Errorf("assembly after its last part = %s at %s, done %v, updated %v; want done at %s at %v", want.State, want.Station, want.DoneAt, want.UpdatedAt, stNext, t3)
 	}
 
 	events := f.Events(t, it.ID)
 	sameEvents(t, events[len(events)-1:], []domain.Event{{
-		FactoryID: f.factory, ItemID: it.ID, At: t3, Kind: domain.EventAssemblyDone, Station: stWork, Actor: domain.ActorEngine,
+		FactoryID: f.factory, ItemID: it.ID, At: t3, Kind: domain.EventAssemblyDone, Station: stNext, Actor: domain.ActorEngine,
 		Data: map[string]any{"state": string(domain.StateDone), "parts_done": 2, dataParts: 3},
 	}})
 }
 
-// An assembly whose parts were all cancelled is cancelled.
+// An assembly whose parts were all cancelled is cancelled where it is, at the station that
+// planned it, as a cancelled item is; its assembly_done event says so.
 func testAssemblyCancelledWithItsParts(f *fixture) {
 	t := f.t
 
@@ -355,8 +357,62 @@ func testAssemblyCancelledWithItsParts(f *fixture) {
 		t.Fatal(err)
 	}
 
-	if got := f.item(t, other.ID); got.State != domain.StateCancelled {
-		t.Errorf("assembly whose parts were all cancelled is %q; want cancelled", got.State)
+	if got := f.item(t, other.ID); got.State != domain.StateCancelled || got.Station != stWork {
+		t.Errorf("assembly whose parts were all cancelled is %s at %s; want cancelled at %s", got.State, got.Station, stWork)
+	}
+
+	events := f.Events(t, other.ID)
+	sameEvents(t, events[len(events)-1:], []domain.Event{{
+		FactoryID: f.factory, ItemID: other.ID, At: t1, Kind: domain.EventAssemblyDone, Station: stWork, Actor: domain.ActorEngine,
+		Data: map[string]any{"state": string(domain.StateCancelled), "parts_done": 0, dataParts: 1},
+	}})
+}
+
+// An open assembly stays at the station that planned it but is no load there: StationLoads
+// and StationTimes count its parts where they are, never the assembly.
+func testStationLoadsCountNoOpenAssembly(f *fixture) {
+	t := f.t
+
+	it, l := f.planning(t, domain.NewItem{Title: titleBig})
+	_, parts := f.assemble(t, assembly(it, l, plan()[:1]))
+	part := parts.Items[0]
+
+	f.move(t, ports.Transition{ItemID: part.ID, From: part.Position(), To: domain.Position{Station: stNext, State: domain.StateQueued}, At: t1})
+
+	if got := f.item(t, it.ID); got.State != domain.StateAssembly || got.Station != stWork {
+		t.Fatalf("assembly is %s at %s; want assembly at %s", got.State, got.Station, stWork)
+	}
+
+	loads, err := f.Store.StationLoads(f.ctx(t), f.factory)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, ld := range loads {
+		want := domain.StationLoad{Station: ld.Station}
+		if ld.Station == stNext {
+			want.Waiting = 1
+		}
+
+		if ld != want {
+			t.Errorf("load at %s = %+v; want %+v", ld.Station, ld, want)
+		}
+	}
+
+	times, _, err := f.Flow.StationTimes(f.ctx(t), f.factory, t1, t1.Add(10*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, st := range times {
+		want := 0
+		if st.Station == stNext {
+			want = 1
+		}
+
+		if st.WaitingNow != want {
+			t.Errorf("StationTimes at %s waiting now = %d; want %d", st.Station, st.WaitingNow, want)
+		}
 	}
 }
 
