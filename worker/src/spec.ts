@@ -36,6 +36,19 @@ export const Connection = z.object({
 });
 export type Connection = z.infer<typeof Connection>;
 
+/**
+ * One of the factory rules that apply to the run (ADR 0014): its name, the sha256 of its rule
+ * file in the run's definition version, its paths and the markdown file to write (frontmatter
+ * with description and paths, then the body).
+ */
+export const Rule = z.object({
+  name: z.string().min(1),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  paths: z.array(z.string()).optional(),
+  content: z.string(),
+});
+export type Rule = z.infer<typeof Rule>;
+
 /** The task as /goal/spec.json holds it: the bundle's spec plus the gateway's URL. It holds no secrets. */
 export const TaskSpec = z.object({
   factory_id: z.string().min(1),
@@ -58,6 +71,8 @@ export const TaskSpec = z.object({
   connections: z.array(Connection).default([]),
   /** The knowledge sources the gateway's knowledge tools search for this run. */
   knowledge_sources: z.array(z.string()).optional(),
+  /** The factory rules that apply to the run; absent from a goald before factory rules. */
+  rules: z.array(Rule).optional(),
   /**
    * Files that conflicted when prepare brought the item's branch up to date with the default
    * branch; it aborted, so the branch is as pushed and the agent resolves them first.

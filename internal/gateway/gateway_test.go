@@ -85,6 +85,27 @@ func (d definitions) AgentFiles(_ context.Context, id domain.DefinitionVersionID
 	return files, nil
 }
 
+// Rules stands in for the definitions cache's: the version's rules that apply to run, each under
+// the hash of its body with its body as content.
+func (d definitions) Rules(_ context.Context, id domain.DefinitionVersionID, run domain.RuleTarget) ([]domain.RunRule, error) {
+	f, ok := d[id]
+	if !ok {
+		return nil, fmt.Errorf("definition version %s: %w", id, ports.ErrNotFound)
+	}
+
+	var declared []domain.Rule
+	for _, r := range f.Spec.Rules {
+		declared = append(declared, domain.Rule{Name: r.Name, AppliesTo: r.AppliesTo, Paths: r.Paths, Body: r.Body})
+	}
+
+	var out []domain.RunRule
+	for _, r := range domain.EffectiveRules(declared, run) {
+		out = append(out, domain.RunRule{Name: r.Name, SHA256: domain.HashBlob([]byte(r.Body)), Paths: r.Paths, Content: r.Body})
+	}
+
+	return out, nil
+}
+
 type harness struct {
 	url   string
 	gw    *Gateway
