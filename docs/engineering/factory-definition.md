@@ -57,3 +57,22 @@ No other key is allowed. A misspelt one, such as `applies_to`, is an error, not 
 | `schema-*` | an entry that does not match the schema, such as an unknown key or a `source` outside `./rules/` |
 
 Rule files are content-addressed blobs of the definition version like every other file of it, so a run keeps the rules of the version it pinned. Delivering the effective rules to a run's box, and recording them in its events, is ADR 0014 §4.
+
+### Review contract pattern
+
+A review station's output contract may carry an optional `violations` array, one entry per factory rule the reviewed work broke ([ADR 0014](../adr/0014-factory-rules.md) §6):
+
+```json
+{
+  "decision": "reject",
+  "reason": "see the violations",
+  "violations": [
+    { "rule": "go-errors", "reason": "the store error is returned bare" }
+  ]
+}
+```
+
+- `rule` is the `name` of a rule in `spec.rules`; `reason` is one line saying how it was broken.
+- The key is a convention, not a contract goald ships: the definition's own contract declares it (an array of objects with `rule` and `reason` strings). goald reads `violations` from any accepted station output that has it, whatever the station or contract.
+- When the output is accepted (it passed its contract and checks, whether its gate approves or rejects), goald appends one `rule_violated` item event per entry, with data `{rule, reason, station, agent}`, in the same transaction that accepts the output, so a retry or a lost lease never counts it twice. Counting those events by `rule` shows which rules break most.
+- An entry naming a rule the run's definition version does not declare, or no rule, is ignored and logged; the others of the same output still count. A `violations` value that is not a list records nothing and never blocks the item.

@@ -65,6 +65,9 @@ type Line struct {
 	Connections []string
 	// KnowledgeSources are the organization's knowledge sources the factory's agents may search.
 	KnowledgeSources []string
+	// Rules are the factory rules the version declares (spec.rules, ADR 0014), in declaration
+	// order; a violation an output reports counts only when it names one of them.
+	Rules []Rule
 	// Removed names each form connections replaced that a version published before the cutover
 	// still has, as "<path> (<code>)" (spec 4 §4.4: field-removed, env-reference-removed,
 	// connection-inline-removed). Such a version loads, so its items stay visible, but it does
