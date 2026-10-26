@@ -42,6 +42,8 @@ const (
 	runtimeModel  = "    modelConnection: claude\n"
 	specAgents    = "  agents:\n"
 	routeBackend  = "/line/stations/1/route/backend"
+	// answerContract is the output contract file the contract cases write.
+	answerContract = "contracts/answer.schema.json"
 )
 
 // edited applies old → new replacements to baseFactory.
@@ -97,8 +99,8 @@ var locatedCases = []struct {
 		code: "yaml-invalid", section: domain.SectionFiles, file: "evals/evals.yaml", anyLine: true,
 	},
 	{
-		name: "a JSON file does not parse", doc: baseFactory, extra: map[string]string{"contracts/answer.schema.json": "{"},
-		code: "json-invalid", section: domain.SectionFiles, file: "contracts/answer.schema.json",
+		name: "a JSON file does not parse", doc: baseFactory, extra: map[string]string{answerContract: "{"},
+		code: "json-invalid", section: domain.SectionFiles, file: answerContract,
 	},
 	{name: "no factory.yaml", code: "factory-yaml-missing", section: domain.SectionFiles},
 	{
@@ -210,6 +212,13 @@ var locatedCases = []struct {
 	{
 		name: "contract not found", doc: edited(specAgents, "  contracts:\n    answer: ./contracts/answer.json #here\n"+specAgents),
 		code: "contract-not-found", section: domain.SectionFiles,
+	},
+	{
+		name: "contract not a tool schema",
+		doc: edited(specAgents, "  contracts:\n    answer: ./contracts/answer.schema.json #here\n"+specAgents,
+			workAgentLine, workAgentLine+"        output: answer\n"),
+		extra: map[string]string{answerContract: `{"oneOf": [{"type": "object"}]}`},
+		code:  codeContractNotToolSchema, section: domain.SectionFiles,
 	},
 	{
 		name: "built-in ask", doc: edited(agentPrompt, agentPrompt+"      builtins: { read: ask } #here\n"),
@@ -387,6 +396,136 @@ func TestCheck_OrganizationConnectionsAreNames(t *testing.T) {
 	if names := []string{f.Spec.Connections[0].Name, f.Spec.Connections[1].Name}; !reflect.DeepEqual(names, []string{"github", "datadog"}) ||
 		f.Spec.Connections[0].Inline() {
 		t.Errorf("connections = %+v, want the organization's github and datadog", f.Spec.Connections)
+	}
+}
+
+// specContract is shaped like the software factory's spec contract: a top-level object whose
+// properties nest arrays of objects with enums and patterns, and no top-level combinator.
+const specContract = `{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["title", "lane", "acceptance"],
+  "additionalProperties": false,
+  "properties": {
+    "title": { "type": "string", "minLength": 10 },
+    "lane": { "type": "string", "enum": ["backend", "frontend", "infra"] },
+    "acceptance": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "touches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path"],
+        "properties": {
+          "path": { "type": "string", "pattern": "^[a-z]" },
+          "kind": { "type": "string", "enum": ["add", "change", "remove"] }
+        }
+      }
+    }
+  }
+}`
+
+// The output contract becomes the model's tool input_schema, which takes only a plain object at
+// the top level: a contract that is not one is refused before it can fail every run.
+func TestCheck_OutputContractsAreToolSchemas(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, contract string
+		keyword        string // the keyword the problem names; "" for no problem
+	}{
+		{name: "plain object", contract: `{"type": "object", "properties": {"a": {"type": "string"}}}`},
+		{
+			name:     "object with $schema, $defs and required",
+			contract: `{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "$defs": {"a": {"type": "string"}}, "required": ["a"], "properties": {"a": {"$ref": "#/$defs/a"}}}`,
+		},
+		{
+			name:     "combinators nested under properties and items",
+			contract: `{"type": "object", "properties": {"a": {"oneOf": [{"type": "string"}, {"type": "integer"}]}, "b": {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "null"}]}}}}`,
+		},
+		{name: "the software factory's spec contract", contract: specContract},
+		{name: "top-level oneOf", contract: `{"type": "object", "oneOf": [{"required": ["a"]}, {"required": ["b"]}]}`, keyword: "oneOf"},
+		{name: "top-level anyOf", contract: `{"anyOf": [{"type": "object"}, {"type": "object"}]}`, keyword: "anyOf"},
+		{name: "top-level allOf", contract: `{"type": "object", "allOf": [{"required": ["a"]}]}`, keyword: "allOf"},
+		{name: "top-level not", contract: `{"type": "object", "not": {"required": ["a"]}}`, keyword: "not"},
+		{
+			name:     "top-level if/then/else",
+			contract: `{"type": "object", "if": {"required": ["a"]}, "then": {"required": ["b"]}, "else": {"required": ["c"]}}`,
+			keyword:  "if",
+		},
+		{name: "type array", contract: `{"type": "array", "items": {"type": "string"}}`, keyword: "type"},
+		{name: "type missing", contract: `{"properties": {"a": {"type": "string"}}}`, keyword: "type"},
+	}
+
+	doc := edited(specAgents, "  contracts:\n    answer: ./contracts/answer.schema.json\n"+specAgents,
+		workAgentLine, workAgentLine+"        output: answer\n")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, problems := Check(checkTree(doc, map[string]string{answerContract: tt.contract}))
+
+			if tt.keyword == "" {
+				if len(problems) > 0 {
+					t.Fatalf("problems = %+v, want none", problems)
+				}
+
+				return
+			}
+
+			if len(problems) != 1 || problems[0].Code != codeContractNotToolSchema || problems[0].Severity != domain.SeverityError {
+				t.Fatalf("problems = %+v, want one %s error", problems, codeContractNotToolSchema)
+			}
+
+			msg := problems[0].Message
+			for _, part := range []string{"contract answer (./contracts/answer.schema.json)", tt.keyword, "in Go"} {
+				if !strings.Contains(msg, part) {
+					t.Errorf("message %q does not name %q", msg, part)
+				}
+			}
+		})
+	}
+}
+
+// Only output contracts become a tool schema, each checked once; a missing or unparsable one is
+// reported by its own check.
+func TestCheck_OutputContractChecksOnlyWhatRuns(t *testing.T) {
+	t.Parallel()
+
+	oneOf := `{"oneOf": [{"type": "object"}]}`
+	twice := edited(specAgents, "  contracts:\n    answer: ./contracts/answer.schema.json\n    spare: ./contracts/spare.schema.json\n"+specAgents,
+		workAgentLine, workAgentLine+"        output: answer\n",
+		doneStation, "      - id: again\n        kind: agent\n        agent: worker\n        output: answer\n"+doneStation)
+
+	tests := []struct {
+		name  string
+		extra map[string]string
+		want  []string
+	}{
+		{
+			name:  "two stations, one contract; an unused one is not checked",
+			extra: map[string]string{answerContract: oneOf, "contracts/spare.schema.json": oneOf},
+			want:  []string{codeContractNotToolSchema},
+		},
+		{
+			name:  "does not parse",
+			extra: map[string]string{answerContract: "{", "contracts/spare.schema.json": oneOf},
+			want:  []string{codeJSONInvalid},
+		},
+		{name: "missing", extra: map[string]string{"contracts/spare.schema.json": oneOf}, want: []string{codeContractNotFound}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, problems := Check(checkTree(twice, tt.extra))
+
+			got := names(problems, func(p domain.DefinitionProblem) string { return p.Code })
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("codes = %v, want %v (%+v)", got, tt.want, problems)
+			}
+		})
 	}
 }
 
