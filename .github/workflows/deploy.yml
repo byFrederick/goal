@@ -8,15 +8,37 @@
 # Rollback: run this workflow by hand (workflow_dispatch) from main with the sha of an earlier commit
 # of main that ci passed for; it deploys that commit without the paths check (cloudflare-operations.md,
 # Deploys).
-# One deploy at a time and never one cancelled in flight: a newer push waits, and when several wait
-# only the newest runs (its diff against the last deploy includes the others'). ci on main is never
-# cancelled in flight and runs one at a time, so its runs finish in push order; when several finish
-# close together, only the newest waiting deploy runs, none is cancelled in flight, and its diff
-# against the last deployed sha covers the others, so an older commit never deploys after a newer one.
-# Hardening (github-actions-hardening skill): actions pinned to commit SHAs, contents: read and
-# actions: read only (the changes job reads ci's and this workflow's runs), the deploy token only in
-# the env of the one step that runs wrangler, never the terraform CLOUDFLARE_API_TOKEN of the same
-# environment, no ${{ }} expressions inside run scripts, nothing printed but file names and shas.
+# Only the newest push is deployed, and a rollback is never cancelled. Each event has its own
+# concurrency group (deploy-production-workflow_run, deploy-production-workflow_dispatch), with
+# cancel-in-progress true only for workflow_run: a newer push deploy cancels the push deploy in flight
+# (or waiting) and starts at once, while a rollback is never cancelled by a push and a later rollback
+# waits for the one in flight. One shared group cannot do this: a workflow_run run with
+# cancel-in-progress true would cancel a rollback in flight.
+# Never two wrangler deploys at once: two groups could run a rollback and a push deploy side by side,
+# so the deploy job's guard step, before the wrangler step, waits while a run of the other event can
+# deploy. It reads this workflow's runs (gh run list, gh run view --json jobs; actions: read). Another
+# run blocks this one when its deploy job is in progress past the guard step (matched by its exact
+# name, GUARD_STEP: rename both together), or when it has not passed its guard yet (no deploy job,
+# queued, or before or in its guard) and its run id is smaller. So of two runs waiting at once the
+# older proceeds and the newer waits for it: no deadlock, and both never pass together. The wait is
+# bounded (30 minutes, then the step fails; the job's timeout leaves room for a deploy after it).
+# A job-level concurrency group with cancel-in-progress false was rejected: GitHub keeps one pending
+# run per group, so a push queued behind a pending rollback would silently replace it.
+# Why cancelling is safe: the changes job diffs against the commit of the last deploy job that
+# SUCCEEDED, so what a cancelled deploy carried is carried by the next one; ci on main runs one at a
+# time and is never cancelled in flight (ci.yml), so workflow_run events arrive in push order; and a
+# newer deploy only ever cancels an older one, so an older commit never deploys after a newer one.
+# A cancel during wrangler deploy can leave the new Worker version live with the previous container
+# images, or a container rollout unfinished (wrangler activates the Worker before the containers);
+# the next deploy redeploys every path changed since the last successful deploy and wrangler deploy
+# reconciles the Worker version and the container application settings to the config.
+# `task deploy:worker` retries wrangler deploy once, only when it timed out preparing the container
+# image on Cloudflare's network.
+# Hardening (github-actions-hardening skill): actions pinned to commit SHAs, contents: read
+# everywhere and actions: read only where needed (the changes job reads ci's and this workflow's
+# runs, the deploy job's guard this workflow's), the deploy token only in the env of the one step
+# that runs wrangler, never the terraform CLOUDFLARE_API_TOKEN of the same environment, no ${{ }}
+# expressions inside run scripts, nothing printed but file names, shas and this workflow's run ids.
 name: deploy
 run-name: deploy ${{ inputs.sha || github.event.workflow_run.head_sha }}
 
@@ -36,8 +58,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-production
-  cancel-in-progress: false
+  group: deploy-production-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'workflow_run' }}
 
 jobs:
   changes:
@@ -116,10 +138,11 @@ jobs:
     needs: changes
     if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75 # up to 30 minutes in the guard, then the deploy's 45
     environment: production
     permissions:
       contents: read
+      actions: read # the guard reads this workflow's runs
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -132,6 +155,41 @@ jobs:
         with:
           version: 3.46.1
           checksum: 8220f1b4563a5bed932348b7350aafba66e1100e90bd411e4bcda4fe80de08f1 # task_linux_amd64.tar.gz
+      - name: Wait while a deploy of the other event runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          RUN_ID: ${{ github.run_id }}
+          GUARD_STEP: Wait while a deploy of the other event runs
+          WAIT_SECONDS: "1800"
+        run: |
+          set -eu
+          deadline=$(( $(date +%s) + WAIT_SECONDS ))
+          while :; do
+            blocker=""
+            for id in $(gh run list --repo "$REPO" --workflow deploy.yml --limit 50 --json databaseId,event,status |
+              jq -r --arg event "$EVENT" '.[] | select(.status != "completed" and .event != $event) | .databaseId'); do
+              # deploying: its deploy job is past the guard; done: no deploy job will run; pending: not past it yet.
+              state=$(gh run view "$id" --repo "$REPO" --json jobs | jq -r --arg step "$GUARD_STEP" '
+                [.jobs[] | select(.name == "deploy")][0] as $job
+                | if $job == null then "pending"
+                  elif $job.status == "completed" then "done"
+                  elif ([$job.steps[]? | select(.name == $step and .status == "completed")] | length) > 0 then "deploying"
+                  else "pending" end')
+              if [ "$state" = deploying ] || { [ "$state" = pending ] && [ "$id" -lt "$RUN_ID" ]; }; then
+                blocker=$id
+                break
+              fi
+            done
+            [ -z "$blocker" ] && exit 0
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::error::deploy run $blocker of the other event is still running after $WAIT_SECONDS s"
+              exit 1
+            fi
+            echo "Waiting for deploy run $blocker of the other event"
+            sleep 20
+          done
       - name: Build and push the images, deploy the control Worker (wrangler deploy)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
