@@ -16,13 +16,13 @@ func TestInFlightSection(t *testing.T) {
 	t.Parallel()
 
 	at := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
-	request := "Move terraform/ and the design-system/goal/ docs"
+	request := "Move terraform/ and the docs/design/ docs"
 
 	entries := []InFlightEntry{
 		{Ref: "acme#1", Title: "No paths, newest", State: StateQueued, Station: stationTriage, UpdatedAt: at.Add(5 * time.Hour)},
 		{Ref: "acme#2", Title: "One overlap, older", State: StateInProgress, Station: stationBuild, Paths: []string{"terraform/**", "cmd/**"}, UpdatedAt: at},
-		{Ref: "acme#3", Title: "Two overlaps", State: StateAssembly, Station: "plan", Paths: []string{"terraform/*.tf", "design-system/goal/**"}, UpdatedAt: at},
-		{Ref: "acme#4", Title: "One overlap, newer", State: StateBlocked, Station: stationBuild, Paths: []string{"design-system/**"}, UpdatedAt: at.Add(time.Hour)},
+		{Ref: "acme#3", Title: "Two overlaps", State: StateAssembly, Station: "plan", Paths: []string{"terraform/*.tf", "docs/design/**"}, UpdatedAt: at},
+		{Ref: "acme#4", Title: "One overlap, newer", State: StateBlocked, Station: stationBuild, Paths: []string{"docs/design/**"}, UpdatedAt: at.Add(time.Hour)},
 		{Ref: "acme#5", Title: "No overlap, wildcard first", State: StateReady, Station: stationBuild, Paths: []string{"**/*.go", "{a,b}/x"}, UpdatedAt: at.Add(2 * time.Hour)},
 	}
 
@@ -33,8 +33,8 @@ func TestInFlightSection(t *testing.T) {
 		"",
 		"The factory's other open items and assemblies, with the paths each expects to change, ranked by how many of their paths this item names (5 of 5):",
 		"",
-		`- acme#3 "Two overlaps": assembly at plan, paths terraform/*.tf, design-system/goal/**`,
-		`- acme#4 "One overlap, newer": blocked at build, paths design-system/**`,
+		`- acme#3 "Two overlaps": assembly at plan, paths terraform/*.tf, docs/design/**`,
+		`- acme#4 "One overlap, newer": blocked at build, paths docs/design/**`,
 		`- acme#2 "One overlap, older": in_progress at build, paths terraform/**, cmd/**`,
 		`- acme#5 "No overlap, wildcard first": ready at build, paths **/*.go, {a,b}/x`,
 		`- acme#1 "No paths, newest": queued at triage, no paths known`,

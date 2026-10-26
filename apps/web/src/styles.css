@@ -1,4 +1,4 @@
-/* Design tokens from design-system/goal/MASTER.md (the user overrides). Components use these
+/* Design tokens from docs/design/MASTER.md (the user overrides). Components use these
    names only: no hex values, no default Tailwind palette (it is cleared below), no gradients. */
 @import "tailwindcss";
 @import "@fontsource-variable/inter/opsz.css";
@@ -89,7 +89,7 @@
   }
 }
 
-/* Dark values (design-system/goal/MASTER.md, "Dark theme"): the same tokens, redefined. Two blocks
+/* Dark values (docs/design/MASTER.md, "Dark theme"): the same tokens, redefined. Two blocks
    with the same declarations: the choice is written to data-theme by theme.js before first paint
    (and by src/shared/theme.ts afterwards); the media query covers a page that has no script yet.
    Data-theme=light always wins over the system. Components never name a color: they use these. */
