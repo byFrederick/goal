@@ -25,7 +25,7 @@ export interface RunEntry {
   endedAt?: string;
   station: string;
   agent: string;
-  /** The station slot of the claim the run worked in, from 0: the agent copy. */
+  /** The station slot of the claim the run worked in, from 0: a machine field, never shown to people. */
   slot?: number;
   model?: string;
   /** The number of the definition version the run ran on. */
@@ -169,9 +169,9 @@ function note(e: ItemEvent): Omit<NoteEntry, 'kind' | 'key' | 'at' | 'station' |
   }
 }
 
-/** A run's agent copy as boards name it: "investigator-2" for slot 1; the agent when unknown. */
-export function runLabel(run: Pick<RunEntry, 'agent' | 'slot'>): string {
-  return run.slot === undefined ? run.agent : `${run.agent}-${run.slot + 1}`;
+/** A run's role as people read it: "Investigator" for the investigator agent. Its slot is a machine field, never shown. */
+export function runRole(run: Pick<RunEntry, 'agent'>): string {
+  return humanize(run.agent);
 }
 
 /** goald's record of a run over what its events said; turns and cost count once it ended. */

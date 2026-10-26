@@ -5,6 +5,7 @@ import { ExternalLink } from 'lucide-react';
 import type { CurrentRun, Factory, Item, ItemFlow, ItemSpan, Station } from '../../api/types';
 import { formatClock, formatDuration, formatUsd, humanize } from '../../shared/format';
 import { describeState, pullRequestLabel, pullRequestsOf } from '../../shared/item-state';
+import { useModelLabel } from '../../shared/models';
 import { holds } from '../../shared/permissions';
 import { SectionCard, StatRow } from '../../ui/card';
 import { cn } from '../../ui/cn';
@@ -23,11 +24,6 @@ const noFlow: ItemFlow = {
 function useNow(): number {
   // Ages are recomputed on every render; renders follow the stream, which is often enough.
   return Date.now();
-}
-
-/** "investigator-2": the agent copy working the item. */
-export function agentCopy(run: CurrentRun): string {
-  return `${run.agent}-${run.slot}`;
 }
 
 /** "$1.12 of $4.00" against the task budget, else the spend alone. */
@@ -67,10 +63,12 @@ export function TimeCard({
   className?: string;
 }) {
   const now = useNow();
+  const modelOf = useModelLabel();
   const flow = item.flow ?? noFlow;
   const end = item.done_at ?? new Date(now).toISOString();
   const bar = timeBar(flow.spans, { createdAt: item.created_at, end, targetSeconds: flow.target_seconds });
   const run = flow.current_run;
+  const model = run?.model ?? trace.model;
   const expedite = item.class_of_service === 'expedite';
   const target = flow.target_seconds ? formatTarget(flow.target_seconds) : null;
   const prs = pullRequestsOf(
@@ -151,7 +149,7 @@ export function TimeCard({
         </ul>
       ) : null}
       <p className="m-0 text-[13px] text-muted @[720px]:hidden">
-        {run ? `${agentCopy(run)} on turn ${turnsText(run, flow)}, ` : ''}
+        {run ? `${humanize(run.agent)} on turn ${turnsText(run, flow)}, ` : ''}
         {spendText(item, flow)}
       </p>
       <div className="hidden flex-col @[720px]:flex">
@@ -159,9 +157,11 @@ export function TimeCard({
         <StatRow label="Turns">
           {run ? turnsText(run, flow) : trace.turns > 0 ? trace.turns : 'None finished yet'}
         </StatRow>
-        {run || trace.model ? (
+        {model ? (
           <StatRow label="Model">
-            <span className="normal-nums">{run?.model ?? trace.model}</span>
+            <span className="min-w-0 truncate normal-nums" title={model}>
+              {modelOf(model)}
+            </span>
           </StatRow>
         ) : null}
         {run?.output_contract ? (
@@ -229,7 +229,7 @@ export function PathCard({ item, factory, className }: { item: Item; factory: Fa
   const end = item.done_at ? Date.parse(item.done_at) : now;
   const run = flow.current_run;
   const state = describeState(
-    { state: item.state, agent: run ? agentCopy(run) : null, rework_count: item.rework_count },
+    { state: item.state, agent: run?.agent ?? null, rework_count: item.rework_count },
     { decides: holds(factory, 'item:decide') },
   );
 
