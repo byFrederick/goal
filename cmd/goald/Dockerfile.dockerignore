@@ -9,6 +9,7 @@
 !contracts/definitions/
 !apps/web/
 !packages/api-client/
+!packages/config/
 !package.json
 !pnpm-lock.yaml
 !pnpm-workspace.yaml

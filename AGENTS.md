@@ -17,7 +17,7 @@ db/             the database: db/migrations/ (forward-only SQL, goose), db/queri
 deploy/         deploy/cloudflare/ (the control Worker and wrangler config), deploy/terraform/ (the platform's own infrastructure, one root module), each with the Taskfile.yml of its tasks
 docs/           adr/, design/ (MASTER.md: the UI's design system), engineering/, history/ (history/specs/ and history/jonah/: earlier plans), reference/ (glossary.md, and environment.md generated from the contracts)
 internal/       the Go packages: domain, engine, ports, adapters, api, gateway… (docs/engineering/architecture.md)
-packages/       shared TypeScript: api-client/ (the API client and its generated types, its tasks in Taskfile.yml)
+packages/       shared TypeScript: api-client/ (the API client and its generated types, its tasks in Taskfile.yml), config/ (the shared Biome config and the tsconfig bases for Node, the browser and Workers)
 tools/          repository tooling that is not a shipped binary: layoutcheck/ (task layout:check), envcheck/ (task env:check), checkplan/ (task check:changed), permgen/ (task api:gen's permission tables)
 ```
 
