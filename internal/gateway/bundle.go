@@ -109,9 +109,9 @@ type gitCredential struct {
 }
 
 // ServeRun serves GET /run: the bundle of the run whose task token the request carries, from
-// the definition version the run started on and the item it works on. A token that does not
-// verify is 401; one whose factory, agent, station or item the version or the organization does
-// not have is 403.
+// the definition version the run started on and the item it works on, or with notes_after the
+// notes left since the run started (serveNotes). A token that does not verify is 401; one whose
+// factory, agent, station or item the version or the organization does not have is 403.
 func (g *Gateway) ServeRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
@@ -127,6 +127,11 @@ func (g *Gateway) ServeRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := domain.WithOrg(r.Context(), claims.OrgID)
+
+	if r.URL.Query().Has(notesAfterParam) {
+		g.serveNotes(ctx, w, r, claims)
+		return
+	}
 
 	b, err := g.bundle(ctx, claims)
 	switch {
@@ -153,32 +158,54 @@ func (g *Gateway) ServeRun(w http.ResponseWriter, r *http.Request) {
 	g.log.InfoContext(ctx, "run bundle served", claimAttrs(claims, "files", len(b.Files))...)
 }
 
-func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, error) {
+// taskRun is what a task token names, checked against its definition version and organization.
+type taskRun struct {
+	line    domain.Line
+	agent   domain.AgentSpec
+	station domain.Station
+	item    domain.Item
+}
+
+// run checks what c names: its version must be one of its factory's and declare its agent and
+// station, and its item must be of that factory in the token's organization (ctx). Anything else
+// wraps errForbidden or ports.ErrNotFound.
+func (g *Gateway) run(ctx context.Context, c domain.TaskClaims) (taskRun, error) {
 	f, err := g.defs.Version(ctx, c.VersionID)
 	if err != nil {
-		return runBundle{}, fmt.Errorf("load factory %s version %s: %w", c.FactoryID, c.VersionID, err)
+		return taskRun{}, fmt.Errorf("load factory %s version %s: %w", c.FactoryID, c.VersionID, err)
 	}
 
 	if f.Metadata.ID != string(c.FactoryID) {
-		return runBundle{}, fmt.Errorf("%w: version %s is not a version of factory %s", errForbidden, c.VersionID, c.FactoryID)
+		return taskRun{}, fmt.Errorf("%w: version %s is not a version of factory %s", errForbidden, c.VersionID, c.FactoryID)
 	}
 
 	line := f.Line()
 
 	agent, ok := line.Agent(c.Agent)
 	if !ok {
-		return runBundle{}, fmt.Errorf("%w: agent %q is not in factory %s", errForbidden, c.Agent, c.FactoryID)
+		return taskRun{}, fmt.Errorf("%w: agent %q is not in factory %s", errForbidden, c.Agent, c.FactoryID)
 	}
 
 	station, ok := line.Station(c.Station)
 	if !ok {
-		return runBundle{}, fmt.Errorf("%w: station %q is not in factory %s", errForbidden, c.Station, c.FactoryID)
+		return taskRun{}, fmt.Errorf("%w: station %q is not in factory %s", errForbidden, c.Station, c.FactoryID)
 	}
 
 	it, err := g.item(ctx, c)
 	if err != nil {
+		return taskRun{}, err
+	}
+
+	return taskRun{line: line, agent: agent, station: station, item: it}, nil
+}
+
+func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, error) {
+	run, err := g.run(ctx, c)
+	if err != nil {
 		return runBundle{}, err
 	}
+
+	line, agent, station, it := run.line, run.agent, run.station, run.item
 
 	agentFiles, err := g.defs.AgentFiles(ctx, c.VersionID, agent, station.Output)
 	if err != nil {

@@ -65,8 +65,13 @@ const (
 	// count its turns so far.
 	EventUsage EventKind = "usage"
 	// EventNote is a person's note for the agents working the item; data text and actor (ref).
-	// The next run's brief carries it.
+	// The next run's brief carries it, and a run in progress reads it from the gateway
+	// (GET /run?notes_after) between its agent's turns.
 	EventNote EventKind = "note"
+	// EventNoteDelivered is a running agent's worker reporting that it gave the agent a note
+	// left while the run works, as a user message between turns. Data note_id (the note's event
+	// id); the engine stamps the run.
+	EventNoteDelivered EventKind = "note_delivered"
 	// EventPaused is a person stopping an open item where it is: it is blocked until a retry.
 	// Data reason (optional) and actor (ref).
 	EventPaused EventKind = "paused"
