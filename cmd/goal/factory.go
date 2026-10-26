@@ -58,7 +58,7 @@ type pulled struct {
 	Manifest map[string]string `json:"manifest"`
 }
 
-// factory runs goal factory validate|push|pull|list|publish|versions|restore.
+// factory runs goal factory validate|push|pull|list|publish|versions|restore|archive|delete.
 func factory(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	if len(args) == 0 {
 		return errUsage
@@ -79,6 +79,10 @@ func factory(ctx context.Context, out *printer, getenv func(string) string, args
 		return factoryVersions(ctx, out, getenv, rest)
 	case "restore":
 		return factoryRestore(ctx, out, getenv, rest)
+	case "archive":
+		return factoryArchive(ctx, out, getenv, rest)
+	case "delete":
+		return factoryDelete(ctx, out, getenv, rest)
 	default:
 		return errUsage
 	}
@@ -730,12 +734,13 @@ func readVersion(ctx context.Context, c orgClient, f *gen.Factory, sel string) (
 	return v, files, nil
 }
 
-// factoryList runs goal factory list [--validate]: every factory of the organization with the
-// version that runs, its open draft and whether it is paused; --validate checks each current
-// version and exits 1 when one has errors.
+// factoryList runs goal factory list [--validate] [--archived]: every factory of the organization
+// with the version that runs, its open draft and whether it is paused; --validate checks each
+// current version and exits 1 when one has errors; --archived lists only the archived factories.
 func factoryList(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs := newFlags("factory list")
 	check := fs.Bool("validate", false, "validate each factory's current version")
+	archived := fs.Bool("archived", false, "list only the archived factories")
 	org := addOrgFlag(fs)
 
 	if pos, err := parseInterspersed(fs, args); err != nil || len(pos) != 0 {
@@ -747,7 +752,9 @@ func factoryList(ctx context.Context, out *printer, getenv func(string) string, 
 		return err
 	}
 
-	res, err := c.ListFactoriesWithResponse(ctx, c.org, nil)
+	params, kind := listScope(*archived)
+
+	res, err := c.ListFactoriesWithResponse(ctx, c.org, params)
 	if err != nil {
 		return apiDown(err)
 	}
@@ -778,7 +785,7 @@ func factoryList(ctx context.Context, out *printer, getenv func(string) string, 
 		printProblems(out, "", problems)
 	}
 
-	out.printf("%d factories in %s\n", len(res.JSON200.Factories), c.org)
+	out.printf("%d %s in %s\n", len(res.JSON200.Factories), kind, c.org)
 
 	if invalid > 0 {
 		return fmt.Errorf("%d factories' current versions are invalid", invalid)
@@ -787,7 +794,17 @@ func factoryList(ctx context.Context, out *printer, getenv func(string) string, 
 	return nil
 }
 
-// describeFactory is a factory's versions as goal factory list shows them: "v3 + draft r4 · paused".
+// listScope is goal factory list's request and what it lists: the archived factories or the others.
+func listScope(archived bool) (*gen.ListFactoriesParams, string) {
+	if archived {
+		return &gen.ListFactoriesParams{Archived: new(true)}, "archived factories"
+	}
+
+	return nil, "factories"
+}
+
+// describeFactory is a factory's versions as goal factory list shows them: "v3 + draft r4 · paused",
+// then " · archived" for an archived one.
 func describeFactory(f gen.Factory) string {
 	s := "never published"
 	if f.Current != nil {
@@ -800,6 +817,10 @@ func describeFactory(f gen.Factory) string {
 
 	if f.Paused {
 		s += " · paused"
+	}
+
+	if f.ArchivedAt != nil {
+		s += " · archived"
 	}
 
 	return s
@@ -947,13 +968,18 @@ func factoryVersions(ctx context.Context, out *printer, getenv func(string) stri
 }
 
 // factoryRestore runs goal factory restore <factory> <N> [--move S=T]...: version N runs again,
-// expecting the version it read as current.
+// expecting the version it read as current. With the factory alone, goal factory restore
+// <factory> restores an archived factory instead (factoryUnarchive).
 func factoryRestore(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs := newFlags("factory restore")
 	moves := addMovesFlag(fs)
 	org := addOrgFlag(fs)
 
 	pos, err := parseInterspersed(fs, args)
+	if err == nil && len(pos) == 1 && len(moves) == 0 {
+		return factoryUnarchive(ctx, out, getenv, *org, pos[0])
+	}
+
 	if err != nil || len(pos) != 2 {
 		return errUsage
 	}
@@ -963,12 +989,19 @@ func factoryRestore(ctx context.Context, out *printer, getenv func(string) strin
 		return errUsage
 	}
 
-	c, err := connect(ctx, getenv, *org)
+	return restoreVersion(ctx, out, getenv, *org, pos[0], n, moves)
+}
+
+// restoreVersion is goal factory restore <factory> <N>.
+func restoreVersion(ctx context.Context, out *printer, getenv func(string) string, org, ref string, n int,
+	moves map[string]string,
+) error {
+	c, err := connect(ctx, getenv, org)
 	if err != nil {
 		return err
 	}
 
-	f, err := getFactory(ctx, c, pos[0])
+	f, err := getFactory(ctx, c, ref)
 	if err != nil {
 		return err
 	}
@@ -999,6 +1032,156 @@ func factoryRestore(ctx context.Context, out *printer, getenv func(string) strin
 	out.printf("✓ %s runs v%d again (it ran v%d)\n", f.Name, n, f.Current.Number)
 
 	return nil
+}
+
+// factoryArchive runs goal factory archive <factory>: retire a paused, idle factory, keeping its
+// history; goald refuses a running one ("Pause the factory first") or one whose items are being
+// worked.
+func factoryArchive(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs := newFlags("factory archive")
+	org := addOrgFlag(fs)
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 1 {
+		return errUsage
+	}
+
+	c, err := connect(ctx, getenv, *org)
+	if err != nil {
+		return err
+	}
+
+	f, err := getFactory(ctx, c, pos[0])
+	if err != nil {
+		return err
+	}
+
+	res, err := c.ArchiveFactoryWithResponse(ctx, c.org, f.Id)
+	if err != nil {
+		return apiDown(err)
+	}
+
+	if res.JSON200 == nil {
+		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+
+	out.printf("✓ archived %s (%s); `goal factory restore %s` brings it back\n", res.JSON200.Name, res.JSON200.Id, res.JSON200.Name)
+
+	return nil
+}
+
+// factoryUnarchive is goal factory restore <factory>: the archived factory is listed again, still
+// paused.
+func factoryUnarchive(ctx context.Context, out *printer, getenv func(string) string, org, ref string) error {
+	c, err := connect(ctx, getenv, org)
+	if err != nil {
+		return err
+	}
+
+	f, err := getFactory(ctx, c, ref)
+	if err != nil {
+		return err
+	}
+
+	res, err := c.RestoreFactoryWithResponse(ctx, c.org, f.Id)
+	if err != nil {
+		return apiDown(err)
+	}
+
+	if res.JSON200 == nil {
+		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+
+	out.printf("✓ restored %s (%s); it is still paused and takes work once it is resumed\n", res.JSON200.Name, res.JSON200.Id)
+
+	return nil
+}
+
+// factoryDelete runs goal factory delete <factory> [--yes]: delete an archived factory for good,
+// with its items, runs, events and versions, after the person types its name (--yes: no prompt).
+// A factory never published is deleted with its draft, archived or not.
+func factoryDelete(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs := newFlags("factory delete")
+	yes := fs.Bool("yes", false, "delete without asking to type the name")
+	org := addOrgFlag(fs)
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 1 {
+		return errUsage
+	}
+
+	c, err := connect(ctx, getenv, *org)
+	if err != nil {
+		return err
+	}
+
+	f, err := getFactory(ctx, c, pos[0])
+	if err != nil {
+		return err
+	}
+
+	if f.Current != nil && f.ArchivedAt == nil {
+		return notArchived(f)
+	}
+
+	if !*yes {
+		out.printf("This deletes %s (%s) for good, with its items, runs, events and versions. Type its name to confirm: ", f.Name, f.Id)
+
+		confirm, err := readLine(out.in)
+		if err != nil {
+			return err
+		}
+
+		if confirm != f.Name {
+			return fmt.Errorf("%q is not %q; nothing was deleted", confirm, f.Name)
+		}
+	}
+
+	if err := deleteRequest(ctx, c, f); err != nil {
+		return err
+	}
+
+	out.printf("✓ deleted %s (%s)\n", f.Name, f.Id)
+
+	return nil
+}
+
+// deleteRequest deletes f: purgeFactory once it was published, deleteFactory before.
+func deleteRequest(ctx context.Context, c orgClient, f *gen.Factory) error {
+	var (
+		res *http.Response
+		p   *gen.Problem
+	)
+
+	if f.Current != nil {
+		r, err := c.PurgeFactoryWithResponse(ctx, c.org, f.Id)
+		if err != nil {
+			return apiDown(err)
+		}
+
+		res, p = r.HTTPResponse, r.ApplicationproblemJSONDefault
+	} else {
+		r, err := c.DeleteFactoryWithResponse(ctx, c.org, f.Id)
+		if err != nil {
+			return apiDown(err)
+		}
+
+		res, p = r.HTTPResponse, r.ApplicationproblemJSONDefault
+	}
+
+	switch {
+	case res.StatusCode == http.StatusNoContent:
+		return nil
+	case problemCode(p) == authoring.CodeFactoryNotArchived:
+		return notArchived(f)
+	default:
+		return problem(res, p)
+	}
+}
+
+// notArchived is goal factory delete's refusal of a published factory that is not archived.
+func notArchived(f *gen.Factory) error {
+	return fmt.Errorf("%s is not archived; archive it first with `goal factory archive %s`", f.Name, f.Name)
 }
 
 // addMovesFlag adds --move <station>=<station>, repeatable: where the open items of a station
