@@ -32,6 +32,9 @@ vars:
   TF_WORKSPACE_NAME: production
   SOPS_FILE: deploy/terraform/secrets/production.sops.yaml
   SOPS_DECRYPTED: deploy/terraform/secrets/production.decrypted.yaml
+  # The creation rules, passed to every sops call: sops looks for .sops.yaml only from the current
+  # directory up, so a call from the root would not find them in deploy/terraform/.
+  SOPS_CONFIG: '{{.ROOT_DIR}}/deploy/terraform/.sops.yaml'
   # The data directory of tf:validate, tf:test and tf:lint: inside deploy/terraform/.terraform/ (ignored)
   # but apart from the s3 backend that tf:plan saves there, so they never reach for credentials.
   TF_OFFLINE_DATA_DIR: .terraform/offline
@@ -236,13 +239,19 @@ tasks:
     cmds:
       - terraform test
 
+  tf:sops-test:
+    desc: Round-trip sops encrypt and decrypt under deploy/terraform/.sops.yaml's creation rule with a throwaway age key (skips without sops or age-keygen)
+    cmds:
+      - sh deploy/terraform/tests/sops-roundtrip.sh
+
   tf:check:
-    desc: Everything task check runs on deploy/terraform/ (fmt -check, validate, tflint, terraform test), offline
+    desc: Everything task check runs on deploy/terraform/ (fmt -check, validate, tflint, terraform test, the sops round trip), offline
     dir: deploy/terraform
     cmds:
       - terraform fmt -check -recursive
       - task: tf:test
       - task: tf:lint
+      - task: tf:sops-test
 
   tf:plan:
     desc: terraform plan of production against its R2 state, changing no infrastructure (extra flags after --)
@@ -291,12 +300,12 @@ tasks:
   secrets:edit:
     desc: Edit deploy/terraform/secrets/production.sops.yaml in $EDITOR, decrypted in memory only (sops edit); then git diff it
     cmds:
-      - sops edit {{.SOPS_FILE}}
+      - sops --config {{.SOPS_CONFIG}} edit {{.SOPS_FILE}}
 
   secrets:decrypt:
     desc: Decrypt the production secrets into deploy/terraform/secrets/production.decrypted.yaml (git-ignored, mode 0600) for bulk edits; secrets:encrypt puts them back and deletes it
     cmds:
-      - umask 077 && sops decrypt --output {{.SOPS_DECRYPTED}} {{.SOPS_FILE}}
+      - umask 077 && sops --config {{.SOPS_CONFIG}} decrypt --output {{.SOPS_DECRYPTED}} {{.SOPS_FILE}}
 
   secrets:encrypt:
     desc: Encrypt deploy/terraform/secrets/production.decrypted.yaml over the SOPS file (with its creation rule) and delete the decrypted copy
@@ -308,7 +317,7 @@ tasks:
         set -eu
         tmp="deploy/terraform/secrets/.production.sops.yaml.tmp"
         trap 'rm -f "$tmp"' EXIT
-        sops encrypt --filename-override {{.SOPS_FILE}} --output "$tmp" {{.SOPS_DECRYPTED}}
+        sops --config {{.SOPS_CONFIG}} encrypt --filename-override {{.SOPS_FILE}} --output "$tmp" {{.SOPS_DECRYPTED}}
         mv "$tmp" {{.SOPS_FILE}}
         rm -f {{.SOPS_DECRYPTED}}
 
@@ -325,7 +334,7 @@ tasks:
         GOAL_PG_OWNER_PASSWORD="$(out goal_pg_owner_password)"
         GOAL_PG_APP_PASSWORD="$(out goal_pg_app_password)"
         GOAL_PG_AUTH_PASSWORD="$(out goal_pg_auth_password)"
-        GOAL_MASTER_KEYS="$(sops decrypt --extract '["master_key"]["GOAL_MASTER_KEYS"]' secrets/{{.TF_WORKSPACE_NAME}}.sops.yaml)" # rekey
+        GOAL_MASTER_KEYS="$(sops --config {{.SOPS_CONFIG}} decrypt --extract '["master_key"]["GOAL_MASTER_KEYS"]' secrets/{{.TF_WORKSPACE_NAME}}.sops.yaml)" # rekey
         export GOAL_DATABASE_ADMIN_URL GOAL_MIGRATE_DATABASE_URL GOAL_PG_OWNER_PASSWORD GOAL_PG_APP_PASSWORD GOAL_PG_AUTH_PASSWORD GOAL_MASTER_KEYS
         cd ../..
         go run ./cmd/goal db {{.CLI_ARGS}}

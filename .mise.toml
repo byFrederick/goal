@@ -9,6 +9,8 @@ node = "22"
 terraform = "1.15.7"
 tflint = "0.64.0"
 sops = "3.13.3"
+# age-keygen for tf:sops-test, the throwaway-key round trip of deploy/terraform/.sops.yaml.
+age = "1.3.2"
 golangci-lint = "2"
 sqlc = "1"
 

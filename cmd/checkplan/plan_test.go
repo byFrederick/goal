@@ -49,7 +49,7 @@ func TestPlan(t *testing.T) {
 		"api client":       {[]string{"packages/api-client/src/client.ts"}, []string{"api-client:check", "web:check"}, "web (web:check): packages/api-client/src/client.ts", ""},
 		"control worker":   {[]string{"deploy/cloudflare/src/index.ts"}, []string{envCheck, "cloudflare:check"}, "cloudflare (cloudflare:check): deploy/cloudflare/src/index.ts", ""},
 		"terraform":        {[]string{"deploy/terraform/r2.tf"}, []string{"tf:check"}, "terraform (tf:check): deploy/terraform/r2.tf", ""},
-		"sops rules":       {[]string{".sops.yaml"}, []string{"tf:check"}, ".sops.yaml", ""},
+		"sops rules":       {[]string{"deploy/terraform/.sops.yaml"}, []string{"tf:check"}, "terraform (tf:check): deploy/terraform/.sops.yaml", ""},
 		"agents map":       {[]string{"AGENTS.md"}, layoutTasks, "layout (layout:check): AGENTS.md", ""},
 		"layout adr":       {[]string{"docs/adr/0013-repository-layout.md"}, layoutTasks, "layout (layout:check): docs/adr/0013-repository-layout.md", ""},
 		"rule globs":       {[]string{".claude/rules/go.md"}, layoutTasks, "layout (layout:check): .claude/rules/go.md", ""},

@@ -93,7 +93,6 @@ var rules = []rule{
 	{under("apps/web"), []part{partWeb}, ""},
 	{under("deploy/cloudflare"), []part{partCloudflare, partEnv}, ""},
 	{under("deploy/terraform"), []part{partTerraform}, ""},
-	{exact(".sops.yaml"), []part{partTerraform}, ""},
 	{under("docs", ".claude", ".github", ".githooks"), nil, ""},
 	{exact("skills-lock.json"), nil, ""},
 	{rootMarkdown, nil, ""},
