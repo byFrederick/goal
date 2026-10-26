@@ -18,7 +18,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"path/filepath"
 )
 
 const (
@@ -55,17 +54,23 @@ func run(args []string, stdout io.Writer) error {
 		return fmt.Errorf("unexpected argument %q", flags.Arg(0))
 	}
 
-	files, err := render(os.DirFS(*dir))
+	root, err := os.OpenRoot(*dir)
+	if err != nil {
+		return fmt.Errorf("open the repository: %w", err)
+	}
+	defer func() { _ = root.Close() }() // every write is checked where it happens
+
+	files, err := render(root.FS())
 	if err != nil {
 		return err
 	}
 
 	if *check {
-		return checkFiles(*dir, files, stdout)
+		return checkFiles(root, files, stdout)
 	}
 
 	for _, name := range generatedFiles {
-		if err := os.WriteFile(filepath.Join(*dir, filepath.FromSlash(name)), []byte(files[name]), 0o644); err != nil { //nolint:gosec // docs are world-readable
+		if err := root.WriteFile(name, []byte(files[name]), 0o644); err != nil {
 			return fmt.Errorf("write %s: %w", name, err)
 		}
 	}
@@ -76,11 +81,11 @@ func run(args []string, stdout io.Writer) error {
 // generatedFiles are the files gendocs writes, in report order.
 var generatedFiles = []string{changeMapFile, adrIndexFile}
 
-func checkFiles(dir string, files map[string]string, stdout io.Writer) error {
+func checkFiles(root *os.Root, files map[string]string, stdout io.Writer) error {
 	stale := false
 
 	for _, name := range generatedFiles {
-		got, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(name)))
+		got, err := root.ReadFile(name)
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return fmt.Errorf("read %s: %w", name, err)
 		}

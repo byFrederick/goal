@@ -44,6 +44,19 @@ func copyRepo(t *testing.T, name string) string {
 	return dir
 }
 
+func openRoot(t *testing.T, dir string) *os.Root {
+	t.Helper()
+
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = root.Close() })
+
+	return root
+}
+
 func TestGenerate_ChangeMapRowsInFileNameOrder(t *testing.T) {
 	t.Parallel()
 
@@ -80,7 +93,7 @@ func TestGenerate_WritesBothFiles(t *testing.T) {
 	}
 
 	for file, want := range map[string]string{changeMapFile: wantChangeMap, adrIndexFile: wantADRIndex} {
-		got, err := os.ReadFile(filepath.Join(dir, file))
+		got, err := openRoot(t, dir).ReadFile(file)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -176,9 +189,9 @@ func TestCheck_HandEditFails(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			p := filepath.Join(dir, file)
+			root := openRoot(t, dir)
 
-			text, err := os.ReadFile(p)
+			text, err := root.ReadFile(file)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -186,7 +199,7 @@ func TestCheck_HandEditFails(t *testing.T) {
 			edited := strings.Replace(string(text), "Alpha", "Alpha, edited", 1)
 			edited = strings.Replace(edited, "`a.go`", "`c.go`", 1)
 
-			if err := os.WriteFile(p, []byte(edited), 0o600); err != nil {
+			if err := root.WriteFile(file, []byte(edited), 0o600); err != nil {
 				t.Fatal(err)
 			}
 

@@ -13,6 +13,7 @@ Docs describe the code as built. How the repository lays out its docs: [ADR 0013
 - Update the spec, the architecture page and the README that describe a behavior in the same pull request as the behavior. A stale page sends the next agent the wrong way.
 - Link the longer doc instead of repeating it. A sentence copied into two places drifts apart, so one place keeps each rule.
 - Check that relative links still resolve after a file moves. A move that breaks a link hides the page from readers.
+- Add or change a change-map row as its entry file in `docs/engineering/change-map/`, and an ADR as its own file in `docs/adr/`, then run `task docs:gen`. `docs/engineering/change-map.md` and `docs/adr/README.md` are generated, so a hand edit is lost and `task check` fails on it; one file per entry keeps two pull requests that each add one from conflicting.
 
 ## Decisions
 

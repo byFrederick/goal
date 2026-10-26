@@ -1,6 +1,6 @@
 ## When you change
 
-Adding, renaming or moving a task (in the root `Taskfile.yml` or an area's)
+Adding, renaming or moving a task (in the root `Taskfile.yml` or an area's, such as `docs/Taskfile.yml`)
 
 ## Also change
 
