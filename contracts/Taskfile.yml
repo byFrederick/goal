@@ -1,0 +1,19 @@
+# The generators and checks of contracts/api (openapi.yaml, permissions.yaml).
+# Included by the root Taskfile.yml with flatten: true and dir set to the repository root, so these
+# tasks keep their full names, run from the root (a task's dir: is relative to it) and see the
+# root's dotenv, env and vars. Run them from the root: `task <name>`.
+version: "3"
+
+tasks:
+  api:gen:
+    desc: Regenerate from contracts/api/openapi.yaml and contracts/api/permissions.yaml, the permission table (internal/api/permissions.gen.go) and the auth roles (apps/auth/src/access.gen.ts), the Go server and client (internal/api/gen) and the TypeScript types (packages/api-client)
+    deps: [worker:install]
+    cmds:
+      - go run ./tools/permgen
+      - go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@{{.OAPI_CODEGEN_VERSION}} -config internal/api/gen/oapi-codegen.yaml contracts/api/openapi.yaml
+      - pnpm --filter @goal/api-client run --silent gen
+
+  api:permissions-check:
+    desc: The generated permission table matches contracts/api/permissions.yaml and every operation's x-goal-scope (tools/permgen -check)
+    cmds:
+      - go run ./tools/permgen -check

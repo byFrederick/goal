@@ -1,0 +1,57 @@
+# The web UI's tasks (apps/web).
+# Included by the root Taskfile.yml with flatten: true and dir set to the repository root, so these
+# tasks keep their full names, run from the root (a task's dir: is relative to it) and see the
+# root's dotenv, env and vars. Run them from the root: `task <name>`.
+version: "3"
+
+tasks:
+  web:install:
+    desc: Install the pnpm workspace's dependencies from the lockfile (web and worker share one)
+    sources: [package.json, pnpm-lock.yaml, pnpm-workspace.yaml, apps/web/package.json]
+    cmds:
+      - pnpm install --frozen-lockfile
+
+  web:dev:
+    desc: Vite dev server on :5173 proxying /v1 to goald (GOAL_API_URL, default http://127.0.0.1:8080); GOAL_API=mock uses the mock API
+    deps: [web:install]
+    dir: apps/web
+    cmds:
+      - pnpm run dev
+
+  web:build:
+    desc: Build the web UI into apps/web/dist (embedded into goald by task build)
+    deps: [web:install]
+    dir: apps/web
+    sources: [src/**/*, public/**/*, index.html, vite.config.ts, package.json, ../../pnpm-lock.yaml, ../../packages/api-client/src/**/*]
+    generates: [dist/index.html]
+    cmds:
+      - pnpm run --silent build
+
+  web:check:
+    desc: Web typecheck, Biome lint, Vitest unit tests (no browser) and pnpm audit of its production dependencies (SECURITY.md)
+    deps: [web:install]
+    dir: apps/web
+    cmds:
+      - pnpm run --silent typecheck
+      - pnpm run --silent lint
+      - pnpm run --silent test
+      - pnpm audit --prod --filter @goal/web
+
+  web:e2e:
+    desc: Playwright on the critical flows at 375, 768 and 1440 px with axe, against vite preview and the mock API (Chromium)
+    deps: [web:install]
+    dir: apps/web
+    cmds:
+      - pnpm exec playwright install chromium
+      - pnpm run --silent e2e
+
+  web:e2e-auth:
+    desc: >-
+      Playwright sign-in against a real goald under GOAL_AUTH=session, its identity service and
+      Mailpit (start them first; GOAL_E2E_AUTH_URL, GOAL_MAILPIT_URL, GOAL_MAILPIT_AUTH (user:password), GOAL_BOOTSTRAP_OWNER_EMAIL).
+      Not part of task check: it needs the running stack
+    deps: [web:install]
+    dir: apps/web
+    cmds:
+      - pnpm exec playwright install chromium
+      - pnpm exec playwright test --config playwright.auth.config.ts

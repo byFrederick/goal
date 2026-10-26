@@ -1,0 +1,150 @@
+# The platform's own infrastructure (deploy/terraform), its SOPS secrets and goal db on production.
+# Included by the root Taskfile.yml with flatten: true and dir set to the repository root, so these
+# tasks keep their full names, run from the root (a task's dir: is relative to it) and see the
+# root's dotenv, env and vars. Run them from the root: `task <name>`.
+version: "3"
+
+tasks:
+  # deploy/terraform/: the platform's own infrastructure on Cloudflare, in the production workspace only
+  # (docs/engineering/cloudflare-operations.md). tf:check runs offline; tf:plan and tf:apply need
+  # credentials (tf:credentials says which): the operator's on a laptop, or a GitHub environment's
+  # in a workflow (GITHUB_ACTIONS=true; Google through Workload Identity Federation, ADR 0010).
+  # Neither prompts given -input=false and a saved plan:
+  #   task tf:plan -- -input=false -out=tfplan && task tf:apply -- -input=false tfplan
+  # On merge to main, .github/workflows/terraform-apply.yml runs exactly that (ADR 0010). Agents
+  # fmt, check and plan and never run tf:apply; the owner runs it by hand only for the bootstrap
+  # and break-glass cases of the runbook (AGENTS.md rule 8).
+  tf:fmt:
+    desc: Format deploy/terraform/ (terraform fmt -recursive)
+    dir: deploy/terraform
+    cmds:
+      - terraform fmt -recursive
+
+  tf:validate:
+    desc: terraform validate in the production workspace, offline (no backend, no credentials)
+    dir: deploy/terraform
+    env:
+      TF_WORKSPACE: "{{.TF_WORKSPACE_NAME}}"
+      TF_DATA_DIR: "{{.TF_OFFLINE_DATA_DIR}}"
+    cmds:
+      - terraform init -backend=false -input=false -lockfile=readonly >/dev/null
+      - terraform validate
+
+  tf:lint:
+    desc: tflint over deploy/terraform/ and its modules (the bundled terraform ruleset, deploy/terraform/.tflint.hcl)
+    dir: deploy/terraform
+    env:
+      TF_WORKSPACE: "{{.TF_WORKSPACE_NAME}}"
+      TF_DATA_DIR: "{{.TF_OFFLINE_DATA_DIR}}"
+    cmds:
+      - tflint --recursive --config "$PWD/.tflint.hcl"
+
+  tf:test:
+    desc: terraform test against mock providers (deploy/terraform/tests), offline
+    deps: [tf:validate]
+    dir: deploy/terraform
+    env:
+      TF_WORKSPACE: "{{.TF_WORKSPACE_NAME}}"
+      TF_DATA_DIR: "{{.TF_OFFLINE_DATA_DIR}}"
+    cmds:
+      - terraform test
+
+  tf:sops-test:
+    desc: Round-trip sops encrypt and decrypt under deploy/terraform/.sops.yaml's creation rule with a throwaway age key (skips without sops or age-keygen)
+    cmds:
+      - sh deploy/terraform/tests/sops-roundtrip.sh
+
+  tf:check:
+    desc: Everything task check runs on deploy/terraform/ (fmt -check, validate, tflint, terraform test, the sops round trip), offline
+    dir: deploy/terraform
+    cmds:
+      - terraform fmt -check -recursive
+      - task: tf:test
+      - task: tf:lint
+      - task: tf:sops-test
+
+  tf:plan:
+    desc: terraform plan of production against its R2 state, changing no infrastructure (extra flags after --)
+    cmds:
+      - task: tf:run
+        vars: { TF_COMMAND: plan }
+
+  tf:apply:
+    desc: terraform apply of production (shows the plan and asks, or applies a saved plan; extra flags after --). Run by the apply-on-merge workflow (.github/workflows/terraform-apply.yml); agents never run it, the owner only for bootstrap and break-glass
+    interactive: true
+    cmds:
+      - task: tf:run
+        vars: { TF_COMMAND: apply }
+
+  tf:credentials:
+    internal: true
+    preconditions:
+      - sh: test -n "${CLOUDFLARE_API_TOKEN:-}"
+        msg: "CLOUDFLARE_API_TOKEN is not set: the Cloudflare API token for deploy/terraform/ (scopes in docs/engineering/cloudflare-operations.md)"
+      - sh: test -n "${CLOUDFLARE_ACCOUNT_ID:-}"
+        msg: "CLOUDFLARE_ACCOUNT_ID is not set: the account whose R2 holds the state bucket goal-terraform-state"
+      - sh: test -n "${GOAL_TF_STATE_ACCESS_KEY:-}" && test -n "${GOAL_TF_STATE_SECRET_KEY:-}"
+        msg: "GOAL_TF_STATE_ACCESS_KEY and GOAL_TF_STATE_SECRET_KEY are not set: the R2 API token (Object Read & Write) of the state bucket goal-terraform-state"
+      - sh: test -n "${PLANETSCALE_SERVICE_TOKEN_ID:-}" && test -n "${PLANETSCALE_SERVICE_TOKEN:-}"
+        msg: "PLANETSCALE_SERVICE_TOKEN_ID and PLANETSCALE_SERVICE_TOKEN are not set: the PlanetScale service token for deploy/terraform/ (access in docs/engineering/cloudflare-operations.md)"
+      - sh: test -r "$SOPS_AGE_KEY_FILE"
+        msg: "No age key at $SOPS_AGE_KEY_FILE (SOPS_AGE_KEY_FILE): the operator's key that decrypts deploy/terraform/secrets/"
+      # Google: a laptop's goal gcloud configuration, or in GitHub Actions the token the workflow exported.
+      - sh: |
+          if [ "${GITHUB_ACTIONS:-}" = true ]; then
+            test -n "${GOOGLE_OAUTH_ACCESS_TOKEN:-}"
+          else
+            CLOUDSDK_ACTIVE_CONFIG_NAME=goal gcloud auth print-access-token >/dev/null 2>&1
+          fi
+        msg: "No Google access token. On a laptop, gcloud's goal configuration has no signed-in account: CLOUDSDK_ACTIVE_CONFIG_NAME=goal gcloud auth login. In GitHub Actions, GOOGLE_OAUTH_ACCESS_TOKEN is not set: run google-github-actions/auth with token_format: access_token first"
+
+  tf:run:
+    internal: true
+    deps: [tf:credentials]
+    dir: deploy/terraform
+    cmds:
+      - |
+        {{.TF_ONLINE}}
+        terraform {{.TF_COMMAND}} {{.CLI_ARGS}}
+
+  secrets:edit:
+    desc: Edit deploy/terraform/secrets/production.sops.yaml in $EDITOR, decrypted in memory only (sops edit); then git diff it
+    cmds:
+      - sops --config {{.SOPS_CONFIG}} edit {{.SOPS_FILE}}
+
+  secrets:decrypt:
+    desc: Decrypt the production secrets into deploy/terraform/secrets/production.decrypted.yaml (git-ignored, mode 0600) for bulk edits; secrets:encrypt puts them back and deletes it
+    cmds:
+      - umask 077 && sops --config {{.SOPS_CONFIG}} decrypt --output {{.SOPS_DECRYPTED}} {{.SOPS_FILE}}
+
+  secrets:encrypt:
+    desc: Encrypt deploy/terraform/secrets/production.decrypted.yaml over the SOPS file (with its creation rule) and delete the decrypted copy
+    preconditions:
+      - sh: test -f {{.SOPS_DECRYPTED}}
+        msg: "Nothing to encrypt: run task secrets:decrypt first"
+    cmds:
+      - |
+        set -eu
+        tmp="deploy/terraform/secrets/.production.sops.yaml.tmp"
+        trap 'rm -f "$tmp"' EXIT
+        sops --config {{.SOPS_CONFIG}} encrypt --filename-override {{.SOPS_FILE}} --output "$tmp" {{.SOPS_DECRYPTED}}
+        mv "$tmp" {{.SOPS_FILE}}
+        rm -f {{.SOPS_DECRYPTED}}
+
+  db:production:
+    desc: "goal db <command> on the Cloudflare install's database (task db:production -- init): the administrator, goal_owner and the role passwords from the Terraform state, the master keys from the SOPS file, never printed"
+    deps: [tf:credentials]
+    cmds:
+      - |
+        cd deploy/terraform
+        {{.TF_ONLINE}}
+        out() { terraform output -raw "$1"; }
+        GOAL_DATABASE_ADMIN_URL="$(out goal_database_admin_url)"
+        GOAL_MIGRATE_DATABASE_URL="$(out goal_migrate_database_url)" # migrate, rekey, recover-admin, recover-owner
+        GOAL_PG_OWNER_PASSWORD="$(out goal_pg_owner_password)"
+        GOAL_PG_APP_PASSWORD="$(out goal_pg_app_password)"
+        GOAL_PG_AUTH_PASSWORD="$(out goal_pg_auth_password)"
+        GOAL_MASTER_KEYS="$(sops --config {{.SOPS_CONFIG}} decrypt --extract '["master_key"]["GOAL_MASTER_KEYS"]' secrets/{{.TF_WORKSPACE_NAME}}.sops.yaml)" # rekey
+        export GOAL_DATABASE_ADMIN_URL GOAL_MIGRATE_DATABASE_URL GOAL_PG_OWNER_PASSWORD GOAL_PG_APP_PASSWORD GOAL_PG_AUTH_PASSWORD GOAL_MASTER_KEYS
+        cd ../..
+        go run ./cmd/goal db {{.CLI_ARGS}}
