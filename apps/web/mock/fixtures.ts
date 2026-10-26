@@ -54,6 +54,16 @@ export interface MockItem {
   pr_url: string | null;
   /** Its spans at stations, kept as goald's trigger keeps item_spans (trackSpan). */
   spans: ItemSpan[];
+  /** The files it changes (its plan's touches), which a files wait compares. Not on Item. */
+  paths?: string[];
+  /** The open need it waits for while queued or ready (Item.waiting). Not on Item. */
+  waitsOn?: MockWaitsOn;
+}
+
+/** The need a queued item waits for: an item of the factory by number, by its order (after) or its files (files). */
+export interface MockWaitsOn {
+  kind: 'after' | 'files';
+  number: number;
 }
 
 /** An agent's measures (AgentStats without what the request and the line give). */
@@ -211,6 +221,8 @@ interface Seed {
   createdMin: number;
   updatedMin: number;
   outputs?: Record<string, unknown>;
+  paths?: string[];
+  waitsOn?: MockWaitsOn;
   steps: Step[];
 }
 
@@ -410,6 +422,8 @@ const goalSeeds: Seed[] = [
   {
     number: 15,
     title: 'Metrics endpoint: lead time percentiles per work type',
+    paths: ['internal/knowledge/sync.go', 'internal/metrics/**'],
+    waitsOn: { kind: 'files', number: 13 },
     type: 'feature',
     body: 'The floor needs p50 and p85 lead time per work type, not only per factory.',
     station: 'inbox',
@@ -421,6 +435,7 @@ const goalSeeds: Seed[] = [
   {
     number: 14,
     title: 'Board: a Move menu on every card',
+    waitsOn: { kind: 'after', number: 16 },
     type: 'feature',
     body: 'Every card gets a Move menu so a card can change station without dragging.',
     station: 'inbox',
@@ -432,6 +447,7 @@ const goalSeeds: Seed[] = [
   {
     number: 13,
     title: 'Spec the knowledge sync retry',
+    paths: ['internal/knowledge/**', 'internal/knowledge/sync.go'],
     type: 'feature',
     body: 'Knowledge sync gives up after one failure. Retry with backoff and surface the failure on the floor.',
     station: 'spec',
@@ -1156,6 +1172,8 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
       updated_at: new Date(updated).toISOString(),
       agent: seed.agent ?? null,
       pr_url: seed.pr ? `${repo}/pull/${seed.pr}` : null,
+      ...(seed.paths ? { paths: seed.paths } : {}),
+      ...(seed.waitsOn ? { waitsOn: seed.waitsOn } : {}),
       spans: [],
     };
 

@@ -42,6 +42,7 @@ import type {
   ItemFlow,
   ItemPage,
   ItemTouches,
+  ItemWaiting,
   NoteReceipt,
   Org,
   OrgAttention,
@@ -253,8 +254,23 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     ),
   ];
 
+  /**
+   * Item.waiting of a queued or ready item whose need is open (goald derives it on every read): the
+   * need's ref and title and its paths; for kind files, the item's own paths the need shares.
+   */
+  const waitingOf = (it: MockItem): ItemWaiting | null => {
+    if (!it.waitsOn || (it.state !== 'queued' && it.state !== 'ready')) return null;
+    const need = state.items.find((n) => n.factory === it.factory && n.number === it.waitsOn?.number);
+    if (!need || need.state === 'done' || need.state === 'cancelled') return null;
+    const needPaths = need.paths ?? [];
+    const files = it.waitsOn.kind === 'files' ? (it.paths ?? []).filter((p) => needPaths.includes(p)) : [];
+    const needed = { ref: ref(need), title: need.title, paths: needPaths };
+    return { kind: it.waitsOn.kind, items: [needed.ref], files, needs: [needed] };
+  };
+
   const card = (it: MockItem): ItemCard => {
     const run = liveRun(it);
+    const waiting = waitingOf(it);
     const copies = state.stations[it.factory]?.[it.station]?.copies ?? 1;
     return {
       id: it.id,
@@ -280,6 +296,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       in_buffer: (it.state === 'queued' || it.state === 'ready') && it.station === state.constraint[it.factory],
       rope_held: false,
       touch_count: itemTouches(it).length,
+      ...(waiting ? { waiting } : {}),
     };
   };
 
@@ -407,7 +424,16 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
 
   const full = (it: MockItem): Item => {
     const factory = state.factories.find((f) => f.name === it.factory);
-    const { agent: _agent, factory: _factory, pr_url: _pr, spans: _spans, lane, ...rest } = it;
+    const {
+      agent: _agent,
+      factory: _factory,
+      pr_url: _pr,
+      spans: _spans,
+      paths: _paths,
+      waitsOn: _waits,
+      lane,
+      ...rest
+    } = it;
     return { ...rest, ...(lane ? { lane } : {}), ref: ref(it), factory_id: factory?.id ?? '' };
   };
 
@@ -1540,7 +1566,12 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const action = m[2];
 
     if (!action && method === 'GET')
-      return json(res, 200, { ...full(it), flow: flowOf(it), touches: itemTouchesOf(it) });
+      return json(res, 200, {
+        ...full(it),
+        flow: flowOf(it),
+        touches: itemTouchesOf(it),
+        ...(waitingOf(it) ? { waiting: waitingOf(it) } : {}),
+      });
     if (action === 'events' && method === 'GET') {
       const after = Number(url.searchParams.get('after') ?? 0);
       const limit = Math.min(1000, Number(url.searchParams.get('limit') ?? 200));
