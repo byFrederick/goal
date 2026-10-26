@@ -164,7 +164,7 @@ The board header's Inbox button shows the count of what waits on people in the f
 
 ### Status icons
 
-`ui/status-icon.tsx` (`StatusIcon`) is the one set of item status icons, the same everywhere an item's status shows: working is a half-filled circle (teal), waiting for another item a clock (amber), waiting for the same files two crossing arrows (rust), ready or merged a check (green). Each is decorative (`aria-hidden`); the words beside it say the same. The Inbox drawer uses the check for Ready to merge and the clock for decisions and blocked rows; the other two are defined for the rows that will say why an item waits.
+`ui/status-icon.tsx` (`StatusIcon`) is the one set of item status icons, the same everywhere an item's status shows: working is a half-filled circle (teal), waiting for another item a clock (amber), waiting for the same files two crossing arrows (rust), ready or merged a check (green). Each is decorative (`aria-hidden`); the words beside it say the same. `itemStatus` (`shared/item-state.ts`) maps an item's state to its icon, and the board's rows, the inbox drawer, the Items list (desktop column and phone sub-line) and the item page's state chip all use it: a clock for queued, waiting on you, and ready in the drum's buffer; a check for ready outside it and done; none for blocked, cancelled and assemblies. The Inbox drawer keeps its own row mapping (`shared/inbox.ts`). The two crossing arrows (same files) wait on the overlap wait the API does not expose yet, so no state shows them.
 
 ### Colour theme (dark mode)
 
