@@ -6,7 +6,10 @@
 # checks; worker/README.md has the contract. It carries the worker (Claude Code through the Agent
 # SDK), git, gh, mise with Go, Node and Python, a C compiler and PostgreSQL 18's server binaries with pgvector;
 # a repository's other tools come from its mise config at prepare. Every version is pinned and
-# every download checked against the checksums its project publishes.
+# every download checked against the checksums its project publishes. The production deploy builds
+# and pushes it reproducibly (deploy/cloudflare/scripts/deploy.sh): the slow stages (apt, mise,
+# pnpm install from the manifests) come before COPY worker/, and no layer keeps apt's lists or logs,
+# a package manager's cache or pnpm's dated .modules.yaml.
 
 ARG DEBIAN_IMAGE=debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
 
@@ -52,7 +55,8 @@ RUN apt-get update \
  && apt-get install --yes --no-install-recommends \
       curl git openssh-client ripgrep jq unzip xz-utils zstd bzip2 procps less \
       gcc libc6-dev make "postgresql-${PG_MAJOR}" "postgresql-${PG_MAJOR}-pgvector" \
- && rm -rf /var/lib/apt/lists/* \
+ && rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log /var/log/alternatives.log \
+      /var/cache/debconf/*-old /var/cache/ldconfig/aux-cache \
  && useradd --uid 1000 --user-group --create-home --home-dir /home/node --shell /bin/bash node \
  && install -d -o 1000 -g 1000 /opt/mise /workspace /goal \
  && printf '%s\n' '[user]' '	name = Goal agent' '	email = goal-agent@example.com' '[init]' '	defaultBranch = main' \
@@ -73,7 +77,7 @@ ENV HOME=/home/node \
     PATH=/opt/mise/shims:/usr/lib/postgresql/${PG_MAJOR}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 USER 1000:1000
 RUN mise install \
- && rm -rf /home/node/.cache /opt/mise/downloads
+ && rm -rf /home/node/.cache /home/node/.local/state /opt/mise/downloads
 
 # worker: the TypeScript worker, built with the image's own Node and deployed with its
 # production dependencies only.
@@ -86,7 +90,8 @@ COPY --chown=1000:1000 worker/package.json worker/
 RUN pnpm install --frozen-lockfile --filter @goal/worker
 COPY --chown=1000:1000 worker/ worker/
 RUN pnpm --filter @goal/worker build \
- && pnpm --filter @goal/worker deploy --prod /home/node/out
+ && pnpm --filter @goal/worker deploy --prod /home/node/out \
+ && rm -f /home/node/out/node_modules/.modules.yaml
 
 # runtime: base plus the worker, nothing of its build.
 FROM base AS runtime
