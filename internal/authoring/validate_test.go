@@ -66,7 +66,7 @@ func TestValidate_ListsEveryCheckThatRan(t *testing.T) {
 	}
 
 	want := []string{
-		"yaml", "schema", "line", "references", "tools", "removed", "availability", "name", "connections",
+		"yaml", "schema", "line", "references", "tools", "contracts", "removed", "availability", "name", "connections",
 	}
 	if !slices.Equal(checkIDs(v), want) || !v.OK {
 		t.Errorf("checks = %v (ok %v, problems %v), want %v", checkIDs(v), v.OK, codes(v.Problems), want)

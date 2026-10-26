@@ -62,7 +62,7 @@
         "skills": { "type": "array", "items": { "$ref": "#/$defs/skill" } },
         "contracts": {
           "type": "object",
-          "description": "Named JSON Schemas that station outputs must satisfy.",
+          "description": "Named JSON Schemas that station outputs must satisfy. An output contract becomes the model's tool input_schema, so its top level must be \"type\": \"object\" with no oneOf, anyOf or allOf there (nested under a property is fine).",
           "additionalProperties": { "type": "string" }
         },
         "agents": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/agent" } },
