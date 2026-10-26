@@ -109,9 +109,8 @@ type Store interface {
 	// Transition does (fenced, its lease taken or released, its events and audit entry, closing
 	// the assembly with its last open part), appends c.Events and returns the assembly's parts.
 	// A cascade naming no part, a part twice, a part of another assembly or a move to state
-	// assembly is refused with domain.ErrInvalid; an assembly no longer in state assembly, or
-	// any part's failed guard, with ErrConflict (or ErrLeaseLost). A refused cascade writes
-	// nothing.
+	// assembly is refused with domain.ErrInvalid; an assembly no longer in state assembly, or any
+	// part's failed guard, with ErrConflict (or ErrLeaseLost). A refused cascade writes nothing.
 	CascadeParts(ctx context.Context, c Cascade) (domain.Parts, error)
 
 	// HeartbeatLease extends a held lease to expiresAt. It returns ErrLeaseLost when no lease

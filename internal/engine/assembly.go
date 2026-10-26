@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
@@ -51,7 +52,7 @@ func (e *Engine) pauseAssembly(ctx context.Context, a domain.Item, by domain.Act
 
 	c.Events = []domain.Event{decision(a, domain.EventPaused, now, by, withReason(map[string]any{"parts": len(c.Parts)}, reason))}
 
-	return e.cascade(ctx, "pause", a, by, c, taken)
+	return e.cascade(ctx, "pause", a, by, now, c, taken)
 }
 
 // retryAssembly resumes the blocked parts of assembly a, each as Retry would one item, in one
@@ -88,12 +89,13 @@ func (e *Engine) retryAssembly(ctx context.Context, a domain.Item, l domain.Line
 
 	c.Events = []domain.Event{decision(a, domain.EventRetried, now, by, map[string]any{"parts": len(c.Parts)})}
 
-	return e.cascade(ctx, "retry", a, by, c, nil)
+	return e.cascade(ctx, "retry", a, by, now, c, nil)
 }
 
-// cascade applies c, a person's change of assembly a to its parts, and stops this instance's
-// runs of the parts whose lease it took (the others learn through Interrupt or their heartbeat).
-func (e *Engine) cascade(ctx context.Context, verb string, a domain.Item, by domain.Actor, c ports.Cascade, taken []domain.Item) (domain.Item, error) {
+// cascade applies c, a person's change of assembly a to its parts at now, and stops this
+// instance's runs of the parts whose lease it took (the others learn through Interrupt or their
+// heartbeat).
+func (e *Engine) cascade(ctx context.Context, verb string, a domain.Item, by domain.Actor, now time.Time, c ports.Cascade, taken []domain.Item) (domain.Item, error) {
 	_, err := e.store.CascadeParts(ctx, c)
 	if errors.Is(err, ports.ErrConflict) || errors.Is(err, ports.ErrLeaseLost) {
 		return domain.Item{}, fmt.Errorf("%s %s: %w", verb, a.ID, errors.Join(ErrItemChanged, err))
@@ -107,7 +109,7 @@ func (e *Engine) cascade(ctx context.Context, verb string, a domain.Item, by dom
 		slog.Int("parts", len(c.Parts)), slog.String("by", by.Ref()))
 
 	for _, p := range taken {
-		e.stopRun(ctx, p.ID, p.Station, c.Parts[0].At)
+		e.stopRun(ctx, p.ID, p.Station, now)
 	}
 
 	return a, nil
