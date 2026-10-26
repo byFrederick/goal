@@ -155,6 +155,10 @@ func station(st Station) domain.Station {
 		}
 	}
 
+	for _, c := range st.Context {
+		out.Context = append(out.Context, domain.StationContext(c))
+	}
+
 	for _, c := range st.Checks { // shorthand command lines decode as command checks
 		if c.Kind == CheckCommand && c.Run != "" {
 			out.Checks = append(out.Checks, c.Run)
