@@ -18,7 +18,7 @@ Status: accepted · 2026-10-23
 | Factory definitions | **One versioned S3-compatible bucket**, `factories/<id>/` per factory; RustFS (`compose.yaml`) locally, Amazon S3 on AWS; AWS SDK for Go v2 behind the `ObjectStore` port | Definitions are content, not code: they change without a release, roll back by object version, and the same API works on a laptop and on AWS ([ADR 0005](0005-factory-definitions-in-object-storage.md)). |
 | Knowledge | **S3 + Bedrock Knowledge Bases + S3 Vectors** | Managed RAG with per-factory isolation and near-zero idle cost. Documents go under `factories/<id>/knowledge/` in the same bucket (phase 3). |
 | Telemetry | Claude Code OpenTelemetry → `goald` OTLP receiver; optional export to Langfuse/Grafana | Cost, tokens and tool events per item without extra agents. |
-| Infrastructure | **Terraform ≥ 1.10, AWS provider 6.x**, S3 backend with native lockfile | `terraform/` provisions the knowledge layer; from phase 3 it reads factory definitions from the bucket, not from the repository. |
+| Infrastructure | **Terraform ≥ 1.10, AWS provider 6.x**, S3 backend with native lockfile | `deploy/terraform/` provisions the knowledge layer; from phase 3 it reads factory definitions from the bucket, not from the repository. |
 | Tooling | mise (versions), Taskfile (go-task v3), golangci-lint, Biome | `task check` is the one entry point for humans, the pre-push hook and CI. |
 
 ## Languages

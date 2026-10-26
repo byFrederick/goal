@@ -1,5 +1,5 @@
 // Goal's control Worker on Cloudflare (spec 4 §5.12). A person deploys it with `wrangler deploy`
-// on Workers Paid, after terraform/ has made the bucket, DNS, the PlanetScale branch and the
+// on Workers Paid, after deploy/terraform/ has made the bucket, DNS, the PlanetScale branch and the
 // Secrets Store secrets (docs/engineering/cloudflare-operations.md, bootstrap step 8); Terraform
 // owns the Workers route, so none is declared here. It creates nothing per organization. Images
 // build for linux/amd64 from this repository. `image` and `images` name Dockerfiles, which
@@ -74,7 +74,7 @@
     "GOAL_LOG_FORMAT": "json"
   },
   // Platform secrets only (AGENTS.md rule 7): Terraform's goal-production-<NAME>, in the store of
-  // `terraform output secrets_store_id`; each container gets those terraform/secrets.tf's
+  // `terraform output secrets_store_id`; each container gets those deploy/terraform/secrets.tf's
   // secret_consumers give it (src/env.ts). The database URLs follow spec 4 §5.12: port 5432,
   // verify-full (with sslrootcert=system and pool_max_conns=8 for goald).
   "secrets_store_secrets": [

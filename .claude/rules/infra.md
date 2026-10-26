@@ -1,7 +1,7 @@
 ---
 paths:
   - "deploy/**"
-  - "terraform/**"
+  - "deploy/terraform/**"
   - ".github/**"
   - "compose.yaml"
   - "**/Dockerfile"
