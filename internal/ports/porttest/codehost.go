@@ -166,7 +166,7 @@ func (c *CodeHost) UpdateBranch(_ context.Context, conn domain.ResolvedConnectio
 	}
 
 	if files, ok := c.conflict[url]; ok {
-		return &ports.MergeConflict{URL: url, Files: slices.Clone(files)}
+		return &ports.MergeConflictError{URL: url, Files: slices.Clone(files)}
 	}
 
 	c.updated = append(c.updated, url)

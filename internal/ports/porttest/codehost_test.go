@@ -57,9 +57,9 @@ func TestCodeHost_UpdateBranch(t *testing.T) {
 
 	err := h.UpdateBranch(t.Context(), conn, conflict, head)
 
-	var mc *ports.MergeConflict
+	var mc *ports.MergeConflictError
 	if !errors.Is(err, ports.ErrMergeConflict) || !errors.As(err, &mc) || !slices.Equal(mc.Files, []string{"go.mod", "internal/x.go"}) {
-		t.Fatalf("UpdateBranch(conflicting) = %v; want a *MergeConflict naming go.mod and internal/x.go", err)
+		t.Fatalf("UpdateBranch(conflicting) = %v; want a *MergeConflictError naming go.mod and internal/x.go", err)
 	}
 
 	if errors.Is(err, ports.ErrNotMergeable) {

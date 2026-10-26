@@ -411,9 +411,9 @@ func TestUpdateBranch_ConflictIsMergeConflict(t *testing.T) {
 
 	err := c.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA)
 
-	var mc *ports.MergeConflict
+	var mc *ports.MergeConflictError
 	if !errors.Is(err, ports.ErrMergeConflict) || !errors.As(err, &mc) || len(mc.Files) != 0 || errors.Is(err, ports.ErrNotMergeable) {
-		t.Errorf("UpdateBranch on a conflict = %v; want a *MergeConflict without files, not ErrNotMergeable", err)
+		t.Errorf("UpdateBranch on a conflict = %v; want a *MergeConflictError without files, not ErrNotMergeable", err)
 	}
 }
 

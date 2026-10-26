@@ -12,7 +12,7 @@
 // conflicts, head moved) come back as ports.ErrNotMergeable. GitLab's rebase takes no expected
 // head: UpdateBranch reads the merge request first and rebases only if its head is the one it
 // was given, best effort against a push in between, and never forced; a rebase GitLab refuses
-// for conflicts comes back as a *ports.MergeConflict (without files). Squash merges with squash; merge
+// for conflicts comes back as a *ports.MergeConflictError (without files). Squash merges with squash; merge
 // uses the project's own merge method. The token travels only in the PRIVATE-TOKEN header of
 // requests to that API; redirects are not followed, and the token is scrubbed from every error.
 package gitlab
@@ -259,7 +259,7 @@ func (cl *Client) UpdateBranch(ctx context.Context, c domain.ResolvedConnection,
 	case status == http.StatusAccepted:
 		return nil
 	case status == http.StatusConflict, status >= http.StatusBadRequest && strings.Contains(strings.ToLower(msg), "conflict"):
-		return fmt.Errorf("rebase %s: GitLab refused (%d): %s: %w", mrURL, status, msg, &ports.MergeConflict{URL: mrURL})
+		return fmt.Errorf("rebase %s: GitLab refused (%d): %s: %w", mrURL, status, msg, &ports.MergeConflictError{URL: mrURL})
 	case status == http.StatusForbidden, status == http.StatusMethodNotAllowed, status == http.StatusNotFound:
 		// No permission to push to the source branch, or a merge request that cannot be rebased.
 		return fmt.Errorf("rebase %s: GitLab refused (%d): %s: %w", mrURL, status, msg, ports.ErrNotMergeable)

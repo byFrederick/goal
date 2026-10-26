@@ -25,6 +25,7 @@ const (
 
 	fieldToken  = "token"
 	keyState    = "state"
+	stateClosed = "closed"
 	keyStatus   = "detailed_merge_status"
 	keyMessage  = "message"
 	squashSHA   = "squash-sha"
@@ -206,7 +207,7 @@ func TestPullRequest_ReadsStateHeadAndBase(t *testing.T) {
 			want: ports.PullRequest{Merged: true, MergeSHA: squashSHA},
 		},
 		{
-			name: "closed", mr: map[string]any{keyState: "closed"},
+			name: stateClosed, mr: map[string]any{keyState: stateClosed},
 			want: ports.PullRequest{},
 		},
 	}
@@ -351,8 +352,8 @@ func TestUpdateBranch_RebasesAtTheHeadItWasGiven(t *testing.T) {
 
 	// A head that moved since the caller read it, a closed merge request or no head: no rebase.
 	for name, change := range map[string]func(*fakeGitLab){
-		"moved":  func(f *fakeGitLab) { f.mr["sha"] = "1a2b3c" },
-		"closed": func(f *fakeGitLab) { f.mr[keyState] = "closed" },
+		"moved":     func(f *fakeGitLab) { f.mr["sha"] = "1a2b3c" },
+		stateClosed: func(f *fakeGitLab) { f.mr[keyState] = stateClosed },
 	} {
 		f, c := newFakeGitLab(t)
 		change(f)
@@ -388,9 +389,9 @@ func TestUpdateBranch_GitLabRefusals(t *testing.T) {
 
 		err := c.UpdateBranch(t.Context(), dotComConn(t), mrURL, headSHA)
 
-		var mc *ports.MergeConflict
+		var mc *ports.MergeConflictError
 		if tt.conflict && (!errors.Is(err, ports.ErrMergeConflict) || !errors.As(err, &mc) || errors.Is(err, ports.ErrNotMergeable)) {
-			t.Errorf("rebase answered %d: err = %v; want a *MergeConflict", tt.status, err)
+			t.Errorf("rebase answered %d: err = %v; want a *MergeConflictError", tt.status, err)
 		}
 
 		if !tt.conflict && (!errors.Is(err, ports.ErrNotMergeable) || errors.Is(err, ports.ErrMergeConflict)) {

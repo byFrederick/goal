@@ -10,7 +10,7 @@
 // head SHA it was asked for, so GitHub refuses it if the branch moved, and it is never forced:
 // GitHub's refusals (not mergeable, head moved, invalid) come back as ports.ErrNotMergeable. A
 // branch update names the expected head SHA the same way; its conflicts come back as a
-// *ports.MergeConflict (without files: GitHub names none). The
+// *ports.MergeConflictError (without files: GitHub names none). The
 // token travels only in the Authorization header of requests to that API; redirects are not
 // followed, and the token is scrubbed from every error.
 package github
@@ -302,7 +302,7 @@ func (cl *Client) UpdateBranch(ctx context.Context, c domain.ResolvedConnection,
 		return fmt.Errorf("update branch of %s: GitHub refused (%d): %s: %w", prURL, status, msg, ports.ErrNotMergeable)
 	case status == http.StatusUnprocessableEntity:
 		// A conflict, or a refusal GitHub does not explain: never forced, nothing changed.
-		return fmt.Errorf("update branch of %s: GitHub refused: %s: %w", prURL, msg, &ports.MergeConflict{URL: prURL})
+		return fmt.Errorf("update branch of %s: GitHub refused: %s: %w", prURL, msg, &ports.MergeConflictError{URL: prURL})
 	case status == http.StatusNotFound, status == http.StatusForbidden:
 		return fmt.Errorf("update branch of %s: GitHub refused (%d): %s: %w", prURL, status, msg, ports.ErrNotMergeable)
 	default:
