@@ -516,7 +516,7 @@ test('the board shows how each station is doing and who works each card', async 
   await expect(page.getByRole('region', { name: 'Triage', exact: true })).toContainText('triager, turn 1');
   await expect(page.getByRole('region', { name: 'Approve', exact: true }).getByText('Needs your OK')).toHaveCount(3);
   await expect(page.getByRole('region', { name: 'Done', exact: true })).toContainText('1 today');
-  await expect(page.getByRole('region', { name: 'Done', exact: true })).toContainText('Postmortem filed');
+  await expect(page.getByRole('region', { name: 'Done', exact: true })).not.toContainText('Postmortem filed');
   await expect(investigate.getByRole('article').filter({ hasText: 'Checkout API p95' })).toContainText('Expedite');
   await expectAccessible(page);
 });
@@ -565,7 +565,7 @@ test('on a phone the board opens where a person is needed, then picks any statio
 
   await picker.getByRole('tab', { name: 'Done 1 today' }).click();
   await expect(page).toHaveURL(/station=done/);
-  await expect(page.getByRole('article').filter({ hasText: 'Redis evictions' })).toContainText('Postmortem filed');
+  await expect(page.getByRole('article').filter({ hasText: 'Redis evictions' })).not.toContainText('Postmortem filed');
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });

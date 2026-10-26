@@ -186,7 +186,7 @@ Below 768 px (`features/board/board-page.tsx`, `StationTabs`) the Board is a hea
 
 ### Card size
 
-A board card stays compact in every column, so the board scans as flow: a done item's card shows a short excerpt of its summary (`summaryExcerpt` in `features/board/stats.ts`: the first line without markdown marks, at most 100 characters), the state line is clamped to two lines and the title to two (`line-clamp-2`, with the full title in a `title` attribute). The item page's Outputs card shows the summary in full. Any new card text that can grow goes through a clamp or an excerpt the same way.
+A board card stays compact in every column, so the board scans as flow: a done item's card shows its ref, age, title, PR link(s) and touches, and no state line or summary (the item page's Outputs card shows the summary in full). The state line is clamped to two lines and the title to two (`line-clamp-2`, with the full title in a `title` attribute). Any new card text that can grow goes through a clamp or an excerpt the same way.
 
 ### Moving work
 
