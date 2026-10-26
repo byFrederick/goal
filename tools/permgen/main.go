@@ -36,7 +36,7 @@ func run(args []string) error {
 
 	permissions := fs.String("permissions", "contracts/api/permissions.yaml", "the permission table")
 	openapi := fs.String("openapi", "contracts/api/openapi.yaml", "the API contract whose operations carry x-goal-scope")
-	goOut := fs.String("go", "internal/api/permissions_gen.go", "the Go table for goald")
+	goOut := fs.String("go", "internal/api/permissions.gen.go", "the Go table for goald")
 	tsOut := fs.String("ts", "apps/auth/src/access.gen.ts", "the TypeScript roles for the auth service")
 	check := fs.Bool("check", false, "fail when a generated file differs from what the sources give, writing nothing")
 

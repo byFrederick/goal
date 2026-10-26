@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// renderGo writes goald's table, internal/api/permissions_gen.go: permissionRules (each
+// renderGo writes goald's table, internal/api/permissions.gen.go: permissionRules (each
 // permission by name, as the hand-written rule type of internal/api) and operationScopes (each
 // operationId's permission), both sorted by key.
 func renderGo(t table) ([]byte, error) {

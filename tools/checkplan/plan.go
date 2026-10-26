@@ -9,7 +9,7 @@ import (
 
 // tasks is the order task check runs its tasks in; a plan keeps it.
 var tasks = []string{
-	"layout:check", "env:check", "lint", "test", "api:permissions-check", "worker:check", "auth:check",
+	"layout:check", "env:check", "lint", "test", "gen:check", "worker:check", "auth:check",
 	"api-client:check", "web:check", "cloudflare:check", "validate", "tf:check",
 }
 
@@ -20,7 +20,8 @@ type part struct {
 }
 
 var (
-	partGo         = part{"go", []string{"lint", "test", "api:permissions-check", "validate"}}
+	partGo         = part{"go", []string{"lint", "test", "gen:check", "validate"}}
+	partGen        = part{"gen", []string{"gen:check"}}
 	partWorker     = part{"worker", []string{"worker:check"}}
 	partAuth       = part{"auth", []string{"auth:check"}}
 	partAPIClient  = part{"api-client", []string{"api-client:check"}}
@@ -33,7 +34,7 @@ var (
 )
 
 // parts lists every part in report order; everything comes first since it covers the rest.
-var parts = []part{partEverything, partGo, partWorker, partAuth, partAPIClient, partWeb, partCloudflare, partTerraform, partLayout, partEnv}
+var parts = []part{partEverything, partGo, partGen, partWorker, partAuth, partAPIClient, partWeb, partCloudflare, partTerraform, partLayout, partEnv}
 
 // A rule maps the paths it matches to the parts they select; no parts means nothing to check.
 type rule struct {
@@ -59,6 +60,9 @@ func under(dirs ...string) func(string) bool {
 }
 
 func goFile(p string) bool { return strings.HasSuffix(p, ".go") }
+
+// generated reports a generated file: its name has .gen. before the extension (ADR 0013, decision 4).
+func generated(p string) bool { return strings.Contains(path.Base(p), ".gen.") }
 
 func rootMarkdown(p string) bool { return !strings.Contains(p, "/") && path.Ext(p) == ".md" }
 
@@ -86,8 +90,6 @@ var rules = []rule{
 	{under("tools/checkplan", "tools/permgen"), []part{partGo}, ""},
 	{exact("apps/web/csp.txt"), []part{partGo}, ""},
 	{exact("compose.yaml", ".env.example"), []part{partGo, partEnv}, ""},
-	// permgen -check (api:permissions-check) compares this generated file with contracts/api/permissions.yaml.
-	{exact("apps/auth/src/access.gen.ts"), []part{partGo, partAuth, partEnv}, ""},
 	{under("apps/worker"), []part{partWorker, partEnv}, ""},
 	{under("apps/auth"), []part{partAuth, partEnv}, ""},
 	// web depends on @goal/api-client.
@@ -142,7 +144,8 @@ func planFor(changed []string) plan {
 }
 
 // selectParts maps each part's name to the paths that select it, and to the why of the rule
-// that selected it first, if that rule has one.
+// that selected it first, if that rule has one. A generated file also selects gen, whatever
+// its rule, since task gen:check reruns its generator.
 func selectParts(changed []string) (selected map[string][]string, whys map[string]string) {
 	selected, whys = map[string][]string{}, map[string]string{}
 
@@ -150,6 +153,10 @@ func selectParts(changed []string) (selected map[string][]string, whys map[strin
 		r, ok := ruleFor(p)
 		if !ok {
 			r = rule{parts: []part{partEverything}, why: "matches no rule"}
+		}
+
+		if generated(p) {
+			r.parts = append(slices.Clone(r.parts), partGen)
 		}
 
 		for _, pt := range r.parts {

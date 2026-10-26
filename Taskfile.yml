@@ -178,7 +178,7 @@ tasks:
       - sqlc generate -f db/sqlc.yaml
 
   api:gen:
-    desc: Regenerate from contracts/api/openapi.yaml and contracts/api/permissions.yaml, the permission table (internal/api/permissions_gen.go), the Go server and client (internal/api/gen) and the TypeScript types (packages/api-client)
+    desc: Regenerate from contracts/api/openapi.yaml and contracts/api/permissions.yaml, the permission table (internal/api/permissions.gen.go) and the auth roles (apps/auth/src/access.gen.ts), the Go server and client (internal/api/gen) and the TypeScript types (packages/api-client)
     deps: [worker:install]
     cmds:
       - go run ./tools/permgen
@@ -189,6 +189,36 @@ tasks:
     desc: The generated permission table matches contracts/api/permissions.yaml and every operation's x-goal-scope (tools/permgen -check)
     cmds:
       - go run ./tools/permgen -check
+
+  gen:
+    desc: >-
+      Run every generator: permgen, oapi-codegen and the api-client types (api:gen), sqlc, the web build (which writes
+      apps/web/src/routeTree.gen.ts) and envcheck -write (docs/reference/environment.md). The generated files are
+      listed in docs/engineering/change-map.md
+    deps: [worker:install]
+    cmds:
+      - task: web:install
+      - task: api:gen
+      - task: sqlc
+      - pnpm --dir apps/web run --silent build
+      - go run ./tools/envcheck -write
+
+  gen:check:
+    desc: >-
+      Run every generator (task gen) and fail when a generated file (*.gen.*, internal/api/gen,
+      internal/adapters/postgres/db, docs/reference/environment.md) differs from the commit or is untracked
+    cmds:
+      - task: gen
+      - cmd: |
+          set -eu
+          changed="$(git status --porcelain --untracked-files=all -- ':(glob)**/*.gen.*' internal/api/gen internal/adapters/postgres/db docs/reference/environment.md)"
+          if [ -n "$changed" ]; then
+            echo "gen:check: these generated files differ from the commit:" >&2
+            echo "$changed" >&2
+            echo "gen:check: never edit them by hand; change the source, run task gen and commit the result" >&2
+            exit 1
+          fi
+        silent: true
 
   validate:
     desc: Validate factory definitions offline, without goald (the test fixtures by default; FACTORIES=<glob> for others)
@@ -409,7 +439,7 @@ tasks:
       - task: env:check
       - task: lint
       - task: test
-      - task: api:permissions-check
+      - task: gen:check
       - task: worker:check
       - task: auth:check
       - task: api-client:check

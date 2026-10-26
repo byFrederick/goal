@@ -14,6 +14,11 @@ sql:
         sql_package: pgx/v5
         emit_pointers_for_null_types: true
         omit_unused_structs: true
+        output_db_file_name: db.gen.go
+        output_models_file_name: models.gen.go
+        output_batch_file_name: batch.gen.go
+        output_copyfrom_file_name: copyfrom.gen.go
+        output_files_suffix: .gen
         overrides:
           - db_type: uuid
             go_type: github.com/google/uuid.UUID
