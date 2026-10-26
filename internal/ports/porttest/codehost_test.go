@@ -79,3 +79,35 @@ func TestCodeHost_UpdateBranch(t *testing.T) {
 		t.Errorf("UpdatedBranches = %v; want only %s", calls, pr)
 	}
 }
+
+// An up-to-date branch updates like GitHub's: nothing to merge in, the head stays, no conflict.
+func TestCodeHost_UpdateBranchUpToDate(t *testing.T) {
+	t.Parallel()
+
+	const (
+		pr   = "https://github.com/acme/app/pull/7"
+		head = "4b825dc6"
+	)
+
+	conn := githubConn()
+	h := porttest.NewCodeHost()
+	h.Add(ports.PullRequest{URL: pr, Open: true, Mergeable: true, HeadSHA: head})
+	h.UpToDate(pr)
+
+	if err := h.UpdateBranch(t.Context(), conn, pr, head); err != nil {
+		t.Fatalf("UpdateBranch(up to date) = %v; want nil", err)
+	}
+
+	got, err := h.PullRequest(t.Context(), conn, pr)
+	if err != nil || got.HeadSHA != head {
+		t.Errorf("head after updating an up-to-date branch = %q, %v; want %s unchanged", got.HeadSHA, err, head)
+	}
+
+	if calls := h.UpdatedBranches(); len(calls) != 0 {
+		t.Errorf("UpdatedBranches = %v; want none: nothing was merged in", calls)
+	}
+
+	if err := h.UpdateBranch(t.Context(), conn, pr, "moved"); !errors.Is(err, ports.ErrNotMergeable) {
+		t.Errorf("UpdateBranch(up to date, moved head) = %v; want ErrNotMergeable", err)
+	}
+}

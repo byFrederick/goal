@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/engine"
 	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/ports/porttest"
 )
@@ -261,6 +262,41 @@ func TestGateMerge_UpdatesTheBranchBeforeMerging(t *testing.T) {
 	if merges := h.codehost.Merges(); !reflect.DeepEqual(merges, []porttest.MergeCall{squashOf(prURL, connGitHub)}) {
 		t.Errorf("merges %+v, want app#7 at its updated head", merges)
 	}
+}
+
+// A pull request whose branch already holds its base merges on its first approval, at the head
+// it has: an up-to-date branch is not a conflict and does not send the item back to build.
+func TestGateMerge_UpToDateBranchMergesOnFirstApproval(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, gateMergeLine(), byAgent(map[string]string{
+		agWorker: `{"pull_request":"` + prURL + `"}`, agReviewer: approve,
+	}))
+	h.codehost.Add(openPR(prURL))
+	h.codehost.UpToDate(prURL)
+
+	it := h.submit(t, domain.NewItem{})
+	h.step(t)
+	h.step(t)
+
+	if got := h.item(t, it.ID); got.State != domain.StateDone {
+		t.Fatalf("item at %+v, want done (events %v)", got.Position(), h.kinds(it.ID))
+	}
+
+	want := porttest.MergeCall{URL: prURL, Connection: connGitHub, Merge: ports.Merge{Method: engine.MergeSquash, HeadSHA: headSHA}}
+	if merges := h.codehost.Merges(); !reflect.DeepEqual(merges, []porttest.MergeCall{want}) {
+		t.Errorf("merges %+v, want app#7 once at its original head", merges)
+	}
+
+	if n := len(h.eventsOf(it.ID, domain.EventMergeConflict)); n != 0 {
+		t.Errorf("events %v, want no merge_conflict", h.kinds(it.ID))
+	}
+
+	if slices.Contains(h.kinds(it.ID), domain.EventGateRejected) {
+		t.Errorf("events %v, want no move back to build", h.kinds(it.ID))
+	}
+
+	h.expectEngineMerged(t, it.ID, 1)
 }
 
 // A conflict after the gate's approval sends the item back to the gate's onReject, approved and

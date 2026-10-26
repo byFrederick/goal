@@ -25,6 +25,20 @@ type CodeHost struct {
 	branches []string
 	updated  []string            // urls whose branches were updated, in order
 	conflict map[string][]string // url → the files its branch conflicts with its base in
+	current  map[string]bool     // urls whose branches already hold their base
+}
+
+// UpToDate makes the branch of the pull request at url already hold its base: updating it
+// succeeds and leaves its head where it is.
+func (c *CodeHost) UpToDate(url string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.current == nil {
+		c.current = map[string]bool{}
+	}
+
+	c.current[url] = true
 }
 
 // Conflict makes updating the branch of the pull request at url conflict with its base in files.
@@ -154,7 +168,7 @@ func (c *CodeHost) Merge(_ context.Context, conn domain.ResolvedConnection, url 
 }
 
 // UpdateBranch implements ports.CodeHost. An update moves the head to "updated-" and the head
-// it was given.
+// it was given; an up-to-date branch (UpToDate) is left as it is.
 func (c *CodeHost) UpdateBranch(_ context.Context, conn domain.ResolvedConnection, url, headSHA string) error {
 	if err := onHost(conn, url); err != nil {
 		return err
@@ -175,6 +189,10 @@ func (c *CodeHost) UpdateBranch(_ context.Context, conn domain.ResolvedConnectio
 
 	if files, ok := c.conflict[url]; ok {
 		return &ports.MergeConflictError{URL: url, Files: slices.Clone(files)}
+	}
+
+	if c.current[url] {
+		return nil
 	}
 
 	c.updated = append(c.updated, url)

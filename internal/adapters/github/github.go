@@ -145,6 +145,7 @@ type pullJSON struct {
 	State          string `json:"state"`
 	Merged         bool   `json:"merged"`
 	Mergeable      *bool  `json:"mergeable"`
+	MergeableState string `json:"mergeable_state"`
 	MergeCommitSHA string `json:"merge_commit_sha"`
 	Head           struct {
 		SHA  string    `json:"sha"`
@@ -273,12 +274,25 @@ func (cl *Client) Merge(ctx context.Context, c domain.ResolvedConnection, prURL 
 	}
 }
 
-// headMoved is how GitHub's 422 to an update-branch whose expected_head_sha is not the branch's
-// head begins ("expected head sha didn't match current head ref."); any other 422 is a conflict.
-const headMoved = "expected head sha"
+// GitHub's 422 answers to an update-branch, matched case-insensitively on their message:
+//   - headMoved: expected_head_sha is not the branch's head ("expected head sha didn't match
+//     current head ref.");
+//   - upToDate: the head already holds the base ("There are no new commits on the base branch.");
+//   - conflicted: the base does not merge into the head cleanly ("merge conflict between base and
+//     head").
+const (
+	headMoved  = "expected head sha"
+	upToDate   = "no new commits"
+	conflicted = "merge conflict"
+)
+
+// dirty is the mergeable_state of a pull request that conflicts with its base.
+const dirty = "dirty"
 
 // UpdateBranch implements ports.CodeHost: GitHub merges the base into the head branch, in the
-// background once it answers 202.
+// background once it answers 202. The pull request is read once first: a dirty one is a conflict
+// without asking. A branch already up to date is a success; a 422 is a conflict only when GitHub
+// names one, and any other refusal is ErrNotMergeable.
 func (cl *Client) UpdateBranch(ctx context.Context, c domain.ResolvedConnection, prURL, headSHA string) error {
 	p, err := cl.open(c, prURL)
 	if err != nil {
@@ -289,21 +303,40 @@ func (cl *Client) UpdateBranch(ctx context.Context, c domain.ResolvedConnection,
 		return fmt.Errorf("update branch of %s: the expected head SHA is required", prURL)
 	}
 
+	pj, err := cl.read(ctx, p, prURL)
+	if err != nil {
+		return fmt.Errorf("update branch of %s: %w", prURL, err)
+	}
+
+	if pj.MergeableState == dirty {
+		return fmt.Errorf("update branch of %s: GitHub reports it dirty: %w", prURL, &ports.MergeConflictError{URL: prURL})
+	}
+
 	status, msg, err := cl.call(ctx, p, http.MethodPut, p.repoPath("/pulls/"+p.number+"/update-branch"), map[string]string{
 		"expected_head_sha": headSHA,
 	}, nil)
+	if err != nil {
+		return fmt.Errorf("update branch of %s: %w", prURL, err)
+	}
+
+	return updateAnswer(prURL, status, msg)
+}
+
+// updateAnswer is what GitHub's answer status and msg to an update-branch of prURL mean.
+func updateAnswer(prURL string, status int, msg string) error {
+	lower := strings.ToLower(msg)
 
 	switch {
-	case err != nil:
-		return fmt.Errorf("update branch of %s: %w", prURL, err)
 	case status == http.StatusAccepted:
 		return nil
-	case status == http.StatusUnprocessableEntity && strings.Contains(strings.ToLower(msg), headMoved):
-		return fmt.Errorf("update branch of %s: GitHub refused (%d): %s: %w", prURL, status, msg, ports.ErrNotMergeable)
-	case status == http.StatusUnprocessableEntity:
-		// A conflict, or a refusal GitHub does not explain: never forced, nothing changed.
+	case status == http.StatusUnprocessableEntity && strings.Contains(lower, upToDate):
+		return nil
+	case status == http.StatusUnprocessableEntity && strings.Contains(lower, conflicted):
 		return fmt.Errorf("update branch of %s: GitHub refused: %s: %w", prURL, msg, &ports.MergeConflictError{URL: prURL})
-	case status == http.StatusNotFound, status == http.StatusForbidden:
+	case status == http.StatusUnprocessableEntity && strings.Contains(lower, headMoved):
+		return fmt.Errorf("update branch of %s: the head moved: GitHub refused (%d): %s: %w", prURL, status, msg, ports.ErrNotMergeable)
+	case status == http.StatusUnprocessableEntity, status == http.StatusNotFound, status == http.StatusForbidden:
+		// A refusal GitHub does not explain: never forced, nothing changed, the item stays.
 		return fmt.Errorf("update branch of %s: GitHub refused (%d): %s: %w", prURL, status, msg, ports.ErrNotMergeable)
 	default:
 		return fmt.Errorf("update branch of %s: GitHub answered %d: %s", prURL, status, msg)

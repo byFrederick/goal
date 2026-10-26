@@ -417,6 +417,60 @@ func TestUpdateBranch_ConflictIsMergeConflict(t *testing.T) {
 	}
 }
 
+func TestUpdateBranch_UpToDateIsNotAConflict(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitHub(t)
+	f.pr["mergeable_state"] = "clean"
+	f.update = func(map[string]string) (int, any) {
+		// GitHub's answer when the head branch already holds every commit of the base.
+		return http.StatusUnprocessableEntity, map[string]any{message: "There are no new commits on the base branch."}
+	}
+
+	if err := c.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA); err != nil {
+		t.Errorf("UpdateBranch on an up-to-date branch = %v; want nil", err)
+	}
+}
+
+func TestUpdateBranch_DirtyIsMergeConflictWithoutUpdating(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitHub(t)
+	f.pr["mergeable"], f.pr["mergeable_state"] = false, "dirty"
+
+	updated := false
+	f.update = func(map[string]string) (int, any) {
+		updated = true
+
+		return http.StatusAccepted, map[string]any{message: "Updating pull request branch."}
+	}
+
+	err := c.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA)
+
+	var mc *ports.MergeConflictError
+	if !errors.As(err, &mc) || errors.Is(err, ports.ErrNotMergeable) {
+		t.Errorf("UpdateBranch on a dirty pull request = %v; want a *MergeConflictError", err)
+	}
+
+	if updated {
+		t.Error("UpdateBranch asked GitHub to update a dirty branch; want no update-branch call")
+	}
+}
+
+func TestUpdateBranch_UnexplainedRefusalIsNotMergeable(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitHub(t)
+	f.update = func(map[string]string) (int, any) {
+		return http.StatusUnprocessableEntity, map[string]any{message: "Validation Failed"}
+	}
+
+	err := c.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA)
+	if !errors.Is(err, ports.ErrNotMergeable) || errors.Is(err, ports.ErrMergeConflict) {
+		t.Errorf("UpdateBranch on an unexplained 422 = %v; want ErrNotMergeable, not a conflict", err)
+	}
+}
+
 func TestUpdateBranch_MovedHeadIsNotMergeable(t *testing.T) {
 	t.Parallel()
 
