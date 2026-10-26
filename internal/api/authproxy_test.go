@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -78,6 +79,35 @@ func (s *identityService) url(t *testing.T) *url.URL {
 	}
 
 	return u
+}
+
+// downService is the URL of an auth service that is down: it closes every connection without
+// answering. Its listener stays open for the whole test, so no other test's server can take its
+// port, as one can after closing an httptest server when the whole module's tests run at once.
+func downService(t *testing.T) *url.URL {
+	t.Helper()
+
+	var lc net.ListenConfig
+
+	l, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = l.Close() })
+
+	go func() {
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				return
+			}
+
+			_ = conn.Close()
+		}
+	}()
+
+	return &url.URL{Scheme: "http", Host: l.Addr().String()}
 }
 
 // spaStatus is what the handler after the proxy answers with, so a test can tell it was reached.
@@ -541,9 +571,7 @@ func TestAuthProxy_LimitsBodies(t *testing.T) {
 func TestAuthProxy_UnavailableService(t *testing.T) {
 	t.Parallel()
 
-	down := newIdentityService(t, nil)
-	downURL := down.url(t)
-	down.Close()
+	downURL := downService(t)
 
 	stalled := func(t *testing.T) *url.URL {
 		t.Helper()
@@ -626,9 +654,7 @@ func TestAuthProxy_LogsNoSecrets(t *testing.T) {
 		w.Header().Set("Set-Auth-Token", "auth-token-secret")
 		_, _ = w.Write([]byte("{}"))
 	})
-	down := newIdentityService(t, nil)
-	downURL := down.url(t)
-	down.Close()
+	downURL := downService(t)
 
 	for _, upstream := range []*url.URL{svc.url(t), downURL} {
 		var buf bytes.Buffer

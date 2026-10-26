@@ -22,7 +22,7 @@ db/queries/            SQL for sqlc (pgx/v5); db/sqlc.yaml compiles them
 compose.yaml           local PostgreSQL 18 with pgvector, RustFS (S3-compatible object storage) and Mailpit (the dev inbox)
 apps/worker/           agent container images (TypeScript, Claude Agent SDK): runtime and dev (Go, task, Terraform, PostgreSQL)
 apps/web/              UI (React)
-terraform/             the platform's own Cloudflare infrastructure: R2 bucket, DNS, Worker route, Secrets Store secrets
+deploy/terraform/      the platform's own Cloudflare infrastructure: R2 bucket, DNS, Worker route, Secrets Store secrets
 design-system/         UI rules generated with ui-ux-pro-max, plus the user's overrides (MASTER.md)
 docs/adr/              decisions (0001 stack, 0002 Jonah evals, 0003 hexagonal architecture, 0004 frontend, 0005 definitions in object storage, 0006 workspaces and command checks)
 docs/engineering/      architecture and testing rules
@@ -119,7 +119,7 @@ Goal then opens from its own icon, full screen, and keeps the phone's status bar
 | `apps/worker/`, `apps/auth/`, `deploy/cloudflare/` | `worker:check`, `auth:check`, `cloudflare:check` |
 | `packages/api-client/` | `api-client:check` and `web:check` (web uses it) |
 | the rest of `apps/web/` | `web:check` |
-| `terraform/`, `.sops.yaml` | `tf:check` |
+| `deploy/terraform/`, `.sops.yaml` | `tf:check` |
 | `tools/layoutcheck/` | the Go checks and `layout:check` |
 | `AGENTS.md`, `docs/adr/0013-repository-layout.md`, `.claude/rules/` (what `tools/layoutcheck` compares with the tracked files) | `layout:check` |
 | the rest of `docs/`, `design-system/`, the rest of `.claude/`, `.github/`, `.githooks/`, other root `*.md`, `skills-lock.json` | nothing |
@@ -140,7 +140,7 @@ evals/          evals.yaml, cases/, judges/, fixtures/
 
 A contract a station names as its `output` becomes the tool `input_schema` the model fills, so its top level must be `"type": "object"` with no `oneOf`, `anyOf` or `allOf` there (nested under a property is fine). Validate and publish refuse one that is not (`contract-not-tool-schema`): describe the alternatives in one object, or nest the choice under a property, and check the alternatives in Go.
 
-goald stores each file once per organization as a content-addressed blob in the bucket (`orgs/<org-id>/blobs/<sha256>`), and PostgreSQL holds every draft and published version as a manifest (path → sha256) with a pointer to the version each factory runs. Each factory has one shared draft (the builder and the CLI both write it); publishing makes it the next version, every goald reloads within a second, and `goal factory restore` points the factory back at an older version. The bucket is one, versioned: locally `goal-local` on RustFS (`compose.yaml`), on Cloudflare the R2 bucket `goal-production` (`terraform/`). Files written to the bucket directly change nothing goald runs.
+goald stores each file once per organization as a content-addressed blob in the bucket (`orgs/<org-id>/blobs/<sha256>`), and PostgreSQL holds every draft and published version as a manifest (path → sha256) with a pointer to the version each factory runs. Each factory has one shared draft (the builder and the CLI both write it); publishing makes it the next version, every goald reloads within a second, and `goal factory restore` points the factory back at an older version. The bucket is one, versioned: locally `goal-local` on RustFS (`compose.yaml`), on Cloudflare the R2 bucket `goal-production` (`deploy/terraform/`). Files written to the bucket directly change nothing goald runs.
 
 The CLI reaches definitions through goald's API (`GOAL_API_URL`, default `http://127.0.0.1:8080`). Only the operator commands `goal storage init` and `goal catalog skills|templates` use the bucket directly, configured from the environment (`.env.example`): `GOAL_S3_BUCKET`, plus `GOAL_S3_ENDPOINT`, `GOAL_S3_ACCESS_KEY` and `GOAL_S3_SECRET_KEY` for a local S3-compatible server or R2 (its account endpoint and an R2 API token's keys).
 
@@ -177,7 +177,7 @@ PostgreSQL 18 is the only database: work items, the event log, leases (`FOR UPDA
 
 ## Infrastructure
 
-`terraform/` holds the platform's own infrastructure and nothing per organization: on Cloudflare the R2 bucket, the DNS record and Workers route of `goal.byfrederick.work`, the R2 and Workers AI tokens and every Secrets Store secret; on PlanetScale the database's branch (adopted) and its administrator; the Google Cloud project of the sign-in OAuth client. Terraform generates every secret it can; only outside values and the master keys are in the age-encrypted `terraform/secrets/production.sops.yaml`. One root module, one Terraform workspace, `production`; state in an R2 bucket. wrangler deploys the control Worker and the containers (`deploy/cloudflare/`).
+`deploy/terraform/` holds the platform's own infrastructure and nothing per organization: on Cloudflare the R2 bucket, the DNS record and Workers route of `goal.byfrederick.work`, the R2 and Workers AI tokens and every Secrets Store secret; on PlanetScale the database's branch (adopted) and its administrator; the Google Cloud project of the sign-in OAuth client. Terraform generates every secret it can; only outside values and the master keys are in the age-encrypted `deploy/terraform/secrets/production.sops.yaml`. One root module, one Terraform workspace, `production`; state in an R2 bucket. wrangler deploys the control Worker and the containers (`deploy/cloudflare/`).
 
 ```bash
 task tf:check                 # fmt, validate, tflint, terraform test: offline, part of task check
@@ -186,7 +186,7 @@ task tf:plan                  # needs the operator's credentials (task tf:creden
 task deploy:production        # wrangler deploy (builds and pushes the images), then the health check
 ```
 
-A merge to main that changes the app deploys production on its own once `ci` passes (`.github/workflows/deploy.yml`: `task deploy:worker`, then `task deploy:health` polls `GET /v1/health` until it is healthy or fails after 5 minutes); `terraform/`-only and docs-only changes deploy nothing. To roll back, run the deploy workflow by hand with the sha of an earlier commit of main.
+A merge to main that changes the app deploys production on its own once `ci` passes (`.github/workflows/deploy.yml`: `task deploy:worker`, then `task deploy:health` polls `GET /v1/health` until it is healthy or fails after 5 minutes); `deploy/terraform/`-only and docs-only changes deploy nothing. To roll back, run the deploy workflow by hand with the sha of an earlier commit of main.
 
 Bootstrap, deploys, master key escrow and rotation, and restores: [docs/engineering/cloudflare-operations.md](docs/engineering/cloudflare-operations.md). Agents format, check and plan; only the owner, or the coordinator the owner authorizes, applies.
 

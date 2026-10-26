@@ -28,7 +28,7 @@ reported), with a one-line reason.
 
 | # | Rule | Commit | Path:line | Verdict | Remediation |
 | --- | --- | --- | --- | --- | --- |
-| 1 | hashicorp-tf-password | `3bd7b72b0280` | `terraform/tests/database_urls_unit_test.tftest.hcl:10` | test fixture: the mocked PlanetScale role's made-up password | none (allowlisted) |
+| 1 | hashicorp-tf-password | `3bd7b72b0280` | `deploy/terraform/tests/database_urls_unit_test.tftest.hcl:10` | test fixture: the mocked PlanetScale role's made-up password | none (allowlisted) |
 | 2 | generic-api-key | `2a04d5224074` | `internal/engine/connections_test.go:35` | test fixture: a fake leased key | none (allowlisted) |
 | 3 | gitlab-pat | `9d1af0be718c` | `internal/adapters/gitlab/gitlab_test.go:20` | test fixture: a `glpat-` prefixed string that names itself a test token | none (allowlisted) |
 | 4 | generic-api-key | `3a5b7f636db9` | `internal/adapters/s3store/s3store_integration_test.go:155` | false positive: an object key (`orgs/acme/…`) | none (allowlisted) |
@@ -45,7 +45,7 @@ reported), with a one-line reason.
 
 Checked by hand as well, because a decrypted key or plain `.env` would be critical:
 
-- `git log --all -- '*.env' 'terraform/secrets/*'`: only `terraform/secrets/production.sops.yaml`,
+- `git log --all -- '*.env' 'deploy/terraform/secrets/*'`: only `deploy/terraform/secrets/production.sops.yaml`,
   in four commits (`201fab3`, `3bd7b72`, `e2c593f`, `a3e191d`). In every version each value is an
   `ENC[AES256_GCM,…]` or an empty string; the file never held a plain value. No `.env` was ever
   committed (only `.env.example`, with no values).
@@ -70,11 +70,11 @@ companies are their authors' fiction.
 | Employer or client names | — | none found | sample data uses `acme`, `example-labs` and `example.com` |
 | The owner's email address (a personal Gmail address) as **author** | commits `a570b92` (2026-10-23), `c19d01d` and `59ddcae` (2026-10-25; `59ddcae` is on `main`) | owner's call | a public repository shows every commit's author email. Every other commit uses the GitHub noreply address. Keep it, or rewrite (below) |
 | The owner's name, `F. Cruz` / `f.cruz@example.com` | test fixtures, `apps/web/mock`, specs | keep | the owner's own name on a fictional address |
-| PlanetScale organization `freddycruz5227` | `terraform/locals.tf:29`, `terraform/tests/platform_unit_test.tftest.hcl`, `docs/engineering/cloudflare-operations.md` | keep | Terraform needs it to address the branch; it is useless without a PlanetScale service token. It does repeat the local part of the email above: renaming it is a PlanetScale setting, not a repository change |
+| PlanetScale organization `freddycruz5227` | `deploy/terraform/locals.tf:29`, `deploy/terraform/tests/platform_unit_test.tftest.hcl`, `docs/engineering/cloudflare-operations.md` | keep | Terraform needs it to address the branch; it is useless without a PlanetScale service token. It does repeat the local part of the email above: renaming it is a PlanetScale setting, not a repository change |
 | Cloudflare account id | `deploy/cloudflare/wrangler.jsonc` (`GOAL_S3_ENDPOINT`, `GOAL_EMBED_URL`), since the deploy config was added | keep | not a credential: every API call also needs a token. [Cloudflare's own docs](https://developers.cloudflare.com/sandbox/sdk/api/tunnels/) call account and zone ids "non-secret IDs" for a Wrangler config's `vars` |
 | Secrets Store id | `deploy/cloudflare/wrangler.jsonc` (every `store_id`) | keep | an address, not a secret: reading a store needs an account token with Secrets Store access, and Workers read it only through their bindings. The deploy item may still turn both ids into deploy-time values so a fork deploys its own account |
 | Public hostname `goal.byfrederick.work`, zone `byfrederick.work`, `goal@byfrederick.work` (an example sender in the runbook) | README, SECURITY.md, the runbook, specs, Terraform | keep | public by design: it is the install's address and in public DNS |
-| Google Cloud project id `goal-byfrederick`, state bucket `goal-terraform-state` | `terraform/locals.tf`, the runbook | keep | names, useless without the owner's Google and R2 credentials |
+| Google Cloud project id `goal-byfrederick`, state bucket `goal-terraform-state` | `deploy/terraform/locals.tf`, the runbook | keep | names, useless without the owner's Google and R2 credentials |
 | age recipient in `.sops.yaml` | `.sops.yaml` | keep | an age **public** key: it can only encrypt to the owner |
 | `*.internal` hosts (`gateway.internal`, `sandbox.internal`, `auth.internal`, `host.docker.internal`, …) | the control Worker, compose, tests | keep | names inside Cloudflare's container network and Docker, not the owner's network |
 | Private IPs (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10`, `172.17.0.1`) | egress policy tests, compose, docs | keep | the ranges the egress policy refuses and Docker's default bridge, as test data |

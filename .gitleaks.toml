@@ -9,7 +9,7 @@ useDefault = true
 [[allowlists]]
 description = "Terraform unit tests: a made-up administrator password of the mocked PlanetScale role"
 condition = "AND"
-paths = ['''^terraform/tests/[^/]+\.tftest\.hcl$''']
+paths = ['''^deploy/terraform/tests/[^/]+\.tftest\.hcl$''']
 regexes = ['''^"?test-admin"?$''']
 
 [[allowlists]]
