@@ -14,12 +14,15 @@ import (
 // items it needs (planned or linked) or, held only by overlap needs, files with its own paths
 // that overlap theirs. An item with no open need waits on nothing. The page's open needs are
 // read once.
+// openAPIPath is a file a plan says its parts change.
+const openAPIPath = "contracts/api/openapi.yaml"
+
 func TestAPI_WaitingSaysWhatHoldsAnItem(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
-	_, parts := h.assembledOf(t,
-		domain.NewPart{Key: "contract", Title: "the contract", Paths: []string{"contracts/api/openapi.yaml", "web/**"}},
+	asm, parts := h.assembledOf(t,
+		domain.NewPart{Key: "contract", Title: "the contract", Paths: []string{openAPIPath, "web/**"}},
 		domain.NewPart{Key: "client", Title: "the client", Paths: []string{"web/src/a.ts"}, Needs: []string{"contract"}},
 		domain.NewPart{Key: "docs", Title: "the docs", Paths: []string{"docs/a.md", "contracts/api/*.yaml"}},
 	)
@@ -30,17 +33,36 @@ func TestAPI_WaitingSaysWhatHoldsAnItem(t *testing.T) {
 	linked := h.seed(t, stBuild, domain.StateQueued, t0)
 	h.edge(t, linked, need, domain.EdgeLinked)
 
+	onAssembly := h.seed(t, stBuild, domain.StateQueued, t0)
+	h.edge(t, onAssembly, asm, domain.EdgeLinked)
+
 	contractRef := "line#" + strconv.FormatInt(contract.Number, 10)
 	needRef := "line#" + strconv.FormatInt(need.Number, 10)
+	asmRef := "line#" + strconv.FormatInt(asm.Number, 10)
+
+	contractNeed := gen.ItemWaitingNeed{Ref: contractRef, Title: "the contract", Paths: []string{openAPIPath, "web/**"}}
+	asmNeed := gen.ItemWaitingNeed{Ref: asmRef, Title: asm.Title, Paths: []string{
+		openAPIPath, "web/**", "web/src/a.ts", "docs/a.md", "contracts/api/*.yaml",
+	}}
 
 	tests := []struct {
 		name string
 		it   domain.Item
 		want *gen.ItemWaiting
 	}{
-		{"planned need", client, &gen.ItemWaiting{Kind: gen.WaitingAfter, Items: []string{contractRef}, Files: []string{}}},
-		{"linked need", linked, &gen.ItemWaiting{Kind: gen.WaitingAfter, Items: []string{needRef}, Files: []string{}}},
-		{"overlap need", docs, &gen.ItemWaiting{Kind: gen.WaitingFiles, Items: []string{contractRef}, Files: []string{"contracts/api/*.yaml"}}},
+		{"planned need", client, &gen.ItemWaiting{
+			Kind: gen.WaitingAfter, Items: []string{contractRef}, Files: []string{}, Needs: []gen.ItemWaitingNeed{contractNeed},
+		}},
+		{"linked need", linked, &gen.ItemWaiting{
+			Kind: gen.WaitingAfter, Items: []string{needRef}, Files: []string{},
+			Needs: []gen.ItemWaitingNeed{{Ref: needRef, Title: need.Title, Paths: []string{}}},
+		}},
+		{"overlap need", docs, &gen.ItemWaiting{
+			Kind: gen.WaitingFiles, Items: []string{contractRef}, Files: []string{"contracts/api/*.yaml"}, Needs: []gen.ItemWaitingNeed{contractNeed},
+		}},
+		{"assembly need", onAssembly, &gen.ItemWaiting{
+			Kind: gen.WaitingAfter, Items: []string{asmRef}, Files: []string{}, Needs: []gen.ItemWaitingNeed{asmNeed},
+		}},
 		{"no open need", need, nil},
 	}
 

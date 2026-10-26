@@ -351,7 +351,7 @@ describe('board lanes', () => {
       title: 'Ship the export migration',
       state: 'queued',
       board_lane: 'investigator',
-      waiting: { kind: 'after', items: ['sre#3'], files: [] },
+      waiting: { kind: 'after', items: ['sre#3'], files: [], needs: [] },
     });
     const shared = item({
       id: 'item-21',
@@ -364,6 +364,7 @@ describe('board lanes', () => {
         kind: 'files',
         items: ['sre#3'],
         files: ['internal/api/gen/export/handlers.go', 'web/src/features/export/**'],
+        needs: [],
       },
     });
     const approved = item({

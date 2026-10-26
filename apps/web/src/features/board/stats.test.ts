@@ -319,8 +319,13 @@ describe('doingText', () => {
 });
 
 describe('cardState with a waiting reason', () => {
-  const after = { kind: 'after' as const, items: ['sre#3'], files: [] };
-  const files = { kind: 'files' as const, items: ['sre#3'], files: ['internal/api/**', 'web/src/**'] };
+  const after = { kind: 'after' as const, items: ['sre#3'], files: [], needs: [] };
+  const files = {
+    kind: 'files' as const,
+    items: ['sre#3'],
+    files: ['internal/api/**', 'web/src/**'],
+    needs: [{ ref: 'sre#3', title: 'Move the API', paths: ['internal/api/**'] }],
+  };
 
   it('says a queued or ready item starts after the items it needs merge, one or several', () => {
     expect(cardState(card({ state: 'queued', waiting: after }))).toEqual({
@@ -328,7 +333,8 @@ describe('cardState with a waiting reason', () => {
       tone: 'muted',
     });
     expect(
-      cardState(card({ state: 'ready', waiting: { kind: 'after', items: ['sre#3', 'sre#4'], files: [] } })).text,
+      cardState(card({ state: 'ready', waiting: { kind: 'after', items: ['sre#3', 'sre#4'], files: [], needs: [] } }))
+        .text,
     ).toBe('Starts after sre#3, sre#4 merge');
   });
 
