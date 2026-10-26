@@ -10,7 +10,7 @@
 //   - a docs/reference/environment.md that differs from the one the registry generates.
 //
 // It finds reads by syntax, not by running anything. Go files are parsed: a call to os.Getenv,
-// os.LookupEnv, getenv, lookup or or whose first argument is a string literal or a string constant
+// os.LookupEnv, getenv, lookup or the or closure whose first argument is a string literal or a string constant
 // of the same package is a read, and so is a string constant of the form "env:NAME" (a Secrets
 // reference). TypeScript is matched line by line: process.env.X, env.X, env['X'], get('X') and
 // required(env, 'X'). The vars and Secrets Store bindings of wrangler.jsonc are reads of the
@@ -104,11 +104,11 @@ func writeReference(r repo, root *os.Root) error {
 		return err
 	}
 
-	if err := root.MkdirAll(path.Dir(referenceFile), 0o755); err != nil { //nolint:gosec // a docs directory the repository tracks
+	if err := root.MkdirAll(path.Dir(referenceFile), 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", path.Dir(referenceFile), err)
 	}
 
-	if err := root.WriteFile(referenceFile, []byte(reference(reg)), 0o644); err != nil { //nolint:gosec // a doc the repository tracks
+	if err := root.WriteFile(referenceFile, []byte(reference(reg)), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", referenceFile, err)
 	}
 

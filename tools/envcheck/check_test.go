@@ -3,7 +3,6 @@ package main
 import (
 	"io/fs"
 	"os"
-	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -18,12 +17,14 @@ func fixture(t *testing.T) fstest.MapFS {
 
 	m := fstest.MapFS{}
 
-	err := fs.WalkDir(os.DirFS("testdata/repo"), ".", func(p string, d fs.DirEntry, err error) error {
+	src := os.DirFS("testdata/repo")
+
+	err := fs.WalkDir(src, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
 
-		b, err := os.ReadFile(path.Join("testdata/repo", p))
+		b, err := fs.ReadFile(src, p)
 		if err != nil {
 			return err
 		}
@@ -211,17 +212,24 @@ func TestCheck_UnreadDeclared(t *testing.T) {
 			"contracts/env.yaml: ZZ_TEST is declared but nothing reads it",
 		},
 		"a removed read": {
-			func(t *testing.T, m fstest.MapFS) { replace(t, m, "cmd/goald/settings.go", `os.Getenv("GOAL_OS")`, `""`) },
+			func(t *testing.T, m fstest.MapFS) {
+				t.Helper()
+				replace(t, m, "cmd/goald/settings.go", `os.Getenv("GOAL_OS")`, `""`)
+			},
 			"contracts/env.yaml: GOAL_OS is declared but nothing reads it",
 		},
 		"an indirect name gone from its file": {
 			func(t *testing.T, m fstest.MapFS) {
+				t.Helper()
+
 				replace(t, m, "deploy/cloudflare/src/env.ts", "['CF_INDIRECT']", "[]")
 			},
 			"contracts/env.yaml: CF_INDIRECT is declared but nothing reads it (its name does not appear quoted in deploy/cloudflare/src/env.ts)",
 		},
 		"a compose variable gone": {
 			func(t *testing.T, m fstest.MapFS) {
+				t.Helper()
+
 				replace(t, m, composeFile, `group_add: ["${GOAL_DOCKER_GID:-999}"]`, "group_add: []")
 			},
 			"contracts/env.yaml: GOAL_DOCKER_GID is declared but nothing reads it",
@@ -246,18 +254,24 @@ func TestCheck_WrongReader(t *testing.T) {
 	}{
 		"goald read, entry lists the CLI": {
 			func(t *testing.T, m fstest.MapFS) {
+				t.Helper()
+
 				replace(t, m, registryFile, "  - name: GOAL_LISTEN\n    readers: [goald]", "  - name: GOAL_LISTEN\n    readers: [goal]")
 			},
 			[]string{"cmd/goald/settings.go:11: GOAL_LISTEN is read by goald, which its entry in contracts/env.yaml does not list among its readers"},
 		},
 		"worker read, entry lists auth": {
 			func(t *testing.T, m fstest.MapFS) {
+				t.Helper()
+
 				replace(t, m, registryFile, "  - name: WORKER_DIR\n    readers: [worker]", "  - name: WORKER_DIR\n    readers: [auth]")
 			},
 			[]string{"apps/worker/src/run.ts:2: WORKER_DIR is read by worker, which its entry in contracts/env.yaml does not list among its readers"},
 		},
 		"an internal read needs only an entry": {
 			func(t *testing.T, m fstest.MapFS) {
+				t.Helper()
+
 				replace(t, m, registryFile, "  - name: GOAL_SHARED\n    readers: [goald]", "  - name: GOAL_SHARED\n    readers: [goal-egress]")
 			},
 			nil,

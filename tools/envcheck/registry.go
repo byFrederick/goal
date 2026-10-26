@@ -116,8 +116,7 @@ func parseRegistry(schema, src []byte) (registry, error) {
 	}
 
 	if err := sch.Validate(v); err != nil {
-		var ve *jsonschema.ValidationError
-		if errors.As(err, &ve) {
+		if ve, ok := errors.AsType[*jsonschema.ValidationError](err); ok {
 			return registry{}, fmt.Errorf("%s does not match %s: %s", registryFile, schemaFile, strings.TrimSpace(ve.Error()))
 		}
 

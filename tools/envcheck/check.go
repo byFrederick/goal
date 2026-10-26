@@ -72,41 +72,9 @@ func check(r repo) ([]problem, error) {
 
 // scanRepo finds every read in the tracked files.
 func scanRepo(r repo) ([]read, wrangler, error) {
-	packages := map[string]map[string][]byte{}
-
-	var reads []read
-
-	for _, f := range r.files {
-		switch {
-		case isGoSource(f):
-			src, err := r.read(f)
-			if err != nil {
-				return nil, wrangler{}, err
-			}
-
-			dir := path.Dir(f)
-			if packages[dir] == nil {
-				packages[dir] = map[string][]byte{}
-			}
-
-			packages[dir][f] = src
-		case isTSSource(f):
-			src, err := r.read(f)
-			if err != nil {
-				return nil, wrangler{}, err
-			}
-
-			reads = append(reads, scanTS(f, src)...)
-		}
-	}
-
-	for _, dir := range sortedKeys(packages) {
-		found, err := scanGo(packages[dir])
-		if err != nil {
-			return nil, wrangler{}, err
-		}
-
-		reads = append(reads, found...)
+	reads, err := scanSources(r)
+	if err != nil {
+		return nil, wrangler{}, err
 	}
 
 	w, err := wranglerOf(r)
@@ -133,6 +101,48 @@ func scanRepo(r repo) ([]read, wrangler, error) {
 	}
 
 	return reads, w, nil
+}
+
+// scanSources finds the reads in the Go and TypeScript sources, Go one package at a time so a
+// read may name a constant of another file of its package.
+func scanSources(r repo) ([]read, error) {
+	packages := map[string]map[string][]byte{}
+
+	var reads []read
+
+	for _, f := range r.files {
+		if !isGoSource(f) && !isTSSource(f) {
+			continue
+		}
+
+		src, err := r.read(f)
+		if err != nil {
+			return nil, err
+		}
+
+		if isTSSource(f) {
+			reads = append(reads, scanTS(f, src)...)
+			continue
+		}
+
+		dir := path.Dir(f)
+		if packages[dir] == nil {
+			packages[dir] = map[string][]byte{}
+		}
+
+		packages[dir][f] = src
+	}
+
+	for _, dir := range sortedKeys(packages) {
+		found, err := scanGo(packages[dir])
+		if err != nil {
+			return nil, err
+		}
+
+		reads = append(reads, found...)
+	}
+
+	return reads, nil
 }
 
 func wranglerOf(r repo) (wrangler, error) {
