@@ -63,7 +63,10 @@ type Item struct {
 	// PartPaths the files the plan said it changes.
 	PartKey   string
 	PartPaths []string
-	Type      string
+	// Paths are the file globs the item is expected to change, nil when none are known: a part's
+	// are its plan's (ADR 0012).
+	Paths []string
+	Type  string
 	// Lane picks the agent at stations that route by lane. Empty until intake or an output sets it.
 	Lane     string
 	Title    string

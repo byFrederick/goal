@@ -66,6 +66,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"HeartbeatLease_FencedByAcquiredAt", testHeartbeat},
 		{"Transition_MovesAndReleases", testTransition},
 		{"Transition_ConflictChangesNothing", testTransitionConflict},
+		{"Paths_SetByTransitionKeptOtherwise", testPathsSetByTransition},
 		{"Transition_LeaseLostChangesNothing", testTransitionLeaseLost},
 		{"RequeueExpiredLeases_RequeuesAndFailsRuns", testRequeue},
 		{"RequeueExpiredLeases_FencesTheOldHolder", testRequeueFences},
