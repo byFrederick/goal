@@ -95,7 +95,7 @@ func (e *Engine) Reject(ctx context.Context, id domain.ItemID, by domain.Actor, 
 	return e.control(ctx, "reject", it, by, t)
 }
 
-// Errors of the human controls of an item (Move, Pause and Reject).
+// Errors of the human controls of an item (Move, Pause, Cancel and Reject).
 var (
 	// ErrCannotSendBack means a send-back of an item that is queued, ready, done or cancelled,
 	// or whose station has nowhere upstream to send it.
@@ -189,6 +189,46 @@ func (e *Engine) Pause(ctx context.Context, id domain.ItemID, by domain.Actor, r
 		Events: []domain.Event{decision(it, domain.EventPaused, now, by, withReason(nil, reason))},
 		Audit:  itemAudit(it, now, by, domain.AuditItemPaused, withReason(map[string]any{"station": it.Station}, reason)),
 	})
+}
+
+// Cancel closes an open item where it is, for good: it becomes cancelled at its station with a
+// cancelled event (the reason is optional) and an audit entry. In progress, its lease is taken
+// and its run stopped. An assembly cancels its open parts with it (cancelAssembly).
+func (e *Engine) Cancel(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error) {
+	reason = strings.TrimSpace(reason)
+
+	it, _, err := e.itemAndLine(ctx, id)
+	if err != nil {
+		return domain.Item{}, fmt.Errorf("cancel %s: %w", id, err)
+	}
+
+	switch {
+	case closed(it):
+		return domain.Item{}, fmt.Errorf("cancel %s: %w", id, ErrItemClosed)
+	case it.State == domain.StateAssembly:
+		return e.cancelAssembly(ctx, it, by, reason)
+	}
+
+	now := e.clock.Now()
+
+	return e.control(ctx, "cancel", it, by, cancelOf(it, now, by, reason, nil))
+}
+
+// cancelOf is the transition that cancels it at its station, with its cancelled event (data)
+// and audit entry (the station and data).
+func cancelOf(it domain.Item, at time.Time, by domain.Actor, reason string, data map[string]any) ports.Transition {
+	audit := maps.Clone(data)
+	if audit == nil {
+		audit = map[string]any{}
+	}
+
+	audit["station"] = it.Station
+
+	return ports.Transition{
+		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: it.Station, State: domain.StateCancelled}, At: at,
+		Events: []domain.Event{decision(it, domain.EventCancelled, at, by, withReason(data, reason))},
+		Audit:  itemAudit(it, at, by, domain.AuditItemCancelled, withReason(audit, reason)),
+	}
 }
 
 // control applies a person's transition of it. An item in progress has its lease taken first

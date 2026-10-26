@@ -1,7 +1,9 @@
 package engine_test
 
 import (
+	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/byFrederick/goal/internal/domain"
@@ -220,4 +222,109 @@ func (h *harness) retriedParts(t *testing.T, a domain.Item, parts map[string]dom
 			}
 		}
 	}
+}
+
+// Cancelling an assembly cancels each of its open parts where it is, in one cascade, each with
+// one cancelled event naming the assembly and the lease of one in progress taken; the done part
+// is untouched and the assembly ends cancelled, not done, with its own cancelled event.
+func TestEngine_CancelAssemblyCancelsOnlyItsOpenParts(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, controlLine(), porttest.Succeed(`{}`))
+	a, parts := h.assemblyAtWork(t)
+	shipped := h.kinds(parts[partShipped].ID)
+
+	got, err := h.e.Cancel(inOrg(t), a.ID, human, reasonVendor)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.ID != a.ID || got.State != domain.StateCancelled || !got.DoneAt.IsZero() {
+		t.Errorf("Cancel of an assembly returned %s in %s, done %v; want the assembly, cancelled", got.ID, got.State, got.DoneAt)
+	}
+
+	cancelled := domain.Position{Station: stWork, State: domain.StateCancelled}
+	h.atPositions(t, "cancel", parts, map[string]domain.Position{
+		partBuilding: cancelled, partQueued: cancelled, partStuck: cancelled, partShipped: {Station: stDone, State: domain.StateDone},
+	})
+
+	for _, key := range []string{partBuilding, partQueued, partStuck} {
+		events := h.eventsOf(parts[key].ID, domain.EventCancelled)
+		if len(events) != 1 || events[0].Data["assembly"] != string(a.ID) || events[0].Data["reason"] != reasonVendor {
+			t.Errorf("cancelled events of %s = %+v; want one naming the assembly and the reason", key, events)
+		}
+	}
+
+	if now := h.kinds(parts[partShipped].ID); !slices.Equal(now, shipped) {
+		t.Errorf("events of the done part = %v; want them unchanged, %v", now, shipped)
+	}
+
+	if n := len(h.eventsOf(parts[partBuilding].ID, domain.EventLeaseTaken)); n != 1 {
+		t.Errorf("lease_taken events of the building part = %d; want 1", n)
+	}
+
+	if ls, _ := h.store.Leases(inOrg(t), factoryID, stWork); len(ls) != 0 {
+		t.Errorf("leases at work after the cancel = %+v; want the building part's taken", ls)
+	}
+
+	if events := h.eventsOf(a.ID, domain.EventCancelled); len(events) != 1 || events[0].Data["parts"] != 3 {
+		t.Errorf("cancelled events of the assembly = %+v; want one, with parts 3", events)
+	}
+
+	if audited := h.audited(t, domain.AuditItemCancelled); len(audited) != 3 {
+		t.Errorf("item.cancelled audit entries = %+v; want one per cancelled part", audited)
+	}
+
+	if _, err := h.e.Cancel(inOrg(t), a.ID, human, ""); !errors.Is(err, engine.ErrItemClosed) {
+		t.Errorf("Cancel of a cancelled assembly: err = %v; want ErrItemClosed", err)
+	}
+}
+
+// closedParts is a store whose Parts reports every part closed: an assembly still open whose
+// parts all closed, which no cascade can move.
+type closedParts struct {
+	*porttest.Store
+}
+
+func (s closedParts) Parts(ctx context.Context, parent domain.ItemID) (domain.Parts, error) {
+	parts, err := s.Store.Parts(ctx, parent)
+	for i := range parts.Items {
+		if parts.Items[i].State != domain.StateDone {
+			parts.Items[i].State = domain.StateCancelled
+		}
+	}
+
+	return parts, err
+}
+
+// An assembly whose parts are all closed is cancelled directly, with its cancelled event and
+// audit entry, and no part is touched.
+func TestEngine_CancelAssemblyWithEveryPartClosed(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, controlLine(), porttest.Succeed(`{}`))
+	a, parts := h.assemblyAtWork(t)
+	e := h.engine(t, closedParts{h.store})
+
+	got, err := e.Cancel(inOrg(t), a.ID, human, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Position() != (domain.Position{Station: stWork, State: domain.StateCancelled}) {
+		t.Errorf("cancelled assembly at %+v; want cancelled at work", got.Position())
+	}
+
+	if events := h.eventsOf(a.ID, domain.EventCancelled); len(events) != 1 || events[0].Data["parts"] != 0 {
+		t.Errorf("cancelled events of the assembly = %+v; want one, with parts 0", events)
+	}
+
+	if audited := h.audited(t, domain.AuditItemCancelled); len(audited) != 1 || audited[0].TargetID != string(a.ID) {
+		t.Errorf("item.cancelled audit entries = %+v; want one, of the assembly", audited)
+	}
+
+	h.atPositions(t, "cancel", parts, map[string]domain.Position{
+		partBuilding: {Station: stWork, State: domain.StateInProgress}, partQueued: {Station: stWork, State: domain.StateQueued},
+		partStuck: {Station: stWork, State: domain.StateBlocked}, partShipped: {Station: stDone, State: domain.StateDone},
+	})
 }
