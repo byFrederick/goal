@@ -421,6 +421,10 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 
 	out.Touches = s.itemTouchesOf(touches)
 
+	if out.Assembly, err = s.assemblyOf(ctx, it); err != nil {
+		return nil, err
+	}
+
 	return gen.GetItem200JSONResponse(out), nil
 }
 

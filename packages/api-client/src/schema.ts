@@ -2664,6 +2664,8 @@ export interface components {
             part_key?: string;
             /** @description The files the plan said the part changes; absent unless the item is a part */
             part_paths?: string[];
+            /** @description The assembly the item is a part of, and its place among the parts in plan order; getItem only, absent unless the item is a part. The parts themselves are listItemParts */
+            assembly?: components["schemas"]["PartOf"];
             type: string;
             lane?: string;
             title: string;

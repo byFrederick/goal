@@ -41,6 +41,7 @@ const (
 	codeLastNotDone     = "last-station-not-done"
 	codeGateNotUpstream = "gate-not-upstream"
 	codeAgentsOverWIP   = "agents-exceed-wip"
+	codeRouteOverAgents = "route-agents-exceed-station"
 	codeCheckRunMissing = "check-run-missing"
 	codeBufferOffDrum   = "buffer-not-at-constraint"
 
@@ -239,11 +240,21 @@ func (c *checker) station(i int, s Station) {
 		c.errorf(checkReferences, codeUnknownAgent, append(base, "agent"), "station %s: unknown agent %q", s.ID, s.Agent)
 	}
 
+	kept := 0
+
 	for _, lane := range sortedKeys(s.Route) {
-		if a := s.Route[lane]; !slices.Contains(c.agents, a) {
+		r := s.Route[lane]
+		kept += r.Agents
+
+		if !slices.Contains(c.agents, r.Agent) {
 			c.errorf(checkReferences, codeUnknownAgent, append(base, "route", lane),
-				"station %s: route %s → unknown agent %q", s.ID, lane, a)
+				"station %s: route %s → unknown agent %q", s.ID, lane, r.Agent)
 		}
+	}
+
+	if agents := max(s.Agents, 1); kept > agents {
+		c.errorf(checkLine, codeRouteOverAgents, append(base, "route"),
+			"station %s: route keeps %d slots but the station has %d agents", s.ID, kept, agents)
 	}
 
 	if _, ok := c.f.Spec.Contracts[s.Output]; s.Output != "" && !ok {

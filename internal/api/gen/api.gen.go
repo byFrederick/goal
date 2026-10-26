@@ -2350,6 +2350,8 @@ type Inviter struct {
 
 // Item defines model for Item.
 type Item struct {
+	// Assembly The assembly the item is a part of, and its place among the parts in plan order; getItem only, absent unless the item is a part. The parts themselves are listItemParts
+	Assembly       *PartOf        `json:"assembly,omitempty"`
 	Body           string         `json:"body"`
 	ClassOfService ClassOfService `json:"class_of_service"`
 	CostUsd        float64        `json:"cost_usd"`

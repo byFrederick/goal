@@ -3368,6 +3368,11 @@ components:
           type: array
           description: The files the plan said the part changes; absent unless the item is a part
           items: { type: string }
+        assembly:
+          description: >-
+            The assembly the item is a part of, and its place among the parts in plan order;
+            getItem only, absent unless the item is a part. The parts themselves are listItemParts
+          allOf: [{ $ref: "#/components/schemas/PartOf" }]
         type: { type: string }
         lane: { type: string }
         title: { type: string }
@@ -5276,7 +5281,9 @@ components:
                 type: object
                 description: >-
                   id, name, description, kind (queue, agent, human, done), agent, route (lane →
-                  agent), agents, wip, buffer, output, checks (strings or {kind, run, min}), gate
+                  agent or {agent, agents}: an entry with agents n keeps n of the station's slots
+                  for its lane, which uses no others; entries without a count share the rest),
+                  agents, wip, buffer, output, checks (strings or {kind, run, min}), gate
                   ({on_reject, max_rework}), action
                 additionalProperties: {}
             intake:

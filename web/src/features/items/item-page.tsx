@@ -17,14 +17,14 @@ import { cn } from '../../ui/cn';
 import { PathCard, TimeCard } from './flow-cards';
 import { NoteComposer } from './note-composer';
 import { OutputsCard } from './outputs';
-import { activeRun, buildTrace, latestToolCalls, noteRecipient, runLabel, type Trace } from './timeline';
+import { activeRun, buildTrace, latestToolCalls, noteRecipient, runRole, type Trace } from './timeline';
 import { TouchesCard } from './touches-card';
 import { ToolRow, TraceList } from './trace-view';
 
-/** The agent copy working the item now, as the trace names it. */
-function agentOf(trace: Trace): string | null {
+/** The role working the item now, as the trace names it. */
+function roleOf(trace: Trace): string | null {
   const run = activeRun(trace);
-  return run ? runLabel(run) : null;
+  return run ? runRole(run) : null;
 }
 
 const chipTone: Record<Tone, ChipTone> = { run: 'run', you: 'you', rework: 'rework', muted: 'plain', ok: 'ok' };
@@ -53,7 +53,7 @@ function TraceCard({
                 aria-hidden="true"
                 className="size-2 rounded-full bg-run shadow-[0_0_0_4px_var(--color-run-tint)]"
               />
-              {runLabel(run)} working, {run.tools.length} tool calls
+              {runRole(run)} working, {run.tools.length} tool calls
             </>
           ) : null}
         </span>
@@ -102,10 +102,11 @@ export function ItemPage() {
   const { data: runs } = useQuery(runsQuery(org.id, key));
   const trace = useMemo(() => buildTrace(events, runs?.runs), [events, runs]);
   const [fullTrace, setFullTrace] = useState(false);
-  const recipient = noteRecipient(trace, item.station);
+  const recipientAgent = noteRecipient(trace, item.station);
+  const recipient = recipientAgent ? humanize(recipientAgent) : undefined;
   const station = factory.stations.find((s) => s.id === item.station);
   const state = describeState(
-    { state: item.state, agent: agentOf(trace), rework_count: item.rework_count },
+    { state: item.state, agent: roleOf(trace), rework_count: item.rework_count },
     { decides: holds(factory, 'item:decide') },
   );
   const decidable = {
