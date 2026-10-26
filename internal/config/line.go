@@ -110,6 +110,10 @@ func flowPolicy(fl Flow) domain.FlowPolicy {
 		}
 	}
 
+	if d := fl.Dependencies; d != nil {
+		p.Dependencies.After = d.After
+	}
+
 	if fl.Release != "" {
 		p.Release = domain.ReleasePolicy(fl.Release)
 	}

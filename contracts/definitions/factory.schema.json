@@ -466,6 +466,18 @@
                 }
               }
             },
+            "dependencies": {
+              "type": "object",
+              "description": "Which properties of a station's output declare what an item must follow. No property is fixed by the platform; an omitted key reads none.",
+              "additionalProperties": false,
+              "properties": {
+                "after": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The output property listing the open items of this factory, outside the output's plan, that the work must follow, as item refs <factory>#<number>. Each becomes a linked edge from the item, or from every part of its plan with no in-plan needs; a ref that is malformed, of another factory, unknown, done, cancelled or would close a cycle fails the output."
+                }
+              }
+            },
             "retry": {
               "type": "object",
               "description": "How often a claim runs an item again after a failure that is not the item's fault. Omitted keys take their defaults.",

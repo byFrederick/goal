@@ -27,6 +27,8 @@ type FlowPolicy struct {
 	// Assemblies says how runs keep item branches fresh, what a merge conflict does and how
 	// the line treats items that edit the same files.
 	Assemblies AssemblyPolicy
+	// Dependencies names the output properties that declare what an item must follow.
+	Dependencies DependencyPolicy
 	// Retry caps the runs again of a claim whose sandbox is lost.
 	Retry RetryPolicy
 }
@@ -92,6 +94,14 @@ type AssemblyPolicy struct {
 	// Materialize makes a station's plan (PlanFrom) an assembly with its parts when the station
 	// finishes; off, the plan is ignored and the item moves on. On by default.
 	Materialize bool
+}
+
+// DependencyPolicy is board.flow.dependencies: which properties of a station's output declare
+// the item's dependencies. No property is fixed by the platform; an unset one is not read.
+type DependencyPolicy struct {
+	// After is the output property listing the open items (<factory>#<number>, AfterFrom) the
+	// work must follow: each becomes a linked edge from the item, or from its plan's root parts.
+	After string
 }
 
 // AndonPolicy pulls the andon cord when too many gate verdicts reject.
