@@ -399,3 +399,195 @@ func testAssemblyClosesOnce(f *fixture) {
 		}
 	}
 }
+
+// pauseAll is the cascade that blocks parts where they are, taking the lease of those in
+// progress, with a paused event on each and one on the assembly.
+func (f *fixture) pauseAll(assembly domain.ItemID, parts ...domain.Item) ports.Cascade {
+	c := ports.Cascade{
+		Assembly: assembly,
+		Events: []domain.Event{{
+			FactoryID: f.factory, ItemID: assembly, At: t1, Kind: domain.EventPaused, Station: stWork, Actor: domain.ActorEngine,
+			Data: map[string]any{"parts": len(parts)},
+		}},
+	}
+
+	for _, p := range parts {
+		tr := ports.Transition{
+			ItemID: p.ID, From: p.Position(), To: domain.Position{Station: p.Station, State: domain.StateBlocked}, At: t1,
+			Events: []domain.Event{{FactoryID: f.factory, ItemID: p.ID, At: t1, Kind: domain.EventPaused, Station: p.Station, Actor: domain.ActorEngine}},
+		}
+		if p.State == domain.StateInProgress {
+			tr.TakeLease, tr.Outcome = true, domain.LeaseTaken
+		}
+
+		c.Parts = append(c.Parts, tr)
+	}
+
+	return c
+}
+
+// CascadeParts moves every part it names, taking the lease of one in progress, appends each
+// part's events and the assembly's, and leaves the assembly in state assembly; a cascade that
+// closes the last open parts closes the assembly, once.
+func testCascadeParts(f *fixture) {
+	t := f.t
+	ctx := f.ctx(t)
+
+	it, l := f.planning(t, domain.NewItem{Title: titleBig})
+	_, parts := f.assemble(t, assembly(it, l, plan()))
+	api, _ := f.claim(t, work, 1, t1)
+	store, web := parts.Items[1], parts.Items[2]
+
+	c := f.pauseAll(it.ID, web, api, store)
+
+	got, err := f.Store.CascadeParts(ctx, c)
+	if err != nil {
+		t.Fatalf("CascadeParts: %v", err)
+	}
+
+	if !reflect.DeepEqual(got, f.parts(t, it.ID)) || got.Total != 3 || !reflect.DeepEqual(keysOf(got), []string{keyAPI, keyStore, keyWeb}) {
+		t.Errorf("CascadeParts returned\n  %+v\nwant the assembly's parts in plan order\n  %+v", got, f.parts(t, it.ID))
+	}
+
+	for _, p := range got.Items {
+		if p.Position() != (domain.Position{Station: stWork, State: domain.StateBlocked}) || !p.UpdatedAt.Equal(t1) {
+			t.Errorf("part %s after the cascade is %s at %s; want blocked at work", p.PartKey, p.State, p.Station)
+		}
+	}
+
+	if ls := f.leases(t, stWork); len(ls) != 0 {
+		t.Errorf("Leases after the cascade = %+v; want the API part's lease taken", ls)
+	}
+
+	for i, p := range []domain.Item{web, api, store} {
+		events := f.Events(t, p.ID)
+		sameEvents(t, events[len(events)-1:], c.Parts[i].Events)
+	}
+
+	if a := f.item(t, it.ID); a.State != domain.StateAssembly {
+		t.Errorf("assembly after the cascade is %q; want assembly", a.State)
+	}
+
+	events := f.Events(t, it.ID)
+	sameEvents(t, events[len(events)-1:], c.Events)
+
+	f.cancelClosesTheAssembly(it.ID, got)
+}
+
+// cancelClosesTheAssembly cancels every one of parts, the open parts of assembly, in one
+// cascade, which closes the assembly as cancelled, once.
+func (f *fixture) cancelClosesTheAssembly(assembly domain.ItemID, parts domain.Parts) {
+	t := f.t
+	cancel := ports.Cascade{Assembly: assembly}
+
+	for _, p := range parts.Items {
+		cancel.Parts = append(cancel.Parts, ports.Transition{
+			ItemID: p.ID, From: p.Position(), To: domain.Position{Station: stWork, State: domain.StateCancelled}, At: t1,
+		})
+	}
+
+	if got, err := f.Store.CascadeParts(f.ctx(t), cancel); err != nil || got.Done != 0 || got.Total != 3 {
+		t.Fatalf("CascadeParts cancelling every part = %+v, %v; want 0/3", got, err)
+	}
+
+	if a := f.item(t, assembly); a.State != domain.StateCancelled {
+		t.Errorf("assembly after its parts were cancelled is %q; want cancelled", a.State)
+	}
+
+	closes := 0
+
+	for _, e := range f.Events(t, assembly) {
+		if e.Kind == domain.EventAssemblyDone {
+			closes++
+		}
+	}
+
+	if closes != 1 {
+		t.Errorf("assembly_done events = %d; want 1", closes)
+	}
+}
+
+// A cascade naming no part, a part of another assembly, the assembly itself or a move to state
+// assembly is invalid; one with a stale part, a lost lease or a closed assembly conflicts. None
+// writes anything, even when its other parts could move.
+func testCascadeRefused(f *fixture) {
+	t := f.t
+	ctx := f.ctx(t)
+
+	it, l := f.planning(t, domain.NewItem{Title: titleBig})
+	_, parts := f.assemble(t, assembly(it, l, plan()))
+	api, apiLease := f.claim(t, work, 1, t1)
+	store, web := parts.Items[1], parts.Items[2]
+
+	other, ol := f.planning(t, domain.NewItem{Title: "dropped request"})
+	_, dropped := f.assemble(t, assembly(other, ol, plan()[:1]))
+
+	if err := f.finishPart(t, dropped.Items[0], domain.StateCancelled, t1); err != nil {
+		t.Fatal(err)
+	}
+
+	gone := dropped.Items[0]
+	gone.Station, gone.State = stNext, domain.StateCancelled
+
+	before := map[domain.ItemID]int{}
+	for _, id := range []domain.ItemID{it.ID, api.ID, store.ID, web.ID} {
+		before[id] = len(f.Events(t, id))
+	}
+
+	edit := func(c ports.Cascade, change func(c *ports.Cascade)) ports.Cascade { change(&c); return c }
+	good := f.pauseAll(it.ID, store, web)
+	stale := store
+	stale.State = domain.StateReady
+	lost := apiLease
+	lost.AcquiredAt = apiLease.AcquiredAt.Add(-time.Second)
+
+	refused := []struct {
+		name string
+		c    ports.Cascade
+		want error
+	}{
+		{"no parts", ports.Cascade{Assembly: it.ID}, domain.ErrInvalid},
+		{"a part of another assembly", f.pauseAll(it.ID, store, gone), domain.ErrInvalid},
+		{"a part twice", f.pauseAll(it.ID, store, store), domain.ErrInvalid},
+		{"the assembly itself", f.pauseAll(it.ID, store, f.item(t, it.ID)), domain.ErrInvalid},
+		{"a move to state assembly", edit(good, func(c *ports.Cascade) {
+			c.Parts = append([]ports.Transition{}, c.Parts...)
+			c.Parts[1].To.State = domain.StateAssembly
+		}), domain.ErrInvalid},
+		{"a stale part", f.pauseAll(it.ID, web, stale), ports.ErrConflict},
+		{"a lost lease", edit(f.pauseAll(it.ID, web, api), func(c *ports.Cascade) {
+			c.Parts[1].TakeLease, c.Parts[1].Lease, c.Parts[1].Outcome = false, &lost, domain.LeaseAdvanced
+		}), ports.ErrLeaseLost},
+		{"a closed assembly", ports.Cascade{Assembly: other.ID, Parts: []ports.Transition{{
+			ItemID: gone.ID, From: gone.Position(), To: domain.Position{Station: stWork, State: domain.StateQueued}, At: t1,
+		}}}, ports.ErrConflict},
+	}
+
+	for _, r := range refused {
+		if _, err := f.Store.CascadeParts(ctx, r.c); !errors.Is(err, r.want) {
+			t.Errorf("CascadeParts with %s = %v; want %v", r.name, err, r.want)
+		}
+	}
+
+	sameItem(t, f.item(t, api.ID), api)
+	sameItem(t, f.item(t, store.ID), store)
+	sameItem(t, f.item(t, web.ID), web)
+
+	if a := f.item(t, it.ID); a.State != domain.StateAssembly {
+		t.Errorf("assembly after refusals is %q; want assembly", a.State)
+	}
+
+	if g := f.item(t, other.ID); g.State != domain.StateCancelled {
+		t.Errorf("closed assembly after refusals is %q; want cancelled", g.State)
+	}
+
+	if ls := f.leases(t, stWork); len(ls) != 1 || ls[0] != apiLease {
+		t.Errorf("Leases after refusals = %+v; want the API part's lease still held", ls)
+	}
+
+	for id, n := range before {
+		if got := len(f.Events(t, id)); got != n {
+			t.Errorf("events of %s after refusals = %d; want %d", id, got, n)
+		}
+	}
+}
