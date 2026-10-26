@@ -64,8 +64,13 @@ func goFile(p string) bool { return strings.HasSuffix(p, ".go") }
 // generated reports a generated file: its name has .gen. before the extension (ADR 0013, decision 4).
 func generated(p string) bool { return strings.Contains(path.Base(p), ".gen.") }
 
-// taskfile reports the root Taskfile.yml or one it includes (apps/web/Taskfile.yml...).
-func taskfile(p string) bool { return path.Base(p) == "Taskfile.yml" }
+// taskfile reports the root Taskfile.yml or one it includes (apps/web/Taskfile.yml...); a test's
+// fixture under testdata/ is not one.
+func taskfile(p string) bool { return path.Base(p) == "Taskfile.yml" && !isTestdata(p) }
+
+func isTestdata(p string) bool {
+	return strings.HasPrefix(p, "testdata/") || strings.Contains(p, "/testdata/")
+}
 
 func rootMarkdown(p string) bool { return !strings.Contains(p, "/") && path.Ext(p) == ".md" }
 

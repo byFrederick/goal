@@ -103,7 +103,7 @@ func scanRepo(r repo) ([]read, wrangler, error) {
 type dollarFile struct{ file, reader string }
 
 // dollarFiles returns the tracked compose file and every tracked Taskfile: the root's and each one
-// it includes (a file named Taskfile.yml anywhere), in the order of files.
+// it includes (a file named Taskfile.yml anywhere but a test's testdata/), in the order of files.
 func dollarFiles(files []string) []dollarFile {
 	var out []dollarFile
 
@@ -111,7 +111,7 @@ func dollarFiles(files []string) []dollarFile {
 		switch {
 		case f == composeFile:
 			out = append(out, dollarFile{f, readerCompose})
-		case path.Base(f) == taskfileName:
+		case path.Base(f) == taskfileName && !strings.HasPrefix(f, "testdata/") && !strings.Contains(f, "/testdata/"):
 			out = append(out, dollarFile{f, readerTaskfile})
 		}
 	}

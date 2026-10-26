@@ -70,8 +70,8 @@ func TestPlan(t *testing.T) {
 			append(slices.Clone(layoutTasks), goTasks...), "layout (layout:check): tools/layoutcheck/check.go and 1 more", "",
 		},
 		"env check": {
-			[]string{"tools/envcheck/check.go", "tools/envcheck/testdata/repo/compose.yaml"},
-			goEnvTasks, "env (env:check): tools/envcheck/check.go and 1 more", "",
+			[]string{"tools/envcheck/check.go", "tools/envcheck/testdata/repo/compose.yaml", "tools/envcheck/testdata/repo/apps/web/Taskfile.yml"},
+			goEnvTasks, "env (env:check): tools/envcheck/check.go and 2 more", "",
 		},
 		"repository tools": {
 			[]string{"tools/permgen/table.go", "tools/checkplan/testdata/x.txt"},
