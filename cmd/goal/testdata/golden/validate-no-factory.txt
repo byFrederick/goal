@@ -1,0 +1,6 @@
+exit 1
+--- stdout
+✗ ../../internal/config/testdata
+  ../../internal/config/testdata/factory.yaml error factory-yaml-missing read factory.yaml: open factory.yaml: file does not exist
+--- stderr
+goal: 1 of 1 factories are invalid

@@ -1,0 +1,7 @@
+exit 0
+--- stdout
+github.com/byFrederick/goal v0.0.0-test
+go go1.0-test
+vcs.revision 0123456789abcdef (modified)
+vcs.time 2026-01-02T03:04:05Z
+--- stderr

@@ -196,25 +196,37 @@ var errUsage = errors.New(usage)
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-
-	out := &printer{w: os.Stdout, e: os.Stderr, in: os.Stdin}
-	err := errors.Join(run(ctx, os.Args[1:], out, os.Getenv, debug.ReadBuildInfo), out.err)
+	code := Run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr, os.Getenv, debug.ReadBuildInfo)
 
 	stop()
+	os.Exit(code)
+}
+
+// Run runs the command line args (without the program name) and returns the exit code: 2 for a
+// command line that names no valid command, exitNoPerm when goald refuses a credential or
+// permission, 1 for any other error and 0 on success.
+func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, getenv func(string) string, readBuildInfo buildInfoFunc) int {
+	out := &printer{w: stdout, e: stderr, in: stdin}
+	err := errors.Join(run(ctx, args, out, getenv, readBuildInfo), out.err)
 
 	var refused *accessError
 
 	switch {
 	case errors.Is(err, errUsage):
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
+		fmt.Fprintln(stderr, err)
+
+		return 2
 	case errors.As(err, &refused):
-		fmt.Fprintln(os.Stderr, "goal:", err)
-		os.Exit(exitNoPerm)
+		fmt.Fprintln(stderr, "goal:", err)
+
+		return exitNoPerm
 	case err != nil:
-		fmt.Fprintln(os.Stderr, "goal:", err)
-		os.Exit(1)
+		fmt.Fprintln(stderr, "goal:", err)
+
+		return 1
 	}
+
+	return 0
 }
 
 // command is a command, or a group of them, given its arguments.

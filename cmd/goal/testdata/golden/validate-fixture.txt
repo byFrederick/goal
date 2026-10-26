@@ -1,0 +1,4 @@
+exit 0
+--- stdout
+✓ acme-line (0b6f1c9e) — 3 agents, 7 stations
+--- stderr
