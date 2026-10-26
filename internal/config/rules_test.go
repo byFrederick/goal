@@ -27,7 +27,7 @@ func TestLoad_ParsesRules(t *testing.T) {
 			Name: "go-errors", Source: "./rules/go-errors.md",
 			Description: "Wrap every returned error with what was being done.",
 			AppliesTo: domain.RuleScope{
-				Agents: []string{"engineer"}, Stations: []string{"build"}, Lanes: []string{"backend"},
+				Agents: []string{engineer}, Stations: []string{"build"}, Lanes: []string{laneBackend},
 				WorkTypes: []string{"feature", "incident"},
 			},
 			Paths: []string{"**/*.go"},
@@ -39,6 +39,12 @@ func TestLoad_ParsesRules(t *testing.T) {
 		t.Errorf("rules =\n%+v\nwant\n%+v", f.Spec.Rules, want)
 	}
 }
+
+// Names of the line fixture its rules name.
+const (
+	engineer    = "engineer"
+	laneBackend = "backend"
+)
 
 // ruleEntry declares one rule, secrets, in baseFactory.
 const ruleEntry = "  rules:\n    - { name: secrets, source: ./rules/secrets.md } #here\n"

@@ -85,7 +85,7 @@ func (c *checker) readRule(r *Rule) (code, why string) {
 		for _, l := range []struct {
 			key  string
 			list []string
-		}{{keyAgents, a.Agents}, {"stations", a.Stations}, {"lanes", a.Lanes}, {"workTypes", a.WorkTypes}} {
+		}{{keyAgents, a.Agents}, {keyStations, a.Stations}, {"lanes", a.Lanes}, {"workTypes", a.WorkTypes}} {
 			if l.list != nil && len(l.list) == 0 {
 				return codeRuleInvalid, "appliesTo." + l.key + " is empty: omit it to apply the rule whatever the " + l.key
 			}
@@ -107,7 +107,7 @@ func (c *checker) ruleScope(r *Rule, p []string) {
 		list, known           []string
 	}{
 		{keyAgents, codeUnknownAgent, "agent", "", r.AppliesTo.Agents, c.agents},
-		{"stations", codeUnknownStation, "station", "", r.AppliesTo.Stations, c.stations},
+		{keyStations, codeUnknownStation, "station", "", r.AppliesTo.Stations, c.stations},
 		{"lanes", codeUnknownLane, "lane", "; lanes are the keys of the stations' routes", r.AppliesTo.Lanes, lanes},
 		{"workTypes", codeUnknownWorkType, "work type", "; work types are board.workTypes", r.AppliesTo.WorkTypes, c.f.Spec.Board.WorkTypes},
 	} {
