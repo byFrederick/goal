@@ -1,6 +1,6 @@
 # ADR 0007 — Identity with Better Auth beside goald
 
-Status: accepted · 2026-10-24 · decision 4 amended the same day ([personal tokens](#amendment--personal-tokens-decision-4)) · Builds on [ADR 0003](0003-hexagonal-architecture-and-deployment.md) and [ADR 0004](0004-frontend-and-monorepo.md) · Spec: [phase 3](../specs/3-identity-and-access.md) · (roadmap 2026-10-24) the Goal MCP server this ADR calls phase 6 was phase 5 when it was written; continuous learning took phase 5
+Status: accepted · 2026-10-24 · decision 4 amended the same day ([personal tokens](#amendment--personal-tokens-decision-4)) · Builds on [ADR 0003](0003-hexagonal-architecture-and-deployment.md) and [ADR 0004](0004-frontend-and-monorepo.md) · Spec: [phase 3](../history/specs/3-identity-and-access.md) · (roadmap 2026-10-24) the Goal MCP server this ADR calls phase 6 was phase 5 when it was written; continuous learning took phase 5
 
 ## Context
 
@@ -38,7 +38,7 @@ Better Auth (TypeScript) covers email codes, Google, organizations with invitati
 
 ## Amendment — personal tokens (decision 4)
 
-Status: accepted · 2026-10-24 · extends decision 4. Specified in [phase 3](../specs/3-identity-and-access.md) §4.5 and §6.7; built in PR 3-12b.
+Status: accepted · 2026-10-24 · extends decision 4. Specified in [phase 3](../history/specs/3-identity-and-access.md) §4.5 and §6.7; built in PR 3-12b.
 
 **Context.** The owner wants people to use the CLI and scripts on their own machines, headless ones included, and to set factories up from the CLI, without the browser device flow on each machine.
 

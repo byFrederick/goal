@@ -16,5 +16,5 @@ description: Add or change an HTTP endpoint of goald end to end, from contracts/
 7. **Extend the client.** Add the route and any helper in `packages/api-client/src/routes.ts`, with its test beside it. Run `task api-client:check`.
 8. **Call it from the web.** Add the request to the matching file in `apps/web/src/api` (`client.ts` or the resource's own file) and its query key in `queries.ts`. Add the mock's answer in `apps/web/mock` so the screens work without goald. Build the screen with [goal-ui-screen](../goal-ui-screen/SKILL.md). Run `task web:check`.
 9. **Auth roles.** When `contracts/api/permissions.yaml` changed, run `task auth:check`.
-10. **Docs as built.** Update the spec in `docs/specs/` that describes the endpoint, and `docs/engineering/frontend.md` when the client or a screen changed.
+10. **Docs as built.** Update `docs/engineering/architecture.md` ("HTTP API") where it describes the endpoint, and `docs/engineering/frontend.md` when the client or a screen changed.
 11. **Deliver** with [goal-deliver](../goal-deliver/SKILL.md). In the pull request, list each of these checks you ran, with its result.

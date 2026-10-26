@@ -1,6 +1,6 @@
 # ADR 0002 — Jonah: evaluation and self-remediation
 
-Status: accepted as amended for phase 5 (2026-10-24; [amendment](#amendment--phase-5-the-minimal-loop)) · first proposed 2026-10-23 · amended by [ADR 0005](0005-factory-definitions-in-object-storage.md) (definitions and visible cases live in the bucket) · Plan: [docs/jonah/README.md](../jonah/README.md)
+Status: accepted as amended for phase 5 (2026-10-24; [amendment](#amendment--phase-5-the-minimal-loop)) · first proposed 2026-10-23 · amended by [ADR 0005](0005-factory-definitions-in-object-storage.md) (definitions and visible cases live in the bucket) · Plan: [docs/history/jonah/README.md](../history/jonah/README.md)
 
 ## Context
 
@@ -48,7 +48,7 @@ The design follows Anthropic's *Demystifying evals for AI agents* (tasks, trials
 
 ## Amendment — phase 5: the minimal loop
 
-Status: accepted · 2026-10-24 · replaces decisions 1–9 and 11 where they differ; decision 10 stands. Specified in [phase 5, continuous learning](../specs/5-continuous-learning.md); follows [ADR 0008](0008-portable-runs-connections-and-knowledge.md). The plan in `docs/jonah/README.md` stays as background; where it differs, spec 5 wins.
+Status: accepted · 2026-10-24 · replaces decisions 1–9 and 11 where they differ; decision 10 stands. Specified in [phase 5, continuous learning](../history/specs/5-continuous-learning.md); follows [ADR 0008](0008-portable-runs-connections-and-knowledge.md). The plan in `docs/history/jonah/README.md` stays as background; where it differs, spec 5 wins.
 
 **Context.** The original decisions assumed a heavy optimizer: a sealed holdout, calibrated gating judges, paired statistics, autonomy levels and a separate eval lane. The owner runs a personal platform and wants the smallest loop that turns human touches (phase 4's headline metric) into knowledge, standard work and tests, proves a change before it ships, and shows afterwards whether it helped.
 

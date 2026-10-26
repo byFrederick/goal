@@ -1,6 +1,6 @@
 # Jonah — evaluation and self-remediation for Goal
 
-Status: background design (2026-10-23); **phase 5 builds a smaller loop, specified in [spec 5](../specs/5-continuous-learning.md) and the [phase 5 amendment of ADR 0002](../adr/0002-jonah-evals.md#amendment--phase-5-the-minimal-loop), which win where they differ** · Decision records: [ADR 0002](../adr/0002-jonah-evals.md), [ADR 0005](../adr/0005-factory-definitions-in-object-storage.md) (definitions and visible cases in the bucket)
+Status: background design (2026-10-23); **phase 5 builds a smaller loop, specified in [spec 5](../specs/5-continuous-learning.md) and the [phase 5 amendment of ADR 0002](../../adr/0002-jonah-evals.md#amendment--phase-5-the-minimal-loop), which win where they differ** · Decision records: [ADR 0002](../../adr/0002-jonah-evals.md), [ADR 0005](../../adr/0005-factory-definitions-in-object-storage.md) (definitions and visible cases in the bucket)
 
 In *The Goal*, Jonah never fixes the plant. He asks Alex Rogo questions until Alex can see the constraint himself, then lets him change it. This subsystem works the same way. It measures every agent, station and factory, finds where quality is lost (first at the constraint), and proposes one change at a time with evidence. A human decides. Jonah never edits the measuring stick.
 
@@ -8,11 +8,11 @@ Files that make up this design:
 
 | File | What it is |
 | --- | --- |
-| `docs/jonah/README.md` | This plan |
+| `docs/history/jonah/README.md` | This plan |
 | `docs/adr/0002-jonah-evals.md` | Key decisions and rejected alternatives |
 | `contracts/definitions/evals.schema.json` | JSON Schema (2020-12) for `evals.yaml` and case files |
-| `factories/<id>/evals/` in the definitions bucket (goal, sre) | Starter suites, cases, judges and fixtures ([ADR 0005](../adr/0005-factory-definitions-in-object-storage.md)) |
-| `docs/jonah/schema.sql` | Draft tables, tested on PostgreSQL 18; becomes migrations in J1 |
+| `factories/<id>/evals/` in the definitions bucket (goal, sre) | Starter suites, cases, judges and fixtures ([ADR 0005](../../adr/0005-factory-definitions-in-object-storage.md)) |
+| `docs/jonah/schema.sql` (deleted; the draft is in git history) | Draft tables, tested on PostgreSQL 18; becomes migrations in J1 |
 
 ---
 
@@ -342,7 +342,7 @@ Why a separate file, not a section of `factory.yaml`: it has a different owner (
 
 ## 9. Data model
 
-Draft: [`schema.sql`](schema.sql). It applies after `db/migrations/00001_init.sql` and is split into numbered migrations in J1. All names from YAML are `text`; engine vocabularies are `text` + CHECK; every foreign key is indexed (verified with a catalog query); keys are UUIDv7 generated in Go.
+Draft: `docs/jonah/schema.sql`, deleted when phase 5 replaced this design; the draft is in git history. It applied after `db/migrations/00001_init.sql` and is split into numbered migrations in J1. All names from YAML are `text`; engine vocabularies are `text` + CHECK; every foreign key is indexed (verified with a catalog query); keys are UUIDv7 generated in Go.
 
 | Table | Purpose |
 | --- | --- |
@@ -573,7 +573,7 @@ Spec-ready titles; lane in brackets; acceptance criteria are checkable.
 
 **J1**
 
-1. **Store transcripts and config versions for every agent run** [backend] — `factory_definitions`, `transcripts` and `agent_runs.definition_sha256` added by new migrations from `docs/jonah/schema.sql`; a finished run has a zstd transcript row with sha256 and size; the run's `definition_sha256` matches the loaded factory; integration test proves two goald instances storing transcripts concurrently do not conflict.
+1. **Store transcripts and config versions for every agent run** [backend] — `factory_definitions`, `transcripts` and `agent_runs.definition_sha256` added by new migrations from `docs/jonah/schema.sql` (the draft is in git history); a finished run has a zstd transcript row with sha256 and size; the run's `definition_sha256` matches the loaded factory; integration test proves two goald instances storing transcripts concurrently do not conflict.
 2. **Validate evals.yaml and case files in `goal factory validate`** [backend] — embeds `contracts/definitions/evals.schema.json`; reports every cross-reference error listed in section 8; the starter files for goal and sre pass; a broken fixture set reports each error at once (table test).
 3. **Repository snapshots for eval fixtures** [backend] — tag `evals/base-1` exists; `goal eval snapshot <ref>` produces a single-commit tree with no history or remotes, stored by sha256; the gateway serves it by hash; a test proves `git log` inside the snapshot shows one commit.
 4. **Offline harness MVP: `goal eval run <factory> <suite>`** [backend] — plans trials with interleaved order keys; runs each in a fresh Docker container through the Runner port; records `error` vs `graded`; prints pass@1, pass@k, pass^k with intervals; oracle and null checks run for draft cases.

@@ -41,7 +41,7 @@ A factory's behavior is its definition: `factory.yaml`, agent prompts, skills, c
 
 ## Amendment — 2.2: versions in PostgreSQL, content as blobs
 
-Status: accepted · 2026-10-23 · amends decisions 1, 2, 4, 5 and 7. Specified in [2.2-B](../specs/2.2-b-definitions.md); built in its pull requests B2–B10.
+Status: accepted · 2026-10-23 · amends decisions 1, 2, 4, 5 and 7. Specified in [2.2-B](../history/specs/2.2-b-definitions.md); built in its pull requests B2–B10.
 
 **Context.** A version was "whatever object versions a listing returned". A bucket has no transaction across objects, so a refresh that lists a prefix halfway through a push can load new prompts with the old `factory.yaml`; pushing `factory.yaml` last narrows that window but does not close it. The builder adds shared drafts, publishing by people in the UI, rollback, per-run version pinning and questions such as "which factories use this credential", all of which need atomic writes, foreign keys and queries. Organizations (2.2-A) also make the tenant part of every key.
 
@@ -81,7 +81,7 @@ s3://<bucket>/
 
 ## Amendment — phase 4: no object versions, knowledge uploads
 
-Status: accepted · 2026-10-24 · changes the 2.2 amendment's decision 7 and its consequences on versioning, and decision 6. Specified in [phase 4](../specs/4-connections-runs-and-knowledge.md) §5.7 and §7; built in PRs 4-3 and 4-16. Follows [ADR 0008](0008-portable-runs-connections-and-knowledge.md).
+Status: accepted · 2026-10-24 · changes the 2.2 amendment's decision 7 and its consequences on versioning, and decision 6. Specified in [phase 4](../history/specs/4-connections-runs-and-knowledge.md) §5.7 and §7; built in PRs 4-3 and 4-16. Follows [ADR 0008](0008-portable-runs-connections-and-knowledge.md).
 
 **Context.** Cloudflare R2, the cloud target's bucket, implements neither bucket versioning nor `ListObjectVersions`. Since 2.2 nothing needs versions: definition files are immutable content-addressed blobs written with a conditional put, and versions live in PostgreSQL. Only the port's shape (`Get` by version, version ids in listings, delete markers), `EnsureBucket` turning versioning on, the skills catalog cache keyed by version id and the one-time legacy import still use them. The knowledge base (ADR 0008) needs a place for uploaded documents.
 

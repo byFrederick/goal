@@ -6,7 +6,7 @@ paths:
 
 # Docs
 
-Docs describe the code as built. How the repository lays out its docs: [ADR 0013](../../docs/adr/0013-repository-layout.md). How a phase spec is written: [docs/specs/README.md](../../docs/specs/README.md).
+Docs describe the code as built. How the repository lays out its docs: [ADR 0013](../../docs/adr/0013-repository-layout.md). The plans earlier phases were built from are in `docs/history/`; the living docs are `docs/engineering/` and `docs/reference/`.
 
 ## Keeping docs true
 
@@ -18,7 +18,7 @@ Docs describe the code as built. How the repository lays out its docs: [ADR 0013
 
 - Write an ADR in `docs/adr/` for any decision others must follow, such as a layout, a dependency's role or a security model. A pull request description disappears; an ADR stays.
 - Change an accepted ADR only by a dated amendment. Readers rely on the record of what was decided when.
-- Write a phase spec in `docs/specs/` before the code, and follow the README there. Reviewers check the design before it is built.
+- Put the design of a change in its work item's spec, and update `docs/engineering/` and `docs/reference/` to describe it as built. `docs/history/` is a record and is not updated.
 
 ## Writing
 

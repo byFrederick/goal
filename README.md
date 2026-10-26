@@ -26,7 +26,8 @@ deploy/terraform/      the platform's own Cloudflare infrastructure: R2 bucket, 
 docs/adr/              decisions (0001 stack, 0002 Jonah evals, 0003 hexagonal architecture, 0004 frontend, 0005 definitions in object storage, 0006 workspaces and command checks)
 docs/design/           the UI's design system (MASTER.md, generated with ui-ux-pro-max and then edited by the user)
 docs/engineering/      architecture and testing rules
-docs/jonah/            evaluation and self-remediation plan
+docs/history/          earlier plans the code has replaced: the phase specs and the Jonah plan
+docs/reference/        the glossary and the generated environment reference
 AGENTS.md              the index of rules for every agent and human (CLAUDE.md imports it)
 Taskfile.yml           task check = everything the pre-push hook and CI run
 .githooks/             pre-push hook: task check (+ task migrate-check when db/migrations/ or apps/auth/ changed)
@@ -83,7 +84,7 @@ bin/goal login             # the CLI: approve the code it shows in the browser; 
 bin/goal whoami
 ```
 
-The bootstrap owner becomes a platform admin and owner of every organization (`default` included), then invites people from Members; rows from before sign-in stay as they were and read "Local user (before sign-in)". For scripts and CI, create an API key or a personal token on the organization's API keys page and set `GOAL_API_KEY`, or store it with `goal login --token` (from stdin); either acts in its own organization. Locked out: `goal db recover-admin <email>` or `goal db recover-owner <org> <email>` need only the database. `GOAL_AUTH=none` turns sign-in off again (loopback only, one developer's laptop: every request, agents' included, is the single local user) without losing data. Upgrading a 2.2 install: `pg_dump` first, add the two variables, `goal up` ([spec 3 §14](docs/specs/3-identity-and-access.md#14-rollout-and-migration)).
+The bootstrap owner becomes a platform admin and owner of every organization (`default` included), then invites people from Members; rows from before sign-in stay as they were and read "Local user (before sign-in)". For scripts and CI, create an API key or a personal token on the organization's API keys page and set `GOAL_API_KEY`, or store it with `goal login --token` (from stdin); either acts in its own organization. Locked out: `goal db recover-admin <email>` or `goal db recover-owner <org> <email>` need only the database. `GOAL_AUTH=none` turns sign-in off again (loopback only, one developer's laptop: every request, agents' included, is the single local user) without losing data. Upgrading a 2.2 install: `pg_dump` first, add the two variables, `goal up` ([spec 3 §14](docs/history/specs/3-identity-and-access.md#14-rollout-and-migration)).
 
 Every factory, item and run belongs to an organization; what existed before organizations is in `default`. Commands act in one: `--org <slug>`, else `GOAL_ORG`, else `org` in `~/.config/goal/config.json` (`goal org use <slug>` writes it), else the install's only organization (a key's or token's own). `goal org list` shows them and `goal org create <slug> --name N` adds one (platform admins). Decisions are recorded as the person signed in.
 
@@ -110,7 +111,7 @@ Goal then opens from its own icon, full screen, and keeps the phone's status bar
 
 ## Development
 
-`task check` runs every part's checks. While working on a branch, `task check:changed` runs only the ones the branch needs: `cmd/checkplan` lists the files changed since the merge base with `BASE` (default `origin/main`; `task check:changed BASE=<ref>`), committed, staged, unstaged and untracked, with renames counted as a deletion and an addition so a file moved out of a part still selects it. It prints each part it runs and the file that selected it, then runs those tasks in `task check`'s order and stops at the first failure.
+`task check` runs every part's checks. While working on a branch, `task check:changed` runs only the ones the branch needs: `tools/checkplan` lists the files changed since the merge base with `BASE` (default `origin/main`; `task check:changed BASE=<ref>`), committed, staged, unstaged and untracked, with renames counted as a deletion and an addition so a file moved out of a part still selects it. It prints each part it runs and the file that selected it, then runs those tasks in `task check`'s order and stops at the first failure.
 
 | Changed | Runs |
 | --- | --- |

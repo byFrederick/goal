@@ -82,6 +82,8 @@ var rules = []rule{
 	// the environment, which tools/envcheck checks.
 	{goFile, []part{partGo, partEnv}, ""},
 	{under("cmd", "internal", "db", "apps/web/placeholder"), []part{partGo}, ""},
+	// The Go repository tools whose output is not a check of their own.
+	{under("tools/checkplan", "tools/permgen"), []part{partGo}, ""},
 	{exact("apps/web/csp.txt"), []part{partGo}, ""},
 	{exact("compose.yaml", ".env.example"), []part{partGo, partEnv}, ""},
 	// permgen -check (api:permissions-check) compares this generated file with contracts/api/permissions.yaml.
