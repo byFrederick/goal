@@ -250,7 +250,7 @@ describe('cardState', () => {
     expect(cardState(card({ state: 'in_progress', turn: 4, activity: null })).text).toBe('Working, turn 4');
   });
 
-  it('asks for your OK, says how often work was sent back, and what a done item became', () => {
+  it('asks for your OK and says how often work was sent back', () => {
     expect(cardState(card({ state: 'waiting_human' }))).toEqual({ text: 'Needs your OK', tone: 'you' });
     expect(cardState(card({ state: 'waiting_human' }), false)).toEqual({
       text: 'Waiting on an approver',
@@ -259,57 +259,6 @@ describe('cardState', () => {
     expect(cardState(card({ rework_count: 1 }))).toEqual({ text: 'Sent back once', tone: 'rework' });
     expect(cardState(card({ rework_count: 2 })).text).toBe('Sent back twice');
     expect(cardState(card({ rework_count: 3 })).text).toBe('Sent back 3 times');
-    expect(cardState(card({ state: 'done', summary: 'Postmortem filed' }))).toEqual({
-      text: 'Postmortem filed',
-      tone: 'ok',
-    });
-    expect(cardState(card({ state: 'done' })).text).toBe('Done');
-  });
-
-  it('shows a done item’s summary as a short excerpt: its first line, without markdown marks', () => {
-    const summary = [
-      '## Added the version subcommand',
-      '',
-      '- **Added** `cmd/goal/version.go` with the `version` subcommand.',
-      '- Wired it in `cmd/goal/main.go`, next to `help`.',
-      '',
-      '1. Tests cover the output format.',
-      '2. The commit comes from the build info.',
-      '',
-      '> Notes for the reviewer below.',
-      ...Array.from({ length: 16 }, (_, i) => `- Detail ${i + 1} of the migration and the port adapter.`),
-    ].join('\n');
-    expect(cardState(card({ state: 'done', summary }))).toEqual({
-      text: 'Added the version subcommand',
-      tone: 'ok',
-    });
-    expect(cardState(card({ state: 'done', summary: '  \n\n- **Bold** `code` text\n' })).text).toBe('Bold code text');
-  });
-
-  it('cuts a long first line at a word boundary, to at most 100 characters with an ellipsis', () => {
-    const long = `${'Migration and port detail for the version command, '.repeat(3)}end`;
-    const text = cardState(card({ state: 'done', summary: long })).text;
-    expect(text.endsWith('…')).toBe(true);
-    expect(Array.from(text).length).toBeLessThanOrEqual(100);
-    expect(long.startsWith(text.slice(0, -1))).toBe(true);
-    expect(text.slice(0, -1).endsWith(' ')).toBe(false);
-  });
-
-  it('keeps a multi-byte character whole when it cuts', () => {
-    const text = cardState(card({ state: 'done', summary: `${'é🙂'.repeat(60)}` })).text;
-    expect(text.endsWith('…')).toBe(true);
-    expect(Array.from(text).length).toBeLessThanOrEqual(100);
-    expect(
-      Array.from(text)
-        .slice(0, -1)
-        .every((c) => c === 'é' || c === '🙂'),
-    ).toBe(true);
-  });
-
-  it('reads Done for a done item whose summary has no words', () => {
-    expect(cardState(card({ state: 'done', summary: '' })).text).toBe('Done');
-    expect(cardState(card({ state: 'done', summary: '\n   \n\t\n' })).text).toBe('Done');
-    expect(cardState(card({ state: 'done', summary: '## \n- ' })).text).toBe('Done');
   });
 
   it('marks work in the drum’s buffer, and work the rope holds back', () => {
