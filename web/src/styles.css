@@ -77,6 +77,16 @@
       opacity: 0;
     }
   }
+
+  /* The first-load line at the top of the viewport (PendingScreen): a third of the width, sliding across. */
+  @keyframes progress-slide {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(300%);
+    }
+  }
 }
 
 /* Dark values (design-system/goal/MASTER.md, "Dark theme"): the same tokens, redefined. Two blocks

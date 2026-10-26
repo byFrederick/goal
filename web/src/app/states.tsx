@@ -1,20 +1,33 @@
 import { isCancelledError, useQueryErrorResetBoundary } from '@tanstack/react-query';
 import { type ErrorComponentProps, Link, useRouter } from '@tanstack/react-router';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '../api/client';
 import { Button } from '../ui/button';
 
-/** Shown while a screen's first data loads; reserves the space the cards will take. */
+/** How long a first load may take before the thin line at the top says it is still going. */
+const slowLoadMs = 1000;
+
+/**
+ * Shown while a screen's first data loads: the app background and nothing else, so the page that
+ * follows lands without a layout shift. After a second a thin line fixed to the top of the viewport
+ * (out of the flow, so nothing moves) says the load is still on.
+ */
 export function PendingScreen() {
+  const [slow, setSlow] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSlow(true), slowLoadMs);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
-    <div aria-busy="true" aria-live="polite" className="flex flex-col gap-5">
+    <div aria-busy="true" aria-live="polite">
       <span className="sr-only">Loading</span>
-      <div className="h-12 w-64 max-w-full rounded-control bg-control/70" />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="h-72 rounded-card border border-line bg-card" />
-        ))}
-      </div>
+      {slow ? (
+        <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden">
+          <div className="h-full w-1/3 bg-run motion-safe:animate-[progress-slide_1.4s_ease-in-out_infinite]" />
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -261,6 +261,50 @@ describe('BoardPage', () => {
     await screen.findByTitle('Line running, WIP 2 of 3');
     expect(screen.queryByRole('link', { name: 'By station' })).toBeNull();
   });
+
+  it('a done card shows its ref, age, title, PR link, touches and Move, but no summary and no state line', async () => {
+    const REDIS = 'Redis evictions';
+    const done = item({
+      id: 'item-30',
+      ref: 'sre#30',
+      number: 30,
+      title: REDIS,
+      station: 'done',
+      state: 'done',
+      age_seconds: 7200,
+      pr_url: 'https://github.com/acme/sre/pull/30',
+      touch_count: 2,
+      summary: 'Postmortem filed',
+    });
+    const withDone: Board = {
+      ...board(),
+      stations: [...board().stations, station({ id: 'done', kind: 'done', items: [done], done_today: 1 })],
+    };
+    const expectDoneCard = (card: HTMLElement) => {
+      // The phone's list row joins the ref, type and age on one line; the columns split them.
+      expect(within(card).getByText(/sre#30/)).toBeTruthy();
+      expect(within(card).getByText(/2 h/)).toBeTruthy();
+      expect(within(card).getByRole('link', { name: REDIS })).toBeTruthy();
+      expect(
+        within(card)
+          .getByRole('link', { name: /opens in a new tab/ })
+          .getAttribute('href'),
+      ).toBe('https://github.com/acme/sre/pull/30');
+      expect(within(card).getByText('2 touches')).toBeTruthy();
+      expect(within(card).getByRole('button', { name: 'Move sre#30 to another station' })).toBeTruthy();
+      expect(within(card).queryByText('Postmortem filed')).toBeNull();
+      expect(within(card).queryByText('Done')).toBeNull();
+    };
+
+    const first = renderBoardPage({ page: BoardPage, org, factory, board: withDone });
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    expectDoneCard(within(within(columns).getByRole('region', { name: 'Done' })).getByRole('article'));
+    first.unmount();
+
+    renderBoardPage({ page: BoardPage, org, factory, board: withDone, station: 'done' });
+    const panel = await screen.findByRole('tabpanel');
+    expectDoneCard(within(panel).getByRole('article'));
+  });
 });
 
 describe('board filters and grouping', () => {

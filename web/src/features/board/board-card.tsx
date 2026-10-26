@@ -60,10 +60,13 @@ export function BoardCard({
   const expedite = isExpedite(item);
   const expediteLabel = expedite ? <ExpediteMark /> : null;
 
-  // Two lines at most: a done item's summary is an excerpt, and a card stays about as tall as its neighbours.
-  const stateLine = (
-    <span className={cn('line-clamp-2', compact ? 'text-[13px]' : 'text-xs', toneText[state.tone])}>{state.text}</span>
-  );
+  // A done card has no state line: its summary is on the item page. Two lines at most, so a card stays about as tall as its neighbours.
+  const stateLine =
+    item.state === 'done' ? null : (
+      <span className={cn('line-clamp-2', compact ? 'text-[13px]' : 'text-xs', toneText[state.tone])}>
+        {state.text}
+      </span>
+    );
   const touches = <TouchCount item={item} />;
   const prLink = <PrLink item={item} />;
 

@@ -35,6 +35,7 @@ export type StationAction = Schemas["StationAction"];
 export type Item = Schemas["Item"];
 export type AssemblyParts = Schemas["AssemblyParts"];
 export type AssemblyPart = Schemas["AssemblyPart"];
+export type NewPartRequest = Schemas["NewPartRequest"];
 export type PartOf = Schemas["PartOf"];
 export type PartsSummary = Schemas["PartsSummary"];
 export type ItemCard = Schemas["ItemCard"];

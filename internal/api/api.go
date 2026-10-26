@@ -70,6 +70,7 @@ type Engine interface {
 	Note(ctx context.Context, id domain.ItemID, by domain.Actor, text string) (domain.Event, error)
 	Link(ctx context.Context, id, needs domain.ItemID, by domain.Actor) (domain.Edge, error)
 	Unlink(ctx context.Context, id, needs domain.ItemID, by domain.Actor) error
+	AddPart(ctx context.Context, assembly domain.ItemID, by domain.Actor, part domain.NewPart) (domain.Item, domain.Parts, error)
 	PullAndon(ctx context.Context, f domain.FactoryID, by domain.Actor, reason string) (domain.AndonPull, error)
 	ClearAndon(ctx context.Context, f domain.FactoryID, by domain.Actor, note string) (domain.AndonPull, error)
 }
@@ -579,7 +580,7 @@ func problemOf(err error) gen.Problem {
 	// The connection and knowledge routes' answers come before the definitions' (all wrap
 	// ports.ErrNameTaken).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, edgeProblem, connectionProblem, knowledgeProblem, definitionProblem, controlProblem, agentProblem, apiKeyProblem, personalTokenProblem,
+		fixedProblem, edgeProblem, partProblem, connectionProblem, knowledgeProblem, definitionProblem, controlProblem, agentProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {
 			return p

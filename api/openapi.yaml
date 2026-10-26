@@ -1812,6 +1812,30 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AssemblyParts" }
         default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: addItemPart
+      x-goal-scope: item:create
+      summary: Add one part to an open assembly
+      description: >-
+        The part is queued at the assembly's own station, with the assembly's type, priority and
+        class of service, the brief as its body and a planned edge to each part it needs. Its key is
+        a slug of its title, made unique among the assembly's parts with -2, -3. Answers the
+        assembly's parts, as listItemParts does. 400 part-invalid for an empty title or brief or an
+        unknown need; 409 not-an-assembly for an item that is not an assembly, item-closed for a
+        done or cancelled one, edge-cycle when the needs would close a cycle and item-changed when
+        the assembly changed meanwhile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewPartRequest" }
+      responses:
+        "201":
+          description: The part is added; the assembly's parts, the new one last
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssemblyParts" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/runs:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -3549,6 +3573,17 @@ components:
           type: array
           description: In plan order
           items: { $ref: "#/components/schemas/AssemblyPart" }
+    NewPartRequest:
+      type: object
+      required: [title, brief]
+      properties:
+        title: { type: string, maxLength: 200, description: "The part's title; its key is derived from it (surrounding space is trimmed)" }
+        lane: { type: string, description: The lane of the station's agents that should work the part }
+        brief: { type: string, maxLength: 10000, description: What the part must do, its body }
+        needs:
+          type: array
+          description: The keys of the assembly's parts this one waits for
+          items: { type: string }
     AssemblyPart:
       type: object
       required: [id, ref, number, index, key, title, paths, station, state, needs, waiting_on, wave, cost_usd, pr_url, agent, created_at, done_at]
