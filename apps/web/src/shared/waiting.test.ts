@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ItemWaiting } from '../api/types';
-import { pathSummary, waitingLines } from './waiting';
+import { waitingDetail, waitingShort } from './waiting';
 
 type ItemWaitingNeed = ItemWaiting['needs'][number];
 
@@ -11,77 +11,45 @@ const need = (over: Partial<ItemWaitingNeed> = {}): ItemWaitingNeed => ({
   ...over,
 });
 
-const waiting = (kind: ItemWaiting['kind'], needs: ItemWaitingNeed[]): ItemWaiting => ({
+const waiting = (kind: ItemWaiting['kind'], needs: ItemWaitingNeed[], files: string[] = []): ItemWaiting => ({
   kind,
   items: needs.map((n) => n.ref),
-  files: [],
+  files,
   needs,
 });
 
-describe('pathSummary', () => {
-  it('is the directory the globs share, cut before the first wildcard', () => {
-    expect(pathSummary('Title', ['terraform/**', 'terraform/main.tf'])).toBe('terraform/');
+describe('waitingShort', () => {
+  it('names the one item it waits for', () => {
+    expect(waitingShort({ items: ['sre#3'] })).toBe('Waits for sre#3');
   });
 
-  it('does not keep a wildcard in the prefix: terraform/** and terraform/*.tf share terraform/', () => {
-    expect(pathSummary('Title', ['terraform/**', 'terraform/*.tf'])).toBe('terraform/');
+  it('counts the others after the first', () => {
+    expect(waitingShort({ items: ['sre#3', 'sre#4'] })).toBe('Waits for sre#3 +1');
+    expect(waitingShort({ items: ['sre#3', 'sre#4', 'sre#5'] })).toBe('Waits for sre#3 +2');
   });
 
-  it('shares only whole directories: web/src/ab.ts and web/src/ac.ts give web/src/, web/src/a and web/lib/x give web/', () => {
-    expect(pathSummary('Title', ['web/src/ab.ts', 'web/src/ac.ts'])).toBe('web/src/');
-    expect(pathSummary('Title', ['web/src/a.ts', 'web/lib/x.ts'])).toBe('web/');
-  });
-
-  it('gives the longest shared directory of several globs', () => {
-    expect(pathSummary('Title', ['internal/knowledge/**', 'internal/metrics/**'])).toBe('internal/');
-  });
-
-  it('lists the globs when they share no directory: at most two in full', () => {
-    expect(pathSummary('Title', ['*.tf'])).toBe('*.tf');
-    expect(pathSummary('Title', ['a.tf', 'b.tf'])).toBe('a.tf, b.tf');
-  });
-
-  it('lists the first two globs and the count of the rest when there are more than two', () => {
-    expect(pathSummary('Title', ['a/x.go', 'b/y.go', 'c/z.go', 'd/w.go'])).toBe('a/x.go, b/y.go, +2 more');
-  });
-
-  it('is the title when the need names no paths', () => {
-    expect(pathSummary('Move the state bucket', [])).toBe('Move the state bucket');
+  it('never carries a path or a glob', () => {
+    expect(waitingShort(waiting('files', [need()], ['terraform/main.tf']))).not.toMatch(/[/*]/);
   });
 });
 
-describe('waitingLines', () => {
-  it('reads one "moves" line per need for kind after', () => {
-    expect(waitingLines(waiting('after', [need()]))).toEqual([
-      { ref: 'software#93', text: 'waits for software#93 (moves terraform/)' },
-    ]);
-  });
-
-  it('reads one "same files" line per need for kind files', () => {
-    expect(waitingLines(waiting('files', [need()]))).toEqual([
-      { ref: 'software#93', text: 'waits for the same files as software#93 (terraform/)' },
-    ]);
-  });
-
-  it('falls back to the needed item title when it has no paths, for both kinds', () => {
-    const untitled = need({ paths: [] });
-    expect(waitingLines(waiting('after', [untitled]))[0]?.text).toBe(
-      'waits for software#93 (moves Move the state bucket)',
-    );
-    expect(waitingLines(waiting('files', [untitled]))[0]?.text).toBe(
-      'waits for the same files as software#93 (Move the state bucket)',
+describe('waitingDetail', () => {
+  it('gives each need its ref, its title and the paths it holds the wait on', () => {
+    expect(waitingDetail(waiting('files', [need()], ['terraform/main.tf']))).toBe(
+      'software#93 Move the state bucket (same files terraform/**)\nShared files: terraform/main.tf',
     );
   });
 
-  it('gives a line per open need, in the order given', () => {
-    const lines = waitingLines(
-      waiting('after', [need(), need({ ref: 'goal#16', title: 'Exit on empty bucket', paths: [] })]),
+  it('says moves for an after wait, and gives the title alone when the need names no paths', () => {
+    expect(waitingDetail(waiting('after', [need(), need({ ref: 'goal#16', paths: [] })]))).toBe(
+      'software#93 Move the state bucket (moves terraform/**)\ngoal#16 Move the state bucket',
     );
-    expect(lines.map((l) => l.ref)).toEqual(['software#93', 'goal#16']);
   });
 
-  it('is empty with no waiting item', () => {
-    expect(waitingLines(null)).toEqual([]);
-    expect(waitingLines(undefined)).toEqual([]);
+  it('gives a line per need, in the order given, with nothing cut short', () => {
+    const long = 'internal/knowledge/sync/retry/very/long/path/that/keeps/going/**';
+    const lines = waitingDetail(waiting('after', [need({ paths: [long] }), need({ ref: 'goal#16' })])).split('\n');
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain(long);
   });
 });

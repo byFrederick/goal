@@ -1,60 +1,26 @@
-// Why a queued or ready item waits, in words: one line per open need, for the board's waiting rows and
-// the item page. Pure: the path summary is the directory the needed item's globs share, or the globs
-// themselves when they share none, or the needed item's title when it names no paths.
+// Why a queued or ready item waits on another item, in words. The board card gets one short line
+// (waitingShort) and its tooltip the full list (waitingDetail); the item page lists each need itself.
 import type { ItemWaiting } from '../api/types';
 
-export interface WaitingLine {
-  /** The needed item's <factory name>#<number>; the text contains it once, where the link goes. */
-  ref: string;
-  text: string;
-}
-
-const wildcard = /[*?[{]/;
-
-/** The directory a glob sits in: the glob cut before its first wildcard, then to its last "/" (`terraform/**` is `terraform/`). */
-function directoryOf(glob: string): string {
-  const cut = glob.search(wildcard);
-  const literal = cut < 0 ? glob : glob.slice(0, cut);
-  return literal.slice(0, literal.lastIndexOf('/') + 1);
-}
-
-/** The longest directory all the given directories share, ending in "/" or empty. */
-function commonDirectory(dirs: string[]): string {
-  const [first = '', ...rest] = dirs;
-  let end = first.length;
-  for (const dir of rest) {
-    let i = 0;
-    while (i < end && i < dir.length && dir[i] === first[i]) i++;
-    end = i;
-  }
-  return end === 0 ? '' : first.slice(0, first.lastIndexOf('/', end - 1) + 1);
+/** The card's one line: "Waits for sre#3", or "Waits for sre#3 +2" when three items hold it. */
+export function waitingShort(waiting: Pick<ItemWaiting, 'items'>): string {
+  const [first, ...rest] = waiting.items;
+  if (!first) return 'Waiting';
+  return rest.length > 0 ? `Waits for ${first} +${rest.length}` : `Waits for ${first}`;
 }
 
 /**
- * What a need covers, for its line: the directory its globs share ("terraform/"), else the globs
- * (two or fewer, or the first two and "+N more"), else the title when it names no paths.
+ * The full list for a tooltip, one line per need: its ref, its title and the paths that hold the
+ * wait (the shared files for a files wait). Nothing is cut short here; the tooltip wraps it.
  */
-export function pathSummary(title: string, paths: string[]): string {
-  if (paths.length === 0) return title;
-  const dir = commonDirectory(paths.map(directoryOf));
-  if (dir) return dir;
-  return paths.length <= 2 ? paths.join(', ') : `${paths[0]}, ${paths[1]}, +${paths.length - 2} more`;
-}
-
-/**
- * One line per open need of a waiting item: "waits for <ref> (moves <summary>)" for kind after,
- * "waits for the same files as <ref> (<summary>)" for kind files.
- */
-export function waitingLines(waiting: Pick<ItemWaiting, 'kind' | 'needs'> | null | undefined): WaitingLine[] {
-  if (!waiting) return [];
-  return waiting.needs.map(({ ref, title, paths }) => {
-    const summary = pathSummary(title, paths);
-    return {
-      ref,
-      text:
-        waiting.kind === 'files'
-          ? `waits for the same files as ${ref} (${summary})`
-          : `waits for ${ref} (moves ${summary})`,
-    };
+export function waitingDetail(waiting: ItemWaiting): string {
+  const lines = waiting.needs.map(({ ref, title, paths }) => {
+    const because = waiting.kind === 'files' ? 'same files' : 'moves';
+    const where = paths.length > 0 ? ` (${because} ${paths.join(', ')})` : '';
+    return `${ref} ${title}${where}`;
   });
+  if (waiting.kind === 'files' && waiting.files.length > 0) {
+    lines.push(`Shared files: ${waiting.files.join(', ')}`);
+  }
+  return lines.join('\n');
 }

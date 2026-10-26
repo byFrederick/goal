@@ -1,6 +1,6 @@
 // The status icons, the same everywhere an item's status shows (MASTER's status-icon rule): working is
 // a half-filled circle (teal, the run colour), waiting for another item a clock (amber), waiting for
-// the same files two crossing arrows (rust), ready or merged a check (green). Decorative: the words
+// the same files two crossing arrows (muted: waiting is normal flow, not an error), ready or merged a check (green). Decorative: the words
 // beside the icon say the same, so the icon is hidden from assistive technology.
 import { CircleCheckBig, Clock, Shuffle } from 'lucide-react';
 import { cn } from './cn';
@@ -10,7 +10,7 @@ export type StatusKind = 'working' | 'waiting' | 'same-files' | 'ready';
 const tones: Record<StatusKind, string> = {
   working: 'text-run',
   waiting: 'text-amber',
-  'same-files': 'text-rework',
+  'same-files': 'text-muted',
   ready: 'text-ok-dot',
 };
 
