@@ -1,7 +1,9 @@
 package engine_test
 
 import (
+	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -13,6 +15,8 @@ import (
 const (
 	stBuild  = "build"
 	stReview = "review"
+	// approve is the reviewer's approving verdict.
+	approve = `{"decision":"approve"}`
 )
 
 // gateMergeLine is build (an agent that reports pull requests) → review (a gate whose approval
@@ -97,7 +101,7 @@ func TestGateMerge_RefusedBlocksAndRetrySkipsMerged(t *testing.T) {
 				line.Connections = tt.conns
 			}
 
-			h := newHarness(t, line, byAgent(map[string]string{agWorker: output, agReviewer: `{"decision":"approve"}`}))
+			h := newHarness(t, line, byAgent(map[string]string{agWorker: output, agReviewer: approve}))
 
 			pr := openPR(prURL)
 			if tt.pr != nil {
@@ -122,7 +126,7 @@ func TestGateMerge_RefusedBlocksAndRetrySkipsMerged(t *testing.T) {
 		t.Parallel()
 
 		output := `{"pull_requests":["` + prURL + `","` + mrURL + `","` + docsURL + `"]}`
-		h := newHarness(t, gateMergeLine(), byAgent(map[string]string{agWorker: output, agReviewer: `{"decision":"approve"}`}))
+		h := newHarness(t, gateMergeLine(), byAgent(map[string]string{agWorker: output, agReviewer: approve}))
 		h.codehost.Add(openPR(prURL))
 		h.codehost.Add(openPR(docsURL))
 
@@ -232,4 +236,94 @@ func (h *harness) expectBlockedAtGate(t *testing.T, item domain.ItemID, reason s
 	if merged := h.eventsOf(item, domain.EventMerged); len(merged) != 0 {
 		t.Errorf("merged events %+v, want none on a blocked item", merged)
 	}
+}
+
+func TestGateMerge_UpdatesTheBranchBeforeMerging(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, gateMergeLine(), byAgent(map[string]string{
+		agWorker: `{"pull_request":"` + prURL + `"}`, agReviewer: approve,
+	}))
+	h.codehost.Add(openPR(prURL))
+
+	it := h.submit(t, domain.NewItem{})
+	h.step(t)
+	h.step(t)
+
+	if got := h.item(t, it.ID); got.State != domain.StateDone {
+		t.Fatalf("item at %+v, want done (events %v)", got.Position(), h.kinds(it.ID))
+	}
+
+	if updated := h.codehost.UpdatedBranches(); !reflect.DeepEqual(updated, []string{prURL}) {
+		t.Errorf("updated branches %v, want app#7's", updated)
+	}
+
+	if merges := h.codehost.Merges(); !reflect.DeepEqual(merges, []porttest.MergeCall{squashOf(prURL, connGitHub)}) {
+		t.Errorf("merges %+v, want app#7 at its updated head", merges)
+	}
+}
+
+// A conflict after the gate's approval sends the item back to the gate's onReject, approved and
+// not rejected: its rework count is unchanged, and a gate with no rework left does not escalate.
+func TestGateMerge_ConflictReworksWithoutCountingAgainstMaxRework(t *testing.T) {
+	t.Parallel()
+
+	for _, maxRework := range []int{2, 0} {
+		t.Run(fmt.Sprintf("maxRework %d", maxRework), func(t *testing.T) {
+			t.Parallel()
+
+			line := gateMergeLine()
+			line.Stations[2].Gate.MaxRework = maxRework
+
+			h := newHarness(t, line, byAgent(map[string]string{
+				agWorker: `{"pull_request":"` + prURL + `"}`, agReviewer: approve,
+			}))
+			h.codehost.Add(openPR(prURL))
+			h.codehost.Conflict(prURL, "internal/engine/merge.go", "go.mod")
+
+			it := h.submit(t, domain.NewItem{})
+			h.step(t)
+			h.step(t)
+
+			got := h.item(t, it.ID)
+			if got.Position() != (domain.Position{Station: stBuild, State: domain.StateQueued}) || got.ReworkCount != 0 {
+				t.Fatalf("item at %+v rework %d, want queued at build with no rework (events %v)",
+					got.Position(), got.ReworkCount, h.kinds(it.ID))
+			}
+
+			kinds := h.kinds(it.ID)
+			if i := slices.Index(kinds, domain.EventGateApproved); i < 0 || i+1 >= len(kinds) || kinds[i+1] != domain.EventMergeConflict {
+				t.Errorf("events %v, want gate_approved then merge_conflict", kinds)
+			}
+
+			expectConflictEvent(t, h.eventsOf(it.ID, domain.EventMergeConflict), stReview)
+
+			if n := len(h.eventsOf(it.ID, domain.EventMerged)) + len(h.eventsOf(it.ID, domain.EventGateRejected)) +
+				len(h.eventsOf(it.ID, domain.EventWaitingHuman)); n != 0 {
+				t.Errorf("events %v, want no merged, gate_rejected or waiting_human", kinds)
+			}
+
+			h.expectOutcomes(t, it.ID, domain.LeaseAdvanced, domain.LeaseAdvanced)
+		})
+	}
+}
+
+// With onConflict human, a conflict blocks the item at the gate, as any refusal does.
+func TestGateMerge_ConflictWithOnConflictHumanBlocks(t *testing.T) {
+	t.Parallel()
+
+	line := gateMergeLine()
+	line.Flow.Assemblies.OnConflict = domain.ConflictHuman
+
+	h := newHarness(t, line, byAgent(map[string]string{
+		agWorker: `{"pull_request":"` + prURL + `"}`, agReviewer: approve,
+	}))
+	h.codehost.Add(openPR(prURL))
+	h.codehost.Conflict(prURL, "go.mod")
+
+	it := h.submit(t, domain.NewItem{})
+	h.step(t)
+	h.step(t)
+
+	h.expectBlockedAtGate(t, it.ID, "go.mod")
 }

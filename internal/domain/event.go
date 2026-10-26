@@ -40,6 +40,11 @@ const (
 	EventDone           EventKind = "done"
 	EventRetried        EventKind = "retried"
 	EventMerged         EventKind = "merged"
+	// EventMergeConflict is a merge the engine stopped because a pull request's branch conflicts
+	// with its base, sending the item back to be built again (flow.assemblies.onConflict rework).
+	// It is not a rejection: the item's rework count is unchanged. Data reason (the pull request,
+	// its base, the files and what to do) and pull_request.
+	EventMergeConflict EventKind = "merge_conflict"
 	// EventEdgeAdded and EventEdgeRemoved are a dependency of the item added or removed: data
 	// needs (the item it needs), kind and actor (ref).
 	EventEdgeAdded   EventKind = "edge_added"
