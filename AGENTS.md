@@ -12,15 +12,15 @@ This file is an index. Each rule lives in one place and is linked from here; the
 .github/        CI, deploy and Terraform workflows
 apps/           auth/ (identity service, Hono + Better Auth, reached only through goald's /api/auth proxy), web/ (React SPA, embedded into goald), worker/ (goal-agent, the one agent container image)
 cmd/            binaries: goal (CLI), goald (daemon), goal-egress (egress proxy) and code generators
-contracts/      contracts/api/ (openapi.yaml, permissions.yaml, sandbox.yaml: the only contract between goald and TypeScript), contracts/definitions/ (JSON Schemas for factory, eval and connection kind files)
+contracts/      contracts/api/ (openapi.yaml, permissions.yaml, sandbox.yaml: the only contract between goald and TypeScript), contracts/definitions/ (JSON Schemas for factory, eval and connection kind files), env.yaml (every environment variable a process reads, with env.schema.json)
 db/             the database: db/migrations/ (forward-only SQL, goose), db/queries/ (SQL for sqlc) and db/sqlc.yaml
 deploy/         cloudflare/: the control Worker and wrangler config
 design-system/  goal/MASTER.md: the UI's design system
-docs/           adr/, engineering/, specs/, jonah/
+docs/           adr/, engineering/, specs/, jonah/, reference/ (generated from the contracts: environment.md)
 internal/       the Go packages: domain, engine, ports, adapters, api, gateway… (docs/engineering/architecture.md)
 packages/       shared TypeScript: api-client/ (the API client and its generated types)
 terraform/      the platform's own infrastructure, one root module
-tools/          repository tooling that is not a shipped binary: layoutcheck/ (task layout:check)
+tools/          repository tooling that is not a shipped binary: layoutcheck/ (task layout:check), envcheck/ (task env:check)
 ```
 
 Root files: the entry docs, `Taskfile.yml`, `compose.yaml`, the Go and pnpm manifests, and `skills-lock.json`. Factory definitions are not in this tree; they live in the bucket and PostgreSQL ([factory-definition.md](docs/engineering/factory-definition.md)).

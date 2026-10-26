@@ -23,9 +23,11 @@ The owner wants a small root, one home for each kind of file, rules that load on
    packages/                                             shared TypeScript packages (unchanged)
    contracts/api/                                        openapi.yaml, permissions.yaml, sandbox.yaml, and events.schema.json once it exists
    contracts/definitions/                                the factory, eval and connection-kind JSON Schemas
+   contracts/env.yaml contracts/env.schema.json          the environment registry and its schema
    db/migrations/ db/queries/ db/sqlc.yaml               the database
    deploy/cloudflare/ deploy/terraform/                  how the platform is deployed (cloudflare/ unchanged)
    docs/adr/ docs/specs/ docs/engineering/               decisions, specs, engineering guides
+   docs/reference/                                       references generated from the contracts
    docs/design/ docs/jonah/                              the design system (MASTER.md), Jonah
    .claude/rules/ .claude/skills/ .claude/settings.json  agent rules, skills and settings
    .github/ .githooks/                                   CI workflows and versioned git hooks
@@ -36,6 +38,8 @@ The owner wants a small root, one home for each kind of file, rules that load on
 2. **A new top-level directory needs an amendment to this ADR.** It names the directory, the kind of file it holds and why no existing home fits.
 
    *Amended 2026-10-26: `tools/`.* It holds repository tooling that is not a shipped binary: programs that check or generate the repository's own files and that only the Taskfile and CI run, starting with `tools/layoutcheck` (`task layout:check`). `cmd/` does not fit because it holds the binaries Goal ships (`goal`, `goald`, `goal-egress`), and mixing in tooling makes it harder to tell what is deployed. `task layout:check` checks that this layout, the AGENTS.md map and the `paths:` globs of `.claude/rules` still match the tracked files.
+
+   *Amended 2026-10-26: `contracts/env.yaml` and `docs/reference/`.* Neither is a new top-level directory, but both are new kinds of file, so they are recorded here. `contracts/env.yaml` is the environment registry: every environment variable a Goal process reads, with the processes that read it, its class (public, config or secret), whether it is required and what it means, never a value. Its shape is `contracts/env.schema.json`. It sits in `contracts/` because it is a contract between the code and whoever runs it, like the API. `docs/reference/` holds reference pages generated from a contract and never edited by hand, starting with `docs/reference/environment.md`. `tools/envcheck` (`task env:check`, part of `task check`) fails when a read is not declared, a declared variable is never read, `.env.example` names an undeclared variable or shows a real-looking secret, or the generated page differs from the committed one.
 
 3. **No process output is committed.** Run artifacts, reports, metrics, screenshots and generated evidence stay out of the repository. Work state lives in Goal (items, runs, events), not in files here.
 
