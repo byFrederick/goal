@@ -15,9 +15,9 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/byFrederick/goal/apps/web"
 	"github.com/byFrederick/goal/internal/api"
 	"github.com/byFrederick/goal/internal/egress"
-	"github.com/byFrederick/goal/apps/web"
 )
 
 // Without a gateway listener the main one serves the gateway beside the API and the SPA; with one,
