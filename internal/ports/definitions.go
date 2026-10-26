@@ -28,6 +28,9 @@ var (
 	ErrFactoryRunning = errors.New("factory running")
 	// ErrFactoryBusy means one of the factory's items holds a lease: a run is still working it.
 	ErrFactoryBusy = errors.New("factory busy")
+	// ErrFactoryNotArchived means a factory must be archived first: deleting a live factory for
+	// good.
+	ErrFactoryNotArchived = errors.New("factory not archived")
 )
 
 // DefinitionStore keeps factory definitions: file content as immutable blobs in the bucket
@@ -61,6 +64,13 @@ type DefinitionStore interface {
 	// they were. Restoring a factory that is not archived changes nothing. Audit:
 	// factory.restored.
 	RestoreArchivedFactory(ctx context.Context, id domain.FactoryID, by domain.Actor) (FactoryRecord, error)
+	// DeleteArchivedFactory deletes an archived factory for good, with everything of it: its
+	// items, runs, leases, events, andon pulls, versions and drafts, roles and key scopes. Its
+	// blobs stay in the bucket (another factory may share them; the organization's retention
+	// purge removes them) and so does its audit history. It returns ErrFactoryNotArchived for a
+	// factory that is not archived and ErrFactoryBusy when one of its items holds a lease.
+	// Audit: factory.deleted.
+	DeleteArchivedFactory(ctx context.Context, id domain.FactoryID, by domain.Actor) error
 
 	// PutBlobs stores files by their content hash (only blobs the organization lacks are
 	// uploaded) and returns their manifest. A file over domain.MaxBlobSize is refused with an

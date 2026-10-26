@@ -119,6 +119,17 @@ func (q *Queries) CurrentVersions(ctx context.Context) ([]DefinitionVersion, err
 	return items, nil
 }
 
+const deleteArchivedFactory = `-- name: DeleteArchivedFactory :exec
+SELECT goal_delete_factory($1::uuid)
+`
+
+// Deletes an archived, idle factory of the organization with everything that references it
+// (00061); called under the factory's row lock, after the adapter checked both.
+func (q *Queries) DeleteArchivedFactory(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteArchivedFactory, id)
+	return err
+}
+
 const deleteFactory = `-- name: DeleteFactory :exec
 DELETE FROM factories WHERE id = $1
 `

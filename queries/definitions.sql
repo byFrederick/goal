@@ -33,6 +33,11 @@ SELECT EXISTS (SELECT 1 FROM factories WHERE lower(name) = lower(sqlc.arg(name):
 -- name: DeleteFactory :exec
 DELETE FROM factories WHERE id = $1;
 
+-- name: DeleteArchivedFactory :exec
+-- Deletes an archived, idle factory of the organization with everything that references it
+-- (00061); called under the factory's row lock, after the adapter checked both.
+SELECT goal_delete_factory(sqlc.arg(id)::uuid);
+
 -- name: SetFactoryPaused :exec
 UPDATE factories SET
   paused_at = CASE WHEN sqlc.arg(paused)::boolean THEN now() END,

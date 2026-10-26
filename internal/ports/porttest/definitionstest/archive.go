@@ -166,3 +166,99 @@ func testArchiveListedWithItsStamp(f *fixture) {
 	checkRecord(t, "listed factory", list[1], kept)
 	checkRecord(t, "FactoryRecord", f.record(t, r.ID), want)
 }
+
+// archivedFactory creates, publishes, pauses and archives a factory with one item that ran at
+// stQA and moved on, and returns it with that item.
+func (f *fixture) archivedFactory(t *testing.T, name string) (ports.FactoryRecord, domain.Item) {
+	t.Helper()
+
+	r := f.pausedFactory(t, name)
+	f.item(t, r.ID, stQA, domain.StateQueued)
+	it, lease := f.claim(t, r.ID, stQA)
+	f.finish(t, it, lease)
+
+	archived, err := f.Definitions.ArchiveFactory(f.ctx(t), r.ID, local)
+	if err != nil {
+		t.Fatalf("ArchiveFactory: %v", err)
+	}
+
+	return archived, it
+}
+
+func testDeleteArchivedRemovesTheFactoryAndItsRows(f *fixture) {
+	t := f.t
+	ctx := f.ctx(t)
+	r, it := f.archivedFactory(t, acme)
+	kept := f.pausedFactory(t, "zeta")
+
+	if err := f.Definitions.DeleteArchivedFactory(ctx, r.ID, local); err != nil {
+		t.Fatalf("DeleteArchivedFactory: %v", err)
+	}
+
+	_, err := f.Definitions.FactoryRecord(ctx, r.ID)
+	expect(t, "FactoryRecord of a deleted factory", err, ports.ErrNotFound)
+	_, err = f.Definitions.Version(ctx, current(r))
+	expect(t, "Version of a deleted factory", err, ports.ErrNotFound)
+	_, err = f.Items.Item(ctx, it.ID)
+	expect(t, "Item of a deleted factory", err, ports.ErrNotFound)
+
+	if got := names(f.records(t)); !slices.Equal(got, []string{"zeta"}) {
+		t.Errorf("FactoryRecords = %v; want only zeta", got)
+	}
+
+	checkRecord(t, "FactoryRecord of the other factory", f.record(t, kept.ID), kept)
+
+	expect(t, "DeleteArchivedFactory of a deleted factory", f.Definitions.DeleteArchivedFactory(ctx, r.ID, local), ports.ErrNotFound)
+	expect(t, "DeleteArchivedFactory of an unknown factory", f.Definitions.DeleteArchivedFactory(ctx, newFactoryID(), local), ports.ErrNotFound)
+}
+
+func testDeleteArchivedRefusesALiveOrBusyFactory(f *fixture) {
+	t := f.t
+	ctx := f.ctx(t)
+	r := f.pausedFactory(t, acme)
+	queued := f.item(t, r.ID, stQA, domain.StateQueued)
+
+	expect(t, "DeleteArchivedFactory of a factory that is not archived",
+		f.Definitions.DeleteArchivedFactory(ctx, r.ID, local), ports.ErrFactoryNotArchived)
+
+	if _, err := f.Definitions.ArchiveFactory(ctx, r.ID, local); err != nil {
+		t.Fatalf("ArchiveFactory: %v", err)
+	}
+
+	f.claim(t, r.ID, stQA)
+
+	expect(t, "DeleteArchivedFactory while an item holds a lease",
+		f.Definitions.DeleteArchivedFactory(ctx, r.ID, local), ports.ErrFactoryBusy)
+
+	if rec := f.record(t, r.ID); !rec.Archived() {
+		t.Errorf("record after refused deletes = %+v; want it still archived", rec)
+	}
+
+	f.itemNow(t, queued.ID)
+
+	if n := len(f.auditEntries(t, r.ID, domain.AuditFactoryDeleted)); n != 0 {
+		t.Errorf("%d factory.deleted entries after refused deletes; want 0", n)
+	}
+}
+
+func testDeleteArchivedAuditsOnceAndNotifies(f *fixture) {
+	t := f.t
+	r, _ := f.archivedFactory(t, acme)
+	got := f.listen(t)
+
+	if err := f.Definitions.DeleteArchivedFactory(f.ctx(t), r.ID, agent); err != nil {
+		t.Fatalf("DeleteArchivedFactory: %v", err)
+	}
+
+	entries := f.auditEntries(t, r.ID, domain.AuditFactoryDeleted)
+	if len(entries) != 1 {
+		t.Fatalf("%d factory.deleted entries; want 1", len(entries))
+	}
+
+	checkEntry(t, entries[0], agent, domain.AuditTargetFactory, string(r.ID), map[string]any{"name": acme})
+
+	want := ports.DefinitionNotice{OrgID: f.org, FactoryID: r.ID, Kind: ports.NoticeFactory}
+	if n := next(t, got, func(n ports.DefinitionNotice) bool { return n.FactoryID == r.ID && n.Kind == ports.NoticeFactory }); n != want {
+		t.Errorf("notice = %+v; want %+v", n, want)
+	}
+}
