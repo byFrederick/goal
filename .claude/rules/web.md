@@ -1,6 +1,6 @@
 ---
 paths:
-  - "web/**"
+  - "apps/web/**"
 ---
 
 # Web
@@ -10,10 +10,10 @@ The UI is one product, so its look comes from one design system: [MASTER.md](../
 ## Design
 
 - Follow `design-system/goal/MASTER.md` exactly: its tokens, Inter, radii and spacing. Drift between screens is what users notice first.
-- Use token names only, never a hex, `rgb()` or `hsl()` value, and no gradients. A theme switch then needs no edits, and `web/src/ui/raw-colors.test.ts` enforces it.
+- Use token names only, never a hex, `rgb()` or `hsl()` value, and no gradients. A theme switch then needs no edits, and `apps/web/src/ui/raw-colors.test.ts` enforces it.
 - Support light and dark from the same tokens. People choose the theme, so both must read well.
 - Lay out for a phone first and check 375, 768 and 1440 px by reasoning about the CSS. The app fills the viewport with no framed shell.
-- Reuse the components already in `web/src` before writing a new one. Two copies of a control drift apart.
+- Reuse the components already in `apps/web/src` before writing a new one. Two copies of a control drift apart.
 - Run the ui-ux-pro-max pre-delivery checklist on every visual change. It catches what a reading of the code misses.
 
 ## The four states
@@ -23,11 +23,11 @@ The UI is one product, so its look comes from one design system: [MASTER.md](../
 
 ## Data and routing
 
-- Fetch server data only through `web/src/api` and the generated types. The contract is the one source of shapes, so a hand-written type drifts from it.
+- Fetch server data only through `apps/web/src/api` and the generated types. The contract is the one source of shapes, so a hand-written type drifts from it.
 - Keep server state in TanStack Query under the keys in `queries.ts`. One key scheme lets an event refresh every screen that shows the data.
 - Keep filters, tabs and selections in the URL with TanStack Router. A linked view then shows the same thing for whoever opens it.
 - Let stream events invalidate queries instead of polling. Polling wastes requests and lags behind the event.
-- Load first-use views with `lazyRetrying` (`web/src/shared/lazy.ts`), not bare `React.lazy`. A failed chunk otherwise stays broken until a reload.
+- Load first-use views with `lazyRetrying` (`apps/web/src/shared/lazy.ts`), not bare `React.lazy`. A failed chunk otherwise stays broken until a reload.
 
 ## Accessibility
 
@@ -45,7 +45,7 @@ The UI is one product, so its look comes from one design system: [MASTER.md](../
 
 - Test what a person sees and does with Vitest and Testing Library. Tests of markup or internals break on every refactor.
 - Write or update the Playwright specs when a flow changes. They cannot run in the box, so the pull request says so.
-- Run `pnpm --dir web run typecheck`, `lint` and `test` after the last edit.
+- Run `pnpm --dir apps/web run typecheck`, `lint` and `test` after the last edit.
 
 ## Skills
 

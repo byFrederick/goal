@@ -20,7 +20,7 @@ type Items interface {
 }
 
 // runBundle is the body of GET /run: what a run's sandbox needs to prepare and run its agent
-// (goal-agent prepare writes it to /goal; worker/README.md documents the layout). It holds no
+// (goal-agent prepare writes it to /goal; apps/worker/README.md documents the layout). It holds no
 // secret: a git credential names the environment variable that carries its password, and a
 // connection's MCP headers name the variables Claude Code expands in the box.
 type runBundle struct {

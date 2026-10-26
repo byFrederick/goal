@@ -81,7 +81,7 @@ const goaldSettings = [
 /** What the topology fixes in the auth service's environment. */
 const authTopology = { GOAL_AUTH_LISTEN: `0.0.0.0:${ports.auth}` };
 
-/** The auth service's settings (auth/src/settings.ts). */
+/** The auth service's settings (apps/auth/src/settings.ts). */
 const authSettings = [
   'GOAL_PUBLIC_URL',
   'GOAL_AUTH_GOOGLE',

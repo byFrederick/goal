@@ -1,6 +1,6 @@
 ---
 paths:
-  - "auth/**"
+  - "apps/auth/**"
 ---
 
 # Auth
@@ -19,7 +19,7 @@ The identity service runs sign-in, sessions, members and invitations. Its bounda
 - Use Better Auth's plugins for email codes, Google, organizations and the device flow. Re-implementing them means owning their security fixes.
 - Pin `better-auth` through the workspace catalog. Auth and web must run the same version of the client and the server.
 - Write the service's tables as goose migrations in `db/migrations/`. Better Auth's generated migrations would bypass the one migration history, so check them with `task migrate-check`.
-- Test the handlers with Vitest. CI runs `task migrate-check` whenever `auth/` changes.
+- Test the handlers with Vitest. CI runs `task migrate-check` whenever `apps/auth/` changes.
 
 ## Skills
 

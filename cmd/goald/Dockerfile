@@ -10,18 +10,18 @@ ARG NODE_IMAGE=node:22-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a3
 ARG GO_IMAGE=golang:1.26.10-alpine@sha256:27f2d3b83cfc5803c8078f8e730af0f7c431bf067afaec8f60a36fb763187cba
 ARG RUNTIME_IMAGE=alpine:3.22@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f
 
-# The web UI (web/dist), from the workspace manifests first so dependencies cache.
+# The web UI (apps/web/dist), from the workspace manifests first so dependencies cache.
 FROM ${NODE_IMAGE} AS web
 ARG PNPM_VERSION=12.15.0
 RUN npm install --global --no-fund --no-audit "pnpm@${PNPM_VERSION}"
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY web/package.json web/
+COPY apps/web/package.json apps/web/
 COPY packages/api-client/package.json packages/api-client/
 RUN pnpm install --frozen-lockfile --filter "@goal/web..."
 COPY contracts/definitions/ contracts/definitions/
 COPY packages/api-client/ packages/api-client/
-COPY web/ web/
+COPY apps/web/ apps/web/
 RUN pnpm --filter @goal/web run build
 
 FROM ${GO_IMAGE} AS build
@@ -32,8 +32,8 @@ COPY cmd/goald/ cmd/goald/
 COPY internal/ internal/
 COPY db/migrations/ db/migrations/
 COPY contracts/definitions/ contracts/definitions/
-COPY web/ web/
-COPY --from=web /src/web/dist/ web/dist/
+COPY apps/web/ apps/web/
+COPY --from=web /src/apps/web/dist/ apps/web/dist/
 RUN CGO_ENABLED=0 go build -trimpath -tags webui -ldflags="-s -w" -o /out/goald ./cmd/goald
 
 # Alpine for wget (the health check) and the CA bundle, which Go's system pool reads: a managed

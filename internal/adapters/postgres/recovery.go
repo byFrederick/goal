@@ -210,7 +210,7 @@ func recordRecovery(ctx context.Context, tx pgx.Tx, r Recovery, command string) 
 	return nil
 }
 
-// emailSubject is how the security log names an address (auth/src/goal.ts emailSubject):
+// emailSubject is how the security log names an address (apps/auth/src/goal.ts emailSubject):
 // base64url, unpadded, of the SHA-256 of the trimmed, lower-case address.
 func emailSubject(email string) string {
 	sum := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(email))))

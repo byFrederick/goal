@@ -71,12 +71,12 @@ func TestChangedFiles(t *testing.T) {
 func testRenameAcrossParts(t *testing.T) {
 	t.Parallel()
 
-	dir := repo(t, "web/src/util.ts", "docs/a.md")
-	if err := os.MkdirAll(filepath.Join(dir, "worker/src"), 0o750); err != nil {
+	dir := repo(t, "apps/web/src/util.ts", "docs/a.md")
+	if err := os.MkdirAll(filepath.Join(dir, "apps/worker/src"), 0o750); err != nil {
 		t.Fatal(err)
 	}
 
-	gitT(t, dir, "mv", "web/src/util.ts", "worker/src/util.ts")
+	gitT(t, dir, "mv", "apps/web/src/util.ts", "apps/worker/src/util.ts")
 	gitT(t, dir, "commit", "-q", "-m", "move")
 
 	got, err := changedFiles(t.Context(), dir, "origin/main")
@@ -84,7 +84,7 @@ func testRenameAcrossParts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if want := []string{"web/src/util.ts", "worker/src/util.ts"}; !slices.Equal(got, want) {
+	if want := []string{"apps/web/src/util.ts", "apps/worker/src/util.ts"}; !slices.Equal(got, want) {
 		t.Fatalf("changed = %v, want %v", got, want)
 	}
 
@@ -96,14 +96,14 @@ func testRenameAcrossParts(t *testing.T) {
 func testUncommitted(t *testing.T) {
 	t.Parallel()
 
-	dir := repo(t, ".gitignore", "auth/src/a.ts", "terraform/r2.tf")
+	dir := repo(t, ".gitignore", "apps/auth/src/a.ts", "terraform/r2.tf")
 	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("*.log\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	gitT(t, dir, "add", ".gitignore")
 	write(t, dir, "terraform/r2.tf", " v2")
-	write(t, dir, "web/src/new.tsx")
+	write(t, dir, "apps/web/src/new.tsx")
 	write(t, dir, "debug.log")
 
 	got, err := changedFiles(t.Context(), dir, "origin/main")
@@ -111,7 +111,7 @@ func testUncommitted(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if want := []string{".gitignore", "terraform/r2.tf", "web/src/new.tsx"}; !slices.Equal(got, want) {
+	if want := []string{".gitignore", "apps/web/src/new.tsx", "terraform/r2.tf"}; !slices.Equal(got, want) {
 		t.Fatalf("changed = %v, want %v", got, want)
 	}
 }
@@ -128,7 +128,7 @@ func testNothingChanged(t *testing.T) {
 func testMissingBase(t *testing.T) {
 	t.Parallel()
 
-	dir := repo(t, "web/src/a.tsx")
+	dir := repo(t, "apps/web/src/a.tsx")
 
 	_, err := changedFiles(t.Context(), dir, "origin/nope")
 	if !errors.Is(err, errNoBase) || !strings.Contains(err.Error(), "origin/nope not found") {

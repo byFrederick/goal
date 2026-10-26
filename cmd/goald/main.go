@@ -30,6 +30,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/moby/moby/client"
 
+	"github.com/byFrederick/goal/apps/web"
 	"github.com/byFrederick/goal/internal/adapters/awssts"
 	"github.com/byFrederick/goal/internal/adapters/cloudflare"
 	"github.com/byFrederick/goal/internal/adapters/confluence"
@@ -53,7 +54,6 @@ import (
 	"github.com/byFrederick/goal/internal/knowledge"
 	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/retention"
-	"github.com/byFrederick/goal/web"
 )
 
 // minKeyBytes is the shortest gateway key goald accepts (openssl rand -hex 32 gives 64).

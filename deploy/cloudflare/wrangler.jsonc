@@ -31,7 +31,7 @@
     },
     {
       "class_name": "Auth",
-      "image": "../../auth/Dockerfile",
+      "image": "../../apps/auth/Dockerfile",
       "image_build_context": "../..",
       "instance_type": "basic",
       "max_instances": 1,
@@ -43,7 +43,7 @@
       "class_name": "RunBox",
       "scheduling_policy": "durable_object",
       "images": {
-        "goal-agent": { "dockerfile": "../../worker/Dockerfile", "build_context": "../.." }
+        "goal-agent": { "dockerfile": "../../apps/worker/Dockerfile", "build_context": "../.." }
       }
     }
   ],

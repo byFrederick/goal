@@ -28,7 +28,7 @@ type Identity struct {
 // NewIdentity returns the identity lookups on s's pool.
 func NewIdentity(s *Store) *Identity { return &Identity{q: s.q} }
 
-// cliClient is the device authorization client the auth service accepts (auth/src/auth.ts), and
+// cliClient is the device authorization client the auth service accepts (apps/auth/src/auth.ts), and
 // the name the person approving it is shown.
 const (
 	cliClient     = "goal-cli"

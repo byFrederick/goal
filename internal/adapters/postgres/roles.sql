@@ -6,7 +6,7 @@
 --
 -- goal_owner owns the schema and runs the migrations. goal_app runs goald: it owns nothing, so
 -- row-level security binds it, and every migration grants it exactly what it needs. goal_auth runs
--- the identity service (auth/): it owns nothing either, has DML on Better Auth's tables in schema
+-- the identity service (apps/auth/): it owns nothing either, has DML on Better Auth's tables in schema
 -- auth only (00041) and no privilege on Goal's tables; migration 00040 grants to it, so goald
 -- refuses to migrate while it is missing.
 DO $$ BEGIN

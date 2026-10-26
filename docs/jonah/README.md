@@ -411,8 +411,8 @@ Packages (each with one responsibility and a caller):
 | `internal/adapters/gateway` | Replay and record modes, fixture and snapshot serving by hash, eval-mode tool policy |
 | `internal/adapters/judge` | `anthropic` (Messages API, structured outputs, prompt caching, Message Batches for offline grading), `bedrock`, `worker` (subscription) |
 | `cmd/goal` | `goal factory validate` (evals too), `goal eval run|compare|record|export-case|calibrate` |
-| `worker/` | Envelope `mode: eval`: no push, gateway URL in replay mode, then a separate grading phase (hidden files, commands) the agent never sees; `mode: judge`: one turn, no tools, JSON schema output |
-| `web/src/features/jonah/` | Screens in section 13, through `packages/api-client` |
+| `apps/worker/` | Envelope `mode: eval`: no push, gateway URL in replay mode, then a separate grading phase (hidden files, commands) the agent never sees; `mode: judge`: one turn, no tools, JSON schema output |
+| `apps/web/src/features/jonah/` | Screens in section 13, through `packages/api-client` |
 
 Stateless and cloud-ready:
 
@@ -503,7 +503,7 @@ Starter estimate for the `goal` factory: architect regression (30 cases × 3 tri
 
 ## 13. UI
 
-Screens live in `web/src/features/jonah/` and follow `design-system/goal/MASTER.md`: Inter with optical sizing and tabular numerals, the user palette, radii 8–16 px, solid fills only (no gradients), no pink. Color carries meaning, never alone: every state also has an icon and a label.
+Screens live in `apps/web/src/features/jonah/` and follow `design-system/goal/MASTER.md`: Inter with optical sizing and tabular numerals, the user palette, radii 8–16 px, solid fills only (no gradients), no pink. Color carries meaning, never alone: every state also has an icon and a label.
 
 | Token | Use in Jonah |
 | --- | --- |

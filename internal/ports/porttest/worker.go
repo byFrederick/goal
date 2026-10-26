@@ -17,7 +17,7 @@ import (
 // when ctx ends. It runs on the command's own goroutine.
 type AgentFunc func(ctx context.Context, run ExecCall, stdout io.Writer) domain.RunResult
 
-// Worker plays the goal-agent image in Sandboxes (NewSandboxes(w.Exec)), as worker/README.md's
+// Worker plays the goal-agent image in Sandboxes (NewSandboxes(w.Exec)), as apps/worker/README.md's
 // sandbox contract says: `goal-agent prepare` writes its one prepared line, `goal-agent run`
 // plays an AgentFunc and writes its result as the stdout protocol's finished line, and any
 // other command is a station check, which exits as scripted (Exit) and passes otherwise. It

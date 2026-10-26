@@ -68,15 +68,15 @@ var rules = []rule{
 	{under("contracts"), []part{partEverything}, "a contract every part builds on"},
 	// Go code anywhere, and the files Go embeds (go:embed) or its tests read.
 	{goFile, []part{partGo}, ""},
-	{under("cmd", "internal", "db", "web/placeholder"), []part{partGo}, ""},
-	{exact("web/csp.txt", "compose.yaml", ".env.example"), []part{partGo}, ""},
+	{under("cmd", "internal", "db", "apps/web/placeholder"), []part{partGo}, ""},
+	{exact("apps/web/csp.txt", "compose.yaml", ".env.example"), []part{partGo}, ""},
 	// permgen -check (api:permissions-check) compares this generated file with contracts/api/permissions.yaml.
-	{exact("auth/src/access.gen.ts"), []part{partGo, partAuth}, ""},
-	{under("worker"), []part{partWorker}, ""},
-	{under("auth"), []part{partAuth}, ""},
+	{exact("apps/auth/src/access.gen.ts"), []part{partGo, partAuth}, ""},
+	{under("apps/worker"), []part{partWorker}, ""},
+	{under("apps/auth"), []part{partAuth}, ""},
 	// web depends on @goal/api-client.
 	{under("packages/api-client"), []part{partAPIClient, partWeb}, ""},
-	{under("web"), []part{partWeb}, ""},
+	{under("apps/web"), []part{partWeb}, ""},
 	{under("deploy/cloudflare"), []part{partCloudflare}, ""},
 	{under("terraform"), []part{partTerraform}, ""},
 	{exact(".sops.yaml"), []part{partTerraform}, ""},
@@ -151,7 +151,7 @@ func selectParts(changed []string) (selected map[string][]string, whys map[strin
 
 // needsMigrateCheck reports a path that the pre-push hook also runs task migrate-check for.
 func needsMigrateCheck(p string) bool {
-	return strings.HasPrefix(p, "db/migrations/") || strings.HasPrefix(p, "auth/")
+	return strings.HasPrefix(p, "db/migrations/") || strings.HasPrefix(p, "apps/auth/")
 }
 
 // everything plans every task for a reason that is not a changed file (no base to compare with).

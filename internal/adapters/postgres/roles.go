@@ -13,7 +13,7 @@ import (
 
 // The database roles Goal runs as. OwnerRole owns the schema and applies migrations; AppRole
 // runs goald and owns nothing, so row-level security binds it; AuthRole runs the identity
-// service (auth/), with DML on Better Auth's tables in schema auth only.
+// service (apps/auth/), with DML on Better Auth's tables in schema auth only.
 const (
 	OwnerRole = "goal_owner"
 	AppRole   = "goal_app"

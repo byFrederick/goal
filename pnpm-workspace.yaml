@@ -1,7 +1,7 @@
 packages:
-  - auth
-  - web
-  - worker
+  - apps/auth
+  - apps/web
+  - apps/worker
   - deploy/cloudflare
   - packages/*
 

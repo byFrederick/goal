@@ -5,7 +5,7 @@
 // It refuses to generate from a table that does not hold together: a permission with an
 // unknown level or role, a fresh permission keys may carry, an operation without a scope or
 // with an unknown one. Each output is a target (render function and path): the Go table for
-// goald and auth/'s TypeScript roles for Better Auth.
+// goald and apps/auth/'s TypeScript roles for Better Auth.
 package main
 
 import (
@@ -37,7 +37,7 @@ func run(args []string) error {
 	permissions := fs.String("permissions", "contracts/api/permissions.yaml", "the permission table")
 	openapi := fs.String("openapi", "contracts/api/openapi.yaml", "the API contract whose operations carry x-goal-scope")
 	goOut := fs.String("go", "internal/api/permissions_gen.go", "the Go table for goald")
-	tsOut := fs.String("ts", "auth/src/access.gen.ts", "the TypeScript roles for the auth service")
+	tsOut := fs.String("ts", "apps/auth/src/access.gen.ts", "the TypeScript roles for the auth service")
 	check := fs.Bool("check", false, "fail when a generated file differs from what the sources give, writing nothing")
 
 	if err := fs.Parse(args); err != nil {

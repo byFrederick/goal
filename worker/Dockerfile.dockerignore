@@ -1,8 +1,0 @@
-# The image builds from the repository root and needs only the workspace manifests and worker/.
-*
-!package.json
-!pnpm-lock.yaml
-!pnpm-workspace.yaml
-!worker/
-worker/node_modules/
-worker/dist/

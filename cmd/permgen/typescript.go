@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// renderTS writes auth/'s roles, auth/src/access.gen.ts: the organization and factory roles, and
+// renderTS writes apps/auth/'s roles, apps/auth/src/access.gen.ts: the organization and factory roles, and
 // Better Auth's access control (spec 3 §8.6): its statements are every better_auth action of
 // the table, and each organization role holds the actions of the permissions it holds.
 func renderTS(t table) ([]byte, error) {

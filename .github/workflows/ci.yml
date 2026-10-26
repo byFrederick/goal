@@ -1,5 +1,5 @@
 # The same gate as the local pre-push hook (.githooks/pre-push), on every pull request and every
-# push to main: `task check`, and `task migrate-check` when db/migrations/ or auth/ changed (on a pull
+# push to main: `task check`, and `task migrate-check` when db/migrations/ or apps/auth/ changed (on a pull
 # request, against its base; on main, always); plus `task test-integration` on PostgreSQL 18,
 # RustFS and Mailpit from compose.yaml. The tools come from .mise.toml, as on a laptop, and so does
 # how they install (its [settings]: npm: tools such as pnpm install with npm, not aube).
@@ -49,13 +49,13 @@ jobs:
           checksum: 8220f1b4563a5bed932348b7350aafba66e1100e90bd411e4bcda4fe80de08f1 # task_linux_amd64.tar.gz
       - name: Lint, race tests, worker, auth, web, control Worker, factory validation, terraform
         run: task check
-      - name: Did db/migrations/ or auth/ change
+      - name: Did db/migrations/ or apps/auth/ change
         id: migrations
         env:
           EVENT: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          if [ "$EVENT" != pull_request ] || [ -n "$(git diff --name-only "$BASE_SHA"...HEAD -- db/migrations/ auth/)" ]; then
+          if [ "$EVENT" != pull_request ] || [ -n "$(git diff --name-only "$BASE_SHA"...HEAD -- db/migrations/ apps/auth/)" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Migrations apply from zero, Better Auth schema drift

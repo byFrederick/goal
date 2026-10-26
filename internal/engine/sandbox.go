@@ -17,7 +17,7 @@ import (
 	"github.com/byFrederick/goal/internal/ports"
 )
 
-// The agent image's sandbox contract (worker/README.md): the commands goald runs in a sandbox,
+// The agent image's sandbox contract (apps/worker/README.md): the commands goald runs in a sandbox,
 // the variables it gives them and where the repository is cloned.
 const (
 	envGatewayURL   = "GOAL_GATEWAY_URL"
