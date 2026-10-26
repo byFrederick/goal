@@ -17,7 +17,7 @@ The owner wants a small root, one home for each kind of file, rules that load on
    go.mod go.sum package.json pnpm-workspace.yaml        manifests
    pnpm-lock.yaml Taskfile.yml compose.yaml
    skills-lock.json .mise.toml and the dotfiles
-   cmd/ internal/                                        Go (unchanged)
+   cmd/ internal/                                        Go: cmd/ wires each binary, internal/ holds its code (internal/cli: the goal CLI)
    tools/                                                repository tooling that is not a shipped binary
    apps/web/ apps/auth/ apps/worker/                     the pnpm apps
    packages/api-client/ packages/config/                 shared TypeScript packages (config: see the amendment below)
@@ -37,6 +37,8 @@ The owner wants a small root, one home for each kind of file, rules that load on
    `.claude/rules/` holds our rules, each scoped to the paths it governs. `.claude/skills/` holds our own skills and the vendored skills we actually use.
 
    *Amended 2026-10-26: one Taskfile per area.* The root `Taskfile.yml` keeps the cross-cutting tasks (`default`, `build`, `up`, `check`, `check:changed`, `test`, `lint`, `fmt`, `gen`, `gen:check`, `layout:check`, `env:check`, `hooks:install`, `clean`, the egress and goald images, storage, connections and factories), and also `dotenv`, the global `env:` and `vars:`, because an included Taskfile cannot have its own dotenv and reads the root's vars. Each area's tasks live in its own `Taskfile.yml` next to its code: `apps/web/`, `apps/auth/`, `apps/worker/`, `db/`, `deploy/cloudflare/`, `deploy/terraform/`, `contracts/` and `packages/api-client/`. The root includes each with `flatten: true` and `dir: "{{.ROOT_DIR}}"`. Flattening keeps every task's full name (`web:check`, `tf:plan`, `migrate-check`), so CI, the git hooks, the docs, the rules and the skills keep calling the same names. A namespace would rename tasks such as `migrate-check` and `deploy:production`. Setting the include's dir to the root means each task runs where it did before, and its own `dir:` and `sources:` stay relative to the root. Run `task` from the repository root: from inside an area directory, Task would find that area's Taskfile first. `tools/layoutcheck/tasks.txt` lists every name `task --list-all` shows, and `task layout:check` fails when the Taskfiles and the list differ, so a name changes only on purpose. `tools/envcheck` scans every `Taskfile.yml` for `${NAME}` reads, and `tools/checkplan` treats any of them as shared by every part.
+
+   *Amended 2026-10-26: thin binaries.* A binary's code lives in `internal/`, and `cmd/<binary>/main.go` only builds its dependencies by constructor and calls one entry point (AGENTS.md rule 6). The goal CLI's commands moved from `cmd/goal`'s package main to `internal/cli`, tests, testdata and the integration test included, with no change to their names, help text, output or exit codes. `cmd/goal/main.go` builds the signal context and calls `cli.Run(ctx, args, stdin, stdout, stderr, getenv, readBuildInfo)`, which returns the exit code. Golden files in `internal/cli/testdata/golden` pin the help and the output of the commands that run without a server. A depguard rule stops every other package under `internal/` from importing `internal/cli`, so only `cmd/goal` wires it. `tools/envcheck` counts reads under `internal/cli/` as the CLI's.
 
    *Amended 2026-10-26: `packages/config`.* It is the shared TypeScript settings: `biome.json` (the Biome formatter and linter settings) and the tsconfig bases `tsconfig.base.json`, `tsconfig.node.json` (NodeNext, for the Node services), `tsconfig.browser.json` (DOM, bundled, no emit) and `tsconfig.workers.json` (the Workers runtime). It is the private workspace package `@goal/config`, and each project extends one variant and keeps only its own options: `include`, `rootDir`, `outDir`, `types` and each app's own checks stay in the project. It holds no Vitest preset. `packages/config` is not checked on its own; a change to it runs every TypeScript part's check (`tools/checkplan`). The `goald`, `auth` and `worker` Dockerfiles copy its manifest and sources, and their `.dockerignore` allowlists admit them.
 
@@ -91,3 +93,4 @@ The old path of each directory or file that moves. Once the moves are done, this
 | `cmd/permgen/` | `tools/permgen/` |
 | `docs/specs/` | `docs/history/specs/` |
 | `docs/jonah/` | `docs/history/jonah/` (`schema.sql` deleted) |
+| `cmd/goal/` (all but `main.go`) | `internal/cli/` |

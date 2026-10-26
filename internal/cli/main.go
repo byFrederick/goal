@@ -201,15 +201,15 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 
 	switch {
 	case errors.Is(err, errUsage):
-		fmt.Fprintln(stderr, err)
+		_, _ = fmt.Fprintln(stderr, err)
 
 		return 2
 	case errors.As(err, &refused):
-		fmt.Fprintln(stderr, "goal:", err)
+		_, _ = fmt.Fprintln(stderr, "goal:", err)
 
 		return exitNoPerm
 	case err != nil:
-		fmt.Fprintln(stderr, "goal:", err)
+		_, _ = fmt.Fprintln(stderr, "goal:", err)
 
 		return 1
 	}

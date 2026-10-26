@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -20,31 +21,27 @@ var update = flag.Bool("update", false, "rewrite the golden files in testdata/go
 func TestRun_Golden(t *testing.T) {
 	cases := []struct {
 		name string
-		args []string
+		line string
 	}{
-		{"no-arguments", nil},
-		{"help", []string{"help"}},
-		{"unknown-command", []string{"frobnicate"}},
-		{"version", []string{"version"}},
-		{"version-extra-argument", []string{"version", "now"}},
-		{"validate-fixture", []string{"validate", "../../internal/config/testdata/line"}},
-		{"validate-no-factory", []string{"validate", "../../internal/config/testdata"}},
-		{"validate-no-arguments", []string{"validate"}},
-		{"factory", []string{"factory"}},
-		{"factory-help", []string{"factory", "-h"}},
-		{"org", []string{"org"}},
-		{"key", []string{"key"}},
-		{"andon", []string{"andon"}},
-		{"admin", []string{"admin"}},
-		{"catalog", []string{"catalog"}},
-		{"connection", []string{"connection"}},
-		{"knowledge", []string{"knowledge"}},
-		{"db", []string{"db"}},
-		{"storage", []string{"storage"}},
-		{"status-help", []string{"status", "-h"}},
-		{"up-help", []string{"up", "-h"}},
-		{"run", []string{"run"}},
-		{"login-help", []string{"login", "-h"}},
+		{"no-arguments", ""},
+		{"help", "help"},
+		{"unknown-command", "frobnicate"},
+		{"version-extra-argument", "version now"},
+		{"validate-fixture", "validate ../../internal/config/testdata/line"},
+		{"validate-no-factory", "validate ../../internal/config/testdata"},
+		{"validate-no-arguments", "validate"},
+		{"factory-help", "factory -h"},
+		{"status-help", "status -h"},
+		{"up-help", "up -h"},
+		{"login-help", "login -h"},
+	}
+
+	// Each of these runs with no arguments, and its golden file has its name.
+	for group := range strings.FieldsSeq("version factory org key andon admin catalog connection knowledge db storage run") {
+		cases = append(cases, struct {
+			name string
+			line string
+		}{group, group})
 	}
 
 	for _, tc := range cases {
@@ -58,7 +55,8 @@ func TestRun_Golden(t *testing.T) {
 
 			var stdout, stderr bytes.Buffer
 
-			code := Run(context.Background(), tc.args, strings.NewReader(""), &stdout, &stderr, getenv, fixedBuildInfo)
+			args := strings.Fields(tc.line)
+			code := Run(context.Background(), args, strings.NewReader(""), &stdout, &stderr, getenv, fixedBuildInfo)
 
 			got := fmt.Sprintf("exit %d\n--- stdout\n%s--- stderr\n%s", code, stdout.String(), stderr.String())
 			path := filepath.Join("testdata", "golden", tc.name+".txt")
@@ -75,13 +73,13 @@ func TestRun_Golden(t *testing.T) {
 				return
 			}
 
-			want, err := os.ReadFile(path)
+			want, err := fs.ReadFile(os.DirFS(filepath.Dir(path)), filepath.Base(path))
 			if err != nil {
 				t.Fatalf("read %s (go test -run TestRun_Golden -update writes it): %v", path, err)
 			}
 
 			if got != string(want) {
-				t.Errorf("goal %s printed\n%s\nwant (%s)\n%s", strings.Join(tc.args, " "), got, path, want)
+				t.Errorf("goal %s printed\n%s\nwant (%s)\n%s", tc.line, got, path, want)
 			}
 		})
 	}

@@ -29,11 +29,11 @@ How the code is laid out and why: [architecture.md](../../docs/engineering/archi
 - Log with `log/slog` and stable event names (`"api request"`, not formatted sentences), so logs can be searched and alerted on.
 - Never log a secret, token, cookie, credential or email, because logs leave the platform.
 
-## CLI (`cmd/goal`)
+## CLI (`internal/cli`, wired by `cmd/goal`)
 
 - Parse arguments with the standard library `flag` package, never cobra or another framework, so the CLI stays small and its parsing testable.
 - Use no `init()` in any binary, so wiring happens only in `main`.
 
 ## Skills
 
-Load `golang-code-style`, `golang-error-handling`, `golang-concurrency`, `golang-lint`, `golang-security`, `golang-performance` and `golang-observability`; `golang-cli` for `cmd/goal`; `golang-database` for pgx code.
+Load `golang-code-style`, `golang-error-handling`, `golang-concurrency`, `golang-lint`, `golang-security`, `golang-performance` and `golang-observability`; `golang-cli` for `internal/cli` and `cmd/goal`; `golang-database` for pgx code.
