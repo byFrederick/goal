@@ -15,14 +15,36 @@ import (
 var _ ports.CodeHost = (*CodeHost)(nil)
 
 // CodeHost is an in-memory code host holding the pull requests a test adds. Like the adapters, it
-// serves only pull requests on the host of the connection's git login, and it merges like a
-// careful host: only open, mergeable pull requests whose head has not moved.
+// serves only pull requests on the host of the connection's git login, and it merges and updates
+// branches like a careful host: only open pull requests whose head has not moved.
 type CodeHost struct {
 	mu       sync.Mutex
 	prs      map[string]*ports.PullRequest
 	moves    map[string]string // url → the head a push moves it to once it is next read
 	merges   []MergeCall
 	branches []string
+	updated  []string            // urls whose branches were updated, in order
+	conflict map[string][]string // url → the files its branch conflicts with its base in
+}
+
+// Conflict makes updating the branch of the pull request at url conflict with its base in files.
+func (c *CodeHost) Conflict(url string, files ...string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.conflict == nil {
+		c.conflict = map[string][]string{}
+	}
+
+	c.conflict[url] = slices.Clone(files)
+}
+
+// UpdatedBranches returns the pull requests whose branches were updated, in order.
+func (c *CodeHost) UpdatedBranches() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return slices.Clone(c.updated)
 }
 
 // MoveHeadAfterRead pushes sha to the pull request at url right after it is next read, as a push
@@ -121,6 +143,36 @@ func (c *CodeHost) Merge(_ context.Context, conn domain.ResolvedConnection, url 
 	pr.Open, pr.Merged, pr.Mergeable, pr.MergeSHA = false, true, false, "merge-"+pr.HeadSHA
 
 	return pr.MergeSHA, nil
+}
+
+// UpdateBranch implements ports.CodeHost. An update moves the head to "updated-" and the head
+// it was given.
+func (c *CodeHost) UpdateBranch(_ context.Context, conn domain.ResolvedConnection, url, headSHA string) error {
+	if err := onHost(conn, url); err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	pr, ok := c.prs[url]
+	switch {
+	case !ok:
+		return fmt.Errorf("pull request %s does not exist: %w", url, ports.ErrNotMergeable)
+	case !pr.Open:
+		return fmt.Errorf("pull request %s is closed: %w", url, ports.ErrNotMergeable)
+	case pr.HeadSHA != headSHA:
+		return fmt.Errorf("pull request %s: head moved: %w", url, ports.ErrNotMergeable)
+	}
+
+	if files, ok := c.conflict[url]; ok {
+		return &ports.MergeConflict{URL: url, Files: slices.Clone(files)}
+	}
+
+	c.updated = append(c.updated, url)
+	pr.HeadSHA = "updated-" + headSHA
+
+	return nil
 }
 
 // DeleteBranch implements ports.CodeHost.

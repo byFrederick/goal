@@ -57,6 +57,7 @@ type fakeGitHub struct {
 	mu       sync.Mutex
 	pr       map[string]any
 	merge    func(body map[string]string) (int, any)
+	update   func(body map[string]string) (int, any)
 	requests []string
 	deleted  []string
 	// mergeable, when not empty, is what successive reads of the pull request answer for
@@ -88,6 +89,10 @@ func newFakeGitHubWith(t *testing.T, cfg Config) (*fakeGitHub, *Client) {
 		return http.StatusOK, map[string]any{"sha": "merge-sha", "merged": true, message: "Pull Request successfully merged"}
 	}
 
+	f.update = func(map[string]string) (int, any) {
+		return http.StatusAccepted, map[string]any{message: "Updating pull request branch.", "url": "https://github.com/acme/app/pull/7"}
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /repos/acme/app/pulls/7", func(w http.ResponseWriter, _ *http.Request) {
 		f.mu.Lock()
@@ -109,6 +114,18 @@ func newFakeGitHubWith(t *testing.T, cfg Config) (*fakeGitHub, *Client) {
 
 		f.mu.Lock()
 		status, res := f.merge(body)
+		f.mu.Unlock()
+
+		f.reply(w, status, res)
+	})
+	mux.HandleFunc("PUT /repos/acme/app/pulls/7/update-branch", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+		}
+
+		f.mu.Lock()
+		status, res := f.update(body)
 		f.mu.Unlock()
 
 		f.reply(w, status, res)
@@ -301,6 +318,10 @@ func TestPullRequest_OnlyOnTheConnectionsHost(t *testing.T) {
 		if err := c.DeleteBranch(t.Context(), tt.conn, tt.url, "goal/7-add-x"); !errors.Is(err, ports.ErrNotMergeable) {
 			t.Errorf("DeleteBranch(%s) = %v; want ErrNotMergeable", tt.url, err)
 		}
+
+		if err := c.UpdateBranch(t.Context(), tt.conn, tt.url, headSHA); !errors.Is(err, ports.ErrNotMergeable) {
+			t.Errorf("UpdateBranch(%s) = %v; want ErrNotMergeable", tt.url, err)
+		}
 	}
 
 	// A connection without a token has no git login: nothing is sent either.
@@ -352,6 +373,65 @@ func TestMerge_GitHubRefusalsAreNotMergeable(t *testing.T) {
 	}
 }
 
+func TestUpdateBranch_SendsTheExpectedHead(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitHub(t)
+
+	var asked map[string]string
+
+	f.update = func(body map[string]string) (int, any) {
+		asked = body
+
+		return http.StatusAccepted, map[string]any{message: "Updating pull request branch."}
+	}
+
+	if err := c.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA); err != nil {
+		t.Fatalf("UpdateBranch = %v; want accepted", err)
+	}
+
+	if len(asked) != 1 || asked["expected_head_sha"] != headSHA {
+		t.Errorf("update request %v; want only expected_head_sha 4b825dc6", asked)
+	}
+
+	// Without a head to expect, GitHub would update whatever the branch holds: nothing is sent.
+	before := len(f.sent())
+	if err := c.UpdateBranch(t.Context(), dotComConn(t), prURL, ""); err == nil || len(f.sent()) != before {
+		t.Errorf("UpdateBranch without a head = %v, sent %v; want refused before sending", err, f.sent()[before:])
+	}
+}
+
+func TestUpdateBranch_ConflictIsMergeConflict(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitHub(t)
+	f.update = func(map[string]string) (int, any) {
+		return http.StatusUnprocessableEntity, map[string]any{message: "merge conflict between base and head"}
+	}
+
+	err := c.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA)
+
+	var mc *ports.MergeConflict
+	if !errors.Is(err, ports.ErrMergeConflict) || !errors.As(err, &mc) || len(mc.Files) != 0 || errors.Is(err, ports.ErrNotMergeable) {
+		t.Errorf("UpdateBranch on a conflict = %v; want a *MergeConflict without files, not ErrNotMergeable", err)
+	}
+}
+
+func TestUpdateBranch_MovedHeadIsNotMergeable(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitHub(t)
+	f.update = func(map[string]string) (int, any) {
+		// GitHub's answer when expected_head_sha is not the branch's head.
+		return http.StatusUnprocessableEntity, map[string]any{message: "expected head sha didn't match current head ref."}
+	}
+
+	err := c.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA)
+	if !errors.Is(err, ports.ErrNotMergeable) || errors.Is(err, ports.ErrMergeConflict) {
+		t.Errorf("UpdateBranch on a moved head = %v; want ErrNotMergeable, not a conflict", err)
+	}
+}
+
 func TestDeleteBranch_DeletesTheRefAndToleratesAGoneOne(t *testing.T) {
 	t.Parallel()
 
@@ -385,6 +465,14 @@ func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 		t.Errorf("err = %v; want an error without the token", err)
 	}
 
+	f.update = func(map[string]string) (int, any) {
+		return http.StatusUnprocessableEntity, map[string]any{message: "bad token " + token}
+	}
+
+	if err := c.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA); err == nil || strings.Contains(err.Error(), token) {
+		t.Errorf("UpdateBranch err = %v; want an error without the token", err)
+	}
+
 	// A redirect is not followed: the token would travel to another host.
 	var leaked bool
 
@@ -402,5 +490,9 @@ func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 
 	if _, err := moved.PullRequest(t.Context(), dotComConn(t), prURL); err == nil || leaked {
 		t.Errorf("PullRequest via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", err, leaked)
+	}
+
+	if err := moved.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA); err == nil || leaked {
+		t.Errorf("UpdateBranch via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", err, leaked)
 	}
 }

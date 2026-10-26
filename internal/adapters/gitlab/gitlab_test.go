@@ -61,6 +61,7 @@ type fakeGitLab struct {
 	mu       sync.Mutex
 	mr       map[string]any
 	merge    func(body map[string]any) (int, any)
+	rebase   func() (int, any)
 	requests []string
 	deleted  []string
 }
@@ -78,6 +79,8 @@ func newFakeGitLab(t *testing.T) (*fakeGitLab, *Client) {
 
 		return http.StatusOK, f.mr
 	}
+
+	f.rebase = func() (int, any) { return http.StatusAccepted, map[string]any{"rebase_in_progress": true} }
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		route := r.Method + " " + r.URL.EscapedPath()
@@ -102,6 +105,12 @@ func newFakeGitLab(t *testing.T) (*fakeGitLab, *Client) {
 
 			f.mu.Lock()
 			status, res := f.merge(body)
+			f.mu.Unlock()
+
+			f.reply(w, status, res)
+		case route == "PUT "+project+"/merge_requests/3/rebase":
+			f.mu.Lock()
+			status, res := f.rebase()
 			f.mu.Unlock()
 
 			f.reply(w, status, res)
@@ -253,6 +262,10 @@ func TestPullRequest_OnlyOnTheConnectionsHost(t *testing.T) {
 		if err := c.DeleteBranch(t.Context(), tt.conn, tt.url, branch); !errors.Is(err, ports.ErrNotMergeable) {
 			t.Errorf("DeleteBranch(%s) = %v; want ErrNotMergeable", tt.url, err)
 		}
+
+		if err := c.UpdateBranch(t.Context(), tt.conn, tt.url, headSHA); !errors.Is(err, ports.ErrNotMergeable) {
+			t.Errorf("UpdateBranch(%s) = %v; want ErrNotMergeable", tt.url, err)
+		}
 	}
 
 	if got := f.sent(); len(got) != 0 {
@@ -318,6 +331,78 @@ func TestMerge_GitLabRefusalsAreNotMergeable(t *testing.T) {
 	}
 }
 
+func TestUpdateBranch_RebasesAtTheHeadItWasGiven(t *testing.T) {
+	t.Parallel()
+
+	const (
+		read   = "GET " + project + "/merge_requests/3"
+		rebase = "PUT " + project + "/merge_requests/3/rebase"
+	)
+
+	f, c := newFakeGitLab(t)
+
+	if err := c.UpdateBranch(t.Context(), dotComConn(t), mrURL, headSHA); err != nil {
+		t.Fatalf("UpdateBranch = %v; want accepted", err)
+	}
+
+	if got := f.sent(); !slices.Equal(got, []string{read, rebase}) {
+		t.Errorf("requests %v; want the read, then the rebase", got)
+	}
+
+	// A head that moved since the caller read it, a closed merge request or no head: no rebase.
+	for name, change := range map[string]func(*fakeGitLab){
+		"moved":  func(f *fakeGitLab) { f.mr["sha"] = "1a2b3c" },
+		"closed": func(f *fakeGitLab) { f.mr[keyState] = "closed" },
+	} {
+		f, c := newFakeGitLab(t)
+		change(f)
+
+		if err := c.UpdateBranch(t.Context(), dotComConn(t), mrURL, headSHA); !errors.Is(err, ports.ErrNotMergeable) ||
+			slices.Contains(f.sent(), rebase) {
+			t.Errorf("%s: UpdateBranch = %v after %v; want ErrNotMergeable and no rebase", name, err, f.sent())
+		}
+	}
+
+	if err := c.UpdateBranch(t.Context(), dotComConn(t), mrURL, ""); err == nil || len(f.sent()) != 2 {
+		t.Errorf("UpdateBranch without a head = %v after %v; want refused before sending", err, f.sent())
+	}
+}
+
+func TestUpdateBranch_GitLabRefusals(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		status   int
+		message  string
+		conflict bool
+	}{
+		{http.StatusConflict, "Failed to enqueue the rebase operation", true},
+		{http.StatusUnprocessableEntity, "Rebase failed: Rebase locally, resolve all conflicts, then push the branch.", true},
+		{http.StatusForbidden, "403 Forbidden", false},
+		{http.StatusMethodNotAllowed, "405 Method Not Allowed", false},
+	}
+
+	for _, tt := range tests {
+		f, c := newFakeGitLab(t)
+		f.rebase = func() (int, any) { return tt.status, map[string]any{keyMessage: tt.message} }
+
+		err := c.UpdateBranch(t.Context(), dotComConn(t), mrURL, headSHA)
+
+		var mc *ports.MergeConflict
+		if tt.conflict && (!errors.Is(err, ports.ErrMergeConflict) || !errors.As(err, &mc) || errors.Is(err, ports.ErrNotMergeable)) {
+			t.Errorf("rebase answered %d: err = %v; want a *MergeConflict", tt.status, err)
+		}
+
+		if !tt.conflict && (!errors.Is(err, ports.ErrNotMergeable) || errors.Is(err, ports.ErrMergeConflict)) {
+			t.Errorf("rebase answered %d: err = %v; want ErrNotMergeable", tt.status, err)
+		}
+
+		if err != nil && !strings.Contains(err.Error(), tt.message) {
+			t.Errorf("rebase answered %d: err = %v; want GitLab's reason", tt.status, err)
+		}
+	}
+}
+
 func TestDeleteBranch_DeletesTheBranchAndToleratesAGoneOne(t *testing.T) {
 	t.Parallel()
 
@@ -353,6 +438,12 @@ func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 	if _, err := c.Merge(t.Context(), dotComConn(t), mrURL, ports.Merge{Method: methodSquash, HeadSHA: headSHA}); err == nil ||
 		strings.Contains(err.Error(), token) {
 		t.Errorf("err = %v; want an error without the token", err)
+	}
+
+	f.rebase = func() (int, any) { return http.StatusConflict, map[string]any{keyMessage: "bad token " + token} }
+
+	if err := c.UpdateBranch(t.Context(), dotComConn(t), mrURL, headSHA); err == nil || strings.Contains(err.Error(), token) {
+		t.Errorf("UpdateBranch err = %v; want an error without the token", err)
 	}
 
 	// A redirect is not followed: the token would travel to another host.

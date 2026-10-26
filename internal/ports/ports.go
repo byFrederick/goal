@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/byFrederick/goal/internal/domain"
@@ -43,7 +44,29 @@ var (
 	// conflicts or failing required checks, its head moved, or its URL is not a pull request on
 	// the connection's host. Nothing was changed.
 	ErrNotMergeable = errors.New("pull request not mergeable")
+	// ErrMergeConflict means a pull request's branch cannot be brought up to date with its base
+	// because their changes conflict (MergeConflict names the files when the host says which).
+	// Nothing was changed.
+	ErrMergeConflict = errors.New("merge conflict")
 )
+
+// MergeConflict is an error wrapping ErrMergeConflict: the pull request at URL conflicts with its
+// base, in Files when the host named them (GitHub names none).
+type MergeConflict struct {
+	URL   string
+	Files []string
+}
+
+func (e *MergeConflict) Error() string {
+	if len(e.Files) == 0 {
+		return "pull request " + e.URL + " conflicts with its base"
+	}
+
+	return "pull request " + e.URL + " conflicts with its base in " + strings.Join(e.Files, ", ")
+}
+
+// Is makes errors.Is(err, ErrMergeConflict) true.
+func (e *MergeConflict) Is(target error) bool { return target == ErrMergeConflict }
 
 // Store is the engine's only state. Every method is atomic; methods that change state append
 // their events in the same transaction. All of them are safe to call from many goald
@@ -613,6 +636,16 @@ type CodeHost interface {
 	// forces: a pull request the host refuses to merge is an error wrapping ErrNotMergeable.
 	// It returns the merge commit's SHA.
 	Merge(ctx context.Context, c domain.ResolvedConnection, url string, m Merge) (string, error)
+
+	// UpdateBranch brings the head branch of the pull request at url up to date with its base
+	// (GitHub merges the base into it; GitLab rebases it) only while its head is still headSHA,
+	// and never forces. Changes that conflict are an error wrapping ErrMergeConflict (a
+	// *MergeConflict); a moved head, a closed pull request or one the host refuses to update is
+	// an error wrapping ErrNotMergeable. Both hosts update asynchronously: nil means the host
+	// accepted the update, and the head changes later, so callers read the pull request again
+	// before merging. GitLab's rebase takes no expected head, so there the check is the adapter's
+	// own read just before it: best effort against a push landing in between.
+	UpdateBranch(ctx context.Context, c domain.ResolvedConnection, url, headSHA string) error
 
 	// DeleteBranch deletes a branch of the repository the pull request at url merges into; a
 	// branch that is already gone is not an error.

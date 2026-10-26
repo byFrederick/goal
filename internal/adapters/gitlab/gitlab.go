@@ -2,13 +2,17 @@
 // from the goald host with the credential of a connection whose kind's code host is gitlab (spec
 // 4 §5.5).
 //
-// It reads merge requests, merges them and deletes branches, nothing else. The connection's
+// It reads merge requests, merges them, rebases them on their target and deletes branches,
+// nothing else. The connection's
 // rendered git login says which host it serves (gitlab.com or a self-managed GitLab) and holds
 // the access token; a merge request URL on any other host is refused before anything is sent,
 // and the project is the URL's own (https://<host>/<namespace>/<project>/-/merge_requests/<iid>).
 // The API is https://<host>/api/v4. A merge names the head SHA it was asked for, so GitLab
 // refuses it if the branch moved, and it is never forced: GitLab's refusals (not mergeable,
-// conflicts, head moved) come back as ports.ErrNotMergeable. Squash merges with squash; merge
+// conflicts, head moved) come back as ports.ErrNotMergeable. GitLab's rebase takes no expected
+// head: UpdateBranch reads the merge request first and rebases only if its head is the one it
+// was given, best effort against a push in between, and never forced; a rebase GitLab refuses
+// for conflicts comes back as a *ports.MergeConflict (without files). Squash merges with squash; merge
 // uses the project's own merge method. The token travels only in the PRIVATE-TOKEN header of
 // requests to that API; redirects are not followed, and the token is scrubbed from every error.
 package gitlab
@@ -144,6 +148,24 @@ func (mr mrJSON) mergeSHA() string {
 	}
 }
 
+// read gets the merge request.
+func (cl *Client) read(ctx context.Context, m mergeRequest, mrURL string) (mrJSON, error) {
+	var mr mrJSON
+
+	status, _, err := cl.call(ctx, m, http.MethodGet, m.path("/merge_requests/"+m.iid), nil, &mr)
+
+	switch {
+	case err != nil:
+		return mrJSON{}, fmt.Errorf("merge request %s: %w", mrURL, err)
+	case status == http.StatusNotFound:
+		return mrJSON{}, fmt.Errorf("merge request %s does not exist: %w", mrURL, ports.ErrNotMergeable)
+	case status != http.StatusOK:
+		return mrJSON{}, fmt.Errorf("merge request %s: GitLab answered %d", mrURL, status)
+	}
+
+	return mr, nil
+}
+
 // PullRequest implements ports.CodeHost.
 func (cl *Client) PullRequest(ctx context.Context, c domain.ResolvedConnection, mrURL string) (ports.PullRequest, error) {
 	m, err := cl.open(c, mrURL)
@@ -151,17 +173,9 @@ func (cl *Client) PullRequest(ctx context.Context, c domain.ResolvedConnection, 
 		return ports.PullRequest{}, err
 	}
 
-	var mr mrJSON
-
-	status, _, err := cl.call(ctx, m, http.MethodGet, m.path("/merge_requests/"+m.iid), nil, &mr)
-
-	switch {
-	case err != nil:
-		return ports.PullRequest{}, fmt.Errorf("merge request %s: %w", mrURL, err)
-	case status == http.StatusNotFound:
-		return ports.PullRequest{}, fmt.Errorf("merge request %s does not exist: %w", mrURL, ports.ErrNotMergeable)
-	case status != http.StatusOK:
-		return ports.PullRequest{}, fmt.Errorf("merge request %s: GitLab answered %d", mrURL, status)
+	mr, err := cl.read(ctx, m, mrURL)
+	if err != nil {
+		return ports.PullRequest{}, err
 	}
 
 	mergeable := mr.DetailedMergeStatus == "mergeable" || (mr.DetailedMergeStatus == "" && mr.MergeStatus == "can_be_merged")
@@ -211,6 +225,46 @@ func (cl *Client) Merge(ctx context.Context, c domain.ResolvedConnection, mrURL 
 		return "", fmt.Errorf("merge %s: GitLab refused (%d): %s: %w", mrURL, status, msg, ports.ErrNotMergeable)
 	default:
 		return "", fmt.Errorf("merge %s: GitLab answered %d: %s", mrURL, status, msg)
+	}
+}
+
+// UpdateBranch implements ports.CodeHost: GitLab rebases the source branch on the target, in
+// the background once it answers 202.
+func (cl *Client) UpdateBranch(ctx context.Context, c domain.ResolvedConnection, mrURL, headSHA string) error {
+	m, err := cl.open(c, mrURL)
+	if err != nil {
+		return err
+	}
+
+	if headSHA == "" {
+		return fmt.Errorf("rebase %s: the expected head SHA is required", mrURL)
+	}
+
+	mr, err := cl.read(ctx, m, mrURL)
+
+	switch {
+	case err != nil:
+		return err
+	case mr.State != "opened":
+		return fmt.Errorf("rebase %s: the merge request is %s: %w", mrURL, mr.State, ports.ErrNotMergeable)
+	case mr.SHA != headSHA:
+		return fmt.Errorf("rebase %s: head moved to %s: %w", mrURL, mr.SHA, ports.ErrNotMergeable)
+	}
+
+	status, msg, err := cl.call(ctx, m, http.MethodPut, m.path("/merge_requests/"+m.iid+"/rebase"), nil, nil)
+
+	switch {
+	case err != nil:
+		return fmt.Errorf("rebase %s: %w", mrURL, err)
+	case status == http.StatusAccepted:
+		return nil
+	case status == http.StatusConflict, status >= http.StatusBadRequest && strings.Contains(strings.ToLower(msg), "conflict"):
+		return fmt.Errorf("rebase %s: GitLab refused (%d): %s: %w", mrURL, status, msg, &ports.MergeConflict{URL: mrURL})
+	case status == http.StatusForbidden, status == http.StatusMethodNotAllowed, status == http.StatusNotFound:
+		// No permission to push to the source branch, or a merge request that cannot be rebased.
+		return fmt.Errorf("rebase %s: GitLab refused (%d): %s: %w", mrURL, status, msg, ports.ErrNotMergeable)
+	default:
+		return fmt.Errorf("rebase %s: GitLab answered %d: %s", mrURL, status, msg)
 	}
 }
 
