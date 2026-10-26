@@ -124,8 +124,9 @@ func openPR(url string) ports.PullRequest {
 	}
 }
 
+// squashOf is the merge of the pull request at url, at the head its branch update moved it to.
 func squashOf(url, conn string) porttest.MergeCall {
-	return porttest.MergeCall{URL: url, Connection: conn, Merge: ports.Merge{Method: engine.MergeSquash, HeadSHA: headSHA}}
+	return porttest.MergeCall{URL: url, Connection: conn, Merge: ports.Merge{Method: engine.MergeSquash, HeadSHA: "updated-" + headSHA}}
 }
 
 // atMerge submits an item whose work station outputs output and steps it to the merge station.
@@ -439,6 +440,123 @@ func plannedAll(t *testing.T, events []domain.Event) {
 	for _, e := range events {
 		if e.Data[domain.KeyPlanned] != true {
 			t.Errorf("%s event data %v, want planned true", e.Kind, e.Data)
+		}
+	}
+}
+
+// Before merging, the branch is brought up to date with its base and merged at its new head; a
+// pull request already merged is neither updated nor merged again.
+func TestMerge_UpdatesTheBranchBeforeMerging(t *testing.T) {
+	t.Parallel()
+
+	output := `{"pull_requests":["` + prURL + `","` + docsURL + `"]}`
+	h := newHarness(t, mergeLine(domain.ActionMerge), porttest.Succeed(output))
+	h.codehost.Add(openPR(prURL))
+
+	done := openPR(docsURL)
+	done.Open, done.Merged, done.MergeSHA = false, true, "abc123"
+	h.codehost.Add(done)
+
+	it := h.atMerge(t)
+
+	if _, err := h.e.Merge(inOrg(t), it.ID, human, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if updated := h.codehost.UpdatedBranches(); !slices.Equal(updated, []string{prURL}) {
+		t.Errorf("updated branches %v, want only app#7's", updated)
+	}
+
+	if merges := h.codehost.Merges(); !reflect.DeepEqual(merges, []porttest.MergeCall{squashOf(prURL, connGitHub)}) {
+		t.Errorf("merges %+v, want app#7 at its updated head", merges)
+	}
+}
+
+// A conflict with the base sends the item back to the nearest agent station upstream, with the
+// files and what to do: not a rejection, so its rework count is unchanged and nothing approves it.
+// What merged before the conflict stays merged and is skipped on the next merge.
+func TestMerge_ConflictSendsTheItemBackToBuild(t *testing.T) {
+	t.Parallel()
+
+	output := `{"pull_requests":["` + docsURL + `","` + prURL + `"]}`
+	h := newHarness(t, mergeLine(domain.ActionMerge), porttest.Succeed(output))
+	h.codehost.Add(openPR(docsURL))
+	h.codehost.Add(openPR(prURL))
+	h.codehost.Conflict(prURL, "internal/engine/merge.go", "go.mod")
+
+	it := h.atMerge(t)
+
+	got, err := h.e.Merge(inOrg(t), it.ID, human, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Position() != (domain.Position{Station: stWork, State: domain.StateQueued}) || got.ReworkCount != 0 {
+		t.Fatalf("item at %+v rework %d, want queued at %s with no rework", got.Position(), got.ReworkCount, stWork)
+	}
+
+	expectConflictEvent(t, h.eventsOf(it.ID, domain.EventMergeConflict), stMerge)
+
+	if approved := h.eventsOf(it.ID, domain.EventApproved); len(approved) != 0 {
+		t.Errorf("approved events %+v, want none", approved)
+	}
+
+	if merges := h.codehost.Merges(); !reflect.DeepEqual(merges, []porttest.MergeCall{squashOf(docsURL, connGitHub)}) {
+		t.Errorf("merges %+v, want docs#2 only, before the conflict", merges)
+	}
+
+	// Built again with the conflict resolved, the next merge skips docs#2.
+	h.codehost.Resolve(prURL)
+	h.step(t)
+
+	if _, err := h.e.Merge(inOrg(t), it.ID, human, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if merges := h.codehost.Merges(); !reflect.DeepEqual(merges, []porttest.MergeCall{squashOf(docsURL, connGitHub), squashOf(prURL, connGitHub)}) {
+		t.Errorf("merges %+v, want docs#2 once, then app#7", merges)
+	}
+}
+
+// With onConflict human, a conflict is a refusal, as without an update: the item stays.
+func TestMerge_ConflictWithOnConflictHumanRefuses(t *testing.T) {
+	t.Parallel()
+
+	line := mergeLine(domain.ActionMerge)
+	line.Flow.Assemblies.OnConflict = domain.ConflictHuman
+
+	h := newHarness(t, line, porttest.Succeed(`{"pull_request":"`+prURL+`"}`))
+	h.codehost.Add(openPR(prURL))
+	h.codehost.Conflict(prURL, "go.mod")
+
+	it := h.atMerge(t)
+	before := h.item(t, it.ID)
+
+	_, err := h.e.Merge(inOrg(t), it.ID, human, "")
+	if !errors.Is(err, ports.ErrNotMergeable) || !errors.Is(err, ports.ErrMergeConflict) {
+		t.Fatalf("Merge = %v, want ErrNotMergeable and ErrMergeConflict", err)
+	}
+
+	refusalSays(t, err, "go.mod", "")
+
+	if after := h.item(t, it.ID); after.Position() != before.Position() || len(h.codehost.Merges()) != 0 {
+		t.Errorf("item moved to %+v, merges %v; want it waiting, nothing merged", after.Position(), h.codehost.Merges())
+	}
+}
+
+// expectConflictEvent fails unless events is one merge_conflict by the engine at station, whose
+// reason names app#7, its files and what to do.
+func expectConflictEvent(t *testing.T, events []domain.Event, station string) {
+	t.Helper()
+
+	if len(events) != 1 || events[0].Actor != domain.ActorEngine || events[0].Station != station {
+		t.Fatalf("merge_conflict events %+v, want one by the engine at %s", events, station)
+	}
+
+	reason, _ := events[0].Data["reason"].(string)
+	for _, want := range []string{prURL, "internal/engine/merge.go", "go.mod", "merge origin/main and resolve"} {
+		if !strings.Contains(reason, want) {
+			t.Errorf("merge_conflict reason %q, want it to say %q", reason, want)
 		}
 	}
 }
