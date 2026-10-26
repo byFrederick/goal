@@ -362,3 +362,30 @@ describe('cardState with a waiting reason', () => {
     expect(cardState(card({ state: 'queued', waiting: null }))).toEqual({ text: 'Waiting', tone: 'muted' });
   });
 });
+
+describe('open assemblies count toward no station', () => {
+  // An open assembly is a header over its parts: the board sends it beside the stations, never in one.
+  const open = {
+    id: 'item-asm',
+    state: 'assembly',
+    parts: { total: 5, merged: 3, in_progress: 1, waiting: 1, stations: ['build'] },
+  } as ItemCard;
+  const build = station({
+    id: 'build',
+    wip_limit: 3,
+    in_progress: 1,
+    waiting: 2,
+    items: [card({ state: 'in_progress' })],
+  });
+  const inbox = station({ id: 'inbox', kind: 'queue', waiting: 4 });
+  const plain = { stations: [inbox, build], constraint: 'build' };
+  const withOpen = { ...plain, assemblies: [open] };
+
+  it('leaves the stations’ loads, counts and the station the phone opens on as they are', () => {
+    expect(firstStation(withOpen)).toBe(firstStation(plain));
+    expect(stationStat(build)).toBe('1 of 3, 2 ready');
+    expect(columnCount(build)).toBe('1 of 3');
+    expect(stationMeter(build)).toEqual({ value: 1, max: 3, tone: 'run' });
+    expect(stationStat(inbox)).toBe('4 waiting');
+  });
+});

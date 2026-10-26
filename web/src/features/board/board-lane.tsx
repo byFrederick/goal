@@ -3,7 +3,7 @@
 // or waiting on a person) and the items queued for it as waiting rows. A card names its lane in
 // board_lane; one that matches no lane sits in an untitled lane at the foot. A queue or done
 // station has no lanes and lists its items as cards, as before.
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import type { BoardLane, BoardStation, ItemCard } from '../../api/types';
 import { useFactory } from '../../shared/factory';
 import { formatAge } from '../../shared/format';
@@ -13,6 +13,7 @@ import { holds } from '../../shared/permissions';
 import { cn } from '../../ui/cn';
 import { StatusIcon } from '../../ui/status-icon';
 import {
+  AssemblyHeader,
   AssemblyLine,
   BoardCard,
   type CardDrag,
@@ -23,7 +24,11 @@ import {
   TouchCount,
 } from './board-card';
 import { DraggableCard } from './board-dnd';
+import { type OpenAssembly, runsOf } from './board-filters';
 import { cardState, isExpedite, type PlanSegment, planSegments } from './stats';
+
+/** The open assemblies to head their grouped parts with, by id; undefined when the cards are not grouped. */
+export type OpenAssemblies = ReadonlyMap<string, OpenAssembly>;
 
 /** Opens the Move menu for an item. */
 type OnMove = ((item: ItemCard) => void) | undefined;
@@ -42,14 +47,42 @@ function Movable({
 }
 
 /**
+ * A list of cards, each run of one assembly's parts after its header when the cards are grouped and
+ * the assembly is open. A part of no open assembly keeps its assembly line (`headed` is false).
+ */
+function Runs({
+  items,
+  headers,
+  compact,
+  render,
+}: {
+  items: ItemCard[];
+  headers: OpenAssemblies | undefined;
+  compact: boolean;
+  render: (item: ItemCard, headed: boolean) => ReactNode;
+}) {
+  return runsOf(items).map((run) => {
+    const assembly = run.assembly === undefined ? undefined : headers?.get(run.assembly);
+    return (
+      <Fragment key={`${run.assembly ?? 'none'}-${run.items[0]?.id}`}>
+        {assembly ? <AssemblyHeader assembly={assembly} compact={compact} /> : null}
+        {run.items.map((it) => render(it, assembly !== undefined))}
+      </Fragment>
+    );
+  });
+}
+
+/**
  * A station's items. Without lanes (a queue or done station) they are cards, as before; with lanes
- * they are grouped under their lane, and any item no lane claims at the foot.
+ * they are grouped under their lane, and any item no lane claims at the foot. `headers` (the open
+ * assemblies, when the cards are grouped by assembly) head the runs of their parts.
  */
 export function StationBody({
   station,
   onMove,
   draggable,
   compact = false,
+  headers,
 }: {
   station: BoardStation;
   onMove: OnMove;
@@ -57,14 +90,22 @@ export function StationBody({
   draggable: boolean;
   /** The phone's layout: 44 px Move buttons and the list rows, in lanes and without them. */
   compact?: boolean;
+  headers?: OpenAssemblies | undefined;
 }) {
   const lanes = station.lanes ?? [];
   if (lanes.length === 0) {
-    return station.items.map((it) => (
-      <Movable key={it.id} item={it} draggable={draggable}>
-        {(drag) => <BoardCard item={it} onMove={onMove && (() => onMove(it))} drag={drag} compact={compact} />}
-      </Movable>
-    ));
+    return (
+      <Runs
+        items={station.items}
+        headers={headers}
+        compact={compact}
+        render={(it) => (
+          <Movable key={it.id} item={it} draggable={draggable}>
+            {(drag) => <BoardCard item={it} onMove={onMove && (() => onMove(it))} drag={drag} compact={compact} />}
+          </Movable>
+        )}
+      />
+    );
   }
 
   const keys = new Set(lanes.map((lane) => lane.key));
@@ -79,9 +120,12 @@ export function StationBody({
           onMove={onMove}
           draggable={draggable}
           compact={compact}
+          headers={headers}
         />
       ))}
-      {unclaimed.length > 0 ? <Lane items={unclaimed} onMove={onMove} draggable={draggable} compact={compact} /> : null}
+      {unclaimed.length > 0 ? (
+        <Lane items={unclaimed} onMove={onMove} draggable={draggable} compact={compact} headers={headers} />
+      ) : null}
     </>
   );
 }
@@ -93,6 +137,7 @@ function Lane({
   onMove,
   draggable,
   compact,
+  headers,
 }: {
   /** Undefined for the untitled lane of cards no lane claims. */
   lane?: BoardLane;
@@ -100,6 +145,7 @@ function Lane({
   onMove: OnMove;
   draggable: boolean;
   compact: boolean;
+  headers?: OpenAssemblies | undefined;
 }) {
   const decides = holds(useFactory(), 'item:decide');
   const working = items.filter(
@@ -113,26 +159,44 @@ function Lane({
     >
       {lane ? <LaneHeader lane={lane} /> : null}
       {items.length === 0 ? <p className="m-0 px-1 pb-1 text-[13px] text-muted">Nothing to do</p> : null}
-      {working.map((it) => (
-        <Movable key={it.id} item={it} draggable={draggable}>
-          {(drag) => (
-            <WorkCard item={it} decides={decides} onMove={onMove && (() => onMove(it))} drag={drag} compact={compact} />
-          )}
-        </Movable>
-      ))}
-      {waiting.map((it) => (
-        <Movable key={it.id} item={it} draggable={draggable}>
-          {(drag) => (
-            <WaitingRow
-              item={it}
-              decides={decides}
-              onMove={onMove && (() => onMove(it))}
-              drag={drag}
-              compact={compact}
-            />
-          )}
-        </Movable>
-      ))}
+      <Runs
+        items={working}
+        headers={headers}
+        compact={compact}
+        render={(it, headed) => (
+          <Movable key={it.id} item={it} draggable={draggable}>
+            {(drag) => (
+              <WorkCard
+                item={it}
+                decides={decides}
+                onMove={onMove && (() => onMove(it))}
+                drag={drag}
+                compact={compact}
+                headed={headed}
+              />
+            )}
+          </Movable>
+        )}
+      />
+      <Runs
+        items={waiting}
+        headers={headers}
+        compact={compact}
+        render={(it, headed) => (
+          <Movable key={it.id} item={it} draggable={draggable}>
+            {(drag) => (
+              <WaitingRow
+                item={it}
+                decides={decides}
+                onMove={onMove && (() => onMove(it))}
+                drag={drag}
+                compact={compact}
+                headed={headed}
+              />
+            )}
+          </Movable>
+        )}
+      />
     </section>
   );
 }
@@ -201,12 +265,15 @@ function WorkCard({
   onMove,
   drag,
   compact,
+  headed,
 }: {
   item: ItemCard;
   decides: boolean;
   onMove: (() => void) | undefined;
   drag: CardDrag | undefined;
   compact: boolean;
+  /** Under its assembly's header, so no assembly line. */
+  headed: boolean;
 }) {
   const expedite = isExpedite(item);
   const doing = cardState(item, decides);
@@ -229,7 +296,7 @@ function WorkCard({
         <span>{item.ref}</span>
         <span className="whitespace-nowrap">{formatAge(item.age_seconds)}</span>
       </div>
-      <AssemblyLine item={item} />
+      {headed ? null : <AssemblyLine item={item} />}
       <CardTitle item={item} compact={compact} describedBy={drag?.describedBy} movable={Boolean(onMove)} />
       <div className="flex items-end gap-2">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -292,12 +359,15 @@ function WaitingRow({
   onMove,
   drag,
   compact,
+  headed,
 }: {
   item: ItemCard;
   decides: boolean;
   onMove: (() => void) | undefined;
   drag: CardDrag | undefined;
   compact: boolean;
+  /** Under its assembly's header, so no assembly line. */
+  headed: boolean;
 }) {
   const reason = cardState(item, decides);
   const status = itemStatus(item);
@@ -323,7 +393,7 @@ function WaitingRow({
       {expedite ? <ExpediteMark /> : null}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-xs text-muted tabular-nums">{item.ref}</span>
-        <AssemblyLine item={item} />
+        {headed ? null : <AssemblyLine item={item} />}
         <CardTitle item={item} compact={compact} describedBy={drag?.describedBy} movable={Boolean(onMove)} />
         <span className={cn('flex min-w-0 items-center gap-1.5 text-xs', toneText[reason.tone])} title={reason.text}>
           {status ? <StatusIcon status={status} /> : null}

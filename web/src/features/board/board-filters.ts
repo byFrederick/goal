@@ -2,7 +2,7 @@
 // Agent role and Status choices offer, which cards they keep, and how a station's cards group by
 // assembly. The choices live in the board route's search params (assembly, role, status, group),
 // so a link reproduces the view. Nothing here reads a station or factory name.
-import type { Board, BoardStation, ItemCard } from '../../api/types';
+import type { Board, BoardStation, ItemCard, PartsSummary } from '../../api/types';
 import { itemStatus } from '../../shared/item-state';
 import type { StatusKind } from '../../ui/status-icon';
 
@@ -28,16 +28,34 @@ export interface AssemblyOption {
   title: string;
 }
 
+/** An open assembly, headed over its grouped parts: its ref, its title and where its parts stand. */
+export interface OpenAssembly {
+  id: string;
+  ref: string;
+  title: string;
+  parts: PartsSummary;
+}
+
+/** The board's open assemblies by id. Only these get a header; the others keep their assembly line. */
+export function openAssemblies(board: Board): Map<string, OpenAssembly> {
+  const open = new Map<string, OpenAssembly>();
+  for (const a of board.assemblies) {
+    if (a.parts) open.set(a.id, { id: a.id, ref: a.ref, title: a.title, parts: a.parts });
+  }
+  return open;
+}
+
 function allItems(board: Board): ItemCard[] {
   return board.stations.flatMap((s) => s.items);
 }
 
-/** Each assembly on the board, by title: from the PartOf of its parts and from the assembly's own card. */
+/** Each assembly on the board, by title: the open ones and those of the parts on the board. */
 export function assemblyOptions(board: Board): AssemblyOption[] {
   const byId = new Map<string, AssemblyOption>();
+  for (const a of board.assemblies) byId.set(a.id, { id: a.id, title: a.title });
   for (const it of allItems(board)) {
-    const assembly = it.assembly ?? (it.state === 'assembly' ? { id: it.id, title: it.title } : undefined);
-    if (assembly && !byId.has(assembly.id)) byId.set(assembly.id, { id: assembly.id, title: assembly.title });
+    if (it.assembly && !byId.has(it.assembly.id))
+      byId.set(it.assembly.id, { id: it.assembly.id, title: it.assembly.title });
   }
   return [...byId.values()].sort((a, b) => a.title.localeCompare(b.title));
 }
@@ -74,16 +92,15 @@ function matches(station: BoardStation, item: ItemCard, view: BoardView): boolea
 }
 
 /**
- * The cards of one station grouped by assembly: each assembly's cards together in part order (an
- * assembly's own card first), the assemblies in the order of their first card, then the cards of no
- * assembly in their own order. A lane keeps this order, so its working cards and waiting rows stay
- * in it too.
+ * The cards of one station grouped by assembly: each assembly's parts together in part order, the
+ * assemblies in the order of their first part, then the cards of no assembly in their own order.
+ * A lane keeps this order, so its working cards and waiting rows stay in it too.
  */
 export function groupByAssembly(items: ItemCard[]): ItemCard[] {
   const groups = new Map<string, ItemCard[]>();
   const loose: ItemCard[] = [];
   for (const it of items) {
-    const key = it.assembly?.id ?? (it.state === 'assembly' ? it.id : undefined);
+    const key = it.assembly?.id;
     if (key === undefined) {
       loose.push(it);
       continue;
@@ -96,6 +113,24 @@ export function groupByAssembly(items: ItemCard[]): ItemCard[] {
     members.sort((a, b) => (a.assembly?.part ?? 0) - (b.assembly?.part ?? 0)),
   );
   return [...grouped, ...loose];
+}
+
+/** A run of consecutive cards of one assembly (undefined: of none), in the order a list keeps them. */
+export interface Run {
+  assembly: string | undefined;
+  items: ItemCard[];
+}
+
+/** A list split into its runs of one assembly: a header goes over each run of an open assembly. */
+export function runsOf(items: ItemCard[]): Run[] {
+  const runs: Run[] = [];
+  for (const it of items) {
+    const assembly = it.assembly?.id;
+    const last = runs.at(-1);
+    if (last && last.assembly === assembly) last.items.push(it);
+    else runs.push({ assembly, items: [it] });
+  }
+  return runs;
 }
 
 /**

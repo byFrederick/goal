@@ -29,10 +29,11 @@ import {
   assemblyOptions,
   type BoardView,
   knownView,
+  openAssemblies,
   roleOptions,
   statusChoices,
 } from './board-filters';
-import { StationBody } from './board-lane';
+import { type OpenAssemblies, StationBody } from './board-lane';
 import {
   budgetNote,
   columnCount,
@@ -187,8 +188,8 @@ function PhoneTouchesLink() {
   );
 }
 
-function Columns({ board, onMove }: { board: Board; onMove: OnMove }) {
-  const columns = <ColumnGrid board={board} onMove={onMove} />;
+function Columns({ board, onMove, headers }: { board: Board; onMove: OnMove; headers: OpenAssemblies | undefined }) {
+  const columns = <ColumnGrid board={board} onMove={onMove} headers={headers} />;
   // Cards are dragged only by someone who may move them.
   return onMove ? (
     <CardDnd board={board} onDrop={onMove}>
@@ -199,7 +200,7 @@ function Columns({ board, onMove }: { board: Board; onMove: OnMove }) {
   );
 }
 
-function ColumnGrid({ board, onMove }: { board: Board; onMove: OnMove }) {
+function ColumnGrid({ board, onMove, headers }: { board: Board; onMove: OnMove; headers: OpenAssemblies | undefined }) {
   const decides = holds(useFactory(), 'item:decide');
   return (
     <section aria-label="Stations" className="-mx-1 hidden overflow-x-auto px-1 pb-2 md:block">
@@ -234,7 +235,7 @@ function ColumnGrid({ board, onMove }: { board: Board; onMove: OnMove }) {
               {!s.lanes?.length && s.items.length === 0 ? (
                 <p className="m-0 px-1 pb-1 text-[13px] text-muted">Empty</p>
               ) : null}
-              <StationBody station={s} onMove={onMove} draggable={Boolean(onMove)} />
+              <StationBody station={s} onMove={onMove} draggable={Boolean(onMove)} headers={headers} />
             </DropColumn>
           );
         })}
@@ -249,11 +250,13 @@ function StationTabs({
   selected,
   onMove,
   rateOf,
+  headers,
 }: {
   board: Board;
   selected: string;
   onMove: OnMove;
   rateOf: RateOf;
+  headers: OpenAssemblies | undefined;
 }) {
   const navigate = useNavigate({ from: '/o/$org/f/$factory/board' });
   const list = useRef<HTMLDivElement>(null);
@@ -326,7 +329,7 @@ function StationTabs({
               {!s.lanes?.length && s.items.length === 0 ? (
                 <p className="m-0 text-sm text-muted">Nothing here right now.</p>
               ) : null}
-              <StationBody station={s} onMove={onMove} draggable={false} compact />
+              <StationBody station={s} onMove={onMove} draggable={false} compact headers={headers} />
             </section>
           </Tabs.Content>
         );
@@ -465,6 +468,8 @@ export function BoardPage() {
   const shown = arrangeBoard(board, view);
   const changeView = (change: BoardView) =>
     navigate({ search: (prev) => ({ ...prev, ...change }), replace: true, resetScroll: false });
+  // Grouped by assembly, each open assembly heads its parts; ungrouped, the parts keep their assembly line.
+  const headers = view.group === 'assembly' ? openAssemblies(board) : undefined;
   const expedite = expediteHeader(board.line, board.stations.flatMap((s) => s.items).filter(isExpedite).length);
   // The phone's status line: the line, its WIP and the week's touches per item, in one truncated line.
   const headline = board.line.touches;
@@ -529,8 +534,8 @@ export function BoardPage() {
         <LineCard board={board} decides={holds(factory, 'item:decide')} rateOf={rateOf} expedite={expedite} />
       </div>
       <FilterRow board={board} view={view} onChange={changeView} />
-      <Columns board={shown} onMove={onMove} />
-      <StationTabs board={shown} selected={selected} onMove={onMove} rateOf={rateOf} />
+      <Columns board={shown} onMove={onMove} headers={headers} />
+      <StationTabs board={shown} selected={selected} onMove={onMove} rateOf={rateOf} headers={headers} />
       {onMove ? (
         <>
           <p className="m-0 hidden text-[13px] text-muted md:block">

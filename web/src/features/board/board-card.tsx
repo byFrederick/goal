@@ -8,6 +8,7 @@ import { pullRequestLabel, toneText } from '../../shared/item-state';
 import { isMoveShortcut, MoveButton, moveShortcut } from '../../shared/move-menu';
 import { holds } from '../../shared/permissions';
 import { cn } from '../../ui/cn';
+import type { OpenAssembly } from './board-filters';
 import { cardState, isExpedite } from './stats';
 
 /** What the board's drag and drop attaches to a card (columns only; phones move by the button). */
@@ -193,6 +194,35 @@ export function AssemblyLine({ item }: { item: Pick<ItemCard, 'assembly'> }) {
         › {assembly.part} of {assembly.parts}
       </span>
     </Link>
+  );
+}
+
+/**
+ * An open assembly's header over its grouped parts: "Migrate billing · 3 of 5 merged", linking to the
+ * assembly's item page. It is no card: it counts nowhere and cannot be dragged. The phone's is 44 px tall.
+ */
+export function AssemblyHeader({ assembly, compact }: { assembly: OpenAssembly; compact: boolean }) {
+  const params = useFactoryParams();
+  return (
+    <h3 className="m-0 flex min-w-0 px-1 text-[13px] font-medium">
+      <Link
+        to="/o/$org/f/$factory/items/$ref"
+        params={{ ...params, ref: refParam(assembly.ref) }}
+        draggable={false}
+        className={cn(
+          'flex min-w-0 flex-1 items-center gap-1.5 rounded-control text-ink no-underline hover:text-run',
+          'outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run',
+          compact ? 'min-h-11' : 'min-h-8',
+        )}
+      >
+        <span className="min-w-0 truncate" title={assembly.title}>
+          {assembly.title}
+        </span>
+        <span className="shrink-0 whitespace-nowrap text-muted tabular-nums">
+          · {assembly.parts.merged} of {assembly.parts.total} merged
+        </span>
+      </Link>
+    </h3>
   );
 }
 

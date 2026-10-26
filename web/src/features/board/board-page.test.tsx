@@ -513,4 +513,93 @@ describe('board filters and grouping', () => {
     expect(screen.getByRole('radio', { name: 'None' })).toHaveProperty('checked', true);
     expect(shownTitles()).toEqual([ADD, DRAFT, TRIAGE, WIRE, ROTATE, SHIP]);
   });
+
+  /** An open assembly on the board: "PWA" (sre#50), 3 of its 5 parts merged; its own card is in no station. */
+  const PWA = item({
+    id: 'item-50',
+    ref: 'sre#50',
+    title: 'PWA',
+    state: 'assembly',
+    parts: { total: 5, merged: 3, in_progress: 1, waiting: 1, stations: ['investigate'] },
+  });
+  const pwaPartOf = (n: number) => ({ id: 'item-50', ref: 'sre#50', title: 'PWA', part: n, parts: 5 });
+
+  /** Whether `later` comes after `earlier` in the document. */
+  const follows = (earlier: Element, later: Element) =>
+    (earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+
+  it('shows an open assembly as a header over its grouped parts, and in no station column', async () => {
+    const parts = [
+      item({
+        id: 'item-51',
+        ref: 'sre#51',
+        title: ADD,
+        state: 'in_progress',
+        agent: 'investigator',
+        slot: 1,
+        turn: 2,
+        board_lane: 'investigator',
+        assembly: pwaPartOf(4),
+      }),
+      item({ id: 'item-52', ref: 'sre#52', title: WIRE, board_lane: 'investigator', assembly: pwaPartOf(5) }),
+    ];
+    const board: Board = {
+      ...filterBoard(),
+      stations: [station({ id: 'investigate', lanes: [lane({})], items: parts, in_progress: 1, wip_limit: 2 })],
+      assemblies: [PWA],
+    };
+    renderBoardPage({ page: BoardPage, org, factory, board, search: { group: 'assembly' } });
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+
+    // The working card and the waiting row sit in different runs, so each has its own header.
+    const headers = within(columns).getAllByRole('link', { name: /3 of 5 merged/ });
+    expect(headers).toHaveLength(2);
+    for (const header of headers) {
+      expect(header.textContent).toBe('PWA· 3 of 5 merged');
+      expect(header.getAttribute('href')).toBe('/o/acme/f/sre/items/50');
+    }
+    expect(shownTitles(columns)).toEqual([ADD, WIRE]);
+    expect(within(columns).queryAllByRole('link', { name: /^Part \d+ of 5 of PWA$/ })).toHaveLength(0);
+    // Each header comes before the run it heads: the working card, then the waiting row.
+    const [addCard, wireCard] = within(columns).getAllByRole('article');
+    const [workingHeader, waitingHeader] = headers;
+    expect(workingHeader && addCard && follows(workingHeader, addCard)).toBe(true);
+    expect(waitingHeader && wireCard && follows(waitingHeader, wireCard)).toBe(true);
+  });
+
+  it('shows a done assembly as a normal card in the Done column', async () => {
+    const done = item({ id: 'item-60', ref: 'sre#60', title: 'Billing migration', state: 'done', station: 'done' });
+    const board: Board = {
+      ...filterBoard(),
+      stations: [
+        station({ id: 'investigate', items: [] }),
+        station({ id: 'done', kind: 'done', items: [done], done_today: 1 }),
+      ],
+      assemblies: [],
+    };
+    renderBoardPage({ page: BoardPage, org, factory, board, search: { group: 'assembly' } });
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    expect(shownTitles(within(columns).getByRole('region', { name: 'Done' }))).toEqual(['Billing migration']);
+    expect(within(columns).queryAllByRole('link', { name: /merged/ })).toHaveLength(0);
+  });
+
+  it('shows the same header over the grouped parts in the phone’s picked station', async () => {
+    const part = item({
+      id: 'item-52',
+      ref: 'sre#52',
+      title: WIRE,
+      board_lane: 'investigator',
+      assembly: pwaPartOf(5),
+    });
+    const board: Board = {
+      ...filterBoard(),
+      stations: [station({ id: 'investigate', lanes: [lane({})], items: [part], in_progress: 0, wip_limit: 2 })],
+      assemblies: [PWA],
+    };
+    renderBoardPage({ page: BoardPage, org, factory, board, search: { group: 'assembly', station: 'investigate' } });
+    const panel = await screen.findByRole('tabpanel');
+    const header = within(panel).getByRole('link', { name: /3 of 5 merged/ });
+    expect(header.getAttribute('href')).toBe('/o/acme/f/sre/items/50');
+    expect(shownTitles(panel)).toEqual([WIRE]);
+  });
 });
