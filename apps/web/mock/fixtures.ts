@@ -703,7 +703,7 @@ const goalSeeds: Seed[] = [
     },
     steps: [
       { move: 'spec' },
-      specRun([['Read', 'design-system/goal/MASTER.md', 'Read 230 lines']], 0.29, 7),
+      specRun([['Read', 'docs/design/MASTER.md', 'Read 230 lines']], 0.29, 7),
       { move: 'approve-spec' },
       { waiting: true },
       { human: 'approved', by: 'fcruz' },

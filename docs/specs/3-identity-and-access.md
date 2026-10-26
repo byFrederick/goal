@@ -902,7 +902,7 @@ As built (3-13): `goal login` remembers either store as `credential_store` (keyc
 
 ### 10.2 Boards for the designer
 
-Every board follows `design-system/goal/MASTER.md`, desktop 1440 and phone 375. Copy below is the content; exact layout is the designer's.
+Every board follows `docs/design/MASTER.md`, desktop 1440 and phone 375. Copy below is the content; exact layout is the designer's.
 
 **Sign-In** (`Sign-In.dc.html`, no rail; centered card on the app background)
 - Goal wordmark; h1 "Sign in to Goal"; field "Email" (placeholder `you@example.com`); primary "Email me a code"; divider "or"; secondary "Continue with Google" (only when enabled); note "Goal is invite-only. Ask an owner of your organization to invite you."

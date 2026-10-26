@@ -23,8 +23,8 @@ compose.yaml           local PostgreSQL 18 with pgvector, RustFS (S3-compatible 
 apps/worker/           agent container images (TypeScript, Claude Agent SDK): runtime and dev (Go, task, Terraform, PostgreSQL)
 apps/web/              UI (React)
 deploy/terraform/      the platform's own Cloudflare infrastructure: R2 bucket, DNS, Worker route, Secrets Store secrets
-design-system/         UI rules generated with ui-ux-pro-max, plus the user's overrides (MASTER.md)
 docs/adr/              decisions (0001 stack, 0002 Jonah evals, 0003 hexagonal architecture, 0004 frontend, 0005 definitions in object storage, 0006 workspaces and command checks)
+docs/design/           the UI's design system (MASTER.md, generated with ui-ux-pro-max and then edited by the user)
 docs/engineering/      architecture and testing rules
 docs/jonah/            evaluation and self-remediation plan
 AGENTS.md              the index of rules for every agent and human (CLAUDE.md imports it)
@@ -122,7 +122,7 @@ Goal then opens from its own icon, full screen, and keeps the phone's status bar
 | `deploy/terraform/`, `.sops.yaml` | `tf:check` |
 | `tools/layoutcheck/` | the Go checks and `layout:check` |
 | `AGENTS.md`, `docs/adr/0013-repository-layout.md`, `.claude/rules/` (what `tools/layoutcheck` compares with the tracked files) | `layout:check` |
-| the rest of `docs/`, `design-system/`, the rest of `.claude/`, `.github/`, `.githooks/`, other root `*.md`, `skills-lock.json` | nothing |
+| the rest of `docs/`, the rest of `.claude/`, `.github/`, `.githooks/`, other root `*.md`, `skills-lock.json` | nothing |
 
 Shared files run everything and say which file did: `go.mod`, `go.sum`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `Taskfile.yml`, `.golangci.yml`, the mise config, `contracts/`. So does any path no rule knows, and a `BASE` that is missing or shares no history with `HEAD` (a shallow clone). Any other git failure fails the task: it never passes with an empty plan. When `db/migrations/` or `apps/auth/` changed it notes that `task migrate-check` also applies; it does not run it. The pre-push hook still runs the whole `task check`.
 

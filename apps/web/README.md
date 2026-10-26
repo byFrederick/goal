@@ -1,6 +1,6 @@
 # web
 
-The Goal UI: the Floor, the Board and the Item screens of a factory, on desktop and phone. React 19, Vite, TypeScript strict, TanStack Router and Query, Tailwind v4 with the tokens of `design-system/goal/MASTER.md`, Radix primitives. Built static and embedded into goald (`task build`); the same build can go to Vercel with `VITE_API_URL` pointing at goald once goald allows that origin.
+The Goal UI: the Floor, the Board and the Item screens of a factory, on desktop and phone. React 19, Vite, TypeScript strict, TanStack Router and Query, Tailwind v4 with the tokens of `docs/design/MASTER.md`, Radix primitives. Built static and embedded into goald (`task build`); the same build can go to Vercel with `VITE_API_URL` pointing at goald once goald allows that origin.
 
 ```bash
 task web:dev                 # http://localhost:5173, /v1 proxied to goald on 127.0.0.1:8080
@@ -22,4 +22,4 @@ task build                   # this app, then goald with it embedded (go build -
 | `e2e/` | Playwright: critical flows and accessibility. |
 | `webui.go`, `dist_*.go`, `placeholder/` | Go package `web`: goald serves the build (or the placeholder without `-tags webui`). |
 
-Read `docs/engineering/frontend.md` before changing anything here, and follow `design-system/goal/MASTER.md` exactly: no hex values in components (tokens only, the default Tailwind palette is cleared), amber only for the constraint, violet only for waiting on you, rust only for rework, no gradients.
+Read `docs/engineering/frontend.md` before changing anything here, and follow `docs/design/MASTER.md` exactly: no hex values in components (tokens only, the default Tailwind palette is cleared), amber only for the constraint, violet only for waiting on you, rust only for rework, no gradients.

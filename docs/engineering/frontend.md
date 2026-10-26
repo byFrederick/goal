@@ -21,7 +21,7 @@ goal/
   packages/
     contracts/                 generated: TS types from contracts/api/openapi.yaml and contracts/definitions/*.json
     api-client/                typed fetch client (openapi-fetch), errors as Problem, SSE subscription
-    ui/                        design system: tokens from design-system/goal/MASTER.md + shadcn/Radix components
+    ui/                        design system: tokens from docs/design/MASTER.md + shadcn/Radix components
     config/                    shared tsconfig, Biome config, Vitest preset
 ```
 
