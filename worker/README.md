@@ -40,11 +40,11 @@ goald creates one sandbox per run (`ports.Sandboxes`) and execs, in order:
 | `/goal/spec.json` | the task, without secrets (below) |
 | `/goal/agent/prompt.md` | the agent's prompt, appended to Claude Code's system prompt |
 | `/goal/agent/skills/<name>/SKILL.md` | one folder per skill that ships in the factory, with its other files |
-| `/goal/agent/output.schema.json` | the station's output contract (JSON Schema, without `$schema`), only when the station has one |
+| `/goal/agent/output.schema.json` | the station's output contract (JSON Schema, without `$schema`), only when the station has one; for a part (ADR 0012) without the `plan` property and its `required` entry, since a part never plans an assembly |
 | `/workspace` | the factory's repository on the item's branch, or empty; the agent's working directory |
 | `/home/node` | `HOME`: Claude Code's config dir (`.claude`), mise's global config, git's credential helpers |
 
-`GOAL_FEEDBACK` is what goald adds to the brief for one attempt: the notes people left and, on a retry in the same sandbox, why the previous attempt was rejected. The worker puts it right after the brief. `GOAL_GATEWAY_TOKEN` is removed from the agent's own environment (the token reaches the gateway only as a header); everything else goald gave the exec is the agent's, its connections' credentials included (spec 4 §11.3).
+`GOAL_FEEDBACK` is what goald adds to the brief for one attempt: for a part, an `## Assembly` section naming its assembly (ref and title), its key, the other parts with their state, the parts it needs and that a part returns a spec, never a plan; the notes people left; on a retry in the same sandbox, why the previous attempt was rejected; and what the workspace holds. The worker puts it right after the brief. `GOAL_GATEWAY_TOKEN` is removed from the agent's own environment (the token reaches the gateway only as a header); everything else goald gave the exec is the agent's, its connections' credentials included (spec 4 §11.3).
 
 ### prepare and the run bundle
 

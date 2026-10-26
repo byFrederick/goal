@@ -2,8 +2,11 @@ package engine_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/byFrederick/goal/internal/domain"
@@ -13,6 +16,7 @@ import (
 
 const (
 	agArchitect = "architect"
+	testFactory = "acme-api"
 	keyStore    = "store"
 	// plan is a station output that splits its item in three: api and web both need store.
 	plan = `{"lane":"data","plan":[
@@ -225,6 +229,133 @@ func TestAssemble_PartPlanIsBlocked(t *testing.T) {
 		ev := h.eventsOf(p.ID, domain.EventBlocked)
 		if len(ev) != 1 || ev[0].Data["reason"] != "a part cannot plan an assembly" {
 			t.Errorf("part %s blocked events %+v, want one saying a part cannot plan an assembly", p.PartKey, ev)
+		}
+	}
+}
+
+// A part's agent hears which assembly it serves: the assembly's ref and title, the part's key,
+// the other parts with their state, what it needs and that a part returns a spec, never a plan.
+// An item that is not a part hears none of it.
+func TestAssemble_PartRunInputNamesItsAssembly(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, planLine(true), porttest.Succeed(plan))
+	it := h.submit(t, domain.NewItem{Title: "Ship the report"})
+
+	h.step(t) // the item plans its assembly
+	h.step(t) // store, the part that needs none, runs spec
+
+	runs := h.worker.Runs()
+	if len(runs) != 2 {
+		t.Fatalf("%d runs, want the item's and store's", len(runs))
+	}
+
+	if f := h.feedback(0); strings.Contains(f, "## Assembly") {
+		t.Errorf("the planning item's feedback has an assembly section:\n%s", f)
+	}
+
+	ref := func(n int64) string { return domain.ItemRef{Factory: testFactory, Number: n}.String() }
+	want := []string{
+		"## Assembly", "part `store` of assembly " + ref(it.Number) + ", \"Ship the report\"",
+		"needs no other part", "A part returns a spec, never a plan",
+	}
+
+	for _, p := range h.parts(t, it.ID).Items {
+		if p.PartKey == keyStore {
+			if runs[1].Sandbox.ItemID != p.ID {
+				t.Fatalf("second run is of %s, want store's", runs[1].Sandbox.ItemID)
+			}
+
+			continue
+		}
+
+		want = append(want, fmt.Sprintf("- `%s` %s %q: %s", p.PartKey, ref(p.Number), p.Title, domain.StateQueued))
+	}
+
+	f := h.feedback(1)
+	for _, w := range want {
+		if !strings.Contains(f, w) {
+			t.Errorf("store's feedback lacks %q:\n%s", w, f)
+		}
+	}
+}
+
+// A part that needs others hears their keys once they are done and it runs.
+func TestAssemble_PartRunInputNamesItsNeeds(t *testing.T) {
+	t.Parallel()
+
+	ok := func(out string) domain.RunResult {
+		return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(out)}
+	}
+	h := newHarness(t, planLine(true), porttest.Sequence(ok(plan), ok(`{"lane":"backend"}`)))
+	it := h.submit(t, domain.NewItem{})
+
+	h.step(t) // the item plans its assembly
+
+	var api domain.Item
+
+	for _, p := range h.parts(t, it.ID).Items {
+		if p.PartKey == "api" {
+			api = p
+		}
+	}
+
+	for range 6 { // store runs spec and build; then api runs spec
+		h.step(t)
+	}
+
+	i := slices.IndexFunc(h.worker.Runs(), func(c porttest.ExecCall) bool { return c.Sandbox.ItemID == api.ID })
+	if i < 0 {
+		t.Fatalf("api never ran (events %v)", h.kinds(api.ID))
+	}
+
+	if f := h.feedback(i); !strings.Contains(f, "This part needs `store`.") {
+		t.Errorf("api's feedback lacks its need:\n%s", f)
+	}
+}
+
+// partsDown is a store whose Parts fails once the assembly has parts.
+type partsDown struct{ ports.Store }
+
+var errPartsDown = errors.New("parts unavailable")
+
+func (s partsDown) Parts(ctx context.Context, id domain.ItemID) (domain.Parts, error) {
+	parts, err := s.Store.Parts(ctx, id)
+	if err == nil && parts.Total > 0 {
+		return domain.Parts{}, errPartsDown
+	}
+
+	return parts, err
+}
+
+// A part whose assembly cannot be read is blocked with the reason; it never runs without it.
+func TestAssemble_PartWithoutItsAssemblyIsBlocked(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, planLine(true), porttest.Succeed(plan))
+	h.e = h.engine(t, partsDown{Store: h.store})
+	it := h.submit(t, domain.NewItem{})
+
+	h.step(t) // the item plans its assembly
+	h.step(t) // store is claimed, but its assembly cannot be read
+
+	if n := len(h.worker.Runs()); n != 1 {
+		t.Errorf("%d runs, want only the item's", n)
+	}
+
+	parts, err := h.store.Parts(inOrg(t), it.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, p := range parts.Items {
+		if p.PartKey != keyStore {
+			continue
+		}
+
+		ev := h.eventsOf(p.ID, domain.EventBlocked)
+		if len(ev) != 1 || !strings.Contains(fmt.Sprint(ev[0].Data["reason"]), errPartsDown.Error()) {
+			t.Errorf("store %s, blocked events %+v; want blocked saying %q", h.item(t, p.ID).State, ev, errPartsDown)
 		}
 	}
 }

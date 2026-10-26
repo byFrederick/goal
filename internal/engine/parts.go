@@ -143,3 +143,67 @@ func clip(slug string, n int) string {
 
 	return strings.TrimRight(slug, "-")
 }
+
+// assemblyNote tells a part's agent which assembly it serves (ADR 0012): the assembly's ref and
+// title, the part's key, the other parts in plan order with their state, the parts it needs and
+// that a part returns a spec, never a plan. It is empty for an item that is not a part.
+func (e *Engine) assemblyNote(ctx context.Context, l domain.Line, it domain.Item) (string, error) {
+	if it.ParentID == "" {
+		return "", nil
+	}
+
+	a, err := e.store.Item(ctx, it.ParentID)
+	if err != nil {
+		return "", fmt.Errorf("read the assembly of part %s: %w", it.ID, err)
+	}
+
+	parts, err := e.store.Parts(ctx, it.ParentID)
+	if err != nil {
+		return "", fmt.Errorf("read the parts of assembly %s: %w", it.ParentID, err)
+	}
+
+	edges, err := e.store.Edges(ctx, it.ID)
+	if err != nil {
+		return "", fmt.Errorf("read the needs of part %s: %w", it.ID, err)
+	}
+
+	ref := func(n int64) string { return domain.ItemRef{Factory: l.Name, Number: n}.String() }
+	keys := make(map[domain.ItemID]string, len(parts.Items))
+
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "## Assembly\n\nThis item is part `%s` of assembly %s, %q: one of the parts it was split into, which ship together.",
+		it.PartKey, ref(a.Number), a.Title)
+
+	others := make([]string, 0, len(parts.Items))
+
+	for _, p := range parts.Items {
+		keys[p.ID] = p.PartKey
+
+		if p.ID != it.ID {
+			others = append(others, fmt.Sprintf("- `%s` %s %q: %s", p.PartKey, ref(p.Number), p.Title, p.State))
+		}
+	}
+
+	if len(others) > 0 {
+		fmt.Fprintf(&b, "\n\nThe other parts, in plan order:\n\n%s", strings.Join(others, "\n"))
+	}
+
+	var needs []string
+
+	for _, n := range edges.Needs {
+		if k, ok := keys[n.Needs]; ok && n.Kind == domain.EdgePlanned {
+			needs = append(needs, "`"+k+"`")
+		}
+	}
+
+	if len(needs) == 0 {
+		b.WriteString("\n\nThis part needs no other part.")
+	} else {
+		fmt.Fprintf(&b, "\n\nThis part needs %s.", strings.Join(needs, ", "))
+	}
+
+	b.WriteString("\n\nA part returns a spec, never a plan: do not split this part into parts, and leave the plan out of your output.")
+
+	return b.String(), nil
+}
