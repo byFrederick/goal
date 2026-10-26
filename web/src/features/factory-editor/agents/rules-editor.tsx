@@ -4,7 +4,7 @@
 // better than a rule. Each rule's text is read through the session, so the list shows what is
 // typed; delete saves the rules entry and the file in one agents save, with the file read first
 // so its undo can write it back. Read-only sessions show the list only.
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '../../../api/client';
 import type { ModelRule } from '../../../shared/definition/model';
@@ -13,29 +13,10 @@ import { Button } from '../../../ui/button';
 import { ConfirmDialog } from '../../../ui/confirm-dialog';
 import { EmptyState } from '../../../ui/empty-state';
 import { removeRule, ruleFile } from '../draft/ops';
-import { useDraft, useDraftSession, useSection, useViewOnly } from '../draft/use-draft';
+import { useDraftSession, useSection, useViewOnly } from '../draft/use-draft';
 import { useProblems } from '../frame/use-editor';
 import { RuleDialog } from './rule-dialog';
-
-/** The rule's text as the session has it: undefined while it loads, null when its file is missing or unreadable. */
-function useRuleText(name: string): string | null | undefined {
-  const session = useDraftSession();
-  const typed = useDraft((s) => s.files.get(ruleFile(name))?.text);
-  const [loaded, setLoaded] = useState<string | null>();
-
-  useEffect(() => {
-    let live = true;
-    session.fileText(ruleFile(name)).then(
-      (text) => live && setLoaded(text),
-      () => live && setLoaded(null),
-    );
-    return () => {
-      live = false;
-    };
-  }, [name, session]);
-
-  return typed ?? loaded;
-}
+import { useRuleText } from './use-rule-text';
 
 /** Whom the rule applies to, as the list says it: "Every agent", or the agents and the other kinds it names. */
 export function appliesLabel(scope: RuleScope | undefined, paths: string[] | undefined): string {

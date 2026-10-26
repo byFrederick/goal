@@ -1,5 +1,5 @@
 import { CircleCheck, CircleX } from 'lucide-react';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import type { ItemState } from '../../api/types';
 import { formatClock, formatDuration, formatUsd, humanize } from '../../shared/format';
 import { toneText } from '../../shared/item-state';
@@ -73,6 +73,19 @@ function RunBlock({ run, itemState }: { run: RunEntry; itemState: ItemState }) {
       {metaText ? (
         <p className="m-0 truncate text-[13px] text-muted" title={metaText}>
           {metaText}
+        </p>
+      ) : null}
+      {run.rules ? (
+        <p className="m-0 text-[13px] leading-snug text-muted">
+          Ran with rules:{' '}
+          {run.rules.map((rule, i) => (
+            <Fragment key={rule.name}>
+              {i > 0 ? ', ' : null}
+              <span translate="no" className="font-mono text-[12px] text-ink break-all">
+                {rule.name}
+              </span>
+            </Fragment>
+          ))}
         </p>
       ) : null}
       {run.tools.length > 0 ? (
