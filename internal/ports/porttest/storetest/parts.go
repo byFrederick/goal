@@ -12,12 +12,20 @@ import (
 	"github.com/byFrederick/goal/internal/ports"
 )
 
+// Part keys and the planning item's title the cases use.
+const (
+	keyAPI   = "api"
+	keyStore = "store"
+	keyWeb   = "web"
+	titleBig = "big request"
+)
+
 // plan is three parts: api first, then store and web, web also needing store.
 func plan() []domain.NewPart {
 	return []domain.NewPart{
-		{Key: "api", Title: "API", Lane: laneBackend, Brief: "the contract", Paths: []string{"api/openapi.yaml"}},
-		{Key: "store", Title: "Store", Brief: "the rows", Paths: []string{"queries/a.sql", "migrations/x.sql"}, Needs: []string{"api"}},
-		{Key: "web", Title: "Web", Brief: "the page", Needs: []string{"api", "store"}},
+		{Key: keyAPI, Title: "API", Lane: laneBackend, Brief: "the contract", Paths: []string{"api/openapi.yaml"}},
+		{Key: keyStore, Title: "Store", Brief: "the rows", Paths: []string{"queries/a.sql", "migrations/x.sql"}, Needs: []string{keyAPI}},
+		{Key: keyWeb, Title: "Web", Brief: "the page", Needs: []string{keyAPI, keyStore}},
 	}
 }
 
@@ -95,7 +103,7 @@ func testAssembleCreatesParts(f *fixture) {
 	t := f.t
 	ctx := f.ctx(t)
 
-	it, l := f.planning(t, domain.NewItem{Title: "big request", Type: "feature", Priority: 4, Class: domain.ClassExpedite})
+	it, l := f.planning(t, domain.NewItem{Title: titleBig, Type: "feature", Priority: 4, Class: domain.ClassExpedite})
 
 	a := assembly(it, l, plan())
 	a.Transition.Events = []domain.Event{{FactoryID: f.factory, ItemID: it.ID, At: t1, Kind: domain.EventMoved, Station: stWork, Actor: agWorker}}
@@ -111,7 +119,7 @@ func testAssembleCreatesParts(f *fixture) {
 		t.Errorf("Leases after Assemble = %+v; want the planning lease released", ls)
 	}
 
-	if got := keysOf(parts); !reflect.DeepEqual(got, []string{"api", "store", "web"}) || parts.Total != 3 || parts.Done != 0 {
+	if got := keysOf(parts); !reflect.DeepEqual(got, []string{keyAPI, keyStore, keyWeb}) || parts.Total != 3 || parts.Done != 0 {
 		t.Fatalf("Assemble parts = %v, %d/%d; want api, store, web and 0/3", got, parts.Done, parts.Total)
 	}
 
@@ -172,7 +180,7 @@ func testAssembleCreatesParts(f *fixture) {
 func testAssembleRetry(f *fixture) {
 	t := f.t
 
-	it, l := f.planning(t, domain.NewItem{Title: "big request"})
+	it, l := f.planning(t, domain.NewItem{Title: titleBig})
 	a := assembly(it, l, plan())
 
 	_, first := f.assemble(t, a)
@@ -201,13 +209,13 @@ func testAssembleRetry(f *fixture) {
 	}
 }
 
-// A malformed plan, a transition elsewhere than to state assembly, a part as parent and a plain
+// A malformed plan, a transition elsewhere than to state assembly, a lost lease and a plain
 // Transition to state assembly are refused, and nothing is written.
 func testAssembleRefused(f *fixture) {
 	t := f.t
 	ctx := f.ctx(t)
 
-	it, l := f.planning(t, domain.NewItem{Title: "big request"})
+	it, l := f.planning(t, domain.NewItem{Title: titleBig})
 	before := len(f.Events(t, it.ID))
 
 	with := func(edit func(p []domain.NewPart) []domain.NewPart) []domain.NewPart { return edit(plan()) }
@@ -218,13 +226,13 @@ func testAssembleRefused(f *fixture) {
 		want  error
 	}{
 		{"no parts", nil, domain.ErrInvalid},
-		{"duplicate key", with(func(p []domain.NewPart) []domain.NewPart { p[2].Key = "api"; return p }), domain.ErrInvalid},
+		{"duplicate key", with(func(p []domain.NewPart) []domain.NewPart { p[2].Key = keyAPI; return p }), domain.ErrInvalid},
 		{"no key", with(func(p []domain.NewPart) []domain.NewPart { p[0].Key = " "; return p }), domain.ErrInvalid},
 		{"no title", with(func(p []domain.NewPart) []domain.NewPart { p[1].Title = ""; return p }), domain.ErrInvalid},
 		{"unknown need", with(func(p []domain.NewPart) []domain.NewPart { p[1].Needs = []string{"db"}; return p }), domain.ErrInvalid},
-		{"need twice", with(func(p []domain.NewPart) []domain.NewPart { p[1].Needs = []string{"api", "api"}; return p }), domain.ErrInvalid},
-		{"cycle", with(func(p []domain.NewPart) []domain.NewPart { p[0].Needs = []string{"web"}; return p }), domain.ErrCycle},
-		{"needs itself", with(func(p []domain.NewPart) []domain.NewPart { p[0].Needs = []string{"api"}; return p }), domain.ErrCycle},
+		{"need twice", with(func(p []domain.NewPart) []domain.NewPart { p[1].Needs = []string{keyAPI, keyAPI}; return p }), domain.ErrInvalid},
+		{"cycle", with(func(p []domain.NewPart) []domain.NewPart { p[0].Needs = []string{keyWeb}; return p }), domain.ErrCycle},
+		{"needs itself", with(func(p []domain.NewPart) []domain.NewPart { p[0].Needs = []string{keyAPI}; return p }), domain.ErrCycle},
 	}
 
 	for _, r := range refused {
@@ -264,8 +272,14 @@ func testAssembleRefused(f *fixture) {
 	if n := len(f.Events(t, it.ID)); n != before {
 		t.Errorf("events after refusals = %d; want %d", n, before)
 	}
+}
 
-	// A part never becomes an assembly.
+// A part never becomes an assembly, and an unknown item has no parts.
+func testAssembleRefusesAPart(f *fixture) {
+	t := f.t
+	ctx := f.ctx(t)
+
+	it, l := f.planning(t, domain.NewItem{Title: titleBig})
 	_, parts := f.assemble(t, assembly(it, l, plan()))
 	api, apiLease := f.claim(t, work, 1, t1)
 
@@ -283,12 +297,11 @@ func testAssembleRefused(f *fixture) {
 }
 
 // The assembly stays open while any part is; the transition that closes its last part closes
-// it: done when a part is done, cancelled when every part was cancelled. Two last parts finishing
-// at once close it exactly once.
+// it, done when a part is done.
 func testAssemblyClosesWithItsLastPart(f *fixture) {
 	t := f.t
 
-	it, l := f.planning(t, domain.NewItem{Title: "big request"})
+	it, l := f.planning(t, domain.NewItem{Title: titleBig})
 	_, parts := f.assemble(t, assembly(it, l, plan()))
 	t2, t3 := t1.Add(time.Minute), t1.Add(2*time.Minute)
 
@@ -320,22 +333,30 @@ func testAssemblyClosesWithItsLastPart(f *fixture) {
 	events := f.Events(t, it.ID)
 	sameEvents(t, events[len(events)-1:], []domain.Event{{
 		FactoryID: f.factory, ItemID: it.ID, At: t3, Kind: domain.EventAssemblyDone, Station: stWork, Actor: domain.ActorEngine,
-		Data: map[string]any{"state": "done", "done": 2, "total": 3},
+		Data: map[string]any{"state": string(domain.StateDone), "parts_done": 2, "parts": 3},
 	}})
+}
 
-	// Every part cancelled: the assembly is cancelled.
+// An assembly whose parts were all cancelled is cancelled.
+func testAssemblyCancelledWithItsParts(f *fixture) {
+	t := f.t
+
 	other, ol := f.planning(t, domain.NewItem{Title: "dropped request"})
 	_, dropped := f.assemble(t, assembly(other, ol, plan()[:1]))
 
-	if err := f.finishPart(t, dropped.Items[0], domain.StateCancelled, t3); err != nil {
+	if err := f.finishPart(t, dropped.Items[0], domain.StateCancelled, t1); err != nil {
 		t.Fatal(err)
 	}
 
 	if got := f.item(t, other.ID); got.State != domain.StateCancelled {
 		t.Errorf("assembly whose parts were all cancelled is %q; want cancelled", got.State)
 	}
+}
 
-	// The two last parts finish concurrently: the assembly closes once.
+// Of two last parts finishing at once, one closes the assembly, exactly once.
+func testAssemblyClosesOnce(f *fixture) {
+	t := f.t
+
 	for range 5 {
 		race, rl := f.planning(t, domain.NewItem{Title: "race"})
 		_, rp := f.assemble(t, assembly(race, rl, []domain.NewPart{{Key: "a", Title: "a"}, {Key: "b", Title: "b"}}))
@@ -346,7 +367,7 @@ func testAssemblyClosesWithItsLastPart(f *fixture) {
 		)
 
 		for i, p := range rp.Items {
-			wg.Go(func() { errs[i] = f.finishPart(t, p, domain.StateDone, t3) })
+			wg.Go(func() { errs[i] = f.finishPart(t, p, domain.StateDone, t1) })
 		}
 
 		wg.Wait()

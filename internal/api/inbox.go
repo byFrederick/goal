@@ -106,7 +106,7 @@ func itemEntry(f *config.Factory, l domain.Line, a domain.AttentionItem, card ge
 	case domain.StateBlocked:
 		e.Kind, e.Id, e.Since = gen.InboxEntryKindBlocked, string(gen.InboxEntryKindBlocked)+":"+string(it.ID), it.UpdatedAt
 		e.Blocked = &gen.InboxBlocked{Reason: optional(a.BlockedReason), Paused: a.Paused}
-	case domain.StateQueued, domain.StateReady, domain.StateInProgress, domain.StateDone, domain.StateCancelled:
+	case domain.StateQueued, domain.StateReady, domain.StateInProgress, domain.StateDone, domain.StateCancelled, domain.StateAssembly:
 		// An expedite item that waits on nothing else (InboxItems returns no closed item).
 	}
 

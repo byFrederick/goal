@@ -168,6 +168,6 @@ func (s *Store) closeAssembly(part *domain.Item, at time.Time) {
 	s.trackSpan(parent, &before, at)
 	s.append(domain.Event{
 		FactoryID: parent.FactoryID, ItemID: parent.ID, At: at, Kind: domain.EventAssemblyDone, Station: parent.Station,
-		Actor: domain.ActorEngine, Data: map[string]any{"state": string(parent.State), "done": parts.Done, "total": parts.Total},
+		Actor: domain.ActorEngine, Data: map[string]any{"state": string(parent.State), "parts_done": parts.Done, "parts": parts.Total},
 	})
 }

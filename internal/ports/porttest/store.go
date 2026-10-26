@@ -683,7 +683,6 @@ func (s *Store) checkTransition(it *domain.Item, t ports.Transition) error {
 
 // move applies a guarded transition to it. Callers hold s.mu.
 func (s *Store) move(it *domain.Item, t ports.Transition) {
-
 	if held, ok := s.leases[t.ItemID]; ok && (t.Lease != nil || t.TakeLease) {
 		s.recordLease(held, t.Outcome, t.At)
 		delete(s.leases, t.ItemID)

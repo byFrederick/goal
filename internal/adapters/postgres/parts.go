@@ -235,6 +235,6 @@ func closeAssembly(ctx context.Context, q *db.Queries, row db.WorkItem, at time.
 	return appendEvents(ctx, q, []domain.Event{{
 		FactoryID: domain.FactoryID(parent.FactoryID.String()), ItemID: domain.ItemID(parent.ID.String()), At: at,
 		Kind: domain.EventAssemblyDone, Station: parent.Station, Actor: domain.ActorEngine,
-		Data: map[string]any{"state": string(closed), "done": c.Done, "total": c.Total},
+		Data: map[string]any{"state": string(closed), "parts_done": c.Done, "parts": c.Total},
 	}})
 }

@@ -526,7 +526,7 @@ func (e *Engine) arrive(it domain.Item, to domain.Station, actor string) (domain
 	case domain.StateDone:
 		doneAt = now
 		events = append(events, event(it, domain.EventDone, now, actor, nil))
-	case domain.StateQueued, domain.StateReady, domain.StateInProgress, domain.StateBlocked, domain.StateCancelled:
+	case domain.StateQueued, domain.StateReady, domain.StateInProgress, domain.StateBlocked, domain.StateCancelled, domain.StateAssembly:
 	}
 
 	for i := 1; i < len(events); i++ {

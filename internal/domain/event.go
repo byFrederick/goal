@@ -46,7 +46,7 @@ const (
 	EventEdgeRemoved EventKind = "edge_removed"
 	// EventAssembled is an item whose plan became parts (data parts: how many); EventPartCreated
 	// a part created from it (data parent and key), its first event; EventAssemblyDone the
-	// assembly closed by its last part (data state, done and total).
+	// assembly closed by its last part (data state, parts_done and parts).
 	EventAssembled    EventKind = "assembled"
 	EventPartCreated  EventKind = "part_created"
 	EventAssemblyDone EventKind = "assembly_done"
