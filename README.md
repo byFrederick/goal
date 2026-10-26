@@ -27,11 +27,12 @@ design-system/         UI rules generated with ui-ux-pro-max, plus the user's ov
 docs/adr/              decisions (0001 stack, 0002 Jonah evals, 0003 hexagonal architecture, 0004 frontend, 0005 definitions in object storage, 0006 workspaces and command checks)
 docs/engineering/      architecture and testing rules
 docs/jonah/            evaluation and self-remediation plan
-AGENTS.md              rules for every agent and human (CLAUDE.md imports it)
+AGENTS.md              the index of rules for every agent and human (CLAUDE.md imports it)
 Taskfile.yml           task check = everything the pre-push hook and CI run
 .githooks/             pre-push hook: task check (+ task migrate-check when migrations/ or auth/ changed)
 .github/               CI workflow (ci.yml): the pre-push gate on every pull request and push to main
-.claude/skills/        skills.sh skills used to build Goal itself, pinned in skills-lock.json
+.claude/rules/         path-scoped rules, one home per rule, each naming its area's skills
+.claude/skills/        vendored skills (pinned in skills-lock.json) and our goal-* procedures
 ```
 
 ## Quick start

@@ -202,9 +202,10 @@ async function guidanceWrite(
   const lexical = posix.resolve(workspace, target);
   if (!isGuidance(posix.relative(workspace, lexical))) return false;
   // A committed symlink (.claude/rules -> ../.git) would pass the lexical check: the real path of
-  // the target's nearest existing ancestor must be guidance of the workspace's real path too.
+  // the target's nearest existing ancestor must be guidance of the workspace's real path too,
+  // resolved the same way, since either may not exist yet.
   const real = await realTarget(lexical);
-  return isGuidance(posix.relative(await realpath(workspace), real));
+  return isGuidance(posix.relative(await realTarget(posix.resolve(workspace)), real));
 }
 
 const guidanceMention = /(^|[\s'"=/])(\.claude\/(rules|skills|agents|commands)\/|CLAUDE\.md|AGENTS\.md)/;
