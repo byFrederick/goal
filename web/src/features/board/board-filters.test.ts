@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { Board, BoardLane, BoardStation, ItemCard } from '../../api/types';
-import { arrangeBoard, assemblyOptions, groupByAssembly, knownView, roleOptions } from './board-filters';
+import {
+  arrangeBoard,
+  assemblyOptions,
+  groupByAssembly,
+  knownView,
+  openAssemblies,
+  roleOptions,
+  runsOf,
+} from './board-filters';
 
 const item = (over: Partial<ItemCard>): ItemCard => ({
   id: 'item-x',
@@ -74,9 +82,15 @@ const board = (stations: BoardStation[]): Board => ({
 
 const partOf = (id: string, title: string, part: number) => ({ id, ref: `sre#${id}`, title, part, parts: 2 });
 
-// Assembly ASM (sre#20) has two parts; the second assembly has one part and no card on the board.
+// Assembly ASM (sre#20) is open with two parts, one in progress; it is no card, only the board's header.
 const ASM = 'item-asm';
-const asmCard = item({ id: ASM, ref: 'sre#20', title: 'Checkout retry rollout', state: 'assembly' });
+const asmCard = item({
+  id: ASM,
+  ref: 'sre#20',
+  title: 'Checkout retry rollout',
+  state: 'assembly',
+  parts: { total: 2, merged: 0, in_progress: 1, waiting: 1, stations: ['investigate'] },
+});
 const partOne = item({
   id: 'item-21',
   ref: 'sre#21',
@@ -103,23 +117,39 @@ const other = item({
 const loose = item({ id: 'item-23', ref: 'sre#23', title: 'Triage the export', board_lane: 'triager' });
 const ready = item({ id: 'item-24', ref: 'sre#24', title: 'Merge the cleanup', state: 'ready', board_lane: 'triager' });
 
-const twoStations = board([
-  station({
-    id: 'investigate',
-    lanes: [lane({}), lane({ key: 'triager', role: 'Triager' })],
-    items: [asmCard, other, partTwo, loose, partOne, ready],
-  }),
-  station({ id: 'queue', kind: 'queue', items: [] }),
-]);
+const twoStations: Board = {
+  ...board([
+    station({
+      id: 'investigate',
+      lanes: [lane({}), lane({ key: 'triager', role: 'Triager' })],
+      items: [other, partTwo, loose, partOne, ready],
+    }),
+    station({ id: 'queue', kind: 'queue', items: [] }),
+  ]),
+  assemblies: [asmCard],
+};
 
 const refs = (b: Board, id = 'investigate') => b.stations.find((s) => s.id === id)?.items.map((it) => it.ref);
 
 describe('assemblyOptions', () => {
-  it('lists each assembly once, from its parts and from its own card, by title', () => {
+  it('lists each assembly once, from the open assemblies and the parts’ PartOf, by title', () => {
     expect(assemblyOptions(twoStations)).toEqual([
       { id: ASM, title: 'Checkout retry rollout' },
       { id: 'item-other', title: 'Docs refresh' },
     ]);
+  });
+
+  it('offers an open assembly with no part on the board', () => {
+    const idle = { ...board([station({ id: 'build', items: [loose] })]), assemblies: [asmCard] };
+    expect(assemblyOptions(idle)).toEqual([{ id: ASM, title: 'Checkout retry rollout' }]);
+  });
+});
+
+describe('openAssemblies', () => {
+  it('maps each open assembly by id, with its parts summary', () => {
+    expect(openAssemblies(twoStations)).toEqual(
+      new Map([[ASM, { id: ASM, ref: 'sre#20', title: 'Checkout retry rollout', parts: asmCard.parts }]]),
+    );
   });
 });
 
@@ -150,11 +180,11 @@ describe('knownView', () => {
 
 describe('arrangeBoard', () => {
   it('keeps every card with no choice made', () => {
-    expect(refs(arrangeBoard(twoStations, {}))).toEqual(['sre#20', 'sre#30', 'sre#22', 'sre#23', 'sre#21', 'sre#24']);
+    expect(refs(arrangeBoard(twoStations, {}))).toEqual(['sre#30', 'sre#22', 'sre#23', 'sre#21', 'sre#24']);
   });
 
-  it('keeps an assembly’s own card and its parts, and no other card', () => {
-    expect(refs(arrangeBoard(twoStations, { assembly: ASM }))).toEqual(['sre#20', 'sre#22', 'sre#21']);
+  it('keeps an assembly’s parts, and no other card', () => {
+    expect(refs(arrangeBoard(twoStations, { assembly: ASM }))).toEqual(['sre#22', 'sre#21']);
   });
 
   it('keeps the cards whose lane has the role', () => {
@@ -198,18 +228,38 @@ describe('groupByAssembly', () => {
     expect(groupByAssembly(items).map((it) => it.ref)).toEqual(['sre#30', 'sre#21', 'sre#22', 'sre#23']);
   });
 
-  it('leads an assembly with its own card', () => {
-    expect(groupByAssembly([partTwo, asmCard, partOne]).map((it) => it.ref)).toEqual(['sre#20', 'sre#21', 'sre#22']);
-  });
-
   it('keeps the cards of no assembly in their own order', () => {
     expect(groupByAssembly([loose, ready]).map((it) => it.ref)).toEqual(['sre#23', 'sre#24']);
+  });
+
+  it('keeps the open assembly out of the cards: it is a header, not a card', () => {
+    expect(groupByAssembly([partTwo, partOne]).map((it) => it.ref)).toEqual(['sre#21', 'sre#22']);
+  });
+});
+
+describe('runsOf', () => {
+  it('splits a list into its runs of consecutive cards of one assembly', () => {
+    expect(runsOf([partOne, partTwo, loose, other]).map((run) => [run.assembly, run.items.length])).toEqual([
+      [ASM, 2],
+      [undefined, 1],
+      ['item-other', 1],
+    ]);
+  });
+
+  it('starts a new run where the assembly changes back', () => {
+    expect(runsOf([partOne, other, partTwo]).map((run) => run.assembly)).toEqual([ASM, 'item-other', ASM]);
   });
 });
 
 describe('arrangeBoard with the grouping', () => {
+  it('puts each assembly’s parts together under it, and no card for the open assembly', () => {
+    const grouped = arrangeBoard(twoStations, { group: 'assembly' });
+    expect(refs(grouped)).toEqual(['sre#30', 'sre#21', 'sre#22', 'sre#23', 'sre#24']);
+    expect(grouped.stations.flatMap((s) => s.items).some((it) => it.state === 'assembly')).toBe(false);
+  });
+
   it('orders each station’s cards by assembly and keeps the filter', () => {
     const grouped = arrangeBoard(twoStations, { group: 'assembly', assembly: ASM });
-    expect(refs(grouped)).toEqual(['sre#20', 'sre#21', 'sre#22']);
+    expect(refs(grouped)).toEqual(['sre#21', 'sre#22']);
   });
 });
