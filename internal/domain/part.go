@@ -19,6 +19,9 @@ type NewPart struct {
 	Needs []string
 }
 
+// PlanField is the platform-defined property of a station's output that holds a plan (PlanFrom).
+const PlanField = "plan"
+
 // ErrBadPlan means a station's output has a plan that cannot become an assembly: not the
 // platform's shape, or refused by ValidatePlan.
 var ErrBadPlan = errors.New("bad plan")
