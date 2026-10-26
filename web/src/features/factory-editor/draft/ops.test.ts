@@ -5,6 +5,7 @@ import {
   AgentInUseError,
   type AnyEdit,
   addAgent,
+  addRule,
   addSkillFromCatalog,
   addStation,
   applyFix,
@@ -14,12 +15,14 @@ import {
   moveStation,
   removeAgent,
   removeConnection,
+  removeRule,
   renameAgent,
   SkillExistsError,
   setAgentConnection,
   setBuiltin,
   setFactoryConnection,
   setGate,
+  setRuleText,
   setStationKind,
   setStationName,
 } from './ops';
@@ -356,5 +359,30 @@ describe('fixes', () => {
       patch: [{ op: 'add', path: '/work_types/0', value: 'fix' }],
     });
     expect((added.value as Model['basics']).work_types).toEqual(['fix', 'feature']);
+  });
+});
+
+describe('factory rules', () => {
+  const agents = { agents: [{ name: 'engineer', prompt: { path: './agents/engineer.md' } }], rules: [] };
+
+  it('adds the rules entry and its file in one agents save', () => {
+    const e = addRule(agents, 'secrets', '---\ndescription: x\n---\n');
+    expect(e.section).toBe('agents');
+    expect(e.value).toMatchObject({ rules: [{ name: 'secrets', source: './rules/secrets.md' }] });
+    expect(e.files).toEqual({ 'rules/secrets.md': { text: '---\ndescription: x\n---\n' } });
+  });
+
+  it('rewrites a rule file and keeps the rules list as it was', () => {
+    const withRule = { ...agents, rules: [{ name: 'secrets', source: './rules/secrets.md' }] };
+    const e = setRuleText(withRule, 'secrets', 'new');
+    expect(e.value).toEqual(withRule);
+    expect(e.files).toEqual({ 'rules/secrets.md': { text: 'new' } });
+  });
+
+  it('removes the entry and lists the file for removal', () => {
+    const withRule = { ...agents, rules: [{ name: 'secrets', source: './rules/secrets.md' }] };
+    const e = removeRule(withRule, 'secrets');
+    expect(e.value).toMatchObject({ rules: [] });
+    expect(e.removeFiles).toEqual(['rules/secrets.md']);
   });
 });

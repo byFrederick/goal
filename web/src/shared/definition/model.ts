@@ -129,10 +129,17 @@ export interface ModelSkill {
   origin?: string;
 }
 
+/** A factory rule (ADR 0014): its entry in the agents section; the rule's text is rules/<name>.md. */
+export interface ModelRule {
+  name: string;
+  source: string;
+}
+
 export interface AgentsSection {
   default_model?: string;
   agents?: ModelAgent[];
   skills?: ModelSkill[];
+  rules?: ModelRule[];
 }
 
 export interface ModelConnection {
