@@ -15,9 +15,9 @@ import (
 var _ ports.CodeHost = (*CodeHost)(nil)
 
 // CodeHost is an in-memory code host holding the pull requests, branch heads and commits a test
-// adds. Like the adapters, it
-// serves only pull requests on the host of the connection's git login, and it merges and updates
-// branches like a careful host: only open pull requests whose head has not moved.
+// adds. Like the adapters, it serves only pull requests and repositories on the host of the
+// connection's git login, and it merges and updates branches like a careful host: only open pull
+// requests whose head has not moved.
 type CodeHost struct {
 	mu       sync.Mutex
 	prs      map[string]*ports.PullRequest

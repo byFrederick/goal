@@ -11,6 +11,8 @@ import (
 	"github.com/byFrederick/goal/internal/ports/porttest"
 )
 
+const goMod = "go.mod"
+
 // githubConn is a connection whose git login is on github.com.
 func githubConn() domain.ResolvedConnection {
 	return domain.ResolvedConnection{
@@ -42,7 +44,7 @@ func TestCodeHost_UpdateBranch(t *testing.T) {
 	h.Add(ports.PullRequest{URL: pr, Open: true, Mergeable: true, HeadSHA: head})
 	h.Add(ports.PullRequest{URL: conflict, Open: true, HeadSHA: head})
 	h.Add(ports.PullRequest{URL: "https://github.com/acme/app/pull/9", HeadSHA: head})
-	h.Conflict(conflict, "go.mod", "internal/x.go")
+	h.Conflict(conflict, goMod, "internal/x.go")
 
 	// A moved head, a closed, unknown or off-host pull request: refused, nothing changes.
 	for _, tt := range []struct{ url, head string }{
@@ -59,7 +61,7 @@ func TestCodeHost_UpdateBranch(t *testing.T) {
 	err := h.UpdateBranch(t.Context(), conn, conflict, head)
 
 	var mc *ports.MergeConflictError
-	if !errors.Is(err, ports.ErrMergeConflict) || !errors.As(err, &mc) || !slices.Equal(mc.Files, []string{"go.mod", "internal/x.go"}) {
+	if !errors.Is(err, ports.ErrMergeConflict) || !errors.As(err, &mc) || !slices.Equal(mc.Files, []string{goMod, "internal/x.go"}) {
 		t.Fatalf("UpdateBranch(conflicting) = %v; want a *MergeConflictError naming go.mod and internal/x.go", err)
 	}
 
@@ -127,9 +129,17 @@ func TestCodeHost_BranchHeadAndCompare(t *testing.T) {
 	h.SetBranchHead(repo, "goal/7-add-x", "f1")
 	h.AddCommits(repo,
 		ports.Commit{SHA: "c1", Subject: "first"},
-		ports.Commit{SHA: "c2", Subject: "second", Files: []string{"go.mod"}},
+		ports.Commit{SHA: "c2", Subject: "second", Files: []string{goMod}},
 	)
-	h.AddCommits(repo, ports.Commit{SHA: "c3", Subject: "third", Files: []string{"docs/a.md", "go.mod"}})
+	h.AddCommits(repo, ports.Commit{SHA: "c3", Subject: "third", Files: []string{"docs/a.md", goMod}})
+
+	checkBranchHeads(t, h, conn, repo)
+	checkCompare(t, h, conn, repo)
+	checkCompareCap(t, h, conn)
+}
+
+func checkBranchHeads(t *testing.T, h *porttest.CodeHost, conn domain.ResolvedConnection, repo string) {
+	t.Helper()
 
 	for _, tt := range []struct{ branch, want string }{{"", "c3"}, {"goal/7-add-x", "f1"}} {
 		if got, err := h.BranchHead(t.Context(), conn, repo, tt.branch); err != nil || got != tt.want {
@@ -141,13 +151,21 @@ func TestCodeHost_BranchHeadAndCompare(t *testing.T) {
 		t.Errorf("BranchHead(gone) = %v; want ErrNotFound", err)
 	}
 
+	if _, err := h.BranchHead(t.Context(), conn, "https://gitlab.example.com/acme/app", ""); err == nil {
+		t.Error("BranchHead off the connection's host succeeded; want refused")
+	}
+}
+
+func checkCompare(t *testing.T, h *porttest.CodeHost, conn domain.ResolvedConnection, repo string) {
+	t.Helper()
+
 	got, err := h.Compare(t.Context(), conn, repo, "c1", "c3")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	if len(got.Commits) != 2 || got.Commits[0].SHA != "c2" || got.Commits[1].SHA != "c3" || got.Truncated ||
-		!slices.Equal(got.Commits[1].Files, []string{"docs/a.md", "go.mod"}) {
+		!slices.Equal(got.Commits[1].Files, []string{"docs/a.md", goMod}) {
 		t.Errorf("Compare(c1, c3) = %+v; want c2 then c3 with their files", got)
 	}
 
@@ -164,20 +182,21 @@ func TestCodeHost_BranchHeadAndCompare(t *testing.T) {
 			t.Errorf("Compare(%s, %s, %s) = %v; want ErrNotFound", tt.repo, tt.base, tt.head, err)
 		}
 	}
+}
 
-	if _, err := h.BranchHead(t.Context(), conn, "https://gitlab.example.com/acme/app", ""); err == nil {
-		t.Error("BranchHead off the connection's host succeeded; want refused")
-	}
+// checkCompareCap checks that past the cap Compare returns the oldest MaxCompareCommits, truncated.
+func checkCompareCap(t *testing.T, h *porttest.CodeHost, conn domain.ResolvedConnection) {
+	t.Helper()
 
-	// Past the cap: the oldest MaxCompareCommits, truncated.
 	const long = "https://github.com/acme/long"
 
 	for i := range ports.MaxCompareCommits + 5 {
 		h.AddCommits(long, ports.Commit{SHA: "l" + strconv.Itoa(i)})
 	}
 
-	got, err = h.Compare(t.Context(), conn, long, "l0", "l"+strconv.Itoa(ports.MaxCompareCommits+4))
+	got, err := h.Compare(t.Context(), conn, long, "l0", "l"+strconv.Itoa(ports.MaxCompareCommits+4))
 	if err != nil || !got.Truncated || len(got.Commits) != ports.MaxCompareCommits || got.Commits[0].SHA != "l1" {
-		t.Errorf("Compare past the cap = %d commits, truncated %v, %v; want %d from l1, truncated", len(got.Commits), got.Truncated, err, ports.MaxCompareCommits)
+		t.Errorf("Compare past the cap = %d commits, truncated %v, %v; want %d from l1, truncated",
+			len(got.Commits), got.Truncated, err, ports.MaxCompareCommits)
 	}
 }

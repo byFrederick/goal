@@ -28,6 +28,11 @@ const (
 	message = "message"
 	merged  = "merged"
 	closed  = "closed"
+
+	headBranch = "goal/7-add-x"
+	mainBranch = "main"
+	sharedFile = "docs/shared.md"
+	keySHA     = "sha"
 )
 
 // connection is a connection of the platform's github kind with values (token and host).
@@ -92,13 +97,13 @@ func newFakeGitHubWith(t *testing.T, cfg Config) (*fakeGitHub, *Client) {
 
 	f := &fakeGitHub{pr: map[string]any{
 		"state": "open", merged: false, "mergeable": true, "merge_commit_sha": "test-merge-sha",
-		"head": map[string]any{"sha": headSHA, "ref": "goal/7-add-x", "repo": map[string]any{"full_name": "acme/app"}},
-		"base": map[string]any{"ref": "main", "repo": map[string]any{"full_name": "acme/app"}},
+		"head": map[string]any{keySHA: headSHA, "ref": headBranch, "repo": map[string]any{"full_name": "acme/app"}},
+		"base": map[string]any{"ref": mainBranch, "repo": map[string]any{"full_name": "acme/app"}},
 	}}
 	f.merge = func(map[string]string) (int, any) {
 		f.pr["state"], f.pr[merged] = closed, true
 
-		return http.StatusOK, map[string]any{"sha": "merge-sha", "merged": true, message: "Pull Request successfully merged"}
+		return http.StatusOK, map[string]any{keySHA: "merge-sha", "merged": true, message: "Pull Request successfully merged"}
 	}
 
 	f.update = func(map[string]string) (int, any) {
@@ -143,7 +148,7 @@ func newFakeGitHubWith(t *testing.T, cfg Config) (*fakeGitHub, *Client) {
 		f.reply(w, status, res)
 	})
 	mux.HandleFunc("GET /repos/acme/app", func(w http.ResponseWriter, _ *http.Request) {
-		f.reply(w, http.StatusOK, map[string]any{"full_name": "acme/app", "default_branch": "main"})
+		f.reply(w, http.StatusOK, map[string]any{"full_name": "acme/app", "default_branch": mainBranch})
 	})
 	mux.HandleFunc("GET /repos/acme/app/branches/{branch...}", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
@@ -155,7 +160,7 @@ func newFakeGitHubWith(t *testing.T, cfg Config) (*fakeGitHub, *Client) {
 			return
 		}
 
-		f.reply(w, http.StatusOK, map[string]any{"name": r.PathValue("branch"), "commit": map[string]any{"sha": sha}})
+		f.reply(w, http.StatusOK, map[string]any{"name": r.PathValue("branch"), "commit": map[string]any{keySHA: sha}})
 	})
 	mux.HandleFunc("GET /repos/acme/app/compare/{spec}", func(w http.ResponseWriter, r *http.Request) {
 		status, res := f.compare(r)
@@ -177,7 +182,7 @@ func newFakeGitHubWith(t *testing.T, cfg Config) (*fakeGitHub, *Client) {
 			files = append(files, map[string]any{"filename": name, "status": "modified", "patch": "@@ -1 +1 @@"})
 		}
 
-		f.reply(w, http.StatusOK, map[string]any{"sha": fc.sha, "commit": map[string]any{message: fc.message}, "files": files})
+		f.reply(w, http.StatusOK, map[string]any{keySHA: fc.sha, "commit": map[string]any{message: fc.message}, "files": files})
 	})
 	mux.HandleFunc("DELETE /repos/acme/app/git/refs/heads/", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
@@ -254,7 +259,7 @@ func (f *fakeGitHub) compare(r *http.Request) (int, any) {
 
 	for i, fc := range all {
 		if i >= (page-1)*perPage && i < page*perPage {
-			commits = append(commits, map[string]any{"sha": fc.sha, "commit": map[string]any{message: fc.message}})
+			commits = append(commits, map[string]any{keySHA: fc.sha, "commit": map[string]any{message: fc.message}})
 		}
 
 		for _, name := range fc.files {
@@ -305,7 +310,7 @@ func TestPullRequest_ReadsStateHeadAndBase(t *testing.T) {
 	}
 
 	want := ports.PullRequest{
-		URL: prURL, Open: true, Mergeable: true, HeadSHA: headSHA, HeadBranch: "goal/7-add-x", SameRepository: true, BaseBranch: "main",
+		URL: prURL, Open: true, Mergeable: true, HeadSHA: headSHA, HeadBranch: headBranch, SameRepository: true, BaseBranch: mainBranch,
 	}
 	if pr != want {
 		t.Errorf("pull request = %+v; want %+v", pr, want)
@@ -417,7 +422,7 @@ func TestPullRequest_OnlyOnTheConnectionsHost(t *testing.T) {
 			t.Errorf("PullRequest(%s) = %v; want ErrNotMergeable", tt.url, err)
 		}
 
-		if err := c.DeleteBranch(t.Context(), tt.conn, tt.url, "goal/7-add-x"); !errors.Is(err, ports.ErrNotMergeable) {
+		if err := c.DeleteBranch(t.Context(), tt.conn, tt.url, headBranch); !errors.Is(err, ports.ErrNotMergeable) {
 			t.Errorf("DeleteBranch(%s) = %v; want ErrNotMergeable", tt.url, err)
 		}
 
@@ -446,7 +451,7 @@ func TestMerge_SquashesTheHeadItWasGiven(t *testing.T) {
 	f.merge = func(body map[string]string) (int, any) {
 		asked = body
 
-		return http.StatusOK, map[string]any{"sha": "merge-sha", "merged": true}
+		return http.StatusOK, map[string]any{keySHA: "merge-sha", "merged": true}
 	}
 
 	sha, err := c.Merge(t.Context(), dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
@@ -593,11 +598,11 @@ func TestDeleteBranch_DeletesTheRefAndToleratesAGoneOne(t *testing.T) {
 
 	f, c := newFakeGitHub(t)
 
-	if err := c.DeleteBranch(t.Context(), dotComConn(t), prURL, "goal/7-add-x"); err != nil {
+	if err := c.DeleteBranch(t.Context(), dotComConn(t), prURL, headBranch); err != nil {
 		t.Fatal(err)
 	}
 
-	if len(f.deleted) != 1 || f.deleted[0] != "goal/7-add-x" {
+	if len(f.deleted) != 1 || f.deleted[0] != headBranch {
 		t.Errorf("deleted %v; want goal/7-add-x", f.deleted)
 	}
 
@@ -619,11 +624,11 @@ func (f *fakeGitHub) seedHistory(n int) {
 		f.history = append(f.history, fakeCommit{
 			sha:     "c" + strconv.Itoa(i),
 			message: "change " + strconv.Itoa(i) + "\n\nThe body, not the subject.",
-			files:   []string{"internal/f" + strconv.Itoa(i) + ".go", "docs/shared.md"},
+			files:   []string{"internal/f" + strconv.Itoa(i) + ".go", sharedFile},
 		})
 	}
 
-	f.heads = map[string]string{"main": "c" + strconv.Itoa(n), "goal/7-add-x": headSHA}
+	f.heads = map[string]string{mainBranch: "c" + strconv.Itoa(n), headBranch: headSHA}
 }
 
 func TestBranchHead_NamedAndDefaultBranch(t *testing.T) {
@@ -635,8 +640,8 @@ func TestBranchHead_NamedAndDefaultBranch(t *testing.T) {
 	for _, tt := range []struct{ repo, branch, want string }{
 		{repoURL, "", "c3"},
 		{repoURL + ".git", "", "c3"},
-		{repoURL + "/", "main", "c3"},
-		{repoURL, "goal/7-add-x", headSHA},
+		{repoURL + "/", mainBranch, "c3"},
+		{repoURL, headBranch, headSHA},
 	} {
 		got, err := c.BranchHead(t.Context(), dotComConn(t), tt.repo, tt.branch)
 		if err != nil || got != tt.want {
@@ -705,9 +710,9 @@ func TestCompare_CommitsOldestFirstWithFiles(t *testing.T) {
 	}
 
 	want := ports.Comparison{Commits: []ports.Commit{
-		{SHA: "c2", Subject: "change 2", Files: []string{"internal/f2.go", "docs/shared.md"}},
-		{SHA: "c3", Subject: "change 3", Files: []string{"internal/f3.go", "docs/shared.md"}},
-		{SHA: "c4", Subject: "change 4", Files: []string{"internal/f4.go", "docs/shared.md"}},
+		{SHA: "c2", Subject: "change 2", Files: []string{"internal/f2.go", sharedFile}},
+		{SHA: "c3", Subject: "change 3", Files: []string{"internal/f3.go", sharedFile}},
+		{SHA: "c4", Subject: "change 4", Files: []string{"internal/f4.go", sharedFile}},
 	}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Compare = %+v; want %+v", got, want)
@@ -815,19 +820,23 @@ func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 
 	moved := New(Config{APIURL: redirect.URL})
 
-	if _, err := moved.PullRequest(t.Context(), dotComConn(t), prURL); err == nil || leaked {
-		t.Errorf("PullRequest via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", err, leaked)
-	}
-
-	if err := moved.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA); err == nil || leaked {
-		t.Errorf("UpdateBranch via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", err, leaked)
-	}
-
-	if _, err := moved.BranchHead(t.Context(), dotComConn(t), repoURL, ""); err == nil || leaked {
-		t.Errorf("BranchHead via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", err, leaked)
-	}
-
-	if _, err := moved.Compare(t.Context(), dotComConn(t), repoURL, "c1", "c2"); err == nil || leaked {
-		t.Errorf("Compare via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", err, leaked)
+	for name, call := range map[string]func() error{
+		"PullRequest": func() error {
+			_, err := moved.PullRequest(t.Context(), dotComConn(t), prURL)
+			return err
+		},
+		"UpdateBranch": func() error { return moved.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA) },
+		"BranchHead": func() error {
+			_, err := moved.BranchHead(t.Context(), dotComConn(t), repoURL, "")
+			return err
+		},
+		"Compare": func() error {
+			_, err := moved.Compare(t.Context(), dotComConn(t), repoURL, "c1", "c2")
+			return err
+		},
+	} {
+		if err := call(); err == nil || leaked {
+			t.Errorf("%s via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", name, err, leaked)
+		}
 	}
 }
