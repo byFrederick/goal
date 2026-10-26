@@ -77,10 +77,17 @@ const usage = `usage:
                                                   pull (--force pushes over it)
   goal factory publish <factory> [--message M] [--move S=T]...
                                                   validate and publish the open draft
-  goal factory list [--validate]                  the factories: current version, open draft, paused
+  goal factory list [--validate] [--archived]     the factories: current version, open draft, paused
+                                                  (--archived: only the archived ones)
   goal factory versions <factory>                 the published versions (* the one that runs)
   goal factory restore <factory> <N> [--move S=T]...
                                                   run version N again
+  goal factory archive <factory>                  retire a paused factory none of whose items is being
+                                                  worked; it keeps its history and leaves the list
+  goal factory restore <factory>                  list an archived factory again; it stays paused
+  goal factory delete <factory> [--yes]           delete an archived factory for good, with its items,
+                                                  runs and versions, after typing its name (--yes: no
+                                                  prompt); a factory never published needs no archive
   goal org list                                   the organizations (* the one commands act in)
   goal org use <slug>                             act in this organization from now on (config file)
   goal org create <slug> --name N [--mark M]      create an organization (platform admins only)

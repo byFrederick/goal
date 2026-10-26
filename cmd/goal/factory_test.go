@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -609,7 +610,9 @@ func TestFactory_RefusesBadCommandLines(t *testing.T) {
 	for _, line := range []string{
 		"factory", "factory remove x", "factory push", "factory push a b", "factory push a --message m",
 		"factory pull a", "factory pull a b --version latest", "factory validate", "factory list x",
-		"factory publish", "factory versions", "factory restore a", "factory restore a zero", "factory push a --move inbox",
+		"factory publish", "factory versions", "factory restore a zero", "factory push a --move inbox",
+		"factory archive", "factory archive a b", "factory delete", "factory delete a b", "factory restore a 1 2",
+		"factory restore a --move inbox=done", "factory list --archived x",
 	} {
 		if _, err := g.goal(t, strings.Fields(line)...); !errors.Is(err, errUsage) {
 			t.Errorf("goal %s = %v, want a usage error", line, err)
@@ -625,4 +628,165 @@ func mustPull(t *testing.T, g *defGoald, sel string) string {
 	g.mustGoal(t, "factory", "pull", "acme", dir, "--version", sel)
 
 	return dir
+}
+
+// publishedAcme pushes and publishes acme and returns g.
+func publishedAcme(t *testing.T) *defGoald {
+	t.Helper()
+
+	g := newDefGoald(t)
+	g.mustGoal(t, "factory", "push", newCopy(t, nil), "--publish")
+
+	return g
+}
+
+// pause pauses acme as the UI's pause would; the CLI has no pause.
+func (g *defGoald) pause(t *testing.T) {
+	t.Helper()
+
+	if _, err := g.authors.Pause(g.ctx(t), factoryID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// goalTyping runs a command line with typed as the terminal's input (nil: none).
+func (g *defGoald) goalTyping(t *testing.T, typed *string, args ...string) (string, error) {
+	t.Helper()
+
+	var buf bytes.Buffer
+
+	p := &printer{w: &buf}
+	if typed != nil {
+		p.in = strings.NewReader(*typed)
+	}
+
+	err := run(t.Context(), args, p, testEnv(t, g.srv.URL, map[string]string{envOrg: orgAcme}), nil)
+
+	return buf.String(), err
+}
+
+func TestFactoryArchive_ArchivesAndRestores(t *testing.T) {
+	t.Parallel()
+
+	g := publishedAcme(t)
+	g.pause(t)
+
+	if out := g.mustGoal(t, "factory", "archive", "acme"); !strings.Contains(out, "✓ archived acme ("+factoryID+")") {
+		t.Errorf("archive = %s", out)
+	}
+
+	// Archived, it is still found by name and by id.
+	if out := g.mustGoal(t, "factory", "archive", factoryID); !strings.Contains(out, "✓ archived acme") {
+		t.Errorf("archive by id of an archived factory = %s", out)
+	}
+
+	out := g.mustGoal(t, "factory", "restore", "acme")
+	if !strings.Contains(out, "✓ restored acme ("+factoryID+")") || !strings.Contains(out, "still paused") {
+		t.Errorf("restore = %s", out)
+	}
+
+	if out := g.mustGoal(t, "factory", "list"); !strings.Contains(out, factoryID) || !strings.Contains(out, "paused") {
+		t.Errorf("list after the restore = %s", out)
+	}
+
+	// Two arguments still restore a version.
+	if out := g.mustGoal(t, "factory", "restore", "acme", "1"); !strings.Contains(out, "acme v1 runs already") {
+		t.Errorf("restore of a version = %s", out)
+	}
+}
+
+func TestFactoryArchive_RefusesARunningFactory(t *testing.T) {
+	t.Parallel()
+
+	g := publishedAcme(t)
+
+	out, err := g.goal(t, "factory", "archive", "acme")
+	if err == nil || !strings.Contains(err.Error(), "Pause the factory first") {
+		t.Errorf("archive of a running factory = %v\n%s", err, out)
+	}
+
+	if out := g.mustGoal(t, "factory", "list"); !strings.Contains(out, factoryID) {
+		t.Errorf("a refused archive archived acme:\n%s", out)
+	}
+}
+
+func TestFactoryDelete_ConfirmsByTypedName(t *testing.T) {
+	t.Parallel()
+
+	typed := func(s string) *string { return &s }
+	yes := []string{"--yes"}
+
+	const deleted = "✓ deleted acme"
+
+	for _, tt := range []struct {
+		name      string
+		published bool
+		archived  bool
+		ref       string // the factory as delete names it; acme when empty
+		args      []string
+		typed     *string
+		want      string // in the output on success, in the error otherwise
+		deleted   bool
+	}{
+		{name: "match", published: true, archived: true, typed: typed("acme\n"), want: deleted, deleted: true},
+		{name: "mismatch", published: true, archived: true, typed: typed("acne\n"), want: "nothing was deleted"},
+		{name: "no input", published: true, archived: true, want: "pass --yes"},
+		{name: "end of input", published: true, archived: true, typed: typed(""), want: "read the confirmation"},
+		{name: "yes", published: true, archived: true, args: yes, want: deleted, deleted: true},
+		{name: "by id", published: true, archived: true, ref: factoryID, args: yes, want: deleted, deleted: true},
+		{name: "never published", typed: typed("acme\n"), want: deleted, deleted: true},
+		{name: "not archived", published: true, args: yes, want: "`goal factory archive acme`"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			g := newDefGoald(t)
+			if tt.published {
+				g.mustGoal(t, "factory", "push", newCopy(t, nil), "--publish")
+			} else {
+				g.mustGoal(t, "factory", "push", newCopy(t, nil))
+			}
+
+			if tt.archived {
+				g.pause(t)
+				g.mustGoal(t, "factory", "archive", "acme")
+			}
+
+			out, err := g.goalTyping(t, tt.typed, strings.Fields("factory delete "+cmp.Or(tt.ref, "acme")+" "+strings.Join(tt.args, " "))...)
+
+			switch {
+			case tt.deleted && (err != nil || !strings.Contains(out, tt.want)):
+				t.Errorf("delete = %v\n%s", err, out)
+			case !tt.deleted && (err == nil || !strings.Contains(err.Error(), tt.want)):
+				t.Errorf("delete = %v, want an error with %q\n%s", err, tt.want, out)
+			}
+
+			listed := g.mustGoal(t, "factory", "list") + g.mustGoal(t, "factory", "list", "--archived")
+			if gone := !strings.Contains(listed, factoryID); gone != tt.deleted {
+				t.Errorf("deleted = %v, want %v:\n%s", gone, tt.deleted, listed)
+			}
+		})
+	}
+}
+
+func TestFactoryList_Archived(t *testing.T) {
+	t.Parallel()
+
+	g := publishedAcme(t)
+
+	other := strings.NewReplacer(factoryID, "6f7a2b1c-0d3e-4f5a-8b9c-1d2e3f4a5b6c", "name: acme", "name: beta").Replace(factoryYAML)
+	g.mustGoal(t, "factory", "push", newCopy(t, map[string]string{yamlPath: other}), "--publish")
+
+	g.pause(t)
+	g.mustGoal(t, "factory", "archive", "acme")
+
+	out := g.mustGoal(t, "factory", "list", "--archived")
+	if !strings.Contains(out, factoryID) || !strings.Contains(out, "· archived") || strings.Contains(out, "beta") ||
+		!strings.Contains(out, "1 archived factories") {
+		t.Errorf("list --archived = %s", out)
+	}
+
+	if out := g.mustGoal(t, "factory", "list"); strings.Contains(out, factoryID) || !strings.Contains(out, "beta") {
+		t.Errorf("list = %s", out)
+	}
 }
