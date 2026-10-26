@@ -62,6 +62,19 @@ type bundleSpec struct {
 	// KnowledgeSources are the knowledge sources the gateway's knowledge tools search for the
 	// run, which the worker's prompt names.
 	KnowledgeSources []string `json:"knowledge_sources,omitempty"`
+	// Rules are the factory rules that apply to the run (ADR 0014), in declaration order, which
+	// the worker writes to the agent's rules.
+	Rules []bundleRule `json:"rules"`
+}
+
+// bundleRule is one factory rule of the run: its name, the hash of its rule file in the run's
+// definition version, its paths (none: every file) and the file the worker writes, its
+// frontmatter (description and paths) and body.
+type bundleRule struct {
+	Name    string          `json:"name"`
+	SHA256  domain.BlobHash `json:"sha256"`
+	Paths   []string        `json:"paths,omitempty"`
+	Content string          `json:"content"`
 }
 
 // bundleConnection is what the agent hears and the worker configures of one connection: the
@@ -162,13 +175,9 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 		return runBundle{}, fmt.Errorf("%w: station %q is not in factory %s", errForbidden, c.Station, c.FactoryID)
 	}
 
-	it, err := g.items.Item(ctx, c.ItemID)
+	it, err := g.item(ctx, c)
 	if err != nil {
-		return runBundle{}, fmt.Errorf("item %s: %w", c.ItemID, err)
-	}
-
-	if it.FactoryID != c.FactoryID {
-		return runBundle{}, fmt.Errorf("%w: item %s is not in factory %s", errForbidden, c.ItemID, c.FactoryID)
+		return runBundle{}, err
 	}
 
 	agentFiles, err := g.defs.AgentFiles(ctx, c.VersionID, agent, station.Output)
@@ -185,6 +194,7 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 			Brief: it.Work(), Inputs: it.Outputs, Output: station.Output, MaxTurns: maxTurns, MaxUSD: maxUSD,
 			Connections:      []bundleConnection{},
 			KnowledgeSources: g.searchable(line),
+			Rules:            []bundleRule{},
 		},
 		Files: make(map[string][]byte, len(agentFiles)),
 		Git:   []gitCredential{},
@@ -211,7 +221,83 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 		return runBundle{}, err
 	}
 
+	if err := g.addRules(ctx, c, it, &b); err != nil {
+		return runBundle{}, err
+	}
+
 	return b, nil
+}
+
+// addRules puts the factory rules that apply to the run in b, matched by its agent, station and
+// item's lane and work type, and records them.
+func (g *Gateway) addRules(ctx context.Context, c domain.TaskClaims, it domain.Item, b *runBundle) error {
+	rules, err := g.defs.Rules(ctx, c.VersionID, domain.RuleTarget{Agent: c.Agent, Station: c.Station, Lane: it.Lane, WorkType: it.Type})
+	if err != nil {
+		return fmt.Errorf("rules of agent %s: %w", c.Agent, err)
+	}
+
+	for _, r := range rules {
+		b.Spec.Rules = append(b.Spec.Rules, bundleRule{Name: r.Name, SHA256: r.SHA256, Paths: r.Paths, Content: r.Content})
+	}
+
+	return g.recordRules(ctx, c, rules)
+}
+
+// eventPage is how many of an item's events recordRules reads at a time.
+const eventPage = 500
+
+// recordRules appends the run's EventRulesApplied with the name and hash of each of its rules,
+// unless no rule applies or the run has one already: a bundle fetched again records nothing.
+func (g *Gateway) recordRules(ctx context.Context, c domain.TaskClaims, rules []domain.RunRule) error {
+	if len(rules) == 0 {
+		return nil
+	}
+
+	for after := int64(0); ; {
+		events, err := g.events.ItemEvents(ctx, c.ItemID, after, eventPage)
+		if err != nil {
+			return fmt.Errorf("events of item %s: %w", c.ItemID, err)
+		}
+
+		if slices.ContainsFunc(events, func(e domain.Event) bool { return e.Kind == domain.EventRulesApplied && e.RunID == c.RunID }) {
+			return nil
+		}
+
+		if len(events) < eventPage {
+			break
+		}
+
+		after = events[len(events)-1].ID
+	}
+
+	applied := make([]any, 0, len(rules))
+	for _, r := range rules {
+		applied = append(applied, map[string]any{"name": r.Name, "sha256": string(r.SHA256)})
+	}
+
+	err := g.events.AppendEvents(ctx, domain.Event{
+		FactoryID: c.FactoryID, ItemID: c.ItemID, RunID: c.RunID, At: g.clock.Now(), Kind: domain.EventRulesApplied,
+		Station: c.Station, Actor: c.Agent, Data: map[string]any{"rules": applied},
+	})
+	if err != nil {
+		return fmt.Errorf("record the rules of run %s: %w", c.RunID, err)
+	}
+
+	return nil
+}
+
+// item is the item the run works on, which must be of the run's factory.
+func (g *Gateway) item(ctx context.Context, c domain.TaskClaims) (domain.Item, error) {
+	it, err := g.items.Item(ctx, c.ItemID)
+	if err != nil {
+		return domain.Item{}, fmt.Errorf("item %s: %w", c.ItemID, err)
+	}
+
+	if it.FactoryID != c.FactoryID {
+		return domain.Item{}, fmt.Errorf("%w: item %s is not in factory %s", errForbidden, c.ItemID, c.FactoryID)
+	}
+
+	return it, nil
 }
 
 // outputSchemaFile is the agent file that holds the station contract's JSON Schema.

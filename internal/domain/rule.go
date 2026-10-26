@@ -61,6 +61,16 @@ func within(list []string, v string) bool {
 	return len(list) == 0 || slices.Contains(list, v)
 }
 
+// RunRule is a rule as a run gets it in its bundle: its name, the hash of its rule file in the
+// run's definition version, its paths and Content, the file the worker writes to the agent's
+// rules (a frontmatter with the description and paths, then the body).
+type RunRule struct {
+	Name    string
+	SHA256  BlobHash
+	Paths   []string
+	Content string
+}
+
 // Violation is one factory rule an output says was broken: a review contract's violations
 // entry, {rule: <rule name>, reason: <one line>} (ADR 0014 §6).
 type Violation struct {

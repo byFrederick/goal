@@ -90,6 +90,11 @@ const (
 	// restart, a network blip) and that the engine runs again in a new one at the same station.
 	// Data reason, attempt (the lost one) and max.
 	EventRunRetried EventKind = "run_retried"
+	// EventRulesApplied is the factory rules a run ran with (ADR 0014), written by the gateway
+	// once per run when it first serves the run's bundle, and only when a rule applies. Data
+	// rules: [{name, sha256}], the rule's name and the hash of its rule file in the run's
+	// definition version.
+	EventRulesApplied EventKind = "rules_applied"
 )
 
 // Audit of items.

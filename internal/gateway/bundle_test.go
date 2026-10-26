@@ -106,6 +106,8 @@ spec:
   connections: [issues, docs, wiki]
   skills:
     - { name: acme-conventions, source: ./skills/acme-conventions }
+  rules:
+    - { name: go-errors, source: ./rules/go-errors.md }
   contracts: { change: contracts/change.json }
   agents:
     - name: engineer
@@ -128,6 +130,7 @@ spec:
 var bundleFiles = map[string]string{
 	"skills/acme-conventions/SKILL.md": "---\nname: acme-conventions\n---\n",
 	"contracts/change.json":            `{"type":"object"}`,
+	"rules/go-errors.md":               "---\ndescription: Wrap errors.\npaths: [\"**/*.go\"]\n---\nWrap with %w.\n",
 }
 
 // runServer serves the gateway's run bundle the way goald mounts it.
@@ -248,6 +251,7 @@ func TestServeRun_ServesTheRunsBundle(t *testing.T) {
 					MCP: &domain.KindMCP{Command: []string{"sh", "-c", "npx -y @acme/docs-mcp@1.0.0"}},
 				},
 			},
+			Rules: []bundleRule{{Name: "go-errors", SHA256: domain.HashBlob([]byte("Wrap with %w.\n")), Paths: []string{"**/*.go"}, Content: "Wrap with %w.\n"}},
 		},
 		Files:      map[string][]byte{"agent/prompt.md": []byte("# engineer\n"), "agent/output.schema.json": []byte(`{"type":"object"}`)},
 		Repository: &bundleRepository{URL: "https://github.com/acme/api.git", Branch: it.Branch(), FreshBase: domain.FreshBaseMerge},
@@ -487,4 +491,182 @@ func mustJSON(t *testing.T, v any) string {
 	}
 
 	return string(b)
+}
+
+// rulesYAML is a factory whose rules apply to every run (secrets) or are scoped to an agent
+// (designer), a station (review), a lane (backend), a work type (incident) and, for the reviewer,
+// the lane and work type of the work it reviews.
+const rulesYAML = `apiVersion: goal/v1
+kind: Factory
+metadata: { id: ` + string(factoryID) + `, name: acme-rules }
+spec:
+  runtime: { modelConnection: claude }
+  rules:
+    - { name: secrets, source: ./rules/secrets.md }
+    - { name: design, source: ./rules/design.md }
+    - { name: reviewing, source: ./rules/reviewing.md }
+    - { name: backend, source: ./rules/backend.md }
+    - { name: incidents, source: ./rules/incidents.md }
+    - { name: backend-features, source: ./rules/backend-features.md }
+  agents:
+    - { name: engineer, prompt: ./agents/engineer.md }
+    - { name: designer, prompt: ./agents/engineer.md }
+    - { name: reviewer, prompt: ./agents/engineer.md }
+  board:
+    workTypes: [feature, incident]
+    stations:
+      - { id: build, kind: agent, route: { backend: engineer, frontend: designer } }
+      - { id: review, kind: agent, agent: reviewer }
+      - { id: done, kind: done }
+`
+
+var rulesFiles = map[string]string{
+	"rules/secrets.md":          "---\ndescription: Keep secrets out.\n---\nNever print a token.\n",
+	"rules/design.md":           "---\ndescription: Design.\nappliesTo: { agents: [designer] }\n---\nUse the design system.\n",
+	"rules/reviewing.md":        "---\ndescription: Review.\nappliesTo: { stations: [review] }\n---\nRead the diff.\n",
+	"rules/backend.md":          "---\ndescription: Backend.\nappliesTo: { lanes: [backend] }\npaths: [\"**/*.go\"]\n---\nWrap errors.\n",
+	"rules/incidents.md":        "---\ndescription: Incidents.\nappliesTo: { workTypes: [incident] }\n---\nPage someone.\n",
+	"rules/backend-features.md": "---\ndescription: Features.\nappliesTo: { agents: [reviewer], lanes: [backend], workTypes: [feature] }\n---\nCheck the tests.\n",
+}
+
+// queue creates an item of the harness's factory of work type feature in lane backend at station.
+func (h *harness) queue(t *testing.T, station string) domain.Item {
+	t.Helper()
+
+	it, err := h.store.CreateItem(domain.WithOrg(t.Context(), h.claims().OrgID), domain.NewItem{
+		FactoryID: factoryID, Type: "feature", Lane: "backend", Title: "Add a health endpoint",
+		Station: station, State: domain.StateQueued, CreatedAt: h.clock.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return it
+}
+
+// fetchBundle serves claims c their bundle and decodes it.
+func (h *harness) fetchBundle(t *testing.T, url string, c domain.TaskClaims) runBundle {
+	t.Helper()
+
+	status, _, body := request(t, http.MethodGet, url, h.token(t, c))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (%s)", status, body)
+	}
+
+	var b runBundle
+	if err := json.Unmarshal(body, &b); err != nil {
+		t.Fatal(err)
+	}
+
+	return b
+}
+
+// bundleRuleOf is rule name of rulesFiles as the harness's definitions serve it: its body under
+// the body's hash.
+func bundleRuleOf(name string, paths ...string) bundleRule {
+	_, body, _ := strings.Cut(strings.TrimPrefix(rulesFiles["rules/"+name+".md"], "---\n"), "\n---\n")
+
+	return bundleRule{Name: name, SHA256: domain.HashBlob([]byte(body)), Paths: paths, Content: body}
+}
+
+// A run gets the rules whose appliesTo matches its agent, station and its item's lane and work
+// type; a reviewer the same way, by the lane and work type of the item it reviews.
+func TestBundle_RulesSelectedByAgentStationLaneAndWorkType(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, station, agent string
+		want                 []bundleRule
+	}{
+		{name: agentEngineer, station: "build", agent: agentEngineer, want: []bundleRule{bundleRuleOf("secrets"), bundleRuleOf("backend", "**/*.go")}},
+		{name: "reviewer", station: "review", agent: "reviewer", want: []bundleRule{
+			bundleRuleOf("secrets"), bundleRuleOf("reviewing"), bundleRuleOf("backend", "**/*.go"), bundleRuleOf("backend-features"),
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarnessWith(t, Config{}, harnessDeps{yaml: rulesYAML, files: rulesFiles})
+			c := h.claims()
+			c.ItemID, c.Station, c.Agent, c.Connections = h.queue(t, tt.station).ID, tt.station, tt.agent, nil
+
+			got := h.fetchBundle(t, h.runServer(t), c)
+
+			if g, w := mustJSON(t, got.Spec.Rules), mustJSON(t, tt.want); g != w {
+				t.Errorf("rules\n got %s\nwant %s", g, w)
+			}
+		})
+	}
+}
+
+// The run's rules are recorded once, by name and hash, however often its bundle is fetched.
+func TestBundle_RulesAppliedEventWrittenOncePerRun(t *testing.T) {
+	t.Parallel()
+
+	h := newHarnessWith(t, Config{}, harnessDeps{yaml: rulesYAML, files: rulesFiles})
+	it := h.queue(t, "build")
+	c := h.claims()
+	c.ItemID, c.Connections = it.ID, nil
+	url := h.runServer(t)
+
+	h.fetchBundle(t, url, c)
+	h.fetchBundle(t, url, c)
+
+	applied := rulesApplied(h.store.Events(it.ID))
+	if len(applied) != 1 {
+		t.Fatalf("%d rules_applied events, want 1: %+v", len(applied), applied)
+	}
+
+	e := applied[0]
+	if e.RunID != c.RunID || e.Station != "build" || e.Actor != agentEngineer || e.FactoryID != factoryID {
+		t.Errorf("event %+v; want run %s at build by engineer", e, c.RunID)
+	}
+
+	want := []map[string]any{
+		{"name": "secrets", "sha256": string(bundleRuleOf("secrets").SHA256)},
+		{"name": "backend", "sha256": string(bundleRuleOf("backend").SHA256)},
+	}
+	if g, w := mustJSON(t, e.Data["rules"]), mustJSON(t, want); g != w {
+		t.Errorf("rules %s, want %s", g, w)
+	}
+
+	// Another run of the item records its own.
+	c.RunID = "run-2"
+	h.fetchBundle(t, url, c)
+
+	if all := rulesApplied(h.store.Events(it.ID)); len(all) != 2 || all[1].RunID != c.RunID {
+		t.Errorf("after another run's bundle, rules_applied events %+v; want one per run", all)
+	}
+}
+
+// A run that no rule applies to records none.
+func TestBundle_NoRulesAppliedEventWithoutRules(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, Config{})
+	it := h.submit(t, factoryID, "Write the spec", "")
+	c := h.claims()
+	c.ItemID = it.ID
+
+	if b := h.fetchBundle(t, h.runServer(t), c); b.Spec.Rules == nil || len(b.Spec.Rules) != 0 {
+		t.Errorf("rules %v, want []", b.Spec.Rules)
+	}
+
+	if applied := rulesApplied(h.store.Events(it.ID)); len(applied) != 0 {
+		t.Errorf("rules_applied events %+v, want none", applied)
+	}
+}
+
+func rulesApplied(events []domain.Event) []domain.Event {
+	var out []domain.Event
+
+	for _, e := range events {
+		if e.Kind == domain.EventRulesApplied {
+			out = append(out, e)
+		}
+	}
+
+	return out
 }
