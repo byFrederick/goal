@@ -87,6 +87,7 @@ const ship: InboxEntry = {
 const board: Board = {
   factory: { id: factory.id, name: factory.name, title: 'SRE' },
   stations: [],
+  assemblies: [],
   constraint: null,
   constraint_source: 'configured',
   line: {

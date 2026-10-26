@@ -54,7 +54,7 @@ func (s *server) GetBoard(ctx context.Context, req gen.GetBoardRequestObject) (g
 
 	constraint, source := l.ConstraintOf(l.Candidates(stats.list, stats.busyOver, 1), loads)
 
-	byStation, err := s.boardCards(ctx, f, l, constraint)
+	byStation, assemblies, err := s.boardCards(ctx, f, l, constraint)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func (s *server) GetBoard(ctx context.Context, req gen.GetBoardRequestObject) (g
 	line.Touches = touchHeadline(touches)
 
 	board := gen.GetBoard200JSONResponse{
-		Stations: make([]gen.BoardStation, 0, len(l.Stations)), Line: line, Constraint: optional(constraint),
+		Stations: make([]gen.BoardStation, 0, len(l.Stations)), Assemblies: assemblies, Line: line, Constraint: optional(constraint),
 		ConstraintSource: gen.ConstraintSource(source),
 	}
 	board.Factory.Id, board.Factory.Name, board.Factory.Title = f.Metadata.ID, f.Metadata.Name, optional(f.Metadata.Title)
@@ -121,31 +121,45 @@ func (s *server) stationLoads(ctx context.Context, f domain.FactoryID) (map[stri
 }
 
 // boardCards renders the board's cards by station: every open item (up to boardOpenItems) and the
-// boardDoneItems newest done ones, those waiting at drum in its buffer.
-func (s *server) boardCards(ctx context.Context, f *config.Factory, l domain.Line, drum string) (map[string][]gen.ItemCard, error) {
+// boardDoneItems newest done ones, those waiting at drum in its buffer; and, apart, the open
+// assemblies (up to boardOpenItems), which are on no station's column.
+func (s *server) boardCards(ctx context.Context, f *config.Factory, l domain.Line, drum string) (map[string][]gen.ItemCard, []gen.ItemCard, error) {
 	open, err := s.items.ListItems(ctx, ports.ItemQuery{FactoryID: l.FactoryID, States: openStates, Limit: boardOpenItems})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	done, err := s.items.ListItems(ctx, ports.ItemQuery{
 		FactoryID: l.FactoryID, States: []domain.ItemState{domain.StateDone}, Limit: boardDoneItems,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	cards, err := s.cards(ctx, f, l, drum, append(open, done...))
+	asms, err := s.items.ListItems(ctx, ports.ItemQuery{
+		FactoryID: l.FactoryID, States: []domain.ItemState{domain.StateAssembly}, Limit: boardOpenItems,
+	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	byStation := map[string][]gen.ItemCard{}
+	cards, err := s.cards(ctx, f, l, drum, slices.Concat(open, done, asms))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	byStation, assemblies := map[string][]gen.ItemCard{}, []gen.ItemCard{}
+
 	for _, c := range cards {
+		if c.State == gen.ItemState(domain.StateAssembly) {
+			assemblies = append(assemblies, c)
+			continue
+		}
+
 		byStation[c.Station] = append(byStation[c.Station], c)
 	}
 
-	return byStation, nil
+	return byStation, assemblies, nil
 }
 
 // boardStats is what the board's station statistics come from: every station measured over the

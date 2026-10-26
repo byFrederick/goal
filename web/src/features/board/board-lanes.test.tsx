@@ -98,6 +98,7 @@ const board = (over: Partial<BoardStation> = {}, items: ItemCard[] = []): Board 
       ...over,
     }),
   ],
+  assemblies: [],
   constraint: 'investigate',
   constraint_source: 'configured',
   line: {

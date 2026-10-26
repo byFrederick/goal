@@ -4096,7 +4096,7 @@ components:
           description: Pass as `after` for the next page; null on the last page
     Board:
       type: object
-      required: [factory, stations, constraint, constraint_source, line]
+      required: [factory, stations, assemblies, constraint, constraint_source, line]
       properties:
         factory:
           type: object
@@ -4108,6 +4108,14 @@ components:
         stations:
           type: array
           items: { $ref: "#/components/schemas/BoardStation" }
+        assemblies:
+          type: array
+          description: >-
+            The factory's open assemblies (state assembly), each with its parts summary. An open
+            assembly stays at the station that planned it but is no work there: it is in no
+            station's items and in none of its counts, WIP or statistics; its parts are. A done
+            assembly is a card in the done station's items, like a finished item (ADR 0012).
+          items: { $ref: "#/components/schemas/ItemCard" }
         constraint:
           type: string
           nullable: true
