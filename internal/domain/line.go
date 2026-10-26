@@ -160,7 +160,19 @@ type Station struct {
 	// a gate where goald acts as the engine on the gate's approval (ActionMerge); empty means
 	// the approval only records the decision.
 	Action StationAction
+	// Context names what goald preloads into the feedback of every run at the station.
+	Context []StationContext
 }
+
+// StationContext is something goald preloads into a station's runs.
+type StationContext string
+
+// ContextInFlight preloads the factory's open items and assemblies with their paths, as an
+// `## In flight` section (ADR 0015).
+const ContextInFlight StationContext = "inflight"
+
+// Preloads reports whether the station's runs get c.
+func (s Station) Preloads(c StationContext) bool { return slices.Contains(s.Context, c) }
 
 // Gate sends rejected work back to OnReject, at most MaxRework times per item.
 type Gate struct {

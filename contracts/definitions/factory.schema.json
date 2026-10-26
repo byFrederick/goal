@@ -372,6 +372,12 @@
           "enum": ["merge"],
           "description": "On a human station or an agent station with a gate: what goald does when the human or the gate approves. merge merges every pull request the item's outputs name first (the pull_request and pull_requests fields of each station's latest output, the gate's own included), each through the factory's code host connection for its host; at a gate goald merges as the engine, and a refused merge blocks the item at the gate."
         },
+        "context": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["inflight"] },
+          "description": "What goald preloads into the feedback of every run at this station. inflight: an In flight section listing up to 30 of the factory's open items and assemblies with the paths each expects to change, ranked by overlap with the item."
+        },
         "gate": {
           "type": "object",
           "required": ["onReject"],

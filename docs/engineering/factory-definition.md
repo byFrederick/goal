@@ -101,3 +101,22 @@ board:
 - The output fails, as a malformed plan does (`contract_failed` naming the ref, one more attempt with the reason, then blocked), and no edge is written, when an entry is not an item ref, or names an item of another factory, an item that does not exist, one that is done or cancelled, the item itself or its own assembly, or an item that already waits for this one (the edge would close a cycle).
 
 **Planning-station convention.** When a request overlaps work in flight, a planning station does one of two things: name that item in the mapped `after` field, so the new work follows it, or declare the overlapping paths in `touches` (a single item) or in the plan's `paths` (each part), so the overlap hold serializes them. A factory's prompt for its planning agent should say so; goald enforces neither.
+
+## Station context
+
+A station's optional `context` list names what goald preloads into the `GOAL_FEEDBACK` of every run at the station. Its only value is `inflight` ([ADR 0015](../adr/0015-overlapping-in-flight-work.md) decision 1); a station without `context` gets nothing preloaded.
+
+```yaml
+- id: plan
+  kind: agent
+  agent: planner
+  context: [inflight]
+```
+
+With `inflight`, the run's feedback gets an `## In flight` section, read once per claim, after the `## Assembly` section of a part:
+
+- It lists the factory's open items and assemblies (neither done nor cancelled), leaving out the item itself, its assembly and its assembly's other parts. Each line gives the ref (`<factory>#<number>`), title, state, station and paths: the item's `work_items.paths`, or for an assembly the union of its open parts' part paths (its done parts are already on main).
+- It holds at most 30 entries, ranked by how many of an entry's globs have a literal prefix (up to the first `*`, `?`, `[` or `{`) that appears in the item's title or body, highest first, then by most recently updated. Entries without paths come last. The section says how many of the open entries it shows.
+- It is ranked from the factory's 500 newest open items; older ones are not listed.
+- It states what it lists and nothing else: how agents use it (naming an overlapping item in `after`, declaring overlapping paths) belongs in the factory's prompts and rules.
+- A store error while reading the open items blocks the item; it never runs without the section.
