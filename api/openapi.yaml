@@ -3456,6 +3456,30 @@ components:
           type: array
           description: The items that need this item, oldest edge first; getItem only
           items: { $ref: "#/components/schemas/ItemLink" }
+        waiting:
+          description: Why the item is not claimed yet; getItem only, absent unless it is queued or ready with an open need
+          allOf: [{ $ref: "#/components/schemas/ItemWaiting" }]
+    ItemWaiting:
+      type: object
+      description: >-
+        Why a queued or ready item is not claimed yet, derived from its open needs (those neither
+        done nor cancelled) on every read and never stored. Planned and linked needs win over
+        overlap ones
+      required: [kind, items, files]
+      properties:
+        kind:
+          type: string
+          enum: [after, files]
+          x-enum-varnames: [WaitingAfter, WaitingFiles]
+          description: "after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap)"
+        items:
+          type: array
+          description: "Refs (<factory name>#<number>) of the open needs of that kind, oldest edge first"
+          items: { type: string }
+        files:
+          type: array
+          description: "For kind files, the item's own paths that overlap those items' paths, in the item's order; empty for kind after"
+          items: { type: string }
     NewLink:
       type: object
       required: [needs]
@@ -3852,6 +3876,10 @@ components:
             parse (the worker cuts long tool input)
           nullable: true
           allOf: [{ $ref: "#/components/schemas/PlanSteps" }]
+        waiting:
+          description: Why the item is not claimed yet; absent or null unless it is queued or ready with an open need
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/ItemWaiting" }]
     PlanSteps:
       type: object
       description: The todos a running run completed of all it listed ("2 of 5 steps")

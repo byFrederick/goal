@@ -163,9 +163,9 @@ func TestAPI_ItemCardsCarryAssemblyAndParts(t *testing.T) {
 		board       gen.Board
 	)
 
-	h.getReadingAssembliesOnce(t, "/v1/orgs/acme/factories/line/items", &list)
-	h.getReadingAssembliesOnce(t, "/v1/orgs/acme/factories/line/board", &board)
-	h.getReadingAssembliesOnce(t, "/v1/orgs/acme/factories/line/items?state=in_progress", &alone)
+	h.getReadingOnce(t, "Assemblies", "/v1/orgs/acme/factories/line/items", &list)
+	h.getReadingOnce(t, "Assemblies", "/v1/orgs/acme/factories/line/board", &board)
+	h.getReadingOnce(t, "Assemblies", "/v1/orgs/acme/factories/line/items?state=in_progress", &alone)
 
 	if _, ok := cardsOf(board)[asm.Number]; ok {
 		t.Errorf("board shows the assembly %d; want only its parts on the line", asm.Number)
@@ -198,8 +198,8 @@ func TestAPI_ItemCardsCarryAssemblyAndParts(t *testing.T) {
 	}
 }
 
-// getReadingAssembliesOnce GETs path into out and checks it read the assemblies once.
-func (h *harness) getReadingAssembliesOnce(t *testing.T, path string, out any) {
+// getReadingOnce GETs path into out and checks it made the store read named read once.
+func (h *harness) getReadingOnce(t *testing.T, read, path string, out any) {
 	t.Helper()
 
 	h.seam.steps()
@@ -211,13 +211,13 @@ func (h *harness) getReadingAssembliesOnce(t *testing.T, path string, out any) {
 	reads := 0
 
 	for _, s := range h.seam.steps() {
-		if s.read == "Assemblies" {
+		if s.read == read {
 			reads++
 		}
 	}
 
 	if reads != 1 {
-		t.Errorf("GET %s read assemblies %d times, want once", path, reads)
+		t.Errorf("GET %s read %s %d times, want once", path, read, reads)
 	}
 }
 
@@ -247,6 +247,18 @@ func (h *harness) child(t *testing.T, parent domain.Item) {
 func (h *harness) assembled(t *testing.T, keys ...string) (domain.Item, []domain.Item) {
 	t.Helper()
 
+	plan := make([]domain.NewPart, 0, len(keys))
+	for _, k := range keys {
+		plan = append(plan, domain.NewPart{Key: k, Title: "part " + k})
+	}
+
+	return h.assembledOf(t, plan...)
+}
+
+// assembledOf is assembled with the parts of plan.
+func (h *harness) assembledOf(t *testing.T, plan ...domain.NewPart) (domain.Item, []domain.Item) {
+	t.Helper()
+
 	h.seed(t, stBuild, domain.StateQueued, t0)
 
 	it, l, err := h.store.ClaimNext(inOrg(t), ports.Claim{
@@ -254,11 +266,6 @@ func (h *harness) assembled(t *testing.T, keys ...string) (domain.Item, []domain
 	})
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	plan := make([]domain.NewPart, 0, len(keys))
-	for _, k := range keys {
-		plan = append(plan, domain.NewPart{Key: k, Title: "part " + k})
 	}
 
 	asm, parts, err := h.store.Assemble(inOrg(t), ports.Assembly{

@@ -594,6 +594,24 @@ func (e ItemState) Valid() bool {
 	}
 }
 
+// Defines values for ItemWaitingKind.
+const (
+	WaitingAfter ItemWaitingKind = "after"
+	WaitingFiles ItemWaitingKind = "files"
+)
+
+// Valid indicates whether the value is a known member of the ItemWaitingKind enum.
+func (e ItemWaitingKind) Valid() bool {
+	switch e {
+	case WaitingAfter:
+		return true
+	case WaitingFiles:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for KnowledgeDocumentStatus.
 const (
 	KnowledgeDocumentStatusFailed  KnowledgeDocumentStatus = "failed"
@@ -2416,6 +2434,9 @@ type Item struct {
 	Touches   *ItemTouches `json:"touches,omitempty"`
 	Type      string       `json:"type"`
 	UpdatedAt time.Time    `json:"updated_at"`
+
+	// Waiting Why the item is not claimed yet; getItem only, absent unless it is queued or ready with an open need
+	Waiting *ItemWaiting `json:"waiting,omitempty"`
 }
 
 // ItemAt defines model for ItemAt.
@@ -2497,6 +2518,9 @@ type ItemCard struct {
 	Turn      *int      `json:"turn"`
 	Type      string    `json:"type"`
 	UpdatedAt time.Time `json:"updated_at"`
+
+	// Waiting Why the item is not claimed yet; absent or null unless it is queued or ready with an open need
+	Waiting *ItemWaiting `json:"waiting,omitempty"`
 }
 
 // ItemFlow How the item flows, on GET of one item only
@@ -2581,6 +2605,21 @@ type ItemTouches struct {
 	Planned   int `json:"planned"`
 	Unplanned int `json:"unplanned"`
 }
+
+// ItemWaiting Why a queued or ready item is not claimed yet, derived from its open needs (those neither done nor cancelled) on every read and never stored. Planned and linked needs win over overlap ones
+type ItemWaiting struct {
+	// Files For kind files, the item's own paths that overlap those items' paths, in the item's order; empty for kind after
+	Files []string `json:"files"`
+
+	// Items Refs (<factory name>#<number>) of the open needs of that kind, oldest edge first
+	Items []string `json:"items"`
+
+	// Kind after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap)
+	Kind ItemWaitingKind `json:"kind"`
+}
+
+// ItemWaitingKind after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap)
+type ItemWaitingKind string
 
 // ItemsAtRemovedStations The open items that keep a publish or restore from dropping stations
 type ItemsAtRemovedStations struct {
