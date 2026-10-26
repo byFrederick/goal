@@ -64,7 +64,7 @@ func TestPlan(t *testing.T) {
 		"env reference":     {[]string{"docs/reference/environment.md"}, envTasks, "env (env:check): docs/reference/environment.md", ""},
 		"wrangler bindings": {[]string{"deploy/cloudflare/wrangler.jsonc"}, []string{envCheck, "cloudflare:check"}, "env (env:check): deploy/cloudflare/wrangler.jsonc", ""},
 		"nothing to check": {
-			[]string{"docs/adr/0001.md", "design-system/goal/MASTER.md", ".claude/skills/x/SKILL.md", ".github/workflows/ci.yml", ".githooks/pre-push", "README.md", "skills-lock.json"},
+			[]string{"docs/adr/0001.md", "docs/design/MASTER.md", ".claude/skills/x/SKILL.md", ".github/workflows/ci.yml", ".githooks/pre-push", "README.md", "skills-lock.json"},
 			nil, "", "",
 		},
 		"parts keep task check's order": {

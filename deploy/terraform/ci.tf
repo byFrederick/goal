@@ -58,6 +58,7 @@ locals {
     "iam.workloadIdentityPools.create",
     "iam.workloadIdentityPools.delete",
     "iam.workloadIdentityPools.get",
+    "iam.workloadIdentityPools.getAttestationRules",
     "iam.workloadIdentityPools.list",
     "iam.workloadIdentityPools.undelete",
     "iam.workloadIdentityPools.update",

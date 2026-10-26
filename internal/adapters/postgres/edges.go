@@ -200,7 +200,7 @@ func (s *Store) OpenNeeds(ctx context.Context, factory domain.FactoryID, ids []d
 	}
 
 	for _, r := range rows {
-		n := domain.OpenNeed{Kind: domain.EdgeKind(r.Kind), Item: domain.ItemID(r.NeedsID.String()), Number: r.Number}
+		n := domain.OpenNeed{Kind: domain.EdgeKind(r.Kind), Item: domain.ItemID(r.NeedsID.String()), Number: r.Number, Title: r.Title}
 		if len(r.Paths) > 0 {
 			n.Paths = r.Paths
 		}

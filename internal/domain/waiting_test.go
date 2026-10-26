@@ -12,6 +12,8 @@ func TestWaitingFor(t *testing.T) {
 	linked := OpenNeed{Kind: EdgeLinked, Item: "b", Number: 2}
 	overSQL := OpenNeed{Kind: EdgeOverlap, Item: "c", Number: 3, Paths: []string{"db/queries/*.sql"}}
 	overWeb := OpenNeed{Kind: EdgeOverlap, Item: "d", Number: 4, Paths: []string{"web/**", "db/queries/items.sql"}}
+	titled := OpenNeed{Kind: EdgeLinked, Item: "e", Number: 5, Title: "Move terraform", Paths: []string{"terraform/**"}}
+	titledOver := OpenNeed{Kind: EdgeOverlap, Item: "f", Number: 6, Title: "The API", Paths: []string{"internal/api/board.go"}}
 
 	queued := Item{
 		State: StateQueued,
@@ -42,6 +44,14 @@ func TestWaitingFor(t *testing.T) {
 		{
 			name: "after wins over files", item: queued, needs: []OpenNeed{overSQL, planned, overWeb, linked},
 			want: Waiting{Kind: WaitingAfter, Items: []OpenNeed{planned, linked}}, ok: true,
+		},
+		{
+			name: "after keeps each need's title and paths", item: queued, needs: []OpenNeed{titled, overSQL},
+			want: Waiting{Kind: WaitingAfter, Items: []OpenNeed{titled}}, ok: true,
+		},
+		{
+			name: "files keeps each need's title and paths", item: queued, needs: []OpenNeed{titledOver},
+			want: Waiting{Kind: WaitingFiles, Items: []OpenNeed{titledOver}, Files: []string{"internal/api/**"}}, ok: true,
 		},
 	}
 

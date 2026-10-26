@@ -5,9 +5,9 @@ description: Build or change a screen or component of the web UI from Goal's des
 
 # Build a screen
 
-The UI follows `design-system/goal/MASTER.md` exactly. How the app is laid out (routes, the API client, query keys, the mock, themes) is in [frontend.md](../../../docs/engineering/frontend.md). What moves with a UI change is the UI row of the [change map](../../../docs/engineering/change-map.md). Read both before you start, and [testing.md](../../../docs/engineering/testing.md) before the tests.
+The UI follows `docs/design/MASTER.md` exactly. How the app is laid out (routes, the API client, query keys, the mock, themes) is in [frontend.md](../../../docs/engineering/frontend.md). What moves with a UI change is the UI row of the [change map](../../../docs/engineering/change-map.md). Read both before you start, and [testing.md](../../../docs/engineering/testing.md) before the tests.
 
-1. **Read the spec and the design.** Find the screen in its spec in `docs/specs/`. Then read the sections of `design-system/goal/MASTER.md` that apply: Global Rules, Component Specs, Dark theme and Anti-Patterns.
+1. **Read the spec and the design.** Find the screen in its spec in `docs/specs/`. Then read the sections of `docs/design/MASTER.md` that apply: Global Rules, Component Specs, Dark theme and Anti-Patterns.
 2. **Reuse the components.** The design system's components are in `apps/web/src/ui` (button, card, field, dialog, sheet, list-row, empty-state, page-header and others). Compose a screen from them, inside its feature folder in `apps/web/src/features/<area>`. Add a component to `apps/web/src/ui` only when two screens need it.
 3. **Get the data through the client.** Requests live in `apps/web/src/api` and query keys in `apps/web/src/api/queries.ts`. No screen calls `fetch` or builds a query key by hand. A new endpoint comes first, through [goal-api-change](../goal-api-change/SKILL.md).
 4. **Build all four states.** Every view that loads data has:

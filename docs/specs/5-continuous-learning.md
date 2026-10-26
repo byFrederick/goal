@@ -185,7 +185,7 @@ Tag `learning`; no new permission: reading is `factory:read`, deciding and start
 
 ## 10. Web UI
 
-Routes under the factory: `/jonah` (review list), `/jonah/proposals/:proposal`, `/jonah/evals/:run`; org page `/o/:org/knowledge/learned`; the Definition's Versions section and publish dialog gain the per-version touches and the eval report. Query keys `['org', id, 'factory', f, 'jonah', 'proposals'|'evals'|'versions']`, `['org', id, 'knowledge', 'learned']`; the `learning` stream event invalidates them. Diffs use the builder's existing diff view; judge verdicts carry an "advisory" badge; every action follows `can`. Phone layouts for the review list and a proposal (accept and dismiss on the go). Accessibility and layout per `design-system/goal/MASTER.md`; Playwright at 375, 768 and 1440 px with axe.
+Routes under the factory: `/jonah` (review list), `/jonah/proposals/:proposal`, `/jonah/evals/:run`; org page `/o/:org/knowledge/learned`; the Definition's Versions section and publish dialog gain the per-version touches and the eval report. Query keys `['org', id, 'factory', f, 'jonah', 'proposals'|'evals'|'versions']`, `['org', id, 'knowledge', 'learned']`; the `learning` stream event invalidates them. Diffs use the builder's existing diff view; judge verdicts carry an "advisory" badge; every action follows `can`. Phone layouts for the review list and a proposal (accept and dismiss on the go). Accessibility and layout per `docs/design/MASTER.md`; Playwright at 375, 768 and 1440 px with axe.
 
 ## 11. Security and tenancy
 
