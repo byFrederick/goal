@@ -77,34 +77,69 @@ func ValidatePlan(parts []NewPart) error {
 	keys := make(map[string]bool, len(parts))
 
 	for i, p := range parts {
-		switch {
-		case strings.TrimSpace(p.Key) == "":
+		if strings.TrimSpace(p.Key) == "" {
 			return fmt.Errorf("part %d has no key: %w", i+1, ErrInvalid)
-		case strings.TrimSpace(p.Title) == "":
-			return fmt.Errorf("part %q has no title: %w", p.Key, ErrInvalid)
-		case keys[p.Key]:
-			return fmt.Errorf("part key %q twice: %w", p.Key, ErrInvalid)
+		}
+
+		if err := partHead(p, keys); err != nil {
+			return err
 		}
 
 		keys[p.Key] = true
 	}
 
 	for _, p := range parts {
-		seen := make(map[string]bool, len(p.Needs))
-
-		for _, n := range p.Needs {
-			switch {
-			case !keys[n]:
-				return fmt.Errorf("part %q needs unknown part %q: %w", p.Key, n, ErrInvalid)
-			case seen[n]:
-				return fmt.Errorf("part %q needs %q twice: %w", p.Key, n, ErrInvalid)
-			}
-
-			seen[n] = true
+		if err := partNeeds(p, keys); err != nil {
+			return err
 		}
 	}
 
 	return planCycle(parts)
+}
+
+// ValidatePart checks one part added to an assembly whose parts have keys, by ValidatePlan's
+// rules: a key and a title, a key no other part has, each need naming one of keys once. It
+// returns ErrInvalid for those. A new part has no dependents, so its needs close no cycle.
+func ValidatePart(p NewPart, keys map[string]bool) error {
+	if strings.TrimSpace(p.Key) == "" {
+		return fmt.Errorf("part has no key: %w", ErrInvalid)
+	}
+
+	if err := partHead(p, keys); err != nil {
+		return err
+	}
+
+	return partNeeds(p, keys)
+}
+
+// partHead checks a part's title and that its key is not among keys.
+func partHead(p NewPart, keys map[string]bool) error {
+	switch {
+	case strings.TrimSpace(p.Title) == "":
+		return fmt.Errorf("part %q has no title: %w", p.Key, ErrInvalid)
+	case keys[p.Key]:
+		return fmt.Errorf("part key %q twice: %w", p.Key, ErrInvalid)
+	}
+
+	return nil
+}
+
+// partNeeds checks that each of a part's needs names one of keys, once.
+func partNeeds(p NewPart, keys map[string]bool) error {
+	seen := make(map[string]bool, len(p.Needs))
+
+	for _, n := range p.Needs {
+		switch {
+		case !keys[n]:
+			return fmt.Errorf("part %q needs unknown part %q: %w", p.Key, n, ErrInvalid)
+		case seen[n]:
+			return fmt.Errorf("part %q needs %q twice: %w", p.Key, n, ErrInvalid)
+		}
+
+		seen[n] = true
+	}
+
+	return nil
 }
 
 // planCycle returns ErrCycle unless the parts can be ordered so each comes after what it needs

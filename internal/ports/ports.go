@@ -128,6 +128,18 @@ type Store interface {
 	// nothing.
 	Assemble(ctx context.Context, a Assembly) (domain.Item, domain.Parts, error)
 
+	// AddPart adds one part to an open assembly, in one transaction, under the factory's lock and
+	// then the assembly's (AddEdge's order): n.Part becomes an item as each of Assemble's parts
+	// does, with the assembly's type, priority and class of service, its brief as body, its paths,
+	// queued at the assembly's own station (the station that planned it), and each need, the key
+	// of one of the assembly's parts, a planned edge by n.By (checked for cycles as AddEdge's
+	// are). It appends part_created on the part and part_added on the assembly, writes n.Audit
+	// when set and returns the part and the assembly's parts. A part that fails
+	// domain.ValidatePart, an unknown need, an item that is not an assembly and a part are
+	// domain.ErrInvalid; a key the assembly already has and an assembly no longer in state
+	// assembly ErrConflict; an unknown item ErrNotFound. A refused part writes nothing.
+	AddPart(ctx context.Context, n NewAssemblyPart) (domain.Item, domain.Parts, error)
+
 	// Parts returns an assembly's parts in plan order and how many are done. An unknown item has
 	// none.
 	Parts(ctx context.Context, parent domain.ItemID) (domain.Parts, error)
@@ -566,6 +578,16 @@ type NewRun struct {
 type Assembly struct {
 	Transition Transition
 	Parts      []domain.NewPart
+}
+
+// NewAssemblyPart is one part added to an open assembly by By at At.
+type NewAssemblyPart struct {
+	Assembly domain.ItemID
+	Part     domain.NewPart
+	By       domain.Actor
+	At       time.Time
+	// Audit, when set, is appended to the organization's audit log with the part.
+	Audit *domain.AuditEntry
 }
 
 // Cascade is a change of an assembly applied to its parts: one transition per part it moves,

@@ -14,6 +14,9 @@ import (
 	"github.com/byFrederick/goal/internal/ports"
 )
 
+// partKeyIndex is the unique index of an assembly's part keys (parent_id, part_key).
+const partKeyIndex = "work_items_parent_part_key_idx"
+
 // Assemble implements ports.Store. The parent's row lock serializes it with a retry, so the
 // second call finds the parts the first created (and work_items_parent_part_key_idx would refuse
 // duplicates).
@@ -92,7 +95,7 @@ func assemble(ctx context.Context, q *db.Queries, cur db.WorkItem, a ports.Assem
 	events := make([]domain.Event, 0, len(a.Parts)+1)
 
 	for _, p := range a.Parts {
-		part, err := insertPart(ctx, q, row, p, t)
+		part, err := insertPart(ctx, q, row, p, t.From.Station, t.At)
 		if err != nil {
 			return db.WorkItem{}, err
 		}
@@ -127,9 +130,9 @@ func assemble(ctx context.Context, q *db.Queries, cur db.WorkItem, a ports.Assem
 	return row, nil
 }
 
-// insertPart creates one part of the assembly parent: the parent's type, priority and class of
-// service, queued at the station that planned it.
-func insertPart(ctx context.Context, q *db.Queries, parent db.WorkItem, p domain.NewPart, t ports.Transition) (db.WorkItem, error) {
+// insertPart creates one part of the assembly parent at at: the parent's type, priority and class
+// of service, queued at station, the one that planned it.
+func insertPart(ctx context.Context, q *db.Queries, parent db.WorkItem, p domain.NewPart, station string, at time.Time) (db.WorkItem, error) {
 	id, err := newID()
 	if err != nil {
 		return db.WorkItem{}, err
@@ -147,11 +150,162 @@ func insertPart(ctx context.Context, q *db.Queries, parent db.WorkItem, p domain
 
 	row, err := q.InsertPart(ctx, db.InsertPartParams{
 		ID: id, FactoryID: parent.FactoryID, Number: number, ParentID: parent.ID, PartKey: p.Key, PartPaths: paths,
-		Type: parent.Type, Lane: optional(p.Lane), Title: p.Title, Body: p.Brief, Station: t.From.Station,
-		ClassOfService: parent.ClassOfService, Priority: int64(parent.Priority), CreatedAt: t.At,
+		Type: parent.Type, Lane: optional(p.Lane), Title: p.Title, Body: p.Brief, Station: station,
+		ClassOfService: parent.ClassOfService, Priority: int64(parent.Priority), CreatedAt: at,
 	})
+	if violates(err, partKeyIndex) {
+		return db.WorkItem{}, fmt.Errorf("part key %q is taken: %w", p.Key, ports.ErrConflict)
+	}
+
 	if err != nil {
 		return db.WorkItem{}, fmt.Errorf("insert part %q: %w", p.Key, err)
+	}
+
+	return row, nil
+}
+
+// AddPart implements ports.Store. The factory's row is locked before the assembly's, AddEdge's
+// order, so the planned edges' cycle check sees every edge committed before it; the assembly's lock
+// serializes it with Assemble, a closing part and another AddPart (work_items_parent_part_key_idx
+// refuses a key taken meanwhile).
+func (s *Store) AddPart(ctx context.Context, n ports.NewAssemblyPart) (domain.Item, domain.Parts, error) {
+	id, err := parseID("item", string(n.Assembly))
+	if err != nil {
+		return domain.Item{}, domain.Parts{}, fmt.Errorf("add part to %s: %w", n.Assembly, err)
+	}
+
+	var (
+		part  domain.Item
+		parts domain.Parts
+	)
+
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		cur, existing, err := lockAssembly(ctx, q, id, n.Assembly)
+		if err != nil {
+			return err
+		}
+
+		row, err := addPart(ctx, q, cur, existing, n)
+		if err != nil {
+			return err
+		}
+
+		if part, err = itemFrom(row); err != nil {
+			return err
+		}
+
+		rows, err := q.ItemParts(ctx, id)
+		if err != nil {
+			return fmt.Errorf("parts: %w", err)
+		}
+
+		parts, err = partsFrom(rows)
+
+		return err
+	})
+	if err != nil {
+		return domain.Item{}, domain.Parts{}, fmt.Errorf("add part to %s: %w", n.Assembly, err)
+	}
+
+	return part, parts, nil
+}
+
+// lockAssembly locks the factory of the item id, then the item, which must be an open assembly,
+// and returns it and its parts.
+func lockAssembly(ctx context.Context, q *db.Queries, id uuid.UUID, item domain.ItemID) (db.WorkItem, []db.WorkItem, error) {
+	it, err := q.GetItem(ctx, id)
+	if notFound(err) {
+		return db.WorkItem{}, nil, fmt.Errorf("item %s: %w", item, ports.ErrNotFound)
+	}
+
+	if err != nil {
+		return db.WorkItem{}, nil, fmt.Errorf("item %s: %w", item, err)
+	}
+
+	if _, err := q.LockFactory(ctx, it.FactoryID); err != nil {
+		return db.WorkItem{}, nil, fmt.Errorf("lock factory %s: %w", it.FactoryID, err)
+	}
+
+	cur, err := lockItem(ctx, q, id, item)
+	if err != nil {
+		return db.WorkItem{}, nil, err
+	}
+
+	if cur.PartKey != nil {
+		return db.WorkItem{}, nil, fmt.Errorf("item %s is a part: %w", item, domain.ErrInvalid)
+	}
+
+	existing, err := q.ItemParts(ctx, id)
+	if err != nil {
+		return db.WorkItem{}, nil, fmt.Errorf("parts: %w", err)
+	}
+
+	switch {
+	case domain.ItemState(cur.State) != domain.StateAssembly && len(existing) == 0:
+		return db.WorkItem{}, nil, fmt.Errorf("item %s is no assembly: %w", item, domain.ErrInvalid)
+	case domain.ItemState(cur.State) != domain.StateAssembly:
+		return db.WorkItem{}, nil, fmt.Errorf("item %s is %s, not an open assembly: %w", item, cur.State, ports.ErrConflict)
+	}
+
+	return cur, existing, nil
+}
+
+// addPart creates n's part of the locked assembly cur, whose parts are existing, with its planned
+// edges, events and audit entry.
+func addPart(ctx context.Context, q *db.Queries, cur db.WorkItem, existing []db.WorkItem, n ports.NewAssemblyPart) (db.WorkItem, error) {
+	p := n.Part
+	ids := make(map[string]uuid.UUID, len(existing))
+	keys := make(map[string]bool, len(existing))
+
+	for _, e := range existing {
+		ids[*e.PartKey], keys[*e.PartKey] = e.ID, true
+	}
+
+	if keys[p.Key] {
+		return db.WorkItem{}, fmt.Errorf("part key %q is taken: %w", p.Key, ports.ErrConflict)
+	}
+
+	if err := domain.ValidatePart(p, keys); err != nil {
+		return db.WorkItem{}, err
+	}
+
+	row, err := insertPart(ctx, q, cur, p, cur.Station, n.At)
+	if err != nil {
+		return db.WorkItem{}, err
+	}
+
+	for _, k := range p.Needs {
+		cycle, err := q.EdgeReaches(ctx, db.EdgeReachesParams{FromID: ids[k], ToID: row.ID})
+		if err != nil {
+			return db.WorkItem{}, fmt.Errorf("check cycle: %w", err)
+		}
+
+		if cycle {
+			return db.WorkItem{}, fmt.Errorf("part %q needs %q: %w", p.Key, k, domain.ErrCycle)
+		}
+
+		if _, err := q.InsertEdge(ctx, db.InsertEdgeParams{
+			ItemID: row.ID, NeedsID: ids[k], Kind: string(domain.EdgePlanned), CreatedBy: n.By.Ref(), CreatedAt: n.At,
+		}); err != nil {
+			return db.WorkItem{}, fmt.Errorf("part %q needs %q: %w", p.Key, k, err)
+		}
+	}
+
+	factory, assembly := domain.FactoryID(cur.FactoryID.String()), domain.ItemID(cur.ID.String())
+	if err := appendEvents(ctx, q, []domain.Event{{
+		FactoryID: factory, ItemID: domain.ItemID(row.ID.String()), At: n.At, Kind: domain.EventPartCreated,
+		Station: row.Station, Actor: n.By.Name, Data: map[string]any{"parent": string(assembly), "key": p.Key},
+	}, {
+		FactoryID: factory, ItemID: assembly, At: n.At, Kind: domain.EventPartAdded, Station: cur.Station, Actor: n.By.Name,
+		Data: map[string]any{"part": row.ID.String(), "key": p.Key, "actor": n.By.Ref()},
+	}}); err != nil {
+		return db.WorkItem{}, err
+	}
+
+	if n.Audit != nil {
+		if err := appendAudit(ctx, q, *n.Audit); err != nil {
+			return db.WorkItem{}, err
+		}
 	}
 
 	return row, nil
