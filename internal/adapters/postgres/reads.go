@@ -60,6 +60,42 @@ func (s *Store) ListItems(ctx context.Context, q ports.ItemQuery) ([]domain.Item
 	return convertAll(rows, itemFrom)
 }
 
+// Assemblies implements ports.Store. Ids that are not UUIDs name no item.
+func (s *Store) Assemblies(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID]domain.Assembly, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	out := map[domain.ItemID]domain.Assembly{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.AssemblyPartsRow, error) {
+		return q.AssemblyParts(ctx, db.AssemblyPartsParams{Ids: uuids(ids), FactoryID: fid})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("assemblies of factory %s: %w", factory, err)
+	}
+
+	for _, r := range rows {
+		id := domain.ItemID(r.AssemblyID.String())
+
+		a, ok := out[id]
+		if !ok {
+			a = domain.Assembly{ID: id, Number: r.AssemblyNumber, Title: r.AssemblyTitle}
+		}
+
+		a.Parts = append(a.Parts, domain.Part{
+			ID: domain.ItemID(r.ID.String()), Number: r.Number, Station: r.Station, State: domain.ItemState(r.State),
+		})
+		out[id] = a
+	}
+
+	return out, nil
+}
+
 // StationLoads implements ports.Store.
 func (s *Store) StationLoads(ctx context.Context, factory domain.FactoryID) ([]domain.StationLoad, error) {
 	fid, err := parseID("factory", string(factory))

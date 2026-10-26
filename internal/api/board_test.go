@@ -2,8 +2,10 @@ package api_test
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/byFrederick/goal/internal/api/gen"
@@ -135,4 +137,93 @@ func lanesString(lanes []gen.BoardLane) string {
 	}
 
 	return string(b)
+}
+
+func TestAPI_ItemCardsCarryAssemblyAndParts(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	asm := h.seed(t, stInbox, domain.StateQueued, t0)
+	h.seedPart(t, asm, stDone, domain.StateDone)
+	second := h.seedPart(t, asm, stBuild, domain.StateInProgress)
+	h.seedPart(t, asm, stMerge, domain.StateWaitingHuman)
+	plain := h.seed(t, stBuild, domain.StateQueued, t0)
+
+	wantParts := &gen.AssemblyParts{Total: 3, Merged: 1, InProgress: 1, Waiting: 1, Stations: []string{stBuild, stMerge}}
+
+	// One read of assemblies a page, wherever the page's parents and parts are.
+	cardsAt := func(path string, into any, cards func() []gen.ItemCard) map[int64]gen.ItemCard {
+		t.Helper()
+
+		h.seam.steps()
+
+		if code := h.call(t, http.MethodGet, path, "", into); code != http.StatusOK {
+			t.Fatalf("GET %s = %d", path, code)
+		}
+
+		reads := 0
+
+		for _, s := range h.seam.steps() {
+			if s.read == "Assemblies" {
+				reads++
+			}
+		}
+
+		if reads != 1 {
+			t.Errorf("GET %s read assemblies %d times, want once", path, reads)
+		}
+
+		out := map[int64]gen.ItemCard{}
+		for _, c := range cards() {
+			out[c.Number] = c
+		}
+
+		return out
+	}
+
+	var (
+		list, alonePage gen.ItemPage
+		board           gen.Board
+	)
+
+	listed := cardsAt("/v1/orgs/acme/factories/line/items", &list, func() []gen.ItemCard { return list.Items })
+	boarded := cardsAt("/v1/orgs/acme/factories/line/board", &board, func() []gen.ItemCard { return slices.Collect(maps.Values(cardsOf(board))) })
+
+	for from, cards := range map[string]map[int64]gen.ItemCard{"items": listed, "board": boarded} {
+		a, part, other := cards[asm.Number], cards[second.Number], cards[plain.Number]
+
+		if !reflect.DeepEqual(a.Parts, wantParts) || a.Assembly != nil {
+			t.Errorf("%s: assembly card parts = %+v, assembly = %+v; want %+v and none", from, a.Parts, a.Assembly, wantParts)
+		}
+
+		want := &gen.PartOf{Id: string(asm.ID), Ref: a.Ref, Title: asm.Title, Part: 2, Parts: 3}
+		if !reflect.DeepEqual(part.Assembly, want) || part.Parts != nil {
+			t.Errorf("%s: second part's assembly = %+v, parts = %+v; want %+v and none", from, part.Assembly, part.Parts, want)
+		}
+
+		if other.Number != plain.Number || other.Assembly != nil || other.Parts != nil {
+			t.Errorf("%s: plain card = %+v; want neither assembly nor parts", from, other)
+		}
+	}
+
+	// A page holding the part alone still names its assembly.
+	alone := cardsAt("/v1/orgs/acme/factories/line/items?state=in_progress", &alonePage, func() []gen.ItemCard { return alonePage.Items })
+	if got := alone[second.Number].Assembly; len(alone) != 1 || got == nil || got.Part != 2 || got.Parts != 3 {
+		t.Errorf("in-progress page = %+v; want only the second part, 2 of 3", alone)
+	}
+}
+
+// seedPart seeds a part of assembly asm at station in state.
+func (h *harness) seedPart(t *testing.T, asm domain.Item, station string, state domain.ItemState) domain.Item {
+	t.Helper()
+
+	it, err := h.store.CreateItem(inOrg(t), domain.NewItem{
+		FactoryID: lineID, ParentID: asm.ID, Type: typeFeature, Lane: "api", Title: "part at " + station, Station: station,
+		State: state, Class: domain.ClassStandard, CreatedAt: t0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return it
 }

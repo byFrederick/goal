@@ -1,6 +1,9 @@
 package domain
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestItemBranch_IsAStableGitRefFromNumberAndTitle(t *testing.T) {
 	t.Parallel()
@@ -21,5 +24,30 @@ func TestItemBranch_IsAStableGitRefFromNumberAndTitle(t *testing.T) {
 		if got := (Item{Number: tc.number, Title: tc.title}).Branch(); got != tc.want {
 			t.Errorf("Branch(%d, %q) = %q, want %q", tc.number, tc.title, got, tc.want)
 		}
+	}
+}
+
+func TestAssemblyProgress_CountsMergedWorkingAndWaitingParts(t *testing.T) {
+	t.Parallel()
+
+	a := Assembly{ID: "a", Parts: []Part{
+		{ID: "p1", Station: "build", State: StateDone},
+		{ID: "p2", Station: "build", State: StateInProgress},
+		{ID: "p3", Station: "review", State: StateWaitingHuman},
+		{ID: "p4", Station: "build", State: StateQueued},
+		{ID: "p5", Station: "triage", State: StateCancelled},
+	}}
+
+	want := AssemblyProgress{Total: 5, Merged: 1, InProgress: 1, Waiting: 2, Stations: []string{"build", "review"}}
+	if got := a.Progress(); !reflect.DeepEqual(got, want) {
+		t.Errorf("Progress = %+v, want %+v", got, want)
+	}
+
+	if got := a.PartNumber("p3"); got != 3 {
+		t.Errorf("PartNumber(p3) = %d, want 3", got)
+	}
+
+	if got := a.PartNumber("other"); got != 0 {
+		t.Errorf("PartNumber(other) = %d, want 0", got)
 	}
 }
