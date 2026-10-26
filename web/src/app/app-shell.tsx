@@ -17,7 +17,7 @@ import { Rail } from './rail';
 export function AppShell({ org, children }: { org: OrgSummary; children: ReactNode }) {
   return (
     <AccountProvider org={org}>
-      <div className="flex min-h-dvh flex-col bg-shell md:flex-row">
+      <div className="flex min-h-dvh flex-col bg-shell pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] md:flex-row">
         <a
           href="#main"
           className="sr-only z-50 rounded-control bg-ink px-4 py-2 text-white focus:not-sr-only focus:fixed focus:top-3 focus:left-3"

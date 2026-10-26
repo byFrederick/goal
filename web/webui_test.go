@@ -26,6 +26,7 @@ func testSPAWith(t *testing.T, o Options) http.Handler {
 		"index.html":           {Data: []byte("<!doctype html>" + index)},
 		"favicon.svg":          {Data: []byte("<svg/>")},
 		"assets/index-a1b2.js": {Data: []byte("console.log(1)")},
+		"manifest.webmanifest": {Data: []byte(`{"name":"Goal"}`)},
 	}, o)
 	if err != nil {
 		t.Fatal(err)
@@ -51,6 +52,7 @@ func TestSPA_ServesFilesAndFallsBackToIndexForRoutes(t *testing.T) {
 		{"/index.html", 200, index, revalidate},
 		{"/assets/index-a1b2.js", 200, "console.log(1)", immutable},
 		{"/favicon.svg", 200, "<svg/>", revalidate},
+		{"/manifest.webmanifest", 200, `"name":"Goal"`, revalidate},
 		{"/assets/index-gone.js", 404, "", ""},
 		{"/assets/", 404, "", ""},
 		{"/v1/unknown", 404, "", ""},
@@ -133,6 +135,35 @@ func TestSPA_SetsSecurityHeaders(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// The manifest is served as application/manifest+json (Go's mime table does not know it), revalidated
+// like the other unhashed files, and with the same security headers.
+func TestSPA_ServesTheManifestAsWebManifest(t *testing.T) {
+	t.Parallel()
+
+	rec := httptest.NewRecorder()
+	testSPA(t).ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/manifest.webmanifest", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	if got := rec.Header().Get("Content-Type"); got != "application/manifest+json" {
+		t.Errorf("Content-Type = %q, want application/manifest+json", got)
+	}
+
+	if got := rec.Header().Get("Cache-Control"); got != revalidate {
+		t.Errorf("Cache-Control = %q, want %q", got, revalidate)
+	}
+
+	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("X-Content-Type-Options = %q, want nosniff", got)
+	}
+
+	if got := rec.Header().Get("Content-Security-Policy"); !strings.Contains(got, "default-src 'self'") {
+		t.Errorf("Content-Security-Policy = %q, want the policy of every answer", got)
 	}
 }
 
