@@ -70,7 +70,8 @@ test("the board says the week's touches per item, by station and on each touched
 
   if (isPhone(page)) {
     await expect(page.getByText(/^\d+\.\d touches per item$/)).toBeVisible();
-    await expect(page.getByText(/^The constraint: .+\. \d\.\d\d touches per item\.$/)).toBeVisible();
+    await expect(page.getByText(/^Investigate is the constraint: \d+ of \d+ busy, \d+ waiting$/)).toBeVisible();
+    await expect(page.getByText(/^\d\.\d\d touches per item\.$/)).toBeVisible();
     await expect(page.getByRole('link', { name: 'By station' })).toHaveAttribute(
       'href',
       '/o/acme/f/sre#touches-summary',

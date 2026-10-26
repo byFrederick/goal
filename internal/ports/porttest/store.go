@@ -644,6 +644,10 @@ func (s *Store) Transition(ctx context.Context, t ports.Transition) (domain.Item
 }
 
 func (s *Store) transition(org domain.OrgID, t ports.Transition) (domain.Item, ports.Audit, error) {
+	if t.To.State == domain.StateAssembly {
+		return domain.Item{}, nil, fmt.Errorf("item %s: only Assemble makes an assembly: %w", t.ItemID, domain.ErrInvalid)
+	}
+
 	s.mu.Lock()
 	defer s.changes.signal()
 	defer s.mu.Unlock()
@@ -653,15 +657,32 @@ func (s *Store) transition(org domain.OrgID, t ports.Transition) (domain.Item, p
 		return domain.Item{}, nil, fmt.Errorf("item %s: %w", t.ItemID, ports.ErrNotFound)
 	}
 
-	if err := s.checkLease(t); err != nil {
+	if err := s.checkTransition(it, t); err != nil {
 		return domain.Item{}, nil, err
 	}
 
+	s.move(it, t)
+	s.closeAssembly(it, t.At)
+
+	return clone(it), s.audit, nil
+}
+
+// checkTransition is Transition's guard: the lease, then the position. Callers hold s.mu.
+func (s *Store) checkTransition(it *domain.Item, t ports.Transition) error {
+	if err := s.checkLease(t); err != nil {
+		return err
+	}
+
 	if it.Position() != t.From {
-		return domain.Item{}, nil, fmt.Errorf("item %s is %s at %s, not %s at %s: %w",
+		return fmt.Errorf("item %s is %s at %s, not %s at %s: %w",
 			t.ItemID, it.State, it.Station, t.From.State, t.From.Station, ports.ErrConflict)
 	}
 
+	return nil
+}
+
+// move applies a guarded transition to it. Callers hold s.mu.
+func (s *Store) move(it *domain.Item, t ports.Transition) {
 	if held, ok := s.leases[t.ItemID]; ok && (t.Lease != nil || t.TakeLease) {
 		s.recordLease(held, t.Outcome, t.At)
 		delete(s.leases, t.ItemID)
@@ -691,8 +712,6 @@ func (s *Store) transition(org domain.OrgID, t ports.Transition) (domain.Item, p
 	for _, e := range t.Events {
 		s.append(e)
 	}
-
-	return clone(it), s.audit, nil
 }
 
 // checkLease refuses a transition that releases or takes a lease without an outcome, names both,
@@ -891,6 +910,7 @@ func rank(c domain.ClassOfService) int {
 func clone(it *domain.Item) domain.Item {
 	c := *it
 	c.Outputs = maps.Clone(it.Outputs)
+	c.PartPaths = slices.Clone(it.PartPaths)
 
 	return c
 }

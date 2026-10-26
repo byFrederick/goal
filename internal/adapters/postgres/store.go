@@ -528,6 +528,10 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 
 // Transition implements ports.Store.
 func (s *Store) Transition(ctx context.Context, t ports.Transition) (domain.Item, error) {
+	if t.To.State == domain.StateAssembly {
+		return domain.Item{}, fmt.Errorf("transition: item %s: only Assemble makes an assembly: %w", t.ItemID, domain.ErrInvalid)
+	}
+
 	item, err := parseID("item", string(t.ItemID))
 	if err != nil {
 		return domain.Item{}, err
@@ -536,49 +540,74 @@ func (s *Store) Transition(ctx context.Context, t ports.Transition) (domain.Item
 	var it domain.Item
 
 	err = s.inTx(ctx, func(q *db.Queries) error {
-		cur, err := q.LockItem(ctx, item)
-		if notFound(err) {
-			return fmt.Errorf("item %s: %w", t.ItemID, ports.ErrNotFound)
-		}
-
+		cur, err := lockItem(ctx, q, item, t.ItemID)
 		if err != nil {
-			return fmt.Errorf("lock item: %w", err)
-		}
-
-		// Releasing first is safe: a failed guard below rolls the release back, its lease span too.
-		if err := releaseOrTake(ctx, q, item, t); err != nil {
 			return err
 		}
 
-		if cur.Station != t.From.Station || domain.ItemState(cur.State) != t.From.State {
-			return fmt.Errorf("item %s is %s at %s, not %s at %s: %w",
-				t.ItemID, cur.State, cur.Station, t.From.State, t.From.Station, ports.ErrConflict)
-		}
-
-		row, err := q.MoveItem(ctx, moveParams(item, t))
+		row, err := transition(ctx, q, cur, t)
 		if err != nil {
-			return fmt.Errorf("move item: %w", err)
-		}
-
-		if it, err = itemFrom(row); err != nil {
 			return err
 		}
 
-		if err := appendEvents(ctx, q, t.Events); err != nil {
+		if err := closeAssembly(ctx, q, row, t.At); err != nil {
 			return err
 		}
 
-		if t.Audit == nil {
-			return nil
-		}
+		it, err = itemFrom(row)
 
-		return appendAudit(ctx, q, *t.Audit)
+		return err
 	})
 	if err != nil {
 		return domain.Item{}, fmt.Errorf("transition: %w", err)
 	}
 
 	return it, nil
+}
+
+// lockItem locks an item's row for a change: ErrNotFound when there is none.
+func lockItem(ctx context.Context, q *db.Queries, item uuid.UUID, id domain.ItemID) (db.WorkItem, error) {
+	cur, err := q.LockItem(ctx, item)
+	if notFound(err) {
+		return db.WorkItem{}, fmt.Errorf("item %s: %w", id, ports.ErrNotFound)
+	}
+
+	if err != nil {
+		return db.WorkItem{}, fmt.Errorf("lock item: %w", err)
+	}
+
+	return cur, nil
+}
+
+// transition applies t to the locked item cur: the lease, the guard, the move, its events and
+// audit entry.
+func transition(ctx context.Context, q *db.Queries, cur db.WorkItem, t ports.Transition) (db.WorkItem, error) {
+	// Releasing first is safe: a failed guard below rolls the release back, its lease span too.
+	if err := releaseOrTake(ctx, q, cur.ID, t); err != nil {
+		return db.WorkItem{}, err
+	}
+
+	if cur.Station != t.From.Station || domain.ItemState(cur.State) != t.From.State {
+		return db.WorkItem{}, fmt.Errorf("item %s is %s at %s, not %s at %s: %w",
+			t.ItemID, cur.State, cur.Station, t.From.State, t.From.Station, ports.ErrConflict)
+	}
+
+	row, err := q.MoveItem(ctx, moveParams(cur.ID, t))
+	if err != nil {
+		return db.WorkItem{}, fmt.Errorf("move item: %w", err)
+	}
+
+	if err := appendEvents(ctx, q, t.Events); err != nil {
+		return db.WorkItem{}, err
+	}
+
+	if t.Audit != nil {
+		if err := appendAudit(ctx, q, *t.Audit); err != nil {
+			return db.WorkItem{}, err
+		}
+	}
+
+	return row, nil
 }
 
 // releaseOrTake deletes the lease t releases (fenced by its acquired_at: ErrLeaseLost when it is

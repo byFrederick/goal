@@ -24,7 +24,7 @@ import { StationBody } from './board-lane';
 import {
   budgetNote,
   columnCount,
-  constraintNote,
+  constraintSentence,
   expediteHeader,
   firstStation,
   isExpedite,
@@ -160,25 +160,18 @@ function TouchesChip({ touches }: { touches: TouchHeadline }) {
   );
 }
 
-/** Phones, above the picked station: the same figures and a link to where they happen. */
-function PhoneTouches({ touches }: { touches: TouchHeadline }) {
+/** Phones, in the status line: the link to where the touches happen, a 44 px target beside the line. */
+function PhoneTouchesLink() {
   const params = useFactoryParams();
-  if (touches.finished === 0) return null;
   return (
-    <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-soft tabular-nums">
-      <span>
-        <strong className="font-medium">{perItem(touches.per_item_mean)}</strong> touches per item
-      </span>
-      <span>{formatPercent(touches.touchless_rate)} touchless</span>
-      <Link
-        to="/o/$org/f/$factory"
-        params={params}
-        hash="touches-summary"
-        className="inline-flex min-h-11 items-center text-ink underline underline-offset-2 transition-colors duration-200 hover:text-run"
-      >
-        By station
-      </Link>
-    </p>
+    <Link
+      to="/o/$org/f/$factory"
+      params={params}
+      hash="touches-summary"
+      className="inline-flex min-h-11 shrink-0 items-center text-ink underline underline-offset-2 transition-colors duration-200 hover:text-run"
+    >
+      By station
+    </Link>
   );
 }
 
@@ -236,7 +229,7 @@ function ColumnGrid({ board, onMove }: { board: Board; onMove: OnMove }) {
   );
 }
 
-/** Phones: a station picker and the picked station's cards. */
+/** Phones: a station picker, the constraint's sentence, and the picked station's cards. */
 function StationTabs({
   board,
   selected,
@@ -250,6 +243,8 @@ function StationTabs({
 }) {
   const navigate = useNavigate({ from: '/o/$org/f/$factory/board' });
   const list = useRef<HTMLDivElement>(null);
+  const picked = board.stations.find((s) => s.id === selected);
+  const sentence = picked && picked.id === board.constraint ? constraintSentence(picked) : null;
 
   // Keep the picked station visible in the scrolling picker.
   useEffect(() => {
@@ -267,24 +262,33 @@ function StationTabs({
       <Tabs.List ref={list} aria-label="Stations" className="-mx-4 flex gap-2 overflow-x-auto px-4 py-1">
         {board.stations.map((s) => {
           const drum = s.id === board.constraint;
+          const load = stationStat(s);
           return (
             <Tabs.Trigger
               key={s.id}
               value={s.id}
               data-station={s.id}
               className={cn(
-                'flex min-h-14 shrink-0 flex-col items-start justify-center gap-0.5 rounded-control border border-line bg-surface px-3 py-2 text-ink',
+                'flex min-h-14 w-36 shrink-0 flex-col items-start justify-center gap-0.5 rounded-control border border-line bg-surface px-3 py-2 text-ink',
                 'data-[state=active]:border-ink data-[state=active]:bg-ink data-[state=active]:text-white',
                 drum && 'shadow-[inset_0_-3px_0_var(--color-amber)]',
               )}
             >
-              <span className="text-sm font-medium">{humanize(s.id)}</span>
-              <span className="text-xs opacity-80">{stationStat(s)}</span>
+              <span className="block w-full truncate text-sm font-medium" title={humanize(s.id)}>
+                {humanize(s.id)}
+              </span>
+              <span className="block w-full truncate text-xs opacity-80" title={load}>
+                {load}
+              </span>
             </Tabs.Trigger>
           );
         })}
       </Tabs.List>
-      <PhoneTouches touches={board.line.touches} />
+      {sentence ? (
+        <p className="m-0 truncate text-sm text-ink-soft" title={sentence}>
+          {sentence}
+        </p>
+      ) : null}
       {board.stations.map((s) => {
         const drum = s.id === board.constraint;
         return (
@@ -302,7 +306,7 @@ function StationTabs({
                 </h2>
                 <span className="text-[13px] text-muted">{stationStat(s)}</span>
               </div>
-              <StationNote station={s} drum={drum} rateOf={rateOf} />
+              <StationNote station={s} rateOf={rateOf} />
               {!s.lanes?.length && s.items.length === 0 ? (
                 <p className="m-0 text-sm text-muted">Nothing here right now.</p>
               ) : null}
@@ -315,12 +319,11 @@ function StationTabs({
   );
 }
 
-/** On a phone, under the station's name: the constraint's load, then its touches per item. */
-function StationNote({ station, drum, rateOf }: { station: BoardStation; drum: boolean; rateOf: RateOf }) {
+/** On a phone, under the station's name: its touches per item, when one finished. */
+function StationNote({ station, rateOf }: { station: BoardStation; rateOf: RateOf }) {
   const touches = stationTouches(rateOf, station);
-  const parts = [drum ? `${constraintNote(station)}.` : null, touches ? `${touches}.` : null].filter(Boolean);
-  if (parts.length === 0) return null;
-  return <p className="m-0 mb-1 text-[13px] text-ink-soft">{parts.join(' ')}</p>;
+  if (!touches) return null;
+  return <p className="m-0 mb-1 text-[13px] text-ink-soft">{touches}.</p>;
 }
 
 /** Puts focus back on a card after it moved (it is rendered in its new column by then). */
@@ -343,6 +346,16 @@ export function BoardPage() {
   const rateOf: RateOf = (s) => (!rates || touches?.finished === 0 ? null : (rates.get(s.id) ?? 0));
   const search = useSearch({ from: '/o/$org/f/$factory/board' });
   const expedite = expediteHeader(board.line, board.stations.flatMap((s) => s.items).filter(isExpedite).length);
+  // The phone's status line: the line, its WIP and the week's touches per item, in one truncated line.
+  const headline = board.line.touches;
+  const touchesHeadline = `${perItem(headline.per_item_mean)} touches per item`;
+  const phoneLine = [
+    board.line.andon ? `Line stopped: ${board.line.andon.reason}` : 'Line running',
+    wipText(board.line),
+    headline.finished > 0 ? touchesHeadline : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
   const selected = board.stations.find((s) => s.id === search.station)?.id ?? firstStation(board);
   const [moving, setMoving] = useState<{ item: ItemCard; to?: string | undefined } | null>(null);
   const onMove: OnMove = holds(factory, 'item:operate') ? (item, to) => setMoving({ item, to }) : undefined;
@@ -372,22 +385,23 @@ export function BoardPage() {
           </span>
         </div>
       </header>
-      <div className="-mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-muted md:hidden">
+      <div className="-mt-3 flex min-w-0 items-center gap-2 text-sm text-muted md:hidden">
         <LineStatus
           andon={board.line.andon}
-          className="text-sm"
+          className="min-w-0 flex-1"
+          title={phoneLine}
           suffix={
             <>
               , <span className="whitespace-nowrap">{wipText(board.line)}</span>
-              {expedite ? (
+              {headline.finished > 0 ? (
                 <>
-                  , <span className="whitespace-nowrap">{expedite}</span>
+                  , <span className="whitespace-nowrap">{touchesHeadline}</span>
                 </>
               ) : null}
             </>
           }
-          wrap
         />
+        {headline.finished > 0 ? <PhoneTouchesLink /> : null}
         <AndonButton factory={factory} andon={board.line.andon} className="min-h-11" />
       </div>
 

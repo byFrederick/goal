@@ -168,8 +168,8 @@ describe('BoardPage', () => {
     const line = await screen.findByRole('region', { name: 'The line' });
     expect(within(line).getByText('WIP 2 of 3')).toBeTruthy();
     expect(within(line).getByText('Expedite 1 of 1 in use')).toBeTruthy();
-    // The phone's status line carries the same count.
-    expect(screen.getAllByText('Expedite 1 of 1 in use')).toHaveLength(2);
+    // The phone's status line is the line, WIP and touches only, so the count appears once.
+    expect(screen.getAllByText('Expedite 1 of 1 in use')).toHaveLength(1);
   });
 
   it('leaves the expedite count out when the line has no lane and no expedite item', async () => {
@@ -187,5 +187,64 @@ describe('BoardPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^Inbox/ }));
     const drawer = await screen.findByRole('dialog', { name: 'Inbox' });
     expect(await within(drawer).findByText('Nothing needs you')).toBeTruthy();
+  });
+
+  it('lays the phone picker out as one-line tabs, the constraint’s with its amber edge and the picked one ink-filled', async () => {
+    renderBoardPage({
+      page: () => (
+        <div style={{ width: 390 }}>
+          <BoardPage />
+        </div>
+      ),
+      org,
+      factory,
+      board: board(),
+      station: 'build',
+    });
+
+    const tabs = await screen.findByRole('tablist', { name: 'Stations' });
+    const build = within(tabs).getByRole('tab', { name: /^Build/ });
+    expect(build.getAttribute('data-state')).toBe('active');
+    expect(build.classList).toContain('data-[state=active]:bg-ink');
+    expect(build.classList).toContain('shadow-[inset_0_-3px_0_var(--color-amber)]');
+    expect(build.classList).toContain('min-h-14');
+    // The name and the load are each one line, the load cut with its full text in a title.
+    const load = within(build).getByText('1 of 1');
+    expect(load.classList).toContain('truncate');
+    expect(load.getAttribute('title')).toBe('1 of 1');
+
+    const investigate = within(tabs).getByRole('tab', { name: /^Investigate/ });
+    expect(investigate.getAttribute('data-state')).toBe('inactive');
+    expect(investigate.classList).not.toContain('shadow-[inset_0_-3px_0_var(--color-amber)]');
+  });
+
+  it('states the constraint under the tabs only while the constraint is picked', async () => {
+    const first = renderBoardPage({ page: BoardPage, org, factory, board: board(), station: 'build' });
+    expect(await screen.findByText('Build is the constraint: 1 of 1 busy, 0 waiting')).toBeTruthy();
+    first.unmount();
+
+    renderBoardPage({ page: BoardPage, org, factory, board: board(), station: 'investigate' });
+    await screen.findByRole('tabpanel');
+    expect(screen.queryByText(/^Build is the constraint: /)).toBeNull();
+  });
+
+  it('keeps the phone status line to one line with the touches per item and a 44 px link to them', async () => {
+    const touched = board({ touches: { finished: 4, per_item_mean: 1.4, per_item_median: 1, touchless_rate: 0.5 } });
+    renderBoardPage({ page: BoardPage, org, factory, board: touched });
+
+    const line = await screen.findByTitle('Line running, WIP 2 of 3, 1.4 touches per item');
+    expect(line.classList).toContain('truncate');
+    expect(line.textContent).toContain('1.4 touches per item');
+
+    const link = screen.getByRole('link', { name: 'By station' });
+    expect(link.classList).toContain('min-h-11');
+    expect(line.contains(link)).toBe(false);
+  });
+
+  it('shows no touches link while no item finished this week', async () => {
+    renderBoardPage({ page: BoardPage, org, factory, board: board() });
+
+    await screen.findByTitle('Line running, WIP 2 of 3');
+    expect(screen.queryByRole('link', { name: 'By station' })).toBeNull();
   });
 });

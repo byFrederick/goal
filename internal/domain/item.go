@@ -28,6 +28,9 @@ const (
 	StateBlocked      ItemState = "blocked"
 	StateDone         ItemState = "done"
 	StateCancelled    ItemState = "cancelled"
+	// StateAssembly is an item whose plan became parts (Store.Assemble): it is never claimed and
+	// closes itself when its last part is done or cancelled.
+	StateAssembly ItemState = "assembly"
 )
 
 // Waiting reports whether an item in this state can be pulled by the next free slot.
@@ -57,7 +60,11 @@ type Item struct {
 	// Number is unique per factory and shown as <FACTORY>-<number>.
 	Number   int64
 	ParentID ItemID // empty when the item has no parent
-	Type     string
+	// PartKey is the part's key in its assembly's plan, empty unless the item is a part;
+	// PartPaths the files the plan said it changes.
+	PartKey   string
+	PartPaths []string
+	Type      string
 	// Lane picks the agent at stations that route by lane. Empty until intake or an output sets it.
 	Lane     string
 	Title    string

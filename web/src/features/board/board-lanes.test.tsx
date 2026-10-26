@@ -3,6 +3,7 @@ import { cleanup, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Board, BoardLane, BoardStation, Factory, ItemCard, OrgSummary } from '../../api/types';
 import { renderBoardPage } from '../../test/route';
+import { StationBody } from './board-lane';
 import { BoardPage } from './board-page';
 
 // The header's Inbox button reads the inbox; the board tests see an empty one.
@@ -303,5 +304,34 @@ describe('board lanes', () => {
     const standard = within(investigator).getByRole('link', { name: QUEUED }).closest('article');
     expect(standard?.classList.contains('bg-rework-tint')).toBe(false);
     expect(within(standard as HTMLElement).queryByText('Expedite')).toBeNull();
+  });
+
+  it('gives a compact station’s lane cards their 44 px Move buttons, and the desktop’s 32 px ones', async () => {
+    const stationOf = board({}, [workItem, queuedItem]).stations[0] as BoardStation;
+    const render = (compact: boolean) =>
+      renderBoardPage({
+        page: () => <StationBody station={stationOf} onMove={vi.fn()} draggable={false} compact={compact} />,
+        org,
+        factory,
+      });
+
+    const phone = render(true);
+    const compactButtons = await screen.findAllByRole('button', { name: /^Move sre#/ });
+    expect(compactButtons).toHaveLength(2);
+    for (const button of compactButtons) expect(button.classList).toContain('size-11');
+    phone.unmount();
+
+    render(false);
+    const desktopButtons = await screen.findAllByRole('button', { name: /^Move sre#/ });
+    expect(desktopButtons).toHaveLength(2);
+    for (const button of desktopButtons) expect(button.classList).toContain('size-8');
+  });
+
+  it('says Nothing to do in a phone lane with no items', async () => {
+    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [workItem, queuedItem]) });
+
+    const panel = await screen.findByRole('tabpanel');
+    const triager = within(panel).getByRole('region', { name: 'Triager' });
+    expect(within(triager).getByText('Nothing to do')).toBeTruthy();
   });
 });

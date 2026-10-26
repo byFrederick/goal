@@ -561,7 +561,7 @@ test('on a phone the board opens where a person is needed, then picks any statio
   expect(await wip.evaluate((el) => el.getClientRects().length)).toBe(1);
   await picker.getByRole('tab', { name: 'Investigate 3 of 3, 2 ready' }).click();
   await expect(page).toHaveURL(/station=investigate/);
-  await expect(page.getByText('The constraint: busy 94%, queue growing')).toBeVisible();
+  await expect(page.getByText('Investigate is the constraint: 3 of 3 busy, 2 waiting')).toBeVisible();
   await expect(page.getByRole('article').filter({ hasText: 'billing-svc' })).toContainText(
     'sre#8, Incident, 1 hbilling-svc deploy rolled back twiceinvestigator-1, turn 3',
   );
