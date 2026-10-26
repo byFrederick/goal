@@ -71,7 +71,6 @@ func (s *server) AddItemPart(ctx context.Context, req gen.AddItemPartRequestObje
 	_, parts, err := s.engine.AddPart(ctx, it.ID, by, domain.NewPart{
 		Title: req.Body.Title, Lane: deref(req.Body.Lane), Brief: req.Body.Brief, Needs: deref(req.Body.Needs),
 	})
-
 	if err != nil {
 		return nil, partRefusal(err)
 	}

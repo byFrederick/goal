@@ -316,7 +316,7 @@ func TestAPI_AddItemPart(t *testing.T) {
 
 	plain := h.seed(t, stBuild, domain.StateQueued, h.clock.Now())
 	closed := newHarness(t)
-	done := closed.assemble(t, []domain.NewPart{{Key: "a", Title: "Contract", Lane: laneAPI}})
+	done := closed.assemble(t, []domain.NewPart{{Key: "a", Title: "Only", Lane: laneAPI}})
 	closed.move(t, done, domain.Position{Station: stDone, State: domain.StateDone}, func(tr *ports.Transition) { tr.DoneAt = h.clock.Now() })
 
 	refusals := []struct {

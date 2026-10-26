@@ -38,12 +38,37 @@ func TestEngine_AddPartQueuesAtTheAssemblysStationWithItsNeeds(t *testing.T) {
 		t.Errorf("assembly has %d parts, last %v; want 5, the new one last", all.Total, all.Items[len(all.Items)-1].ID)
 	}
 
-	edges, err := h.store.Edges(inOrg(t), part.ID)
+	if needs, want := h.plannedNeeds(t, part.ID), []domain.ItemID{parts[partQueued].ID, parts[partShipped].ID}; !slices.Equal(needs, want) {
+		t.Errorf("part needs %v; want %v", needs, want)
+	}
+
+	h.checkPartAdded(t, asm.ID, part.ID)
+}
+
+// checkPartAdded checks the trail of one added part: part_created on it, part_added and one
+// audit entry on its assembly.
+func (h *harness) checkPartAdded(t *testing.T, asm, part domain.ItemID) {
+	t.Helper()
+
+	if len(h.eventsOf(part, domain.EventPartCreated)) != 1 || len(h.eventsOf(asm, domain.EventPartAdded)) != 1 {
+		t.Errorf("events: part %v, assembly %v; want part_created and part_added", h.kinds(part), h.kinds(asm))
+	}
+
+	if audited := h.audited(t, domain.AuditItemPartAdded); len(audited) != 1 || audited[0].TargetID != string(asm) {
+		t.Errorf("audit = %+v; want one %s entry on the assembly", audited, domain.AuditItemPartAdded)
+	}
+}
+
+// plannedNeeds are the items id needs, oldest edge first; each edge must be planned.
+func (h *harness) plannedNeeds(t *testing.T, id domain.ItemID) []domain.ItemID {
+	t.Helper()
+
+	edges, err := h.store.Edges(inOrg(t), id)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var needs []domain.ItemID
+	needs := make([]domain.ItemID, 0, len(edges.Needs))
 	for _, e := range edges.Needs {
 		if e.Kind != domain.EdgePlanned {
 			t.Errorf("edge to %s is %s; want planned", e.Needs, e.Kind)
@@ -52,17 +77,7 @@ func TestEngine_AddPartQueuesAtTheAssemblysStationWithItsNeeds(t *testing.T) {
 		needs = append(needs, e.Needs)
 	}
 
-	if want := []domain.ItemID{parts[partQueued].ID, parts[partShipped].ID}; !slices.Equal(needs, want) {
-		t.Errorf("part needs %v; want %v", needs, want)
-	}
-
-	if len(h.eventsOf(part.ID, domain.EventPartCreated)) != 1 || len(h.eventsOf(asm.ID, domain.EventPartAdded)) != 1 {
-		t.Errorf("events: part %v, assembly %v; want part_created and part_added", h.kinds(part.ID), h.kinds(asm.ID))
-	}
-
-	if audited := h.audited(t, domain.AuditItemPartAdded); len(audited) != 1 || audited[0].TargetID != string(asm.ID) {
-		t.Errorf("audit = %+v; want one %s entry on the assembly", audited, domain.AuditItemPartAdded)
-	}
+	return needs
 }
 
 // A title whose slug another part has gets -2, then -3; a title without letters or digits is
