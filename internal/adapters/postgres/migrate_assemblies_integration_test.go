@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/byFrederick/goal/migrations"
+	"github.com/byFrederick/goal/db/migrations"
 )
 
 // Migration 00062 moves every done assembly to the station of its most recently done part,

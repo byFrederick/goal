@@ -17,8 +17,8 @@ internal/authoring/    definition authoring behind the API: drafts, validation, 
 internal/adapters/     postgres (store, LISTEN/NOTIFY), s3store (S3 and RustFS), docker (sandboxes), github (merges), envsecrets, sysclock
 packages/api-client/   @goal/api-client: typed TypeScript client of the API (generated types + openapi-fetch) for the UI
 contracts/definitions/ factory.schema.json, evals.schema.json (editor autocompletion + validation)
-migrations/            PostgreSQL schema (goose, forward-only)
-queries/               SQL for sqlc (pgx/v5)
+db/migrations/         PostgreSQL schema (goose, forward-only)
+db/queries/            SQL for sqlc (pgx/v5); db/sqlc.yaml compiles them
 compose.yaml           local PostgreSQL 18 with pgvector, RustFS (S3-compatible object storage) and Mailpit (the dev inbox)
 worker/                agent container images (TypeScript, Claude Agent SDK): runtime and dev (Go, task, Terraform, PostgreSQL)
 web/                   UI (React)
@@ -29,7 +29,7 @@ docs/engineering/      architecture and testing rules
 docs/jonah/            evaluation and self-remediation plan
 AGENTS.md              the index of rules for every agent and human (CLAUDE.md imports it)
 Taskfile.yml           task check = everything the pre-push hook and CI run
-.githooks/             pre-push hook: task check (+ task migrate-check when migrations/ or auth/ changed)
+.githooks/             pre-push hook: task check (+ task migrate-check when db/migrations/ or auth/ changed)
 .github/               CI workflow (ci.yml): the pre-push gate on every pull request and push to main
 .claude/rules/         path-scoped rules, one home per rule, each naming its area's skills
 .claude/skills/        vendored skills (pinned in skills-lock.json) and our goal-* procedures
@@ -95,7 +95,7 @@ An item is `<factory>#<number>` (`goal#2`), its id, or a bare number when only o
 
 `goal up --compose` (`task up:compose`) runs goald and the auth service as compose services too (the `stack` profile, images built from this checkout, goald holding the Docker socket: one's own laptop only), with `.env`'s settings and the addresses of compose's network, and returns once everything is healthy; `docker compose logs -f goald` follows it and `docker compose stop goald auth` stops it. It needs `GOAL_AUTH=session`. Plain `goal up` keeps goald on this machine.
 
-Two gates run the same checks. Locally, the pre-push hook blocks `git push` unless `task check` passes (and `task migrate-check` when the pushed commits touch `migrations/` or `auth/`). On GitHub, CI (`.github/workflows/ci.yml`) runs on every pull request and every push to main: `task check`, `task migrate-check` when the pull request changes `migrations/` or `auth/` (always on main), and `task test-integration` on compose.yaml's services, with the tools at `.mise.toml`'s versions. It needs no secrets, so pull requests from forks run it as well. It went unused while the private repository had no Actions minutes; if GitHub shows it as disabled once the repository is public, a person re-enables it with `gh workflow enable ci.yml`.
+Two gates run the same checks. Locally, the pre-push hook blocks `git push` unless `task check` passes (and `task migrate-check` when the pushed commits touch `db/migrations/` or `auth/`). On GitHub, CI (`.github/workflows/ci.yml`) runs on every pull request and every push to main: `task check`, `task migrate-check` when the pull request changes `db/migrations/` or `auth/` (always on main), and `task test-integration` on compose.yaml's services, with the tools at `.mise.toml`'s versions. It needs no secrets, so pull requests from forks run it as well. It went unused while the private repository had no Actions minutes; if GitHub shows it as disabled once the repository is public, a person re-enables it with `gh workflow enable ci.yml`.
 
 Read `AGENTS.md` before changing anything.
 
@@ -114,7 +114,7 @@ Goal then opens from its own icon, full screen, and keeps the phone's status bar
 
 | Changed | Runs |
 | --- | --- |
-| `*.go` anywhere, `cmd/`, `internal/`, `queries/`, `sqlc.yaml`, `migrations/`; what Go embeds or its tests read: `web/csp.txt`, `web/placeholder/`, `compose.yaml`, `.env.example` | `lint`, `test`, `api:permissions-check`, `validate` |
+| `*.go` anywhere, `cmd/`, `internal/`, `db/queries/`, `db/sqlc.yaml`, `db/migrations/`; what Go embeds or its tests read: `web/csp.txt`, `web/placeholder/`, `compose.yaml`, `.env.example` | `lint`, `test`, `api:permissions-check`, `validate` |
 | `auth/src/access.gen.ts` (compared by `api:permissions-check`) | the Go checks and `auth:check` |
 | `worker/`, `auth/`, `deploy/cloudflare/` | `worker:check`, `auth:check`, `cloudflare:check` |
 | `packages/api-client/` | `api-client:check` and `web:check` (web uses it) |
@@ -122,7 +122,7 @@ Goal then opens from its own icon, full screen, and keeps the phone's status bar
 | `terraform/`, `.sops.yaml` | `tf:check` |
 | `docs/`, `design-system/`, `.claude/`, `.github/`, `.githooks/`, root `*.md`, `skills-lock.json` | nothing |
 
-Shared files run everything and say which file did: `go.mod`, `go.sum`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `Taskfile.yml`, `.golangci.yml`, the mise config, `contracts/`. So does any path no rule knows, and a `BASE` that is missing or shares no history with `HEAD` (a shallow clone). Any other git failure fails the task: it never passes with an empty plan. When `migrations/` or `auth/` changed it notes that `task migrate-check` also applies; it does not run it. The pre-push hook still runs the whole `task check`.
+Shared files run everything and say which file did: `go.mod`, `go.sum`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `Taskfile.yml`, `.golangci.yml`, the mise config, `contracts/`. So does any path no rule knows, and a `BASE` that is missing or shares no history with `HEAD` (a shallow clone). Any other git failure fails the task: it never passes with an empty plan. When `db/migrations/` or `auth/` changed it notes that `task migrate-check` also applies; it does not run it. The pre-push hook still runs the whole `task check`.
 
 ## Where factories live
 
@@ -171,7 +171,7 @@ Templates for the builder's New factory come from the bucket's catalog: `goal ca
 
 ## Database
 
-PostgreSQL 18 is the only database: work items, the event log, leases (`FOR UPDATE SKIP LOCKED`), agent runs and realtime (`LISTEN/NOTIFY`). Schema changes are new files in `migrations/`; applied migrations are never edited.
+PostgreSQL 18 is the only database: work items, the event log, leases (`FOR UPDATE SKIP LOCKED`), agent runs and realtime (`LISTEN/NOTIFY`). Schema changes are new files in `db/migrations/`; applied migrations are never edited.
 
 ## Infrastructure
 

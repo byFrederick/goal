@@ -1,8 +1,8 @@
 ---
 paths:
-  - "migrations/**"
-  - "queries/**"
-  - "sqlc.yaml"
+  - "db/migrations/**"
+  - "db/queries/**"
+  - "db/sqlc.yaml"
   - "internal/adapters/postgres/**"
 ---
 
@@ -12,11 +12,11 @@ The data model and its reasons: [docs/specs/README.md](../../docs/specs/README.m
 
 ## Migrations
 
-- Write migrations for goose, forward-only, as a new numbered file in `migrations/`, because goose applies them in order and refuses a number below one already applied.
+- Write migrations for goose, forward-only, as a new numbered file in `db/migrations/`, because goose applies them in order and refuses a number below one already applied.
 - Never edit an applied migration; fix it with the next file, because every database that ran it keeps the old one.
 - Take the next free number in your phase's range from docs/specs/README.md, so parallel work does not collide.
 - Keep each migration safe in one transaction, and add a large table's new constraint `NOT VALID` then validate it, so deploys do not lock tables.
-- Run `task migrate-check` after a change to `migrations/`, because it applies every file to a fresh PostgreSQL 18 with pgvector.
+- Run `task migrate-check` after a change to `db/migrations/`, because it applies every file to a fresh PostgreSQL 18 with pgvector.
 
 ## Tenancy
 
@@ -26,7 +26,7 @@ The data model and its reasons: [docs/specs/README.md](../../docs/specs/README.m
 
 ## Queries
 
-- Put SQL in `queries/` and regenerate with `task sqlc`, because `internal/adapters/postgres/db` is generated and never edited by hand.
+- Put SQL in `db/queries/` and regenerate with `task sqlc`, because `internal/adapters/postgres/db` is generated and never edited by hand.
 - Run each store method in one transaction and lock an item before its lease or runs, so concurrent methods cannot deadlock.
 
 ## Tests

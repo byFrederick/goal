@@ -78,7 +78,7 @@ func (h *harness) partsInFlight(t *testing.T) string {
 
 	assembly := h.assemble(t, []domain.NewPart{
 		{Key: "a", Title: "Contract", Lane: laneAPI, Paths: []string{"contracts/api/openapi.yaml"}},
-		{Key: "b", Title: "Store", Lane: laneAPI, Paths: []string{"queries/a.sql"}, Needs: []string{"a"}},
+		{Key: "b", Title: "Store", Lane: laneAPI, Paths: []string{"db/queries/a.sql"}, Needs: []string{"a"}},
 		{Key: "c", Title: "Page", Lane: laneAPI, Needs: []string{"a", "b"}},
 	})
 	ref := "line#" + strconv.FormatInt(assembly.Number, 10)
@@ -113,7 +113,7 @@ func TestAPI_ItemParts(t *testing.T) {
 	a, b := got.Parts[0].Ref, got.Parts[1].Ref
 	want := []assemblyPart{
 		{Index: 1, Wave: 0, Key: "a", State: "done", Needs: []string{}, WaitingOn: []string{}, Paths: []string{"contracts/api/openapi.yaml"}, Done: true},
-		{Index: 2, Wave: 1, Key: "b", State: "in_progress", Needs: []string{a}, WaitingOn: []string{}, Paths: []string{"queries/a.sql"}, Agent: agBackend},
+		{Index: 2, Wave: 1, Key: "b", State: "in_progress", Needs: []string{a}, WaitingOn: []string{}, Paths: []string{"db/queries/a.sql"}, Agent: agBackend},
 		{Index: 3, Wave: 2, Key: "c", State: "queued", Needs: []string{a, b}, WaitingOn: []string{b}, Paths: []string{}},
 	}
 
@@ -138,8 +138,8 @@ func (h *harness) partItems(t *testing.T, ref, b string) {
 
 	var part gen.Item
 	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/items/"+url.PathEscape(b), "", &part); code != http.StatusOK ||
-		deref(part.PartKey) != "b" || part.PartPaths == nil || !reflect.DeepEqual(*part.PartPaths, []string{"queries/a.sql"}) {
-		t.Errorf("GET part = %d, key %v, paths %v; want 200, b and [queries/a.sql]", code, part.PartKey, part.PartPaths)
+		deref(part.PartKey) != "b" || part.PartPaths == nil || !reflect.DeepEqual(*part.PartPaths, []string{"db/queries/a.sql"}) {
+		t.Errorf("GET part = %d, key %v, paths %v; want 200, b and [db/queries/a.sql]", code, part.PartKey, part.PartPaths)
 	}
 
 	if none := h.parts(t, b); !reflect.DeepEqual(none, gen.AssemblyParts{Parts: []gen.AssemblyPart{}}) {

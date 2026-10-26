@@ -2,7 +2,7 @@
 # Local gate for every push (install once: `task hooks:install`). CI (.github/workflows/ci.yml)
 # runs the same gate on every pull request and push to main; this hook catches it before the push:
 #   - always: task check (lint, race tests, factory validation, task tf:check)
-#   - when the pushed commits touch migrations/ or auth/: task migrate-check as well (with the
+#   - when the pushed commits touch db/migrations/ or auth/: task migrate-check as well (with the
 #     Better Auth schema drift check, task auth:schema-check)
 # It checks the working tree you push from; commit or stash unrelated edits first.
 # Bypass only in an emergency with `git push --no-verify`, and say so in the pull request.
@@ -19,7 +19,7 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
 	*) range="$remote_sha..$local_sha" ;;
 	esac
 	# shellcheck disable=SC2086 # range is intentionally split into git arguments
-	if [ -n "$(git log --format= --name-only $range -- migrations/ auth/)" ]; then
+	if [ -n "$(git log --format= --name-only $range -- db/migrations/ auth/)" ]; then
 		migrations=yes
 	fi
 done
@@ -33,6 +33,6 @@ echo "pre-push: task check" >&2
 task check
 
 if [ -n "$migrations" ]; then
-	echo "pre-push: migrations/ or auth/ changed, task migrate-check" >&2
+	echo "pre-push: db/migrations/ or auth/ changed, task migrate-check" >&2
 	task migrate-check
 fi

@@ -1,5 +1,5 @@
 // Package postgres implements ports.Store on PostgreSQL 18 with pgx and the sqlc-generated
-// queries in package db (compiled from queries/ against migrations/).
+// queries in package db (compiled from db/queries/ against db/migrations/).
 //
 // Every Store method runs in one transaction bound to the organization in ctx
 // (domain.WithOrg): it starts with set_config('goal.org_id', <org>, true), so row-level security
@@ -25,10 +25,10 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
+	"github.com/byFrederick/goal/db/migrations"
 	"github.com/byFrederick/goal/internal/adapters/postgres/db"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
-	"github.com/byFrederick/goal/migrations"
 )
 
 // Open connects a pool to the database at url (a postgres:// URL or key=value DSN; pool

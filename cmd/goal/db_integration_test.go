@@ -17,11 +17,11 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
+	"github.com/byFrederick/goal/db/migrations"
 	"github.com/byFrederick/goal/internal/adapters/masterkey"
 	"github.com/byFrederick/goal/internal/adapters/postgres"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
-	"github.com/byFrederick/goal/migrations"
 )
 
 // recoveryDB is a throwaway database migrated as goald would (never the install's own): adminURL

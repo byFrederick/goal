@@ -20,10 +20,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/byFrederick/goal/db/migrations"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/ports/porttest/storetest"
-	"github.com/byFrederick/goal/migrations"
 )
 
 func TestStore_Conformance(t *testing.T) {
@@ -116,7 +116,7 @@ func withPoolSize(t *testing.T, dbURL string, size int) string {
 	return u.String()
 }
 
-// latestMigration is the number of the newest file in migrations/.
+// latestMigration is the number of the newest file in db/migrations/.
 func latestMigration(t *testing.T) int64 {
 	t.Helper()
 

@@ -9,7 +9,7 @@ One repository, two toolchains: a Go module at the root and a pnpm workspace for
 ```
 goal/
   go.mod                       Go module (goald, goal CLI, engine, adapters)
-  cmd/  internal/  migrations/  queries/
+  cmd/  internal/  db/          Go code, and db/migrations/, db/queries/, db/sqlc.yaml
   contracts/api/openapi.yaml   THE contract between goald and every TypeScript client (incl. the SSE StreamEvent)
   contracts/definitions/       factory.schema.json, evals.schema.json
   package.json                 private root: pnpm only, no app code
