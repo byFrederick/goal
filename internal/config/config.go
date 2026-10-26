@@ -383,13 +383,15 @@ type Retry struct {
 
 // Assemblies says how runs keep item branches fresh (rebase or merge), what a merge conflict
 // does (rework or human) and whether items whose files overlap wait for each other (serialize
-// or allow) and whether a station's plan becomes an assembly with its parts (materialize); an
-// unset key takes its default, rebase, rework, serialize and true.
+// or allow), whether a station's plan becomes an assembly with its parts (materialize) and
+// whether later runs hear what changed on the default branch since a plan (changedSince); an
+// unset key takes its default, rebase, rework, serialize, true and false.
 type Assemblies struct {
-	FreshBase   string `json:"freshBase,omitempty"`
-	OnConflict  string `json:"onConflict,omitempty"`
-	Overlap     string `json:"overlap,omitempty"`
-	Materialize *bool  `json:"materialize,omitempty"`
+	FreshBase    string `json:"freshBase,omitempty"`
+	OnConflict   string `json:"onConflict,omitempty"`
+	Overlap      string `json:"overlap,omitempty"`
+	Materialize  *bool  `json:"materialize,omitempty"`
+	ChangedSince bool   `json:"changedSince,omitempty"`
 }
 
 // Targets are what the line aims for; an unset target is zero.

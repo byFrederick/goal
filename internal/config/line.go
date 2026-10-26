@@ -118,8 +118,8 @@ func flowPolicy(fl Flow) domain.FlowPolicy {
 	return p
 }
 
-// assemblyPolicy maps board.flow.assemblies; unset settings are rebase, rework, serialize and
-// materialize.
+// assemblyPolicy maps board.flow.assemblies; unset settings are rebase, rework, serialize,
+// materialize and no changedSince.
 func assemblyPolicy(a *Assemblies) domain.AssemblyPolicy {
 	p := domain.AssemblyPolicy{
 		FreshBase: domain.FreshBaseRebase, OnConflict: domain.ConflictRework,
@@ -144,6 +144,8 @@ func assemblyPolicy(a *Assemblies) domain.AssemblyPolicy {
 	if a.Materialize != nil {
 		p.Materialize = *a.Materialize
 	}
+
+	p.ChangedSince = a.ChangedSince
 
 	return p
 }

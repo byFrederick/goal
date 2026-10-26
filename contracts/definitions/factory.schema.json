@@ -457,7 +457,7 @@
             },
             "assemblies": {
               "type": "object",
-              "description": "How runs keep item branches fresh, what a merge conflict does, whether items that edit the same files are built together and whether a station's plan becomes an assembly. Omitted keys take their defaults.",
+              "description": "How runs keep item branches fresh, what a merge conflict does, whether items that edit the same files are built together whether a station's plan becomes an assembly and whether later runs hear what changed since a plan. Omitted keys take their defaults.",
               "additionalProperties": false,
               "properties": {
                 "freshBase": { "enum": ["rebase", "merge"], "description": "How a run brings an existing item branch up to date with the default branch; default rebase." },
@@ -469,6 +469,10 @@
                 "materialize": {
                   "type": "boolean",
                   "description": "true (the default): a station whose output has a non-empty plan ([{key, title, lane, brief, paths, needs}]) makes the item an assembly, its parts queued at that station; false: the plan is ignored and the item moves on."
+                },
+                "changedSince": {
+                  "type": "boolean",
+                  "description": "true: a station with context [inflight] that finishes an item records the default branch's head of runtime.repository as its base commit (a plan's parts inherit it), and every later run of the item gets a Changed since your plan section listing the commits since then that changed files its paths match. false (the default): nothing is recorded."
                 }
               }
             },
