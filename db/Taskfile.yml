@@ -1,0 +1,60 @@
+# The database's tasks: sqlc over db/queries and db/migrations, and migrate-check.
+# Included by the root Taskfile.yml with flatten: true and dir set to the repository root, so these
+# tasks keep their full names, run from the root (a task's dir: is relative to it) and see the
+# root's dotenv, env and vars. Run them from the root: `task <name>`.
+version: "3"
+
+tasks:
+  sqlc:
+    desc: Regenerate internal/adapters/postgres/db from db/queries/ and db/migrations/ (sqlc from .mise.toml)
+    cmds:
+      - sqlc generate -f db/sqlc.yaml
+
+  migrate-check:
+    desc: Apply all migrations to a throwaway PostgreSQL 18 with pgvector (in Docker, or a local cluster without Docker)
+    cmds:
+      - task: migrate-check:{{.MIGRATE_WITH}}
+
+  migrate-check:docker:
+    internal: true
+    vars:
+      # One container per run, named after the checkout and the shell's process id, so checks run
+      # side by side (other worktrees, other clones) never reuse or stop each other's.
+      CONTAINER:
+        sh: echo "goal-migrate-check-$(basename "$PWD" | tr -c "A-Za-z0-9_.\n-" "-")-$$"
+    cmds:
+      - docker run -d --rm --label goal.migrate-check=1 --name {{.CONTAINER}} -p 127.0.0.1::5432 -e POSTGRES_PASSWORD=check -e POSTGRES_DB=goal {{.PG_IMAGE}} >/dev/null
+      - defer: docker rm -f {{.CONTAINER}} >/dev/null 2>&1 || true
+      - until docker exec {{.CONTAINER}} pg_isready -h 127.0.0.1 -U postgres -d goal >/dev/null 2>&1; do sleep 1; done
+      # The roles first (as goal db init does), then every migration as goal_owner in one
+      # transaction (--single-transaction), as goald runs them with goose.
+      - docker exec -i {{.CONTAINER}} psql -U postgres -d goal -v ON_ERROR_STOP=1 -q < internal/adapters/postgres/roles.sql
+      - docker exec {{.CONTAINER}} psql -U postgres -d goal -v ON_ERROR_STOP=1 -qc "{{.MIGRATE_GRANTS}}"
+      - |
+        for f in db/migrations/*.sql; do
+          docker exec -i -e PGOPTIONS='-c role=goal_owner' {{.CONTAINER}} psql -U postgres -d goal -v ON_ERROR_STOP=1 -q --single-transaction < "$f" || exit 1
+          echo "applied $f"
+        done
+      - |
+        port=$(docker port {{.CONTAINER}} 5432/tcp | head -n 1 | sed 's/.*://')
+        "{{.TASK_EXE}}" auth:schema-diff DATABASE_URL="postgres://postgres:check@127.0.0.1:${port}/goal?sslmode=disable&options=-c%20role%3Dgoal_auth"
+
+  migrate-check:local:
+    internal: true
+    vars:
+      PGTMP:
+        sh: mktemp -d
+    cmds:
+      - defer: pg_ctl -D "{{.PGTMP}}/data" -m immediate stop >/dev/null 2>&1; rm -rf "{{.PGTMP}}"
+      - postgres --version | grep -q " 18\." || { echo "migrate-check needs PostgreSQL 18 (postgres --version)"; exit 1; }
+      - initdb -D "{{.PGTMP}}/data" -U postgres --auth=trust >/dev/null
+      - pg_ctl -D "{{.PGTMP}}/data" -l "{{.PGTMP}}/server.log" -o "-k {{.PGTMP}} -c listen_addresses=''" -w start >/dev/null
+      - createdb -h "{{.PGTMP}}" -U postgres goal
+      - psql -h "{{.PGTMP}}" -U postgres -d goal -v ON_ERROR_STOP=1 -q < internal/adapters/postgres/roles.sql
+      - psql -h "{{.PGTMP}}" -U postgres -d goal -v ON_ERROR_STOP=1 -qc "{{.MIGRATE_GRANTS}}"
+      - |
+        for f in db/migrations/*.sql; do
+          PGOPTIONS='-c role=goal_owner' psql -h "{{.PGTMP}}" -U postgres -d goal -v ON_ERROR_STOP=1 -q --single-transaction < "$f" || exit 1
+          echo "applied $f"
+        done
+      - '"{{.TASK_EXE}}" auth:schema-diff DATABASE_URL="postgres://postgres@localhost/goal?host={{.PGTMP}}&options=-c%20role%3Dgoal_auth"'

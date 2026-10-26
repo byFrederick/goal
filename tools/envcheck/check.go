@@ -87,11 +87,7 @@ func scanRepo(r repo) ([]read, wrangler, error) {
 	reads = slices.DeleteFunc(reads, func(rd read) bool { return rd.reader == readerControlWorker && bindings[rd.name] })
 	reads = append(reads, w.reads()...)
 
-	for _, d := range []struct{ file, reader string }{{composeFile, readerCompose}, {taskfileFile, readerTaskfile}} {
-		if !slices.Contains(r.files, d.file) {
-			continue
-		}
-
+	for _, d := range dollarFiles(r.files) {
 		src, err := r.read(d.file)
 		if err != nil {
 			return nil, wrangler{}, err
@@ -101,6 +97,26 @@ func scanRepo(r repo) ([]read, wrangler, error) {
 	}
 
 	return reads, w, nil
+}
+
+// A dollarFile is a tracked file whose ${NAME} references are reads of its reader.
+type dollarFile struct{ file, reader string }
+
+// dollarFiles returns the tracked compose file and every tracked Taskfile: the root's and each one
+// it includes (a file named Taskfile.yml anywhere but a test's testdata/), in the order of files.
+func dollarFiles(files []string) []dollarFile {
+	var out []dollarFile
+
+	for _, f := range files {
+		switch {
+		case f == composeFile:
+			out = append(out, dollarFile{f, readerCompose})
+		case path.Base(f) == taskfileName && !strings.HasPrefix(f, "testdata/") && !strings.Contains(f, "/testdata/"):
+			out = append(out, dollarFile{f, readerTaskfile})
+		}
+	}
+
+	return out
 }
 
 // scanSources finds the reads in the Go and TypeScript sources, Go one package at a time so a
@@ -191,7 +207,7 @@ func checkReads(reg registry, reads []read) []problem {
 }
 
 // checkUnread reports a declared variable that nothing reads: no scanned read, no quoted
-// mention in its indirect file, and no mention in compose.yaml or Taskfile.yml when it lists them.
+// mention in its indirect file, and no mention in compose.yaml or a Taskfile.yml when it lists them.
 func checkUnread(r repo, reg registry, reads []read) ([]problem, error) {
 	isRead := map[string]bool{}
 	for _, rd := range reads {
@@ -222,7 +238,7 @@ func checkUnread(r repo, reg registry, reads []read) ([]problem, error) {
 			continue
 		}
 
-		found, err := mentioned(e, text)
+		found, err := mentioned(e, dollarFiles(r.files), text)
 		if err != nil {
 			return nil, err
 		}
@@ -235,8 +251,9 @@ func checkUnread(r repo, reg registry, reads []read) ([]problem, error) {
 	return problems, nil
 }
 
-// mentioned reports whether a variable without a scanned read is read where its entry says.
-func mentioned(e entry, text func(string) (string, error)) (bool, error) {
+// mentioned reports whether a variable without a scanned read is read where its entry says: files
+// are the tracked compose file and Taskfiles (dollarFiles).
+func mentioned(e entry, files []dollarFile, text func(string) (string, error)) (bool, error) {
 	if e.Indirect != "" {
 		t, err := text(e.Indirect)
 		if err != nil {
@@ -250,7 +267,7 @@ func mentioned(e entry, text func(string) (string, error)) (bool, error) {
 		}
 	}
 
-	for _, d := range []struct{ reader, file string }{{readerCompose, composeFile}, {readerTaskfile, taskfileFile}} {
+	for _, d := range files {
 		if !slices.Contains(e.Readers, d.reader) {
 			continue
 		}

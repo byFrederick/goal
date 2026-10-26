@@ -160,6 +160,7 @@ func TestCheck_UndeclaredRead(t *testing.T) {
 		"wrangler secret":     {"CF_SECRET", "deploy/cloudflare/wrangler.jsonc secrets_store_secrets: CF_SECRET is read but not declared in contracts/env.yaml"},
 		"compose":             {"GOAL_DOCKER_GID", "compose.yaml:3: GOAL_DOCKER_GID is read but not declared in contracts/env.yaml"},
 		"taskfile":            {"GOAL_FACTORIES_DIR", "Taskfile.yml:4: GOAL_FACTORIES_DIR is read but not declared in contracts/env.yaml"},
+		"included taskfile":   {"GOAL_WEB_PORT", "apps/web/Taskfile.yml:6: GOAL_WEB_PORT is read but not declared in contracts/env.yaml"},
 	}
 
 	for name, tt := range tests {
@@ -233,6 +234,14 @@ func TestCheck_UnreadDeclared(t *testing.T) {
 				replace(t, m, composeFile, `group_add: ["${GOAL_DOCKER_GID:-999}"]`, "group_add: []")
 			},
 			"contracts/env.yaml: GOAL_DOCKER_GID is declared but nothing reads it",
+		},
+		"a variable gone from an included Taskfile": {
+			func(t *testing.T, m fstest.MapFS) {
+				t.Helper()
+
+				replace(t, m, "apps/web/Taskfile.yml", `--port "${GOAL_WEB_PORT}"`, "")
+			},
+			"contracts/env.yaml: GOAL_WEB_PORT is declared but nothing reads it",
 		},
 	}
 

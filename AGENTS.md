@@ -10,18 +10,18 @@ This file is an index. Each rule lives in one place and is linked from here; the
 .claude/        rules/ (path-scoped rules), skills/ (vendored skills and our goal-* procedures)
 .githooks/      versioned git hooks (pre-push runs task check)
 .github/        CI, deploy and Terraform workflows
-apps/           auth/ (identity service, Hono + Better Auth, reached only through goald's /api/auth proxy), web/ (React SPA, embedded into goald), worker/ (goal-agent, the one agent container image)
+apps/           auth/ (identity service, Hono + Better Auth, reached only through goald's /api/auth proxy), web/ (React SPA, embedded into goald), worker/ (goal-agent, the one agent container image); each app's tasks in its Taskfile.yml
 cmd/            binaries: goal (CLI), goald (daemon), goal-egress (egress proxy)
-contracts/      contracts/api/ (openapi.yaml, permissions.yaml, sandbox.yaml: the only contract between goald and TypeScript), contracts/definitions/ (JSON Schemas for factory, eval and connection kind files), env.yaml (every environment variable a process reads, with env.schema.json)
-db/             the database: db/migrations/ (forward-only SQL, goose), db/queries/ (SQL for sqlc) and db/sqlc.yaml
-deploy/         deploy/cloudflare/ (the control Worker and wrangler config), deploy/terraform/ (the platform's own infrastructure, one root module)
+contracts/      contracts/api/ (openapi.yaml, permissions.yaml, sandbox.yaml: the only contract between goald and TypeScript), contracts/definitions/ (JSON Schemas for factory, eval and connection kind files), env.yaml (every environment variable a process reads, with env.schema.json); the API generators' tasks in Taskfile.yml
+db/             the database: db/migrations/ (forward-only SQL, goose), db/queries/ (SQL for sqlc), db/sqlc.yaml and Taskfile.yml (sqlc, migrate-check)
+deploy/         deploy/cloudflare/ (the control Worker and wrangler config), deploy/terraform/ (the platform's own infrastructure, one root module), each with the Taskfile.yml of its tasks
 docs/           adr/, design/ (MASTER.md: the UI's design system), engineering/, history/ (history/specs/ and history/jonah/: earlier plans), reference/ (glossary.md, and environment.md generated from the contracts)
 internal/       the Go packages: domain, engine, ports, adapters, api, gateway… (docs/engineering/architecture.md)
-packages/       shared TypeScript: api-client/ (the API client and its generated types)
+packages/       shared TypeScript: api-client/ (the API client and its generated types, its tasks in Taskfile.yml)
 tools/          repository tooling that is not a shipped binary: layoutcheck/ (task layout:check), envcheck/ (task env:check), checkplan/ (task check:changed), permgen/ (task api:gen's permission tables)
 ```
 
-Root files: the entry docs, `Taskfile.yml`, `compose.yaml`, the Go and pnpm manifests, and `skills-lock.json`. Factory definitions are not in this tree; they live in the bucket and PostgreSQL ([factory-definition.md](docs/engineering/factory-definition.md)).
+Root files: the entry docs, `Taskfile.yml` (the cross-cutting tasks, dotenv, env and vars; it includes each area's `Taskfile.yml` flattened, so every task keeps its name, and `tools/layoutcheck/tasks.txt` lists the names: [ADR 0013](docs/adr/0013-repository-layout.md)), `compose.yaml`, the Go and pnpm manifests, and `skills-lock.json`. Factory definitions are not in this tree; they live in the bucket and PostgreSQL ([factory-definition.md](docs/engineering/factory-definition.md)).
 
 ## Non-negotiables
 

@@ -212,7 +212,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `HOME` | config | no | The user's home, under which the CLI keeps its config when XDG_CONFIG_HOME is unset. |
 | `XDG_CONFIG_HOME` | config | no | Where the CLI keeps its config and goal up the Mailpit UI password (default ~/.config). |
 
-## The Taskfile (`Taskfile.yml`)
+## The Taskfiles (`Taskfile.yml` and the area Taskfiles it includes)
 
 | Name | Class | Required | Meaning |
 | --- | --- | --- | --- |

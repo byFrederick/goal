@@ -70,8 +70,8 @@ func TestPlan(t *testing.T) {
 			append(slices.Clone(layoutTasks), goTasks...), "layout (layout:check): tools/layoutcheck/check.go and 1 more", "",
 		},
 		"env check": {
-			[]string{"tools/envcheck/check.go", "tools/envcheck/testdata/repo/compose.yaml"},
-			goEnvTasks, "env (env:check): tools/envcheck/check.go and 1 more", "",
+			[]string{"tools/envcheck/check.go", "tools/envcheck/testdata/repo/compose.yaml", "tools/envcheck/testdata/repo/apps/web/Taskfile.yml"},
+			goEnvTasks, "env (env:check): tools/envcheck/check.go and 2 more", "",
 		},
 		"repository tools": {
 			[]string{"tools/permgen/table.go", "tools/checkplan/testdata/x.txt"},
@@ -90,7 +90,7 @@ func TestPlan(t *testing.T) {
 		},
 	}
 
-	for _, shared := range []string{"go.mod", "go.sum", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "Taskfile.yml", ".golangci.yml", ".mise.toml"} {
+	for _, shared := range []string{"go.mod", "go.sum", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "Taskfile.yml", "apps/web/Taskfile.yml", "deploy/terraform/Taskfile.yml", ".golangci.yml", ".mise.toml"} {
 		tests["shared "+shared] = planCase{[]string{"apps/web/src/a.tsx", shared}, tasks, "everything (" + strings.Join(tasks, ", ") + "): " + shared + " (shared by every part)", ""}
 	}
 
