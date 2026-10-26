@@ -24,6 +24,48 @@ type FlowPolicy struct {
 	// Andon, when set, pulls the cord automatically on a high rework rate (later work).
 	Andon   *AndonPolicy
 	Targets Targets
+	// Assemblies says how runs keep item branches fresh, what a merge conflict does and how
+	// the line treats items that edit the same files.
+	Assemblies AssemblyPolicy
+}
+
+// FreshBase says how a run brings an existing item branch up to date with the default branch.
+type FreshBase string
+
+const (
+	// FreshBaseRebase is the default: the branch is rebased on the default branch.
+	FreshBaseRebase FreshBase = "rebase"
+	// FreshBaseMerge merges the default branch into the branch.
+	FreshBaseMerge FreshBase = "merge"
+)
+
+// ConflictPolicy says what a merge conflict with the default branch does to an item.
+type ConflictPolicy string
+
+const (
+	// ConflictRework is the default: the item goes back to be built again with the conflict.
+	ConflictRework ConflictPolicy = "rework"
+	// ConflictHuman leaves the conflict to a person.
+	ConflictHuman ConflictPolicy = "human"
+)
+
+// OverlapPolicy says whether items whose file globs overlap may be built at the same time.
+type OverlapPolicy string
+
+// Overlap policies, as written in factory.yaml's flow.assemblies.overlap.
+const (
+	// OverlapSerialize is the default: an item whose files overlap those of an item in flight
+	// waits for it.
+	OverlapSerialize OverlapPolicy = "serialize"
+	// OverlapAllow builds items in parallel whatever files they share.
+	OverlapAllow OverlapPolicy = "allow"
+)
+
+// AssemblyPolicy is board.flow.assemblies, with its defaults applied.
+type AssemblyPolicy struct {
+	FreshBase  FreshBase
+	OnConflict ConflictPolicy
+	Overlap    OverlapPolicy
 }
 
 // AndonPolicy pulls the andon cord when too many gate verdicts reject.

@@ -120,6 +120,8 @@ spec:
       - { id: spec, kind: human }
       - { id: build, kind: agent, agent: engineer, output: change }
       - { id: done, kind: done }
+    flow:
+      assemblies: { freshBase: merge }
 `
 
 var bundleFiles = map[string]string{
@@ -191,7 +193,7 @@ func request(t *testing.T, method, url, token string) (int, http.Header, []byte)
 }
 
 // The bundle is the run's task, its agent's files from the run's version, the repository with
-// the item's branch, and what the run's connections give the box without a value: the agent's
+// the item's branch and how a run freshens it, and what the run's connections give the box without a value: the agent's
 // connections its token grants (env names, MCP servers with headers naming env variables, docs),
 // a git login per connection that signs git in, naming the variable of its password, and the
 // runtime's tools with the connections' CLI tools.
@@ -247,7 +249,7 @@ func TestServeRun_ServesTheRunsBundle(t *testing.T) {
 			},
 		},
 		Files:      map[string][]byte{"agent/prompt.md": []byte("# engineer\n"), "agent/output.schema.json": []byte(`{"type":"object"}`)},
-		Repository: &bundleRepository{URL: "https://github.com/acme/api.git", Branch: it.Branch()},
+		Repository: &bundleRepository{URL: "https://github.com/acme/api.git", Branch: it.Branch(), FreshBase: domain.FreshBaseMerge},
 		Git:        []gitCredential{{Host: "github.com", Username: "x-access-token", PasswordEnv: "CODE_TOKEN"}},
 		Tools:      []string{"task@3.46.1", "npm:@acme/issues-cli@2.0.0"},
 	}

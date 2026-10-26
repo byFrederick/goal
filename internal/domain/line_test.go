@@ -87,3 +87,44 @@ func TestLine_MergeConnections(t *testing.T) {
 		t.Errorf("MergeConnections with the repository's listed = %v", got)
 	}
 }
+
+// A station's lane agents are its agent, or each agent its route uses once, sorted; queue,
+// human and done stations have none.
+func TestStation_LaneAgents(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name string
+		st   Station
+		want []string
+	}{
+		{"single agent", Station{Kind: KindAgent, Agent: "writer"}, []string{"writer"}},
+		{"routed", Station{Kind: KindAgent, Route: map[string]string{"web": "web-dev", "api": "api-dev", "db": "api-dev"}}, []string{"api-dev", "web-dev"}},
+		{"queue", Station{Kind: KindQueue}, []string{}},
+		{"human", Station{Kind: KindHuman}, []string{}},
+	} {
+		if got := tt.st.LaneAgents(); !slices.Equal(got, tt.want) || got == nil {
+			t.Errorf("%s: lane agents = %#v, want %#v", tt.name, got, tt.want)
+		}
+	}
+}
+
+// A name reads as words, the first capitalized: never the raw name of a definition.
+func TestStation_Humanize(t *testing.T) {
+	t.Parallel()
+
+	for name, want := range map[string]string{
+		"infra-engineer":   "Infra engineer",
+		"backend":          "Backend",
+		"code_reviewer":    "Code reviewer",
+		"merge":            "Merge",
+		" qa--lead ":       "Qa lead",
+		"":                 "",
+		"élan-agent":       "Élan agent",
+		"Already Readable": "Already Readable",
+	} {
+		if got := Humanize(name); got != want {
+			t.Errorf("Humanize(%q) = %q, want %q", name, got, want)
+		}
+	}
+}

@@ -5,6 +5,7 @@ import {
   cardState,
   columnCount,
   constraintNote,
+  doingText,
   expediteHeader,
   expediteUse,
   firstStation,
@@ -13,6 +14,7 @@ import {
   stationMeter,
   stationNote,
   stationStat,
+  waitStatus,
   wipText,
 } from './stats';
 
@@ -227,13 +229,12 @@ const card = (over: Partial<ItemCard>): ItemCard => ({
 });
 
 describe('cardState', () => {
-  it('names the agent copy and its turn while an item is worked', () => {
+  it('says working and its turn while an item is worked, never a numbered agent copy', () => {
     expect(cardState(card({ state: 'in_progress', agent: 'investigator', slot: 1, turn: 22 }))).toEqual({
-      text: 'investigator-1, turn 22',
+      text: 'Working, turn 22',
       tone: 'run',
     });
-    expect(cardState(card({ state: 'in_progress', agent: 'triager', turn: 3 })).text).toBe('triager, turn 3');
-    expect(cardState(card({ state: 'in_progress', agent: 'triager', turn: 0 })).text).toBe('triager');
+    expect(cardState(card({ state: 'in_progress', agent: 'triager', turn: 0 })).text).toBe('Working');
   });
 
   it('asks for your OK, says how often work was sent back, and what a done item became', () => {
@@ -323,5 +324,19 @@ describe('firstStation', () => {
     expect(firstStation({ stations: [inbox, build, done], constraint: 'build' })).toBe('build');
     expect(firstStation({ stations: [station({ id: 'inbox', kind: 'queue' }), done], constraint: null })).toBe('inbox');
     expect(firstStation({ stations: [], constraint: null })).toBe('');
+  });
+});
+
+describe('waitStatus and doingText', () => {
+  it('shows a check for a ready item and a clock for one that waits', () => {
+    expect(waitStatus(card({ state: 'ready' }))).toBe('ready');
+    expect(waitStatus(card({ state: 'ready', in_buffer: true }))).toBe('waiting');
+    expect(waitStatus(card({ state: 'queued' }))).toBe('waiting');
+    expect(waitStatus(card({ state: 'blocked' }))).toBeNull();
+  });
+
+  it('says the doing line with the turn, never a numbered agent', () => {
+    expect(doingText({ turn: 4 })).toBe('Working, turn 4');
+    expect(doingText({ turn: null })).toBe('Working');
   });
 });

@@ -9,7 +9,10 @@
 # of main that ci passed for; it deploys that commit without the paths check (cloudflare-operations.md,
 # Deploys).
 # One deploy at a time and never one cancelled in flight: a newer push waits, and when several wait
-# only the newest runs (its diff against the last deploy includes the others').
+# only the newest runs (its diff against the last deploy includes the others'). ci on main is never
+# cancelled in flight and runs one at a time, so its runs finish in push order; when several finish
+# close together, only the newest waiting deploy runs, none is cancelled in flight, and its diff
+# against the last deployed sha covers the others, so an older commit never deploys after a newer one.
 # Hardening (github-actions-hardening skill): actions pinned to commit SHAs, contents: read and
 # actions: read only (the changes job reads ci's and this workflow's runs), the deploy token only in
 # the env of the one step that runs wrangler, never the terraform CLOUDFLARE_API_TOKEN of the same

@@ -129,7 +129,7 @@ func (s *server) GetConstraintReport(ctx context.Context, req gen.GetConstraintR
 func candidateOf(c domain.Candidate, st domain.Station, span time.Duration) gen.ConstraintCandidate {
 	t := c.Times
 	out := gen.ConstraintCandidate{
-		Station: c.Station, Slots: c.Slots, Agents: agentsAt(st), BusyRatio: c.Busy, Leases: t.Leases,
+		Station: c.Station, Slots: c.Slots, Agents: st.LaneAgents(), BusyRatio: c.Busy, Leases: t.Leases,
 	}
 
 	if span > 0 {

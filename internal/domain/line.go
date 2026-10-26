@@ -3,9 +3,12 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // ErrNoRoute means a routed station has no agent for the item's lane.
@@ -287,6 +290,31 @@ func (s Station) AgentFor(lane string) (string, error) {
 	}
 
 	return "", fmt.Errorf("station %s, lane %q: %w", s.ID, lane, ErrNoRoute)
+}
+
+// LaneAgents names the agents that work at the station, one lane each: its agent, or every
+// agent its route uses, once each and sorted; none at a station without agents.
+func (s Station) LaneAgents() []string {
+	if s.Agent != "" {
+		return []string{s.Agent}
+	}
+
+	return append([]string{}, slices.Compact(slices.Sorted(maps.Values(s.Route)))...)
+}
+
+// Humanize is how a person reads a definition's name, an agent's or a station's: dashes and
+// underscores as single spaces and the first letter capitalized ("infra-engineer" → "Infra
+// engineer").
+func Humanize(name string) string {
+	words := strings.FieldsFunc(name, func(r rune) bool { return r == '-' || r == '_' || unicode.IsSpace(r) })
+	if len(words) == 0 {
+		return ""
+	}
+
+	first, size := utf8.DecodeRuneInString(words[0])
+	words[0] = string(unicode.ToUpper(first)) + words[0][size:]
+
+	return strings.Join(words, " ")
 }
 
 // Arrival is the state an item takes when it arrives at this station.

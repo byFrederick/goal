@@ -297,8 +297,8 @@ type Gate struct {
 	MaxRework int    `json:"maxRework,omitempty"`
 }
 
-// Flow holds the line's pull policy (expedite lane, constraint, release and andon) and its
-// targets.
+// Flow holds the line's pull policy (expedite lane, constraint, release and andon), its
+// targets and its assembly policy.
 type Flow struct {
 	Expedite *struct {
 		Types []string `json:"types,omitempty"`
@@ -310,7 +310,17 @@ type Flow struct {
 		ReworkRate float64 `json:"reworkRate,omitempty"`
 		Window     int     `json:"window,omitempty"`
 	} `json:"andon,omitempty"`
-	Targets *Targets `json:"targets,omitempty"`
+	Targets    *Targets    `json:"targets,omitempty"`
+	Assemblies *Assemblies `json:"assemblies,omitempty"`
+}
+
+// Assemblies says how runs keep item branches fresh (rebase or merge), what a merge conflict
+// does (rework or human) and whether items whose files overlap wait for each other (serialize
+// or allow); an unset key takes its default, rebase, rework and serialize.
+type Assemblies struct {
+	FreshBase  string `json:"freshBase,omitempty"`
+	OnConflict string `json:"onConflict,omitempty"`
+	Overlap    string `json:"overlap,omitempty"`
 }
 
 // Targets are what the line aims for; an unset target is zero.
