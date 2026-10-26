@@ -281,4 +281,27 @@ describe('board lanes', () => {
     expect(within(blockedRow).getByText('Blocked, needs a retry')).toBeTruthy();
     expect(blockedRow.querySelector('.lucide-clock')).toBeNull();
   });
+
+  it('keeps the expedite tint and label on a queued expedite row, and gives a standard row neither', async () => {
+    const expediteRow = item({
+      id: 'item-21',
+      ref: 'sre#21',
+      number: 21,
+      title: 'Restore the export job',
+      class_of_service: 'expedite',
+      board_lane: 'investigator',
+    });
+    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [expediteRow, queuedItem]) });
+
+    const investigator = within(
+      within(await screen.findByRole('region', { name: 'Stations' })).getByRole('region', { name: 'Investigate' }),
+    ).getByRole('region', { name: 'Investigator' });
+    const expedited = within(investigator).getByRole('link', { name: 'Restore the export job' }).closest('article');
+    expect(expedited?.classList.contains('bg-rework-tint')).toBe(true);
+    expect(within(expedited as HTMLElement).getByText('Expedite')).toBeTruthy();
+
+    const standard = within(investigator).getByRole('link', { name: QUEUED }).closest('article');
+    expect(standard?.classList.contains('bg-rework-tint')).toBe(false);
+    expect(within(standard as HTMLElement).queryByText('Expedite')).toBeNull();
+  });
 });

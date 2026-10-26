@@ -236,6 +236,7 @@ function WaitingRow({
 }) {
   const reason = cardState(item, decides);
   const status = waitStatus(item);
+  const expedite = isExpedite(item);
   return (
     <article
       ref={drag?.ref}
@@ -246,10 +247,15 @@ function WaitingRow({
       className={cn(
         'relative flex items-center gap-2 rounded-control border bg-surface px-3 py-2 transition-[border-color,box-shadow,opacity] duration-200',
         'hover:border-faint hover:shadow-lift has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-run',
-        item.state === 'blocked' ? 'border-rework-line' : 'border-hairline',
+        expedite
+          ? 'border-rework-line bg-rework-tint'
+          : item.state === 'blocked'
+            ? 'border-rework-line'
+            : 'border-hairline',
         drag?.dragging && 'opacity-40',
       )}
     >
+      {expedite ? <ExpediteMark /> : null}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-xs text-muted tabular-nums">{item.ref}</span>
         <CardTitle item={item} describedBy={drag?.describedBy} movable={Boolean(onMove)} />
