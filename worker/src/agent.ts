@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import { posix } from 'node:path';
 import type { CanUseTool, McpServerConfig, Options, Settings } from '@anthropic-ai/claude-agent-sdk';
-import { type AgentFiles, type Connection, paths, type TaskSpec } from './spec.js';
+import { type AgentFiles, type Connection, paths, type Rule, type TaskSpec } from './spec.js';
 
 /** goald's gateway as an MCP server: Goal's own tools, mcp__goal__<tool>. */
 export const gatewayServer = 'goal';
@@ -48,7 +48,8 @@ export function agentQuery(
     // the claude.ai account behind the token, and the checkout's .claude/skills.
     skills: spec.skills,
     settings: isolation,
-    // user: the agent's skills, copied to paths.claudeConfig/skills; project: the checkout's
+    // user: the agent's skills, copied to paths.claudeConfig/skills, and the factory rules, written to
+    // paths.claudeConfig/rules by prepare; project: the checkout's
     // CLAUDE.md and .claude/ settings.
     settingSources: ['user', 'project'],
     mcpServers: mcpServers(spec, env.GOAL_GATEWAY_TOKEN),
@@ -319,15 +320,16 @@ export function agentEnv(env: NodeJS.ProcessEnv): Record<string, string | undefi
 
 /**
  * What goes after Claude Code's system prompt: the factory's purpose, when it has one, the agent's
- * prompt, then the agent's connections and the knowledge sources the gateway's knowledge tools
- * search, when it serves them.
+ * prompt, then the agent's connections, the factory rules the run has and the knowledge sources the
+ * gateway's knowledge tools search, when it serves them.
  */
 export function systemAppend(
-  spec: Pick<TaskSpec, 'purpose' | 'connections' | 'gateway_url' | 'knowledge_sources'>,
+  spec: Pick<TaskSpec, 'purpose' | 'connections' | 'gateway_url' | 'knowledge_sources' | 'rules'>,
   files: Pick<AgentFiles, 'prompt'>,
 ): string {
   const parts = spec.purpose ? [`## This factory\n${spec.purpose}`, files.prompt] : [files.prompt];
   if (spec.connections.length > 0) parts.push(connectionsSection(spec.connections));
+  if (spec.rules && spec.rules.length > 0) parts.push(factoryRulesSection(spec.rules));
   const sources = spec.knowledge_sources ?? [];
   if (spec.gateway_url && sources.length > 0) {
     const tool = (name: string) => `mcp__${gatewayServer}__knowledge__${name}`;
@@ -352,6 +354,21 @@ function connectionsSection(connections: Connection[]): string {
     parts.push([`### ${c.name} (${c.title})`, facts.join(' '), c.docs].filter(Boolean).join('\n\n'));
   }
   return parts.join('\n\n');
+}
+
+/**
+ * The "Factory rules" section: the rules prepare wrote to the user-level rules, and which of them win
+ * over a repository's rules on a conflict inside this factory's runs.
+ */
+function factoryRulesSection(rules: Rule[]): string {
+  const names = rules.map((r) => `\`${r.name}\``).join(', ');
+  return [
+    '## Factory rules',
+    `This factory's rules for this run are in your user-level rules (\`$CLAUDE_CONFIG_DIR/rules\`): ${names}. ` +
+      'They apply to this factory whatever repository the run works on.',
+    "On a conflict with a repository rule (CLAUDE.md, AGENTS.md, .claude/rules), the factory rule wins inside this factory's runs. " +
+      'When that happens, say so in your output: name the factory rule and the repository rule it overrode.',
+  ].join('\n\n');
 }
 
 /**

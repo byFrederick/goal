@@ -42,7 +42,8 @@ export type Connection = z.infer<typeof Connection>;
  * with description and paths, then the body).
  */
 export const Rule = z.object({
-  name: z.string().min(1),
+  /** A slug, as the factory schema names rules: prepare writes it as <name>.md, so it never holds a separator. */
+  name: z.string().regex(/^[a-z][a-z0-9-]{1,38}[a-z0-9]$/),
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
   paths: z.array(z.string()).optional(),
   content: z.string(),
