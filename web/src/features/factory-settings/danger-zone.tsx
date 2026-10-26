@@ -187,7 +187,7 @@ export function DangerZone({ org, factory, deletes }: DangerZoneProps) {
         title={`Archive ${factory.name}?`}
         description={
           needsPause
-            ? 'It is running. Pause first stops it taking work, then archives it. Its items stay where they are.'
+            ? 'It is running. Pause first stops it taking work, then archives it: it leaves the rail and the Factories home and stays readable, with its items and versions.'
             : 'It stops taking work and leaves the rail and the Factories home. It stays readable, with its items and versions.'
         }
         confirmLabel={needsPause ? 'Pause first' : 'Archive factory'}
