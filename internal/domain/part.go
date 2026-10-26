@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -15,6 +17,46 @@ type NewPart struct {
 	Brief string
 	Paths []string
 	Needs []string
+}
+
+// ErrBadPlan means a station's output has a plan that cannot become an assembly: not the
+// platform's shape, or refused by ValidatePlan.
+var ErrBadPlan = errors.New("bad plan")
+
+// PlanFrom reads the "plan" a station's output declares, the platform-defined field that makes
+// the item an assembly: [{key, title, lane, brief, paths, needs}]. It returns nil, nil when the
+// output has no plan (absent, null or empty) and ErrBadPlan, wrapping ValidatePlan's error when
+// it refused the plan, when the plan is malformed.
+func PlanFrom(output json.RawMessage) ([]NewPart, error) {
+	var v struct {
+		Plan []struct {
+			Key   string   `json:"key"`
+			Title string   `json:"title"`
+			Lane  string   `json:"lane"`
+			Brief string   `json:"brief"`
+			Paths []string `json:"paths"`
+			Needs []string `json:"needs"`
+		} `json:"plan"`
+	}
+
+	if err := json.Unmarshal(output, &v); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrBadPlan, err)
+	}
+
+	if len(v.Plan) == 0 {
+		return nil, nil
+	}
+
+	parts := make([]NewPart, len(v.Plan))
+	for i, p := range v.Plan {
+		parts[i] = NewPart{Key: p.Key, Title: p.Title, Lane: p.Lane, Brief: p.Brief, Paths: p.Paths, Needs: p.Needs}
+	}
+
+	if err := ValidatePlan(parts); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrBadPlan, err)
+	}
+
+	return parts, nil
 }
 
 // Parts are an assembly's parts in plan order, with how many are done of how many.
