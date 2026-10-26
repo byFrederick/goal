@@ -91,4 +91,3 @@ func ViolationsFrom(output json.RawMessage) []Violation {
 
 	return out
 }
-

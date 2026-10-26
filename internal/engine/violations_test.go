@@ -28,22 +28,24 @@ func TestFinish_RecordsRuleViolations(t *testing.T) {
 	two := `[{"rule":"tests-first","reason":"no failing test before the fix"},` +
 		`{"rule":"wrap-errors","reason":"the store error is returned bare"}]`
 
+	bothViolated := []string{ruleTestsFirst + "=no failing test before the fix", ruleWrapErrors + "=the store error is returned bare"}
+
 	tests := []struct {
 		name   string
 		review string
-		want   []string // the rules of the rule_violated events, in order
+		want   []string // rule=reason of the rule_violated events, in order
 		state  domain.ItemState
 		logged string // a rule the log must name as unknown
 	}{
 		{
 			name:   "two violations at an approving review",
 			review: `{"decision":"approve","violations":` + two + `}`,
-			want:   []string{ruleTestsFirst, ruleWrapErrors}, state: domain.StateDone,
+			want:   bothViolated, state: domain.StateDone,
 		},
 		{
 			name:   "a rejecting review records its violations",
 			review: `{"decision":"reject","reason":"see the violations","violations":` + two + `}`,
-			want:   []string{ruleTestsFirst, ruleWrapErrors}, state: domain.StateQueued,
+			want:   bothViolated, state: domain.StateQueued,
 		},
 		{name: "no violations", review: `{"decision":"approve"}`, state: domain.StateDone},
 		{name: "an empty list", review: `{"decision":"approve","violations":[]}`, state: domain.StateDone},
@@ -53,7 +55,7 @@ func TestFinish_RecordsRuleViolations(t *testing.T) {
 			review: `{"decision":"approve","violations":[{"rule":"no-such-rule","reason":"made up"},` +
 				`{"rule":"","reason":"nameless"},{"reason":"no rule"},` +
 				`{"rule":"wrap-errors","reason":"the store error is returned bare"}]}`,
-			want: []string{ruleWrapErrors}, state: domain.StateDone, logged: "no-such-rule",
+			want: bothViolated[1:], state: domain.StateDone, logged: "no-such-rule",
 		},
 	}
 
@@ -71,23 +73,8 @@ func TestFinish_RecordsRuleViolations(t *testing.T) {
 				t.Fatalf("item is %s, want %s (events %v)", got.State, tt.state, h.kinds(it.ID))
 			}
 
-			events := h.eventsOf(it.ID, domain.EventRuleViolated)
-
-			var rules []string
-			for _, ev := range events {
-				rules = append(rules, ev.Data["rule"].(string))
-
-				if ev.Data["station"] != "review" || ev.Data["agent"] != agReviewer || ev.Data["reason"] == "" {
-					t.Errorf("rule_violated data = %v, want the reason, station review and agent %s", ev.Data, agReviewer)
-				}
-			}
-
-			if strings.Join(rules, ",") != strings.Join(tt.want, ",") {
-				t.Fatalf("rule_violated rules = %v, want %v (events %v)", rules, tt.want, h.kinds(it.ID))
-			}
-
-			if len(tt.want) > 0 && events[0].Data["reason"] != "no failing test before the fix" && tt.logged == "" {
-				t.Errorf("first violation's reason = %v, want the reviewer's", events[0].Data["reason"])
+			if got := violatedRules(t, h.eventsOf(it.ID, domain.EventRuleViolated)); got != strings.Join(tt.want, ",") {
+				t.Fatalf("rule_violated rules = %s, want %v (events %v)", got, tt.want, h.kinds(it.ID))
 			}
 
 			if tt.logged != "" {
@@ -121,4 +108,24 @@ func TestFinish_RecordsRuleViolations(t *testing.T) {
 			t.Errorf("%d rule_violated events for a rejected output, want none", len(got))
 		}
 	})
+}
+
+// violatedRules are the rule=reason of rule_violated events, comma-separated in order, after checking
+// each carries its reason and the review station's agent.
+func violatedRules(t *testing.T, events []domain.Event) string {
+	t.Helper()
+
+	rules := make([]string, 0, len(events))
+
+	for _, ev := range events {
+		rule, _ := ev.Data["rule"].(string)
+		reason, _ := ev.Data["reason"].(string)
+		rules = append(rules, rule+"="+reason)
+
+		if ev.Data["station"] != "review" || ev.Data["agent"] != agReviewer || ev.Data["reason"] == "" {
+			t.Errorf("rule_violated data = %v, want the reason, station review and agent %s", ev.Data, agReviewer)
+		}
+	}
+
+	return strings.Join(rules, ",")
 }

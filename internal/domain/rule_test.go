@@ -74,7 +74,7 @@ func TestViolationsFrom(t *testing.T) {
 		output string
 		want   []Violation
 	}{
-		{name: "none", output: `{"decision":"approve"}`},
+		{name: "no violations", output: `{"decision":"approve"}`},
 		{name: "empty", output: `{"violations":[]}`},
 		{name: "not a list", output: `{"violations":{"rule":"tests-first"}}`},
 		{name: "not an object", output: `[1,2]`},
