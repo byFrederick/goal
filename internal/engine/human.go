@@ -75,7 +75,7 @@ func (e *Engine) Reject(ctx context.Context, id domain.ItemID, by domain.Actor, 
 
 	switch it.State {
 	case domain.StateWaitingHuman, domain.StateInProgress, domain.StateBlocked:
-	case domain.StateQueued, domain.StateReady, domain.StateDone, domain.StateCancelled:
+	case domain.StateQueued, domain.StateReady, domain.StateDone, domain.StateCancelled, domain.StateAssembly:
 		return domain.Item{}, fmt.Errorf("reject %s: item is %s: %w", id, it.State, ErrCannotSendBack)
 	}
 

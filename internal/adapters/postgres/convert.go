@@ -46,6 +46,14 @@ func itemFrom(w db.WorkItem) (domain.Item, error) {
 		it.ParentID = domain.ItemID(w.ParentID.String())
 	}
 
+	if w.PartKey != nil {
+		it.PartKey = *w.PartKey
+	}
+
+	if len(w.PartPaths) > 0 {
+		it.PartPaths = w.PartPaths
+	}
+
 	if w.DoneAt != nil {
 		it.DoneAt = w.DoneAt.UTC()
 	}

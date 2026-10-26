@@ -51,8 +51,8 @@ func ComponentOf(sp Span) Component {
 		return Component{Kind: ComponentBlocked, Station: sp.Station}
 	case StateInProgress:
 		return Component{Kind: ComponentWorking, Station: sp.Station}
-	case StateQueued, StateReady, StateDone, StateCancelled:
-		// Waiting; an item done or cancelled has no span.
+	case StateQueued, StateReady, StateDone, StateCancelled, StateAssembly:
+		// Waiting; an item done, cancelled or an assembly has no span.
 	}
 
 	return Component{Kind: ComponentWaiting, Station: sp.Station}

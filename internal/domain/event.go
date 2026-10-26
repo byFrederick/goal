@@ -44,6 +44,12 @@ const (
 	// needs (the item it needs), kind and actor (ref).
 	EventEdgeAdded   EventKind = "edge_added"
 	EventEdgeRemoved EventKind = "edge_removed"
+	// EventAssembled is an item whose plan became parts (data parts: how many); EventPartCreated
+	// a part created from it (data parent and key), its first event; EventAssemblyDone the
+	// assembly closed by its last part (data state, parts_done and parts).
+	EventAssembled    EventKind = "assembled"
+	EventPartCreated  EventKind = "part_created"
+	EventAssemblyDone EventKind = "assembly_done"
 	// EventUsage is a running agent's report of one turn's token usage; a run's usage events
 	// count its turns so far.
 	EventUsage EventKind = "usage"

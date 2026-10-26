@@ -1,0 +1,26 @@
+# ADR 0012 — Assemblies and parts: a plan becomes a parent item whose parts are gated by planned edges
+
+Status: accepted · 2026-10-25 · Builds on the item dependencies of migration 00058 (`item_edges` and the claim gate)
+
+## Context
+
+Some requests need more than one pull request. The station that plans the work (in the software factory, its architect) can split such a request into slices that depend on each other. Until now the split was a list of titles that a person turned into items by hand, and nothing held a slice until what it needed was merged. The owner wants the plan to become work the line runs on its own, like an epic with its stories, and wants it named *assembly* and *parts*, the factory's own words. Everything about it must stay factory config: no station, agent or work type is named in Go, SQL or TypeScript (AGENTS.md rule 1).
+
+## Decision
+
+1. **Names.** The parent is an *assembly* and its children are *parts*, in code, state, config, events, API and docs. The words *effort* and *child* are not used.
+2. **The link is `work_items.parent_id`.** A part is an item whose `parent_id` is its assembly and whose `part_key` names it within the plan. `part_paths` holds the files the plan says it changes; it is not called `touches`, which already means a person's touches of an item (migration 00052).
+3. **The plan is a platform-defined output field.** The engine will read a `plan` field from any station's output, the same way it reads `lane` (`domain.LaneFrom`) and gate verdicts (`domain.ParseVerdict`), validated in Go: `[{key, title, lane, brief, paths, needs}]`. Which station plans, and its contract, is the factory's definition. The software factory's spec contract and architect guidance are a definition change in the bucket, not in this repository.
+4. **One transaction, safe to retry.** `Store.Assemble` moves the planning item to state `assembly` with a fenced transition (its lease recorded as for any transition), creates every part with the parent's type, priority and class of service and its brief as body, and adds one `planned` edge per need, all in one transaction. A plan with no parts, a part without key or title, duplicate keys, an unknown need or a cycle is refused and writes nothing. A retry for an item that already has parts returns them, so a lost acknowledgement never creates duplicates; a unique `(parent_id, part_key)` index backs that.
+5. **Parts start at the station that planned them.** Each part is queued at the planning station with its brief, so its own plan or spec is written against main as it is when the part starts, not when the assembly was planned.
+6. **Planned edges are the dependency gate.** A part waits for the parts it needs through the existing claim gate: it is not claimed while a need is neither done nor cancelled.
+7. **The assembly is never claimed and closes in the store.** State `assembly` is neither queued nor ready and opens no item span. The transition that closes the assembly's last open part also closes the assembly, in the same transaction: done, or cancelled when every part was cancelled. The part's row is locked before the assembly's, every time, so two parts finishing together close it exactly once.
+8. **No nested assemblies.** A part never becomes an assembly; `Assemble` refuses one.
+9. **Later steps.** Reading `plan` and creating the parts when a station finishes, behind `flow.assemblies.materialize` (default true) in the factory definition; cascading pause, cancel, priority and expedite from an assembly to its open parts; holding parts whose `part_paths` overlap with `overlap` edges and keeping their branches fresh; the API's `assembly` state and parts with done/total; the board and item page.
+
+## Consequences
+
+- An assembly is visible as an item in its own state, with its parts' done/total, and needs no person to close it.
+- Until the API adds `assembly` to `ItemState`, nothing may create one in production: the engine step that calls `Assemble` must not ship before the API step.
+- A cascade that locks the assembly and then its parts takes the rows in the opposite order to a closing part. It must take them in one order (for example lock the parts first, by id) or retry on deadlock.
+- Flow metrics count parts as items; the assembly itself opens no span, so it adds no station time.
