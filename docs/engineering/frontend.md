@@ -226,7 +226,92 @@ task build                       # web:build, then go build -tags webui: goald s
 
 ## Responsive and mobile
 
-One app, not two, filling the viewport with no outer frame. From 768 px: a 72 px rail (organization mark, the organization's factory squares, New factory, then Connections (a rust dot and "1 failing" while a connection's test fails), Knowledge and the account) and a 232 px sidebar (a factory's Work / Build / Learn, or the organization's own), both pinned to the left edge at full height, then `main`. Below 768 px: a top row with the organization mark and the factory squares, the crumb "Acme / sre", `main`, and on factory pages a bottom tab bar (Floor, Board, Items, Build, More). The Inbox drawer is a full-screen sheet below 768 px and a 460 px panel from there up. Since the sidebar takes room at every width from 768 px (`main` is 464 px wide at 768), screens lay out by the width of `main` with container queries (`@container` on `main`: `@[640px]:`, `@[720px]:`, `@[960px]:`), not viewport breakpoints; viewport breakpoints only switch the phone and desktop chrome. Cards stack, the board becomes a station picker plus a list, and every action has a 44 px target. Factory screens of later phases (Jonah) are listed in `app/screens.ts` with `available: false` and show as "Later" until the PR that adds their route flips them. Later, the app becomes an installable PWA so approvals can arrive as push notifications.
+One app, not two, filling the viewport with no outer frame. From 768 px: a 72 px rail (organization mark, the organization's factory squares, New factory, then Connections (a rust dot and "1 failing" while a connection's test fails), Knowledge and the account) and a 232 px sidebar (a factory's Work / Build / Learn, or the organization's own), both pinned to the left edge at full height, then `main`. Below 768 px: a top row with the organization mark and the factory squares, the crumb "Acme / sre", `main`, and on factory pages a bottom tab bar (Floor, Board, Items, Build, More). The Inbox drawer is a full-screen sheet below 768 px and a 460 px panel from there up. Since the sidebar takes room at every width from 768 px (`main` is 464 px wide at 768), screens lay out by the width of `main` with container queries (`@container` on `main`: `@[640px]:`, `@[720px]:`, `@[960px]:`), not viewport breakpoints; viewport breakpoints only switch the phone and desktop chrome. Cards stack, the board becomes a station picker plus a list, and every action has a 44 px target. Factory screens of later phases (Jonah) are listed in `app/screens.ts` with `available: false` and show as "Later" until the PR that adds their route flips them.
+
+## PWA
+
+Goal installs to a phone's home screen as its own app (standalone, no browser chrome). The service worker, offline caching, update prompts and push notifications come in the next parts, so approvals can arrive as push notifications later.
+
+**Manifest.** `web/public/manifest.webmanifest` is served from the root and linked from `index.html`. Name and short name "Goal", `id`, `start_url` and `scope` "/", `display` "standalone", and `background_color` and `theme_color` `#eef1ef` (`--color-shell`). A manifest takes one colour, so dark mode keeps the media-specific `theme-color` metas in `index.html`. goald serves it as `application/manifest+json` (`web/webui.go` names the type, since Go's mime table lacks `.webmanifest` and the image has no `mime.types`) and revalidates it like the favicon.
+
+**Icons.** `icons/icon-192.png` and `icons/icon-512.png` (purpose `any`) are the favicon itself. `icons/icon-maskable-512.png` (purpose `maskable`) is the mark on a full-bleed `#1d2733` square, the bars at 60% of its height so they sit inside the central 80% safe zone. `apple-touch-icon.png` (180x180) is the same full-bleed design, written as an opaque RGB PNG: iOS rounds the corners itself and shows transparent pixels as black. All of them are rendered from `web/public/favicon.svg`, and only the PNGs are committed. To make them again, from the repository root:
+
+```sh
+mkdir -p /tmp/pwa/run && cd /tmp/pwa/run && npm init -y >/dev/null && npm i @resvg/resvg-js@2
+# save the script below as /tmp/pwa/run/render.mjs, then from the repository root:
+cd <repository root> && node /tmp/pwa/run/render.mjs
+```
+
+```js
+// render.mjs: renders the home-screen icons from web/public/favicon.svg. Run from the repository root.
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { deflateSync } from 'node:zlib';
+import { Resvg } from '@resvg/resvg-js';
+
+const out = 'web/public';
+const favicon = readFileSync(`${out}/favicon.svg`, 'utf8');
+// The three bars of the mark, without the rounded square.
+const bars = favicon.match(/<rect x="8"[\s\S]*<\/svg>/)[0].replace('</svg>', '');
+// A full-bleed #1d2733 square with the bars scaled to 60% of its height (the bars are 14x17 units),
+// inside the central 80% that a maskable icon keeps clear.
+const full = (size) => {
+  const scale = (size * 0.6) / 17;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}"><rect width="${size}" height="${size}" fill="#1d2733"/><g transform="translate(${size / 2} ${size / 2}) scale(${scale}) translate(-15 -14.5)">${bars}</g></svg>`;
+};
+const render = (svg, size) => new Resvg(svg, { fitTo: { mode: 'width', value: size } }).render();
+
+mkdirSync(`${out}/icons`, { recursive: true });
+writeFileSync(`${out}/icons/icon-192.png`, render(favicon, 192).asPng());
+writeFileSync(`${out}/icons/icon-512.png`, render(favicon, 512).asPng());
+writeFileSync(`${out}/icons/icon-maskable-512.png`, render(full(512), 512).asPng());
+
+// apple-touch-icon.png is opaque: iOS shows transparent pixels as black, so it is written as RGB.
+const crcTable = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+const crc = (buf) => {
+  let c = 0xffffffff;
+  for (const b of buf) c = crcTable[(c ^ b) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+};
+const chunk = (type, data) => {
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length);
+  const body = Buffer.concat([Buffer.from(type), data]);
+  const sum = Buffer.alloc(4);
+  sum.writeUInt32BE(crc(body));
+  return Buffer.concat([len, body, sum]);
+};
+const { width, height, pixels } = render(full(180), 180);
+const raw = Buffer.alloc((width * 3 + 1) * height);
+for (let y = 0; y < height; y++) {
+  for (let x = 0; x < width; x++) {
+    const s = (y * width + x) * 4;
+    const d = y * (width * 3 + 1) + 1 + x * 3;
+    raw[d] = pixels[s];
+    raw[d + 1] = pixels[s + 1];
+    raw[d + 2] = pixels[s + 2];
+  }
+}
+const ihdr = Buffer.alloc(13);
+ihdr.writeUInt32BE(width, 0);
+ihdr.writeUInt32BE(height, 4);
+ihdr[8] = 8; // bit depth
+ihdr[9] = 2; // colour type RGB
+const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+writeFileSync(
+  `${out}/apple-touch-icon.png`,
+  Buffer.concat([signature, chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]),
+);
+```
+
+**iOS.** `index.html` carries `apple-mobile-web-app-capable` and `mobile-web-app-capable` (yes), `apple-mobile-web-app-status-bar-style` (black-translucent) and `apple-mobile-web-app-title` (Goal), and the `apple-touch-icon` link. `viewport-fit=cover` lets the page draw under the status bar and the home indicator.
+
+**Safe areas.** With `black-translucent` the page is drawn under the status bar, so the phone top row pads its top by `env(safe-area-inset-top)` on top of its 8 px (`pt-[calc(8px_+_env(safe-area-inset-top))]`), and the shell pads its left and right by `env(safe-area-inset-left)` and `env(safe-area-inset-right)` for landscape. The bottom tab bar, the sheet and the wizard footer pad their bottoms by `env(safe-area-inset-bottom)`. In a browser tab every inset is 0, so nothing moves there. Use `calc()` with spaces around `+` (`calc(8px_+_env(...))`): without them the declaration is invalid CSS and is dropped.
+
+The manifest and icons are checked by `web/src/pwa/manifest.test.ts`, which reads the PNG sizes from their headers, and `web/webui_test.go` checks the manifest's content type.
 
 ## Hosting
 
