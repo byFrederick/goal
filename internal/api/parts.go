@@ -4,13 +4,26 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"time"
+	"unicode/utf8"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/engine"
 	"github.com/byFrederick/goal/internal/ports"
 )
+
+// The longest title and brief a part added through the API may have (NewPartRequest).
+const (
+	maxPartTitle = 200
+	maxPartBrief = 10000
+)
+
+// errPartInvalid is a part the assembly refuses as malformed: no title or brief, one too long,
+// or a need that names none of its parts.
+var errPartInvalid = errors.New("invalid part")
 
 // ListItemParts lists an assembly's parts in plan order (ADR 0012): each one's needs, the needs
 // still open, its wave, pull request and the agent working it, with how many are done and the
@@ -26,24 +39,109 @@ func (s *server) ListItemParts(ctx context.Context, req gen.ListItemPartsRequest
 		return nil, fmt.Errorf("item %s: parts: %w", it.ID, err)
 	}
 
-	out := gen.ListItemParts200JSONResponse{Done: parts.Done, Total: parts.Total, Parts: make([]gen.AssemblyPart, 0, len(parts.Items))}
+	out, err := s.assemblyParts(ctx, it, parts)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.ListItemParts200JSONResponse(out), nil
+}
+
+// AddItemPart adds one part to an open assembly, by the request's actor (ADR 0012 §9), and
+// answers the assembly's parts as ListItemParts does, the new one last.
+func (s *server) AddItemPart(ctx context.Context, req gen.AddItemPartRequestObject) (gen.AddItemPartResponseObject, error) {
+	if req.Body == nil {
+		return nil, fmt.Errorf("%w: a part has a title and a brief", errPartInvalid)
+	}
+
+	if utf8.RuneCountInString(req.Body.Title) > maxPartTitle || utf8.RuneCountInString(req.Body.Brief) > maxPartBrief {
+		return nil, fmt.Errorf("%w: a part's title is at most %d characters and its brief at most %d", errPartInvalid, maxPartTitle, maxPartBrief)
+	}
+
+	by, ok := domain.ActorFrom(ctx)
+	if !ok {
+		return nil, errors.New("add part: the request has no actor")
+	}
+
+	it, err := s.item(ctx, req.Item)
+	if err != nil {
+		return nil, err
+	}
+
+	_, parts, err := s.engine.AddPart(ctx, it.ID, by, domain.NewPart{
+		Title: req.Body.Title, Lane: deref(req.Body.Lane), Brief: req.Body.Brief, Needs: deref(req.Body.Needs),
+	})
+
+	if err != nil {
+		return nil, partRefusal(err)
+	}
+
+	out, err := s.assemblyParts(ctx, it, parts)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.AddItemPart201JSONResponse(out), nil
+}
+
+// partRefusal is err of an added part with the API's meaning: a cycle is edge-cycle, anything
+// else malformed part-invalid (a 400, where domain.ErrInvalid is otherwise a 409).
+func partRefusal(err error) error {
+	switch {
+	case errors.Is(err, domain.ErrCycle):
+		return fmt.Errorf("%w: %w", errEdgeCycle, err)
+	case errors.Is(err, domain.ErrInvalid):
+		return fmt.Errorf("%w: %w", errPartInvalid, err)
+	default:
+		return err
+	}
+}
+
+// partProblem answers the refusals of an added part with their codes; a closed assembly is
+// problemOf's item-closed, and a cycle edgeProblem's edge-cycle.
+func partProblem(err error) (gen.Problem, bool) {
+	answers := []struct {
+		err    error
+		status int
+		code   string
+	}{
+		{err: errPartInvalid, status: http.StatusBadRequest, code: "part-invalid"},
+		{err: engine.ErrNotAssembly, status: http.StatusConflict, code: "not-an-assembly"},
+	}
+
+	for _, a := range answers {
+		if errors.Is(err, a.err) {
+			p := detailed(a.status, err)
+			p.Code = optional(a.code)
+
+			return p, true
+		}
+	}
+
+	return gen.Problem{}, false
+}
+
+// assemblyParts is the body of an assembly's parts, in plan order, shared by ListItemParts and
+// AddItemPart so both answer the same.
+func (s *server) assemblyParts(ctx context.Context, it domain.Item, parts domain.Parts) (gen.AssemblyParts, error) {
+	out := gen.AssemblyParts{Done: parts.Done, Total: parts.Total, Parts: make([]gen.AssemblyPart, 0, len(parts.Items))}
 	if parts.Total == 0 {
 		return out, nil
 	}
 
 	l, err := s.lineOf(ctx, it.FactoryID)
 	if err != nil {
-		return nil, err
+		return gen.AssemblyParts{}, err
 	}
 
 	needs, err := s.partNeeds(ctx, parts.Items)
 	if err != nil {
-		return nil, err
+		return gen.AssemblyParts{}, err
 	}
 
 	agents, err := s.partAgents(ctx, it.FactoryID, parts.Items)
 	if err != nil {
-		return nil, err
+		return gen.AssemblyParts{}, err
 	}
 
 	byID := make(map[domain.ItemID]domain.Item, len(parts.Items))
