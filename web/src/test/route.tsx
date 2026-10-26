@@ -29,7 +29,9 @@ export type Seed = readonly [key: QueryKey, data: unknown];
 
 /**
  * Renders `page` at /o/<org>/f/<factory>/<path> (`path` is the factory route's child: 'board',
- * 'items/', or '/' for the Floor), with `seed` as the query data. Returns what render returns.
+ * 'items/', or '/' for the Floor), with `seed` as the query data and `search` as further search params
+ * beside `station`. Returns what render returns, and the router, whose location a test reads after a
+ * control changed the URL.
  */
 export function renderFactoryPage({
   page,
@@ -39,6 +41,7 @@ export function renderFactoryPage({
   factories = [factory],
   seed = [],
   station,
+  search,
 }: {
   page: () => ReactNode;
   /** The page's route under the factory: 'board', 'items/' or '/' (the Floor). */
@@ -49,6 +52,8 @@ export function renderFactoryPage({
   factories?: Factory[];
   seed?: readonly Seed[];
   station?: string | undefined;
+  /** Further search params the page is at (a filter's choice, a grouping), beside `station`. */
+  search?: Record<string, string> | undefined;
 }) {
   polyfillLayout();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
@@ -72,7 +77,8 @@ export function renderFactoryPage({
   const itemRoute = createRoute({ getParentRoute: () => factoryRoute, path: 'items/$ref', component: () => null });
   const routeTree = rootRoute.addChildren([orgRoute.addChildren([factoryRoute.addChildren([pageRoute, itemRoute])])]);
 
-  const query = station ? `?station=${encodeURIComponent(station)}` : '';
+  const params = new URLSearchParams({ ...(station ? { station } : {}), ...search });
+  const query = params.size > 0 ? `?${params}` : '';
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({
@@ -80,11 +86,14 @@ export function renderFactoryPage({
     }),
   });
 
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
+  return {
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    ),
+    router,
+  };
 }
 
 /**
@@ -99,6 +108,7 @@ export function renderBoardPage({
   board,
   builderMeta,
   station,
+  search,
 }: {
   page: () => ReactNode;
   org: OrgSummary;
@@ -109,9 +119,11 @@ export function renderBoardPage({
   /** The install's models the page labels runs with; left out for a page that names no model. */
   builderMeta?: BuilderMeta;
   station?: string;
+  /** Further search params the page is at (a filter's choice, a grouping), beside `station`. */
+  search?: Record<string, string> | undefined;
 }) {
   const seed: Seed[] = [];
   if (board) seed.push([boardQuery(org.id, factory.id).queryKey, board]);
   if (builderMeta) seed.push([builderMetaQuery(org.id).queryKey, builderMeta]);
-  return renderFactoryPage({ page, path: 'board', org, factory, factories, seed, station });
+  return renderFactoryPage({ page, path: 'board', org, factory, factories, seed, station, search });
 }
