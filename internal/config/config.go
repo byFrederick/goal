@@ -365,9 +365,11 @@ type Flow struct {
 	Dependencies *Dependencies `json:"dependencies,omitempty"`
 }
 
-// Dependencies names the output fields that set an item's dependencies: Paths the one whose
-// list of file globs replaces the item's paths. An unset key maps no field.
+// Dependencies names the output fields that set an item's dependencies: After the one listing
+// the open items (<factory>#<number>) the work must follow, Paths the one whose list of file
+// globs replaces the item's paths. An unset key maps no field.
 type Dependencies struct {
+	After string `json:"after,omitempty"`
 	Paths string `json:"paths,omitempty"`
 }
 

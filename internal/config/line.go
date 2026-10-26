@@ -91,6 +91,7 @@ func flowPolicy(fl Flow) domain.FlowPolicy {
 	}
 
 	if d := fl.Dependencies; d != nil {
+		p.Dependencies.After = d.After
 		p.Dependencies.Paths = d.Paths
 	}
 

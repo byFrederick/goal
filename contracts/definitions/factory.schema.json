@@ -481,6 +481,11 @@
                   "type": "string",
                   "minLength": 1,
                   "description": "The top-level output field whose list of file globs replaces the item's paths when a station finishes with a non-empty one. Items whose paths overlap wait for each other under assemblies.overlap serialize."
+                },
+                "after": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The output property listing the open items of this factory, outside the output's plan, that the work must follow, as item refs <factory>#<number>. Each becomes a linked edge from the item, or from every part of its plan with no in-plan needs; a ref that is malformed, of another factory, unknown, done, cancelled or would close a cycle fails the output."
                 }
               }
             },

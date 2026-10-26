@@ -36,6 +36,10 @@ type FlowPolicy struct {
 // DependencyPolicy is board.flow.dependencies: which output fields set an item's dependencies.
 // The platform names no field; a definition maps them (AGENTS.md rule 1).
 type DependencyPolicy struct {
+	// After is the output field listing the open items (<factory>#<number>, AfterFrom) the
+	// work must follow: each becomes a linked edge from the item, or from its plan's root parts;
+	// "" when no output declares any.
+	After string
 	// Paths is the output field whose list of file globs replaces the item's paths when a
 	// station finishes with it (PathsFrom); "" when no output sets paths.
 	Paths string
