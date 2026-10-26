@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1
 # goald with the web UI embedded (spec 4 §5.12). Build from the repository root (task goald:image,
-# or compose.yaml's goald service); never pushed from here:
+# or compose.yaml's goald service):
 #   docker build -f cmd/goald/Dockerfile --target runtime -t ghcr.io/byfrederick/goald:0.1.0 .
+# The production deploy builds and pushes it reproducibly (deploy/cloudflare/scripts/deploy.sh):
+# keep the slow steps (pnpm and go mod download from the manifests) before the source COPYs.
 # Its settings and secrets come from the container's environment, never from the image.
 
 ARG NODE_IMAGE=node:22-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d
