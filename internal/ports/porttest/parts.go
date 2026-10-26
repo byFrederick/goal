@@ -65,6 +65,11 @@ func (s *Store) assemble(org domain.OrgID, a ports.Assembly) (domain.Item, domai
 		return domain.Item{}, domain.Parts{}, nil, false, err
 	}
 
+	after, err := s.afterItems(it, a.After, org)
+	if err != nil {
+		return domain.Item{}, domain.Parts{}, nil, false, err
+	}
+
 	s.move(it, t)
 
 	ids := make(map[string]domain.ItemID, len(a.Parts))
@@ -94,12 +99,46 @@ func (s *Store) assemble(org domain.OrgID, a ports.Assembly) (domain.Item, domai
 		}
 	}
 
+	for _, p := range a.Parts {
+		if len(p.Needs) > 0 {
+			continue
+		}
+
+		part := s.items[ids[p.Key]]
+		for _, need := range after {
+			e := domain.Edge{Item: part.ID, Needs: need.ID, Kind: domain.EdgeLinked, By: a.AfterBy.Ref(), At: t.At}
+			s.edges = append(s.edges, e)
+			s.append(edgeEvent(domain.EventEdgeAdded, part, e, a.AfterBy, t.At))
+		}
+	}
+
 	s.append(domain.Event{
 		FactoryID: it.FactoryID, ItemID: it.ID, At: t.At, Kind: domain.EventAssembled, Station: it.Station,
 		Actor: domain.ActorEngine, Data: map[string]any{"parts": len(a.Parts)},
 	})
 
 	return clone(it), s.partsOf(it.ID), s.audit, true, nil
+}
+
+// afterItems are the items an assembly's root parts follow: ErrNotFound for one that is missing,
+// domain.ErrInvalid for one of another factory than the assembly it.
+func (s *Store) afterItems(it *domain.Item, ids []domain.ItemID, org domain.OrgID) ([]*domain.Item, error) {
+	items := make([]*domain.Item, 0, len(ids))
+
+	for _, id := range ids {
+		need, ok := s.visible(id, org)
+		if !ok {
+			return nil, fmt.Errorf("assemble item %s after %s: %w", it.ID, id, ports.ErrNotFound)
+		}
+
+		if need.FactoryID != it.FactoryID {
+			return nil, fmt.Errorf("assemble item %s after %s of another factory: %w", it.ID, id, domain.ErrInvalid)
+		}
+
+		items = append(items, need)
+	}
+
+	return items, nil
 }
 
 // AddPart implements ports.Store. The store's mutex serializes it as the factory's and the

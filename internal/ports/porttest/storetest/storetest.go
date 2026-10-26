@@ -63,6 +63,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Parts_AssembleRetryReturnsTheParts", testAssembleRetry},
 		{"Parts_AssembleRefusesAndWritesNothing", testAssembleRefused},
 		{"Parts_AssembleRefusesAPart", testAssembleRefusesAPart},
+		{"Parts_AssembleLinksRootPartsAfter", testAssembleLinksRootPartsAfter},
 		{"Parts_AssemblyClosesWithItsLastPart", testAssemblyClosesWithItsLastPart},
 		{"Parts_AssemblyCancelledWithItsParts", testAssemblyCancelledWithItsParts},
 		{"Parts_AssemblyClosesOnceWhenTwoLastPartsFinish", testAssemblyClosesOnce},

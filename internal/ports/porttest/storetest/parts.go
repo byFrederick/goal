@@ -873,3 +873,78 @@ func (f *fixture) addPartToDone(t *testing.T, it domain.Item, parts domain.Parts
 		t.Errorf("audit log of %s = %+v, %v; want none", domain.AuditItemPartAdded, entries, err)
 	}
 }
+
+// Assemble with After links every part without in-plan needs, and no other, to each item After
+// names, by AfterBy, in its transaction: those parts are not claimed until the item is done. An
+// unknown item or one of another factory is refused with nothing written.
+func testAssembleLinksRootPartsAfter(f *fixture) {
+	t := f.t
+	ctx := f.ctx(t)
+
+	before := f.create(t, domain.NewItem{Title: "in flight", Station: stNext})
+	other := f.create(t, domain.NewItem{Title: "other factory", FactoryID: f.newFactory(t), Station: stNext})
+	it, l := f.planning(t, domain.NewItem{Title: titleBig})
+	agent := domain.Actor{Kind: domain.ActorAgent, ID: agWorker, Name: agWorker}
+
+	for name, r := range map[string]struct {
+		after domain.ItemID
+		want  error
+	}{
+		"unknown item":  {"00000000-0000-4000-8000-0000000000ff", ports.ErrNotFound},
+		"other factory": {other.ID, domain.ErrInvalid},
+	} {
+		a := assembly(it, l, plan())
+		a.After, a.AfterBy = []domain.ItemID{r.after}, agent
+
+		if _, _, err := f.Store.Assemble(ctx, a); !errors.Is(err, r.want) {
+			t.Errorf("Assemble after %s = %v; want %v", name, err, r.want)
+		}
+	}
+
+	if got := f.parts(t, it.ID); got.Total != 0 {
+		t.Fatalf("parts after refused Assembles = %v; want none", keysOf(got))
+	}
+
+	sameItem(t, f.item(t, it.ID), it)
+
+	a := assembly(it, l, plan())
+	a.After, a.AfterBy = []domain.ItemID{before.ID}, agent
+	_, parts := f.assemble(t, a)
+
+	api, store, web := parts.Items[0], parts.Items[1], parts.Items[2]
+	linked := domain.Edge{Item: api.ID, Needs: before.ID, Kind: domain.EdgeLinked, By: agent.Ref(), At: t1}
+
+	sameEdges(t, "api needs", f.edges(t, api.ID).Needs, []domain.Edge{linked})
+	sameEdges(t, "in flight needed by", f.edges(t, before.ID).NeededBy, []domain.Edge{linked})
+
+	for _, p := range []domain.Item{store, web} {
+		for _, e := range f.edges(t, p.ID).Needs {
+			if e.Kind != domain.EdgePlanned {
+				t.Errorf("part %s needs %+v; want only planned edges", p.PartKey, e)
+			}
+		}
+	}
+
+	sameEvents(t, f.Events(t, api.ID), []domain.Event{
+		{
+			FactoryID: f.factory, ItemID: api.ID, At: t1, Kind: domain.EventPartCreated, Station: stWork, Actor: domain.ActorEngine,
+			Data: map[string]any{"parent": string(it.ID), "key": keyAPI},
+		},
+		{
+			FactoryID: f.factory, ItemID: api.ID, At: t1, Kind: domain.EventEdgeAdded, Station: stWork, Actor: agWorker,
+			Data: map[string]any{"needs": string(before.ID), "kind": string(domain.EdgeLinked), "actor": agent.Ref()},
+		},
+	})
+
+	if _, _, err := f.Store.ClaimNext(ctx, ports.Claim{FactoryID: f.factory, Station: work, Slot: 0, Now: t1, ExpiresAt: t1.Add(ttl)}); !errors.Is(err, ports.ErrNoWork) {
+		t.Fatalf("ClaimNext while the linked item is open = %v; want ErrNoWork", err)
+	}
+
+	if err := f.finishPart(t, before, domain.StateDone, t1); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, _ := f.claim(t, work, 0, t1); got.ID != api.ID {
+		t.Fatalf("claimed %q; want API once the linked item is done", got.Title)
+	}
+}
