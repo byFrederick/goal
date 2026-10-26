@@ -17,6 +17,7 @@ type planCase struct {
 const (
 	envCheck = "env:check"
 	genCheck = "gen:check"
+	webCheck = "web:check"
 )
 
 var (
@@ -31,7 +32,7 @@ func TestPlan(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]planCase{
-		"web only":                {[]string{"apps/web/src/routes/board.tsx", "apps/web/package.json"}, []string{"web:check"}, "web (web:check): apps/web/src/routes/board.tsx and 1 more", ""},
+		"web only":                {[]string{"apps/web/src/routes/board.tsx", "apps/web/package.json"}, []string{webCheck}, "web (web:check): apps/web/src/routes/board.tsx and 1 more", ""},
 		"go file":                 {[]string{"internal/engine/pull.go"}, goEnvTasks, "go (lint, test, gen:check, validate): internal/engine/pull.go", ""},
 		"go file outside go dirs": {[]string{"apps/web/webui.go"}, goEnvTasks, "apps/web/webui.go", ""},
 		"go fixture":              {[]string{"internal/config/testdata/acme/factory.yaml"}, goTasks, "go (", ""},
@@ -53,11 +54,11 @@ func TestPlan(t *testing.T) {
 			[]string{"internal/api/permissions.gen.go"}, goEnvTasks, "gen (gen:check): internal/api/permissions.gen.go", "",
 		},
 		"generated api client types": {
-			[]string{"packages/api-client/src/schema.gen.ts"}, []string{genCheck, "api-client:check", "web:check"}, "gen (gen:check): packages/api-client/src/schema.gen.ts", "",
+			[]string{"packages/api-client/src/schema.gen.ts"}, []string{genCheck, "api-client:check", webCheck}, "gen (gen:check): packages/api-client/src/schema.gen.ts", "",
 		},
-		"generated route tree": {[]string{"apps/web/src/routeTree.gen.ts"}, []string{genCheck, "web:check"}, "gen (gen:check): apps/web/src/routeTree.gen.ts", ""},
+		"generated route tree": {[]string{"apps/web/src/routeTree.gen.ts"}, []string{genCheck, webCheck}, "gen (gen:check): apps/web/src/routeTree.gen.ts", ""},
 		"generated queries":    {[]string{"internal/adapters/postgres/db/runs.sql.gen.go"}, goEnvTasks, "gen (gen:check): internal/adapters/postgres/db/runs.sql.gen.go", ""},
-		"api client":           {[]string{"packages/api-client/src/client.ts"}, []string{"api-client:check", "web:check"}, "web (web:check): packages/api-client/src/client.ts", ""},
+		"api client":           {[]string{"packages/api-client/src/client.ts"}, []string{"api-client:check", webCheck}, "web (web:check): packages/api-client/src/client.ts", ""},
 		"control worker":       {[]string{"deploy/cloudflare/src/index.ts"}, []string{envCheck, "cloudflare:check"}, "cloudflare (cloudflare:check): deploy/cloudflare/src/index.ts", ""},
 		"terraform":            {[]string{"deploy/terraform/r2.tf"}, []string{"tf:check"}, "terraform (tf:check): deploy/terraform/r2.tf", ""},
 		"sops rules":           {[]string{"deploy/terraform/.sops.yaml"}, []string{"tf:check"}, "terraform (tf:check): deploy/terraform/.sops.yaml", ""},
@@ -84,7 +85,7 @@ func TestPlan(t *testing.T) {
 		},
 		"parts keep task check's order": {
 			[]string{"deploy/terraform/r2.tf", "apps/web/src/a.tsx", "internal/api/org.go", "apps/worker/src/a.ts"},
-			[]string{envCheck, "lint", "test", "gen:check", "worker:check", "web:check", "validate", "tf:check"},
+			[]string{envCheck, "lint", "test", "gen:check", "worker:check", webCheck, "validate", "tf:check"},
 			"worker (worker:check)", "",
 		},
 	}

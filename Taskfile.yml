@@ -206,18 +206,25 @@ tasks:
   gen:check:
     desc: >-
       Run every generator (task gen) and fail when a generated file (*.gen.*, internal/api/gen,
-      internal/adapters/postgres/db, docs/reference/environment.md) differs from the commit or is untracked
+      internal/adapters/postgres/db, docs/reference/environment.md) differs from the commit or is untracked.
+      It checks before the generators too, so an uncommitted hand edit fails instead of being overwritten
+    vars:
+      GENERATED: "':(glob)**/*.gen.*' internal/api/gen internal/adapters/postgres/db docs/reference/environment.md"
+      DIFF: |
+        changed="$(git status --porcelain --untracked-files=all -- {{.GENERATED}})"
+        if [ -n "$changed" ]; then
+          echo "gen:check: these generated files differ from the commit:" >&2
+          echo "$changed" >&2
+          echo "gen:check: never edit them by hand; change the source, run task gen and commit the result" >&2
+          exit 1
+        fi
     cmds:
+      - cmd: |
+          {{.DIFF}}
+        silent: true
       - task: gen
       - cmd: |
-          set -eu
-          changed="$(git status --porcelain --untracked-files=all -- ':(glob)**/*.gen.*' internal/api/gen internal/adapters/postgres/db docs/reference/environment.md)"
-          if [ -n "$changed" ]; then
-            echo "gen:check: these generated files differ from the commit:" >&2
-            echo "$changed" >&2
-            echo "gen:check: never edit them by hand; change the source, run task gen and commit the result" >&2
-            exit 1
-          fi
+          {{.DIFF}}
         silent: true
 
   validate:

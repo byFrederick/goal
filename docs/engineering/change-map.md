@@ -21,7 +21,7 @@ When you change X, also change Y, and run Z. Paths are today's; the moves of [AD
 
 ## Generated files
 
-Every generated file has `.gen.` before its extension ([ADR 0013](../adr/0013-repository-layout.md), decision 4), and nobody edits one by hand: change its source and run its task. `task gen` runs every generator; `task gen:check` (part of `task check`) runs them and fails when any file below differs from the commit or is untracked. `.golangci.yml` and the `biome.json` files ignore `*.gen.*`.
+Every generated file has `.gen.` before its extension ([ADR 0013](../adr/0013-repository-layout.md), decision 4), and nobody edits one by hand: change its source and run its task. `task gen` runs every generator; `task gen:check` (part of `task check`) fails when any file below differs from the commit or is untracked, checked before the generators run (an uncommitted hand edit) and after. `.golangci.yml` and the `biome.json` files ignore `*.gen.*`.
 
 | File | Generator | Source | Task |
 | --- | --- | --- | --- |
