@@ -66,6 +66,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Parts_AssemblyClosesOnceWhenTwoLastPartsFinish", testAssemblyClosesOnce},
 		{"Parts_CascadeMovesEveryPartInOneTransaction", testCascadeParts},
 		{"Parts_CascadeRefusedWritesNothing", testCascadeRefused},
+		{"Parts_CancelCascadeClosesTheAssemblyCancelled", testCancelCascadeClosesTheAssemblyCancelled},
 		{"HeartbeatLease_FencedByAcquiredAt", testHeartbeat},
 		{"Transition_MovesAndReleases", testTransition},
 		{"Transition_ConflictChangesNothing", testTransitionConflict},

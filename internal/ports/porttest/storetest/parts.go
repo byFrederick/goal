@@ -507,6 +507,43 @@ func (f *fixture) cancelClosesTheAssembly(assembly domain.ItemID, parts domain.P
 	}
 }
 
+// A cancel cascade closes the assembly as cancelled, without a done time, even when one of its
+// parts is done; its assembly_done event says so.
+func testCancelCascadeClosesTheAssemblyCancelled(f *fixture) {
+	t := f.t
+
+	it, l := f.planning(t, domain.NewItem{Title: titleBig})
+	_, parts := f.assemble(t, assembly(it, l, plan()))
+	t2 := t1.Add(time.Minute)
+
+	if err := f.finishPart(t, parts.Items[0], domain.StateDone, t1); err != nil {
+		t.Fatal(err)
+	}
+
+	c := ports.Cascade{Assembly: it.ID, Cancel: true}
+	for _, p := range parts.Items[1:] {
+		c.Parts = append(c.Parts, ports.Transition{
+			ItemID: p.ID, From: p.Position(), To: domain.Position{Station: p.Station, State: domain.StateCancelled}, At: t2,
+		})
+	}
+
+	if got, err := f.Store.CascadeParts(f.ctx(t), c); err != nil || got.Done != 1 || got.Total != 3 {
+		t.Fatalf("CascadeParts cancelling the open parts = %+v, %v; want 1/3", got, err)
+	}
+
+	a := f.item(t, it.ID)
+	if a.State != domain.StateCancelled || !a.DoneAt.IsZero() || !a.UpdatedAt.Equal(t2) || a.Station != stWork {
+		t.Errorf("assembly after a cancel cascade = %s at %s, done %v, updated %v; want cancelled at %s, not done, at %v",
+			a.State, a.Station, a.DoneAt, a.UpdatedAt, stWork, t2)
+	}
+
+	events := f.Events(t, it.ID)
+	sameEvents(t, events[len(events)-1:], []domain.Event{{
+		FactoryID: f.factory, ItemID: it.ID, At: t2, Kind: domain.EventAssemblyDone, Station: stWork, Actor: domain.ActorEngine,
+		Data: map[string]any{"state": string(domain.StateCancelled), "parts_done": 1, "parts": 3},
+	}})
+}
+
 // A cascade naming no part, a part of another assembly, the assembly itself or a move to state
 // assembly is invalid; one with a stale part, a lost lease or a closed assembly conflicts. None
 // writes anything, even when its other parts could move.
