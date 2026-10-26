@@ -61,7 +61,7 @@ func (s *Store) AddEdge(ctx context.Context, n domain.NewEdge) (domain.Edge, err
 }
 
 // RemoveEdge implements ports.Store.
-func (s *Store) RemoveEdge(ctx context.Context, item, needs domain.ItemID, by domain.Actor, at time.Time) error {
+func (s *Store) RemoveEdge(ctx context.Context, item, needs domain.ItemID, by domain.Actor, at time.Time, reason string) error {
 	org, err := orgOf(ctx)
 	if err != nil {
 		return err
@@ -80,7 +80,13 @@ func (s *Store) RemoveEdge(ctx context.Context, item, needs domain.ItemID, by do
 
 	e := s.edges[i]
 	s.edges = slices.Delete(s.edges, i, i+1)
-	s.append(edgeEvent(domain.EventEdgeRemoved, it, e, by, at))
+
+	ev := edgeEvent(domain.EventEdgeRemoved, it, e, by, at)
+	if reason != "" {
+		ev.Data["reason"] = reason
+	}
+
+	s.append(ev)
 
 	return nil
 }

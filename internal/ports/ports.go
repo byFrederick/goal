@@ -105,8 +105,9 @@ type Store interface {
 	AddEdge(ctx context.Context, e domain.NewEdge) (domain.Edge, error)
 
 	// RemoveEdge removes the edge item → needs and appends an edge_removed event on item by
-	// `by` at at. It returns ErrNotFound when there is no such edge.
-	RemoveEdge(ctx context.Context, item, needs domain.ItemID, by domain.Actor, at time.Time) error
+	// `by` at at, with data reason when reason is not empty. It returns ErrNotFound when there
+	// is no such edge.
+	RemoveEdge(ctx context.Context, item, needs domain.ItemID, by domain.Actor, at time.Time, reason string) error
 
 	// Edges returns what an item needs and what needs it. An unknown item has none.
 	Edges(ctx context.Context, item domain.ItemID) (domain.ItemEdges, error)
