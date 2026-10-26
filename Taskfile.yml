@@ -379,9 +379,17 @@ tasks:
         done
       - '"{{.TASK_EXE}}" auth:schema-diff DATABASE_URL="postgres://postgres@localhost/goal?host={{.PGTMP}}&options=-c%20role%3Dgoal_auth"'
 
+  layout:check:
+    desc: >-
+      Check that the AGENTS.md repository map, ADR 0013's layout and the paths: globs of .claude/rules still
+      match the tracked files (tools/layoutcheck)
+    cmds:
+      - go run ./tools/layoutcheck
+
   check:
     desc: Everything the pre-push hook and CI check except migrations and integration tests
     cmds:
+      - task: layout:check
       - task: lint
       - task: test
       - task: api:permissions-check

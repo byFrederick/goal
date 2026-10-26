@@ -9,7 +9,7 @@ import (
 
 // tasks is the order task check runs its tasks in; a plan keeps it.
 var tasks = []string{
-	"lint", "test", "api:permissions-check", "worker:check", "auth:check",
+	"layout:check", "lint", "test", "api:permissions-check", "worker:check", "auth:check",
 	"api-client:check", "web:check", "cloudflare:check", "validate", "tf:check",
 }
 
@@ -27,11 +27,12 @@ var (
 	partWeb        = part{"web", []string{"web:check"}}
 	partCloudflare = part{"cloudflare", []string{"cloudflare:check"}}
 	partTerraform  = part{"terraform", []string{"tf:check"}}
+	partLayout     = part{"layout", []string{"layout:check"}}
 	partEverything = part{"everything", tasks}
 )
 
 // parts lists every part in report order; everything comes first since it covers the rest.
-var parts = []part{partEverything, partGo, partWorker, partAuth, partAPIClient, partWeb, partCloudflare, partTerraform}
+var parts = []part{partEverything, partGo, partWorker, partAuth, partAPIClient, partWeb, partCloudflare, partTerraform, partLayout}
 
 // A rule maps the paths it matches to the parts they select; no parts means nothing to check.
 type rule struct {
@@ -66,6 +67,11 @@ var rules = []rule{
 	{exact("go.mod", "go.sum", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "Taskfile.yml",
 		".golangci.yml", ".mise.toml", "mise.toml", ".tool-versions"), []part{partEverything}, "shared by every part"},
 	{under("contracts"), []part{partEverything}, "a contract every part builds on"},
+	// tools/layoutcheck is Go, and the layout check it runs.
+	{under("tools/layoutcheck"), []part{partGo, partLayout}, ""},
+	// The descriptions of the layout that tools/layoutcheck compares with the tracked files.
+	{exact("AGENTS.md", "docs/adr/0013-repository-layout.md"), []part{partLayout}, ""},
+	{under(".claude/rules"), []part{partLayout}, ""},
 	// Go code anywhere, and the files Go embeds (go:embed) or its tests read.
 	{goFile, []part{partGo}, ""},
 	{under("cmd", "internal", "db", "apps/web/placeholder"), []part{partGo}, ""},
