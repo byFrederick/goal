@@ -226,19 +226,36 @@ func TestAPI_BoardListsOpenAssemblies(t *testing.T) {
 	}
 
 	for _, st := range board.Stations {
-		for _, c := range st.Items {
-			if c.Id == string(done.ID) && (st.Id != stDone || c.State != gen.ItemState(domain.StateDone)) {
-				t.Errorf("done assembly is a %s card at %s; want done at %s", c.State, st.Id, stDone)
-			}
-		}
-
 		if st.Id == stBuild && (st.Waiting != 1 || st.InProgress != 0) {
 			t.Errorf("%s waiting %d, in progress %d; want only the queued part waiting", st.Id, st.Waiting, st.InProgress)
 		}
 	}
 
-	if c, ok := cards[done.Number]; !ok || c.Station != stDone {
-		t.Errorf("done assembly card = %+v (on the board: %t); want it at %s", c, ok, stDone)
+	wantDoneCardAt(t, board, done, stDone)
+}
+
+// wantDoneCardAt checks that item is a done card in station's items and in no other station's.
+func wantDoneCardAt(t *testing.T, board gen.Board, item domain.Item, station string) {
+	t.Helper()
+
+	found := false
+
+	for _, st := range board.Stations {
+		for _, c := range st.Items {
+			if c.Id != string(item.ID) {
+				continue
+			}
+
+			found = found || st.Id == station
+
+			if st.Id != station || c.State != gen.ItemState(domain.StateDone) {
+				t.Errorf("item %d is a %s card at %s; want done at %s", item.Number, c.State, st.Id, station)
+			}
+		}
+	}
+
+	if !found {
+		t.Errorf("item %d is no card at %s", item.Number, station)
 	}
 }
 
