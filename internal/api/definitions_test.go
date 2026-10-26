@@ -818,8 +818,11 @@ func TestDefinitions_StreamSendsDefinitionEvents(t *testing.T) {
 	}
 }
 
-// linePath is the line factory's address; line (build has two agent slots) is the one archived.
-const linePath = factoriesPath + "/line"
+// The line factory (build has two agent slots), the one the archive tests archive.
+const (
+	lineSlug = "line"
+	linePath = factoriesPath + "/" + lineSlug
+)
 
 // pauseLine pauses the line factory, as archiving requires.
 func (h *harness) pauseLine(t *testing.T) gen.Factory {
@@ -835,7 +838,7 @@ func TestDefinitions_ArchiveAndRestore(t *testing.T) {
 	h.pauseLine(t)
 
 	archived := decode[gen.Factory](t, h.request(t, http.MethodPost, linePath+"/archive", "", nil), http.StatusOK)
-	if archived.ArchivedAt == nil || archived.ArchivedBy == nil || archived.ArchivedBy.Id != "local" || !archived.Paused {
+	if archived.ArchivedAt == nil || archived.ArchivedBy == nil || archived.ArchivedBy.Id != domain.LocalUser.ID || !archived.Paused {
 		t.Errorf("archive = %s, want line archived by the local user, still paused", body(t, archived))
 	}
 
@@ -913,7 +916,7 @@ func TestDefinitions_ListFactoriesHidesArchived(t *testing.T) {
 	decode[gen.Factory](t, h.request(t, http.MethodPost, linePath+"/archive", "", nil), http.StatusOK)
 
 	for query, want := range map[string][]string{
-		"": {acmeSlug}, "?archived=false": {acmeSlug}, "?archived=true": {"line"},
+		"": {acmeSlug}, "?archived=false": {acmeSlug}, "?archived=true": {lineSlug},
 	} {
 		list := decode[gen.FactoryList](t, h.request(t, http.MethodGet, factoriesPath+query, "", nil), http.StatusOK)
 
