@@ -30,6 +30,8 @@ const (
 	message = "message"
 	merged  = "merged"
 	closed  = "closed"
+	// mergeSHA is the fake's merge commit.
+	mergeSHA = "merge-sha"
 
 	headBranch = "goal/7-add-x"
 	mainBranch = "main"
@@ -105,7 +107,7 @@ func newFakeGitHubWith(t *testing.T, cfg Config) (*fakeGitHub, *Client) {
 	f.merge = func(map[string]string) (int, any) {
 		f.pr["state"], f.pr[merged] = closed, true
 
-		return http.StatusOK, map[string]any{keySHA: "merge-sha", "merged": true, message: "Pull Request successfully merged"}
+		return http.StatusOK, map[string]any{keySHA: mergeSHA, "merged": true, message: "Pull Request successfully merged"}
 	}
 
 	f.update = func(map[string]string) (int, any) {
@@ -453,11 +455,11 @@ func TestMerge_SquashesTheHeadItWasGiven(t *testing.T) {
 	f.merge = func(body map[string]string) (int, any) {
 		asked = body
 
-		return http.StatusOK, map[string]any{keySHA: "merge-sha", "merged": true}
+		return http.StatusOK, map[string]any{keySHA: mergeSHA, "merged": true}
 	}
 
 	sha, err := c.Merge(t.Context(), dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
-	if err != nil || sha != "merge-sha" {
+	if err != nil || sha != mergeSHA {
 		t.Fatalf("Merge = %q, %v; want merge-sha", sha, err)
 	}
 
@@ -523,18 +525,19 @@ func TestMerge_RetriesAtTheNewHeadWhenGitHubSaysTheHeadWasModified(t *testing.T)
 
 		if body["sha"] != newHead {
 			// GitHub's background update has pushed newHead since the caller read the head.
-			f.pr["head"].(map[string]any)[keySHA] = newHead
+			head, _ := f.pr["head"].(map[string]any)
+			head[keySHA] = newHead
 
 			return http.StatusConflict, map[string]any{message: headModified}
 		}
 
 		f.pr["state"], f.pr[merged] = closed, true
 
-		return http.StatusOK, map[string]any{keySHA: "merge-sha", "merged": true}
+		return http.StatusOK, map[string]any{keySHA: mergeSHA, "merged": true}
 	}
 
 	sha, err := c.Merge(t.Context(), dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
-	if err != nil || sha != "merge-sha" {
+	if err != nil || sha != mergeSHA {
 		t.Fatalf("Merge = %q, %v; want merge-sha", sha, err)
 	}
 

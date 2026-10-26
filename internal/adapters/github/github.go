@@ -98,7 +98,7 @@ func New(cfg Config) *Client {
 	}
 
 	return &Client{
-		api:   strings.TrimSuffix(cfg.APIURL, "/"),
+		api:     strings.TrimSuffix(cfg.APIURL, "/"),
 		polls:   slices.Clone(cfg.MergeabilityPolls),
 		retries: slices.Clone(cfg.MergeRetries),
 		http: &http.Client{
@@ -233,7 +233,7 @@ func (cl *Client) readKnown(ctx context.Context, p pull, prURL string) (pullJSON
 	pj, err := cl.read(ctx, p, prURL)
 
 	for _, wait := range cl.polls {
-		if err != nil || pj.Mergeable != nil || pj.State != "open" || pj.Merged {
+		if err != nil || pj.Mergeable != nil || pj.State != stateOpen || pj.Merged {
 			break
 		}
 
@@ -272,9 +272,9 @@ func (cl *Client) PullRequest(ctx context.Context, c domain.ResolvedConnection, 
 		return ports.PullRequest{}, err
 	}
 
-	unmerged := pj.State == "open" && !pj.Merged
+	unmerged := pj.State == stateOpen && !pj.Merged
 	pr := ports.PullRequest{
-		URL: prURL, Open: pj.State == "open", Merged: pj.Merged, Mergeable: pj.Mergeable != nil && *pj.Mergeable,
+		URL: prURL, Open: pj.State == stateOpen, Merged: pj.Merged, Mergeable: pj.Mergeable != nil && *pj.Mergeable,
 		MergeabilityPending: unmerged && pj.Mergeable == nil,
 		HeadSHA:             pj.Head.SHA, HeadBranch: pj.Head.Ref, BaseBranch: pj.Base.Ref,
 		SameRepository: pj.Head.Repo != nil && pj.Base.Repo != nil && strings.EqualFold(pj.Head.Repo.FullName, pj.Base.Repo.FullName),
@@ -329,7 +329,7 @@ func (cl *Client) Merge(ctx context.Context, c domain.ResolvedConnection, prURL 
 			return "", fmt.Errorf("merge %s: %w", prURL, err)
 		case pj.Merged:
 			return pj.MergeCommitSHA, nil
-		case pj.State != "open":
+		case pj.State != stateOpen:
 			return "", fmt.Errorf("merge %s: closed while retrying: %w", prURL, ports.ErrNotMergeable)
 		}
 
@@ -383,6 +383,9 @@ const (
 	upToDate   = "no new commits"
 	conflicted = "merge conflict"
 )
+
+// stateOpen is the state of a pull request that is neither merged nor closed.
+const stateOpen = "open"
 
 // dirty is the mergeable_state of a pull request that conflicts with its base.
 const dirty = "dirty"
