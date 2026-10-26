@@ -669,7 +669,7 @@ A touch that groups several events (a merge's `merged` and `approved`) reads the
 
 - No `agent_runs` change: a box is named by its run id, and reaping reads `Store.RunsOver`.
 - `knowledge_chunks` is partitioned by hash of `org_id` when it passes about 10 million rows (later; the queries already filter by org).
-- sqlc queries in `queries/connections.sql` and `queries/knowledge.sql`. Conformance: `connectiontest` (create, update, replace secret, resolve, two-org RLS, no plaintext in any column, AAD mismatch refused, rekey), `knowledgetest` (lease claim and expiry, replace chunks, unseen deletion, hybrid ranking fixtures, sources filter, two-org RLS with the vector scan).
+- sqlc queries in `db/queries/connections.sql` and `db/queries/knowledge.sql`. Conformance: `connectiontest` (create, update, replace secret, resolve, two-org RLS, no plaintext in any column, AAD mismatch refused, rekey), `knowledgetest` (lease claim and expiry, replace chunks, unseen deletion, hybrid ranking fixtures, sources filter, two-org RLS with the vector scan).
 
 ## 7. Bucket layout changes
 

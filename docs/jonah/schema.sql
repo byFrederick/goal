@@ -1,8 +1,8 @@
 -- +goose Up
 -- DRAFT: Jonah, Goal's evaluation and self-remediation subsystem. See docs/jonah/README.md.
 --
--- This file lives in docs/, not migrations/. When phase J1 starts, it is split into numbered,
--- forward-only migrations (00002_jonah_*.sql, ...). It applies on top of migrations/00001_init.sql
+-- This file lives in docs/, not db/migrations/. When phase J1 starts, it is split into numbered,
+-- forward-only migrations (00002_jonah_*.sql, ...). It applies on top of db/migrations/00001_init.sql
 -- on PostgreSQL 18 (uuidv7()).
 --
 -- Conventions (same as 00001_init.sql):

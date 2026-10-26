@@ -36,7 +36,7 @@ export async function createTestDatabase(upTo?: string): Promise<TestDatabase> {
     await c.query(`CREATE DATABASE ${name}`);
   });
 
-  const files = (await readdir(`${repo}migrations`)).filter((f) => f.endsWith('.sql')).sort();
+  const files = (await readdir(`${repo}db/migrations`)).filter((f) => f.endsWith('.sql')).sort();
   await withClient(url(), async (c) => {
     await c.query(`
       REVOKE TEMPORARY, CONNECT ON DATABASE ${name} FROM PUBLIC;
@@ -47,7 +47,7 @@ export async function createTestDatabase(upTo?: string): Promise<TestDatabase> {
       CREATE EXTENSION IF NOT EXISTS vector`);
     for (const f of files) {
       // A goose file is plain SQL whose annotations are comments; each runs in one transaction.
-      const sql = await readFile(`${repo}migrations/${f}`, 'utf8');
+      const sql = await readFile(`${repo}db/migrations/${f}`, 'utf8');
       await c.query(`BEGIN; SET LOCAL ROLE goal_owner;\n${sql}\n;\nCOMMIT`);
       if (upTo && f.startsWith(upTo)) break;
     }

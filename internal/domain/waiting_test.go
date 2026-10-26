@@ -10,12 +10,12 @@ func TestWaitingFor(t *testing.T) {
 
 	planned := OpenNeed{Kind: EdgePlanned, Item: "a", Number: 1}
 	linked := OpenNeed{Kind: EdgeLinked, Item: "b", Number: 2}
-	overSQL := OpenNeed{Kind: EdgeOverlap, Item: "c", Number: 3, Paths: []string{"queries/*.sql"}}
-	overWeb := OpenNeed{Kind: EdgeOverlap, Item: "d", Number: 4, Paths: []string{"web/**", "queries/items.sql"}}
+	overSQL := OpenNeed{Kind: EdgeOverlap, Item: "c", Number: 3, Paths: []string{"db/queries/*.sql"}}
+	overWeb := OpenNeed{Kind: EdgeOverlap, Item: "d", Number: 4, Paths: []string{"web/**", "db/queries/items.sql"}}
 
 	queued := Item{
 		State: StateQueued,
-		Paths: []string{"web/src/**", "queries/items.sql", "internal/api/**", "queries/*.sql"},
+		Paths: []string{"web/src/**", "db/queries/items.sql", "internal/api/**", "db/queries/*.sql"},
 	}
 
 	tests := []struct {
@@ -35,7 +35,7 @@ func TestWaitingFor(t *testing.T) {
 			name: "files only", item: queued, needs: []OpenNeed{overWeb, overSQL},
 			want: Waiting{
 				Kind: WaitingFiles, Items: []OpenNeed{overWeb, overSQL},
-				Files: []string{"web/src/**", "queries/items.sql", "queries/*.sql"},
+				Files: []string{"web/src/**", "db/queries/items.sql", "db/queries/*.sql"},
 			},
 			ok: true,
 		},

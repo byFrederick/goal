@@ -68,7 +68,7 @@ func TestPlanFrom_ValidPlanBecomesParts(t *testing.T) {
 	t.Parallel()
 
 	output := `{"lane":"backend","plan":[
-		{"key":"store","title":"Store","lane":"data","brief":"Add the table.","paths":["migrations/"]},
+		{"key":"store","title":"Store","lane":"data","brief":"Add the table.","paths":["db/migrations/"]},
 		{"key":"api","title":"API","lane":"data","brief":"Expose it.","paths":["contracts/api/"],"needs":["store"]}
 	]}`
 
@@ -78,7 +78,7 @@ func TestPlanFrom_ValidPlanBecomesParts(t *testing.T) {
 	}
 
 	want := []NewPart{
-		{Key: "store", Title: "Store", Lane: "data", Brief: "Add the table.", Paths: []string{"migrations/"}},
+		{Key: "store", Title: "Store", Lane: "data", Brief: "Add the table.", Paths: []string{"db/migrations/"}},
 		{Key: "api", Title: "API", Lane: "data", Brief: "Expose it.", Paths: []string{"contracts/api/"}, Needs: []string{"store"}},
 	}
 	if !reflect.DeepEqual(parts, want) {

@@ -290,7 +290,7 @@ func testOpenNeeds(f *fixture) {
 	cancelled := f.create(t, domain.NewItem{Title: "cancelled need", Station: stNext})
 
 	queued := domain.Position{Station: stNext, State: domain.StateQueued}
-	globs := []string{"queries/*.sql", "web/**"}
+	globs := []string{"db/queries/*.sql", "web/**"}
 
 	if _, err := f.Store.Transition(ctx, ports.Transition{ItemID: overlap.ID, From: queued, To: queued, Paths: globs, At: t1}); err != nil {
 		t.Fatal(err)

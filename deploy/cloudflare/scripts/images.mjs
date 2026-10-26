@@ -18,7 +18,7 @@ export const inputs = {
   'cmd/goald/Dockerfile': [
     'cmd/goald/',
     'internal/',
-    'migrations/',
+    'db/migrations/',
     'contracts/definitions/',
     'web/',
     'packages/api-client/',

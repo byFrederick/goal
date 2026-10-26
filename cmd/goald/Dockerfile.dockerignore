@@ -5,7 +5,7 @@
 !go.sum
 !cmd/goald/
 !internal/
-!migrations/
+!db/migrations/
 !contracts/definitions/
 !web/
 !packages/api-client/

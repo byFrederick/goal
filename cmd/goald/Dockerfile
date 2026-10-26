@@ -30,7 +30,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd/goald/ cmd/goald/
 COPY internal/ internal/
-COPY migrations/ migrations/
+COPY db/migrations/ db/migrations/
 COPY contracts/definitions/ contracts/definitions/
 COPY web/ web/
 COPY --from=web /src/web/dist/ web/dist/

@@ -20,7 +20,7 @@ func testPathsSetByTransition(f *fixture) {
 	}
 
 	_, l := f.claim(t, work, 0, t1)
-	globs := []string{"queries/*.sql", "internal/adapters/postgres/**"}
+	globs := []string{"db/queries/*.sql", "internal/adapters/postgres/**"}
 
 	tr := next(it, l, t1.Add(time.Minute))
 	tr.Paths = globs

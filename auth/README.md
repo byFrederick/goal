@@ -21,7 +21,7 @@ creates, renames and deletes organizations.
 
 ## Schema
 
-Better Auth's tables are goose migrations (`migrations/00040`–`00041` and later), generated with
+Better Auth's tables are goose migrations (`db/migrations/00040`–`00041` and later), generated with
 the pinned CLI (`auth generate`) against a database at the goose head. `auth migrate` is never
 run. `task auth:schema-check` (part of `task migrate-check`) fails when `src/auth.ts` and the
 migrations disagree.

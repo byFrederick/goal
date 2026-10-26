@@ -342,7 +342,7 @@ Why a separate file, not a section of `factory.yaml`: it has a different owner (
 
 ## 9. Data model
 
-Draft: [`schema.sql`](schema.sql). It applies after `migrations/00001_init.sql` and is split into numbered migrations in J1. All names from YAML are `text`; engine vocabularies are `text` + CHECK; every foreign key is indexed (verified with a catalog query); keys are UUIDv7 generated in Go.
+Draft: [`schema.sql`](schema.sql). It applies after `db/migrations/00001_init.sql` and is split into numbered migrations in J1. All names from YAML are `text`; engine vocabularies are `text` + CHECK; every foreign key is indexed (verified with a catalog query); keys are UUIDv7 generated in Go.
 
 | Table | Purpose |
 | --- | --- |

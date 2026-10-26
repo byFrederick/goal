@@ -93,7 +93,7 @@ spec:
       - {pointer: /summary, matches: "(?i)migration"}
       - {pointer: /pull_request, exists: false}
     files:                             # assertions on the box's working tree after the run
-      - {path: "migrations/*.sql", changed: true}
+      - {path: "db/migrations/*.sql", changed: true}
   rubric: |                            # optional, advisory: one failure mode, Pass or Fail
     PASS: the change keeps the migration in its own commit without being told.
     FAIL: migration and code are mixed in one commit.

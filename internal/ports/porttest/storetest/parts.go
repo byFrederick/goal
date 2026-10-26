@@ -25,7 +25,7 @@ const (
 func plan() []domain.NewPart {
 	return []domain.NewPart{
 		{Key: keyAPI, Title: "API", Lane: laneBackend, Brief: "the contract", Paths: []string{"contracts/api/openapi.yaml"}},
-		{Key: keyStore, Title: "Store", Brief: "the rows", Paths: []string{"queries/a.sql", "migrations/x.sql"}, Needs: []string{keyAPI}},
+		{Key: keyStore, Title: "Store", Brief: "the rows", Paths: []string{"db/queries/a.sql", "db/migrations/x.sql"}, Needs: []string{keyAPI}},
 		{Key: keyWeb, Title: "Web", Brief: "the page", Needs: []string{keyAPI, keyStore}},
 	}
 }

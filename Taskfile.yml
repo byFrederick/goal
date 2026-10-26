@@ -170,9 +170,9 @@ tasks:
       - "{{.GOLANGCI}} fmt ./..."
 
   sqlc:
-    desc: Regenerate internal/adapters/postgres/db from queries/ and migrations/ (sqlc from .mise.toml)
+    desc: Regenerate internal/adapters/postgres/db from db/queries/ and db/migrations/ (sqlc from .mise.toml)
     cmds:
-      - sqlc generate
+      - sqlc generate -f db/sqlc.yaml
 
   api:gen:
     desc: Regenerate from contracts/api/openapi.yaml and contracts/api/permissions.yaml, the permission table (internal/api/permissions_gen.go), the Go server and client (internal/api/gen) and the TypeScript types (packages/api-client)
@@ -351,7 +351,7 @@ tasks:
       - docker exec -i {{.CONTAINER}} psql -U postgres -d goal -v ON_ERROR_STOP=1 -q < internal/adapters/postgres/roles.sql
       - docker exec {{.CONTAINER}} psql -U postgres -d goal -v ON_ERROR_STOP=1 -qc "{{.MIGRATE_GRANTS}}"
       - |
-        for f in migrations/*.sql; do
+        for f in db/migrations/*.sql; do
           docker exec -i -e PGOPTIONS='-c role=goal_owner' {{.CONTAINER}} psql -U postgres -d goal -v ON_ERROR_STOP=1 -q --single-transaction < "$f" || exit 1
           echo "applied $f"
         done
@@ -373,7 +373,7 @@ tasks:
       - psql -h "{{.PGTMP}}" -U postgres -d goal -v ON_ERROR_STOP=1 -q < internal/adapters/postgres/roles.sql
       - psql -h "{{.PGTMP}}" -U postgres -d goal -v ON_ERROR_STOP=1 -qc "{{.MIGRATE_GRANTS}}"
       - |
-        for f in migrations/*.sql; do
+        for f in db/migrations/*.sql; do
           PGOPTIONS='-c role=goal_owner' psql -h "{{.PGTMP}}" -U postgres -d goal -v ON_ERROR_STOP=1 -q --single-transaction < "$f" || exit 1
           echo "applied $f"
         done
@@ -631,12 +631,12 @@ tasks:
       - GOAL_AUTH_DATABASE_URL='{{.DATABASE_URL}}' BETTER_AUTH_TELEMETRY=0 pnpm exec auth generate --config src/generate.ts --output "{{.OUT}}/drift.sql" --yes >/dev/null
       - |
         if [ -s "{{.OUT}}/drift.sql" ]; then
-          echo "auth:schema-check: Better Auth's schema differs from migrations/; add a goose migration (spec 3 §6.2) for:" >&2
+          echo "auth:schema-check: Better Auth's schema differs from db/migrations/; add a goose migration (spec 3 §6.2) for:" >&2
           cat "{{.OUT}}/drift.sql" >&2
           echo >&2
           exit 1
         fi
-        echo "auth:schema-check: Better Auth's schema matches migrations/"
+        echo "auth:schema-check: Better Auth's schema matches db/migrations/"
 
   api-client:check:
     desc: TypeScript API client typecheck and Vitest unit tests, and its generated types match contracts/api/openapi.yaml

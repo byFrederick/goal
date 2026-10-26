@@ -68,8 +68,8 @@ var rules = []rule{
 	{under("contracts"), []part{partEverything}, "a contract every part builds on"},
 	// Go code anywhere, and the files Go embeds (go:embed) or its tests read.
 	{goFile, []part{partGo}, ""},
-	{under("cmd", "internal", "queries", "migrations", "web/placeholder"), []part{partGo}, ""},
-	{exact("sqlc.yaml", "web/csp.txt", "compose.yaml", ".env.example"), []part{partGo}, ""},
+	{under("cmd", "internal", "db", "web/placeholder"), []part{partGo}, ""},
+	{exact("web/csp.txt", "compose.yaml", ".env.example"), []part{partGo}, ""},
 	// permgen -check (api:permissions-check) compares this generated file with contracts/api/permissions.yaml.
 	{exact("auth/src/access.gen.ts"), []part{partGo, partAuth}, ""},
 	{under("worker"), []part{partWorker}, ""},
@@ -151,7 +151,7 @@ func selectParts(changed []string) (selected map[string][]string, whys map[strin
 
 // needsMigrateCheck reports a path that the pre-push hook also runs task migrate-check for.
 func needsMigrateCheck(p string) bool {
-	return strings.HasPrefix(p, "migrations/") || strings.HasPrefix(p, "auth/")
+	return strings.HasPrefix(p, "db/migrations/") || strings.HasPrefix(p, "auth/")
 }
 
 // everything plans every task for a reason that is not a changed file (no base to compare with).

@@ -1,4 +1,5 @@
-# sqlc compiles queries/ against migrations/ into internal/adapters/postgres/db (`task sqlc`).
+# sqlc compiles db/queries against db/migrations into internal/adapters/postgres/db (`task sqlc`).
+# Paths resolve relative to this file.
 # The generated code is committed; never edit it by hand. Only the row types queries use are
 # generated, so Better Auth's tables in schema auth (read through definer functions) stay out of Go.
 version: "2"
@@ -9,7 +10,7 @@ sql:
     gen:
       go:
         package: db
-        out: internal/adapters/postgres/db
+        out: ../internal/adapters/postgres/db
         sql_package: pgx/v5
         emit_pointers_for_null_types: true
         omit_unused_structs: true
