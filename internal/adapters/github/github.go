@@ -1,13 +1,16 @@
 // Package github implements ports.CodeHost with GitHub's REST API, called from the goald host
 // with the credential of a connection whose kind's code host is github (spec 4 §5.5).
 //
-// It reads pull requests, merges them and deletes branches, nothing else. The connection's
+// It reads pull requests, merges them, updates their branches with their base and deletes
+// branches, nothing else. The connection's
 // rendered git login says which host it serves and holds the token; a pull request URL on any
 // other host is refused before anything is sent, and the repository is the URL's own. The API is
 // https://api.github.com for github.com, https://api.<host> for a GitHub Enterprise Cloud host
 // (<name>.ghe.com) and https://<host>/api/v3 for a GitHub Enterprise Server. A merge names the
 // head SHA it was asked for, so GitHub refuses it if the branch moved, and it is never forced:
-// GitHub's refusals (not mergeable, head moved, invalid) come back as ports.ErrNotMergeable. The
+// GitHub's refusals (not mergeable, head moved, invalid) come back as ports.ErrNotMergeable. A
+// branch update names the expected head SHA the same way; its conflicts come back as a
+// *ports.MergeConflictError (without files: GitHub names none). The
 // token travels only in the Authorization header of requests to that API; redirects are not
 // followed, and the token is scrubbed from every error.
 package github
@@ -267,6 +270,43 @@ func (cl *Client) Merge(ctx context.Context, c domain.ResolvedConnection, prURL 
 		return "", fmt.Errorf("merge %s: GitHub refused (%d): %s: %w", prURL, status, msg, ports.ErrNotMergeable)
 	default:
 		return "", fmt.Errorf("merge %s: GitHub answered %d: %s", prURL, status, msg)
+	}
+}
+
+// headMoved is how GitHub's 422 to an update-branch whose expected_head_sha is not the branch's
+// head begins ("expected head sha didn't match current head ref."); any other 422 is a conflict.
+const headMoved = "expected head sha"
+
+// UpdateBranch implements ports.CodeHost: GitHub merges the base into the head branch, in the
+// background once it answers 202.
+func (cl *Client) UpdateBranch(ctx context.Context, c domain.ResolvedConnection, prURL, headSHA string) error {
+	p, err := cl.open(c, prURL)
+	if err != nil {
+		return err
+	}
+
+	if headSHA == "" {
+		return fmt.Errorf("update branch of %s: the expected head SHA is required", prURL)
+	}
+
+	status, msg, err := cl.call(ctx, p, http.MethodPut, p.repoPath("/pulls/"+p.number+"/update-branch"), map[string]string{
+		"expected_head_sha": headSHA,
+	}, nil)
+
+	switch {
+	case err != nil:
+		return fmt.Errorf("update branch of %s: %w", prURL, err)
+	case status == http.StatusAccepted:
+		return nil
+	case status == http.StatusUnprocessableEntity && strings.Contains(strings.ToLower(msg), headMoved):
+		return fmt.Errorf("update branch of %s: GitHub refused (%d): %s: %w", prURL, status, msg, ports.ErrNotMergeable)
+	case status == http.StatusUnprocessableEntity:
+		// A conflict, or a refusal GitHub does not explain: never forced, nothing changed.
+		return fmt.Errorf("update branch of %s: GitHub refused: %s: %w", prURL, msg, &ports.MergeConflictError{URL: prURL})
+	case status == http.StatusNotFound, status == http.StatusForbidden:
+		return fmt.Errorf("update branch of %s: GitHub refused (%d): %s: %w", prURL, status, msg, ports.ErrNotMergeable)
+	default:
+		return fmt.Errorf("update branch of %s: GitHub answered %d: %s", prURL, status, msg)
 	}
 }
 
