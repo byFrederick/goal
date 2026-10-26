@@ -10,7 +10,11 @@ import { ItemsPage } from './items-page';
 const shown = vi.hoisted(() => ({ items: [] as ItemCard[] }));
 vi.mock(import('../../api/client'), async (original) => ({
   ...(await original()),
-  listItems: vi.fn(async () => ({ items: shown.items, next_after: null })),
+  // Like the server: a state filter keeps the items in that state.
+  listItems: vi.fn(async (_org: string, _factory: string, filter: { state?: string | undefined }) => ({
+    items: filter.state ? shown.items.filter((it) => it.state === filter.state) : shown.items,
+    next_after: null,
+  })),
   getInbox: vi.fn(async () => ({ entries: [], truncated: false })),
 }));
 
@@ -84,13 +88,14 @@ async function rowOf(title: string): Promise<HTMLElement> {
   return (await screen.findByText(title)).closest('a') as HTMLElement;
 }
 
-function renderItems(items: ItemCard[], entries: InboxEntry[] = []) {
+function renderItems(items: ItemCard[], entries: InboxEntry[] = [], search: Record<string, string> = {}) {
   shown.items = items;
   return renderFactoryPage({
     page: ItemsPage,
     path: 'items/',
     org,
     factory,
+    search,
     seed: [
       [boardQuery(org.id, factory.id).queryKey, board],
       [inboxQuery(org.id, factory.id).queryKey, { entries, truncated: false }],
@@ -172,5 +177,150 @@ describe('Items list status icons', () => {
 
     const states = (await rowOf('Triage the export')).querySelectorAll('[title="Waiting"]');
     expect(states.length).toBeGreaterThan(0);
+  });
+});
+
+/** A part of the assembly "Migrate billing" (sre#10), three parts in all. */
+const partOf = (part: number, over: Partial<ItemCard>): ItemCard =>
+  item({
+    id: `part-${part}`,
+    ref: `sre#${10 + part}`,
+    number: 10 + part,
+    title: `Part ${part} title`,
+    assembly: { id: 'asm-1', ref: 'sre#10', title: 'Migrate billing', part, parts: 3 },
+    ...over,
+  });
+
+const assembly = (over: Partial<ItemCard> = {}): ItemCard =>
+  item({
+    id: 'asm-1',
+    ref: 'sre#10',
+    number: 10,
+    title: 'Migrate billing',
+    state: 'assembly',
+    parts: { total: 3, merged: 1, in_progress: 1, waiting: 1, stations: ['build', 'review'] },
+    ...over,
+  });
+
+const linkTitles = () => [...document.querySelectorAll('a')].map((a) => a.textContent ?? '');
+
+describe('Items list assemblies', () => {
+  it('shows an assembly as one row with its parts beneath it, in plan order', async () => {
+    renderItems([
+      assembly(),
+      partOf(2, { title: 'Backfill the ledger', state: 'queued', station: 'build' }),
+      partOf(1, { title: 'Move the schema', state: 'done', station: 'merge' }),
+      item({ id: 'plain', title: 'Triage the export', type: 'incident', state: 'queued' }),
+    ]);
+
+    const toggle = await screen.findByRole('button', { name: 'Parts of Migrate billing' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('1 of 3 parts merged')).toBeTruthy();
+    expect(screen.getByText('Build, Review')).toBeTruthy();
+    expect(screen.getAllByTitle('Migrate billing').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Assembly').length).toBeGreaterThan(0);
+
+    const titles = linkTitles();
+    expect(titles.findIndex((t) => t.includes('Move the schema'))).toBeLessThan(
+      titles.findIndex((t) => t.includes('Backfill the ledger')),
+    );
+    // A part never also shows as a top-level row: its title is in one link only.
+    expect(screen.getAllByText('Move the schema')).toHaveLength(1);
+    // Only the parts are indented, and a plain item has no type chip.
+    expect(document.querySelectorAll('ul ul')).toHaveLength(1);
+    expect(screen.queryByText('Incident')).toBeNull();
+    expect(screen.getByText('Triage the export')).toBeTruthy();
+  });
+
+  it('shows a part with its station and its status in the shared words and icon', async () => {
+    renderItems([assembly(), partOf(1, { title: 'Move the schema', state: 'done', station: 'merge' })]);
+
+    const row = (await screen.findByText('Move the schema')).closest('a') as HTMLElement;
+    expect(within(row).getAllByText('Merge').length).toBeGreaterThan(0);
+    expect(within(row).getAllByText('Done').length).toBeGreaterThan(0);
+    const icons = [...row.querySelectorAll('svg.shrink-0')].map((svg) => svg.getAttribute('class') ?? '');
+    expect(icons.length).toBeGreaterThan(0);
+    expect(icons.every((c) => c.includes('text-ok-dot'))).toBe(true);
+  });
+
+  it('collapses and expands its parts', async () => {
+    renderItems([assembly(), partOf(1, { title: 'Move the schema', state: 'done' })]);
+
+    const toggle = await screen.findByRole('button', { name: 'Parts of Migrate billing' });
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('Move the schema')).toBeNull();
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Move the schema')).toBeTruthy();
+  });
+
+  it('lists every item flat, with no assembly row and no indented part, when Show is Every item flat', async () => {
+    renderItems([assembly(), partOf(1, { title: 'Move the schema', state: 'done' })]);
+
+    fireEvent.click(await screen.findByLabelText('Every item flat'));
+    expect(
+      await screen.findByText(
+        'Every item is listed on its own, assemblies and parts included. Filters apply to every item.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Parts of Migrate billing' })).toBeNull();
+    expect(document.querySelectorAll('ul ul')).toHaveLength(0);
+    expect(document.querySelectorAll('ul.rounded-card > li')).toHaveLength(2);
+    expect(screen.getByText('Move the schema')).toBeTruthy();
+  });
+
+  it('keeps the Show choice across a filter change', async () => {
+    renderItems([assembly(), partOf(1, { title: 'Move the schema', state: 'done' })], [], { show: 'flat' });
+
+    expect((await screen.findByLabelText('Every item flat')) as HTMLInputElement).toHaveProperty('checked', true);
+    fireEvent.click(screen.getByRole('link', { name: 'Done' }));
+    expect(await screen.findByLabelText('Every item flat')).toHaveProperty('checked', true);
+  });
+
+  it('applies a filter to parts, under their assembly, with the assembly progress from the assemblies', async () => {
+    renderItems(
+      [
+        assembly(),
+        assembly({
+          id: 'asm-2',
+          ref: 'sre#20',
+          title: 'Other assembly',
+          parts: { total: 2, merged: 0, in_progress: 0, waiting: 2, stations: ['build'] },
+        }),
+        partOf(1, { title: 'Move the schema', state: 'in_progress', agent: 'infra-engineer' }),
+        partOf(2, { title: 'Backfill the ledger', state: 'queued' }),
+        {
+          ...partOf(3, { title: 'Other part', state: 'queued' }),
+          assembly: { id: 'asm-2', ref: 'sre#20', title: 'Other assembly', part: 1, parts: 2 },
+        },
+        item({ id: 'plain', title: 'Checkout API latency', state: 'in_progress' }),
+      ],
+      [],
+      { state: 'in_progress' },
+    );
+
+    expect(await screen.findByText('Move the schema')).toBeTruthy();
+    // The assemblies come from their own query, which the loader fills in production.
+    expect(await screen.findByText('1 of 3 parts merged')).toBeTruthy();
+    expect(screen.getByText('Checkout API latency')).toBeTruthy();
+    expect(screen.queryByText('Backfill the ledger')).toBeNull();
+    expect(screen.queryByText('Other part')).toBeNull();
+    expect(screen.queryByText('Other assembly')).toBeNull();
+  });
+
+  it('builds an assembly row from a part when the assembly is not on the page, without a progress bar', async () => {
+    renderItems([partOf(2, { title: 'Backfill the ledger', state: 'queued' })]);
+
+    expect(await screen.findByRole('button', { name: 'Parts of Migrate billing' })).toBeTruthy();
+    expect(screen.getByText('3 parts')).toBeTruthy();
+    expect(screen.queryByText(/parts merged/)).toBeNull();
+    expect(screen.getByText('Backfill the ledger')).toBeTruthy();
+  });
+
+  it('footnotes how the list groups and filters', async () => {
+    renderItems([assembly(), partOf(1, { title: 'Move the schema', state: 'done' })]);
+
+    expect(await screen.findByText('Parts are grouped under their assembly. Filters apply to parts.')).toBeTruthy();
   });
 });
