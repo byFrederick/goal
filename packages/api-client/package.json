@@ -8,8 +8,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "gen": "openapi-typescript ../../contracts/api/openapi.yaml --default-non-nullable=false --output src/schema.ts",
-    "check:gen": "openapi-typescript ../../contracts/api/openapi.yaml --default-non-nullable=false --output .schema.check.ts && node --eval \"const fs=require('node:fs');const a=fs.readFileSync('.schema.check.ts','utf8');fs.rmSync('.schema.check.ts');if(a!==fs.readFileSync('src/schema.ts','utf8')){console.error('src/schema.ts is stale: run task api:gen');process.exit(1)}\"",
+    "gen": "openapi-typescript ../../contracts/api/openapi.yaml --default-non-nullable=false --output src/schema.gen.ts",
+    "check:gen": "openapi-typescript ../../contracts/api/openapi.yaml --default-non-nullable=false --output .schema.check.ts && node --eval \"const fs=require('node:fs');const a=fs.readFileSync('.schema.check.ts','utf8');fs.rmSync('.schema.check.ts');if(a!==fs.readFileSync('src/schema.gen.ts','utf8')){console.error('src/schema.gen.ts is stale: run task api:gen');process.exit(1)}\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

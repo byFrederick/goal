@@ -14,7 +14,7 @@ func TestRun_CheckFailsWhenASourceChangesWithoutRegenerating(t *testing.T) {
 	dir := t.TempDir()
 	perms := filepath.Join(dir, "permissions.yaml")
 	openapi := filepath.Join(dir, "openapi.yaml")
-	out := filepath.Join(dir, "permissions_gen.go")
+	out := filepath.Join(dir, "permissions.gen.go")
 	ts := filepath.Join(dir, "access.gen.ts")
 
 	write(t, perms, testPermissions)

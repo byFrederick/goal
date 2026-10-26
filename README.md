@@ -43,7 +43,8 @@ Tools: Go, [Task](https://taskfile.dev), Docker, Terraform, tflint, sops, age (`
 ```bash
 task hooks:install         # once per clone: pushes run task check first
 cp .env.example .env       # optional; defaults already point at the local RustFS
-task check                 # lint, race tests, factory validation, terraform
+task check                 # lint, race tests, generated files, factory validation, terraform
+task gen                   # rerun every generator (task gen:check fails when one is stale)
 task migrate-check         # migrations apply from zero on PostgreSQL 18, as goal_owner
 task storage:up            # RustFS on 127.0.0.1:9000 (console on :9001)
 task storage:init          # bucket goal-local (no versioning needed)

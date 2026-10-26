@@ -2,7 +2,7 @@
 // replay: after a reconnect, and on `event: resync`, events may have been missed, so the
 // subscriber re-reads what it shows. EventSource reconnects by itself (goald sends `retry: 3000`).
 import { orgPath, routeUrl } from "./routes";
-import type { components } from "./schema";
+import type { components } from "./schema.gen";
 
 export type StreamEvent = components["schemas"]["StreamEvent"];
 

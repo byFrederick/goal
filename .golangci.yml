@@ -107,6 +107,8 @@ linters:
 
   exclusions:
     paths:
+      # Generated files (ADR 0013, decision 4): fix their generator or source instead.
+      - \.gen\.go$
       - vendor$
       - third_party$
       - testutils$
@@ -333,6 +335,7 @@ formatters:
   exclusions:
     generated: lax
     paths:
+      - \.gen\.go$
       - third_party$
       - builtin$
       - examples$

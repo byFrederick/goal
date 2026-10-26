@@ -1,4 +1,4 @@
-// Typed client for goald's HTTP API. The types in ./schema.ts are generated from
+// Typed client for goald's HTTP API. The types in ./schema.gen.ts are generated from
 // contracts/api/openapi.yaml (`task api:gen`); never edit them by hand.
 //
 //   const goal = createGoalClient("http://127.0.0.1:8080");
@@ -11,11 +11,11 @@
 // addressed by id or by reference ("goal#2"); path parameters are percent-encoded, so a
 // reference can be passed as is.
 import createClient, { type ClientOptions } from "openapi-fetch";
-import type { components, paths } from "./schema";
+import type { components, paths } from "./schema.gen";
 
 export { ApiError, type Problem, type Result, unwrap } from "./problem";
 export { type OrgPath, orgPath } from "./routes";
-export type { components, operations, paths } from "./schema";
+export type { components, operations, paths } from "./schema.gen";
 export {
   type FactoryEvent,
   type StreamEvent,

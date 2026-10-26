@@ -14,10 +14,14 @@ type planCase struct {
 	note    string // a part of one note, or "" for none
 }
 
-const envCheck = "env:check"
+const (
+	envCheck = "env:check"
+	genCheck = "gen:check"
+	webCheck = "web:check"
+)
 
 var (
-	goTasks     = []string{"lint", "test", "api:permissions-check", "validate"}
+	goTasks     = []string{"lint", "test", "gen:check", "validate"}
 	layoutTasks = []string{"layout:check"}
 	envTasks    = []string{envCheck}
 	// goEnvTasks are a Go change's: Go code may read the environment.
@@ -28,8 +32,8 @@ func TestPlan(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]planCase{
-		"web only":                {[]string{"apps/web/src/routes/board.tsx", "apps/web/package.json"}, []string{"web:check"}, "web (web:check): apps/web/src/routes/board.tsx and 1 more", ""},
-		"go file":                 {[]string{"internal/engine/pull.go"}, goEnvTasks, "go (lint, test, api:permissions-check, validate): internal/engine/pull.go", ""},
+		"web only":                {[]string{"apps/web/src/routes/board.tsx", "apps/web/package.json"}, []string{webCheck}, "web (web:check): apps/web/src/routes/board.tsx and 1 more", ""},
+		"go file":                 {[]string{"internal/engine/pull.go"}, goEnvTasks, "go (lint, test, gen:check, validate): internal/engine/pull.go", ""},
 		"go file outside go dirs": {[]string{"apps/web/webui.go"}, goEnvTasks, "apps/web/webui.go", ""},
 		"go fixture":              {[]string{"internal/config/testdata/acme/factory.yaml"}, goTasks, "go (", ""},
 		"queries":                 {[]string{"db/queries/items.sql"}, goTasks, "db/queries/items.sql", ""},
@@ -45,14 +49,22 @@ func TestPlan(t *testing.T) {
 		"env example read": {[]string{".env.example"}, goEnvTasks, "env (env:check): .env.example", ""},
 		"worker":           {[]string{"apps/worker/src/run.ts", "apps/worker/Dockerfile"}, []string{envCheck, "worker:check"}, "worker (worker:check): apps/worker/src/run.ts and 1 more", ""},
 		"auth":             {[]string{"apps/auth/src/server.ts"}, []string{envCheck, "auth:check"}, "auth (auth:check): apps/auth/src/server.ts", "apps/auth/src/server.ts changed: task migrate-check also applies"},
-		"generated roles":  {[]string{"apps/auth/src/access.gen.ts"}, append(slices.Clone(goEnvTasks[:4]), "auth:check", "validate"), "auth (auth:check): apps/auth/src/access.gen.ts", "migrate-check"},
-		"api client":       {[]string{"packages/api-client/src/client.ts"}, []string{"api-client:check", "web:check"}, "web (web:check): packages/api-client/src/client.ts", ""},
-		"control worker":   {[]string{"deploy/cloudflare/src/index.ts"}, []string{envCheck, "cloudflare:check"}, "cloudflare (cloudflare:check): deploy/cloudflare/src/index.ts", ""},
-		"terraform":        {[]string{"deploy/terraform/r2.tf"}, []string{"tf:check"}, "terraform (tf:check): deploy/terraform/r2.tf", ""},
-		"sops rules":       {[]string{"deploy/terraform/.sops.yaml"}, []string{"tf:check"}, "terraform (tf:check): deploy/terraform/.sops.yaml", ""},
-		"agents map":       {[]string{"AGENTS.md"}, layoutTasks, "layout (layout:check): AGENTS.md", ""},
-		"layout adr":       {[]string{"docs/adr/0013-repository-layout.md"}, layoutTasks, "layout (layout:check): docs/adr/0013-repository-layout.md", ""},
-		"rule globs":       {[]string{".claude/rules/go.md"}, layoutTasks, "layout (layout:check): .claude/rules/go.md", ""},
+		"generated roles":  {[]string{"apps/auth/src/access.gen.ts"}, []string{envCheck, genCheck, "auth:check"}, "gen (gen:check): apps/auth/src/access.gen.ts", "migrate-check"},
+		"generated permission table": {
+			[]string{"internal/api/permissions.gen.go"}, goEnvTasks, "gen (gen:check): internal/api/permissions.gen.go", "",
+		},
+		"generated api client types": {
+			[]string{"packages/api-client/src/schema.gen.ts"}, []string{genCheck, "api-client:check", webCheck}, "gen (gen:check): packages/api-client/src/schema.gen.ts", "",
+		},
+		"generated route tree": {[]string{"apps/web/src/routeTree.gen.ts"}, []string{genCheck, webCheck}, "gen (gen:check): apps/web/src/routeTree.gen.ts", ""},
+		"generated queries":    {[]string{"internal/adapters/postgres/db/runs.sql.gen.go"}, goEnvTasks, "gen (gen:check): internal/adapters/postgres/db/runs.sql.gen.go", ""},
+		"api client":           {[]string{"packages/api-client/src/client.ts"}, []string{"api-client:check", webCheck}, "web (web:check): packages/api-client/src/client.ts", ""},
+		"control worker":       {[]string{"deploy/cloudflare/src/index.ts"}, []string{envCheck, "cloudflare:check"}, "cloudflare (cloudflare:check): deploy/cloudflare/src/index.ts", ""},
+		"terraform":            {[]string{"deploy/terraform/r2.tf"}, []string{"tf:check"}, "terraform (tf:check): deploy/terraform/r2.tf", ""},
+		"sops rules":           {[]string{"deploy/terraform/.sops.yaml"}, []string{"tf:check"}, "terraform (tf:check): deploy/terraform/.sops.yaml", ""},
+		"agents map":           {[]string{"AGENTS.md"}, layoutTasks, "layout (layout:check): AGENTS.md", ""},
+		"layout adr":           {[]string{"docs/adr/0013-repository-layout.md"}, layoutTasks, "layout (layout:check): docs/adr/0013-repository-layout.md", ""},
+		"rule globs":           {[]string{".claude/rules/go.md"}, layoutTasks, "layout (layout:check): .claude/rules/go.md", ""},
 		"layout check": {
 			[]string{"tools/layoutcheck/check.go", "tools/layoutcheck/testdata/x.md"},
 			append(slices.Clone(layoutTasks), goTasks...), "layout (layout:check): tools/layoutcheck/check.go and 1 more", "",
@@ -73,7 +85,7 @@ func TestPlan(t *testing.T) {
 		},
 		"parts keep task check's order": {
 			[]string{"deploy/terraform/r2.tf", "apps/web/src/a.tsx", "internal/api/org.go", "apps/worker/src/a.ts"},
-			[]string{envCheck, "lint", "test", "api:permissions-check", "worker:check", "web:check", "validate", "tf:check"},
+			[]string{envCheck, "lint", "test", "gen:check", "worker:check", webCheck, "validate", "tf:check"},
 			"worker (worker:check)", "",
 		},
 	}

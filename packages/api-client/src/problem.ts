@@ -1,7 +1,7 @@
 // Errors as RFC 9457 problem details. goald answers every failure with a Problem
 // (contracts/api/openapi.yaml, responses.Problem); a proxy or a crash may answer with something else, so
 // the problem is rebuilt from the status line when the body is not one.
-import type { components } from "./schema";
+import type { components } from "./schema.gen";
 
 export type Problem = components["schemas"]["Problem"];
 
