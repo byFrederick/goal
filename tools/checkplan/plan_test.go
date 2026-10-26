@@ -90,7 +90,7 @@ func TestPlan(t *testing.T) {
 		},
 	}
 
-	for _, shared := range []string{"go.mod", "go.sum", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "Taskfile.yml", ".golangci.yml", ".mise.toml"} {
+	for _, shared := range []string{"go.mod", "go.sum", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "Taskfile.yml", "apps/web/Taskfile.yml", "deploy/terraform/Taskfile.yml", ".golangci.yml", ".mise.toml"} {
 		tests["shared "+shared] = planCase{[]string{"apps/web/src/a.tsx", shared}, tasks, "everything (" + strings.Join(tasks, ", ") + "): " + shared + " (shared by every part)", ""}
 	}
 

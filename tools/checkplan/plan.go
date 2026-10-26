@@ -64,13 +64,18 @@ func goFile(p string) bool { return strings.HasSuffix(p, ".go") }
 // generated reports a generated file: its name has .gen. before the extension (ADR 0013, decision 4).
 func generated(p string) bool { return strings.Contains(path.Base(p), ".gen.") }
 
+// taskfile reports the root Taskfile.yml or one it includes (apps/web/Taskfile.yml...).
+func taskfile(p string) bool { return path.Base(p) == "Taskfile.yml" }
+
 func rootMarkdown(p string) bool { return !strings.Contains(p, "/") && path.Ext(p) == ".md" }
 
 // rules are tried in order and the first match wins. A path that matches none runs everything:
 // only an explicit rule may say a file needs no check.
 var rules = []rule{
-	{exact("go.mod", "go.sum", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "Taskfile.yml",
+	{exact("go.mod", "go.sum", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
 		".golangci.yml", ".mise.toml", "mise.toml", ".tool-versions"), []part{partEverything}, "shared by every part"},
+	// The root Taskfile includes each area's, flattened: any of them can change a task another part runs.
+	{taskfile, []part{partEverything}, "shared by every part"},
 	{under("contracts"), []part{partEverything}, "a contract every part builds on"},
 	// tools/layoutcheck is Go, and the layout check it runs.
 	{under("tools/layoutcheck"), []part{partGo, partLayout}, ""},
