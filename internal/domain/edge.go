@@ -54,3 +54,12 @@ type ItemEdges struct {
 	Needs    []Edge
 	NeededBy []Edge
 }
+
+// OpenNeed is one of an item's needs whose item is neither done nor cancelled: the edge's kind
+// and the needed item's id, number and file globs (nil when none are known).
+type OpenNeed struct {
+	Kind   EdgeKind
+	Item   ItemID
+	Number int64
+	Paths  []string
+}

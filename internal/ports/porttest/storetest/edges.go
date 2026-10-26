@@ -274,3 +274,74 @@ func testClaimSkipsOpenNeeds(f *fixture) {
 		t.Fatalf("claimed %q after its need is cancelled; want %q", got.Title, heldToo.Title)
 	}
 }
+
+// OpenNeeds reads the open needs of many items at once, oldest edge first, with each needed
+// item's number and paths; needs that are done or cancelled, items without open needs, another
+// factory's items and ids that are not UUIDs are left out.
+func testOpenNeeds(f *fixture) {
+	t := f.t
+	ctx := f.ctx(t)
+
+	held := f.create(t, domain.NewItem{Title: "held"})
+	free := f.create(t, domain.NewItem{Title: "free"})
+	planned := f.create(t, domain.NewItem{Title: "planned", Station: stNext})
+	overlap := f.create(t, domain.NewItem{Title: "overlap", Station: stNext})
+	done := f.create(t, domain.NewItem{Title: "done need", Station: stNext})
+	cancelled := f.create(t, domain.NewItem{Title: "cancelled need", Station: stNext})
+
+	queued := domain.Position{Station: stNext, State: domain.StateQueued}
+	globs := []string{"queries/*.sql", "web/**"}
+
+	if _, err := f.Store.Transition(ctx, ports.Transition{ItemID: overlap.ID, From: queued, To: queued, Paths: globs, At: t1}); err != nil {
+		t.Fatal(err)
+	}
+
+	add := func(item, needs domain.ItemID, kind domain.EdgeKind, at time.Time) {
+		t.Helper()
+
+		if _, err := f.Store.AddEdge(ctx, domain.NewEdge{Item: item, Needs: needs, Kind: kind, By: domain.LocalUser, At: at}); err != nil {
+			t.Fatalf("AddEdge %s needs %s: %v", item, needs, err)
+		}
+	}
+
+	add(held.ID, overlap.ID, domain.EdgeOverlap, t1)
+	add(held.ID, planned.ID, domain.EdgePlanned, t0)
+	add(held.ID, done.ID, domain.EdgeLinked, t0)
+	add(held.ID, cancelled.ID, domain.EdgeLinked, t0)
+	add(free.ID, done.ID, domain.EdgePlanned, t0)
+
+	for _, it := range []domain.Item{done, cancelled} {
+		state := domain.StateDone
+		if it.ID == cancelled.ID {
+			state = domain.StateCancelled
+		}
+
+		if _, err := f.Store.Transition(ctx, ports.Transition{
+			ItemID: it.ID, From: queued, To: domain.Position{Station: stNext, State: state}, At: t1, DoneAt: t1,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	otherFactory := f.newFactory(t)
+	foreign := f.create(t, domain.NewItem{Title: "other factory", FactoryID: otherFactory})
+	foreignNeed := f.create(t, domain.NewItem{Title: "other factory's need", FactoryID: otherFactory})
+	add(foreign.ID, foreignNeed.ID, domain.EdgePlanned, t0)
+
+	got, err := f.Store.OpenNeeds(ctx, f.factory, []domain.ItemID{held.ID, free.ID, planned.ID, foreign.ID, "not-a-uuid"})
+	if err != nil {
+		t.Fatalf("OpenNeeds: %v", err)
+	}
+
+	want := map[domain.ItemID][]domain.OpenNeed{held.ID: {
+		{Kind: domain.EdgePlanned, Item: planned.ID, Number: planned.Number},
+		{Kind: domain.EdgeOverlap, Item: overlap.ID, Number: overlap.Number, Paths: globs},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("OpenNeeds =\n  %+v\nwant\n  %+v", got, want)
+	}
+
+	if got, err := f.Store.OpenNeeds(ctx, f.factory, nil); err != nil || len(got) != 0 {
+		t.Errorf("OpenNeeds of no ids = %+v, %v; want none", got, err)
+	}
+}

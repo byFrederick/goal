@@ -109,6 +109,7 @@ type Items interface {
 	LabelTouch(ctx context.Context, event int64, reason domain.TouchReason, by domain.Actor) error
 	Parts(ctx context.Context, parent domain.ItemID) (domain.Parts, error)
 	Edges(ctx context.Context, item domain.ItemID) (domain.ItemEdges, error)
+	OpenNeeds(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID][]domain.OpenNeed, error)
 }
 
 // Factories are the definitions goald runs; *definitions.Cache satisfies it.
@@ -433,6 +434,13 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 	if out.Assembly, err = s.assemblyOf(ctx, it); err != nil {
 		return nil, err
 	}
+
+	waiting, err := s.waiting(ctx, it.FactoryID, []domain.Item{it}, func(n int64) string { return s.ref(ctx, it.FactoryID, n) })
+	if err != nil {
+		return nil, err
+	}
+
+	out.Waiting = waiting[it.ID]
 
 	return gen.GetItem200JSONResponse(out), nil
 }

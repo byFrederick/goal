@@ -1,6 +1,7 @@
 package porttest
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"slices"
@@ -106,6 +107,45 @@ func (s *Store) Edges(ctx context.Context, item domain.ItemID) (domain.ItemEdges
 			out.Needs = append(out.Needs, e)
 		case e.Needs:
 			out.NeededBy = append(out.NeededBy, e)
+		}
+	}
+
+	return out, nil
+}
+
+// OpenNeeds implements ports.Store.
+func (s *Store) OpenNeeds(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID][]domain.OpenNeed, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := map[domain.ItemID][]domain.OpenNeed{}
+
+	for _, id := range ids {
+		if it, ok := s.visible(id, org); !ok || it.FactoryID != factory {
+			continue
+		}
+
+		var edges []domain.Edge
+
+		for _, e := range s.edges {
+			need, ok := s.items[e.Needs]
+			if e.Item == id && ok && need.State != domain.StateDone && need.State != domain.StateCancelled {
+				edges = append(edges, e)
+			}
+		}
+
+		slices.SortStableFunc(edges, func(a, b domain.Edge) int {
+			return cmp.Or(a.At.Compare(b.At), cmp.Compare(a.Needs, b.Needs))
+		})
+
+		for _, e := range edges {
+			need := s.items[e.Needs]
+			out[id] = append(out[id], domain.OpenNeed{Kind: e.Kind, Item: need.ID, Number: need.Number, Paths: slices.Clone(need.Paths)})
 		}
 	}
 

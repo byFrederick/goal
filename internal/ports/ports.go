@@ -111,6 +111,12 @@ type Store interface {
 	// Edges returns what an item needs and what needs it. An unknown item has none.
 	Edges(ctx context.Context, item domain.ItemID) (domain.ItemEdges, error)
 
+	// OpenNeeds returns, by item, the needs of those of ids that are items of the factory whose
+	// needed item is neither done nor cancelled, oldest edge first, each with the needed item's
+	// number and paths: the board's waiting reasons in one read. Items without open needs, ids
+	// of another factory's items and ids that are not UUIDs are absent.
+	OpenNeeds(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID][]domain.OpenNeed, error)
+
 	// Assemble makes a planning item an assembly, in one transaction: a.Transition moves it to
 	// state assembly (fenced as Transition is, its lease recorded as a lease span), each of
 	// a.Parts becomes an item with the parent's type, priority and class of service, its brief

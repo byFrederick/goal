@@ -2749,6 +2749,20 @@ export interface components {
             needs?: components["schemas"]["ItemLink"][];
             /** @description The items that need this item, oldest edge first; getItem only */
             dependents?: components["schemas"]["ItemLink"][];
+            /** @description Why the item is not claimed yet; getItem only, absent unless it is queued or ready with an open need */
+            waiting?: components["schemas"]["ItemWaiting"];
+        };
+        /** @description Why a queued or ready item is not claimed yet, derived from its open needs (those neither done nor cancelled) on every read and never stored. Planned and linked needs win over overlap ones */
+        ItemWaiting: {
+            /**
+             * @description after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap)
+             * @enum {string}
+             */
+            kind: "after" | "files";
+            /** @description Refs (<factory name>#<number>) of the open needs of that kind, oldest edge first */
+            items: string[];
+            /** @description For kind files, the item's own paths that overlap those items' paths, in the item's order; empty for kind after */
+            files: string[];
         };
         NewLink: {
             /** @description The needed item's id (a UUID) or <factory>#<number>, as in goal#2; an item of the same factory */
@@ -3083,6 +3097,8 @@ export interface components {
             activity?: string | null;
             /** @description While its run runs, how far it is through its latest todo list (its latest TodoWrite call); absent or null when no run runs, it has listed no todos or the list did not parse (the worker cuts long tool input) */
             plan_steps?: components["schemas"]["PlanSteps"] | null;
+            /** @description Why the item is not claimed yet; absent or null unless it is queued or ready with an open need */
+            waiting?: components["schemas"]["ItemWaiting"] | null;
         };
         /** @description The todos a running run completed of all it listed ("2 of 5 steps") */
         PlanSteps: {

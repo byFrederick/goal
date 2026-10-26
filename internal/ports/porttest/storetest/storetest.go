@@ -56,6 +56,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Edges_AddListRemove", testEdgesAddListRemove},
 		{"Edges_CycleRefused", testEdgesCycleRefused},
 		{"Edges_OtherFactoryRefused", testEdgesOtherFactoryRefused},
+		{"Edges_OpenNeedsOfItems", testOpenNeeds},
 		{"Parts_AssembleCreatesPartsWithPlannedEdges", testAssembleCreatesParts},
 		{"Parts_AssembleRetryReturnsTheParts", testAssembleRetry},
 		{"Parts_AssembleRefusesAndWritesNothing", testAssembleRefused},

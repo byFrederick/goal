@@ -384,8 +384,8 @@ func (s *server) listCards(ctx context.Context, f *config.Factory, items []domai
 // copy (1-based) when its station runs several, and the turns, latest tool call (activity) and
 // plan steps of its running run; for every item
 // the pull request and the summary its outputs name, its human touches, and whether it waits in the buffer of drum
-// (none when drum is ""), and for an assembly where its parts stand, for a part its assembly and
-// which part it is, read for the whole page at once. Nothing is held by the rope until
+// (none when drum is ""), for an assembly where its parts stand, for a part its assembly and
+// which part it is, and for a waiting item what holds it, read for the whole page at once. Nothing is held by the rope until
 // drum-buffer-rope is enforced.
 func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, drum string, items []domain.Item) ([]gen.ItemCard, error) {
 	leases, live, err := s.inProgress(ctx, l, items)
@@ -403,20 +403,22 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 		return nil, err
 	}
 
+	ref := func(n int64) string { return domain.ItemRef{Factory: f.Metadata.Name, Number: n}.String() }
+
+	waiting, err := s.waiting(ctx, l.FactoryID, items, ref)
+	if err != nil {
+		return nil, err
+	}
+
 	now := s.clock.Now()
 	out := make([]gen.ItemCard, 0, len(items))
 
 	for _, it := range items {
-		age := now.Sub(it.CreatedAt)
-		if !it.DoneAt.IsZero() {
-			age = it.DoneAt.Sub(it.CreatedAt)
-		}
-
 		c := gen.ItemCard{
 			Id: string(it.ID), Ref: domain.ItemRef{Factory: f.Metadata.Name, Number: it.Number}.String(), Number: it.Number,
 			Title: it.Title, Type: it.Type, Lane: optional(it.Lane), Station: it.Station, State: gen.ItemState(it.State),
 			ClassOfService: gen.ClassOfService(it.Class), ReworkCount: it.ReworkCount, CostUsd: it.CostUSD,
-			CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt, AgeSeconds: int64(max(age, 0) / time.Second),
+			CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt, AgeSeconds: ageSeconds(it, now),
 			PrUrl: optional(it.PullRequest(l)), Summary: optional(it.Summary(l)),
 			InBuffer: drum != "" && it.Station == drum && it.State.Waiting(), TouchCount: touches[it.ID],
 			PullRequests: []string{},
@@ -445,6 +447,8 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 		}
 
 		c.Assembly, c.Parts = assemblyFields(f, it, asms)
+
+		c.Waiting = waiting[it.ID]
 
 		out = append(out, c)
 	}
@@ -506,6 +510,53 @@ func (s *server) assemblies(ctx context.Context, f domain.FactoryID, items []dom
 	}
 
 	return asms, nil
+}
+
+// ageSeconds is how long it has been open at now, or was from created to done.
+func ageSeconds(it domain.Item, now time.Time) int64 {
+	age := now.Sub(it.CreatedAt)
+	if !it.DoneAt.IsZero() {
+		age = it.DoneAt.Sub(it.CreatedAt)
+	}
+
+	return int64(max(age, 0) / time.Second)
+}
+
+// waiting reads, in one call, the open needs of the waiting ones of items of factory f and
+// derives what holds each of them, by item, with their needs written by ref; no entry for an
+// item that waits on nothing.
+func (s *server) waiting(ctx context.Context, f domain.FactoryID, items []domain.Item, ref func(number int64) string) (map[domain.ItemID]*gen.ItemWaiting, error) {
+	ids := make([]domain.ItemID, 0, len(items))
+	for _, it := range items {
+		if it.State.Waiting() {
+			ids = append(ids, it.ID)
+		}
+	}
+
+	needs, err := s.items.OpenNeeds(ctx, f, ids)
+	if err != nil {
+		return nil, fmt.Errorf("open needs of the items: %w", err)
+	}
+
+	out := map[domain.ItemID]*gen.ItemWaiting{}
+
+	for _, it := range items {
+		if w, ok := domain.WaitingFor(it, needs[it.ID]); ok {
+			out[it.ID] = waitingOf(w, ref)
+		}
+	}
+
+	return out, nil
+}
+
+// waitingOf is w as the API shows it, its items written with ref.
+func waitingOf(w domain.Waiting, ref func(number int64) string) *gen.ItemWaiting {
+	out := &gen.ItemWaiting{Kind: gen.ItemWaitingKind(w.Kind), Items: make([]string, 0, len(w.Items)), Files: append([]string{}, w.Files...)}
+	for _, n := range w.Items {
+		out.Items = append(out.Items, ref(n.Number))
+	}
+
+	return out
 }
 
 // liveFields are a card's turn, activity and plan steps while run runs; activity and plan steps

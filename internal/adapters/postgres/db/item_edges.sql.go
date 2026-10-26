@@ -72,7 +72,7 @@ type InsertEdgeParams struct {
 	CreatedAt time.Time
 }
 
-// Item dependencies (ports.Store AddEdge, RemoveEdge, Edges; migration 00058). Lock order: the
+// Item dependencies (ports.Store AddEdge, RemoveEdge, Edges, OpenNeeds; migration 00058). Lock order: the
 // factory row (LockFactory) before anything of its items, so edges of one factory are added one
 // at a time and the cycle check of each sees the edges committed before it.
 func (q *Queries) InsertEdge(ctx context.Context, arg InsertEdgeParams) (ItemEdge, error) {
@@ -148,6 +148,57 @@ func (q *Queries) ItemNeeds(ctx context.Context, itemID uuid.UUID) ([]ItemEdge, 
 			&i.Kind,
 			&i.CreatedBy,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const openNeeds = `-- name: OpenNeeds :many
+SELECT e.item_id, e.kind, n.id AS needs_id, n.number, n.paths
+FROM item_edges e
+JOIN work_items n ON n.id = e.needs_id
+WHERE e.item_id = ANY ($1::uuid[]) AND n.factory_id = $2
+  AND n.state NOT IN ('done', 'cancelled')
+ORDER BY e.item_id, e.created_at, e.needs_id
+`
+
+type OpenNeedsParams struct {
+	Ids       []uuid.UUID
+	FactoryID uuid.UUID
+}
+
+type OpenNeedsRow struct {
+	ItemID  uuid.UUID
+	Kind    string
+	NeedsID uuid.UUID
+	Number  int64
+	Paths   []string
+}
+
+// The needs of those of the factory's items among ids whose needed item is neither done nor
+// cancelled, each with that item's number and paths, by item then oldest edge first (the
+// primary key). Both ends of an edge are of one factory, so filtering the needed item is enough.
+func (q *Queries) OpenNeeds(ctx context.Context, arg OpenNeedsParams) ([]OpenNeedsRow, error) {
+	rows, err := q.db.Query(ctx, openNeeds, arg.Ids, arg.FactoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OpenNeedsRow
+	for rows.Next() {
+		var i OpenNeedsRow
+		if err := rows.Scan(
+			&i.ItemID,
+			&i.Kind,
+			&i.NeedsID,
+			&i.Number,
+			&i.Paths,
 		); err != nil {
 			return nil, err
 		}

@@ -180,6 +180,38 @@ func (s *Store) Edges(ctx context.Context, item domain.ItemID) (domain.ItemEdges
 	return out, nil
 }
 
+// OpenNeeds implements ports.Store in one query for every id.
+func (s *Store) OpenNeeds(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID][]domain.OpenNeed, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	out := map[domain.ItemID][]domain.OpenNeed{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.OpenNeedsRow, error) {
+		return q.OpenNeeds(ctx, db.OpenNeedsParams{Ids: uuids(ids), FactoryID: fid})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("open needs in factory %s: %w", factory, err)
+	}
+
+	for _, r := range rows {
+		n := domain.OpenNeed{Kind: domain.EdgeKind(r.Kind), Item: domain.ItemID(r.NeedsID.String()), Number: r.Number}
+		if len(r.Paths) > 0 {
+			n.Paths = r.Paths
+		}
+
+		id := domain.ItemID(r.ItemID.String())
+		out[id] = append(out[id], n)
+	}
+
+	return out, nil
+}
+
 func edgeFrom(r db.ItemEdge) domain.Edge {
 	return domain.Edge{
 		Item: domain.ItemID(r.ItemID.String()), Needs: domain.ItemID(r.NeedsID.String()), Kind: domain.EdgeKind(r.Kind),
