@@ -93,7 +93,6 @@ FROM work_items
 WHERE factory_id = $1 AND state NOT IN ('done', 'cancelled')
 GROUP BY station;
 
-
 -- name: AssemblyParts :many
 -- The parts of those of the factory's items among ids that have any (work_items_parent_id_idx),
 -- each with its assembly's number and title, by assembly then part number.
