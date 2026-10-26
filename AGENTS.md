@@ -11,12 +11,12 @@ This file is an index. Each rule lives in one place and is linked from here; the
 .githooks/      versioned git hooks (pre-push runs task check)
 .github/        CI, deploy and Terraform workflows
 apps/           auth/ (identity service, Hono + Better Auth, reached only through goald's /api/auth proxy), web/ (React SPA, embedded into goald), worker/ (goal-agent, the one agent container image); each app's tasks in its Taskfile.yml
-cmd/            binaries: goal (CLI), goald (daemon), goal-egress (egress proxy)
+cmd/            binaries: goal (CLI), goald (daemon), goal-egress (egress proxy); each main.go only wires its dependencies
 contracts/      contracts/api/ (openapi.yaml, permissions.yaml, sandbox.yaml: the only contract between goald and TypeScript), contracts/definitions/ (JSON Schemas for factory, eval and connection kind files), env.yaml (every environment variable a process reads, with env.schema.json); the API generators' tasks in Taskfile.yml
 db/             the database: db/migrations/ (forward-only SQL, goose), db/queries/ (SQL for sqlc), db/sqlc.yaml and Taskfile.yml (sqlc, migrate-check)
 deploy/         deploy/cloudflare/ (the control Worker and wrangler config), deploy/terraform/ (the platform's own infrastructure, one root module), each with the Taskfile.yml of its tasks
 docs/           adr/, design/ (MASTER.md: the UI's design system), engineering/, history/ (history/specs/ and history/jonah/: earlier plans), reference/ (glossary.md, and environment.md generated from the contracts)
-internal/       the Go packages: domain, engine, ports, adapters, api, gateway… (docs/engineering/architecture.md)
+internal/       the Go packages: domain, engine, ports, adapters, api, gateway, cli (the goal CLI's commands, which cmd/goal only wires)… (docs/engineering/architecture.md)
 packages/       shared TypeScript: api-client/ (the API client and its generated types, its tasks in Taskfile.yml), config/ (the shared Biome config and the tsconfig bases for Node, the browser and Workers)
 tools/          repository tooling that is not a shipped binary: layoutcheck/ (task layout:check), envcheck/ (task env:check), checkplan/ (task check:changed), permgen/ (task api:gen's permission tables)
 ```
