@@ -592,8 +592,14 @@ func testCascadeRefused(f *fixture) {
 	}
 }
 
-// keyDocs is the part the AddPart cases add to plan()'s assembly.
-const keyDocs = "docs"
+const (
+	// keyDocs is the part the AddPart cases add to plan()'s assembly.
+	keyDocs = "docs"
+	// typeFeature is the type of the AddPart cases' assembly.
+	typeFeature = "feature"
+	// dataKey and dataActor are keys of the parts' event data.
+	dataKey, dataActor = "key", "actor"
+)
 
 // addedPart is one part added to the assembly it: docs, needing api and store.
 func addedPart(it domain.Item, at time.Time) ports.NewAssemblyPart {
@@ -619,7 +625,7 @@ func testAddPart(f *fixture) {
 	ctx := f.ctx(t)
 	t2 := t1.Add(time.Minute)
 
-	it, l := f.planning(t, domain.NewItem{Title: titleBig, Type: "feature", Priority: 4, Class: domain.ClassExpedite})
+	it, l := f.planning(t, domain.NewItem{Title: titleBig, Type: typeFeature, Priority: 4, Class: domain.ClassExpedite})
 	assembled, before := f.assemble(t, assembly(it, l, plan()))
 
 	part, parts, err := f.Store.AddPart(ctx, addedPart(assembled, t2))
@@ -630,7 +636,7 @@ func testAddPart(f *fixture) {
 	paths := []string{"docs/guide.md"}
 	sameItem(t, part, domain.Item{
 		ID: part.ID, OrgID: f.org, FactoryID: f.factory, Number: it.Number + 4, ParentID: it.ID,
-		PartKey: keyDocs, PartPaths: paths, Paths: paths, Type: "feature", Lane: laneBackend, Title: "Docs", Body: "the guide",
+		PartKey: keyDocs, PartPaths: paths, Paths: paths, Type: typeFeature, Lane: laneBackend, Title: "Docs", Body: "the guide",
 		Station: stWork, State: domain.StateQueued, Class: domain.ClassExpedite, Priority: 4, Outputs: map[string]json.RawMessage{},
 		CreatedAt: t2, UpdatedAt: t2,
 	})
@@ -653,13 +659,13 @@ func testAddPart(f *fixture) {
 
 	sameEvents(t, f.Events(t, part.ID), []domain.Event{{
 		FactoryID: f.factory, ItemID: part.ID, At: t2, Kind: domain.EventPartCreated, Station: stWork, Actor: domain.LocalUser.Name,
-		Data: map[string]any{"parent": string(it.ID), "key": keyDocs},
+		Data: map[string]any{"parent": string(it.ID), dataKey: keyDocs},
 	}})
 
 	events := f.Events(t, it.ID)
 	sameEvents(t, events[len(events)-1:], []domain.Event{{
 		FactoryID: f.factory, ItemID: it.ID, At: t2, Kind: domain.EventPartAdded, Station: stWork, Actor: domain.LocalUser.Name,
-		Data: map[string]any{"part": string(part.ID), "key": keyDocs, "actor": domain.LocalUser.Ref()},
+		Data: map[string]any{"part": string(part.ID), dataKey: keyDocs, dataActor: domain.LocalUser.Ref()},
 	}})
 
 	if got := f.item(t, it.ID); got.State != domain.StateAssembly {
@@ -667,7 +673,7 @@ func testAddPart(f *fixture) {
 	}
 
 	entries, err := f.Audit.AuditLog(ctx, ports.AuditQuery{Action: domain.AuditItemPartAdded, Limit: 10})
-	if err != nil || len(entries) != 1 || entries[0].TargetID != string(it.ID) || entries[0].Data["key"] != keyDocs {
+	if err != nil || len(entries) != 1 || entries[0].TargetID != string(it.ID) || entries[0].Data[dataKey] != keyDocs {
 		t.Errorf("audit log of %s = %+v, %v; want the one entry of the added part", domain.AuditItemPartAdded, entries, err)
 	}
 }
@@ -738,6 +744,16 @@ func testAddPartRefused(f *fixture) {
 		t.Errorf("Parts of the plain item = %+v; want none", got)
 	}
 
+	f.addPartToDone(t, assembled, parts, t2)
+}
+
+// addPartToDone finishes every part of the assembly it and checks that AddPart to it is then
+// ErrConflict and writes nothing.
+func (f *fixture) addPartToDone(t *testing.T, it domain.Item, parts domain.Parts, t2 time.Time) {
+	t.Helper()
+
+	ctx := f.ctx(t)
+
 	for _, p := range parts.Items {
 		if err := f.finishPart(t, p, domain.StateDone, t2); err != nil {
 			t.Fatal(err)
@@ -746,7 +762,7 @@ func testAddPartRefused(f *fixture) {
 
 	done := len(f.Events(t, it.ID))
 
-	if _, _, err := f.Store.AddPart(ctx, addedPart(assembled, t2)); !errors.Is(err, ports.ErrConflict) {
+	if _, _, err := f.Store.AddPart(ctx, addedPart(it, t2)); !errors.Is(err, ports.ErrConflict) {
 		t.Errorf("AddPart to a done assembly = %v; want ErrConflict", err)
 	}
 

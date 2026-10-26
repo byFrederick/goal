@@ -30,6 +30,8 @@ func TestStore_Conformance(t *testing.T) {
 				return s.LeaseSpans(org, id)
 			},
 			NewOrg: func(t *testing.T) domain.OrgID {
+				t.Helper()
+
 				o, err := tn.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: fmt.Sprintf("acme-%d", orgs.Add(1)), Name: "Acme"})
 				if err != nil {
 					t.Fatal(err)
