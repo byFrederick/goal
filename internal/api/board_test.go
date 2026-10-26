@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"reflect"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/ports"
 )
 
 // Every station shows its lanes by who works there: one per routed agent at build, labelled by
@@ -135,4 +138,139 @@ func lanesString(lanes []gen.BoardLane) string {
 	}
 
 	return string(b)
+}
+
+// An assembly's card on the list says where its parts stand, and each part's card which part of
+// which assembly it is, on the list and the board (which holds parts, not their assembly), even
+// when the page holds the part alone, read once a page. A child without a part key is no part; a
+// plain item's card has neither.
+func TestAPI_ItemCardsCarryAssemblyAndParts(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	asm, parts := h.assembled(t, "one", "two", "three")
+	h.move(t, parts[0], domain.Position{Station: stDone, State: domain.StateDone}, func(tr *ports.Transition) { tr.DoneAt = t0 })
+	second := h.move(t, parts[1], domain.Position{Station: stBuild, State: domain.StateInProgress}, nil)
+	h.move(t, parts[2], domain.Position{Station: stMerge, State: domain.StateWaitingHuman}, nil)
+	h.child(t, asm) // created without a part key: no part
+	plain := h.seed(t, stBuild, domain.StateQueued, t0)
+
+	wantParts := &gen.PartsSummary{Total: 3, Merged: 1, InProgress: 1, Waiting: 1, Stations: []string{stBuild, stMerge}}
+	wantOf := &gen.PartOf{Id: string(asm.ID), Ref: "line#" + strconv.FormatInt(asm.Number, 10), Title: asm.Title, Part: 2, Parts: 3}
+
+	var (
+		list, alone gen.ItemPage
+		board       gen.Board
+	)
+
+	h.getReadingAssembliesOnce(t, "/v1/orgs/acme/factories/line/items", &list)
+	h.getReadingAssembliesOnce(t, "/v1/orgs/acme/factories/line/board", &board)
+	h.getReadingAssembliesOnce(t, "/v1/orgs/acme/factories/line/items?state=in_progress", &alone)
+
+	if _, ok := cardsOf(board)[asm.Number]; ok {
+		t.Errorf("board shows the assembly %d; want only its parts on the line", asm.Number)
+	}
+
+	for from, cards := range map[string]map[int64]gen.ItemCard{"items": byNumber(list.Items), "board": cardsOf(board)} {
+		for _, tt := range []struct {
+			name  string
+			it    domain.Item
+			of    *gen.PartOf
+			parts *gen.PartsSummary
+		}{
+			{"assembly", asm, nil, wantParts},
+			{"second part", second, wantOf, nil},
+			{"plain item", plain, nil, nil},
+		} {
+			if from == "board" && tt.it.ID == asm.ID {
+				continue
+			}
+
+			c, ok := cards[tt.it.Number]
+			if !ok || !reflect.DeepEqual(c.Assembly, tt.of) || !reflect.DeepEqual(c.Parts, tt.parts) {
+				t.Errorf("%s: %s card assembly = %+v, parts = %+v (on it: %t); want %+v and %+v", from, tt.name, c.Assembly, c.Parts, ok, tt.of, tt.parts)
+			}
+		}
+	}
+
+	if len(alone.Items) != 1 || !reflect.DeepEqual(alone.Items[0].Assembly, wantOf) {
+		t.Errorf("in-progress page = %+v; want only the second part, of its assembly %+v", alone.Items, wantOf)
+	}
+}
+
+// getReadingAssembliesOnce GETs path into out and checks it read the assemblies once.
+func (h *harness) getReadingAssembliesOnce(t *testing.T, path string, out any) {
+	t.Helper()
+
+	h.seam.steps()
+
+	if code := h.call(t, http.MethodGet, path, "", out); code != http.StatusOK {
+		t.Fatalf("GET %s = %d", path, code)
+	}
+
+	reads := 0
+
+	for _, s := range h.seam.steps() {
+		if s.read == "Assemblies" {
+			reads++
+		}
+	}
+
+	if reads != 1 {
+		t.Errorf("GET %s read assemblies %d times, want once", path, reads)
+	}
+}
+
+func byNumber(cards []gen.ItemCard) map[int64]gen.ItemCard {
+	out := map[int64]gen.ItemCard{}
+	for _, c := range cards {
+		out[c.Number] = c
+	}
+
+	return out
+}
+
+// child creates an item under parent the way CreateItem allows, without a part key.
+func (h *harness) child(t *testing.T, parent domain.Item) {
+	t.Helper()
+
+	if _, err := h.store.CreateItem(inOrg(t), domain.NewItem{
+		FactoryID: lineID, ParentID: parent.ID, Type: typeFeature, Title: "a child", Station: stBuild,
+		State: domain.StateReady, Class: domain.ClassStandard, CreatedAt: t0,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// assembled makes a new item at the build station an assembly of parts with the given keys, as
+// the engine does: claimed, then assembled, its parts queued at build in plan order.
+func (h *harness) assembled(t *testing.T, keys ...string) (domain.Item, []domain.Item) {
+	t.Helper()
+
+	h.seed(t, stBuild, domain.StateQueued, t0)
+
+	it, l, err := h.store.ClaimNext(inOrg(t), ports.Claim{
+		FactoryID: lineID, Station: build, Now: h.clock.Now(), ExpiresAt: h.clock.Now().Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plan := make([]domain.NewPart, 0, len(keys))
+	for _, k := range keys {
+		plan = append(plan, domain.NewPart{Key: k, Title: "part " + k})
+	}
+
+	asm, parts, err := h.store.Assemble(inOrg(t), ports.Assembly{
+		Transition: ports.Transition{
+			ItemID: it.ID, From: it.Position(), To: domain.Position{Station: stBuild, State: domain.StateAssembly},
+			Lease: &l, Outcome: domain.LeaseAdvanced, At: h.clock.Now(),
+		},
+		Parts: plan,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return asm, parts.Items
 }

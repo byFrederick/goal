@@ -3,7 +3,7 @@ import { cp, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { WorkerEvent } from './events.js';
-import { type Exec, type Prepared, prepare } from './prepare.js';
+import { type Exec, type Output, type Prepared, prepare } from './prepare.js';
 import { failed, runTask } from './run.js';
 import { type AgentFiles, parseSpec, paths } from './spec.js';
 
@@ -39,9 +39,31 @@ const exec: Exec = (command, args, opts = {}) =>
     child.once('close', (code, signal) => resolve(code ?? (signal ? 128 : 1)));
   });
 
+/** Runs a command and returns its stdout; its stderr goes to stderr. A failure rejects. */
+const output: Output = (command, args, opts = {}) =>
+  new Promise((resolve, reject) => {
+    const child = spawn(command, args, { cwd: opts.cwd, stdio: ['ignore', 'pipe', 2] });
+    const chunks: Buffer[] = [];
+    child.stdout?.on('data', (c: Buffer) => chunks.push(c));
+    child.once('error', reject);
+    child.once('close', (code, signal) => {
+      if (code === 0) resolve(Buffer.concat(chunks).toString('utf8'));
+      else reject(new Error(`${command} ${args[0]} exited ${code ?? signal}`));
+    });
+  });
+
 async function runPrepare(): Promise<number> {
   try {
-    emit(await prepare({ fetch, exec, env: process.env, now, dirs: { goal: paths.goal, workspace: paths.workspace } }));
+    emit(
+      await prepare({
+        fetch,
+        exec,
+        output,
+        env: process.env,
+        now,
+        dirs: { goal: paths.goal, workspace: paths.workspace },
+      }),
+    );
     return 0;
   } catch (err) {
     process.stderr.write(`goal-agent prepare: ${err instanceof Error ? err.message : String(err)}\n`);

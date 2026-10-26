@@ -193,3 +193,71 @@ func TestAPI_PauseAndRetryAnAssembly(t *testing.T) {
 		}
 	}
 }
+
+// A part's item read names its assembly with its place among the parts in plan order, from one
+// read of the parts; a mutation's answer names its key without reading them, and neither a plain
+// item nor an assembly is part of one.
+func TestAPI_GetItemPartOfAssembly(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	asm := h.assemble(t, []domain.NewPart{
+		{Key: "a", Title: "Contract", Lane: laneAPI},
+		{Key: "b", Title: "Store", Lane: laneAPI, Needs: []string{"a"}},
+		{Key: "c", Title: "Page", Lane: laneAPI, Needs: []string{"b"}},
+	})
+	plain := h.seed(t, stBuild, domain.StateQueued, h.clock.Now())
+
+	parts, err := h.store.Parts(inOrg(t), asm.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.seam.steps()
+
+	var got gen.Item
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/items/"+string(parts.Items[1].ID), "", &got); code != http.StatusOK {
+		t.Fatalf("GET part = %d; want 200", code)
+	}
+
+	want := &gen.PartOf{Id: string(asm.ID), Ref: "line#" + strconv.FormatInt(asm.Number, 10), Title: asm.Title, Part: 2, Parts: 3}
+	if !reflect.DeepEqual(got.Assembly, want) || deref(got.PartKey) != "b" {
+		t.Errorf("GET part: assembly %+v, key %v; want %+v, b", got.Assembly, got.PartKey, want)
+	}
+
+	if n := partsReads(h.seam.steps()); n != 1 {
+		t.Errorf("GET part read the parts %d times; want once", n)
+	}
+
+	var paused gen.Item
+	if code := h.call(t, http.MethodPost, "/v1/orgs/acme/items/"+string(parts.Items[2].ID)+"/pause", "", &paused); code != http.StatusOK {
+		t.Fatalf("pause part = %d; want 200", code)
+	}
+
+	if deref(paused.PartKey) != "c" || paused.Assembly != nil {
+		t.Errorf("pause answer: key %v, assembly %+v; want c and none", paused.PartKey, paused.Assembly)
+	}
+
+	if n := partsReads(h.seam.steps()); n != 0 {
+		t.Errorf("pause read the parts %d times; want none", n)
+	}
+
+	for _, id := range []domain.ItemID{asm.ID, plain.ID} {
+		var it gen.Item
+		if code := h.call(t, http.MethodGet, "/v1/orgs/acme/items/"+string(id), "", &it); code != http.StatusOK || it.Assembly != nil {
+			t.Errorf("GET %s = %d, assembly %+v; want 200 and none", id, code, it.Assembly)
+		}
+	}
+}
+
+func partsReads(steps []step) int {
+	n := 0
+
+	for _, s := range steps {
+		if s.read == "Parts" {
+			n++
+		}
+	}
+
+	return n
+}

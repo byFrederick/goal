@@ -6,7 +6,7 @@ import {
   latestToolCalls,
   noteRecipient,
   type RunEntry,
-  runLabel,
+  runRole,
   toolArgument,
 } from './timeline';
 
@@ -136,7 +136,8 @@ describe('buildTrace', () => {
       ev('run_started', {}, c),
     ]);
     const runs = trace.entries.filter((e) => e.kind === 'run');
-    expect(runs.map(runLabel)).toEqual(['investigator-2', 'investigator-2', 'investigator-1']);
+    expect(runs.map(runRole)).toEqual(['Investigator', 'Investigator', 'Investigator']);
+    expect(runs.map((r) => r.slot)).toEqual([1, 1, 0]);
   });
 
   it('takes status, turns, cost, model and the version a run ran on from goald’s record of it', () => {
@@ -208,7 +209,7 @@ describe('buildTrace', () => {
     expect(trace.entries[0]).toMatchObject({ kind: 'run', status: 'running' });
     expect(trace.entries[0]).not.toHaveProperty('version');
     expect(trace.entries[0]).not.toHaveProperty('turns');
-    expect(runLabel(trace.entries[0] as RunEntry)).toBe('builder');
+    expect(runRole(trace.entries[0] as RunEntry)).toBe('Builder');
   });
 });
 

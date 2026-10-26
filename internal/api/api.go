@@ -82,6 +82,7 @@ type Items interface {
 	Runs(ctx context.Context, item domain.ItemID, limit int) ([]domain.Run, error)
 	Run(ctx context.Context, id domain.RunID) (domain.Run, error)
 	ListItems(ctx context.Context, q ports.ItemQuery) ([]domain.Item, error)
+	Assemblies(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID]domain.Assembly, error)
 	Leases(ctx context.Context, factory domain.FactoryID, station string) ([]domain.Lease, error)
 	StationLoads(ctx context.Context, factory domain.FactoryID) ([]domain.StationLoad, error)
 	FlowMetrics(ctx context.Context, q ports.FlowQuery, longWaitsAt string) (domain.FlowMetrics, error)
@@ -419,6 +420,10 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 	}
 
 	out.Touches = s.itemTouchesOf(touches)
+
+	if out.Assembly, err = s.assemblyOf(ctx, it); err != nil {
+		return nil, err
+	}
 
 	return gen.GetItem200JSONResponse(out), nil
 }
