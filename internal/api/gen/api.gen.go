@@ -3138,6 +3138,21 @@ type NewOrg struct {
 	Slug string  `json:"slug"`
 }
 
+// NewPartRequest defines model for NewPartRequest.
+type NewPartRequest struct {
+	// Brief What the part must do
+	Brief string `json:"brief"`
+
+	// Lane The lane of the station's agents that should work the part
+	Lane *string `json:"lane,omitempty"`
+
+	// Needs The keys of the assembly's parts this one waits for
+	Needs *[]string `json:"needs,omitempty"`
+
+	// Title The part's title; its key is derived from it (surrounding space is trimmed)
+	Title string `json:"title"`
+}
+
 // NewPersonalToken defines model for NewPersonalToken.
 type NewPersonalToken struct {
 	ExpiresInDays *int   `json:"expires_in_days,omitempty"`
@@ -4442,6 +4457,9 @@ type LinkItemJSONRequestBody = NewLink
 // NoteItemJSONRequestBody defines body for NoteItem for application/json ContentType.
 type NoteItemJSONRequestBody = NewNote
 
+// AddItemPartJSONRequestBody defines body for AddItemPart for application/json ContentType.
+type AddItemPartJSONRequestBody = NewPartRequest
+
 // PauseItemJSONRequestBody defines body for PauseItem for application/json ContentType.
 type PauseItemJSONRequestBody = PauseRequest
 
@@ -5540,6 +5558,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/parts (the `ListItemParts` operationId).
 	ListItemParts(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AddItemPartWithBody Add one part to an open assembly
+	//
+	// The part is queued at the assembly's own station, with the assembly's type, priority and class of service, the brief as its body and a planned edge to each part it needs. Its key is a slug of its title, made unique among the assembly's parts with -2, -3. Answers the assembly's parts, as listItemParts does. 400 part-invalid for an empty title or brief or an unknown need; 409 not-an-assembly for an item that is not an assembly, item-closed for a done or cancelled one, edge-cycle when the needs would close a cycle and item-changed when the assembly changed meanwhile.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/parts (the `AddItemPart` operationId).
+	AddItemPartWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AddItemPart Add one part to an open assembly
+	//
+	// The part is queued at the assembly's own station, with the assembly's type, priority and class of service, the brief as its body and a planned edge to each part it needs. Its key is a slug of its title, made unique among the assembly's parts with -2, -3. Answers the assembly's parts, as listItemParts does. 400 part-invalid for an empty title or brief or an unknown need; 409 not-an-assembly for an item that is not an assembly, item-closed for a done or cancelled one, edge-cycle when the needs would close a cycle and item-changed when the assembly changed meanwhile.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/parts (the `AddItemPart` operationId).
+	AddItemPart(ctx context.Context, org OrgRef, item ItemRef, body AddItemPartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PauseItemWithBody Stop an open item where it is until a retry resumes it
 	//
@@ -7647,6 +7683,44 @@ func (c *Client) NoteItem(ctx context.Context, org OrgRef, item ItemRef, body No
 // Corresponds with GET /v1/orgs/{org}/items/{item}/parts (the `ListItemParts` operationId).
 func (c *Client) ListItemParts(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListItemPartsRequest(c.Server, org, item)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AddItemPartWithBody Add one part to an open assembly
+//
+// The part is queued at the assembly's own station, with the assembly's type, priority and class of service, the brief as its body and a planned edge to each part it needs. Its key is a slug of its title, made unique among the assembly's parts with -2, -3. Answers the assembly's parts, as listItemParts does. 400 part-invalid for an empty title or brief or an unknown need; 409 not-an-assembly for an item that is not an assembly, item-closed for a done or cancelled one, edge-cycle when the needs would close a cycle and item-changed when the assembly changed meanwhile.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/parts (the `AddItemPart` operationId).
+func (c *Client) AddItemPartWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAddItemPartRequestWithBody(c.Server, org, item, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AddItemPart Add one part to an open assembly
+//
+// The part is queued at the assembly's own station, with the assembly's type, priority and class of service, the brief as its body and a planned edge to each part it needs. Its key is a slug of its title, made unique among the assembly's parts with -2, -3. Answers the assembly's parts, as listItemParts does. 400 part-invalid for an empty title or brief or an unknown need; 409 not-an-assembly for an item that is not an assembly, item-closed for a done or cancelled one, edge-cycle when the needs would close a cycle and item-changed when the assembly changed meanwhile.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/parts (the `AddItemPart` operationId).
+func (c *Client) AddItemPart(ctx context.Context, org OrgRef, item ItemRef, body AddItemPartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAddItemPartRequest(c.Server, org, item, body)
 	if err != nil {
 		return nil, err
 	}
@@ -12692,6 +12766,60 @@ func NewListItemPartsRequest(server string, org OrgRef, item ItemRef) (*http.Req
 	return req, nil
 }
 
+// NewAddItemPartRequest calls the generic AddItemPart builder with application/json body
+func NewAddItemPartRequest(server string, org OrgRef, item ItemRef, body AddItemPartJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAddItemPartRequestWithBody(server, org, item, "application/json", bodyReader)
+}
+
+// NewAddItemPartRequestWithBody constructs an http.Request for the AddItemPart method, with any body, and a specified content type
+func NewAddItemPartRequestWithBody(server string, org OrgRef, item ItemRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/parts", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewPauseItemRequest calls the generic PauseItem builder with application/json body
 func NewPauseItemRequest(server string, org OrgRef, item ItemRef, body PauseItemJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -15442,6 +15570,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/parts (the `ListItemParts` operationId).
 	ListItemPartsWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*ListItemPartsResponse, error)
+
+	// AddItemPartWithBodyWithResponse Add one part to an open assembly
+	//
+	// The part is queued at the assembly's own station, with the assembly's type, priority and class of service, the brief as its body and a planned edge to each part it needs. Its key is a slug of its title, made unique among the assembly's parts with -2, -3. Answers the assembly's parts, as listItemParts does. 400 part-invalid for an empty title or brief or an unknown need; 409 not-an-assembly for an item that is not an assembly, item-closed for a done or cancelled one, edge-cycle when the needs would close a cycle and item-changed when the assembly changed meanwhile.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/parts (the `AddItemPart` operationId).
+	AddItemPartWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AddItemPartResponse, error)
+
+	// AddItemPartWithResponse Add one part to an open assembly
+	//
+	// The part is queued at the assembly's own station, with the assembly's type, priority and class of service, the brief as its body and a planned edge to each part it needs. Its key is a slug of its title, made unique among the assembly's parts with -2, -3. Answers the assembly's parts, as listItemParts does. 400 part-invalid for an empty title or brief or an unknown need; 409 not-an-assembly for an item that is not an assembly, item-closed for a done or cancelled one, edge-cycle when the needs would close a cycle and item-changed when the assembly changed meanwhile.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/parts (the `AddItemPart` operationId).
+	AddItemPartWithResponse(ctx context.Context, org OrgRef, item ItemRef, body AddItemPartJSONRequestBody, reqEditors ...RequestEditorFn) (*AddItemPartResponse, error)
 
 	// PauseItemWithBodyWithResponse Stop an open item where it is until a retry resumes it
 	//
@@ -19480,6 +19626,54 @@ func (r ListItemPartsResponse) ContentType() string {
 	return ""
 }
 
+type AddItemPartResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *AssemblyParts
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r AddItemPartResponse) GetJSON201() *AssemblyParts {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r AddItemPartResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AddItemPartResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AddItemPartResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AddItemPartResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AddItemPartResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type PauseItemResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -22700,6 +22894,36 @@ func (c *ClientWithResponses) ListItemPartsWithResponse(ctx context.Context, org
 		return nil, err
 	}
 	return ParseListItemPartsResponse(rsp)
+}
+
+// AddItemPartWithBodyWithResponse Add one part to an open assembly
+//
+// The part is queued at the assembly's own station, with the assembly's type, priority and class of service, the brief as its body and a planned edge to each part it needs. Its key is a slug of its title, made unique among the assembly's parts with -2, -3. Answers the assembly's parts, as listItemParts does. 400 part-invalid for an empty title or brief or an unknown need; 409 not-an-assembly for an item that is not an assembly, item-closed for a done or cancelled one, edge-cycle when the needs would close a cycle and item-changed when the assembly changed meanwhile.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/parts (the `AddItemPart` operationId).
+func (c *ClientWithResponses) AddItemPartWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AddItemPartResponse, error) {
+	rsp, err := c.AddItemPartWithBody(ctx, org, item, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAddItemPartResponse(rsp)
+}
+
+// AddItemPartWithResponse Add one part to an open assembly
+//
+// The part is queued at the assembly's own station, with the assembly's type, priority and class of service, the brief as its body and a planned edge to each part it needs. Its key is a slug of its title, made unique among the assembly's parts with -2, -3. Answers the assembly's parts, as listItemParts does. 400 part-invalid for an empty title or brief or an unknown need; 409 not-an-assembly for an item that is not an assembly, item-closed for a done or cancelled one, edge-cycle when the needs would close a cycle and item-changed when the assembly changed meanwhile.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/parts (the `AddItemPart` operationId).
+func (c *ClientWithResponses) AddItemPartWithResponse(ctx context.Context, org OrgRef, item ItemRef, body AddItemPartJSONRequestBody, reqEditors ...RequestEditorFn) (*AddItemPartResponse, error) {
+	rsp, err := c.AddItemPart(ctx, org, item, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAddItemPartResponse(rsp)
 }
 
 // PauseItemWithBodyWithResponse Stop an open item where it is until a retry resumes it
@@ -25940,6 +26164,39 @@ func ParseListItemPartsResponse(rsp *http.Response) (*ListItemPartsResponse, err
 	return response, nil
 }
 
+// ParseAddItemPartResponse parses an HTTP response from a AddItemPartWithResponse call
+func ParseAddItemPartResponse(rsp *http.Response) (*AddItemPartResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AddItemPartResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest AssemblyParts
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParsePauseItemResponse parses an HTTP response from a PauseItemWithResponse call
 func ParsePauseItemResponse(rsp *http.Response) (*PauseItemResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -27411,6 +27668,9 @@ type ServerInterface interface {
 	// ListItemParts An assembly's parts in plan order, with their needs and waves
 	// (GET /v1/orgs/{org}/items/{item}/parts)
 	ListItemParts(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// AddItemPart Add one part to an open assembly
+	// (POST /v1/orgs/{org}/items/{item}/parts)
+	AddItemPart(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
 	// PauseItem Stop an open item where it is until a retry resumes it
 	// (POST /v1/orgs/{org}/items/{item}/pause)
 	PauseItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
@@ -30827,6 +31087,41 @@ func (siw *ServerInterfaceWrapper) ListItemParts(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// AddItemPart operation middleware
+func (siw *ServerInterfaceWrapper) AddItemPart(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddItemPart(w, r, org, item)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PauseItem operation middleware
 func (siw *ServerInterfaceWrapper) PauseItem(w http.ResponseWriter, r *http.Request) {
 
@@ -32392,6 +32687,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}", wrapper.GetItem)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/events", wrapper.ListItemEvents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/parts", wrapper.ListItemParts)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/parts", wrapper.AddItemPart)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/runs", wrapper.ListItemRuns)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/notes", wrapper.NoteItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/needs", wrapper.LinkItem)
@@ -35490,6 +35786,47 @@ func (response ListItemPartsdefaultApplicationProblemPlusJSONResponse) VisitList
 	return err
 }
 
+type AddItemPartRequestObject struct {
+	Org  OrgRef  `json:"org"`
+	Item ItemRef `json:"item"`
+	Body *AddItemPartJSONRequestBody
+}
+
+type AddItemPartResponseObject interface {
+	VisitAddItemPartResponse(w http.ResponseWriter) error
+}
+
+type AddItemPart201JSONResponse AssemblyParts
+
+func (response AddItemPart201JSONResponse) VisitAddItemPartResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddItemPartdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response AddItemPartdefaultApplicationProblemPlusJSONResponse) VisitAddItemPartResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type PauseItemRequestObject struct {
 	Org  OrgRef  `json:"org"`
 	Item ItemRef `json:"item"`
@@ -37244,6 +37581,9 @@ type StrictServerInterface interface {
 	// ListItemParts An assembly's parts in plan order, with their needs and waves
 	// (GET /v1/orgs/{org}/items/{item}/parts)
 	ListItemParts(ctx context.Context, request ListItemPartsRequestObject) (ListItemPartsResponseObject, error)
+	// AddItemPart Add one part to an open assembly
+	// (POST /v1/orgs/{org}/items/{item}/parts)
+	AddItemPart(ctx context.Context, request AddItemPartRequestObject) (AddItemPartResponseObject, error)
 	// PauseItem Stop an open item where it is until a retry resumes it
 	// (POST /v1/orgs/{org}/items/{item}/pause)
 	PauseItem(ctx context.Context, request PauseItemRequestObject) (PauseItemResponseObject, error)
@@ -39626,6 +39966,40 @@ func (sh *strictHandler) ListItemParts(w http.ResponseWriter, r *http.Request, o
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListItemPartsResponseObject); ok {
 		if err := validResponse.VisitListItemPartsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddItemPart operation middleware
+func (sh *strictHandler) AddItemPart(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
+	var request AddItemPartRequestObject
+
+	request.Org = org
+	request.Item = item
+
+	var body AddItemPartJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddItemPart(ctx, request.(AddItemPartRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddItemPart")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddItemPartResponseObject); ok {
+		if err := validResponse.VisitAddItemPartResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
