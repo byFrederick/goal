@@ -32,12 +32,12 @@ func testPathsSetByTransition(f *fixture) {
 
 	samePaths(t, "after Paths set", moved, f.item(t, it.ID), globs)
 
-	at := domain.Position{Station: stNext, State: domain.StateQueued}
-	step := func(paths []string, minute time.Duration) domain.Item {
+	queued := domain.Position{Station: stNext, State: domain.StateQueued}
+	step := func(paths []string, at time.Time) domain.Item {
 		t.Helper()
 
 		got, err := f.Store.Transition(f.ctx(t), ports.Transition{
-			ItemID: it.ID, From: at, To: at, Paths: paths, At: t1.Add(minute * time.Minute),
+			ItemID: it.ID, From: queued, To: queued, Paths: paths, At: at,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -46,8 +46,8 @@ func testPathsSetByTransition(f *fixture) {
 		return got
 	}
 
-	samePaths(t, "after nil Paths", step(nil, 2), f.item(t, it.ID), globs)
-	samePaths(t, "after empty Paths", step([]string{}, 3), f.item(t, it.ID), nil)
+	samePaths(t, "after nil Paths", step(nil, t1.Add(2*time.Minute)), f.item(t, it.ID), globs)
+	samePaths(t, "after empty Paths", step([]string{}, t1.Add(3*time.Minute)), f.item(t, it.ID), nil)
 }
 
 // samePaths checks that the transition's result and the item read back both have want.
