@@ -41,6 +41,7 @@ const (
 	agentPrompt   = "      prompt: ./agents/worker.md\n"
 	runtimeModel  = "    modelConnection: claude\n"
 	specAgents    = "  agents:\n"
+	routeBackend  = "/line/stations/1/route/backend"
 )
 
 // edited applies old → new replacements to baseFactory.
@@ -155,7 +156,28 @@ var locatedCases = []struct {
 	},
 	{
 		name: "unknown agent", doc: edited(workAgentLine, "        agent: ghost #here\n"),
-		code: "unknown-agent", section: domain.SectionLine, pointer: "/line/stations/1/agent",
+		code: codeUnknownAgent, section: domain.SectionLine, pointer: "/line/stations/1/agent",
+	},
+	{
+		name: "unknown routed agent", doc: edited(workAgentLine, "        route: { backend: ghost } #here\n"),
+		code: codeUnknownAgent, section: domain.SectionLine, pointer: routeBackend,
+	},
+	{
+		name: "unknown routed agent with a count", doc: edited(workAgentLine, "        route: { backend: { agent: ghost, agents: 1 } } #here\n"),
+		code: codeUnknownAgent, section: domain.SectionLine, pointer: routeBackend,
+	},
+	{
+		name: "route counts beyond the station's agents",
+		doc:  edited(workAgentLine, "        route: { backend: { agent: worker, agents: 2 }, frontend: worker } #here\n"),
+		code: "route-agents-exceed-station", section: domain.SectionLine, pointer: "/line/stations/1/route",
+	},
+	{
+		name: "route count of zero", doc: edited(workAgentLine, "        route: { backend: { agent: worker, agents: 0 } } #here\n"),
+		code: "schema-invalid", section: domain.SectionLine, pointer: routeBackend,
+	},
+	{
+		name: "route entry with an unknown key", doc: edited(workAgentLine, "        route: { backend: { agent: worker, colour: red } } #here\n"),
+		code: "schema-invalid", section: domain.SectionLine, pointer: routeBackend,
 	},
 	{
 		name: "unknown skill", doc: edited(agentPrompt, agentPrompt+"      skills: [nope] #here\n"),
@@ -175,7 +197,7 @@ var locatedCases = []struct {
 	},
 	{
 		name: "unknown librarian", doc: baseFactory + "  learning:\n    librarian: { agent: ghost } #here\n",
-		code: "unknown-agent", section: domain.SectionLine, pointer: "/line/librarian",
+		code: codeUnknownAgent, section: domain.SectionLine, pointer: "/line/librarian",
 	},
 	{
 		name: "prompt not found", doc: edited(agentPrompt, "      prompt: ./agents/missing.md #here\n"),
