@@ -15,6 +15,8 @@ import (
 const (
 	stBuild  = "build"
 	stReview = "review"
+	// approve is the reviewer's approving verdict.
+	approve = `{"decision":"approve"}`
 )
 
 // gateMergeLine is build (an agent that reports pull requests) → review (a gate whose approval
@@ -99,7 +101,7 @@ func TestGateMerge_RefusedBlocksAndRetrySkipsMerged(t *testing.T) {
 				line.Connections = tt.conns
 			}
 
-			h := newHarness(t, line, byAgent(map[string]string{agWorker: output, agReviewer: `{"decision":"approve"}`}))
+			h := newHarness(t, line, byAgent(map[string]string{agWorker: output, agReviewer: approve}))
 
 			pr := openPR(prURL)
 			if tt.pr != nil {
@@ -124,7 +126,7 @@ func TestGateMerge_RefusedBlocksAndRetrySkipsMerged(t *testing.T) {
 		t.Parallel()
 
 		output := `{"pull_requests":["` + prURL + `","` + mrURL + `","` + docsURL + `"]}`
-		h := newHarness(t, gateMergeLine(), byAgent(map[string]string{agWorker: output, agReviewer: `{"decision":"approve"}`}))
+		h := newHarness(t, gateMergeLine(), byAgent(map[string]string{agWorker: output, agReviewer: approve}))
 		h.codehost.Add(openPR(prURL))
 		h.codehost.Add(openPR(docsURL))
 
@@ -240,7 +242,7 @@ func TestGateMerge_UpdatesTheBranchBeforeMerging(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t, gateMergeLine(), byAgent(map[string]string{
-		agWorker: `{"pull_request":"` + prURL + `"}`, agReviewer: `{"decision":"approve"}`,
+		agWorker: `{"pull_request":"` + prURL + `"}`, agReviewer: approve,
 	}))
 	h.codehost.Add(openPR(prURL))
 
@@ -274,7 +276,7 @@ func TestGateMerge_ConflictReworksWithoutCountingAgainstMaxRework(t *testing.T) 
 			line.Stations[2].Gate.MaxRework = maxRework
 
 			h := newHarness(t, line, byAgent(map[string]string{
-				agWorker: `{"pull_request":"` + prURL + `"}`, agReviewer: `{"decision":"approve"}`,
+				agWorker: `{"pull_request":"` + prURL + `"}`, agReviewer: approve,
 			}))
 			h.codehost.Add(openPR(prURL))
 			h.codehost.Conflict(prURL, "internal/engine/merge.go", "go.mod")
@@ -314,7 +316,7 @@ func TestGateMerge_ConflictWithOnConflictHumanBlocks(t *testing.T) {
 	line.Flow.Assemblies.OnConflict = domain.ConflictHuman
 
 	h := newHarness(t, line, byAgent(map[string]string{
-		agWorker: `{"pull_request":"` + prURL + `"}`, agReviewer: `{"decision":"approve"}`,
+		agWorker: `{"pull_request":"` + prURL + `"}`, agReviewer: approve,
 	}))
 	h.codehost.Add(openPR(prURL))
 	h.codehost.Conflict(prURL, "go.mod")

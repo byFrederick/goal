@@ -277,7 +277,7 @@ func (e *Engine) mergeOne(ctx context.Context, id domain.ItemID, t mergeTarget, 
 
 // merge merges the pull request unless it already is, and returns it as merged. An open one's
 // branch is first brought up to date with its base at the head just read (ports.CodeHost.
-// UpdateBranch), and merged at the head the next read returns; a conflict is a *mergeConflict.
+// UpdateBranch), and merged at the head the next read returns; a conflict is a *mergeConflictError.
 func (e *Engine) merge(ctx context.Context, t mergeTarget, method string) (ports.PullRequest, error) {
 	pr, err := t.host.PullRequest(ctx, t.conn, t.url)
 	if err != nil {
@@ -293,9 +293,8 @@ func (e *Engine) merge(ctx context.Context, t mergeTarget, method string) (ports
 	}
 
 	if err := t.host.UpdateBranch(ctx, t.conn, t.url, pr.HeadSHA); err != nil {
-		var mc *ports.MergeConflictError
-		if errors.As(err, &mc) {
-			return ports.PullRequest{}, &mergeConflict{url: t.url, base: pr.BaseBranch, files: mc.Files, err: err}
+		if mc, ok := errors.AsType[*ports.MergeConflictError](err); ok {
+			return ports.PullRequest{}, &mergeConflictError{url: t.url, base: pr.BaseBranch, files: mc.Files, err: err}
 		}
 
 		return ports.PullRequest{}, fmt.Errorf("update the branch of %s: %w", t.url, err)
@@ -331,16 +330,16 @@ func (e *Engine) merge(ctx context.Context, t mergeTarget, method string) (ports
 	return pr, nil
 }
 
-// mergeConflict is a merge refused because a pull request's branch conflicts with its base. Its
+// mergeConflictError is a merge refused because a pull request's branch conflicts with its base. Its
 // message is the reason the item is sent back with: the pull request, its base, the files when
 // the host named them, and what to do.
-type mergeConflict struct {
+type mergeConflictError struct {
 	url, base string
 	files     []string
 	err       error // the code host's, wrapping ports.ErrMergeConflict
 }
 
-func (c *mergeConflict) Error() string {
+func (c *mergeConflictError) Error() string {
 	base := c.base
 	if base == "" {
 		base = "main"
@@ -356,7 +355,7 @@ func (c *mergeConflict) Error() string {
 
 // Unwrap makes a conflict both ports.ErrMergeConflict and ports.ErrNotMergeable, so a person's
 // merge refused for one answers 409 like any other refusal.
-func (c *mergeConflict) Unwrap() []error { return []error{c.err, ports.ErrNotMergeable} }
+func (c *mergeConflictError) Unwrap() []error { return []error{c.err, ports.ErrNotMergeable} }
 
 // conflictRework points t back at the line's rework target for it (the gate's onReject, else the
 // nearest agent station upstream) when err is a merge conflict and the line's
@@ -364,8 +363,8 @@ func (c *mergeConflict) Unwrap() []error { return []error{c.err, ports.ErrNotMer
 // reports whether it did. It is no rejection: t.Rework stays false, so the item's rework count
 // and its gate's maxRework are untouched.
 func (e *Engine) conflictRework(l domain.Line, it domain.Item, err error, t *ports.Transition) bool {
-	var mc *mergeConflict
-	if !errors.As(err, &mc) || l.Flow.Assemblies.OnConflict == domain.ConflictHuman {
+	mc, ok := errors.AsType[*mergeConflictError](err)
+	if !ok || l.Flow.Assemblies.OnConflict == domain.ConflictHuman {
 		return false
 	}
 
