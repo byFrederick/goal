@@ -343,7 +343,7 @@ type Gate struct {
 }
 
 // Flow holds the line's pull policy (expedite lane, constraint, release and andon), its
-// targets, its assembly policy, its dependency fields and its retry policy.
+// targets, its assembly policy, its retry policy and the output fields that set dependencies.
 type Flow struct {
 	Expedite *struct {
 		Types []string `json:"types,omitempty"`
@@ -355,16 +355,19 @@ type Flow struct {
 		ReworkRate float64 `json:"reworkRate,omitempty"`
 		Window     int     `json:"window,omitempty"`
 	} `json:"andon,omitempty"`
-	Targets      *Targets      `json:"targets,omitempty"`
-	Assemblies   *Assemblies   `json:"assemblies,omitempty"`
+	Targets    *Targets    `json:"targets,omitempty"`
+	Assemblies *Assemblies `json:"assemblies,omitempty"`
+	Retry      *Retry      `json:"retry,omitempty"`
+	// Dependencies maps the output fields that set an item's dependencies.
 	Dependencies *Dependencies `json:"dependencies,omitempty"`
-	Retry        *Retry        `json:"retry,omitempty"`
 }
 
-// Dependencies names the output properties that declare an item's dependencies: After, the one
-// listing the open items (<factory>#<number>) the work must follow. Unset, none is read.
+// Dependencies names the output fields that set an item's dependencies: After the one listing
+// the open items (<factory>#<number>) the work must follow, Paths the one whose list of file
+// globs replaces the item's paths. An unset key maps no field.
 type Dependencies struct {
 	After string `json:"after,omitempty"`
+	Paths string `json:"paths,omitempty"`
 }
 
 // Retry caps the runs again of a claim whose run failed for a transient reason: its sandbox

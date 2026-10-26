@@ -174,11 +174,17 @@ func (e *Engine) claimFor(ctx context.Context, o *orgTurn, tick *tickState) (boo
 }
 
 // claimAt claims the next item waiting at one agent station into a free slot and starts its
-// run. When nothing waits, every slot is held or the store fails, the station is done for the
+// run. On its first turn in a tick it first holds the waiting items whose paths overlap an
+// earlier open item's (holdOverlaps), so the claim gate skips them. When nothing waits, every slot is held or the store fails, the station is done for the
 // tick. A slot cap is returned as ports.ErrOrgFull or ports.ErrFactoryFull, leaving the station
 // as it was: the factory or the organization is what is done.
 func (e *Engine) claimAt(ctx context.Context, l domain.Line, st domain.Station, s *stationTurn) (bool, error) {
 	if s.taken == nil {
+		if err := e.holdOverlaps(ctx, l, st); err != nil {
+			s.done = true
+			return false, err
+		}
+
 		leases, err := e.store.Leases(ctx, l.FactoryID, st.ID)
 		if err != nil {
 			s.done = true

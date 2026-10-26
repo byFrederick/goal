@@ -21,7 +21,7 @@ func TestAfterFrom(t *testing.T) {
 		bad    string // a substring of the error, "" for none
 	}{
 		{name: "no field mapped", field: "", output: `{"after":["acme#1"]}`},
-		{name: "absent", field: afterField, output: `{"lane":"backend"}`},
+		{name: "absent", field: afterField, output: `{"title":"x"}`},
 		{name: "null", field: afterField, output: `{"after":null}`},
 		{name: "empty", field: afterField, output: `{"after":[]}`},
 		{
@@ -32,7 +32,7 @@ func TestAfterFrom(t *testing.T) {
 		{name: "not an array", field: afterField, output: `{"after":"acme#1"}`, bad: "array"},
 		{name: "not a string", field: afterField, output: `{"after":[12]}`, bad: "array"},
 		{name: "bad ref", field: afterField, output: `{"after":["acme#1","acme-12"]}`, bad: `"acme-12"`},
-		{name: "not an object", field: afterField, output: `[]`, bad: "after"},
+		{name: "output not an object", field: afterField, output: `[]`, bad: "after"},
 	}
 
 	for _, tt := range tests {

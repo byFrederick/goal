@@ -1,5 +1,5 @@
-import type { Options, query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import { describe, expect, it } from 'vitest';
+import type { Options, query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkerEvent } from './events.js';
 import { runTask } from './run.js';
 import { type AgentFiles, parseSpec, type TaskSpec } from './spec.js';
@@ -44,11 +44,22 @@ const success = {
   session_id: 's1',
 };
 
-/** A query that plays scripted messages and records the options it was given. */
+/** One query call: the inputs the worker streamed to it, read to the end of the stream, and its options. */
+interface Call {
+  inputs: SDKUserMessage[];
+  read: Promise<void>;
+  options: Options;
+}
+
+/** A query that plays scripted messages, reads its input stream as the SDK does, and records what it was given. */
 function scripted(messages: unknown[], opts: { throws?: Error } = {}) {
-  const calls: { prompt: string; options: Options }[] = [];
-  const fake = ((params: { prompt: string; options: Options }) => {
-    calls.push(params);
+  const calls: Call[] = [];
+  const fake = ((params: { prompt: AsyncIterable<SDKUserMessage>; options: Options }) => {
+    const inputs: SDKUserMessage[] = [];
+    const read = (async () => {
+      for await (const m of params.prompt) inputs.push(m);
+    })();
+    calls.push({ inputs, read, options: params.options });
     return (async function* () {
       for (const m of messages) yield m as SDKMessage;
       if (opts.throws) throw opts.throws;
@@ -57,9 +68,29 @@ function scripted(messages: unknown[], opts: { throws?: Error } = {}) {
   return { fake, calls };
 }
 
+/** The prompt text of a call's first input, the task's prompt. */
+const promptOf = (call?: Call) => String(call?.inputs[0]?.message.content ?? '');
+
+/** goald's gateway as fetch: each request is recorded and answered by respond. */
+function gateway(respond: (url: URL) => Response | Promise<Response> = () => Response.json({ notes: [] })) {
+  const requests: { url: URL; init: RequestInit | undefined }[] = [];
+  const fetch = (async (input: string | URL, init?: RequestInit) => {
+    const url = new URL(String(input));
+    requests.push({ url, init });
+    return respond(url);
+  }) as typeof globalThis.fetch;
+  return { fetch, requests };
+}
+
 async function run(
   messages: unknown[],
-  opts: { throws?: Error; spec?: TaskSpec; files?: AgentFiles; env?: NodeJS.ProcessEnv } = {},
+  opts: {
+    throws?: Error;
+    spec?: TaskSpec;
+    files?: AgentFiles;
+    env?: NodeJS.ProcessEnv;
+    fetch?: typeof globalThis.fetch;
+  } = {},
 ) {
   const { fake, calls } = scripted(messages, opts);
   const events: WorkerEvent[] = [];
@@ -69,7 +100,10 @@ async function run(
     now: () => at,
     env: opts.env ?? env,
     abortController: new AbortController(),
+    fetch: opts.fetch ?? gateway().fetch,
+    notePollMs: 0,
   });
+  for (const call of calls) await call.read;
   return { code, events, calls };
 }
 
@@ -104,9 +138,9 @@ describe('runTask', () => {
     expect(Object.keys(options?.mcpServers ?? {})).toEqual(['goal']);
     expect(options?.env).toMatchObject({ CLAUDE_CODE_OAUTH_TOKEN: 'oauth-token', PATH: '/usr/bin' });
     expect(options?.env).not.toHaveProperty('GOAL_GATEWAY_TOKEN');
-    expect(calls[0]?.prompt).toContain('Add a health endpoint');
-    expect(calls[0]?.prompt).toContain('"lane": "backend"');
-    expect(calls[0]?.prompt).toContain('output contract "change"');
+    expect(promptOf(calls[0])).toContain('Add a health endpoint');
+    expect(promptOf(calls[0])).toContain('"lane": "backend"');
+    expect(promptOf(calls[0])).toContain('output contract "change"');
   });
 
   it("gives the agent only its definition's skills: no bundled, synced or plugin skills, its own config dir", async () => {
@@ -321,15 +355,122 @@ describe('runTask', () => {
 describe('parseSpec', () => {
   it('starts the prompt with a note to resolve conflicts with the default branch', async () => {
     const { calls } = await run([success], { spec: { ...spec, base_conflicts: ['go.mod', 'internal/api/server.go'] } });
-    const prompt = calls[0]?.prompt ?? '';
+    const prompt = promptOf(calls[0]);
 
     expect(prompt.startsWith('## First: conflicts with the default branch')).toBe(true);
     expect(prompt).toContain('- go.mod\n- internal/api/server.go');
     expect(prompt.indexOf('internal/api/server.go')).toBeLessThan(prompt.indexOf('Add a health endpoint'));
-    expect((await run([success])).calls[0]?.prompt.startsWith('Add a health endpoint')).toBe(true);
+    expect(promptOf((await run([success])).calls[0]).startsWith('Add a health endpoint')).toBe(true);
   });
 
   it('rejects a spec without its run id', () => {
     expect(() => parseSpec(JSON.stringify({ ...spec, run_id: undefined }))).toThrow();
+  });
+});
+
+describe('runTask live notes', () => {
+  const init = {
+    type: 'system',
+    subtype: 'init',
+    session_id: 's1',
+    model: 'claude-sonnet-5-5',
+    tools: ['Read', 'Bash'],
+    skills: [],
+    mcp_servers: [],
+  };
+  const assistant = { type: 'assistant', message: { id: 'msg_1', content: [] }, parent_tool_use_id: null };
+  const toolResult = {
+    type: 'user',
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu_1', content: 'ok' }] },
+    parent_tool_use_id: null,
+  };
+  const note = { id: 7, at: '2026-10-23T10:01:00Z', by: 'alice@example.com', text: 'Use the v2 endpoint' };
+  const noteMessage = {
+    type: 'user',
+    message: { role: 'user', content: 'A note from alice@example.com arrived while you work: Use the v2 endpoint' },
+    parent_tool_use_id: null,
+    priority: 'next',
+  };
+  const noteDelivered = { type: 'note_delivered', at: at.toISOString(), note_id: 7 };
+  const finishedEvents = (events: WorkerEvent[]) => events.filter((e) => e.type === 'finished');
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('hands a note served mid-run to the agent once, and reports it delivered once', async () => {
+    // The gateway serves the same note on every poll, as if it did not know the note was delivered.
+    const served = gateway(() => Response.json({ notes: [note] }));
+    const { code, events, calls } = await run([init, assistant, toolResult, success], { fetch: served.fetch });
+
+    expect(code).toBe(0);
+    expect(calls[0]?.inputs).toHaveLength(2);
+    expect(promptOf(calls[0])).toContain('Add a health endpoint');
+    expect(calls[0]?.inputs[1]).toEqual(noteMessage);
+    expect(events.filter((e) => e.type === 'note_delivered')).toEqual([noteDelivered]);
+    // Polled after the assistant message and after the tool result, then the note's id is the cursor.
+    expect(served.requests.map((r) => r.url.searchParams.get('notes_after'))).toEqual(['0', '7']);
+    expect(served.requests[0]?.init?.headers).toEqual({ Authorization: 'Bearer gateway-token' });
+    expect(served.requests[0]?.url.href).toBe('http://host.docker.internal:8081/run?notes_after=0');
+  });
+
+  it('ends the run with exactly one finished event, after the notes', async () => {
+    const { events, calls } = await run([init, assistant, success], {
+      fetch: gateway(() => Response.json({ notes: [note] })).fetch,
+    });
+
+    expect(finishedEvents(events)).toHaveLength(1);
+    expect(events.at(-1)?.type).toBe('finished');
+    expect(calls[0]?.inputs.at(-1)).toEqual(noteMessage);
+  });
+
+  it('polls between turns only: the result ends the run without a poll, so a later note waits for the next run', async () => {
+    const served = gateway();
+    const { events, calls } = await run([init, assistant, success], { fetch: served.fetch });
+
+    expect(served.requests).toHaveLength(1);
+    expect(calls[0]?.inputs).toHaveLength(1);
+    expect(events.filter((e) => e.type === 'note_delivered')).toEqual([]);
+  });
+
+  it('does not fail the run when a poll rejects, and says so on stderr', async () => {
+    const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const { code, events } = await run([init, assistant, toolResult, success], {
+      fetch: (async () => {
+        throw new Error('connect ECONNREFUSED');
+      }) as typeof globalThis.fetch,
+    });
+
+    expect(code).toBe(0);
+    expect(events.at(-1)).toMatchObject({ type: 'finished', status: 'succeeded' });
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(write.mock.calls[0]?.[0]).toContain('connect ECONNREFUSED');
+  });
+
+  it('does not fail the run when the gateway answers an error', async () => {
+    const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const { code, events } = await run([init, assistant, success], {
+      fetch: gateway(() => new Response('gateway unavailable', { status: 503 })).fetch,
+    });
+
+    expect(code).toBe(0);
+    expect(events.at(-1)).toMatchObject({ type: 'finished', status: 'succeeded' });
+    expect(write.mock.calls[0]?.[0]).toContain('503');
+  });
+
+  it('never polls without a gateway URL or a gateway token', async () => {
+    const served = gateway(() => Response.json({ notes: [note] }));
+    const noUrl = await run([init, assistant, toolResult, success], {
+      spec: { ...spec, gateway_url: undefined } as TaskSpec,
+      fetch: served.fetch,
+    });
+    const noToken = await run([init, assistant, toolResult, success], {
+      env: { PATH: '/usr/bin', CLAUDE_CODE_OAUTH_TOKEN: 'oauth-token' },
+      fetch: served.fetch,
+    });
+
+    expect(served.requests).toEqual([]);
+    expect(noUrl.calls[0]?.inputs).toHaveLength(1);
+    expect(noToken.calls[0]?.inputs).toHaveLength(1);
+    expect(finishedEvents(noUrl.events)).toHaveLength(1);
+    expect(finishedEvents(noToken.events)).toHaveLength(1);
   });
 });

@@ -623,7 +623,8 @@ func (e *Engine) finishRun(ctx context.Context, id domain.RunID, res domain.RunR
 }
 
 // finish moves an item whose output passed its checks, with an event for each declared rule the
-// output says was broken (violations): through the gate's verdict when the
+// output says was broken (violations) and the paths it lists in the field the line maps
+// (flow.dependencies.paths): through the gate's verdict when the
 // station has one, into state assembly when its output has a plan (assemble), otherwise to the
 // next station. The run was checked against the version it started on; where the item goes
 // next is the current line's say (chk.next), so an item finishing on v1 after v2 was published
@@ -634,7 +635,7 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output
 	t := ports.Transition{
 		ItemID: c.item.ID, From: domain.Position{Station: c.station.ID, State: domain.StateInProgress},
 		Lease: &c.lease, Outcome: domain.LeaseAdvanced, Lane: domain.LaneFrom(output), OutputStation: c.station.ID,
-		Output: output, At: e.clock.Now(),
+		Paths: domain.PathsFrom(output, c.line.Flow.Dependencies.Paths), Output: output, At: e.clock.Now(),
 	}
 	t.Events = e.violations(ctx, log, c, output, t.At)
 

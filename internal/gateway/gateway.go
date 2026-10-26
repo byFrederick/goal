@@ -30,6 +30,15 @@
 // applies to appends domain.EventRulesApplied with their names and hashes, and a bundle fetched
 // again appends none.
 //
+// # Notes
+//
+// ServeRun answers GET /run?notes_after=<event id> (0 or a positive integer, else 400) with the
+// notes people left on the token's item while its run works, which the worker polls between the
+// agent's turns: {"notes":[{id, at, by, text}]}, the item's note events whose id is greater than
+// both the run's own run_started and notes_after, oldest first, at most 50. A note from before
+// the run started is never listed. It authorizes like the bundle (401, 403) and records nothing;
+// the worker reports each note it gives the agent as a note_delivered line (domain.EventNoteDelivered).
+//
 // # Goal's tools
 //
 // The endpoint serves Goal's own tools, named "<server>__<tool>" (Claude's tool names allow no

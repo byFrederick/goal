@@ -77,51 +77,22 @@ func (f *Factory) Line() domain.Line {
 	return l
 }
 
-// assemblyPolicy maps board.flow.assemblies; an unset key is rebase, rework, serialize and
-// materialize.
-func assemblyPolicy(a Assemblies) domain.AssemblyPolicy {
-	p := domain.AssemblyPolicy{
-		FreshBase: domain.FreshBaseRebase, OnConflict: domain.ConflictRework,
-		Overlap: domain.OverlapSerialize, Materialize: true,
-	}
-
-	if a.FreshBase != "" {
-		p.FreshBase = domain.FreshBase(a.FreshBase)
-	}
-
-	if a.OnConflict != "" {
-		p.OnConflict = domain.ConflictPolicy(a.OnConflict)
-	}
-
-	if a.Overlap != "" {
-		p.Overlap = domain.OverlapPolicy(a.Overlap)
-	}
-
-	if a.Materialize != nil {
-		p.Materialize = *a.Materialize
-	}
-
-	return p
-}
-
 // flowPolicy maps board.flow; an unset release is push, unset assembly settings rebase,
-// rework, serialize and materialize, an unset transient retry cap domain.DefaultTransientAttempts.
+// rework, serialize and materialize, an unset transient retry cap domain.DefaultTransientAttempts
+// and unset dependency fields map no output field.
 func flowPolicy(fl Flow) domain.FlowPolicy {
 	p := domain.FlowPolicy{
 		Release: domain.ReleasePush, Constraint: fl.Constraint,
-		Assemblies: assemblyPolicy(Assemblies{}),
+		Assemblies: assemblyPolicy(fl.Assemblies),
 		Retry:      domain.RetryPolicy{TransientAttempts: domain.DefaultTransientAttempts},
 	}
 	if r := fl.Retry; r != nil && r.Transient != nil && r.Transient.Attempts > 0 {
 		p.Retry.TransientAttempts = r.Transient.Attempts
 	}
 
-	if a := fl.Assemblies; a != nil {
-		p.Assemblies = assemblyPolicy(*a)
-	}
-
 	if d := fl.Dependencies; d != nil {
 		p.Dependencies.After = d.After
+		p.Dependencies.Paths = d.Paths
 	}
 
 	if fl.Release != "" {
@@ -142,6 +113,36 @@ func flowPolicy(fl Flow) domain.FlowPolicy {
 			LeadTime:         time.Duration(t.LeadTimeHours * float64(time.Hour)),
 			ExpediteLeadTime: time.Duration(t.ExpediteLeadTimeMinutes) * time.Minute,
 		}
+	}
+
+	return p
+}
+
+// assemblyPolicy maps board.flow.assemblies; unset settings are rebase, rework, serialize and
+// materialize.
+func assemblyPolicy(a *Assemblies) domain.AssemblyPolicy {
+	p := domain.AssemblyPolicy{
+		FreshBase: domain.FreshBaseRebase, OnConflict: domain.ConflictRework,
+		Overlap: domain.OverlapSerialize, Materialize: true,
+	}
+	if a == nil {
+		return p
+	}
+
+	if a.FreshBase != "" {
+		p.FreshBase = domain.FreshBase(a.FreshBase)
+	}
+
+	if a.OnConflict != "" {
+		p.OnConflict = domain.ConflictPolicy(a.OnConflict)
+	}
+
+	if a.Overlap != "" {
+		p.Overlap = domain.OverlapPolicy(a.Overlap)
+	}
+
+	if a.Materialize != nil {
+		p.Materialize = *a.Materialize
 	}
 
 	return p

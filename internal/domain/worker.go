@@ -19,11 +19,12 @@ const (
 )
 
 var workerEventKinds = map[string]EventKind{
-	"started":     EventAgentStarted,
-	"tool_use":    EventToolCall,
-	"tool_result": EventToolResult,
-	"message":     EventAgentMessage,
-	"usage":       EventUsage,
+	"started":        EventAgentStarted,
+	"tool_use":       EventToolCall,
+	"tool_result":    EventToolResult,
+	"message":        EventAgentMessage,
+	"usage":          EventUsage,
+	"note_delivered": EventNoteDelivered,
 }
 
 const workerFinished = "finished"
