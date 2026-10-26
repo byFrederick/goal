@@ -40,6 +40,7 @@ export type PartsSummary = Schemas["PartsSummary"];
 export type ItemCard = Schemas["ItemCard"];
 export type ItemFlow = Schemas["ItemFlow"];
 export type ItemSpan = Schemas["ItemSpan"];
+export type ItemWaiting = Schemas["ItemWaiting"];
 export type ItemBudget = Schemas["ItemBudget"];
 export type CurrentRun = Schemas["CurrentRun"];
 export type ItemPage = Schemas["ItemPage"];

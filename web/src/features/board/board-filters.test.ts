@@ -167,6 +167,18 @@ describe('arrangeBoard', () => {
     expect(refs(arrangeBoard(twoStations, { status: 'same-files' }))).toEqual([]);
   });
 
+  it('keeps a queued or ready card that waits for the same files under Waiting for same files only', () => {
+    const shared = item({
+      ref: 'sre#40',
+      state: 'queued',
+      waiting: { kind: 'files', items: ['sre#3'], files: ['web/src/**'] },
+    });
+    const starts = item({ ref: 'sre#41', state: 'ready', waiting: { kind: 'after', items: ['sre#3'], files: [] } });
+    const shelf = board([station({ id: 'build', items: [shared, starts] })]);
+    expect(refs(arrangeBoard(shelf, { status: 'same-files' }), 'build')).toEqual(['sre#40']);
+    expect(refs(arrangeBoard(shelf, { status: 'waiting' }), 'build')).toEqual(['sre#41']);
+  });
+
   it('combines the choices: every one must match', () => {
     expect(refs(arrangeBoard(twoStations, { assembly: ASM, status: 'waiting' }))).toEqual(['sre#22']);
   });

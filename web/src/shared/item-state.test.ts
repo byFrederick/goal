@@ -113,6 +113,21 @@ describe('itemStatus', () => {
     expect(itemStatus({ state: 'cancelled' })).toBeNull();
     expect(itemStatus({ state: 'assembly' })).toBeNull();
   });
+
+  it('shows two crossing arrows for a queued or ready item that waits for the same files', () => {
+    expect(itemStatus({ state: 'queued', waiting: { kind: 'files' } })).toBe('same-files');
+    expect(itemStatus({ state: 'ready', in_buffer: false, waiting: { kind: 'files' } })).toBe('same-files');
+  });
+
+  it('shows a clock for a queued or ready item that starts after another item merges', () => {
+    expect(itemStatus({ state: 'queued', waiting: { kind: 'after' } })).toBe('waiting');
+    expect(itemStatus({ state: 'ready', waiting: { kind: 'after' } })).toBe('waiting');
+  });
+
+  it('keeps the icon of an item with no waiting reason as before', () => {
+    expect(itemStatus({ state: 'queued', waiting: null })).toBe('waiting');
+    expect(itemStatus({ state: 'ready', waiting: null })).toBe('ready');
+  });
 });
 
 describe('pullRequestsOf', () => {

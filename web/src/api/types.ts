@@ -79,6 +79,7 @@ export type {
   ItemState,
   ItemsAtRemovedStations,
   ItemTouches,
+  ItemWaiting,
   KnowledgeDocument,
   KnowledgeDocumentPage,
   KnowledgeDocumentText,

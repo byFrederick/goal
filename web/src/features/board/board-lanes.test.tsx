@@ -342,6 +342,63 @@ describe('board lanes', () => {
     expect(blockedRow.querySelector('.lucide-clock')).toBeNull();
   });
 
+  it('shows a waiting row’s reason with its icon: the clock after an item it needs, two crossing arrows for the same files, a check once ready', async () => {
+    const starts = item({
+      id: 'item-20',
+      ref: 'sre#20',
+      number: 20,
+      title: 'Ship the export migration',
+      state: 'queued',
+      board_lane: 'investigator',
+      waiting: { kind: 'after', items: ['sre#3'], files: [] },
+    });
+    const shared = item({
+      id: 'item-21',
+      ref: 'sre#21',
+      number: 21,
+      title: 'Adjust the export handler',
+      state: 'queued',
+      board_lane: 'investigator',
+      waiting: {
+        kind: 'files',
+        items: ['sre#3'],
+        files: ['internal/api/gen/export/handlers.go', 'web/src/features/export/**'],
+      },
+    });
+    const approved = item({
+      id: 'item-22',
+      ref: 'sre#22',
+      number: 22,
+      title: 'Document the export flags',
+      state: 'ready',
+      board_lane: 'investigator',
+    });
+    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [starts, shared, approved]) });
+
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const afterRow = within(columns)
+      .getByRole('link', { name: 'Ship the export migration' })
+      .closest('article') as HTMLElement;
+    expect(afterRow.querySelector('.lucide-clock')).not.toBeNull();
+    expect(within(afterRow).getByText('Starts after sre#3 merges')).toBeTruthy();
+
+    const filesRow = within(columns)
+      .getByRole('link', { name: 'Adjust the export handler' })
+      .closest('article') as HTMLElement;
+    expect(filesRow.querySelector('.lucide-shuffle')).not.toBeNull();
+    expect(filesRow.querySelector('.lucide-clock')).toBeNull();
+    const filesReason = 'Waits for sre#3: same files (internal/api/gen/export/handlers.go, web/src/features/export/**)';
+    const filesText = within(filesRow).getByText(filesReason);
+    expect(filesText.classList).toContain('truncate');
+    expect(filesText.parentElement?.getAttribute('title')).toBe(filesReason);
+
+    const readyRow = within(columns)
+      .getByRole('link', { name: 'Document the export flags' })
+      .closest('article') as HTMLElement;
+    expect(readyRow.querySelector('.lucide-circle-check-big')).not.toBeNull();
+    expect(within(readyRow).getByText('Review approved, checks passed')).toBeTruthy();
+  });
+
   it('keeps the expedite tint and label on a queued expedite row, and gives a standard row neither', async () => {
     const expediteRow = item({
       id: 'item-21',

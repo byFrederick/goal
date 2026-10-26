@@ -206,7 +206,7 @@ export function summaryExcerpt(summary: string): string | null {
 export function cardState(
   item: Pick<
     ItemCard,
-    'state' | 'agent' | 'turn' | 'rework_count' | 'summary' | 'in_buffer' | 'rope_held' | 'activity'
+    'state' | 'agent' | 'turn' | 'rework_count' | 'summary' | 'in_buffer' | 'rope_held' | 'activity' | 'waiting'
   >,
   decides = true,
 ): StateLabel {
@@ -219,12 +219,28 @@ export function cardState(
       return { text: summaryExcerpt(item.summary ?? '') ?? 'Done', tone: 'ok' };
     case 'queued':
     case 'ready':
+      if (item.waiting) return waitingReason(item.waiting);
       if (item.in_buffer) return { text: 'Ready in buffer', tone: 'muted' };
       if (item.rope_held) return { text: 'Waiting for buffer room', tone: 'muted' };
       if (item.rework_count > 0) {
         return { text: `Sent back ${times[item.rework_count - 1] ?? `${item.rework_count} times`}`, tone: 'rework' };
       }
+      if (item.state === 'ready') return { text: 'Review approved, checks passed', tone: 'ok' };
       break;
   }
   return describeState(item);
+}
+
+/**
+ * Why a queued or ready item waits on another item, as the API gives its refs: "Starts after sre#3
+ * merges" for an item it needs, "Waits for sre#3: same files (internal/api/**)" for one whose files
+ * overlap its own.
+ */
+function waitingReason(waiting: NonNullable<ItemCard['waiting']>): StateLabel {
+  const refs = waiting.items.join(', ');
+  if (waiting.kind === 'files') {
+    return { text: `Waits for ${refs}: same files (${waiting.files.join(', ')})`, tone: 'rework' };
+  }
+  const merge = waiting.items.length > 1 ? 'merge' : 'merges';
+  return { text: `Starts after ${refs} ${merge}`, tone: 'muted' };
 }
