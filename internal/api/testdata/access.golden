@@ -52,6 +52,32 @@ approveItem          pat-demoted      404 item-not-found       404 org-not-found
 approveItem          pat-removed      401 unauthenticated      401 unauthenticated
 approveItem          pat-platform     200                      404 org-not-found
 approveItem          pat-deleted-org  401 unauthenticated      401 unauthenticated
+cancelItem           anonymous        401 unauthenticated      401 unauthenticated
+cancelItem           owner            200                      404 org-not-found
+cancelItem           admin            200                      404 org-not-found
+cancelItem           viewer           403 forbidden            404 org-not-found
+cancelItem           approver         200                      404 org-not-found
+cancelItem           editor           200                      404 org-not-found
+cancelItem           member-no-roles  404 item-not-found       404 org-not-found
+cancelItem           other-org-owner  404 org-not-found        200
+cancelItem           platform-admin   404 org-not-found        404 org-not-found
+cancelItem           stale-owner      200                      404 org-not-found
+cancelItem           key-scoped       200                      404 org-not-found
+cancelItem           key-restricted   404 item-not-found       404 org-not-found
+cancelItem           key-other-org    404 org-not-found        200
+cancelItem           key-expired      401 unauthenticated      401 unauthenticated
+cancelItem           key-revoked      401 unauthenticated      401 unauthenticated
+cancelItem           bearer-owner     200                      404 org-not-found
+cancelItem           pat-approver     403 forbidden            404 org-not-found
+cancelItem           pat-owner        200                      404 org-not-found
+cancelItem           pat-viewer       403 forbidden            404 org-not-found
+cancelItem           pat-other-org    404 org-not-found        200
+cancelItem           pat-expired      401 unauthenticated      401 unauthenticated
+cancelItem           pat-revoked      401 unauthenticated      401 unauthenticated
+cancelItem           pat-demoted      404 item-not-found       404 org-not-found
+cancelItem           pat-removed      401 unauthenticated      401 unauthenticated
+cancelItem           pat-platform     200                      404 org-not-found
+cancelItem           pat-deleted-org  401 unauthenticated      401 unauthenticated
 clearAndon           anonymous        401 unauthenticated      401 unauthenticated
 clearAndon           owner            200                      404 org-not-found
 clearAndon           admin            200                      404 org-not-found

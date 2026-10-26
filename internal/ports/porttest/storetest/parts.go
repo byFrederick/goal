@@ -14,10 +14,11 @@ import (
 
 // Part keys and the planning item's title the cases use.
 const (
-	keyAPI   = "api"
-	keyStore = "store"
-	keyWeb   = "web"
-	titleBig = "big request"
+	keyAPI    = "api"
+	keyStore  = "store"
+	keyWeb    = "web"
+	titleBig  = "big request"
+	dataParts = "parts"
 )
 
 // plan is three parts: api first, then store and web, web also needing store.
@@ -154,7 +155,7 @@ func testAssembleCreatesParts(f *fixture) {
 	events := f.Events(t, it.ID)
 	sameEvents(t, events[len(events)-2:], []domain.Event{
 		a.Transition.Events[0],
-		{FactoryID: f.factory, ItemID: it.ID, At: t1, Kind: domain.EventAssembled, Station: stWork, Actor: domain.ActorEngine, Data: map[string]any{"parts": 3}},
+		{FactoryID: f.factory, ItemID: it.ID, At: t1, Kind: domain.EventAssembled, Station: stWork, Actor: domain.ActorEngine, Data: map[string]any{dataParts: 3}},
 	})
 
 	for _, s := range f.spans(t, it.ID) {
@@ -339,7 +340,7 @@ func testAssemblyClosesWithItsLastPart(f *fixture) {
 	events := f.Events(t, it.ID)
 	sameEvents(t, events[len(events)-1:], []domain.Event{{
 		FactoryID: f.factory, ItemID: it.ID, At: t3, Kind: domain.EventAssemblyDone, Station: stWork, Actor: domain.ActorEngine,
-		Data: map[string]any{"state": string(domain.StateDone), "parts_done": 2, "parts": 3},
+		Data: map[string]any{"state": string(domain.StateDone), "parts_done": 2, dataParts: 3},
 	}})
 }
 
@@ -407,7 +408,7 @@ func (f *fixture) pauseAll(assembly domain.ItemID, parts ...domain.Item) ports.C
 		Assembly: assembly,
 		Events: []domain.Event{{
 			FactoryID: f.factory, ItemID: assembly, At: t1, Kind: domain.EventPaused, Station: stWork, Actor: domain.ActorEngine,
-			Data: map[string]any{"parts": len(parts)},
+			Data: map[string]any{dataParts: len(parts)},
 		}},
 	}
 
@@ -505,6 +506,43 @@ func (f *fixture) cancelClosesTheAssembly(assembly domain.ItemID, parts domain.P
 	if closes != 1 {
 		t.Errorf("assembly_done events = %d; want 1", closes)
 	}
+}
+
+// A cancel cascade closes the assembly as cancelled, without a done time, even when one of its
+// parts is done; its assembly_done event says so.
+func testCancelCascadeClosesTheAssemblyCancelled(f *fixture) {
+	t := f.t
+
+	it, l := f.planning(t, domain.NewItem{Title: titleBig})
+	_, parts := f.assemble(t, assembly(it, l, plan()))
+	t2 := t1.Add(time.Minute)
+
+	if err := f.finishPart(t, parts.Items[0], domain.StateDone, t1); err != nil {
+		t.Fatal(err)
+	}
+
+	c := ports.Cascade{Assembly: it.ID, Cancel: true}
+	for _, p := range parts.Items[1:] {
+		c.Parts = append(c.Parts, ports.Transition{
+			ItemID: p.ID, From: p.Position(), To: domain.Position{Station: p.Station, State: domain.StateCancelled}, At: t2,
+		})
+	}
+
+	if got, err := f.Store.CascadeParts(f.ctx(t), c); err != nil || got.Done != 1 || got.Total != 3 {
+		t.Fatalf("CascadeParts cancelling the open parts = %+v, %v; want 1/3", got, err)
+	}
+
+	a := f.item(t, it.ID)
+	if a.State != domain.StateCancelled || !a.DoneAt.IsZero() || !a.UpdatedAt.Equal(t2) || a.Station != stWork {
+		t.Errorf("assembly after a cancel cascade = %s at %s, done %v, updated %v; want cancelled at %s, not done, at %v",
+			a.State, a.Station, a.DoneAt, a.UpdatedAt, stWork, t2)
+	}
+
+	events := f.Events(t, it.ID)
+	sameEvents(t, events[len(events)-1:], []domain.Event{{
+		FactoryID: f.factory, ItemID: it.ID, At: t2, Kind: domain.EventAssemblyDone, Station: stWork, Actor: domain.ActorEngine,
+		Data: map[string]any{"state": string(domain.StateCancelled), "parts_done": 1, dataParts: 3},
+	}})
 }
 
 // A cascade naming no part, a part of another assembly, the assembly itself or a move to state

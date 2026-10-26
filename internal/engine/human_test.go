@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"slices"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -542,5 +543,93 @@ func (h *harness) expectRunTaken(t *testing.T, id domain.ItemID, want domain.Pos
 		if n := len(h.eventsOf(id, k)); n != 0 {
 			t.Errorf("events %v; the instance that lost the run must not move the item (%s)", h.kinds(id), k)
 		}
+	}
+}
+
+// Cancelling a queued item closes it at its station with one cancelled event by the person,
+// with the reason, and one item.cancelled audit entry.
+func TestEngine_CancelQueuedItem(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, controlLine(), porttest.Succeed(`{}`))
+	it := h.at(t, h.submit(t, domain.NewItem{}), stWork, domain.StateQueued)
+
+	got, err := h.e.Cancel(inOrg(t), it.ID, human, "  not needed any more ")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Position() != (domain.Position{Station: stWork, State: domain.StateCancelled}) || !got.DoneAt.IsZero() {
+		t.Errorf("cancelled item at %+v, done %v; want cancelled at work, never done", got.Position(), got.DoneAt)
+	}
+
+	cancelled := h.eventsOf(it.ID, domain.EventCancelled)
+	if len(cancelled) != 1 || cancelled[0].Data["reason"] != "not needed any more" || cancelled[0].Data["actor"] != human.Ref() {
+		t.Errorf("cancelled events %+v; want one by the person with the reason", cancelled)
+	}
+
+	if a := h.audited(t, domain.AuditItemCancelled); len(a) != 1 || a[0].Data["station"] != stWork || a[0].Data["reason"] != "not needed any more" {
+		t.Errorf("audit %+v; want one item.cancelled with the station and the reason", a)
+	}
+}
+
+// Cancelling an item mid-run takes its lease and stops the run; the item stays cancelled.
+func TestEngine_CancelInProgressTakesTheLease(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, controlLine(), porttest.Block(nil, `{}`))
+	it := h.at(t, h.submit(t, domain.NewItem{}), stWork, domain.StateQueued)
+
+	if err := h.e.Tick(inOrg(t)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.clock.WaitTickers(bounded(t), 1); err != nil { // the run heartbeats
+		t.Fatal(err)
+	}
+
+	got, err := h.e.Cancel(inOrg(t), it.ID, human, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.wait(t, h.e) // returns only once the blocking run was cancelled
+
+	want := domain.Position{Station: stWork, State: domain.StateCancelled}
+	if got.Position() != want {
+		t.Errorf("cancelled item at %+v; want %+v", got.Position(), want)
+	}
+
+	h.expectRunTaken(t, it.ID, want)
+
+	if cancelled := h.eventsOf(it.ID, domain.EventCancelled); len(cancelled) != 1 || cancelled[0].Data["reason"] != nil {
+		t.Errorf("cancelled events %+v; want one, without a reason", cancelled)
+	}
+}
+
+// A done or cancelled item cannot be cancelled, and the refusal writes nothing.
+func TestEngine_CancelClosedItemIsRefused(t *testing.T) {
+	t.Parallel()
+
+	for _, state := range []domain.ItemState{domain.StateDone, domain.StateCancelled} {
+		t.Run(string(state), func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarness(t, controlLine(), porttest.Succeed(`{}`))
+			it := h.at(t, h.submit(t, domain.NewItem{}), stDone, state)
+			before := h.kinds(it.ID)
+
+			if _, err := h.e.Cancel(inOrg(t), it.ID, human, "again"); !errors.Is(err, engine.ErrItemClosed) {
+				t.Errorf("Cancel of a %s item: err = %v; want ErrItemClosed", state, err)
+			}
+
+			if got := h.item(t, it.ID); got.Position() != it.Position() || !slices.Equal(h.kinds(it.ID), before) {
+				t.Errorf("a refused cancel changed the item to %+v, events %v", got.Position(), h.kinds(it.ID))
+			}
+
+			if a := h.audited(t, domain.AuditItemCancelled); len(a) != 0 {
+				t.Errorf("audit %+v; want none", a)
+			}
+		})
 	}
 }

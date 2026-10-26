@@ -550,7 +550,7 @@ func (s *Store) Transition(ctx context.Context, t ports.Transition) (domain.Item
 			return err
 		}
 
-		if err := closeAssembly(ctx, q, row, t.At); err != nil {
+		if err := closeAssembly(ctx, q, row, t.At, false); err != nil {
 			return err
 		}
 

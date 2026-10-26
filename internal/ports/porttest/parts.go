@@ -142,8 +142,9 @@ func (s *Store) partsOf(parent domain.ItemID) domain.Parts {
 }
 
 // closeAssembly closes the assembly of a part that just closed when it was the last one open:
-// done when any part is done, cancelled otherwise. Callers hold s.mu.
-func (s *Store) closeAssembly(part *domain.Item, at time.Time) {
+// cancelled when cancel is set (a person cancelled the assembly), else done when any part is
+// done, cancelled otherwise. Callers hold s.mu.
+func (s *Store) closeAssembly(part *domain.Item, at time.Time, cancel bool) {
 	if part.PartKey == "" || !closed(part.State) {
 		return
 	}
@@ -161,7 +162,7 @@ func (s *Store) closeAssembly(part *domain.Item, at time.Time) {
 	before := *parent
 	parent.State, parent.UpdatedAt = domain.StateCancelled, at
 
-	if parts.Done > 0 {
+	if parts.Done > 0 && !cancel {
 		parent.State, parent.DoneAt = domain.StateDone, at
 	}
 
@@ -225,7 +226,7 @@ func (s *Store) cascade(org domain.OrgID, c ports.Cascade) (domain.Parts, ports.
 
 	for i, t := range c.Parts {
 		s.move(parts[i], t)
-		s.closeAssembly(parts[i], t.At)
+		s.closeAssembly(parts[i], t.At, c.Cancel)
 	}
 
 	for _, e := range c.Events {

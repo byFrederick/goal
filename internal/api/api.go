@@ -65,6 +65,7 @@ type Engine interface {
 	Retry(ctx context.Context, id domain.ItemID, by domain.Actor) (domain.Item, error)
 	Move(ctx context.Context, id domain.ItemID, to string, by domain.Actor, reason string) (domain.Item, error)
 	Pause(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
+	Cancel(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Merge(ctx context.Context, id domain.ItemID, by domain.Actor, method string) (domain.Item, error)
 	Note(ctx context.Context, id domain.ItemID, by domain.Actor, text string) (domain.Event, error)
 	Link(ctx context.Context, id, needs domain.ItemID, by domain.Actor) (domain.Edge, error)

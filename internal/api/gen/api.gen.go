@@ -1525,6 +1525,12 @@ type BuilderModel struct {
 	Label string `json:"label"`
 }
 
+// CancelRequest defines model for CancelRequest.
+type CancelRequest struct {
+	// Reason Why the item is cancelled
+	Reason *string `json:"reason,omitempty"`
+}
+
 // Change One meaningful difference, by identity (a reordered station is one moved change)
 type Change struct {
 	// Field Set when exactly one field of the target changed
@@ -3760,7 +3766,7 @@ type Touch struct {
 	// EventId The naming event; its reason is set by setTouchReason
 	EventId int64 `json:"event_id"`
 
-	// Kind The naming event's kind: merged, rejected, approved, moved, paused, retried, note, ...
+	// Kind The naming event's kind: merged, rejected, approved, moved, paused, cancelled, retried, note, ...
 	Kind    string `json:"kind"`
 	Planned bool   `json:"planned"`
 
@@ -4420,6 +4426,9 @@ type SubmitItemJSONRequestBody = NewItem
 
 // RestoreVersionJSONRequestBody defines body for RestoreVersion for application/json ContentType.
 type RestoreVersionJSONRequestBody = RestoreRequest
+
+// CancelItemJSONRequestBody defines body for CancelItem for application/json ContentType.
+type CancelItemJSONRequestBody = CancelRequest
 
 // MergeItemJSONRequestBody defines body for MergeItem for application/json ContentType.
 type MergeItemJSONRequestBody = MergeRequest
@@ -5422,6 +5431,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/approve (the `ApproveItem` operationId).
 	ApproveItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CancelItemWithBody Close an open item as cancelled, with its open parts when it is an assembly
+	//
+	// The item becomes cancelled at its station with a cancelled event. In progress, its lease is taken and its run stopped (lease_taken). An assembly cancels its open parts (neither done nor cancelled) in one transaction, each with its own cancelled event, and closes as cancelled even when some part is done. 409 item-closed (done or cancelled) or item-changed.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/cancel (the `CancelItem` operationId).
+	CancelItemWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CancelItem Close an open item as cancelled, with its open parts when it is an assembly
+	//
+	// The item becomes cancelled at its station with a cancelled event. In progress, its lease is taken and its run stopped (lease_taken). An assembly cancels its open parts (neither done nor cancelled) in one transaction, each with its own cancelled event, and closes as cancelled even when some part is done. 409 item-closed (done or cancelled) or item-changed.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/cancel (the `CancelItem` operationId).
+	CancelItem(ctx context.Context, org OrgRef, item ItemRef, body CancelItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListItemEvents One page of an item's history, oldest first
 	//
@@ -7381,6 +7408,44 @@ func (c *Client) GetItem(ctx context.Context, org OrgRef, item ItemRef, reqEdito
 // Corresponds with POST /v1/orgs/{org}/items/{item}/approve (the `ApproveItem` operationId).
 func (c *Client) ApproveItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewApproveItemRequest(c.Server, org, item)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CancelItemWithBody Close an open item as cancelled, with its open parts when it is an assembly
+//
+// The item becomes cancelled at its station with a cancelled event. In progress, its lease is taken and its run stopped (lease_taken). An assembly cancels its open parts (neither done nor cancelled) in one transaction, each with its own cancelled event, and closes as cancelled even when some part is done. 409 item-closed (done or cancelled) or item-changed.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/cancel (the `CancelItem` operationId).
+func (c *Client) CancelItemWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCancelItemRequestWithBody(c.Server, org, item, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CancelItem Close an open item as cancelled, with its open parts when it is an assembly
+//
+// The item becomes cancelled at its station with a cancelled event. In progress, its lease is taken and its run stopped (lease_taken). An assembly cancels its open parts (neither done nor cancelled) in one transaction, each with its own cancelled event, and closes as cancelled even when some part is done. 409 item-closed (done or cancelled) or item-changed.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/cancel (the `CancelItem` operationId).
+func (c *Client) CancelItem(ctx context.Context, org OrgRef, item ItemRef, body CancelItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCancelItemRequest(c.Server, org, item, body)
 	if err != nil {
 		return nil, err
 	}
@@ -12188,6 +12253,60 @@ func NewApproveItemRequest(server string, org OrgRef, item ItemRef) (*http.Reque
 	return req, nil
 }
 
+// NewCancelItemRequest calls the generic CancelItem builder with application/json body
+func NewCancelItemRequest(server string, org OrgRef, item ItemRef, body CancelItemJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCancelItemRequestWithBody(server, org, item, "application/json", bodyReader)
+}
+
+// NewCancelItemRequestWithBody constructs an http.Request for the CancelItem method, with any body, and a specified content type
+func NewCancelItemRequestWithBody(server string, org OrgRef, item ItemRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/cancel", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewListItemEventsRequest constructs an http.Request for the ListItemEvents method
 func NewListItemEventsRequest(server string, org OrgRef, item ItemRef, params *ListItemEventsParams) (*http.Request, error) {
 	var err error
@@ -15208,6 +15327,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/approve (the `ApproveItem` operationId).
 	ApproveItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*ApproveItemResponse, error)
+
+	// CancelItemWithBodyWithResponse Close an open item as cancelled, with its open parts when it is an assembly
+	//
+	// The item becomes cancelled at its station with a cancelled event. In progress, its lease is taken and its run stopped (lease_taken). An assembly cancels its open parts (neither done nor cancelled) in one transaction, each with its own cancelled event, and closes as cancelled even when some part is done. 409 item-closed (done or cancelled) or item-changed.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/cancel (the `CancelItem` operationId).
+	CancelItemWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CancelItemResponse, error)
+
+	// CancelItemWithResponse Close an open item as cancelled, with its open parts when it is an assembly
+	//
+	// The item becomes cancelled at its station with a cancelled event. In progress, its lease is taken and its run stopped (lease_taken). An assembly cancels its open parts (neither done nor cancelled) in one transaction, each with its own cancelled event, and closes as cancelled even when some part is done. 409 item-closed (done or cancelled) or item-changed.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/cancel (the `CancelItem` operationId).
+	CancelItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body CancelItemJSONRequestBody, reqEditors ...RequestEditorFn) (*CancelItemResponse, error)
 
 	// ListItemEventsWithResponse One page of an item's history, oldest first
 	//
@@ -18966,6 +19103,54 @@ func (r ApproveItemResponse) ContentType() string {
 	return ""
 }
 
+type CancelItemResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Item
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r CancelItemResponse) GetJSON200() *Item {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CancelItemResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CancelItemResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CancelItemResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CancelItemResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CancelItemResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListItemEventsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -22324,6 +22509,36 @@ func (c *ClientWithResponses) ApproveItemWithResponse(ctx context.Context, org O
 	return ParseApproveItemResponse(rsp)
 }
 
+// CancelItemWithBodyWithResponse Close an open item as cancelled, with its open parts when it is an assembly
+//
+// The item becomes cancelled at its station with a cancelled event. In progress, its lease is taken and its run stopped (lease_taken). An assembly cancels its open parts (neither done nor cancelled) in one transaction, each with its own cancelled event, and closes as cancelled even when some part is done. 409 item-closed (done or cancelled) or item-changed.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/cancel (the `CancelItem` operationId).
+func (c *ClientWithResponses) CancelItemWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CancelItemResponse, error) {
+	rsp, err := c.CancelItemWithBody(ctx, org, item, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCancelItemResponse(rsp)
+}
+
+// CancelItemWithResponse Close an open item as cancelled, with its open parts when it is an assembly
+//
+// The item becomes cancelled at its station with a cancelled event. In progress, its lease is taken and its run stopped (lease_taken). An assembly cancels its open parts (neither done nor cancelled) in one transaction, each with its own cancelled event, and closes as cancelled even when some part is done. 409 item-closed (done or cancelled) or item-changed.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/cancel (the `CancelItem` operationId).
+func (c *ClientWithResponses) CancelItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body CancelItemJSONRequestBody, reqEditors ...RequestEditorFn) (*CancelItemResponse, error) {
+	rsp, err := c.CancelItem(ctx, org, item, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCancelItemResponse(rsp)
+}
+
 // ListItemEventsWithResponse One page of an item's history, oldest first
 //
 // Returns a wrapper object for the known response body format(s).
@@ -25465,6 +25680,39 @@ func ParseApproveItemResponse(rsp *http.Response) (*ApproveItemResponse, error) 
 	return response, nil
 }
 
+// ParseCancelItemResponse parses an HTTP response from a CancelItemWithResponse call
+func ParseCancelItemResponse(rsp *http.Response) (*CancelItemResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CancelItemResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Item
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListItemEventsResponse parses an HTTP response from a ListItemEventsWithResponse call
 func ParseListItemEventsResponse(rsp *http.Response) (*ListItemEventsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -27139,6 +27387,9 @@ type ServerInterface interface {
 	// ApproveItem Approve an item waiting for a human; it moves to the next station
 	// (POST /v1/orgs/{org}/items/{item}/approve)
 	ApproveItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// CancelItem Close an open item as cancelled, with its open parts when it is an assembly
+	// (POST /v1/orgs/{org}/items/{item}/cancel)
+	CancelItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
 	// ListItemEvents One page of an item's history, oldest first
 	// (GET /v1/orgs/{org}/items/{item}/events)
 	ListItemEvents(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, params ListItemEventsParams)
@@ -30258,6 +30509,41 @@ func (siw *ServerInterfaceWrapper) ApproveItem(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// CancelItem operation middleware
+func (siw *ServerInterfaceWrapper) CancelItem(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelItem(w, r, org, item)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListItemEvents operation middleware
 func (siw *ServerInterfaceWrapper) ListItemEvents(w http.ResponseWriter, r *http.Request) {
 
@@ -32116,6 +32402,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/reject", wrapper.RejectItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/move", wrapper.MoveItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/pause", wrapper.PauseItem)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/cancel", wrapper.CancelItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/retry", wrapper.RetryItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/merge", wrapper.MergeItem)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/builder/meta", wrapper.GetBuilderMeta)
@@ -34882,6 +35169,47 @@ func (response ApproveItemdefaultApplicationProblemPlusJSONResponse) VisitApprov
 	return err
 }
 
+type CancelItemRequestObject struct {
+	Org  OrgRef  `json:"org"`
+	Item ItemRef `json:"item"`
+	Body *CancelItemJSONRequestBody
+}
+
+type CancelItemResponseObject interface {
+	VisitCancelItemResponse(w http.ResponseWriter) error
+}
+
+type CancelItem200JSONResponse Item
+
+func (response CancelItem200JSONResponse) VisitCancelItemResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelItemdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CancelItemdefaultApplicationProblemPlusJSONResponse) VisitCancelItemResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListItemEventsRequestObject struct {
 	Org    OrgRef  `json:"org"`
 	Item   ItemRef `json:"item"`
@@ -36892,6 +37220,9 @@ type StrictServerInterface interface {
 	// ApproveItem Approve an item waiting for a human; it moves to the next station
 	// (POST /v1/orgs/{org}/items/{item}/approve)
 	ApproveItem(ctx context.Context, request ApproveItemRequestObject) (ApproveItemResponseObject, error)
+	// CancelItem Close an open item as cancelled, with its open parts when it is an assembly
+	// (POST /v1/orgs/{org}/items/{item}/cancel)
+	CancelItem(ctx context.Context, request CancelItemRequestObject) (CancelItemResponseObject, error)
 	// ListItemEvents One page of an item's history, oldest first
 	// (GET /v1/orgs/{org}/items/{item}/events)
 	ListItemEvents(ctx context.Context, request ListItemEventsRequestObject) (ListItemEventsResponseObject, error)
@@ -39036,6 +39367,43 @@ func (sh *strictHandler) ApproveItem(w http.ResponseWriter, r *http.Request, org
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ApproveItemResponseObject); ok {
 		if err := validResponse.VisitApproveItemResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CancelItem operation middleware
+func (sh *strictHandler) CancelItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
+	var request CancelItemRequestObject
+
+	request.Org = org
+	request.Item = item
+
+	var body CancelItemJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CancelItem(ctx, request.(CancelItemRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CancelItem")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CancelItemResponseObject); ok {
+		if err := validResponse.VisitCancelItemResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
