@@ -368,3 +368,48 @@ describe('doingText', () => {
     expect(doingText({ turn: null })).toBe('Working');
   });
 });
+
+describe('cardState with a waiting reason', () => {
+  const after = { kind: 'after' as const, items: ['sre#3'], files: [] };
+  const files = { kind: 'files' as const, items: ['sre#3'], files: ['internal/api/**', 'web/src/**'] };
+
+  it('says a queued or ready item starts after the items it needs merge, one or several', () => {
+    expect(cardState(card({ state: 'queued', waiting: after }))).toEqual({
+      text: 'Starts after sre#3 merges',
+      tone: 'muted',
+    });
+    expect(
+      cardState(card({ state: 'ready', waiting: { kind: 'after', items: ['sre#3', 'sre#4'], files: [] } })).text,
+    ).toBe('Starts after sre#3, sre#4 merge');
+  });
+
+  it('says a queued or ready item waits for the same files, with the paths it shares', () => {
+    expect(cardState(card({ state: 'queued', waiting: files }))).toEqual({
+      text: 'Waits for sre#3: same files (internal/api/**, web/src/**)',
+      tone: 'rework',
+    });
+  });
+
+  it('checks the waiting reason before the buffer, the rope and the send-backs', () => {
+    expect(cardState(card({ state: 'ready', waiting: after, in_buffer: true })).text).toBe('Starts after sre#3 merges');
+    expect(cardState(card({ state: 'queued', waiting: files, rope_held: true, rework_count: 2 })).text).toBe(
+      'Waits for sre#3: same files (internal/api/**, web/src/**)',
+    );
+  });
+
+  it('says a ready item with nothing to wait on has its review approved and checks passed', () => {
+    expect(cardState(card({ state: 'ready', waiting: null }))).toEqual({
+      text: 'Review approved, checks passed',
+      tone: 'ok',
+    });
+  });
+
+  it('keeps a ready item in the buffer, or sent back, as before', () => {
+    expect(cardState(card({ state: 'ready', in_buffer: true })).text).toBe('Ready in buffer');
+    expect(cardState(card({ state: 'ready', rework_count: 1 })).text).toBe('Sent back once');
+  });
+
+  it('keeps a queued item with nothing to wait on as waiting', () => {
+    expect(cardState(card({ state: 'queued', waiting: null }))).toEqual({ text: 'Waiting', tone: 'muted' });
+  });
+});
