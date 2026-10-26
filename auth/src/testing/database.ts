@@ -36,7 +36,7 @@ export async function createTestDatabase(upTo?: string): Promise<TestDatabase> {
     await c.query(`CREATE DATABASE ${name}`);
   });
 
-  const files = (await readdir(`${repo}migrations`)).filter((f) => f.endsWith('.sql')).sort();
+  const files = (await readdir(`${repo}db/migrations`)).filter((f) => f.endsWith('.sql')).sort();
   await withClient(url(), async (c) => {
     await c.query(`
       REVOKE TEMPORARY, CONNECT ON DATABASE ${name} FROM PUBLIC;
