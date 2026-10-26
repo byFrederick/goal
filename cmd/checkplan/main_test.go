@@ -88,7 +88,7 @@ func testRenameAcrossParts(t *testing.T) {
 		t.Fatalf("changed = %v, want %v", got, want)
 	}
 
-	if want := []string{partWorker.tasks[0], partWeb.tasks[0]}; !slices.Equal(planFor(got).tasks, want) {
+	if want := []string{partEnv.tasks[0], partWorker.tasks[0], partWeb.tasks[0]}; !slices.Equal(planFor(got).tasks, want) {
 		t.Fatalf("tasks = %v, want %v", planFor(got).tasks, want)
 	}
 }
